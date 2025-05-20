@@ -338,7 +338,7 @@
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "Updating the file...\n// File url: http://test.com/spaghetti-recipe.gts\n<<<<<<< SEARCH\nthis is the riveting content of the spaghetti-recipe.gts file\n=======\nthis is the engaging content of the spaghetti-recipe.gts file\n>>>>>>> REPLACE\n\nI will also create a file for rigatoni:\n\n// File url: http://test.com/rigatoni-recipe.gts\n<<<<<<< SEARCH\n=======\nthis is the holy content of the rigatoni-recipe.gts file\n>>>>>>> REPLACE\n",
+      "body": "Updating the file...\nhttp://test.com/spaghetti-recipe.gts\n<<<<<<< SEARCH\nthis is the riveting content of the spaghetti-recipe.gts file\n=======\nthis is the engaging content of the spaghetti-recipe.gts file\n>>>>>>> REPLACE\n\nI will also create a file for rigatoni:\n\nhttp://test.com/rigatoni-recipe.gts\n<<<<<<< SEARCH\n=======\nthis is the holy content of the rigatoni-recipe.gts file\n>>>>>>> REPLACE\n",
       "msgtype": "app.boxel.message",
       "format": "org.matrix.custom.html",
       "isStreamingFinished": true,

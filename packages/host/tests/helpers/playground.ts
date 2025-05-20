@@ -48,14 +48,15 @@ export const createNewInstance = async () => {
 export const openFileInPlayground = async (
   filePath: string,
   realmURL = testRealmURL,
-  declaration?: string,
+  opts?: { declaration?: string; codeSelection?: string },
 ) => {
   await visitOperatorMode({
     submode: 'code',
     codePath: `${realmURL}${filePath}`,
+    ...(opts?.codeSelection ? { codeSelection: opts.codeSelection } : {}),
   });
-  if (declaration) {
-    await selectDeclaration(declaration);
+  if (opts?.declaration) {
+    await selectDeclaration(opts.declaration);
   }
   await togglePlaygroundPanel();
 };

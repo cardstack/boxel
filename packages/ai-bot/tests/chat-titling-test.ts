@@ -1,14 +1,32 @@
 import { module, test, assert } from 'qunit';
-import { shouldSetRoomTitle } from '../lib/set-title';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import {
+  getLatestCommandApplyMessage,
+  setTitle,
+  shouldSetRoomTitle,
+} from '../lib/set-title';
+import type {
+  CommandResultEvent,
+  MatrixEvent as DiscreteMatrixEvent,
+} from 'https://cardstack.com/base/matrix-event';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
-import { IEvent, IRoomEvent, IStateEvent, MatrixEvent } from 'matrix-js-sdk';
+import {
+  EventStatus,
+  IEvent,
+  IRoomEvent,
+  IStateEvent,
+  MatrixClient,
+  MatrixEvent,
+} from 'matrix-js-sdk';
+import { FakeMatrixClient } from './helpers/fake-matrix-client';
+import { constructHistory } from '../lib/history';
+import type OpenAI from 'openai';
 
 module('shouldSetRoomTitle', () => {
   test('Do not set a title when there is no content', () => {
@@ -23,7 +41,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
         },
@@ -45,7 +63,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
         },
@@ -61,7 +79,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '2',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'conversation',
         },
@@ -140,7 +158,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
         },
@@ -156,7 +174,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '2',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'conversation',
         },
@@ -172,7 +190,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '3',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Response',
         },
@@ -188,7 +206,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '4',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Response',
         },
@@ -205,7 +223,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '5',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Response',
         },
@@ -221,7 +239,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '6',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
         },
@@ -243,7 +261,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
         },
@@ -259,7 +277,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '2',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'conversation',
         },
@@ -275,7 +293,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '3',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Response',
         },
@@ -291,7 +309,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '4',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
         },
@@ -308,7 +326,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '5',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
         },
@@ -324,7 +342,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '6',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
         },
@@ -346,7 +364,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey please perform an action',
         },
@@ -403,7 +421,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey please perform an action',
         },
@@ -446,5 +464,345 @@ module('shouldSetRoomTitle', () => {
         new MatrixEvent(patchCommandResultEvent),
       ),
     );
+  });
+});
+
+module('getLatestCommandApplyMessage', (hooks) => {
+  let fakeMatrixClient: FakeMatrixClient;
+
+  hooks.beforeEach(() => {
+    fakeMatrixClient = new FakeMatrixClient();
+  });
+
+  test('getLatestCommandApplyMessage correctly finds matching command request', async () => {
+    const commandRequestId = 'test-command-request-id';
+    const testEventId = 'test-event-id';
+
+    // Create a sample event history with a command request
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: testEventId,
+        origin_server_ts: 1234567890,
+        status: EventStatus.SENT,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Test command',
+          data: {
+            context: {
+              functions: [],
+            },
+          },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: commandRequestId,
+              name: 'testCommand',
+              arguments: JSON.stringify({ test: 'data' }),
+            },
+            {
+              id: 'other-id',
+              name: 'otherCommand',
+              arguments: JSON.stringify({ other: 'data' }),
+            },
+          ],
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+      },
+    ];
+    let history: DiscreteMatrixEvent[] = await constructHistory(
+      eventList,
+      fakeMatrixClient,
+    );
+
+    // Create a command result event that references the command request
+    const commandResultEvent = {
+      getContent: () => ({
+        'm.relates_to': {
+          event_id: testEventId,
+          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          key: 'applied',
+        },
+        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+        commandRequestId: commandRequestId,
+      }),
+    } as unknown as CommandResultEvent;
+
+    // Call the function with our test data
+    const result = getLatestCommandApplyMessage(
+      history,
+      '@aibot:localhost',
+      commandResultEvent,
+    );
+
+    // Verify the function returns the expected message
+    assert.equal(result.length, 1, 'Should return one message');
+    assert.equal(result[0].role, 'user', 'Should have user role');
+    assert.ok(
+      result[0].content!.includes('Applying tool call testCommand with args'),
+      `Should include command args info, was ${result[0].content}`,
+    );
+  });
+
+  test('getLatestCommandApplyMessage handles missing command request', () => {
+    // Create a sample event history with no matching command request
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: 'test-event-id',
+        origin_server_ts: 1234567890,
+        status: EventStatus.SENT,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Test command',
+          data: {
+            context: {
+              functions: [],
+            },
+          },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: 'non-matching-id',
+              name: 'testCommand',
+              arguments: JSON.stringify({ test: 'data' }),
+            },
+          ],
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+      },
+    ];
+
+    // Create a command result event that references a non-existent command request
+    const commandResultEvent = {
+      getContent: () => ({
+        'm.relates_to': {
+          event_id: 'test-event-id',
+          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          key: 'applied',
+        },
+        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+        commandRequestId: 'missing-id', // ID that doesn't exist in the command requests
+      }),
+    } as unknown as CommandResultEvent;
+
+    // Call the function with our test data
+    const result = getLatestCommandApplyMessage(
+      history,
+      '@aibot:localhost',
+      commandResultEvent,
+    );
+
+    // Function should gracefully handle the missing command request and return an empty array
+    assert.equal(
+      result.length,
+      0,
+      'Should return empty array when command request is not found',
+    );
+  });
+
+  test('getLatestCommandApplyMessage correctly finds command request when multiple requests exist', () => {
+    const commandRequestId = 'second-command';
+    const testEventId = 'test-event-id';
+
+    // Create a sample event history with multiple command requests
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: testEventId,
+        origin_server_ts: 1234567890,
+        status: EventStatus.SENT,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Test command',
+          data: {
+            context: {
+              functions: [],
+            },
+          },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: 'first-command',
+              name: 'firstCommand',
+              arguments: JSON.stringify({ first: 'data' }),
+            },
+            {
+              id: commandRequestId,
+              name: 'secondCommand',
+              arguments: JSON.stringify({ second: 'data' }),
+            },
+            {
+              id: 'third-command',
+              name: 'thirdCommand',
+              arguments: JSON.stringify({ third: 'data' }),
+            },
+          ],
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+      },
+    ];
+
+    // Create a command result event that references the second command request
+    const commandResultEvent = {
+      getContent: () => ({
+        'm.relates_to': {
+          event_id: testEventId,
+          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          key: 'applied',
+        },
+        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+        commandRequestId: commandRequestId,
+      }),
+    } as unknown as CommandResultEvent;
+
+    // Call the function with our test data
+    const result = getLatestCommandApplyMessage(
+      history,
+      '@aibot:localhost',
+      commandResultEvent,
+    );
+
+    // Verify the function returns the expected message based on the correct command
+    assert.equal(result.length, 1, 'Should return one message');
+    assert.ok(
+      result[0].content!.includes('"second":"data"'),
+      'Should include args from the second command request',
+    );
+    assert.notOk(
+      result[0].content!.includes('"first":"data"'),
+      'Should not include args from the first command request',
+    );
+  });
+});
+
+module('setTitle', () => {
+  test('setTitle correctly processes command result events', async () => {
+    // Mock OpenAI client
+    const mockOpenAI = {
+      chat: {
+        completions: {
+          create: async () => ({
+            choices: [{ message: { content: 'User Updated Card Details' } }],
+          }),
+        },
+      },
+    } as unknown as OpenAI;
+
+    // Mock Matrix client
+    const mockMatrixClient = {
+      setRoomName: async (roomId: string, title: string) => {
+        assert.equal(roomId, 'test-room-id', 'Room ID passed correctly');
+        assert.equal(
+          title,
+          'User Updated Card Details',
+          'Title correctly processed',
+        );
+        return { event_id: 'new-event-id' };
+      },
+    } as unknown as MatrixClient;
+
+    const commandRequestId = 'test-command-id';
+    const testEventId = 'command-source-event-id';
+
+    // Create history with command request event
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: testEventId,
+        origin_server_ts: 1234567890,
+        status: EventStatus.SENT,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Update card details',
+          data: {
+            context: {
+              functions: [],
+            },
+          },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: commandRequestId,
+              name: 'patchCardInstance',
+              arguments: JSON.stringify({
+                description: 'Update card details',
+                attributes: {
+                  cardId: 'card-123',
+                  patch: { attributes: { title: 'New Title' } },
+                },
+              }),
+            },
+          ],
+        },
+        sender: '@user:localhost',
+        room_id: 'test-room-id',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+      },
+      {
+        type: 'm.room.message',
+        event_id: 'user-message-id',
+        origin_server_ts: 1234567880,
+        status: EventStatus.SENT,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Please update my card title',
+          data: {
+            context: {
+              functions: [],
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'test-room-id',
+        unsigned: {
+          age: 1010,
+          transaction_id: '0',
+        },
+      },
+    ];
+
+    // Create command result event
+    const commandResultEvent = {
+      getContent: () => ({
+        'm.relates_to': {
+          event_id: testEventId,
+          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          key: 'applied',
+        },
+        msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+        commandRequestId: commandRequestId,
+      }),
+    } as unknown as CommandResultEvent;
+
+    // Call setTitle with our test data
+    await setTitle(
+      mockOpenAI,
+      mockMatrixClient,
+      'test-room-id',
+      history,
+      '@aibot:localhost',
+      commandResultEvent,
+    );
+    // The assertions are inside the mock matrixClient.setRoomName function
   });
 });

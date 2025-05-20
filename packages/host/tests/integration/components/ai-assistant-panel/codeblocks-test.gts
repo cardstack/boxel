@@ -4,7 +4,10 @@ import GlimmerComponent from '@glimmer/component';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import {
+  APP_BOXEL_MESSAGE_MSGTYPE,
+  baseRealm,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -80,7 +83,9 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
     let cardService = this.owner.lookup('service:card-service') as CardService;
     cardService.getSource = async (url: URL) => {
       if (url.toString() === 'https://example.com/component.gts') {
-        return Promise.resolve(`import Component from '@glimmer/component';
+        return {
+          status: 200,
+          content: `import Component from '@glimmer/component';
 
 export default class MyComponent extends Component {
   a = 1;
@@ -92,9 +97,13 @@ export default class MyComponent extends Component {
       <p>Value of b: {{this.b}}</p>
     </div>
   </template>
-}`);
+}`,
+        };
       }
-      return Promise.resolve('');
+      return {
+        status: 404,
+        content: '',
+      };
     };
 
     class Address extends FieldDef {
@@ -202,7 +211,7 @@ export default class MyComponent extends Component {
       '@aibot:localhost',
       {
         body: 'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -222,7 +231,7 @@ export default class MyComponent extends Component {
       '@aibot:localhost',
       {
         body: 'this is another message',
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -250,7 +259,7 @@ export default class MyComponent extends Component {
       '@aibot:localhost',
       {
         body: 'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -274,7 +283,7 @@ export default class MyComponent extends Component {
       '@aibot:localhost',
       {
         body: 'this is another message',
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -360,7 +369,7 @@ You can use these in your HTML documents to display formatted text, code snippet
       '@aibot:localhost',
       {
         body: messageWithNestedPreTags,
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -467,7 +476,7 @@ And another code block without language specified:
       '@aibot:localhost',
       {
         body: messageWithHtmlOutsideBackticks,
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -528,7 +537,7 @@ And some regular text with <b>HTML tags</b> that should be displayed as actual H
       '@aibot:localhost',
       {
         body: messageWithHtmlInBackticksNoLang,
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -574,8 +583,8 @@ And some regular text with <b>HTML tags</b> that should be displayed as actual H
     let messageWithSearchAndReplaceBlock = `Here's some HTML inside codeblock with search and replace block:
 
 \`\`\`gts
-// File url: https://example.com/component.gts
-  <<<<<<< SEARCH
+https://example.com/component.gts
+<<<<<<< SEARCH
 import Component from '@glimmer/component';
 
 export default class MyComponent extends Component {
@@ -614,7 +623,7 @@ Above code blocks are now complete`;
       '@aibot:localhost',
       {
         body: messageWithSearchAndReplaceBlock,
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -642,7 +651,7 @@ Above code blocks are now complete`;
     let messageWithSearchAndReplaceBlock = `Here's some HTML inside codeblock with search and replace block:
 
 \`\`\`txt
-// File url: https://example.com/blank.txt
+https://example.com/blank.txt
 <<<<<<< SEARCH
 =======
 hello
@@ -656,7 +665,7 @@ Above code blocks are now complete`;
       '@aibot:localhost',
       {
         body: messageWithSearchAndReplaceBlock,
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
