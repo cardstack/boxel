@@ -142,9 +142,9 @@ export default class PlaygroundContent extends Component<Signature> {
         flex-direction: column;
       }
       .format-chooser {
-        position: sticky;
+        position: absolute;
         bottom: 0;
-        margin-top: auto;
+        margin: 0 auto;
 
         --boxel-format-chooser-button-bg-color: var(--boxel-dark);
       }

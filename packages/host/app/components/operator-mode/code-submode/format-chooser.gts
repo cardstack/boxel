@@ -39,6 +39,7 @@ export default class FormatChooser extends Component<Signature> {
         display: flex;
         justify-content: center;
         background-color: var(--boxel-dark);
+        margin: 0 auto;
       }
 
       .format-chooser__buttons {
