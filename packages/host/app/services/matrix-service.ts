@@ -548,7 +548,9 @@ export default class MatrixService extends Service {
       }
 
       if (refreshRoutes) {
+        console.time('matrix-client-refresh-routes');
         await this.router.refresh();
+        console.timeEnd('matrix-client-refresh-routes');
       }
     }
     console.timeEnd('matrix-client-start-total');
