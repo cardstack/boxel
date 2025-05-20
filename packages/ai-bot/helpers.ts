@@ -137,6 +137,62 @@ export async function getPromptParts(
   };
 }
 
+function getAggregatedReplacement(event: IRoomEvent) {
+  /**
+   * When replacements are applied, the server aggregates
+   * them into a single event.
+   *
+   * The latest version is placed within the unsigned
+   * section of the event.
+   *
+   * Here we extract any replacement and return the
+   * latest version, but with *the original id*
+   */
+  let finalRawEvent: IRoomEvent;
+  const originalEventId = event.event_id;
+  let replacedRawEvent: IRoomEvent =
+    event.unsigned?.['m.relations']?.['m.replace'];
+  if (replacedRawEvent) {
+    finalRawEvent = replacedRawEvent;
+    finalRawEvent.event_id = originalEventId;
+  } else {
+    finalRawEvent = event;
+  }
+  return finalRawEvent;
+}
+
+function applyAllReplacements(eventlist: IRoomEvent[]): IRoomEvent[] {
+  // First apply any server-side aggregations
+  let eventsWithAggregatedReplacements = eventlist.map(
+    getAggregatedReplacement,
+  );
+  // Now if the event list we have doesn't have aggregations but still
+  // has replacements, we need to apply them manually
+  // TODO: remove this as part of #CS-8662
+  let eventsMap = new Map<string, IRoomEvent>();
+  for (let event of eventsWithAggregatedReplacements) {
+    let canonicalEventId;
+    if (event.content['m.relates_to']?.rel_type === 'm.replace') {
+      canonicalEventId = event.content['m.relates_to'].event_id!;
+    } else {
+      canonicalEventId = event.event_id!;
+    }
+    if (eventsMap.has(canonicalEventId)) {
+      let existingEvent = eventsMap.get(canonicalEventId)!;
+      // Events can be replaced multiple times, we only want the latest version
+      if (existingEvent.origin_server_ts < event.origin_server_ts) {
+        event.event_id = canonicalEventId;
+        eventsMap.set(canonicalEventId, event);
+      }
+    } else {
+      eventsMap.set(canonicalEventId, event);
+    }
+  }
+  let updatedEvents = Array.from(eventsMap.values());
+  updatedEvents.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
+  return updatedEvents;
+}
+
 export async function constructHistory(
   eventlist: IRoomEvent[],
   client: MatrixClient,
@@ -150,9 +206,15 @@ export async function constructHistory(
    * This function is to construct the chat as a user
    * would see it - with only the latest event for each
    * message.
+   *
+   * When replacements are applied, the server aggregates
+   * them into a single event.
    */
-  const latestEventsMap = new Map<string, DiscreteMatrixEvent>();
-  for (let rawEvent of eventlist) {
+  let latestEvents: DiscreteMatrixEvent[] = [];
+
+  const eventListWithReplacementsApplied = applyAllReplacements(eventlist);
+
+  for (let rawEvent of eventListWithReplacementsApplied) {
     if (rawEvent.content.data) {
       try {
         if (typeof rawEvent.content.data === 'string') {
@@ -187,7 +249,6 @@ export async function constructHistory(
       | CodePatchResultEvent
       | RealmServerEvent
       | MessageEvent; // Typescript could have inferred this from the line above
-    let eventId = event.event_id!;
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
       let { attachedCards } = event.content.data ?? {};
       if (attachedCards && attachedCards.length > 0) {
@@ -223,27 +284,8 @@ export async function constructHistory(
         };
       }
     }
-
-    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
-    if (event.content['m.relates_to']?.rel_type === 'm.replace') {
-      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
-      eventId = event.content['m.relates_to']!.event_id!;
-      event.event_id = eventId;
-    }
-    const existingEvent = latestEventsMap.get(eventId);
-    if (
-      !existingEvent ||
-      // we check the timestamps of the events because the existing event may
-      // itself be an already replaced event. The idea is that you can perform
-      // multiple replacements on an event. In order to prevent backing out a
-      // subsequent replacement we also assert that the replacement timestamp is
-      // after the event that it is replacing
-      existingEvent.origin_server_ts < event.origin_server_ts
-    ) {
-      latestEventsMap.set(eventId, event);
-    }
+    latestEvents.push(event);
   }
-  let latestEvents = Array.from(latestEventsMap.values());
   latestEvents.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
   return latestEvents;
 }
