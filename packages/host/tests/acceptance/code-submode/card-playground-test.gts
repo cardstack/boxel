@@ -393,7 +393,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         [testRealmURL, 'BlogPost/urban-living.json'],
         [testRealmURL, 'Author/jane-doe.json'],
       ]);
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'Category',
+      });
       assert
         .dom('[data-test-selected-item]')
         .hasText('City Design', 'most recent category card is pre-selected');
@@ -467,7 +469,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         [`${testRealmURL}Category/future-tech.json`, ts - 4], // duplicate
       ]);
 
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'Category',
+      });
       assert
         .dom('[data-test-selected-item]')
         .hasText('Home Gym', 'most recent category instance is pre-selected');
@@ -513,7 +517,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .exists();
       // opened home-gym and landscaping in interact-mode and back to playground
 
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'Category',
+      });
       await togglePlaygroundPanel();
       assert
         .dom('[data-test-selected-item]')
@@ -531,7 +537,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('can update the instance chooser when selected card def changes (same file)', async function (assert) {
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'Category',
+      });
       assert.dom('[data-test-selected-item]').containsText('City Design');
       await click('[data-test-instance-chooser]');
       assert.dom('[data-option-index]').exists({ count: 2 });
@@ -545,7 +553,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('can update the instance chooser when a different file is opened', async function (assert) {
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'Category',
+      });
       assert.dom('[data-test-selected-item]').containsText('City Design');
       assertCardExists(assert, `${testRealmURL}Category/city-design`);
       await click('[data-test-instance-chooser]');
@@ -563,7 +573,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('can use the header context menu to open instance in code mode', async function (assert) {
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       await click('[data-test-more-options-button]');
       assert
         .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
@@ -579,7 +591,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('can use the header context menu to open instance in interact mode', async function (assert) {
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       await click('[data-test-more-options-button]');
       await click('[data-test-boxel-menu-item-text="Open in Interact Mode"]');
       assert
@@ -592,7 +606,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('can display selected card in the chosen format', async function (assert) {
       const cardId = `${testRealmURL}Author/jane-doe`;
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       assert
         .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
         .hasText('Author');
@@ -639,7 +655,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('can toggle edit format via button on card header', async function (assert) {
       const cardId = `${testRealmURL}Author/jane-doe`;
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       assert
         .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
         .hasText('Author');
@@ -665,7 +683,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('can use the header context menu to open instance in edit format in interact mode', async function (assert) {
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       await selectFormat('edit');
       await click('[data-test-more-options-button]');
       await click('[data-test-boxel-menu-item-text="Open in Interact Mode"]');
@@ -686,7 +706,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       ) as RecentFilesService;
       assert.strictEqual(recentFilesService.recentFiles?.length, 0);
 
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'BlogPost');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'BlogPost',
+      });
       await chooseAnotherInstance();
       assert.dom('[data-test-card-catalog-modal]').exists();
       assert.dom('[data-test-card-catalog-item]').exists({ count: 3 });
@@ -773,11 +795,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test<TestContextWithSave>('can create new instance with CodeRef field', async function (assert) {
-      await openFileInPlayground(
-        'code-ref-driver.gts',
-        testRealmURL,
-        'CodeRefDriver',
-      );
+      await openFileInPlayground('code-ref-driver.gts', testRealmURL, {
+        declaration: 'CodeRefDriver',
+      });
       let id: string | undefined;
       this.onSave((url) => {
         id = url.href;
@@ -801,11 +821,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('can set relative CodeRef field', async function (assert) {
-      await openFileInPlayground(
-        'code-ref-driver.gts',
-        testRealmURL,
-        'CodeRefDriver',
-      );
+      await openFileInPlayground('code-ref-driver.gts', testRealmURL, {
+        declaration: 'CodeRefDriver',
+      });
       await createNewInstance();
 
       assert
@@ -858,7 +876,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         </template>
           }
         }`;
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       await waitFor('[data-test-selected-item]');
       assert.dom('[data-test-selected-item]').hasText('Jane Doe');
       assert.dom('[data-test-author-title]').containsText('Jane Doe');
@@ -926,7 +946,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           </template>
           }
       }`;
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'BlogPost');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'BlogPost',
+      });
       await waitFor('[data-test-selected-item]');
       assert
         .dom('[data-test-selected-item]')
@@ -973,7 +995,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         },
       });
 
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       assert.dom('[data-test-selected-item]').hasText('Jane Doe');
       assertCardExists(assert, authorId, 'edit');
       await selectFormat('atom'); // change selected format
@@ -1041,7 +1065,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test<TestContextWithSave>('trigger auto saved in edit format', async function (assert) {
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="0"]');
       await click('[data-test-edit-button]');
@@ -1061,7 +1087,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test<TestContextWithSave>('automatically attaches the selected card to the AI message', async function (assert) {
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="0"]');
       await click('[data-test-open-ai-assistant]');
@@ -1115,7 +1143,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test<TestContextWithSave>('instance chooser only appears when panel is opened', async function (assert) {
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       assert.dom('[data-test-instance-chooser]').exists();
       await click('[data-test-accordion-item="playground"] button');
       assert.dom('[data-test-instance-chooser]').doesNotExist();
@@ -1136,7 +1166,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       assert.strictEqual(results.length, 0);
 
-      await openFileInPlayground('person.gts', testRealmURL, 'Person');
+      await openFileInPlayground('person.gts', testRealmURL, {
+        declaration: 'Person',
+      });
       assert.dom('[data-test-selected-item]').containsText('Untitled Person');
 
       recentFiles = getRecentFiles();
@@ -1171,7 +1203,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0].id, cardId);
 
-      await openFileInPlayground('person.gts', testRealmURL, 'Pet');
+      await openFileInPlayground('person.gts', testRealmURL, {
+        declaration: 'Pet',
+      });
       assert
         .dom('[data-test-selected-item]')
         .doesNotContainText('Untitled Pet');
@@ -1252,11 +1286,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('can create new instance in currently open realm', async function (assert) {
       removeRecentFiles();
-      await openFileInPlayground(
-        'author-card.gts',
-        additionalRealmURL,
-        'Author',
-      );
+      await openFileInPlayground('author-card.gts', additionalRealmURL, {
+        declaration: 'Author',
+      });
       assert
         .dom(
           '[data-test-playground-panel] [data-test-card][data-test-card-format="edit"]',
@@ -1405,7 +1437,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           format: 'isolated',
         },
       });
-      await openFileInPlayground('boom-pet.gts', testRealmURL, 'BoomPet');
+      await openFileInPlayground('boom-pet.gts', testRealmURL, {
+        declaration: 'BoomPet',
+      });
       assert
         .dom('[data-test-boxel-card-header-title]')
         .containsText('Card Error: Internal Server Error');
@@ -1423,7 +1457,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('it renders error info when creating new instance causes error after file was created in realm', async function (assert) {
-      await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
+      await openFileInPlayground('boom-person.gts', testRealmURL, {
+        declaration: 'BoomPerson',
+      });
       assert
         .dom('[data-test-instance-chooser]')
         .hasText('Untitled Boom Person');
@@ -1475,7 +1511,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('it can clear card-creation error (that resulted in new file in the realm) when different card-def is selected', async function (assert) {
-      await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
+      await openFileInPlayground('boom-person.gts', testRealmURL, {
+        declaration: 'BoomPerson',
+      });
       assert
         .dom('[data-test-instance-chooser]')
         .hasText('Untitled Boom Person');
@@ -1511,7 +1549,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         },
       });
 
-      await openFileInPlayground('person.gts', testRealmURL, 'Person');
+      await openFileInPlayground('person.gts', testRealmURL, {
+        declaration: 'Person',
+      });
       await click('[data-test-edit-button]');
 
       assert
@@ -1586,7 +1626,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         },
       });
 
-      await openFileInPlayground('person.gts', testRealmURL, 'Person');
+      await openFileInPlayground('person.gts', testRealmURL, {
+        declaration: 'Person',
+      });
       assert
         .dom('[data-test-boxel-card-header-title]')
         .containsText('Card Error: Link Not Found');
