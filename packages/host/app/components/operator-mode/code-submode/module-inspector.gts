@@ -17,6 +17,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   type getCards,
+  type getCard,
   type Query,
   isCardDocumentString,
   isFieldDef,
@@ -24,6 +25,7 @@ import {
   CodeRef,
   CardErrorJSONAPI,
   GetCardsContextName,
+  GetCardContextName,
   ResolvedCodeRef,
   specRef,
 } from '@cardstack/runtime-common';
@@ -102,8 +104,10 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   @service private declare specPanelService: SpecPanelService;
 
   @consume(GetCardsContextName) private declare getCards: getCards;
+  @consume(GetCardContextName) private declare getCard: getCard;
 
   @tracked private specSearch: ReturnType<getCards<Spec>> | undefined;
+  @tracked private cardResource: ReturnType<getCard> | undefined;
 
   private panelSelections: Record<string, SelectedAccordionItem>;
 
@@ -299,33 +303,38 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     };
   }
 
+  doWhileRefreshing = () => {
+    if (
+      !this.specPanelService.specSelection &&
+      this.specsForSelectedDefinition.length > 0
+    ) {
+      this.specPanelService.setSelection(this.specsForSelectedDefinition[0].id);
+    }
+  };
+
   private findSpecsForSelectedDefinition = () => {
     this.specSearch = this.getCards(
       this,
       () => this.queryForSpecsForSelectedDefinition,
       () => this.realmServer.availableRealmURLs,
-      { isLive: true },
+      { isLive: true, doWhileRefreshing: this.doWhileRefreshing },
     ) as ReturnType<getCards<Spec>>;
+  };
+
+  private makeCardResource = () => {
+    this.cardResource = this.getCard(this, () => this.activeSpecId);
   };
 
   get specsForSelectedDefinition() {
     return this.specSearch?.instances ?? [];
   }
 
-  private get activeSpec() {
-    let selectedSpecId = this.specPanelService.specSelection;
+  private get activeSpecId() {
+    return this.specPanelService.specSelection ?? undefined;
+  }
 
-    if (selectedSpecId) {
-      let selectedSpec = this.specsForSelectedDefinition?.find(
-        (spec) => spec.id === selectedSpecId,
-      );
-
-      if (selectedSpec) {
-        return selectedSpec;
-      }
-    }
-
-    return this.specsForSelectedDefinition?.[0];
+  get activeSpec() {
+    return this.cardResource?.card as Spec;
   }
 
   <template>
@@ -358,6 +367,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         {{this.fileIncompatibilityMessage}}
       </div>
     {{else if @selectedCardOrField.cardOrField}}
+      {{consumeContext this.makeCardResource}}
       {{consumeContext this.findSpecsForSelectedDefinition}}
       <Accordion
         {{SpecUpdatedModifier

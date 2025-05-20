@@ -42,10 +42,15 @@ export async function constructHistory(
    *
    * This function is to construct the chat as a user
    * would see it - with only the latest event for each
-   * message, and continuations combined into one message.
+   * message.
+   *
+   * When replacements are applied, the server aggregates
+   * them into a single event.
    */
+  const eventListWithReplacementsApplied = applyAllReplacements(eventlist);
+
   const latestEventsMap = new Map<string, DiscreteMatrixEvent>();
-  for (let rawEvent of eventlist) {
+  for (let rawEvent of eventListWithReplacementsApplied) {
     if (
       rawEvent.type !== 'm.room.message' &&
       rawEvent.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
@@ -151,8 +156,64 @@ export async function constructHistory(
   return eventsWithoutContinuations;
 }
 
+function getAggregatedReplacement(event: IRoomEvent) {
+  /**
+   * When replacements are applied, the server aggregates
+   * them into a single event.
+   *
+   * The latest version is placed within the unsigned
+   * section of the event.
+   *
+   * Here we extract any replacement and return the
+   * latest version, but with *the original id*
+   */
+  let finalRawEvent: IRoomEvent;
+  const originalEventId = event.event_id;
+  let replacedRawEvent: IRoomEvent =
+    event.unsigned?.['m.relations']?.['m.replace'];
+  if (replacedRawEvent) {
+    finalRawEvent = replacedRawEvent;
+    finalRawEvent.event_id = originalEventId;
+  } else {
+    finalRawEvent = event;
+  }
+  return finalRawEvent;
+}
+
+function applyAllReplacements(eventlist: IRoomEvent[]): IRoomEvent[] {
+  // First apply any server-side aggregations
+  let eventsWithAggregatedReplacements = eventlist.map(
+    getAggregatedReplacement,
+  );
+  // Now if the event list we have doesn't have aggregations but still
+  // has replacements, we need to apply them manually
+  // TODO: remove this as part of #CS-8662
+  let eventsMap = new Map<string, IRoomEvent>();
+  for (let event of eventsWithAggregatedReplacements) {
+    let canonicalEventId;
+    if (event.content['m.relates_to']?.rel_type === 'm.replace') {
+      canonicalEventId = event.content['m.relates_to'].event_id!;
+    } else {
+      canonicalEventId = event.event_id!;
+    }
+    if (eventsMap.has(canonicalEventId)) {
+      let existingEvent = eventsMap.get(canonicalEventId)!;
+      // Events can be replaced multiple times, we only want the latest version
+      if (existingEvent.origin_server_ts < event.origin_server_ts) {
+        event.event_id = canonicalEventId;
+        eventsMap.set(canonicalEventId, event);
+      }
+    } else {
+      eventsMap.set(canonicalEventId, event);
+    }
+  }
+  let updatedEvents = Array.from(eventsMap.values());
+  updatedEvents.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
+  return updatedEvents;
+}
+
 function parseContentData(event: IRoomEvent) {
-  if (event.content.data) {
+  if (event.content.data && typeof event.content.data === 'string') {
     try {
       event.content.data = JSON.parse(event.content.data);
     } catch (e) {
