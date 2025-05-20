@@ -1,4 +1,4 @@
-import { IContent } from 'matrix-js-sdk';
+import { IContent, Method } from 'matrix-js-sdk';
 import { logger } from '@cardstack/runtime-common';
 import { OpenAIError } from 'openai/error';
 import * as Sentry from '@sentry/node';
@@ -14,6 +14,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import { PromptParts, mxcUrlToHttp } from '../helpers';
+import { encodeUri } from 'matrix-js-sdk/lib/utils';
 
 let log = logger('ai-bot');
 
@@ -188,6 +189,24 @@ function cleanupCache() {
       fileCache.delete(url);
     }
   }
+}
+
+export async function getRoomEvents(roomId: string, client: MatrixClient) {
+  const messagesPath = encodeUri('/rooms/$roomId/messages', {
+    $roomId: roomId,
+  });
+  let response = await (client as any).http.authedRequest(
+    Method.Get,
+    messagesPath,
+    {
+      dir: 'f',
+      limit: '1000',
+      filter: JSON.stringify({
+        'org.matrix.msc3874.not_rel_types': ['m.replace'],
+      }),
+    },
+  );
+  return (response?.chunk || []) as DiscreteMatrixEvent[];
 }
 
 export async function downloadFile(

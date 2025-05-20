@@ -23,7 +23,11 @@ import {
 } from './lib/set-title';
 import { Responder } from './lib/responder';
 import { handleDebugCommands, isRecognisedDebugCommand } from './lib/debug';
-import { MatrixClient, sendPromptAndEventList } from './lib/matrix';
+import {
+  getRoomEvents,
+  MatrixClient,
+  sendPromptAndEventList,
+} from './lib/matrix';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CommandResultEvent,
@@ -230,9 +234,7 @@ Common issues are:
         }
 
         let promptParts: PromptParts;
-        let initial = await client.roomInitialSync(room!.roomId, 1000);
-        let eventList = (initial!.messages?.chunk ||
-          []) as DiscreteMatrixEvent[];
+        let eventList = await getRoomEvents(room.roomId, client);
         try {
           promptParts = await getPromptParts(eventList, aiBotUserId, client);
           if (!promptParts.shouldRespond) {
@@ -359,8 +361,7 @@ Common issues are:
     );
     try {
       //TODO: optimise this so we don't need to sync room events within a reaction event
-      let initial = await client.roomInitialSync(room!.roomId, 1000);
-      let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
+      let eventList = await getRoomEvents(room.roomId, client);
       if (roomTitleAlreadySet(eventList)) {
         return;
       }
