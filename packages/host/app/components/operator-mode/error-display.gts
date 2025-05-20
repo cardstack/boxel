@@ -3,7 +3,11 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { CopyButton } from '@cardstack/boxel-ui/components';
+import { dropTask } from 'ember-concurrency';
+
+import perform from 'ember-concurrency/helpers/perform';
+
+import { CopyButton, Button } from '@cardstack/boxel-ui/components';
 import { and, bool, not } from '@cardstack/boxel-ui/helpers';
 import {
   DropdownArrowDown,
@@ -11,6 +15,7 @@ import {
   ExclamationTriangleFill,
 } from '@cardstack/boxel-ui/icons';
 
+import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
@@ -26,6 +31,8 @@ interface Signature {
     stack?: string;
     openDetails?: boolean;
     fileToAttach?: FileDef;
+    viewInCodeMode?: boolean;
+    cardId?: string;
   };
 }
 
@@ -33,6 +40,17 @@ export default class ErrorDisplay extends Component<Signature> {
   @tracked private showDetails = this.args.openDetails ?? false;
 
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare commandService: any;
+
+  private viewInCodeMode = dropTask(async () => {
+    let switchSubmodeCommand = new SwitchSubmodeCommand(
+      this.commandService.commandContext,
+    );
+    await switchSubmodeCommand.execute({
+      submode: 'code',
+      codePath: `${this.args.cardId}.json`,
+    });
+  });
 
   private toggleDetails = () => (this.showDetails = !this.showDetails);
 
@@ -92,6 +110,15 @@ export default class ErrorDisplay extends Component<Signature> {
 
       {{#if this.showDetails}}
         <div class='error-details' data-test-error-details>
+          {{#if @viewInCodeMode}}
+            <div class='actions'>
+              <Button
+                data-test-view-in-code-mode-button
+                @kind='primary'
+                {{on 'click' (perform this.viewInCodeMode)}}
+              >View in Code Mode</Button>
+            </div>
+          {{/if}}
           <div class='detail-item'>
             <div class='detail-title'>Stack trace:</div>
             {{#if @stack}}
@@ -210,6 +237,13 @@ export default class ErrorDisplay extends Component<Signature> {
         color: var(--boxel-purple-700);
         font-style: italic;
         margin: 0;
+      }
+
+      .actions {
+        display: flex;
+        justify-content: center;
+        gap: var(--boxel-sp);
+        margin-top: var(--boxel-sp-lg);
       }
     </style>
   </template>
