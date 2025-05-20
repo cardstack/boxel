@@ -399,7 +399,7 @@ export default class CodeEditor extends Component<Signature> {
         min-height: 100%;
         width: 100%;
         min-width: 100%;
-        padding-top: var(--boxel-sp);
+        padding-top: var(--boxel-sp-xxs);
         background-color: var(--monaco-background);
       }
       .monaco-container:not(.readonly) {
@@ -413,9 +413,11 @@ export default class CodeEditor extends Component<Signature> {
         --vscode-editor-background: var(--monaco-background);
         --vscode-editorStickyScroll-background: var(--monaco-background);
         --vscode-editorGutter-background: var(--monaco-background);
+        --vscode-editorStickyScroll-shadow: rgba(0 0 0 / 40%);
+        --vscode-scrollbar-shadow: rgba(0 0 0 / 20%);
       }
-      .monaco-container.readonly :deep(.monaco-editor) {
-        --vscode-editorStickyScroll-shadow: #393939;
+      .monaco-container :deep(.monaco-editor .sticky-widget) {
+        box-shadow: 0 1px 25px -2px var(--vscode-editorStickyScroll-shadow);
       }
       .monaco-container.readonly
         :deep(.monaco-editor .view-overlays .current-line-exact) {
