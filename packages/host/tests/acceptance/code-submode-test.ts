@@ -920,9 +920,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click('[data-test-toggle-details]');
       assert
         .dom('[data-test-error-details]')
-        .includesText(
-          `Encountered error rendering HTML for card: formatName is not defined`,
-        );
+        .includesText(`intentionalError is not defined`);
 
       assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
       await click('[data-test-send-error-to-ai-assistant]');
@@ -930,7 +928,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assertMessages(assert, [
         {
           from: 'testuser',
-          message: `In the attachment file, I encountered an error that needs fixing: Card Error: Internal Server Error Encountered error rendering HTML for card: formatName is not defined Stack trace: Error: Encountered error rendering HTML for card: formatName is not defined at render`,
+          message: `In the attachment file, I encountered an error that needs fixing: Card Error: intentionalError is not defined`,
           files: [
             {
               name: 'broken-country.gts',

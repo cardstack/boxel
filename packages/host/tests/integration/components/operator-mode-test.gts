@@ -634,7 +634,11 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-boxel-card-header-title]')
       .includesText('Link Not Found', 'card error title is displayed');
-    assert.dom('[data-test-error-title]').containsText('Link Not Found');
+    assert
+      .dom('[data-test-error-title]')
+      .containsText(
+        `missing file ${testRealmURL}FriendWithCSS/does-not-exist.json`,
+      );
     await click('[data-test-toggle-details]');
     assert
       .dom('[data-test-error-details]')

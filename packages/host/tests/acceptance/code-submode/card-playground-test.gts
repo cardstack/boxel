@@ -1449,7 +1449,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert
         .dom('[data-test-card-error]')
         .containsText('This card contains an error.');
-      assert.dom('[data-test-error-title]').hasText('Internal Server Error');
+      assert.dom('[data-test-error-title]').hasText('Boom!');
       assert.dom('[data-test-format-chooser]').doesNotExist();
 
       await click('[data-test-toggle-details]');
@@ -1477,7 +1477,11 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert
         .dom('[data-test-card-error]')
         .hasText('This card contains an error.');
-      assert.dom('[data-test-error-title]').hasText('Internal Server Error');
+      assert
+        .dom('[data-test-error-title]')
+        .hasText(
+          'Encountered error rendering HTML for card: fn is not defined',
+        );
 
       await click('[data-test-toggle-details]');
       assert.dom('[data-test-error-details]').containsText('fn is not defined');
@@ -1636,7 +1640,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert
         .dom('[data-test-playground-panel] [data-test-field="title"]')
         .containsText('Delilah', 'last known good state is rendered');
-      assert.dom('[data-test-error-title]').hasText('Link Not Found');
+      assert
+        .dom('[data-test-error-title]')
+        .hasText(`missing file ${testRealmURL}Person/missing-link.json`);
       assert.dom('[data-test-format-chooser]').doesNotExist();
 
       await click('[data-test-toggle-details]');
