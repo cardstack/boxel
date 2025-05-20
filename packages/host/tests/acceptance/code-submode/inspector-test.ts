@@ -751,7 +751,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         `[data-test-card-schema="exported card"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
       )
       .exists();
-    assert.dom(`[data-test-total-fields]`).containsText('4 Fields');
+    assert.dom(`[data-test-total-fields]`).containsText('4');
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
 
     // clicking on a field
@@ -770,7 +770,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .includesText('exported field');
     await waitFor('[data-test-card-schema="exported field"]');
     assert.dom('[data-test-card-schema="exported field"]').exists({ count: 1 });
-    assert.dom(`[data-test-total-fields]`).containsText('1 Field');
+    assert.dom(`[data-test-total-fields]`).containsText('1');
     assert
       .dom(
         `[data-test-card-schema="exported field"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
@@ -1560,7 +1560,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .exists({ count: 1 });
     assert.dom(`[data-test-card-schema="local parent"]`).exists();
     assert.dom(`[data-test-card-schema="local grandparent"]`).exists();
-    assert.dom(`[data-test-total-fields]`).containsText('3 Fields');
+    assert.dom(`[data-test-total-fields]`).containsText('3');
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
     assert.true(monacoService.getLineCursorOn()?.includes('GrandParent'));
 
@@ -1581,7 +1581,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-card-schema="my sport"]').exists({ count: 1 });
     assert.dom(`[data-test-card-schema="my hobby"]`).exists({ count: 1 });
     assert.dom(`[data-test-card-schema="my activity"]`).exists({ count: 1 });
-    assert.dom(`[data-test-total-fields]`).containsText('0 Fields');
+    assert.dom(`[data-test-total-fields]`).containsText('0');
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
 
     //clicking on inherited field defined locally
@@ -1594,7 +1594,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-card-schema="my hobby"]');
     assert.dom(`[data-test-card-schema="my hobby"]`).exists({ count: 1 });
     assert.dom(`[data-test-card-schema="my activity"]`).exists({ count: 1 });
-    assert.dom(`[data-test-total-fields]`).containsText('0 Fields');
+    assert.dom(`[data-test-total-fields]`).containsText('0');
     assert.true(monacoService.getLineCursorOn()?.includes('Hobby'));
     assert.true(monacoService.getLineCursorOn()?.includes('Activity'));
   });
@@ -1759,7 +1759,7 @@ export class TestCard extends ExportedCard {
     assert
       .dom('[data-test-card-schema]')
       .exists({ count: 4 }, 'the card hierarchy is displayed in schema editor');
-    assert.dom('[data-test-total-fields]').containsText('4 Fields');
+    assert.dom('[data-test-total-fields]').containsText('4');
 
     // assert modal state is cleared
     await waitForCodeEditor();
@@ -1921,7 +1921,7 @@ export class ExportedCard extends ExportedCardParent {
     assert
       .dom('[data-test-card-schema]')
       .exists({ count: 4 }, 'the card hierarchy is displayed in schema editor');
-    assert.dom('[data-test-total-fields]').containsText('4 Fields');
+    assert.dom('[data-test-total-fields]').containsText('4');
   });
 
   test('field error message displays if you try to inherit using a filename that already exists', async function (assert) {

@@ -632,7 +632,10 @@ export class TrèsTestCard extends CardDef {
           { count: 3 },
           'the card hierarchy is displayed in schema editor',
         );
-      assert.dom('[data-test-total-fields]').containsText('3 Fields');
+      assert
+        .dom('[data-test-total-fields]')
+        .containsText('3')
+        .hasAttribute('title', '3 fields');
     });
 
     test<TestContextWithSave>('can create a new card definition in same realm as inherited definition', async function (assert) {

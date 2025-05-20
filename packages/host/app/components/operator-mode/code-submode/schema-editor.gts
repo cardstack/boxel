@@ -68,20 +68,20 @@ const SchemaEditorTitle: TemplateOnlyComponent<TitleSignature> = <template>
     {{! Exclamation point maybe? }}
     <span class='syntax-error'>Fail to parse</span>
   {{else}}
-    <span class='total-fields' data-test-total-fields>
+    <span
+      class='total-fields'
+      title='{{@totalFields}} {{getPlural "field" @totalFields}}'
+      data-test-total-fields
+    >
       {{@totalFields}}
-      {{getPlural 'Field' @totalFields}}
     </span>
   {{/if}}
 
   <style scoped>
     .syntax-error,
     .total-fields {
-      margin-left: auto;
       color: var(--boxel-450);
       font: 500 var(--boxel-font-xs);
-      letter-spacing: var(--boxel-lsp-xl);
-      text-transform: uppercase;
     }
     .loading-icon {
       display: inline-block;

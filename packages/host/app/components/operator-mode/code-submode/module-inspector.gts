@@ -508,6 +508,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
             {{#each accordionItems as |moduleInspectorView|}}
               <ToggleButton
+                class='toggle-button'
                 @isActive={{eq this.selectedView moduleInspectorView}}
                 {{on 'click' (fn this.toggleAccordionItem moduleInspectorView)}}
                 data-test-code-mode-panel-item={{moduleInspectorView}}
@@ -623,6 +624,11 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
       .module-inspector-content {
         overflow: scroll;
+      }
+
+      .toggle-button {
+        justify-content: space-between;
+        padding: 0 var(--boxel-sp-xs);
       }
 
       .file-incompatible-message {
