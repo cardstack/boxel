@@ -109,7 +109,6 @@ export default class Monaco extends Modifier<Signature> {
       rules: [],
       colors: {
         'editor.background': readOnly ? '#606060' : '#413e4e',
-        // see editor outer container styling in `components/operator-mode/code-editor.gts`
       },
     });
 
