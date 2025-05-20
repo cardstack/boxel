@@ -189,7 +189,7 @@ export default class MatrixService extends Service {
   }
 
   private setLoggerLevelFromEnvironment() {
-    // This will pick up the level if it’s in LOG_LEVELS
+    // This will pick up the level if it's in LOG_LEVELS
     logger('matrix');
   }
 
@@ -447,6 +447,7 @@ export default class MatrixService extends Service {
       refreshRoutes?: true;
     } = {},
   ) {
+    console.time('matrix-client-start-total');
     let { auth, refreshRoutes } = opts;
     if (!auth) {
       auth = getAuth();
@@ -488,18 +489,22 @@ export default class MatrixService extends Service {
         )}`,
       );
     }
+    console.time('matrix-client-creation');
     this._client = this.matrixSDK.createClient({
       baseUrl: matrixURL,
       accessToken,
       userId,
       deviceId,
     });
+    console.timeEnd('matrix-client-creation');
+
     if (this.client.isLoggedIn()) {
       this.realmServer.setClient(this.client);
       saveAuth(auth);
       this.bindEventListeners();
 
       try {
+        console.time('matrix-client-device-info');
         let deviceId = this._client.getDeviceId();
         if (deviceId) {
           let { last_seen_ts } = await this._client.getDevice(deviceId);
@@ -510,18 +515,32 @@ export default class MatrixService extends Service {
         if (this.startedAtTs === -1) {
           this.startedAtTs = 0;
         }
+        console.timeEnd('matrix-client-device-info');
+
+        console.time('matrix-client-sliding-sync-init');
         await this.initSlidingSync();
+        console.timeEnd('matrix-client-sliding-sync-init');
+
+        console.time('matrix-client-start');
         await this.client.startClient({ slidingSync: this.slidingSync });
+        console.timeEnd('matrix-client-start');
+
+        console.time('matrix-client-account-data');
         let accountDataContent = await this._client.getAccountDataFromServer<{
           realms: string[];
         }>(APP_BOXEL_REALMS_EVENT_TYPE);
         await this.realmServer.setAvailableRealmURLs(
           accountDataContent?.realms ?? [],
         );
+        console.timeEnd('matrix-client-account-data');
+
+        console.time('matrix-client-realm-operations');
         await Promise.all([
           this.loginToRealms(),
           this.realmServer.fetchCatalogRealms(),
         ]);
+        console.timeEnd('matrix-client-realm-operations');
+
         this.postLoginCompleted = true;
       } catch (e) {
         console.log('Error starting Matrix client', e);
@@ -532,6 +551,7 @@ export default class MatrixService extends Service {
         await this.router.refresh();
       }
     }
+    console.timeEnd('matrix-client-start-total');
   }
 
   private async initSlidingSync() {
@@ -599,14 +619,18 @@ export default class MatrixService extends Service {
     // user's profile based on this.client.getUserId();
     let activeRealms = this.realmServer.availableRealmURLs;
 
+    console.time('matrix-client-all-realm-logins');
     await Promise.all(
       activeRealms.map(async (realmURL: string) => {
+        console.time(`matrix-client-realm-login-${realmURL}`);
         try {
           // Our authorization-middleware can login automatically after seeing a
           // 401, but this preemptive login makes it possible to see
           // canWrite===true on realms that are publicly readable.
           await this.realm.login(realmURL);
+          console.timeEnd(`matrix-client-realm-login-${realmURL}`);
         } catch (err) {
+          console.timeEnd(`matrix-client-realm-login-${realmURL}`);
           console.warn(
             `Unable to establish session with realm ${realmURL}`,
             err,
@@ -614,6 +638,7 @@ export default class MatrixService extends Service {
         }
       }),
     );
+    console.timeEnd('matrix-client-all-realm-logins');
   }
 
   async createRealmSession(realmURL: URL) {
