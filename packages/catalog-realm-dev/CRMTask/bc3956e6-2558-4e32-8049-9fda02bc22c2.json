@@ -1,0 +1,68 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": null,
+        "label": null,
+        "color": null,
+        "completed": false
+      },
+      "dateRange": {
+        "start": null,
+        "end": null
+      },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "name": "werwe",
+      "details": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../crm-app/CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": null
+        }
+      },
+      "contact": {
+        "links": {
+          "self": null
+        }
+      },
+      "account": {
+        "links": {
+          "self": null
+        }
+      },
+      "deal": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../crm-app/task",
+        "name": "CRMTask"
+      }
+    }
+  }
+}
