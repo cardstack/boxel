@@ -2780,8 +2780,8 @@ Attached files:
   });
 
   test('Correctly handles server-side aggregations', async () => {
-    // sending older codeblocks back to the model just confuses it and wastes tokens
-    // so we need to remove them from the prompt
+    // This test uses the /messages api with a filter removing
+    // m.replace messages, relying on server side aggregation
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(__dirname, 'resources/chats/server-side-aggregations.json'),
