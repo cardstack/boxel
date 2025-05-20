@@ -4,6 +4,7 @@ import {
   triggerEvent,
   find,
   settled,
+  waitFor,
 } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
@@ -632,6 +633,35 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-create-spec-button]').exists();
     assert.dom('[data-test-create-spec-intent-message]').exists();
     await percySnapshot(assert);
+  });
+  test('spec updates when different declaration selected in the module', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+    await click('[data-test-accordion-item="spec-preview"] button');
+    assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Person');
+    await click('[data-boxel-selector-item-text="DifferentField"]');
+    assert
+      .dom('[data-test-boxel-input-id="spec-title"]')
+      .hasValue('DifferentField');
+    await click('[data-boxel-selector-item-text="Person"]');
+    assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Person');
+  });
+  test('spec updates when different module selected in file tree', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+    await click('[data-test-accordion-item="spec-preview"] button');
+    assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Person');
+    await click('[data-test-file-browser-toggle]');
+    await waitFor('[data-test-file="pet.gts"]');
+    await click('[data-test-file="pet.gts"]');
+    await click('[data-test-accordion-item="spec-preview"] button');
+    assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Pet2');
+    await click('[data-test-file="person.gts"]');
+    assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Person');
   });
   test('does not lose input field focus when editing spec', async function (assert) {
     const receivedEventDeferred = new Deferred<void>();
