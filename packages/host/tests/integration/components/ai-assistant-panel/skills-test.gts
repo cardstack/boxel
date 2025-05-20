@@ -174,6 +174,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
               undefined
             > {
               static displayName = 'SearchAndOpenCardCommand';
+              static actionVerb = 'Search';
               async getInputType() {
                 return new SearchCardsByTypeAndTitleCommand(
                   this.commandContext,

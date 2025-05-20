@@ -12,6 +12,7 @@ export default class GetBoxelUIStateCommand extends HostBaseCommand<
 > {
   @service declare operatorModeStateService: OperatorModeStateService;
   static displayName = 'GetBoxelUIStateCommand';
+  static actionVerb = 'Get';
   description =
     'Get information about the current state of the Boxel UI, including the current submode, what cards are open, and what room, if any, the AI assistant is showing.';
   async getInputType() {
