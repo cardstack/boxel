@@ -10,6 +10,19 @@ export class FakeMatrixClient implements MatrixClient {
     content: IContent;
   }[] = [];
 
+  baseUrl = 'https://example.com';
+
+  async uploadContent(
+    _content: string,
+    _opts?: {
+      type: string;
+    },
+  ): Promise<{ content_uri: string }> {
+    return {
+      content_uri: 'https://example.com/content',
+    };
+  }
+
   async sendEvent(
     roomId: string,
     eventType: string,

@@ -789,8 +789,15 @@ export async function getModifyPrompt(
     (event) => event.sender !== aiBotUserId,
   );
 
-  let realmUrl = (lastMessageEventByUser as CardMessageEvent).content.data
-    ?.context?.realmUrl;
+  let realmUrl;
+  if (
+    lastMessageEventByUser &&
+    lastMessageEventByUser.type === 'm.room.message' &&
+    lastMessageEventByUser.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
+  ) {
+    realmUrl = (lastMessageEventByUser.content as CardMessageContent).data
+      ?.context?.realmUrl;
+  }
 
   let systemMessage = `${MODIFY_SYSTEM_MESSAGE}
 The user currently has given you the following data to work with:

@@ -1,11 +1,6 @@
 import './instrument';
 import './setup-logger'; // This should be first
-import {
-  RoomMemberEvent,
-  RoomEvent,
-  createClient,
-  Method,
-} from 'matrix-js-sdk';
+import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
 import OpenAI from 'openai';
 import { logger, aiBotUsername, DEFAULT_LLM } from '@cardstack/runtime-common';
 import {
