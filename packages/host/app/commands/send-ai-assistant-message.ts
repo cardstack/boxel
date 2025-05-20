@@ -125,6 +125,8 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
           openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
           requireToolCall,
+          realmUrl: input.realmUrl,
+          functions: [],
         },
       },
     } as CardMessageContent);

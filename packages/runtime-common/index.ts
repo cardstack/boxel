@@ -297,7 +297,7 @@ export type getCards<T extends CardDef = CardDef> = (
   getRealms?: () => string[] | undefined,
   opts?: {
     isLive?: true;
-    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+    doWhileRefreshing?: (() => void) | undefined;
   },
 ) => // This is a duck type of the SearchResource
 {

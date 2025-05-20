@@ -370,7 +370,7 @@ const brokenSource = 'some text to make the code broken' + friendCardSource;
 
 const brokenCountryCardSource = countryCardSource.replace(
   'return this.name',
-  'return formatName(this.name)',
+  'return intentionalError(this.name)',
 );
 
 const brokenAdoptionInstance = `{
@@ -904,9 +904,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click('[data-test-toggle-details]');
       assert
         .dom('[data-test-error-details]')
-        .includesText(
-          'Encountered error rendering HTML for card: formatName is not defined',
-        );
+        .includesText('intentionalError is not defined');
 
       await percySnapshot(assert);
     });

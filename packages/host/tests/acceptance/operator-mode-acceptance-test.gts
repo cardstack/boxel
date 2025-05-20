@@ -434,7 +434,6 @@ module('Acceptance | operator mode tests', function (hooks) {
         'index.json': {
           data: {
             type: 'card',
-            attributes: {},
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/cards-grid',

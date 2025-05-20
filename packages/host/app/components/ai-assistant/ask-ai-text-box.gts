@@ -33,6 +33,7 @@ const AskAiTextBox: TemplateOnlyComponent<Signature> = <template>
       @onInput={{@onInput}}
       @placeholder='Ask AI'
       @disabled={{@isLoading}}
+      @autocomplete='off'
       {{onKeyMod 'Enter' @onSend}}
       data-test-ask-ai-input
     />

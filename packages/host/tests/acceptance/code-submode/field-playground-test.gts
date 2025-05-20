@@ -488,7 +488,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     });
 
     test('can preview compound field instance', async function (assert) {
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'Comment',
+      });
       assert
         .dom('[data-test-playground-format-chooser] button')
         .exists({ count: 4 });
@@ -520,7 +522,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     });
 
     test('can not preview non-exports or primitives', async function (assert) {
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'Comment',
+      });
       assert.dom('[data-test-playground-panel]').exists();
 
       await selectDeclaration('Status');
@@ -543,7 +547,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     });
 
     test('can populate instance chooser dropdown options with containedExamples from Spec', async function (assert) {
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'ContactInfo');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'ContactInfo',
+      });
       assertFieldExists(assert, 'embedded');
       assert
         .dom('[data-test-selected-item]')
@@ -568,7 +574,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     });
 
     test('can update the instance chooser when selected declaration changes', async function (assert) {
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'ContactInfo');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'ContactInfo',
+      });
       assertFieldExists(assert, 'embedded');
       assert
         .dom('[data-test-selected-item]')
@@ -606,7 +614,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     });
 
     test('changing the selected spec in Boxel Spec panel changes selected spec in playground', async function (assert) {
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'Comment',
+      });
       assert
         .dom('[data-test-selected-item]')
         .hasText('Comment spec - Example 1');
@@ -661,7 +671,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     });
 
     test("can select a different instance to preview from the spec's containedExamples collection", async function (assert) {
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'Comment',
+      });
       assert
         .dom('[data-test-selected-item]')
         .hasText('Comment spec - Example 1');
@@ -708,7 +720,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
           fieldIndex: 1,
         },
       });
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'Comment',
+      });
       assert
         .dom('[data-test-selected-item]')
         .hasText('Comment spec - Example 2');
@@ -757,7 +771,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     });
 
     test('can autogenerate new Spec and field instance (no preexisting Spec)', async function (assert) {
-      await openFileInPlayground('author.gts', testRealmURL, 'Quote');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Quote',
+      });
       assert.dom('[data-test-instance-chooser]').hasText('Quote - Example 1');
       assertFieldExists(assert, 'edit');
       assert.dom('[data-test-field="quote"] input').hasNoValue();
@@ -786,7 +802,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     });
 
     test('can create new field instance (has preexisting Spec)', async function (assert) {
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'Comment',
+      });
       assert
         .dom('[data-test-selected-item]')
         .hasText('Comment spec - Example 1');
@@ -834,7 +852,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       let selection =
         getPlaygroundSelections()?.[`${testRealmURL}author/FullNameField`];
       assert.strictEqual(selection, undefined);
-      await openFileInPlayground('author.gts', testRealmURL, 'FullNameField');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'FullNameField',
+      });
       assert
         .dom('[data-test-selected-item]')
         .hasText('FullNameField spec - Example 1');
@@ -879,7 +899,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     });
 
     test('has default templates when a format template is not provided', async function (assert) {
-      await openFileInPlayground('pet.gts', testRealmURL, 'TreatField');
+      await openFileInPlayground('pet.gts', testRealmURL, {
+        declaration: 'TreatField',
+      });
       assert
         .dom('[data-test-instance-chooser]')
         .hasText('TreatField - Example 1');
@@ -910,7 +932,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       setRecentFiles([[testRealmURL, 'Pet/mango.json']]);
       setPlaygroundSelections(selections);
 
-      await openFileInPlayground('pet.gts', testRealmURL, 'ToyField');
+      await openFileInPlayground('pet.gts', testRealmURL, {
+        declaration: 'ToyField',
+      });
       assert.dom('[data-test-instance-chooser]').hasText('Toy - Example 1');
       assertFieldExists(assert, 'embedded');
       selections = {
@@ -957,7 +981,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       </template>
       }
     }`;
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'Comment',
+      });
       assertFieldExists(assert, 'embedded');
       assert
         .dom('[data-test-embedded-comment-title]')
@@ -1097,7 +1123,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       });
       assert.strictEqual(matching.length, 0);
 
-      await openFileInPlayground('author.gts', additionalRealmURL, 'Quote');
+      await openFileInPlayground('author.gts', additionalRealmURL, {
+        declaration: 'Quote',
+      });
       assert.dom('[data-test-instance-chooser]').hasText('Quote - Example 1');
       assertFieldExists(assert, 'edit');
       assert.dom('[data-test-field="quote"] input').hasNoValue();
@@ -1116,7 +1144,6 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       assert.strictEqual(matching.length, 1);
       assert.ok(matching[0].id!.startsWith(`${additionalRealmURL}Spec/`));
 
-      // TODO: Bug: spec panel does not show the newly created spec
       // await toggleSpecPanel();
       // assert
       //   .dom('[data-test-spec-selector] > .ember-basic-dropdown-trigger')
@@ -1141,7 +1168,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     });
 
     test('can create new field instance (has preexisting Spec)', async function (assert) {
-      await openFileInPlayground('pet.gts', additionalRealmURL, 'ToyField');
+      await openFileInPlayground('pet.gts', additionalRealmURL, {
+        codeSelection: 'ToyField',
+      });
       assert.dom('[data-test-selected-item]').hasText('Toy - Example 1');
       await selectFormat('atom');
       assertFieldExists(assert, 'atom');
@@ -1193,11 +1222,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
           `${additionalRealmURL}author/FullNameField`
         ];
       assert.strictEqual(selection, undefined);
-      await openFileInPlayground(
-        'author.gts',
-        additionalRealmURL,
-        'FullNameField',
-      );
+      await openFileInPlayground('author.gts', additionalRealmURL, {
+        declaration: 'FullNameField',
+      });
       assert
         .dom('[data-test-selected-item]')
         .hasText('FullNameField spec - Example 1');

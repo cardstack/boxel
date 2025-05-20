@@ -60,8 +60,6 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
-
 import { CardContext } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
@@ -76,7 +74,7 @@ import type { WithBoundArgs } from '@glint/template';
 interface Signature {
   Element: HTMLElement;
   Args: {
-    activeSpec: Spec;
+    activeSpec: Spec | undefined;
     isLoadingNewModule: boolean;
     isPanelOpen: boolean;
     searchIsLoading: boolean | undefined;
@@ -249,7 +247,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
       }));
   }
 
-  private getDropdownData = (spec: CardDef) => {
+  private getDropdownData = (spec: Spec) => {
     let realmInfo = this.realm.info(urlForRealmLookup(spec));
     let realmURL = spec[realmURLSymbol];
     if (!realmURL) {
@@ -477,7 +475,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           specType,
           ref,
           title: ref.name,
-        }) as CardDef;
+        }) as Spec;
         let currentRealm = this.operatorModeStateService.realmURL;
         await this.store.add(card, { realm: currentRealm.href });
         if (card.id) {
