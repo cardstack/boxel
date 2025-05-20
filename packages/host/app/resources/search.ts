@@ -6,6 +6,8 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
+
+import difference from 'lodash/difference';
 import flatMap from 'lodash/flatMap';
 import isEqual from 'lodash/isEqual';
 
@@ -140,9 +142,7 @@ export class SearchResource extends Resource<Args> {
   }
 
   private search = restartableTask(async (query: Query) => {
-    for (let instance of this._instances) {
-      this.store.dropReference(instance.id);
-    }
+    let oldReferences = this._instances.map((i) => i.id);
 
     // we cannot use the `waitForPromise` test waiter helper as that will cast
     // the Task instance to a promise which makes it uncancellable. When this is
@@ -197,8 +197,14 @@ export class SearchResource extends Resource<Args> {
       if (this.#doWhileRefreshing) {
         this.#doWhileRefreshing();
       }
-      for (let instance of this._instances) {
-        this.store.addReference(instance.id);
+      let newReferences = this._instances.map((i) => i.id);
+      let referencesToDrop = difference(oldReferences, newReferences);
+      for (let id of referencesToDrop) {
+        this.store.dropReference(id);
+      }
+      let referencesToAdd = difference(newReferences, oldReferences);
+      for (let id of referencesToAdd) {
+        this.store.addReference(id);
       }
       await this.store.flush();
     } finally {
