@@ -2,12 +2,9 @@ import { click, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { module, skip, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
-
+import { RemixCommand } from '@cardstack/host/commands/remix';
 import { SearchCardsByQueryCommand } from '@cardstack/host/commands/search-cards';
 import type CommandService from '@cardstack/host/services/command-service';
-import { RemixCommand } from '@cardstack/host/commands/remix';
 
 import {
   lookupService,
