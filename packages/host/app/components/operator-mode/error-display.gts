@@ -115,7 +115,7 @@ export default class ErrorDisplay extends Component<Signature> {
         color: black;
         min-width: fit-content;
         width: 100%;
-        box-shadow: var(--boxel-box-shadow);
+        box-shadow: var(--boxel-deep-box-shadow);
         overflow: hidden;
         display: flex;
         flex-direction: column;

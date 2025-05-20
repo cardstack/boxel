@@ -74,10 +74,10 @@ export default class CardErrorDetail extends Component<Signature> {
     <style scoped>
       .error-detail {
         flex: 1.5;
-        overflow: auto;
+        overflow: visible;
         margin-top: auto;
         max-height: fit-content;
-        padding: var(--boxel-sp);
+        margin: var(--boxel-sp);
       }
       @media (min-height: 800px) {
         .error-detail {
