@@ -22,11 +22,8 @@ import {
 
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
-<<<<<<< HEAD
 import downloadAsFileInBrowser from '@cardstack/host/helpers/download-file';
-=======
 import { type HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
->>>>>>> main
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -227,6 +224,8 @@ export default class AiAssistantMessage extends Component<Signature> {
     } catch (error) {
       console.error('Error downloading file:', error);
     }
+  }
+
   get hasMessageHTMLParts() {
     return !!this.args.messageHTMLParts;
   }
