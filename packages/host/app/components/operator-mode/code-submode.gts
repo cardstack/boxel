@@ -877,6 +877,10 @@ export default class CodeSubmode extends Component<Signature> {
       .monaco-editor-panel {
         background-color: var(--monaco-background);
       }
+      .monaco-editor-panel :deep(.binary-info) {
+        --icon-color: var(--boxel-light);
+        color: var(--boxel-light);
+      }
 
       .choose-file-prompt {
         margin: 0;
