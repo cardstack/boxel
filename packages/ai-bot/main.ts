@@ -272,7 +272,11 @@ Common issues are:
           }
         }
 
-        let availableCredits = 1000;
+        let availableCredits = await getAvailableCredits(
+          assistant.pgAdapter,
+          senderMatrixUserId,
+        );
+
         if (availableCredits < MINIMUM_CREDITS) {
           return responder.onError(
             `You need a minimum of ${MINIMUM_CREDITS} credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.`,
