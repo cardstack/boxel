@@ -1,8 +1,8 @@
 import '../setup-logger'; // This should be first
 import { aiBotUsername } from '@cardstack/runtime-common';
-import { createClient, Method } from 'matrix-js-sdk';
+import { createClient } from 'matrix-js-sdk';
 import { writeFileSync } from 'fs';
-
+import { getRoomEvents } from '../lib/matrix';
 console.log(aiBotUsername);
 (async () => {
   const room = process.argv[2];
@@ -54,18 +54,7 @@ console.log(aiBotUsername);
     process.exit(1);
   }
   console.log(`Joined room ${joinedRoom.name}`);
-  let response = await (client as any).http.authedRequest(
-    Method.Get,
-    `/rooms/${roomId}/messages`,
-    {
-      dir: 'f',
-      limit: '1000',
-      filter: JSON.stringify({
-        'org.matrix.msc3874.not_rel_types': ['m.replace'],
-      }),
-    },
-  );
-  let eventList = response?.chunk || [];
+  let eventList = await getRoomEvents(roomId, client);
 
   console.log('Total event list', eventList.length);
   writeFileSync(

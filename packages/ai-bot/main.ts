@@ -1,11 +1,6 @@
 import './instrument';
 import './setup-logger'; // This should be first
-import {
-  RoomMemberEvent,
-  RoomEvent,
-  createClient,
-  Method,
-} from 'matrix-js-sdk';
+import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
 import OpenAI from 'openai';
 import { logger, aiBotUsername, DEFAULT_LLM } from '@cardstack/runtime-common';
 import {
@@ -22,7 +17,7 @@ import {
 } from './lib/set-title';
 import { Responder } from './lib/responder';
 import { handleDebugCommands } from './lib/debug';
-import { MatrixClient } from './lib/matrix';
+import { getRoomEvents, MatrixClient } from './lib/matrix';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CommandResultEvent,
@@ -33,7 +28,6 @@ import { getAvailableCredits, saveUsageCost } from './lib/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { OpenAIError } from 'openai/error';
-import { encodeUri } from 'matrix-js-sdk/lib/utils';
 
 let log = logger('ai-bot');
 
@@ -224,21 +218,7 @@ Common issues are:
         }
 
         let promptParts: PromptParts;
-        const messagesPath = encodeUri('/rooms/$roomId/messages', {
-          $roomId: room.roomId,
-        });
-        let response = await (client as any).http.authedRequest(
-          Method.Get,
-          messagesPath,
-          {
-            dir: 'f',
-            limit: '1000',
-            filter: JSON.stringify({
-              'org.matrix.msc3874.not_rel_types': ['m.replace'],
-            }),
-          },
-        );
-        let eventList = (response?.chunk || []) as DiscreteMatrixEvent[];
+        let eventList = await getRoomEvents(room.roomId, client);
         try {
           promptParts = await getPromptParts(eventList, aiBotUserId, client);
           if (!promptParts.shouldRespond) {
@@ -364,21 +344,7 @@ Common issues are:
     );
     try {
       //TODO: optimise this so we don't need to sync room events within a reaction event
-      const messagesPath = encodeUri('/rooms/$roomId/messages', {
-        $roomId: room.roomId,
-      });
-      let response = await (client as any).http.authedRequest(
-        Method.Get,
-        messagesPath,
-        {
-          dir: 'f',
-          limit: '1000',
-          filter: JSON.stringify({
-            'org.matrix.msc3874.not_rel_types': ['m.replace'],
-          }),
-        },
-      );
-      let eventList = (response?.chunk || []) as DiscreteMatrixEvent[];
+      let eventList = await getRoomEvents(room.roomId, client);
       if (roomTitleAlreadySet(eventList)) {
         return;
       }
