@@ -70,6 +70,19 @@ export class CreateInstanceInput extends CardDef {
   @field realm = contains(StringField);
 }
 
+export class UpdateCodePathWithSelectionInput extends CardDef {
+  @field codeRef = contains(CodeRefField);
+  @field localName = contains(StringField);
+  @field fieldName = contains(StringField);
+}
+
+export class UpdatePlaygroundSelectionInput extends CardDef {
+  @field moduleId = contains(StringField);
+  @field cardId = contains(StringField);
+  @field format = contains(StringField);
+  @field fieldIndex = contains(NumberField);
+}
+
 export class ApplySearchReplaceBlockInput extends CardDef {
   @field fileContent = contains(StringField);
   @field codeBlock = contains(StringField);
@@ -190,6 +203,11 @@ export class AddFieldToCardDefinitionInput extends CardDef {
   @field outgoingRealmURL = contains(StringField); // should be provided when the other 2 params are provided
   @field addFieldAtIndex = contains(NumberField); // if provided, the field will be added at the specified index in the card's possibleFields map
   @field computedFieldFunctionSourceCode = contains(StringField); // if provided, the field will be added as a computed field
+}
+
+export class RemixInput extends CardDef {
+  @field realm = contains(StringField);
+  @field listing = linksTo(CardDef);
 }
 
 export {

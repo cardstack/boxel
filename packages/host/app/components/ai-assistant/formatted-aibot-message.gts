@@ -221,16 +221,16 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
         max-height: 30vh;
       }
 
-      /*
-        This filter is a best-effort approximation of a good looking dark theme that is a function of the white theme that
-        we use for code previews in the AI panel. While Monaco editor does support multiple themes, it does not support
-        monaco instances with different themes *on the same page*. This is why we are using a filter to approximate the
-        dark theme. More details here: https://github.com/Microsoft/monaco-editor/issues/338 (monaco uses global style tags
-        with hardcoded colors; any instance will override the global style tag, making all code editors look the same,
-        effectively disabling multiple themes to be used on the same page)
-      */
+      /* our dark-mode background-color is too similar to AI-Assistant message background,
+        so we are using a darker background for code-blocks */
       :global(.code-block .monaco-editor) {
-        filter: invert(1) hue-rotate(151deg) brightness(0.8) grayscale(0.1);
+        --vscode-editor-background: var(--boxel-dark);
+        --vscode-editorGutter-background: var(--boxel-dark);
+      }
+
+      /* this improves inserted-line legibility by reducing green background overlay opacity */
+      :global(.code-block .monaco-editor .line-insert) {
+        opacity: 0.4;
       }
     </style>
   </template>

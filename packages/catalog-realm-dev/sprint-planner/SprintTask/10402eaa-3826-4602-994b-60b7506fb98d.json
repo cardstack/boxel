@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 1,
+        "label": "Next Sprint",
+        "color": "#64B5F6",
+        "completed": false
+      },
+      "dateRange": {
+        "start": "2024-12-08",
+        "end": "2024-12-10"
+      },
+      "priority": {
+        "index": 1,
+        "label": "Medium"
+      },
+      "name": "Create Pill Picker Example",
+      "details": "Implementation of a multi-select component using pills UI pattern, intended for use in the multi-filter feature. Users can select multiple pills simultaneously.\n\n**Note:** *This ticket is no longer relevant*",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/f379cb36-a323-4213-8477-572a31d5d21d"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/4418bdb4-de70-4f97-a8f6-f5fb0359fef3"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/57a04ed3-80e2-4adc-969a-4e250feac1de"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "SprintTask"
+      }
+    }
+  }
+}

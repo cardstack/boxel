@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Chuan",
+      "email": "chuan@gmail.com",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "team": {
+        "links": {
+          "self": "../Team/fbc44450-5406-4ff6-a139-e5443de074ce"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "TeamMember"
+      }
+    }
+  }
+}

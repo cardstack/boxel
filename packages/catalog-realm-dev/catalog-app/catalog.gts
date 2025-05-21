@@ -72,7 +72,7 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
     <header class='showcase-header'>
       <BookOpen width='45' height='45' role='presentation' />
       <h1 class='showcase-header-title'>
-        Boxel Catalog:
+        Cardstack Catalog:
         <br />
         <span class='showcase-header-highlight'>Discover & Remix the Best</span>
       </h1>

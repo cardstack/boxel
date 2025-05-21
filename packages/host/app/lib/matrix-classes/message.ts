@@ -46,14 +46,20 @@ interface RoomMessageOptional {
   errorMessage?: string;
   clientGeneratedId?: string | null;
   reasoningContent?: string | null;
+  hasContinuation?: boolean;
+  continuationOf?: string | null;
 }
 
 export class Message implements RoomMessageInterface {
-  @tracked body: string;
-  @tracked commands: TrackedArray<MessageCommand>;
+  @tracked _body: string;
+  @tracked _reasoningContent?: string | null;
+  @tracked _commands: TrackedArray<MessageCommand>;
   @tracked codePatchResults: TrackedArray<MessageCodePatchResult>;
-  @tracked isStreamingFinished?: boolean;
-  @tracked reasoningContent?: string | null;
+  @tracked created: Date;
+  @tracked _isStreamingFinished?: boolean;
+  @tracked hasContinuation?: boolean;
+  @tracked continuedInMessage?: Message | null;
+  continuationOf?: string | null;
 
   attachedCardIds?: string[] | null;
   attachedFiles?: FileDef[];
@@ -65,8 +71,7 @@ export class Message implements RoomMessageInterface {
 
   author: RoomMember;
   status: EventStatus | null;
-  @tracked created: Date;
-  updated: Date;
+  _updated: Date;
   eventId: string;
   roomId: string;
 
@@ -74,17 +79,20 @@ export class Message implements RoomMessageInterface {
   instanceId: string;
 
   constructor(init: RoomMessageInterface) {
-    Object.assign(this, init);
+    this._body = init.body;
+    this._reasoningContent = init.reasoningContent;
+    this._commands = new TrackedArray<MessageCommand>();
     this.author = init.author;
-    this.body = init.body;
     this.eventId = init.eventId;
     this.created = init.created;
-    this.updated = init.updated;
+    this._updated = init.updated;
     this.status = init.status;
     this.roomId = init.roomId;
     this.attachedFiles = init.attachedFiles;
-    this.reasoningContent = init.reasoningContent;
-    this.commands = new TrackedArray<MessageCommand>();
+    this.hasContinuation = init.hasContinuation;
+    this.continuationOf = init.continuationOf;
+    this._reasoningContent = init.reasoningContent;
+    this._commands = new TrackedArray<MessageCommand>();
     this.codePatchResults = new TrackedArray<MessageCodePatchResult>();
     this.instanceId = guidFor(this);
   }
@@ -94,6 +102,77 @@ export class Message implements RoomMessageInterface {
       this.errorMessage === undefined ||
       (this.errorMessage && this.errorMessage !== ErrorMessage['M_TOO_LARGE'])
     );
+  }
+
+  get reasoningContent(): string {
+    return [this._reasoningContent, this.continuedReasoningContent]
+      .filter(Boolean)
+      .join('');
+  }
+
+  setReasoningContent(reasoningContent: string | null) {
+    if (this._reasoningContent !== reasoningContent) {
+      this._reasoningContent = reasoningContent;
+    }
+  }
+
+  get continuedReasoningContent() {
+    return this.continuedInMessage?.reasoningContent ?? '';
+  }
+
+  get body(): string {
+    return [this._body, this.continuedBody].filter(Boolean).join('');
+  }
+
+  setBody(body: string) {
+    if (this._body !== body) {
+      this._body = body;
+    }
+  }
+
+  get continuedBody() {
+    return this.continuedInMessage?.body;
+  }
+
+  get commands(): MessageCommand[] {
+    return (this.continuedInMessage?.commands?.length ?? 0) > 0
+      ? this.continuedInMessage!.commands
+      : (this._commands ?? []);
+  }
+
+  setCommands(commands: MessageCommand[]) {
+    this._commands = new TrackedArray<MessageCommand>(commands);
+  }
+
+  get continuedCommands() {
+    return this.continuedInMessage?.commands;
+  }
+
+  setIsStreamingFinished(isStreamingFinished: boolean | undefined) {
+    if (this._isStreamingFinished !== isStreamingFinished) {
+      this._isStreamingFinished = isStreamingFinished;
+    }
+  }
+
+  get isStreamingFinished(): boolean | undefined {
+    if (this.hasContinuation) {
+      return this.continuedInMessage?.isStreamingFinished ?? false;
+    }
+    return this._isStreamingFinished;
+  }
+
+  get isStreamingOfEventFinished(): boolean {
+    return this._isStreamingFinished === true;
+  }
+
+  get updated(): Date {
+    return this.continuedInMessage?.updated ?? this._updated;
+  }
+
+  setUpdated(updated: Date) {
+    if (this._updated.getTime() !== updated.getTime()) {
+      this._updated = updated;
+    }
   }
 
   @cached
