@@ -196,7 +196,7 @@
       },
       "specs.36": {
         "links": {
-          "self": "../Spec/crm-kanban-resource"
+          "self": "../Spec/kanban-resource"
         }
       },
       "specs.37": {

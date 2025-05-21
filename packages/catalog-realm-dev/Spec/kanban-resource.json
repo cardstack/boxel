@@ -5,7 +5,7 @@
       "readMe": null,
       "ref": {
         "name": "KanbanResource",
-        "module": "../crm-app/kanban-resource"
+        "module": "../shared/kanban-resource"
       },
       "specType": "component",
       "containedExamples": [],
