@@ -253,8 +253,8 @@ module('Integration | card-catalog', function (hooks) {
       assert
         .dom('[data-test-realm-filter-button]')
         .hasText(
-          `Workspace: Base Workspace, Boxel Catalog`,
-          'base realm and boxel catalog are selected',
+          `Workspace: Base Workspace, Cardstack Catalog`,
+          'base realm and cardstack catalog are selected',
         );
       assert
         .dom(`[data-test-realm="Base Workspace"] [data-test-card-catalog-item]`)

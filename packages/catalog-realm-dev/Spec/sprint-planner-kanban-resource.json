@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "KanbanResource",
+        "module": "../sprint-planner/kanban-resource"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "Kanban Resource",
+      "description": "Spec for Kanban Resource",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
