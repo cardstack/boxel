@@ -39,18 +39,17 @@ export default class FormatChooser extends Component<Signature> {
         display: flex;
         justify-content: center;
         background-color: var(--boxel-dark);
-        margin: 0 auto;
       }
 
       .format-chooser__buttons {
         display: flex;
-        justify-content: space-around;
+        justify-content: space-between;
+        width: 100%;
 
-        width: 380px;
         border: 0;
         border-radius: var(--boxel-border-radius);
         box-shadow: var(--boxel-deep-box-shadow);
-        padding: var(--boxel-spacing-xs);
+        padding: var(--boxel-sp-xxxs);
       }
 
       .format-chooser__button {
@@ -61,12 +60,11 @@ export default class FormatChooser extends Component<Signature> {
         --boxel-button-font: 600 var(--boxel-font-xs);
         --boxel-button-text-color: var(--boxel-light);
         padding: var(--boxel-sp-xxs);
-        margin: var(--boxel-sp-xxs);
         min-width: unset;
         border: 1px solid
           var(--boxel-format-chooser-border-color, var(--boxel-700));
         border-left: 0;
-        border-radius: initial;
+        border-radius: var(--boxel-border-radius);
         text-transform: capitalize;
       }
 

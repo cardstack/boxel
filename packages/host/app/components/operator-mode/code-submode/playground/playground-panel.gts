@@ -689,8 +689,10 @@ export default class PlaygroundPanel extends Component<Signature> {
       .picker-and-chooser {
         position: sticky;
         bottom: 100px;
-        margin: 0 auto;
         border: 1px solid var(--boxel-450);
+        margin: 0 auto;
+        width: 380px;
+        justify-content: space-between;
 
         /* It’s meant to have two rounded borders, this removes a gap */
         border-radius: calc(var(--boxel-border-radius) + 1px);
@@ -701,6 +703,10 @@ export default class PlaygroundPanel extends Component<Signature> {
       .format-chooser {
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
+      }
+
+      .format-chooser__buttons {
+        padding: var(--boxel-sp-xs);
       }
 
       .playground-panel {
