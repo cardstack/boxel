@@ -29,7 +29,7 @@
       },
       "team": {
         "links": {
-          "self": "../../Team/fbc44450-5406-4ff6-a139-e5443de074ce"
+          "self": "../Team/fbc44450-5406-4ff6-a139-e5443de074ce"
         }
       },
       "subtasks": {
@@ -39,7 +39,7 @@
       },
       "assignee": {
         "links": {
-          "self": "../../TeamMember/c4445054-060f-46e1-b9e5-443de074ced6"
+          "self": "../TeamMember/c4445054-060f-46e1-b9e5-443de074ced6"
         }
       },
       "tags": {
