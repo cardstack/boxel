@@ -381,7 +381,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     return this.args.model.tags?.[0]?.name;
   }
 
-  _remixWithAI = task(async (realmUrl: string) => {
+  _openRoomWithSkillAndPrompt = task(async (realmUrl: string) => {
     let commandContext = this.args.context?.commandContext;
     if (!commandContext) {
       throw new Error('Missing commandContext');
@@ -421,7 +421,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
   });
 
   @action remix(realmUrl: string) {
-    this._remixWithAI.perform(realmUrl);
+    this._openRoomWithSkillAndPrompt.perform(realmUrl);
   }
 
   @action

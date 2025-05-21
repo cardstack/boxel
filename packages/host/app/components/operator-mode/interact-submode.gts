@@ -370,7 +370,7 @@ export default class InteractSubmode extends Component {
         return await here.realm.allRealmsInfo;
       },
       fetchCard: async (url: string) => {
-        return await here.store.get(url);
+        return await here.store.peek(url);
       },
     };
     return { ...actions, ...catalogActions };
