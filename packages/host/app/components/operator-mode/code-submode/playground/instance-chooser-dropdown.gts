@@ -46,15 +46,21 @@ const getItemTitle = (selection: SelectedInstance | undefined) => {
 const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
   <template>
     <div class='selected-item' data-test-selected-item>
-      {{@title}}
+      <span class='label'>Instance:</span>
+      <span class='item'>{{@title}}</span>
     </div>
     <style scoped>
       .selected-item {
-        font: 500 var(--boxel-font-xs);
+        font-size: 500 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-sm);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+      }
+
+      .label {
+        font-weight: 600;
+        margin-right: var(--boxel-sp-xxs);
       }
     </style>
   </template>;
