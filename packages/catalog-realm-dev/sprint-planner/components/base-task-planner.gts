@@ -28,7 +28,7 @@ import { FilterDropdown } from './filter/filter-dropdown';
 import { StatusPill } from './filter/filter-dropdown-item';
 import { FilterTrigger } from './filter/filter-trigger';
 import { FilterDisplay } from './filter/filter-display';
-import getKanbanResource from '../../shared/kanban-resource';
+import getKanbanResource from '../kanban-resource';
 
 interface ColumnHeaderSignature {
   statusLabel: string;

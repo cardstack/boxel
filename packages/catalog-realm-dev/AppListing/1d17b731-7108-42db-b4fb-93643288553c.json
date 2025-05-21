@@ -69,7 +69,7 @@
       },
       "specs.11": {
         "links": {
-          "self": "../Spec/kanban-resource"
+          "self": "../Spec/sprint-planner-kanban-resource"
         }
       },
       "publisher": {
