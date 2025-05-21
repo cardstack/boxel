@@ -707,8 +707,13 @@ export default class PlaygroundPanel extends Component<Signature> {
         border-bottom-right-radius: var(--boxel-border-radius);
       }
 
-      .format-chooser__buttons {
-        padding: var(--boxel-sp-xs);
+      .format-chooser :deep(.format-chooser__buttons) {
+        padding: var(--boxel-sp-xxs);
+      }
+
+      .format-chooser :deep(.format-chooser__button) {
+        min-height: unset;
+        padding: var(--boxel-sp-xxxs);
       }
 
       .playground-panel {
