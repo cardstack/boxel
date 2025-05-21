@@ -542,29 +542,6 @@ export default class PlaygroundPanel extends Component<Signature> {
   <template>
     {{consumeContext this.makeCardResource}}
 
-    <button
-      class='instance-chooser-container'
-      {{on 'click' this.handleClick}}
-      {{on 'mouseup' this.handleClick}}
-    >
-      <InstanceSelectDropdown
-        @prerenderedCardQuery={{hash query=this.query realms=this.recentRealms}}
-        @expandedSearchQuery={{hash
-          query=this.expandedQuery
-          realms=this.realmServer.availableRealmURLs
-        }}
-        @fieldOptions={{this.fieldInstances}}
-        @selection={{this.dropdownSelection}}
-        @onSelect={{this.onSelect}}
-        @chooseCard={{this.chooseInstance}}
-        @createNew={{if this.canWriteRealm this.createNew}}
-        @createNewIsRunning={{this.createNewIsRunning}}
-        @moduleId={{this.moduleId}}
-        @persistSelections={{this.persistToLocalStorage}}
-        @recentCardIds={{this.recentCardIds}}
-      />
-    </button>
-
     {{#if this.fieldChooserIsOpen}}
       <ToElsewhere
         @named='playground-field-picker'
@@ -620,13 +597,40 @@ export default class PlaygroundPanel extends Component<Signature> {
                   @isFieldDef={{@isFieldDef}}
                 />
               </div>
-              <FormatChooser
-                class='format-chooser'
-                @formats={{if @isFieldDef this.fieldFormats}}
-                @format={{this.format}}
-                @setFormat={{this.setFormat}}
-                data-test-playground-format-chooser
-              />
+              <section class='picker-and-chooser'>
+                <button
+                  class='instance-chooser-container'
+                  {{on 'click' this.handleClick}}
+                  {{on 'mouseup' this.handleClick}}
+                >
+                  <InstanceSelectDropdown
+                    @prerenderedCardQuery={{hash
+                      query=this.query
+                      realms=this.recentRealms
+                    }}
+                    @expandedSearchQuery={{hash
+                      query=this.expandedQuery
+                      realms=this.realmServer.availableRealmURLs
+                    }}
+                    @fieldOptions={{this.fieldInstances}}
+                    @selection={{this.dropdownSelection}}
+                    @onSelect={{this.onSelect}}
+                    @chooseCard={{this.chooseInstance}}
+                    @createNew={{if this.canWriteRealm this.createNew}}
+                    @createNewIsRunning={{this.createNewIsRunning}}
+                    @moduleId={{this.moduleId}}
+                    @persistSelections={{this.persistToLocalStorage}}
+                    @recentCardIds={{this.recentCardIds}}
+                  />
+                </button>
+                <FormatChooser
+                  class='format-chooser'
+                  @formats={{if @isFieldDef this.fieldFormats}}
+                  @format={{this.format}}
+                  @setFormat={{this.setFormat}}
+                  data-test-playground-format-chooser
+                />
+              </section>
             {{else if this.createNewIsRunning}}
               <LoadingIndicator @color='var(--boxel-light)' />
             {{else if this.maybeGenerateFieldSpec}}
@@ -647,12 +651,23 @@ export default class PlaygroundPanel extends Component<Signature> {
         background: none;
         border: none;
         cursor: auto;
-        max-width: 271px;
-        width: 271px;
-        min-width: 271px;
+        width: 100%;
         padding: 0;
         margin-left: auto;
       }
+
+      .instance-chooser-container :deep(.instance-chooser) {
+        height: auto;
+
+        border-radius: 0;
+        border-top-left-radius: var(--boxel-border-radius);
+        border-top-right-radius: var(--boxel-border-radius);
+      }
+
+      .instance-chooser-container :deep(.instance-chooser .boxel-trigger) {
+        padding: var(--boxel-sp-sm);
+      }
+
       .instance-chooser-container > :deep(.ember-basic-dropdown) {
         width: 100%;
       }
@@ -670,13 +685,24 @@ export default class PlaygroundPanel extends Component<Signature> {
         display: flex;
         flex-direction: column;
       }
-      .format-chooser {
+
+      .picker-and-chooser {
         position: absolute;
         bottom: 100px;
         margin: 0 auto;
+        border: 1px solid var(--boxel-450);
+
+        /* It’s meant to have two rounded borders, this removes a gap */
+        border-radius: calc(var(--boxel-border-radius) + 1px);
 
         --boxel-format-chooser-button-bg-color: var(--boxel-dark);
       }
+
+      .format-chooser {
+        border-bottom-left-radius: var(--boxel-border-radius);
+        border-bottom-right-radius: var(--boxel-border-radius);
+      }
+
       .playground-panel {
         position: relative;
         background-image: url('./playground-background.png');
