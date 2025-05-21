@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "FilterDisplay",
+        "module": "../sprint-planner/components/filter/filter-display"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "Filter Display",
+      "description": "Spec for Filter Display component",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
