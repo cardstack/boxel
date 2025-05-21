@@ -475,7 +475,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
         }
         .display-section {
           width: 100%;
-          height: 70cqmax;
+          height: 68cqmax;
         }
         .info-section {
           flex-direction: column;
@@ -501,34 +501,38 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
       /* Small Tile (150 x 170) */
       @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (170px <= height) {
         .card-title {
-          font-size: var(--boxel-font-size);
+          font-size: var(--boxel-font-size-sm);
           -webkit-line-clamp: 3;
         }
       }
       /* CardsGrid Tile (170 x 250) */
       @container fitted-card (aspect-ratio <= 1.0) and (150px < width < 250px ) and (170px < height < 275px) {
         .display-section {
-          aspect-ratio: 1 / 1;
+          height: 55cqmax;
         }
         .card-title {
-          -webkit-line-clamp: 2;
+          font-size: var(--boxel-font-size);
+          -webkit-line-clamp: 1;
         }
         .card-display-name,
         .card-tags {
           display: none;
+        }
+        .card-remix-button {
+          --boxel-button-padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
         }
       }
       /* Tall Tile (150 x 275) */
       @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (275px <= height) {
         .card-title {
           font-size: var(--boxel-font-size);
-          -webkit-line-clamp: 4;
+          -webkit-line-clamp: 1;
         }
       }
       /* Large Tile (250 x 275) */
       @container fitted-card (aspect-ratio <= 1.0) and (250px <= width ) and (275px <= height) {
         .card-title {
-          -webkit-line-clamp: 3;
+          -webkit-line-clamp: 1;
         }
       }
       /* Vertical Cards */
