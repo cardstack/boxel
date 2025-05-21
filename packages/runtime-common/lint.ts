@@ -27,6 +27,10 @@ export async function lintFix({ source }: LintArgs): Promise<LintResult> {
     // @ts-ignore no types for missing-invokables-config
     /* webpackIgnore: true */ './etc/eslint/missing-invokables-config.js'
   );
+  const missingCardApiImportConfig = await import(
+    // @ts-ignore no types for missing-invokables-config
+    /* webpackIgnore: true */ './etc/eslint/missing-card-api-import-config.js'
+  );
 
   const CONFIG: any = [
     {
@@ -57,6 +61,12 @@ export async function lintFix({ source }: LintArgs): Promise<LintResult> {
           'error',
           {
             invokables: missingInvokablesConfig.default.invokables,
+          },
+        ],
+        '@cardstack/boxel/missing-card-api-import': [
+          'error',
+          {
+            importMappings: missingCardApiImportConfig.default.importMappings,
           },
         ],
       },
