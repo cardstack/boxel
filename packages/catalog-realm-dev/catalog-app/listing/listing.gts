@@ -14,6 +14,7 @@ import {
   isResolvedCodeRef,
   type CopyCardsWithCodeRef,
   type ResolvedCodeRef,
+  Actions,
 } from '@cardstack/runtime-common';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
@@ -63,11 +64,137 @@ function nameWithUuid(listingName?: string) {
   return newPackageName;
 }
 
+export async function installListing(args: any, realm: string) {
+  const listing = args.model as Partial<Listing>;
+  const copyMeta: CopyMeta[] = [];
+
+  const localDir = nameWithUuid(listing.name);
+
+  // first spec as the selected code ref with new url
+  // if there are examples, take the first example's code ref
+  let selectedCodeRef;
+  let shouldPersistPlaygroundSelection = false;
+  let firstExampleCardId;
+
+  // Copy the gts file based on the attached spec's moduleHref
+  for (const spec of listing.specs ?? []) {
+    const absoluteModulePath = spec.moduleHref;
+    const relativeModulePath = spec.ref.module;
+    const normalizedPath = relativeModulePath.split('/').slice(2).join('/');
+    const newPath = localDir.concat('/').concat(normalizedPath);
+    const fileTargetUrl = new URL(newPath, realm).href;
+    const targetFilePath = fileTargetUrl.concat('.gts');
+
+    await args.context?.actions?.copySource?.(
+      absoluteModulePath,
+      targetFilePath,
+    );
+    copyMeta.push({
+      sourceCodeRef: {
+        module: absoluteModulePath,
+        name: spec.ref.name,
+      },
+      targetCodeRef: {
+        module: fileTargetUrl,
+        name: spec.ref.name,
+      },
+    });
+
+    if (!selectedCodeRef) {
+      selectedCodeRef = {
+        module: fileTargetUrl,
+        name: spec.ref.name,
+      };
+    }
+  }
+
+  if (listing.examples) {
+    // Create serialized objects for each example with modified adoptsFrom
+    const results = listing.examples.map((instance: CardDef) => {
+      let adoptsFrom = instance[meta]?.adoptsFrom;
+      if (!adoptsFrom) {
+        return null;
+      }
+      let exampleCodeRef = instance.id
+        ? codeRefWithAbsoluteURL(adoptsFrom, new URL(instance.id))
+        : adoptsFrom;
+      if (!isResolvedCodeRef(exampleCodeRef)) {
+        throw new Error('exampleCodeRef is NOT resolved');
+      }
+      let maybeCopyMeta = copyMeta.find(
+        (meta) =>
+          meta.sourceCodeRef.module ===
+            (exampleCodeRef as ResolvedCodeRef).module &&
+          meta.sourceCodeRef.name === (exampleCodeRef as ResolvedCodeRef).name,
+      );
+      if (maybeCopyMeta) {
+        if (!shouldPersistPlaygroundSelection) {
+          selectedCodeRef = maybeCopyMeta.targetCodeRef;
+          shouldPersistPlaygroundSelection = true;
+        }
+
+        return {
+          sourceCard: instance,
+          codeRef: maybeCopyMeta.targetCodeRef,
+        };
+      }
+      return null;
+    });
+    const copyCardsWithCodeRef = results.filter(
+      (result) => result !== null,
+    ) as CopyCardsWithCodeRef[];
+    for (const cardWithNewCodeRef of copyCardsWithCodeRef) {
+      const { newCardId } = await args.context?.actions?.copyCard(
+        cardWithNewCodeRef.sourceCard,
+        realm,
+        cardWithNewCodeRef.codeRef,
+        localDir,
+      );
+      if (!firstExampleCardId) {
+        firstExampleCardId = newCardId;
+      }
+    }
+  }
+
+  if (listing instanceof SkillListing) {
+    await Promise.all(
+      listing.skills.map((skill) => {
+        args.context?.actions?.copyCard?.(skill, realm, undefined, localDir);
+      }),
+    );
+  }
+
+  return {
+    selectedCodeRef,
+    shouldPersistPlaygroundSelection,
+    firstExampleCardId,
+  };
+}
+
+export async function setupAllRealmsInfo(args: any) {
+  let allRealmsInfo =
+    (await (args.context?.actions as Actions)?.allRealmsInfo?.()) ?? {};
+  let writableRealms: { name: string; url: string; iconURL?: string }[] = [];
+  if (allRealmsInfo) {
+    Object.entries(allRealmsInfo).forEach(([realmUrl, realmInfo]) => {
+      if (realmInfo.canWrite) {
+        writableRealms.push({
+          name: realmInfo.info.name,
+          url: realmUrl,
+          iconURL: realmInfo.info.iconURL ?? '/default-realm-icon.png',
+        });
+      }
+    });
+  }
+  return writableRealms;
+}
+
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
   @tracked createdInstances = false;
   @tracked installedListing = false;
-  @tracked writableRealms: string[] = [];
+  @tracked writableRealms: { name: string; url: string; iconURL?: string }[] =
+    [];
 
   constructor(owner: any, args: any) {
     super(owner, args);
@@ -75,37 +202,29 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   }
 
   get useRealmOptions() {
-    return this.writableRealms.map((realmUrl) => {
-      return new MenuItem(realmUrl, 'action', {
+    return this.writableRealms.map((realm) => {
+      return new MenuItem(realm.name, 'action', {
         action: () => {
-          this.use(realmUrl);
+          this.use(realm.url);
         },
+        iconURL: realm.iconURL ?? '/default-realm-icon.png',
       });
     });
   }
 
   get installRealmOptions() {
-    return this.writableRealms.map((realmUrl) => {
-      return new MenuItem(realmUrl, 'action', {
+    return this.writableRealms.map((realm) => {
+      return new MenuItem(realm.name, 'action', {
         action: () => {
-          this.install(realmUrl);
+          this.install(realm.url);
         },
+        iconURL: realm.iconURL ?? '/default-realm-icon.png',
       });
     });
   }
 
   _setup = task(async () => {
-    let allRealmsInfo =
-      (await this.args.context?.actions?.allRealmsInfo?.()) ?? {};
-    let writableRealms: string[] = [];
-    if (allRealmsInfo) {
-      Object.entries(allRealmsInfo).forEach(([realmUrl, realmInfo]) => {
-        if (realmInfo.canWrite) {
-          writableRealms.push(realmUrl);
-        }
-      });
-    }
-    this.writableRealms = writableRealms;
+    this.writableRealms = await setupAllRealmsInfo(this.args);
   });
 
   _use = task(async (realm: string) => {
@@ -145,90 +264,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   });
 
   _install = task(async (realm: string) => {
-    const copyMeta: CopyMeta[] = [];
-
-    const localDir = nameWithUuid(this.args.model?.name);
-
-    // Copy the gts file based on the attached spec's moduleHref
-    for (const spec of this.args.model?.specs ?? []) {
-      const absoluteModulePath = spec.moduleHref;
-      const relativeModulePath = spec.ref.module;
-      const normalizedPath = relativeModulePath.split('/').slice(2).join('/');
-      const newPath = localDir.concat('/').concat(normalizedPath);
-      const fileTargetUrl = new URL(newPath, realm).href;
-      const targetFilePath = fileTargetUrl.concat('.gts');
-
-      await this.args.context?.actions?.copySource?.(
-        absoluteModulePath,
-        targetFilePath,
-      );
-      copyMeta.push({
-        sourceCodeRef: {
-          module: absoluteModulePath,
-          name: spec.ref.name,
-        },
-        targetCodeRef: {
-          module: fileTargetUrl,
-          name: spec.ref.name,
-        },
-      });
-    }
-
-    if (this.args.model.examples) {
-      // Create serialized objects for each example with modified adoptsFrom
-      const results = this.args.model.examples.map((instance: CardDef) => {
-        let adoptsFrom = instance[meta]?.adoptsFrom;
-        if (!adoptsFrom) {
-          return null;
-        }
-        let exampleCodeRef = instance.id
-          ? codeRefWithAbsoluteURL(adoptsFrom, new URL(instance.id))
-          : adoptsFrom;
-        if (!isResolvedCodeRef(exampleCodeRef)) {
-          throw new Error('exampleCodeRef is NOT resolved');
-        }
-        let maybeCopyMeta = copyMeta.find(
-          (meta) =>
-            meta.sourceCodeRef.module ===
-              (exampleCodeRef as ResolvedCodeRef).module &&
-            meta.sourceCodeRef.name ===
-              (exampleCodeRef as ResolvedCodeRef).name,
-        );
-        if (maybeCopyMeta) {
-          return {
-            sourceCard: instance,
-            codeRef: maybeCopyMeta.targetCodeRef,
-          };
-        }
-        return null;
-      });
-      const copyCardsWithCodeRef = results.filter(
-        (result) => result !== null,
-      ) as CopyCardsWithCodeRef[];
-      await Promise.all(
-        copyCardsWithCodeRef.map(async (cardWithNewCodeRef) => {
-          let newCard = this.args.context?.actions?.copyCard(
-            cardWithNewCodeRef.sourceCard,
-            realm,
-            cardWithNewCodeRef.codeRef,
-            localDir,
-          );
-          return newCard;
-        }),
-      );
-    }
-    if (this.args.model instanceof SkillListing) {
-      await Promise.all(
-        this.args.model.skills.map((skill) => {
-          this.args.context?.actions?.copyCard?.(
-            skill,
-            realm,
-            undefined,
-            dirName,
-          );
-        }),
-      );
-    }
+    await installListing(this.args, realm);
     this.installedListing = true;
   });
 
@@ -365,8 +401,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 </:trigger>
                 <:content as |dd|>
                   <BoxelMenu
+                    class='realm-dropdown-menu'
                     @closeMenu={{dd.close}}
                     @items={{this.useRealmOptions}}
+                    data-test-catalog-listing-use-dropdown
                   />
                 </:content>
               </BoxelDropdown>
@@ -389,8 +427,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 </:trigger>
                 <:content as |dd|>
                   <BoxelMenu
+                    class='realm-dropdown-menu'
                     @closeMenu={{dd.close}}
                     @items={{this.installRealmOptions}}
+                    data-test-catalog-listing-install-dropdown
                   />
                 </:content>
               </BoxelDropdown>
@@ -558,6 +598,16 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       }
       .action-button {
         flex: 1;
+      }
+      .realm-dropdown-menu {
+        --boxel-menu-item-content-padding: var(--boxel-sp-xs);
+        --boxel-menu-item-gap: var(--boxel-sp-xs);
+        min-width: 13rem;
+        max-height: 13rem;
+        overflow-y: scroll;
+      }
+      .realm-dropdown-menu :deep(.menu-item__icon-url) {
+        border-radius: var(--boxel-border-radius-xs);
       }
       .app-listing-embedded
         :deep(.ember-basic-dropdown-content-wormhole-origin) {

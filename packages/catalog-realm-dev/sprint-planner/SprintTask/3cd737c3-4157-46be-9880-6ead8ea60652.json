@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 0,
+        "label": "Not Started",
+        "color": "#B0BEC5",
+        "completed": false
+      },
+      "dateRange": {
+        "start": "2025-05-15",
+        "end": "2025-07-10"
+      },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "name": "Build Kanban Board Component",
+      "details": "Implement drag and drop functionality using ember-modifier-drag-and-drop:\n\n- Install addon and implement TypeScript interfaces for events/data transfer\n- Create reusable drag/drop modifiers with visual feedback and preview\n- Add validation logic and write tests",
+      "description": "",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/f379cb36-a323-4213-8477-572a31d5d21d"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/4418bdb4-de70-4f97-a8f6-f5fb0359fef3"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/57a04ed3-80e2-4adc-969a-4e250feac1de"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "SprintTask"
+      }
+    }
+  }
+}

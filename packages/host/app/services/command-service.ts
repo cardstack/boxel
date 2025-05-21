@@ -147,7 +147,7 @@ export default class CommandService extends Service {
         if (this.executedCommandRequestIds.has(messageCommand.id!)) {
           continue;
         }
-        if (messageCommand.commandResultFileDef) {
+        if (messageCommand.status === 'applied') {
           continue;
         }
         if (!messageCommand.name) {
