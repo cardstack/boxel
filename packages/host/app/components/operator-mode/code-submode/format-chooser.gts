@@ -61,9 +61,7 @@ export default class FormatChooser extends Component<Signature> {
         --boxel-button-text-color: var(--boxel-light);
         padding: var(--boxel-sp-xxs);
         min-width: unset;
-        border: 1px solid
-          var(--boxel-format-chooser-border-color, var(--boxel-700));
-        border-left: 0;
+        border-color: transparent;
         border-radius: var(--boxel-border-radius);
         text-transform: capitalize;
       }
