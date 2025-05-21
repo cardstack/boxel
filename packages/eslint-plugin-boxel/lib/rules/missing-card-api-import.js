@@ -41,43 +41,65 @@ module.exports = {
   create: (context) => {
     const sourceCode = context.sourceCode;
 
-    // Checks if a class extends another class and validates the base class is in scope
-    function checkBaseClass(node) {
-      if (node.superClass) {
-        // For direct identifier references like "extends BaseClass"
-        if (node.superClass.type === 'Identifier') {
-          const baseClassName = node.superClass.name;
-          if (!isBound(node.superClass, sourceCode.getScope(node))) {
-            const matched = context.options[0]?.importMappings?.[baseClassName];
-            if (matched) {
-              const [exportName, moduleName] = matched;
-              context.report({
-                node: node.superClass,
-                messageId: 'missing-card-api-import',
-                fix(fixer) {
-                  return fixMissingImport(
-                    fixer,
-                    sourceCode,
-                    baseClassName,
-                    exportName,
-                    moduleName,
-                  );
-                },
-              });
-            }
-          }
-        }
+    // Track which nodes we've already reported
+    const reportedNodes = new Set();
+
+    // Check for identifiers that should be imported
+    function checkMissingImport(node, isClassExtends = false) {
+      if (node.type !== 'Identifier') {
+        return;
+      }
+
+      const identifierName = node.name;
+
+      // Skip if the identifier is already in scope or already reported
+      if (reportedNodes.has(node) || isBound(node, sourceCode.getScope(node))) {
+        return;
+      }
+
+      const matched = context.options[0]?.importMappings?.[identifierName];
+      if (matched) {
+        reportedNodes.add(node);
+        const [exportName, moduleName] = matched;
+        context.report({
+          node: node,
+          messageId: 'missing-card-api-import',
+          fix(fixer) {
+            return fixMissingImport(
+              fixer,
+              sourceCode,
+              identifierName,
+              exportName,
+              moduleName,
+            );
+          },
+        });
       }
     }
 
     return {
-      // Handle regular JavaScript/TypeScript class declarations
-      ClassDeclaration(node) {
-        checkBaseClass(node);
-      },
-      // Handle class expressions (like in variable declarations)
-      ClassExpression(node) {
-        checkBaseClass(node);
+      // Check for identifiers used throughout the code
+      Identifier(node) {
+        // Skip identifiers that are part of property access (e.g., obj.prop)
+        if (
+          node.parent &&
+          node.parent.type === 'MemberExpression' &&
+          node.parent.property === node
+        ) {
+          return;
+        }
+
+        // Skip identifiers that are property keys (e.g., { prop: value })
+        if (
+          node.parent &&
+          node.parent.type === 'Property' &&
+          node.parent.key === node &&
+          !node.parent.computed
+        ) {
+          return;
+        }
+
+        checkMissingImport(node);
       },
     };
   },

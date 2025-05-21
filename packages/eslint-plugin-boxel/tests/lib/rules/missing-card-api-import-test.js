@@ -78,5 +78,124 @@ ruleTester.run('missing-card-api-import', rule, {
         },
       ],
     },
+    {
+      code: `import {
+        field,
+        linksTo,
+        FieldDef
+      } from 'https://cardstack.com/base/card-api';
+      import StringField from 'https://cardstack.com/base/string';
+
+      import { Chain } from './chain';
+
+      export class Payment extends FieldDef {
+        @field chain = linksTo(Chain);
+        @field address = contains(StringField);
+      }
+      `,
+      output: `import {
+        field,
+        linksTo,
+        FieldDef, contains
+      } from 'https://cardstack.com/base/card-api';
+      import StringField from 'https://cardstack.com/base/string';
+
+      import { Chain } from './chain';
+
+      export class Payment extends FieldDef {
+        @field chain = linksTo(Chain);
+        @field address = contains(StringField);
+      }
+      `,
+      options: [
+        {
+          importMappings: {
+            contains: ['contains', 'https://cardstack.com/base/card-api'],
+          },
+        },
+      ],
+      errors: [
+        {
+          type: 'Identifier',
+          message: rule.meta.messages['missing-card-api-import'],
+        },
+      ],
+    },
+    {
+      code: `import {
+        FieldDef,
+        contains,
+        linksTo,
+      } from 'https://cardstack.com/base/card-api';
+      import StringField from 'https://cardstack.com/base/string';
+
+      export class Payment extends FieldDef {
+        @field address = contains(StringField);
+      }
+      `,
+      output: `import {
+        FieldDef,
+        contains,
+        linksTo, field,
+      } from 'https://cardstack.com/base/card-api';
+      import StringField from 'https://cardstack.com/base/string';
+
+      export class Payment extends FieldDef {
+        @field address = contains(StringField);
+      }
+      `,
+      options: [
+        {
+          importMappings: {
+            field: ['field', 'https://cardstack.com/base/card-api'],
+          },
+        },
+      ],
+
+      errors: [
+        {
+          type: 'Identifier',
+          message: rule.meta.messages['missing-card-api-import'],
+        },
+      ],
+    },
+    {
+      code: `import {
+        FieldDef,
+        contains,
+        field,
+        linksTo,
+      } from 'https://cardstack.com/base/card-api';
+
+      export class Payment extends FieldDef {
+        @field address = contains(StringField);
+      }
+      `,
+      output: `import StringField from 'https://cardstack.com/base/string';
+import {
+        FieldDef,
+        contains,
+        field,
+        linksTo,
+      } from 'https://cardstack.com/base/card-api';
+
+      export class Payment extends FieldDef {
+        @field address = contains(StringField);
+      }
+      `,
+      options: [
+        {
+          importMappings: {
+            StringField: ['default', 'https://cardstack.com/base/string'],
+          },
+        },
+      ],
+      errors: [
+        {
+          type: 'Identifier',
+          message: rule.meta.messages['missing-card-api-import'],
+        },
+      ],
+    },
   ],
 });

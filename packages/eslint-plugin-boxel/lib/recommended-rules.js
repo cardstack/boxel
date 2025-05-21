@@ -5,5 +5,6 @@
  * definitions, execute "pnpm run update"
  */
 module.exports = {
+  "@cardstack/boxel/missing-card-api-import": "error",
   "@cardstack/boxel/template-missing-invokable": "error"
 }
