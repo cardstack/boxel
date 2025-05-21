@@ -382,17 +382,14 @@ export default class PlaygroundPanel extends Component<Signature> {
     return this.realm.canWrite(this.currentRealm);
   }
 
-  /*
-  FIXME why is this unused?
-  @action
-  private onFieldSelect(index: number) {
-    if (!this.card?.id) {
-      return;
-    }
-    this.persistSelections(this.card.id, this.format, index);
-  }
-
-  */
+  // FIXME why is this unused?
+  // @action
+  // private onFieldSelect(index: number) {
+  //   if (!this.card?.id) {
+  //     return;
+  //   }
+  //   this.persistSelections(this.card.id, this.format, index);
+  // }
 
   private get defaultFormat() {
     return this.args.isFieldDef ? 'embedded' : 'isolated';
