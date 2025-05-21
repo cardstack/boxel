@@ -25,7 +25,7 @@ import {
   MatrixEvent,
 } from 'matrix-js-sdk';
 import { FakeMatrixClient } from './helpers/fake-matrix-client';
-import { constructHistory } from '../helpers';
+import { constructHistory } from '../lib/history';
 import type OpenAI from 'openai';
 
 module('shouldSetRoomTitle', () => {

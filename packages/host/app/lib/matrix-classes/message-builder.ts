@@ -18,6 +18,8 @@ import {
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
+  APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_DEBUG_MESSAGE_MSGTYPE,
@@ -90,6 +92,10 @@ export default class MessageBuilder {
       reasoningContent:
         (this.event.content as CardMessageContent)['app.boxel.reasoning'] ||
         null,
+      hasContinuation: hasContinuation(this.event),
+      continuationOf: isCardMessageEvent(this.event)
+        ? (this.event.content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] ?? null)
+        : null,
     });
   }
 
@@ -140,16 +146,18 @@ export default class MessageBuilder {
     message.errorMessage = this.errorMessage;
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
       message.clientGeneratedId = this.clientGeneratedId;
+      message.setIsStreamingFinished(!!event.content.isStreamingFinished);
       message.attachedCardIds = this.attachedCardIds;
       if (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY]) {
-        message.commands = this.buildMessageCommands(message);
+        message.setCommands(this.buildMessageCommands(message));
       }
       message.codePatchResults = this.buildMessageCodePatchResults(message);
     } else if (event.content.msgtype === 'm.text') {
-      message.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
+      message.setIsStreamingFinished(!!event.content.isStreamingFinished);
     } else if (event.content.msgtype === APP_BOXEL_DEBUG_MESSAGE_MSGTYPE) {
       message.isDebugMessage = true;
     }
+
     return message;
   }
 
@@ -159,16 +167,22 @@ export default class MessageBuilder {
       return;
     }
 
-    message.body = this.event.content.body;
-    message.reasoningContent =
+    message.setBody(this.event.content.body);
+    message.setReasoningContent(
       (this.event.content as CardMessageContent)[
         APP_BOXEL_REASONING_CONTENT_KEY
-      ] || null;
-    message.isStreamingFinished =
+      ] || null,
+    );
+    message.setIsStreamingFinished(
       'isStreamingFinished' in this.event.content
         ? this.event.content.isStreamingFinished
-        : undefined;
-    message.updated = new Date();
+        : undefined,
+    );
+    message.hasContinuation = hasContinuation(this.event);
+    message.continuationOf = isCardMessageEvent(this.event)
+      ? (this.event.content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] ?? null)
+      : null;
+    message.setUpdated(new Date());
     message.errorMessage = this.errorMessage;
 
     let encodedCommandRequests =
@@ -194,7 +208,7 @@ export default class MessageBuilder {
 
   updateMessageCommandResult(message: Message) {
     if (message.commands.length === 0) {
-      message.commands = this.buildMessageCommands(message);
+      message.setCommands(this.buildMessageCommands(message));
     }
 
     if (this.builderContext.commandResultEvent && message.commands.length > 0) {
@@ -321,4 +335,23 @@ export default class MessageBuilder {
     }
     return codePatchResults;
   }
+}
+
+export function isCardMessageEvent(
+  matrixEvent: DiscreteMatrixEvent,
+): matrixEvent is CardMessageEvent {
+  if (matrixEvent.type !== 'm.room.message') {
+    return false;
+  }
+  if (!matrixEvent.content) {
+    return false;
+  }
+  return matrixEvent.content?.msgtype === APP_BOXEL_MESSAGE_MSGTYPE;
+}
+
+function hasContinuation(matrixEvent: DiscreteMatrixEvent) {
+  return (
+    isCardMessageEvent(matrixEvent) &&
+    matrixEvent.content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY] === true
+  );
 }

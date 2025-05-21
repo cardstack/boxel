@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 1,
+        "label": "Next Sprint",
+        "color": null,
+        "completed": false
+      },
+      "dateRange": {
+        "start": null,
+        "end": null
+      },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "name": "Drag and drop bug",
+      "details": "",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/f379cb36-a323-4213-8477-572a31d5d21d"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/df163805-2f30-427d-b400-c9db1fa5db9e"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/7bfbc444-5054-460f-b6e1-39e5443de074"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "SprintTask"
+      }
+    }
+  }
+}

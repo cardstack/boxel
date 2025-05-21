@@ -503,7 +503,7 @@ export class SprintTask extends Task {
   static displayName = 'Sprint Task';
   static icon = CheckboxIcon;
   @field project = linksTo(() => Project);
-  @field team = linksTo(() => Team);
+  @field team = linksTo(() => Team, { isUsed: true });
   @field subtasks = linksToMany(() => SprintTask);
   @field status = contains(SprintTaskStatusField);
 

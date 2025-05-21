@@ -352,6 +352,7 @@ class CodeBlockEditor extends Component<Signature> {
     padding: {
       bottom: 8,
     },
+    theme: 'vs-dark',
   };
 
   <template>
@@ -397,6 +398,7 @@ class CodeBlockDiffEditor extends Component<Signature> {
     padding: {
       bottom: 8,
     },
+    theme: 'vs-dark',
   };
 
   <template>

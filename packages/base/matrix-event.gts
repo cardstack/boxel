@@ -15,12 +15,13 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_DEBUG_MESSAGE_MSGTYPE,
+  APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
+  APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { type SerializedFile } from './file-api';
 
@@ -163,8 +164,10 @@ export interface CardMessageContent {
   format: 'org.matrix.custom.html';
   body: string;
   isStreamingFinished?: boolean;
+  [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]?: boolean;
+  [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]?: string; // event_id of the message we are continuing
   [APP_BOXEL_REASONING_CONTENT_KEY]?: string;
-  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[];
+  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[]; // TODO
   errorMessage?: string;
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.
@@ -173,7 +176,7 @@ export interface CardMessageContent {
     // we retrieve the content on the server side by downloading the file
     attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
     attachedCards?: (SerializedFile & { content?: string; error?: string })[];
-    context: {
+    context?: {
       openCardIds?: string[];
       realmUrl?: string;
       tools?: Tool[];
@@ -181,10 +184,8 @@ export interface CardMessageContent {
       submode?: string;
       debug?: boolean;
       requireToolCall?: boolean;
-      functions: Tool['function'][];
+      functions?: Tool['function'][];
     };
-    cardEventId?: string;
-    card?: LooseSingleCardDocument;
   };
 }
 

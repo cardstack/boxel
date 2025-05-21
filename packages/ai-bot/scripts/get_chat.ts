@@ -2,7 +2,7 @@ import '../setup-logger'; // This should be first
 import { aiBotUsername } from '@cardstack/runtime-common';
 import { createClient } from 'matrix-js-sdk';
 import { writeFileSync } from 'fs';
-import { getRoomEvents } from '../lib/matrix';
+import { getRoomEvents } from '../lib/matrix/util';
 console.log(aiBotUsername);
 (async () => {
   const room = process.argv[2];

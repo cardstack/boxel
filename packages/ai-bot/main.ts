@@ -5,24 +5,24 @@ import OpenAI from 'openai';
 import { logger, aiBotUsername, DEFAULT_LLM } from '@cardstack/runtime-common';
 import {
   type PromptParts,
-  constructHistory,
   isCommandResultStatusApplied,
   getPromptParts,
   isInDebugMode,
 } from './helpers';
 
+import { handleDebugCommands, isRecognisedDebugCommand } from './lib/debug';
+import { constructHistory } from './lib/history';
+import { Responder } from './lib/responder';
 import {
   shouldSetRoomTitle,
   setTitle,
   roomTitleAlreadySet,
 } from './lib/set-title';
-import { Responder } from './lib/responder';
-import { handleDebugCommands, isRecognisedDebugCommand } from './lib/debug';
 import {
   getRoomEvents,
-  MatrixClient,
+  type MatrixClient,
   sendPromptAndEventList,
-} from './lib/matrix';
+} from './lib/matrix/util';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CommandResultEvent,
