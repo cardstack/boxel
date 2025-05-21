@@ -687,7 +687,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       }
 
       .picker-and-chooser {
-        position: absolute;
+        position: sticky;
         bottom: 100px;
         margin: 0 auto;
         border: 1px solid var(--boxel-450);
