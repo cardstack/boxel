@@ -554,13 +554,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
                 @codeRef={{@selectedCodeRef}}
                 @isUpdating={{@moduleContentsResource.isLoading}}
                 @cardOrField={{@selectedCardOrField.cardOrField}}
-                as |PlaygroundTitle PlaygroundContent|
-              >
-                <PlaygroundTitle />
-                {{#if (eq this.selectedAccordionItem 'preview')}}
-                  <PlaygroundContent />
-                {{/if}}
-              </Playground>
+              />
             {{else if (eq this.selectedView 'spec')}}
 
               <SpecPreview
