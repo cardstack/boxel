@@ -879,6 +879,7 @@ module('Acceptance | code submode tests', function (_hooks) {
           ],
         },
       ]);
+      assert.dom('[data-test-send-error-to-ai-assistant]').exists();
     });
 
     test('it shows card preview errors', async function (assert) {
@@ -933,6 +934,7 @@ module('Acceptance | code submode tests', function (_hooks) {
           ],
         },
       ]);
+      assert.dom('[data-test-send-error-to-ai-assistant]').exists();
     });
 
     test('empty state displays default realm info', async function (assert) {

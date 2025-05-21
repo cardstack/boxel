@@ -19,7 +19,7 @@ interface Signature {
       stack?: string;
     };
     errorType: 'syntax' | 'runtime';
-    fileToAttach?: FileDef;
+    fileToAttach: FileDef;
   };
 }
 
@@ -54,8 +54,8 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
   <template>
     <Button
       class='send-error-to-ai-assistant'
-      @kind='primary'
-      @size='small'
+      @kind='secondary-dark'
+      @size='extra-small'
       @disabled={{this.sendToAiAssistant.isRunning}}
       {{on 'click' this.sendToAiAssistant.perform}}
       data-test-send-error-to-ai-assistant
@@ -74,7 +74,6 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        transition: all 0.2s ease;
         text-wrap: nowrap;
         background-image: image-set(
           url('../ai-assistant/ai-assist-icon.webp') 1x,

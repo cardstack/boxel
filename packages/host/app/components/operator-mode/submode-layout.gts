@@ -316,7 +316,9 @@ export default class SubmodeLayout extends Component<Signature> {
             @hide={{this.aiAssistantPanelService.isOpen}}
             @onViewInChatClick={{this.aiAssistantPanelService.openPanel}}
           />
-          <AskAiContainer @selectedCardRef={{@selectedCardRef}} />
+          {{#if (not this.aiAssistantPanelService.isOpen)}}
+            <AskAiContainer @selectedCardRef={{@selectedCardRef}} />
+          {{/if}}
           <AiAssistantButton
             class='chat-btn'
             @isActive={{this.aiAssistantPanelService.isOpen}}

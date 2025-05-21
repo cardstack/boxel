@@ -8,15 +8,13 @@ import { dropTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
 import { CopyButton, Button } from '@cardstack/boxel-ui/components';
-import { and, bool, not } from '@cardstack/boxel-ui/helpers';
 import {
   DropdownArrowDown,
   DropdownArrowUp,
-  ExclamationTriangleFill,
+  Warning,
 } from '@cardstack/boxel-ui/icons';
 
 import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -39,7 +37,6 @@ interface Signature {
 export default class ErrorDisplay extends Component<Signature> {
   @tracked private showDetails = this.args.openDetails ?? false;
 
-  @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare commandService: any;
 
   private viewInCodeMode = dropTask(async () => {
@@ -69,15 +66,10 @@ export default class ErrorDisplay extends Component<Signature> {
     <div class='error-display' data-test-error-display>
       <div class='error-header'>
         <div class='error-type' data-test-error-type>
-          <ExclamationTriangleFill class='error-icon' />
+          <Warning class='error-icon' />
           <span>{{this.headerText}}</span>
         </div>
-        {{#if
-          (and
-            (bool @fileToAttach)
-            (not this.operatorModeStateService.aiAssistantOpen)
-          )
-        }}
+        {{#if @fileToAttach}}
           <SendErrorToAIAssistant
             @error={{this.errorObject}}
             @errorType={{@type}}
@@ -94,8 +86,10 @@ export default class ErrorDisplay extends Component<Signature> {
 
       <div class='error-actions'>
         <CopyButton @textToCopy={{@message}} @width='16px' @heigth='16px' />
-        <button
+        <Button
           class='toggle-details-button'
+          @kind='text-only'
+          @size='extra-small'
           {{on 'click' this.toggleDetails}}
           data-test-toggle-details
         >
@@ -105,7 +99,7 @@ export default class ErrorDisplay extends Component<Signature> {
           {{else}}
             <DropdownArrowDown width='12px' height='12px' />
           {{/if}}
-        </button>
+        </Button>
       </div>
 
       {{#if this.showDetails}}
@@ -136,7 +130,7 @@ export default class ErrorDisplay extends Component<Signature> {
 
     <style scoped>
       .error-display {
-        background: #ffba00;
+        background: var(--boxel-warning-200);
         border-radius: var(--boxel-border-radius-lg);
         padding-bottom: var(--boxel-sp-xs);
         color: black;
@@ -182,6 +176,7 @@ export default class ErrorDisplay extends Component<Signature> {
       .error-actions {
         display: flex;
         justify-content: flex-end;
+        align-items: center;
         margin-top: var(--boxel-sp);
         padding: 0 var(--boxel-sp);
 
@@ -190,17 +185,17 @@ export default class ErrorDisplay extends Component<Signature> {
       }
 
       .toggle-details-button {
-        background: none;
-        border: none;
-        cursor: pointer;
-        font: 500 var(--boxel-font-xs);
-        color: black;
         padding: 0;
+        cursor: pointer;
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxs);
         width: 95px;
         justify-content: flex-end;
+      }
+
+      .toggle-details-button:hover {
+        background-color: transparent;
       }
 
       .error-details {
