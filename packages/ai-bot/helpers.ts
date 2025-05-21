@@ -12,15 +12,13 @@ import type {
   ActiveLLMEvent,
   CardMessageContent,
   CardMessageEvent,
-  MessageEvent,
   CommandResultEvent,
   EncodedCommandRequest,
   SkillsConfigEvent,
   Tool,
   CodePatchResultEvent,
-  RealmServerEvent,
 } from 'https://cardstack.com/base/matrix-event';
-import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
+import { MatrixEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
@@ -38,7 +36,12 @@ import {
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import { SerializedFileDef, downloadFile, MatrixClient } from './lib/matrix';
+import {
+  SerializedFileDef,
+  downloadFile,
+  MatrixClient,
+} from './lib/matrix/util';
+import { constructHistory } from './lib/history';
 
 let log = logger('ai-bot');
 
@@ -89,13 +92,6 @@ export type PromptParts =
 
 export type Message = CommandMessage | TextMessage;
 
-export class HistoryConstructionError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'HistoryConstructionError';
-  }
-}
-
 export async function getPromptParts(
   eventList: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -135,159 +131,6 @@ export async function getPromptParts(
     history,
     toolChoice: toolChoice,
   };
-}
-
-function getAggregatedReplacement(event: IRoomEvent) {
-  /**
-   * When replacements are applied, the server aggregates
-   * them into a single event.
-   *
-   * The latest version is placed within the unsigned
-   * section of the event.
-   *
-   * Here we extract any replacement and return the
-   * latest version, but with *the original id*
-   */
-  let finalRawEvent: IRoomEvent;
-  const originalEventId = event.event_id;
-  let replacedRawEvent: IRoomEvent =
-    event.unsigned?.['m.relations']?.['m.replace'];
-  if (replacedRawEvent) {
-    finalRawEvent = replacedRawEvent;
-    finalRawEvent.event_id = originalEventId;
-  } else {
-    finalRawEvent = event;
-  }
-  return finalRawEvent;
-}
-
-function applyAllReplacements(eventlist: IRoomEvent[]): IRoomEvent[] {
-  // First apply any server-side aggregations
-  let eventsWithAggregatedReplacements = eventlist.map(
-    getAggregatedReplacement,
-  );
-  // Now if the event list we have doesn't have aggregations but still
-  // has replacements, we need to apply them manually
-  // TODO: remove this as part of #CS-8662
-  let eventsMap = new Map<string, IRoomEvent>();
-  for (let event of eventsWithAggregatedReplacements) {
-    let canonicalEventId;
-    if (event.content['m.relates_to']?.rel_type === 'm.replace') {
-      canonicalEventId = event.content['m.relates_to'].event_id!;
-    } else {
-      canonicalEventId = event.event_id!;
-    }
-    if (eventsMap.has(canonicalEventId)) {
-      let existingEvent = eventsMap.get(canonicalEventId)!;
-      // Events can be replaced multiple times, we only want the latest version
-      if (existingEvent.origin_server_ts < event.origin_server_ts) {
-        event.event_id = canonicalEventId;
-        eventsMap.set(canonicalEventId, event);
-      }
-    } else {
-      eventsMap.set(canonicalEventId, event);
-    }
-  }
-  let updatedEvents = Array.from(eventsMap.values());
-  updatedEvents.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
-  return updatedEvents;
-}
-
-export async function constructHistory(
-  eventlist: IRoomEvent[],
-  client: MatrixClient,
-) {
-  /**
-   * We send a lot of events to create messages,
-   * as we stream updates to the UI. This works by
-   * sending a new event with the full content and
-   * information about which event it should replace
-   *
-   * This function is to construct the chat as a user
-   * would see it - with only the latest event for each
-   * message.
-   *
-   * When replacements are applied, the server aggregates
-   * them into a single event.
-   */
-  let latestEvents: DiscreteMatrixEvent[] = [];
-
-  const eventListWithReplacementsApplied = applyAllReplacements(eventlist);
-
-  for (let rawEvent of eventListWithReplacementsApplied) {
-    if (rawEvent.content.data) {
-      try {
-        if (typeof rawEvent.content.data === 'string') {
-          rawEvent.content.data = JSON.parse(rawEvent.content.data);
-        }
-      } catch (e) {
-        Sentry.captureException(e, {
-          attachments: [
-            {
-              data: rawEvent.content.data,
-              filename: 'rawEventContentData.txt',
-            },
-          ],
-        });
-        log.error('Error parsing JSON', e);
-        throw new HistoryConstructionError((e as Error).message);
-      }
-    }
-    let event = { ...rawEvent } as DiscreteMatrixEvent;
-    if (
-      ![
-        'm.room.message',
-        APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-        APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-      ].includes(event.type)
-    ) {
-      continue;
-    }
-    event = event as
-      | CardMessageEvent
-      | CommandResultEvent
-      | CodePatchResultEvent
-      | RealmServerEvent
-      | MessageEvent; // Typescript could have inferred this from the line above
-    if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
-      let { attachedCards } = event.content.data ?? {};
-      if (attachedCards && attachedCards.length > 0) {
-        event.content.data.attachedCards = await Promise.all(
-          attachedCards.map(async (attachedCard: SerializedFileDef) => {
-            try {
-              return {
-                ...attachedCard,
-                content: await downloadFile(client, attachedCard),
-              };
-            } catch (e) {
-              return {
-                ...attachedCard,
-                error: `Error loading attached card: ${e}`,
-              };
-            }
-          }),
-        );
-      }
-    } else if (
-      event.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE &&
-      event.content.data.card
-    ) {
-      try {
-        event.content.data.card = {
-          ...event.content.data.card,
-          content: await downloadFile(client, event.content.data.card),
-        };
-      } catch (e) {
-        event.content.data.card = {
-          ...event.content.data.card,
-          error: `Error loading attached card: ${e}`,
-        };
-      }
-    }
-    latestEvents.push(event);
-  }
-  latestEvents.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
-  return latestEvents;
 }
 
 function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
@@ -546,7 +389,7 @@ export async function getTools(
       continue;
     }
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
-      let eventTools = event.content.data.context.tools;
+      let eventTools = event.content.data?.context?.tools;
       if (eventTools?.length) {
         for (let tool of eventTools) {
           toolMap.set(tool.function.name, tool);
@@ -666,9 +509,9 @@ function toPromptMessageWithToolResults(
           let cardContent =
             commandResult.content.data.card.content ??
             commandResult.content.data.card.error;
-          content = `Command ${status}, with result card: ${cardContent}.\n`;
+          content = `Tool call ${status == 'applied' ? 'executed' : status}, with result card: ${cardContent}.\n`;
         } else {
-          content = `Command ${status}.\n`;
+          content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
         }
       }
       return {

@@ -399,21 +399,30 @@ export default class CodeEditor extends Component<Signature> {
         min-height: 100%;
         width: 100%;
         min-width: 100%;
-        padding: var(--boxel-sp) 0;
+        padding-top: var(--boxel-sp-xxs);
+        background-color: var(--monaco-background);
       }
-
-      :global(.monaco-container.readonly) {
-        background-color: #ebeaed;
+      .monaco-container:not(.readonly) {
+        filter: contrast(1.05) brightness(1.05);
       }
-
-      :global(.monaco-container.readonly .margin) {
-        background-color: #ebeaed;
+      .monaco-container.readonly {
+        --monaco-background: var(--monaco-readonly-background);
+        filter: contrast(1.1) saturate(1.1);
       }
-
-      :global(.monaco-container.readonly .monaco-editor-background) {
-        background-color: #ebeaed;
+      .monaco-container :deep(.monaco-editor) {
+        --vscode-editor-background: var(--monaco-background);
+        --vscode-editorStickyScroll-background: var(--monaco-background);
+        --vscode-editorGutter-background: var(--monaco-background);
+        --vscode-editorStickyScroll-shadow: rgba(0 0 0 / 40%);
+        --vscode-scrollbar-shadow: rgba(0 0 0 / 20%);
       }
-
+      .monaco-container :deep(.monaco-editor .sticky-widget) {
+        box-shadow: 0 1px 15px -2px var(--vscode-editorStickyScroll-shadow);
+      }
+      .monaco-container.readonly
+        :deep(.monaco-editor .view-overlays .current-line-exact) {
+        border-color: #454545;
+      }
       .loading {
         margin: 40vh auto;
       }

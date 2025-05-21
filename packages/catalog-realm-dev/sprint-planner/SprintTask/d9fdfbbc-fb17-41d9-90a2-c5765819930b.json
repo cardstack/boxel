@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 1,
+        "label": "Next Sprint",
+        "color": null,
+        "completed": false
+      },
+      "dateRange": {
+        "start": "2025-01-09",
+        "end": "2025-01-12"
+      },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "name": "Integrate Ember Power Calendar Picker",
+      "details": "Create a date range picker component using Ember Power Calendar with built-in validation to prevent end dates being set before start dates. Component should be implemented within a dropdown for better UX, following this pattern:\n\n1. Click triggers dropdown with calendar\n2. First click sets start date\n3. Second click sets end date (with validation)\n4. Invalid date ranges should be prevented and show validation feedback\n\n**Technical Requirements:**\n- Use `ember-power-calendar` for the calendar implementation\n- Implement date validation logic in the component\n- Style dropdown to match our design system",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/f379cb36-a323-4213-8477-572a31d5d21d"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/4418bdb4-de70-4f97-a8f6-f5fb0359fef3"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/57a04ed3-80e2-4adc-969a-4e250feac1de"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "SprintTask"
+      }
+    }
+  }
+}

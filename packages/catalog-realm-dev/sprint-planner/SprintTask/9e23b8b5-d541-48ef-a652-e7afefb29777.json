@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 6,
+        "label": "Shipped",
+        "color": "#66BB6A",
+        "completed": true
+      },
+      "dateRange": {
+        "start": "2024-11-07",
+        "end": "2024-11-21"
+      },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "name": "Incoporate Boxel Multi Select in Dropdown",
+      "details": "Integrate Boxel's multi-select dropdown component to be more unified with the single-select dropdown.\n\nThe trigger component should share the same designs.",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/f379cb36-a323-4213-8477-572a31d5d21d"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/4418bdb4-de70-4f97-a8f6-f5fb0359fef3"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/57a04ed3-80e2-4adc-969a-4e250feac1de"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "SprintTask"
+      }
+    }
+  }
+}

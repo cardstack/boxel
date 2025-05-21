@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 2,
+        "label": "Current Sprint",
+        "color": "#00BCD4",
+        "completed": false
+      },
+      "dateRange": {
+        "start": null,
+        "end": null
+      },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "name": "Resolve bug where overlay only appears on certain cards",
+      "details": "The overlay is only appearing on specific cards due to a faulty modifier that's not being applied consistently across all card instances.",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/f379cb36-a323-4213-8477-572a31d5d21d"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/4418bdb4-de70-4f97-a8f6-f5fb0359fef3"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/83d3889b-7dcb-48ac-8dba-b178f1d404d7"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "SprintTask"
+      }
+    }
+  }
+}
