@@ -542,7 +542,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           </header>
 
           <section
-            class='preview-panel-content'
+            class='module-inspector-content'
             data-test-module-inspector='card-or-field'
             data-test-active-module-inspector-view={{this.selectedView}}
           >
@@ -615,6 +615,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
     <style scoped>
       .module-inspector {
+        height: 100%;
         background-color: var(--code-mode-panel-background-color);
       }
 
@@ -628,6 +629,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
       .module-inspector-content {
         overflow: scroll;
+        height: 100%;
       }
 
       .toggle-button {

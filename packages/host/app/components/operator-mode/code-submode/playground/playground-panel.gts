@@ -672,7 +672,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       }
       .format-chooser {
         position: absolute;
-        bottom: 0;
+        bottom: 100px;
         margin: 0 auto;
 
         --boxel-format-chooser-button-bg-color: var(--boxel-dark);
