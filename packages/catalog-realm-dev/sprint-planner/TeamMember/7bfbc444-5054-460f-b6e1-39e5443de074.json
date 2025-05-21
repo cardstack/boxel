@@ -10,13 +10,13 @@
     "relationships": {
       "team": {
         "links": {
-          "self": "../sprint-planner/Team/df163805-2f30-427d-b400-c9db1fa5db9e"
+          "self": "../Team/df163805-2f30-427d-b400-c9db1fa5db9e"
         }
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../sprint-planner/sprint-task",
+        "module": "../sprint-task",
         "name": "TeamMember"
       }
     }

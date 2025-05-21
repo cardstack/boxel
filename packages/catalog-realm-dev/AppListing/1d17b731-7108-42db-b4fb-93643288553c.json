@@ -67,6 +67,11 @@
           "self": "../Spec/sprint-planner-user"
         }
       },
+      "specs.11": {
+        "links": {
+          "self": "../Spec/sprint-planner-kanban-resource"
+        }
+      },
       "publisher": {
         "links": {
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"

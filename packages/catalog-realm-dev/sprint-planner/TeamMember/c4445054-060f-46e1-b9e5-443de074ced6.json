@@ -16,7 +16,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../sprint-planner/sprint-task",
+        "module": "../sprint-task",
         "name": "TeamMember"
       }
     }
