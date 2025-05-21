@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 3,
+        "label": "In Progress",
+        "color": "#FFB74D",
+        "completed": false
+      },
+      "dateRange": {
+        "start": "2024-11-19",
+        "end": "2024-11-30"
+      },
+      "priority": {
+        "index": 2,
+        "label": "High"
+      },
+      "name": "Make fitted / embeddedd view for task",
+      "details": "Implement a responsive task view that adapts to its container size using container queries (@container), allowing tasks to be embedded in different contexts while maintaining proper layout and readability. This will ensure consistent display whether tasks appear in boards, lists, or as embedded components.",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/f379cb36-a323-4213-8477-572a31d5d21d"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/4418bdb4-de70-4f97-a8f6-f5fb0359fef3"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/57a04ed3-80e2-4adc-969a-4e250feac1de"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "SprintTask"
+      }
+    }
+  }
+}

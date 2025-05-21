@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "SprintPlanner",
+        "module": "../sprint-planner/sprint-planner"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "SprintPlanner",
+      "description": "Spec of Sprint Planner",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1265,7 +1265,9 @@ Attached files:
     );
 
     // Now add a tool
-    (eventList[0].content as CardMessageContent).data.context.tools = [
+    let cardMessageContent = eventList[0].content as CardMessageContent;
+    cardMessageContent.data.context ||= {};
+    cardMessageContent.data.context.tools = [
       getPatchTool('http://localhost:4201/drafts/Author/1', {
         attributes: { firstName: { type: 'string' } },
       }),
@@ -1283,9 +1285,9 @@ Attached files:
     );
 
     // Now remove cards, tools, and add an attached file
-    (eventList[0].content as CardMessageContent).data.context.openCardIds = [];
-    (eventList[0].content as CardMessageContent).data.context.tools = [];
-    (eventList[0].content as CardMessageContent).data.attachedFiles = [
+    cardMessageContent.data.context.openCardIds = [];
+    cardMessageContent.data.context.tools = [];
+    cardMessageContent.data.attachedFiles = [
       {
         url: 'https://example.com/file.txt',
         sourceUrl: 'https://example.com/file.txt',
@@ -2169,7 +2171,7 @@ Attached files:
     );
     assert.equal(result[5].role, 'tool');
     assert.equal(result[5].tool_call_id, 'tool-call-id-1');
-    const expected = `Command applied, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"https://cardstack.com/base/search-results","name":"SearchResults"}}}}.`;
+    const expected = `Tool call executed, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"https://cardstack.com/base/search-results","name":"SearchResults"}}}}.`;
 
     assert.equal(result[5].content!.trim(), expected.trim());
   });
@@ -2290,6 +2292,131 @@ Attached files:
     assert.ok(
       toolCallMessage!.content!.includes('Cloudy'),
       'Tool call result should include "Cloudy"',
+    );
+  });
+
+  test('Responds to completion of lone tool call even when there is no result card', async function () {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          __dirname,
+          'resources/chats/invoke-submode-swith-command.json',
+        ),
+        'utf-8',
+      ),
+    );
+
+    // Set up mock responses for skill card downloads
+    mockResponses.set('mxc://mock-server/skill_card_v1', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'https://cardstack.com/base/Skill/skill_card_v1',
+          attributes: {
+            instructions: 'Test skill instructions',
+            title: 'Test Skill',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: skillCardRef,
+          },
+        },
+      }),
+    });
+
+    mockResponses.set('mxc://mock-server/skill_card_v2', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'https://cardstack.com/base/Skill/skill_card_v2',
+          attributes: {
+            instructions: 'Test skill instructions with updated commands',
+            commands: [
+              {
+                codeRef: {
+                  name: 'default',
+                  module: '@cardstack/boxel-host/commands/switch-submode',
+                },
+                requiresApproval: false,
+                functionName: 'switch-submode_dd88',
+              },
+            ],
+            title: 'Test Skill',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: skillCardRef,
+          },
+        },
+      }),
+    });
+
+    mockResponses.set('mxc://mock-server/command_def_v2', {
+      ok: true,
+      text: JSON.stringify({
+        codeRef: {
+          name: 'default',
+          module: '@cardstack/boxel-host/commands/switch-submode',
+        },
+        tool: {
+          type: 'function',
+          function: {
+            name: 'switch-submode_dd88',
+            description: 'COMMAND_DESCRIPTION_V2',
+            parameters: {
+              type: 'object',
+              properties: {
+                description: {
+                  type: 'string',
+                },
+                attributes: {
+                  type: 'object',
+                  properties: {
+                    submode: {
+                      type: 'string',
+                    },
+                    codePath: {
+                      type: 'string',
+                    },
+                    option: {
+                      type: 'string',
+                      description: 'Additional option',
+                    },
+                  },
+                },
+                relationships: {
+                  type: 'object',
+                  properties: {},
+                },
+              },
+              required: ['attributes', 'description'],
+            },
+          },
+        },
+      }),
+    });
+    const { shouldRespond, messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
+    // tool call results should be deserialised
+    const toolCallMessages = messages!.filter(
+      (message) => message.role === 'tool',
+    );
+    assert.strictEqual(
+      toolCallMessages.length,
+      1,
+      'Should have one tool call message',
+    );
+    assert.ok(
+      toolCallMessages[0].content!.includes('Tool call executed'),
+      'Tool call result should include "Tool call executed"',
     );
   });
 
