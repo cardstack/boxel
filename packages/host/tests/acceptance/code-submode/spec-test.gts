@@ -641,7 +641,7 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
     });
-    await click('[data-test-accordion-item="spec-preview"] button');
+    await click('[data-test-code-mode-panel-item="spec"]');
     assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Person');
     await click('[data-boxel-selector-item-text="DifferentField"]');
     assert
@@ -655,12 +655,12 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
     });
-    await click('[data-test-accordion-item="spec-preview"] button');
+    await click('[data-test-code-mode-panel-item="spec"]');
     assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Person');
     await click('[data-test-file-browser-toggle]');
     await waitFor('[data-test-file="pet.gts"]');
     await click('[data-test-file="pet.gts"]');
-    await click('[data-test-accordion-item="spec-preview"] button');
+    await click('[data-test-code-mode-panel-item="spec"]');
     assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Pet2');
     await click('[data-test-file="person.gts"]');
     assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Person');
@@ -682,7 +682,7 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
     });
-    await click('[data-test-accordion-item="spec-preview"] button');
+    await click('[data-test-code-mode-panel-item="spec"]');
     // intentionally not awaiting fillIn
     fillIn('[data-test-readme] textarea', 'Hello World');
     let textArea = find('[data-test-readme] textarea') as HTMLTextAreaElement;
