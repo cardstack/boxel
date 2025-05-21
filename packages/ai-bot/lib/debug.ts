@@ -4,7 +4,7 @@ import {
   sendMessageEvent,
   sendPromptAndEventList,
   MatrixClient,
-} from './matrix';
+} from './matrix/util';
 import OpenAI from 'openai';
 
 import * as Sentry from '@sentry/node';

@@ -13,7 +13,7 @@ import {
   APP_BOXEL_DEBUG_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import { PromptParts, mxcUrlToHttp } from '../helpers';
+import { PromptParts, mxcUrlToHttp } from '../../helpers';
 import { encodeUri } from 'matrix-js-sdk/lib/utils';
 
 let log = logger('ai-bot');
