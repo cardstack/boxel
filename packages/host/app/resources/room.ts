@@ -51,7 +51,7 @@ import type Room from '../lib/matrix-classes/room';
 
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
-import type OperatorModeStateService from '../services/operator-mode-state';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
