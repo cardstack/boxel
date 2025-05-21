@@ -41,8 +41,7 @@ function nameWithUuid(listingName?: string) {
   return newPackageName;
 }
 export class RemixCommand extends HostBaseCommand<
-  typeof BaseCommandModule.RemixInput,
-  typeof BaseCommandModule.RemixResult
+  typeof BaseCommandModule.RemixInput
 > {
   @service declare private realmServer: RealmServerService;
 
@@ -66,15 +65,11 @@ export class RemixCommand extends HostBaseCommand<
     return RemixInput;
   }
 
-  protected async run(
-    input: BaseCommandModule.RemixInput,
-  ): Promise<BaseCommandModule.RemixResult> {
+  protected async run(input: BaseCommandModule.RemixInput): Promise<undefined> {
     let realmUrls = this.realmServer.availableRealmURLs;
     let { realm: realmUrl, listing: listingInput } = input;
 
     let cardAPI = await this.loadCardAPI();
-    let commandModule = await this.loadCommandModule();
-    const { RemixResult } = commandModule;
 
     const listing = listingInput as any;
 
@@ -160,7 +155,7 @@ export class RemixCommand extends HostBaseCommand<
         return null;
       });
       const copyCardsWithCodeRef = results.filter(
-        (result) => result !== null,
+        (result: any) => result !== null,
       ) as CopyCardsWithCodeRef[];
       for (const cardWithNewCodeRef of copyCardsWithCodeRef) {
         const { newCardId } = await new CopyCardCommand(
@@ -179,7 +174,7 @@ export class RemixCommand extends HostBaseCommand<
 
     if (listing.displayName === 'SkillListing') {
       await Promise.all(
-        listing.skills.map((skill) =>
+        listing.skills.map((skill: any) =>
           new CopyCardCommand(this.commandContext).execute({
             sourceCard: skill,
             realm: realmUrl,
@@ -220,15 +215,14 @@ export class RemixCommand extends HostBaseCommand<
         },
       );
 
+      // before switching to code mode, the FileResource is not ready immediately for the selected file
+      // so we need to wait for 1 second before switching to code mode to ensure the file is ready for now
       await timeout(1000);
 
       await new SwitchSubmodeCommand(this.commandContext).execute({
         submode: 'code',
         codePath: selectedCodeRef.module,
       });
-
-      return new RemixResult({ success: true });
     }
-    return new RemixResult({ success: false });
   }
 }

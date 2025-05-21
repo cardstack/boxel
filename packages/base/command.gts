@@ -18,7 +18,6 @@ import {
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
 } from './commands/search-card-result';
-import { RemixInput, RemixResult } from './commands/remix-input-result';
 
 export type CommandStatus = 'applied' | 'ready' | 'applying';
 
@@ -206,10 +205,13 @@ export class AddFieldToCardDefinitionInput extends CardDef {
   @field computedFieldFunctionSourceCode = contains(StringField); // if provided, the field will be added as a computed field
 }
 
+export class RemixInput extends CardDef {
+  @field realm = contains(StringField);
+  @field listing = linksTo(CardDef);
+}
+
 export {
   SearchCardsByQueryInput,
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
-  RemixInput,
-  RemixResult,
 };

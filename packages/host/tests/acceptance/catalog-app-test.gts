@@ -5,6 +5,9 @@ import { module, skip, test } from 'qunit';
 import { RemixCommand } from '@cardstack/host/commands/remix';
 import { SearchCardsByQueryCommand } from '@cardstack/host/commands/search-cards';
 import type CommandService from '@cardstack/host/services/command-service';
+import type StoreService from '@cardstack/host/services/store';
+
+import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   lookupService,
