@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 2,
+        "label": "Current Sprint",
+        "color": "#00BCD4",
+        "completed": false
+      },
+      "dateRange": {
+        "start": "2024-12-19",
+        "end": "2025-01-09"
+      },
+      "priority": {
+        "index": 2,
+        "label": "Medium"
+      },
+      "name": "Implement Status and Priority Template Component with Dynamic Rendering",
+      "details": "Technical implementation of a reusable template component for displaying status and priority indicators across the application. Requirements include:\n- Create base template structure\n- Implement dynamic color rendering based on status\n- Add priority level visualization\n- Ensure accessibility compliance\n- Add unit tests for component",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/f379cb36-a323-4213-8477-572a31d5d21d"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/4418bdb4-de70-4f97-a8f6-f5fb0359fef3"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/83d3889b-7dcb-48ac-8dba-b178f1d404d7"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "SprintTask"
+      }
+    }
+  }
+}

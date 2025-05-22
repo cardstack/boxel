@@ -4,20 +4,28 @@ import {
   CardContext,
 } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
-// @ts-ignore
-import type { ComponentLike } from '@glint/template';
-// @ts-ignore
-import cssUrl from 'ember-css-url';
+import { Skill } from 'https://cardstack.com/base/skill';
+import { baseRealm } from '@cardstack/runtime-common';
 
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
+import { task } from 'ember-concurrency';
 import { on } from '@ember/modifier';
-import { add, eq } from '@cardstack/boxel-ui/helpers';
+import { add, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 
-import { type Listing } from '../listing/listing';
+import { type Listing, setupAllRealmsInfo } from '../listing/listing';
 
-import { BoxelButton } from '@cardstack/boxel-ui/components';
+import {
+  BoxelDropdown,
+  BoxelButton,
+  Menu as BoxelMenu,
+} from '@cardstack/boxel-ui/components';
+
+import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
+import OpenAiAssistantRoomCommand from '@cardstack/boxel-host/commands/open-ai-assistant-room';
+import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
+import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
 
 interface Signature {
   Element: HTMLElement;
@@ -331,6 +339,27 @@ class CarouselComponent extends GlimmerComponent<Signature> {
 }
 
 export class ListingFittedTemplate extends Component<typeof Listing> {
+  @tracked writableRealms: { name: string; url: string; iconURL?: string }[] =
+    [];
+
+  roomId: string | null = null;
+
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    this.writableRealms = setupAllRealmsInfo(this.args);
+  }
+
+  get remixRealmOptions() {
+    return this.writableRealms.map((realm) => {
+      return new MenuItem(realm.name, 'action', {
+        action: () => {
+          this.remix(realm.url);
+        },
+        iconURL: realm.iconURL ?? '/default-realm-icon.png',
+      });
+    });
+  }
+
   get firstImage() {
     return this.args.model.images?.[0];
   }
@@ -348,9 +377,52 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     return this.args.model.tags?.[0]?.name;
   }
 
-  @action remix(e: MouseEvent) {
+  _openRoomWithSkillAndPrompt = task(async (realmUrl: string) => {
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('Missing commandContext');
+    }
+
+    const { roomId } = await new CreateAiAssistantRoomCommand(
+      commandContext,
+    ).execute({
+      name: this.args.model.name ? `Remix of ${this.args.model.name}` : 'Remix',
+    });
+    this.roomId = roomId;
+
+    const remixSkillCardId = `${baseRealm.url}Skill/remix`;
+    const remixSkillCard = (await this.args.context?.actions?.fetchCard(
+      remixSkillCardId,
+    )) as Skill;
+
+    if (remixSkillCard) {
+      await new AddSkillsToRoomCommand(commandContext).execute({
+        roomId: this.roomId,
+        skills: [remixSkillCard],
+      });
+    }
+
+    if (this.roomId) {
+      await new SendAiAssistantMessageCommand(commandContext).execute({
+        roomId: this.roomId,
+        prompt: `I would like to remix this ${this.args.model.name} under the following realm: ${realmUrl}`,
+        openCardIds: [this.args.model.id!],
+        attachedCards: [this.args.model as CardDef],
+      });
+
+      await new OpenAiAssistantRoomCommand(commandContext).execute({
+        roomId: this.roomId,
+      });
+    }
+  });
+
+  @action remix(realmUrl: string) {
+    this._openRoomWithSkillAndPrompt.perform(realmUrl);
+  }
+
+  @action
+  _stopPropagation(e: MouseEvent) {
     e.stopPropagation();
-    console.log('remix');
   }
 
   <template>
@@ -380,14 +452,28 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           {{#if this.hasTags}}
             <span class='card-tags'># {{this.firstTagName}}</span>
           {{/if}}
-          <BoxelButton
-            @kind='primary'
-            @size='extra-small'
-            class='card-remix-button'
-            {{on 'click' this.remix}}
-          >
-            Remix
-          </BoxelButton>
+          <BoxelDropdown>
+            <:trigger as |bindings|>
+              <BoxelButton
+                data-test-catalog-listing-remix-button
+                @kind='primary'
+                @size='extra-small'
+                class='card-remix-button'
+                {{on 'click' this._stopPropagation}}
+                {{bindings}}
+              >
+                Remix
+              </BoxelButton>
+            </:trigger>
+            <:content as |dd|>
+              <BoxelMenu
+                class='realm-dropdown-menu'
+                @closeMenu={{dd.close}}
+                @items={{this.remixRealmOptions}}
+                data-test-catalog-listing-remix-dropdown
+              />
+            </:content>
+          </BoxelDropdown>
         </div>
       </div>
     </div>
@@ -466,6 +552,16 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           margin-left: auto;
           flex: 0 0 auto;
         }
+        .realm-dropdown-menu {
+          --boxel-menu-item-content-padding: var(--boxel-sp-xs);
+          --boxel-menu-item-gap: var(--boxel-sp-xs);
+          min-width: 13rem;
+          max-height: 13rem;
+          overflow-y: scroll;
+        }
+        .realm-dropdown-menu :deep(.menu-item__icon-url) {
+          border-radius: var(--boxel-border-radius-xs);
+        }
       }
 
       /* Aspect Ratio <= 1.0 (Vertical) */
@@ -475,7 +571,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
         }
         .display-section {
           width: 100%;
-          height: 70cqmax;
+          height: 68cqmax;
         }
         .info-section {
           flex-direction: column;
@@ -501,34 +597,38 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
       /* Small Tile (150 x 170) */
       @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (170px <= height) {
         .card-title {
-          font-size: var(--boxel-font-size);
+          font-size: var(--boxel-font-size-sm);
           -webkit-line-clamp: 3;
         }
       }
       /* CardsGrid Tile (170 x 250) */
       @container fitted-card (aspect-ratio <= 1.0) and (150px < width < 250px ) and (170px < height < 275px) {
         .display-section {
-          aspect-ratio: 1 / 1;
+          height: 55cqmax;
         }
         .card-title {
-          -webkit-line-clamp: 2;
+          font-size: var(--boxel-font-size);
+          -webkit-line-clamp: 1;
         }
         .card-display-name,
         .card-tags {
           display: none;
+        }
+        .card-remix-button {
+          --boxel-button-padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
         }
       }
       /* Tall Tile (150 x 275) */
       @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (275px <= height) {
         .card-title {
           font-size: var(--boxel-font-size);
-          -webkit-line-clamp: 4;
+          -webkit-line-clamp: 1;
         }
       }
       /* Large Tile (250 x 275) */
       @container fitted-card (aspect-ratio <= 1.0) and (250px <= width ) and (275px <= height) {
         .card-title {
-          -webkit-line-clamp: 3;
+          -webkit-line-clamp: 1;
         }
       }
       /* Vertical Cards */

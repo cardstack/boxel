@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 2,
+        "label": "Current Sprint",
+        "color": "#00BCD4",
+        "completed": false
+      },
+      "dateRange": {
+        "start": null,
+        "end": null
+      },
+      "priority": {
+        "index": 4,
+        "label": "Highest"
+      },
+      "name": "Fill up task board with realistic data",
+      "details": "### Objective\nPopulate the task board with realistic sample data that demonstrates the full capabilities of our markdown and task tracking features.\n\n#### Requirements\n- [ ] Add variety of task statuses (Todo, In Progress, Done)\n- [ ] Include tasks with different priority levels\n- [ ] Create sample tasks with rich markdown content\n- [ ] Add realistic date ranges and deadlines",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/f379cb36-a323-4213-8477-572a31d5d21d"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/fbc44450-5406-4ff6-a139-e5443de074ce"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/c4445054-060f-46e1-b9e5-443de074ced6"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "SprintTask"
+      }
+    }
+  }
+}

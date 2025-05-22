@@ -43,6 +43,7 @@ import consumeContext from '@cardstack/host/helpers/consume-context';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -93,6 +94,7 @@ interface Signature {
 export default class PlaygroundPanel extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @service private declare loaderService: LoaderService;
+  @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
@@ -539,6 +541,16 @@ export default class PlaygroundPanel extends Component<Signature> {
     return false;
   }
 
+  private get fileToFixWithAi() {
+    let codePath = this.operatorModeStateService.state.codePath?.href;
+    if (!codePath) return undefined;
+
+    return this.matrixService.fileAPI.createFileDef({
+      sourceUrl: codePath,
+      name: codePath.split('/').pop(),
+    });
+  }
+
   <template>
     {{consumeContext this.makeCardResource}}
 
@@ -576,6 +588,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                   <CardError
                     @error={{this.cardError}}
                     @cardCreationError={{this.cardError.meta.isCreationError}}
+                    @fileToFixWithAi={{this.fileToFixWithAi}}
                   />
                 </CardContainer>
               {{/if}}

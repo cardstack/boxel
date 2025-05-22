@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 1,
+        "label": "Next Sprint",
+        "color": null,
+        "completed": false
+      },
+      "dateRange": {
+        "start": "2025-05-31",
+        "end": "2025-06-01"
+      },
+      "priority": {
+        "index": 1,
+        "label": "Low"
+      },
+      "name": "Calendar displays wrong date after closing",
+      "details": "🐞 Bug Task: Calendar Displays Incorrect Date After Closing\nDescription:\nWhen a user selects a date and closes the calendar popover/dropdown, the displayed value does not reflect the most recently selected date. This can lead to confusion, as users believe the wrong date is selected or that their action was not registered.",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/f379cb36-a323-4213-8477-572a31d5d21d"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/fbc44450-5406-4ff6-a139-e5443de074ce"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/c4445054-060f-46e1-b9e5-443de074ced6"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "SprintTask"
+      }
+    }
+  }
+}

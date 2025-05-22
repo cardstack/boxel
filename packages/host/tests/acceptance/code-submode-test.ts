@@ -37,6 +37,7 @@ import {
   visitOperatorMode,
   waitForCodeEditor,
   setupUserSubscription,
+  assertMessages,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -860,11 +861,25 @@ module('Acceptance | code submode tests', function (_hooks) {
           operatorModeStateParam,
         )}`,
       );
-      await waitFor('[data-test-syntax-error]');
+      await waitFor('[data-test-error-details]');
       assert
-        .dom('[data-test-syntax-error]')
-        .includesText('/broken.gts: Missing semicolon. (1:4)');
+        .dom('[data-test-error-details]')
+        .includesText('Parse Error at broken.gts:1:6: 1:10');
       assert.dom('[data-test-module-error-panel] > button').isDisabled();
+
+      assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
+      await click('[data-test-send-error-to-ai-assistant]');
+      assert.dom('[data-test-ai-assistant-panel]').exists();
+      assertMessages(assert, [
+        {
+          from: 'testuser',
+          message: `In the attachment file, I encountered an error that needs fixing: Syntax Error Stack trace: Parse Error at broken.gts:1:6: 1:10. broken.gts`,
+          files: [
+            { name: 'broken.gts', sourceUrl: `${testRealmURL}broken.gts` },
+          ],
+        },
+      ]);
+      assert.dom('[data-test-send-error-to-ai-assistant]').exists();
     });
 
     test('it shows card preview errors', async function (assert) {
@@ -875,9 +890,9 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       await waitFor('[data-test-card-error]');
 
-      await click('[data-test-error-detail-toggle] button');
+      await click('[data-test-toggle-details]');
       assert
-        .dom('[data-test-error-detail]')
+        .dom('[data-test-error-details]')
         .includesText(`${testRealmURL}non-card not found`);
 
       await visitOperatorMode({
@@ -887,12 +902,39 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       await waitFor('[data-test-card-error]');
 
-      await click('[data-test-error-detail-toggle] button');
-      assert
-        .dom('[data-test-error-detail]')
-        .includesText('intentionalError is not defined');
+      await click('[data-test-toggle-details]');
+      assert.dom('[data-test-error-details]').includesText('No stack trace');
 
       await percySnapshot(assert);
+    });
+
+    test('it shows card preview errors and fix it button in playground panel', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}broken-country.gts`,
+      });
+
+      await click('[data-test-accordion-item="playground"] button');
+      await waitFor('[data-test-card-error]');
+      await click('[data-test-toggle-details]');
+      assert.dom('[data-test-error-details]').includesText('No stack trace');
+
+      assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
+      await click('[data-test-send-error-to-ai-assistant]');
+      assert.dom('[data-test-ai-assistant-panel]').exists();
+      assertMessages(assert, [
+        {
+          from: 'testuser',
+          message: `In the attachment file, I encountered an error that needs fixing: Card Error intentionalError is not defined`,
+          files: [
+            {
+              name: 'broken-country.gts',
+              sourceUrl: `${testRealmURL}broken-country.gts`,
+            },
+          ],
+        },
+      ]);
+      assert.dom('[data-test-send-error-to-ai-assistant]').exists();
     });
 
     test('empty state displays default realm info', async function (assert) {
