@@ -522,7 +522,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
                 class='toggle-button'
                 @isActive={{eq this.selectedView moduleInspectorView}}
                 {{on 'click' (fn this.toggleAccordionItem moduleInspectorView)}}
-                data-test-code-mode-panel-item={{moduleInspectorView}}
+                data-test-module-inspector-view={{moduleInspectorView}}
               >
                 {{capitalize moduleInspectorView}}
                 {{#if (eq moduleInspectorView 'spec')}}

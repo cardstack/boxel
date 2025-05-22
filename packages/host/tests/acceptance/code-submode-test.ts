@@ -914,7 +914,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}broken-country.gts`,
       });
 
-      await click('[data-test-code-mode-panel-item="preview"]');
+      await click('[data-test-module-inspector-view="preview"]');
       await waitFor('[data-test-card-error]');
       await click('[data-test-toggle-details]');
       assert.dom('[data-test-error-details]').includesText('No stack trace');
@@ -1833,7 +1833,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         .dom('[data-test-active-module-inspector-view="schema"]')
         .exists('defaults to schema-editor view');
 
-      await click('[data-test-code-mode-panel-item="preview"]');
+      await click('[data-test-module-inspector-view="preview"]');
       assert.dom('[data-test-active-module-inspector-view="preview"]').exists();
 
       await click('[data-test-file-browser-toggle]');
@@ -1850,7 +1850,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click('[data-test-file="pet-person.gts"]');
       assert.dom('[data-test-active-module-inspector-view="preview"]').exists();
 
-      await click('[data-test-code-mode-panel-item="spec"]');
+      await click('[data-test-module-inspector-view="spec"]');
       assert.dom('[data-test-active-module-inspector-view="spec"]').exists();
 
       let currentSelections = window.localStorage.getItem(
