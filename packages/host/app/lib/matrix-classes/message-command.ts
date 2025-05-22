@@ -29,6 +29,7 @@ export default class MessageCommand {
     public codeRef: ResolvedCodeRef | undefined,
     public eventId: string,
     public requiresApproval: boolean,
+    public actionVerb: string,
     commandStatus: CommandStatus,
     commandResultFileDef: SerializedFile | undefined,
     owner: Owner,

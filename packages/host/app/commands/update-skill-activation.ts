@@ -14,6 +14,8 @@ export default class UpdateSkillActivationCommand extends HostBaseCommand<
 > {
   @service declare private matrixService: MatrixService;
 
+  static actionVerb = 'Update';
+
   async getInputType() {
     let commandModule = await this.loadCommandModule();
     const { UpdateSkillActivationInput } = commandModule;

@@ -11,6 +11,8 @@ export default class SaveCardCommand extends HostBaseCommand<
 > {
   @service declare private store: StoreService;
 
+  static actionVerb = 'Save';
+
   async getInputType() {
     let commandModule = await this.loadCommandModule();
     const { SaveCardInput } = commandModule;

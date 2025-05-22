@@ -13,6 +13,8 @@ export default class OpenAiAssistantRoomCommand extends HostBaseCommand<
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
 
+  static actionVerb = 'Open';
+
   async getInputType() {
     let commandModule = await this.loadCommandModule();
     const { OpenAiAssistantRoomInput } = commandModule;

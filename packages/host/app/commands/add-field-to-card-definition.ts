@@ -16,6 +16,8 @@ export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
 > {
   @service declare private cardService: CardService;
 
+  static actionVerb = 'Add';
+
   async getInputType() {
     let commandModule = await this.loadCommandModule();
     const { AddFieldToCardDefinitionInput } = commandModule;

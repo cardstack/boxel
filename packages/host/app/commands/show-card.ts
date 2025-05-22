@@ -14,6 +14,8 @@ export default class ShowCardCommand extends HostBaseCommand<
   description =
     'Show a card in the UI. The cardIdToShow mush be a fully qualified URL.';
 
+  static actionVerb = 'Show Card';
+
   async getInputType() {
     let commandModule = await this.loadCommandModule();
     const { ShowCardInput } = commandModule;

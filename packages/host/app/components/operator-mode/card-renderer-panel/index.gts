@@ -75,7 +75,7 @@ export default class CardRendererPanel extends Component<Signature> {
 
   private get urlForRealmLookup() {
     let urlForRealmLookup =
-      this.args.card?.id ?? this.args.card?.[realmURL]?.href;
+      this.args.card?.id ?? this.args?.card?.[realmURL]?.href;
     if (!urlForRealmLookup) {
       throw new Error(
         `bug: cannot determine a URL to use for realm lookup of a card--this should always be set even for new cards`,

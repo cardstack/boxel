@@ -192,7 +192,7 @@ export default class RoomMessageCommand extends Component<Signature> {
             @state={{this.applyButtonState}}
             {{on 'click' @runCommand}}
             data-test-command-apply={{this.applyButtonState}}
-          />
+          >{{@messageCommand.actionVerb}}</ApplyButton>
         </div>
         {{#if this.isDisplayingCode}}
           <CodeBlock
