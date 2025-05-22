@@ -509,7 +509,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
           <header
             class='module-inspector-header'
-            aria-label='FIXME'
             {{SpecUpdatedModifier
               spec=this.activeSpec
               onSpecUpdated=this.updatePlaygroundSelectionsFromSpec
