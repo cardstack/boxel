@@ -8,7 +8,7 @@
 
 Auto-fixes missing imports for card-api related symbols in your code.
 
-If you refer to a card-api symbol without importing it:
+If you refer to a commonly used named export from card-api without importing it:
 
 ```js
 export class Payment extends FieldDef {
@@ -49,7 +49,7 @@ export class Payment extends FieldDef {
 }
 ```
 
-### Partially imported card-api symbols
+### Partially imported card-api exports
 
 ```js
 import { contains, field } from 'https://cardstack.com/base/card-api';
