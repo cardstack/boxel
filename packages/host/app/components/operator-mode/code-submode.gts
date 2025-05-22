@@ -758,7 +758,11 @@ export default class CodeSubmode extends Component<Signature> {
               </InnerContainer>
             </ResizablePanel>
             <ResizeHandle />
-            <ResizablePanel @defaultSize={{this.defaultPanelWidths.rightPanel}}>
+            <ResizablePanel
+              @defaultSize={{this.defaultPanelWidths.rightPanel}}
+              {{! TODO in CS-8713: make this have a minimum width }}
+              @collapsible={{false}}
+            >
               <InnerContainer>
                 {{#if this.isReady}}
                   <ModuleInspector
