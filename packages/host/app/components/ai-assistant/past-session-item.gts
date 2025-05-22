@@ -21,9 +21,8 @@ import {
   IconCircle,
 } from '@cardstack/boxel-ui/icons';
 
+import { SessionRoomData } from '@cardstack/host/services/ai-assistant-panel-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-
-import { SessionRoomData } from './panel';
 
 export type RoomActions = {
   open: (roomId: string) => void;

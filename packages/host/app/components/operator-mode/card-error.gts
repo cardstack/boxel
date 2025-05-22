@@ -11,6 +11,8 @@ import { FileAlert, ExclamationCircle } from '@cardstack/boxel-ui/icons';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { type CardErrorJSONAPI } from '@cardstack/host/services/store';
 
+import type { FileDef } from 'https://cardstack.com/base/file-api';
+
 import { htmlComponent } from '../../lib/html-component';
 
 import CardErrorDetail from './card-error-detail';
@@ -27,6 +29,7 @@ interface Signature {
       moreOptionsMenuItems?: MenuItem[];
       onClose?: () => void;
     };
+    fileToFixWithAi?: FileDef;
   };
   Element: HTMLElement;
 }
@@ -66,6 +69,7 @@ export default class CardErrorComponent extends Component<Signature> {
       @error={{@error}}
       @title={{this.errorTitle}}
       @viewInCodeMode={{@viewInCodeMode}}
+      @fileToFixWithAi={{@fileToFixWithAi}}
     />
 
     <style scoped>
@@ -80,14 +84,14 @@ export default class CardErrorComponent extends Component<Signature> {
         justify-content: center;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp);
+        margin: var(--boxel-sp);
       }
       .card-error {
         flex: 1;
         opacity: 0.4;
         border-radius: 0;
         box-shadow: none;
-        overflow: auto;
+        overflow: visible;
       }
       .message {
         width: 100%;

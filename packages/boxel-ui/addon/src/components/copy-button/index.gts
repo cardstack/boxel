@@ -11,7 +11,9 @@ import Tooltip from '../tooltip/index.gts';
 
 interface Signature {
   Args: {
+    height?: string;
     textToCopy: string;
+    width?: string;
   };
   Element: HTMLElement;
 }
@@ -37,8 +39,8 @@ export default class CopyButton extends Component<Signature> {
       <:trigger>
         <IconButton
           @icon={{Copy}}
-          @width='18px'
-          @height='18px'
+          width={{unless @width '18px'}}
+          height={{unless @height '18px'}}
           {{on 'click' this.copyToClipboard}}
           aria-label='Copy'
           data-test-boxel-copy-button
