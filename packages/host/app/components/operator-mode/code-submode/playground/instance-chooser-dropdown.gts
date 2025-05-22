@@ -238,14 +238,6 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
         --boxel-loading-indicator-size: var(--boxel-icon-xs);
       }
 
-      .instance-chooser :deep(.icon) {
-        transform: rotate(180deg);
-      }
-
-      .instance-chooser :deep(.icon.is-open) {
-        transform: rotate(0deg);
-      }
-
       :deep(
         .boxel-select__dropdown .ember-power-select-option[aria-current='true']
       ),
