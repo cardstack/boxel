@@ -1257,8 +1257,8 @@ export class Account extends CardDef {
   static headerColor = '#f8f7fa';
   static icon = AccountIcon;
   @field crmApp = linksTo(() => CrmApp);
-  @field company = linksTo(() => Company);
-  @field primaryContact = linksTo(() => Contact);
+  @field company = linksTo(() => Company, { isUsed: true });
+  @field primaryContact = linksTo(() => Contact, { isUsed: true });
   @field contacts = linksToMany(() => Contact);
   @field shippingAddress = contains(AddressField);
   @field billingAddress = contains(AddressField);

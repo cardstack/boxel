@@ -459,9 +459,7 @@ export interface CatalogActions {
     localDir?: LocalPath,
   ) => Promise<CardDef[]>;
   copySource: (fromUrl: string, toUrl: string) => Promise<void>;
-  allRealmsInfo: () => Promise<
-    Record<string, { canWrite: boolean; info: RealmInfo }>
-  >;
+  allRealmsInfo: () => Record<string, { canWrite: boolean; info: RealmInfo }>;
   fetchCard: (url: string) => Promise<CardDef | CardErrorJSONAPI | undefined>;
 }
 

@@ -144,7 +144,7 @@ module('Integration | ask-ai', function (hooks) {
         cards: [{ id: cardId, title: 'Marco' }],
       },
     ]);
-    assert.dom('[data-test-ask-ai-input]').hasNoValue();
+    assert.dom('[data-test-ask-ai-input]').doesNotExist();
     assert.dom('[data-test-message-field]').hasNoValue();
   });
 
@@ -179,7 +179,7 @@ module('Integration | ask-ai', function (hooks) {
         message: 'Hello world',
       },
     ]);
-    assert.dom('[data-test-ask-ai-input]').hasNoValue();
+    assert.dom('[data-test-ask-ai-input]').doesNotExist();
     assert.dom('[data-test-message-field]').hasNoValue();
   });
 
@@ -228,22 +228,7 @@ module('Integration | ask-ai', function (hooks) {
     await click('[data-test-past-sessions-button]');
     assert.dom('[data-test-joined-room]').exists({ count: 1 });
     await click('[data-test-past-sessions-button]');
-
-    // sending new message from AskAI box to open panel
-    await sendAskAiMessage('Change title to Marquitos');
-    await assertMessages(assert, [
-      {
-        from: 'testuser',
-        message: 'Change title to Marquitos',
-        cards: [{ id: marcoId, title: 'Marco' }],
-        files: [{ sourceUrl: petCardId, name: 'pet.gts' }],
-      },
-    ]);
-    assert.dom('[data-test-ask-ai-input]').hasNoValue();
-    assert.dom('[data-test-message-field]').hasNoValue();
-    await click('[data-test-past-sessions-button]');
-    assert.dom('[data-test-joined-room]').exists({ count: 2 });
-    await click('[data-test-past-sessions-button]');
+    assert.dom('[data-test-ask-ai-input]').doesNotExist();
 
     // sending message to open room via panel's chatbox
     await fillIn('[data-test-message-field]', 'Goodbye');
@@ -251,7 +236,7 @@ module('Integration | ask-ai', function (hooks) {
     await assertMessages(assert, [
       {
         from: 'testuser',
-        message: 'Change title to Marquitos',
+        message: 'Change embedded template background to blue',
         cards: [{ id: marcoId, title: 'Marco' }],
         files: [{ sourceUrl: petCardId, name: 'pet.gts' }],
       },
@@ -263,7 +248,7 @@ module('Integration | ask-ai', function (hooks) {
       },
     ]);
     await click('[data-test-past-sessions-button]');
-    assert.dom('[data-test-joined-room]').exists({ count: 2 });
+    assert.dom('[data-test-joined-room]').exists({ count: 1 });
     await click('[data-test-past-sessions-button]');
   });
 });

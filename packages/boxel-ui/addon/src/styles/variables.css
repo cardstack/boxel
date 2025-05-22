@@ -159,6 +159,7 @@
   --boxel-error-200: #ed0000;
   --boxel-error-300: #ff0000;
   --boxel-warning-100: var(--boxel-yellow); /* warning - notification */
+  --boxel-warning-200: #ffba00;
   --boxel-success-100: var(--boxel-green);
   --boxel-success-200: var(--boxel-teal);
   --boxel-success-300: var(--boxel-dark-green);
