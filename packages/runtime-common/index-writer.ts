@@ -219,6 +219,7 @@ export class Batch {
       entry.embedded_html = entry.embedded_html
         ? this.objectWithCopiedRealmKeys(sourceRealmURL, entry.embedded_html)
         : entry.embedded_html;
+      this.updateIds(entry.search_doc, sourceRealmURL);
       entry.indexed_at = now;
 
       let { valueExpressions, nameExpressions } = asExpressions(entry);
@@ -687,5 +688,24 @@ export class Batch {
       result[this.copiedRealmURL(fromRealm, new URL(key)).href] = value;
     }
     return result;
+  }
+
+  private updateIds(obj: any, fromRealm: URL) {
+    if (Array.isArray(obj)) {
+      obj.forEach((i) => this.updateIds(i, fromRealm));
+    } else if (obj && typeof obj === 'object') {
+      for (let key in obj) {
+        if (
+          key === 'id' &&
+          'id' in obj &&
+          obj.id &&
+          typeof obj.id === 'string'
+        ) {
+          obj.id = this.copiedRealmURL(fromRealm, new URL(obj.id));
+        } else {
+          this.updateIds(obj[key], fromRealm);
+        }
+      }
+    }
   }
 }

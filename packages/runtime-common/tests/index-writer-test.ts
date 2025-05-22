@@ -466,7 +466,14 @@ const tests = Object.freeze({
           pristine_doc: resource,
           source,
           transpiled_code: null,
-          search_doc: { name: 'Mango' },
+          search_doc: {
+            id: `${testRealmURL}1`,
+            name: 'Mango',
+            friends: [
+              { id: `${testRealmURL}2`, name: 'Van Gogh' },
+              { id: `http://a-different-realm.com/hassan`, name: 'Hassan' },
+            ],
+          },
           display_names: [`Person`],
           deps: [`${testRealmURL}person`],
           types,
@@ -557,7 +564,14 @@ const tests = Object.freeze({
         ),
         error_doc: null,
         transpiled_code: null,
-        search_doc: { name: 'Mango' },
+        search_doc: {
+          id: `${testRealmURL2}1`,
+          name: 'Mango',
+          friends: [
+            { id: `${testRealmURL2}2`, name: 'Van Gogh' },
+            { id: `http://a-different-realm.com/hassan`, name: 'Hassan' },
+          ],
+        },
         display_names: [`Person`],
         deps: [`${testRealmURL2}person`],
         types: destTypes,
