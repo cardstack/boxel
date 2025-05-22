@@ -13,6 +13,7 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
 [new code to replace with]
 >>>>>>> REPLACE
 `;
+  static actionVerb = 'Apply';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();

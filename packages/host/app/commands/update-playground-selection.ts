@@ -12,6 +12,7 @@ export default class UpdatePlaygroundSelectionCommand extends HostBaseCommand<
 > {
   @service declare private playgroundPanelService: PlaygroundPanelService;
   description = 'Persist the playground selections.';
+  static actionVerb = 'Save';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
