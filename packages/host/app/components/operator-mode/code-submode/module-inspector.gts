@@ -768,7 +768,9 @@ class SpecPreviewTitle extends Component<SpecPreviewTitleSignature> {
           {{on 'click' @createSpec}}
           data-test-create-spec-button
         >
-          <IconPlus width='10px' height='10px' />
+          {{#unless @isCreateSpecInstanceRunning}}
+            <IconPlus width='10px' height='10px' />
+          {{/unless}}
         </BoxelButton>
       {{else if this.moreThanOneInstance}}
         <div
@@ -802,6 +804,11 @@ class SpecPreviewTitle extends Component<SpecPreviewTitleSignature> {
         --boxel-button-min-width: auto;
         padding: 4px;
         border-radius: var(--boxel-border-radius-xs);
+      }
+
+      .create-spec-button :deep(.boxel-loading-indicator) {
+        --loading-indicator-size: 12px;
+        margin-right: 0;
       }
 
       .number-of-instance {
