@@ -1,3 +1,5 @@
+const { fixMissingImport, isBound } = require('../utils/import-utils');
+
 /** @type {import('eslint').Rule.RuleModule} */
 module.exports = {
   meta: {
@@ -51,19 +53,17 @@ module.exports = {
           // change this in the future to report all missing invokables when we are ready with
           // a way to share this information in the UI and or to the AI Assistant.
           if (matched) {
-            const [name, module] = matched;
-            const importStatement = buildImportStatement(
-              node.path.head.name,
-              name,
-              module,
-            );
+            const [exportName, moduleName] = matched;
             context.report({
               node: node.path,
               messageId: 'missing-invokable',
               fix(fixer) {
-                return fixer.insertTextBeforeRange(
-                  [0, 0],
-                  `${importStatement};\n`,
+                return fixMissingImport(
+                  fixer,
+                  sourceCode,
+                  node.path.head.name,
+                  exportName,
+                  moduleName,
                 );
               },
             });
@@ -85,21 +85,3 @@ module.exports = {
     };
   },
 };
-
-function isBound(node, scope) {
-  const ref = scope.references.find((v) => v.identifier === node);
-  if (!ref) {
-    return false;
-  }
-  return Boolean(ref.resolved);
-}
-
-function buildImportStatement(consumedName, exportedName, module) {
-  if (exportedName === 'default') {
-    return `import ${consumedName} from '${module}'`;
-  } else {
-    return consumedName === exportedName
-      ? `import { ${consumedName} } from '${module}'`
-      : `import { ${exportedName} as ${consumedName} } from '${module}'`;
-  }
-}
