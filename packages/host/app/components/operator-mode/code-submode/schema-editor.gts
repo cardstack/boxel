@@ -83,6 +83,11 @@ const SchemaEditorTitle: TemplateOnlyComponent<TitleSignature> = <template>
       color: var(--boxel-450);
       font: 500 var(--boxel-font-xs);
     }
+
+    .total-fields {
+      margin-right: var(--boxel-sp-xxxs);
+    }
+
     .loading-icon {
       display: inline-block;
       margin-right: var(--boxel-sp-xxxs);
