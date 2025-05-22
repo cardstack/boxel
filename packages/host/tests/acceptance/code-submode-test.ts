@@ -914,7 +914,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}broken-country.gts`,
       });
 
-      await click('[data-test-accordion-item="playground"] button');
+      await click('[data-test-code-mode-panel-item="preview"]');
       await waitFor('[data-test-card-error]');
       await click('[data-test-toggle-details]');
       assert.dom('[data-test-error-details]').includesText('No stack trace');
