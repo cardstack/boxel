@@ -346,12 +346,8 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
 
   constructor(owner: any, args: any) {
     super(owner, args);
-    this._setup.perform();
+    this.writableRealms = setupAllRealmsInfo(this.args);
   }
-
-  _setup = task(async () => {
-    this.writableRealms = await setupAllRealmsInfo(this.args);
-  });
 
   get remixRealmOptions() {
     return this.writableRealms.map((realm) => {
