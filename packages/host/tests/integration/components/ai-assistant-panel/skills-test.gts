@@ -6,7 +6,11 @@ import { module, test } from 'qunit';
 import { baseRealm, skillCardRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { APP_BOXEL_ROOM_SKILLS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -69,7 +73,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     })(),
   });
 
-  let { getRoomState } = mockMatrixUtils;
+  let { getRoomState, simulateRemoteMessage } = mockMatrixUtils;
 
   let noop = () => {};
 
@@ -246,6 +250,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
             },
           },
         },
+        'hello.txt': 'Hello, world!',
         '.realm.json': `{ "name": "${realmName}" }`,
       },
     });
@@ -461,7 +466,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
   });
 
-  test('updated skill card instructions result in new event and updated room state', async function (assert) {
+  test('updated skill card instructions result in new event and updated room state when sending message', async function (assert) {
     const roomId = await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
 
     await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
@@ -488,6 +493,174 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
       'This message should trigger uploading the updated',
     );
     await click('[data-test-send-message-btn]');
+
+    const finalRoomStateSkillsJson = getRoomState(
+      roomId,
+      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+    );
+    assert.notDeepEqual(
+      finalRoomStateSkillsJson,
+      initialRoomStateSkillsJson,
+      'room state has changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards[0].contentHash,
+      initialRoomStateSkillsJson.enabledSkillCards[0].contentHash,
+      'skill card instructions have changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards[0].url,
+      initialRoomStateSkillsJson.enabledSkillCards[0].url,
+      'skill card instructions have changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards[0].sourceUrl,
+      initialRoomStateSkillsJson.enabledSkillCards[0].sourceUrl,
+      'skill card source URL has not changed',
+    );
+
+    assert.notStrictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards[1].contentHash,
+      initialRoomStateSkillsJson.enabledSkillCards[1].contentHash,
+      'skill card instructions have changed',
+    );
+    assert.notStrictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards[1].url,
+      initialRoomStateSkillsJson.enabledSkillCards[1].url,
+      'skill card instructions have changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards[1].sourceUrl,
+      initialRoomStateSkillsJson.enabledSkillCards[1].sourceUrl,
+      'skill card source URL has not changed',
+    );
+  });
+
+  test('updated skill card instructions result in new event and updated room state when command is completing', async function (assert) {
+    const roomId = await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
+
+    await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click('[data-test-select="http://test-realm/test/Skill/example"]');
+    await click('[data-test-card-catalog-go-button]');
+
+    const initialRoomStateSkillsJson = getRoomState(
+      roomId,
+      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+    );
+
+    await click('[data-test-edit-button]');
+    await fillIn(
+      '[data-test-field="instructions"] textarea',
+      'Updated instructions',
+    );
+    await click('[data-test-edit-button]');
+    await click('[data-test-close-button]');
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: '',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
+          arguments: JSON.stringify({
+            attributes: {
+              description: 'Searching for card',
+              type: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          }),
+        },
+      ],
+    });
+    // Click on the apply button, skill card will be updated since it has changed
+    await waitFor('[data-test-message-idx="0"]');
+    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+
+    const finalRoomStateSkillsJson = getRoomState(
+      roomId,
+      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+    );
+    assert.notDeepEqual(
+      finalRoomStateSkillsJson,
+      initialRoomStateSkillsJson,
+      'room state has changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards[0].contentHash,
+      initialRoomStateSkillsJson.enabledSkillCards[0].contentHash,
+      'skill card instructions have changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards[0].url,
+      initialRoomStateSkillsJson.enabledSkillCards[0].url,
+      'skill card instructions have changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards[0].sourceUrl,
+      initialRoomStateSkillsJson.enabledSkillCards[0].sourceUrl,
+      'skill card source URL has not changed',
+    );
+
+    assert.notStrictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards[1].contentHash,
+      initialRoomStateSkillsJson.enabledSkillCards[1].contentHash,
+      'skill card instructions have changed',
+    );
+    assert.notStrictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards[1].url,
+      initialRoomStateSkillsJson.enabledSkillCards[1].url,
+      'skill card instructions have changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards[1].sourceUrl,
+      initialRoomStateSkillsJson.enabledSkillCards[1].sourceUrl,
+      'skill card source URL has not changed',
+    );
+  });
+
+  test('updated skill card instructions result in new event and updated room state when code patch is completing', async function (assert) {
+    const roomId = await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
+
+    await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click('[data-test-select="http://test-realm/test/Skill/example"]');
+    await click('[data-test-card-catalog-go-button]');
+
+    const initialRoomStateSkillsJson = getRoomState(
+      roomId,
+      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+    );
+
+    await click('[data-test-edit-button]');
+    await fillIn(
+      '[data-test-field="instructions"] textarea',
+      'Updated instructions',
+    );
+    await click('[data-test-edit-button]');
+    await click('[data-test-close-button]');
+
+    let codeBlock = `\`\`\`
+http://test-realm/test/hello.txt
+<<<<<<< SEARCH
+Hello, world!
+=======
+Hi, world!
+>>>>>>> REPLACE\n\`\`\``;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+    // Click on the apply button, skill card will be updated since it has changed
+    await waitFor('[data-test-apply-code-button]');
+    await click('[data-test-apply-code-button]');
 
     const finalRoomStateSkillsJson = getRoomState(
       roomId,
