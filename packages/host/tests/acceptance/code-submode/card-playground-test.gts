@@ -1468,7 +1468,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await openFileInPlayground('boom-person.gts', testRealmURL, {
         declaration: 'BoomPerson',
       });
-      assert.dom('[data-test-instance-chooser]').containsText(('Untitled Boom Person');
+      assert
+        .dom('[data-test-instance-chooser]')
+        .containsText('Untitled Boom Person');
       assert
         .dom('[data-test-card-error]')
         .doesNotExist('auto-generated card has not error in edit format');
@@ -1524,7 +1526,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await openFileInPlayground('boom-person.gts', testRealmURL, {
         declaration: 'BoomPerson',
       });
-      assert.dom('[data-test-instance-chooser]').containsText(('Untitled Boom Person');
+      assert
+        .dom('[data-test-instance-chooser]')
+        .containsText('Untitled Boom Person');
       assert.dom('[data-test-error-container]').doesNotExist();
 
       await createNewInstance();
