@@ -10,6 +10,7 @@ export interface TriggerSignature {
     placeholder?: string;
     select: Select;
     selectedItemComponent?: any;
+    invertIcon?: boolean;
   };
   Blocks: {
     default: [Select['selected'], Select];
@@ -93,7 +94,11 @@ export class BoxelSelectDefaultTrigger extends Component<TriggerSignature> {
       </:default>
       <:icon>
         <CaretDown
-          class={{cn 'icon' (if @select.isOpen 'is-open')}}
+          class={{cn
+            'icon'
+            (if @select.isOpen 'is-open')
+            (if @invertIcon 'is-inverted')
+          }}
           data-test-caret-down
         />
       </:icon>
@@ -106,6 +111,14 @@ export class BoxelSelectDefaultTrigger extends Component<TriggerSignature> {
       }
       .is-open {
         transform: rotate(180deg);
+      }
+
+      .icon.is-inverted {
+        transform: rotate(180deg);
+      }
+
+      .icon.is-inverted.is-open {
+        transform: rotate(0deg);
       }
     </style>
   </template>

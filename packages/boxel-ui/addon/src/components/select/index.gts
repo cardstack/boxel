@@ -4,6 +4,8 @@ import PowerSelect, {
 } from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
 
+import { eq } from '@cardstack/boxel-ui/helpers';
+
 import cn from '../../helpers/cn.ts';
 import { BoxelSelectDefaultTrigger } from './trigger.gts';
 
@@ -37,7 +39,11 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
     {{! We can avoid providing arguments to the triggerComponent as long as they are specified here https://github.com/cibernox/ember-power-select/blob/913c85ec82d5c6aeb80a7a3b9d9c21ca9613e900/ember-power-select/src/components/power-select.hbs#L79-L106 }}
     {{! Even the custom BoxelTriggerWrapper will receive these arguments }}
     @triggerComponent={{(if
-      @triggerComponent @triggerComponent (component BoxelSelectDefaultTrigger)
+      @triggerComponent
+      @triggerComponent
+      (component
+        BoxelSelectDefaultTrigger invertIcon=(eq @verticalPosition 'above')
+      )
     )}}
     @disabled={{@disabled}}
     @matchTriggerWidth={{@matchTriggerWidth}}
