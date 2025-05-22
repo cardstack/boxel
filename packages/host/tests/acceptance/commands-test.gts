@@ -151,6 +151,7 @@ module('Acceptance | Commands tests', function (hooks) {
       @service
       private declare operatorModeStateService: OperatorModeStateService;
       static displayName = 'ScheduleMeetingCommand';
+      static actionVerb = 'Schedule';
 
       async getInputType() {
         return ScheduleMeetingInput;
@@ -203,6 +204,7 @@ module('Acceptance | Commands tests', function (hooks) {
 
     class SleepCommand extends Command<typeof ScheduleMeetingInput> {
       static displayName = 'SleepCommand';
+      static actionVerb = 'Sleep';
       async getInputType() {
         return ScheduleMeetingInput;
       }
@@ -214,6 +216,7 @@ module('Acceptance | Commands tests', function (hooks) {
 
     class MaybeBoomCommand extends Command<undefined, undefined> {
       static displayName = 'MaybeBoomCommand';
+      static actionVerb = 'Boom?';
       async getInputType() {
         return undefined;
       }
@@ -230,6 +233,7 @@ module('Acceptance | Commands tests', function (hooks) {
       undefined
     > {
       static displayName = 'SearchAndOpenCardCommand';
+      static actionVerb = 'Search';
       async getInputType() {
         return new SearchCardsByTypeAndTitleCommand(
           this.commandContext,
@@ -1047,6 +1051,9 @@ module('Acceptance | Commands tests', function (hooks) {
     assert
       .dom('[data-test-message-idx="0"] .command-description')
       .containsText('Finding and opening Hassan card');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply]')
+      .containsText('Search');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
     assert
       .dom(

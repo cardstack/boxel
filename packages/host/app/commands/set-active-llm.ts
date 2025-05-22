@@ -12,6 +12,8 @@ export default class SetActiveLLMCommand extends HostBaseCommand<
 > {
   @service declare private matrixService: MatrixService;
 
+  static actionVerb = 'Set';
+
   async getInputType() {
     let commandModule = await this.loadCommandModule();
     const { SetActiveLLMInput } = commandModule;

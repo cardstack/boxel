@@ -22,6 +22,8 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
 > {
   @service declare private matrixService: MatrixService;
 
+  static actionVerb = 'Create';
+
   async getInputType() {
     let commandModule = await this.loadCommandModule();
     const { CreateAIAssistantRoomInput } = commandModule;
