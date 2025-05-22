@@ -122,7 +122,7 @@ export default class SchemaEditor extends Component<Signature> {
   }
 
   get hasModuleError() {
-    return !!this.args.moduleContentsResource?.moduleError?.message;
+    return !!this.args?.moduleContentsResource?.moduleError?.message;
   }
 
   get isLoading() {
