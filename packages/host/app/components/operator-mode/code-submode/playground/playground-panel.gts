@@ -693,6 +693,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         gap: var(--boxel-sp);
         min-height: 100%;
         margin-inline: auto;
+        padding: var(--boxel-sp);
       }
       .preview-area {
         flex-grow: 1;
