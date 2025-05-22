@@ -745,7 +745,9 @@ module('Acceptance | Spec preview', function (hooks) {
       });
       await waitUntil(() => id);
     });
-    //spec is opened
+    assert
+      .dom('[data-test-spec-item-path-creating]')
+      .doesNotExist('creating message is dismissed');
     assert.dom('[data-test-accordion-item="spec-preview"]').hasClass('open');
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Person1');
     assert.dom('[data-test-exported-type]').hasText('card');
