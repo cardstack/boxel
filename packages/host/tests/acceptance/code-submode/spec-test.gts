@@ -5,6 +5,7 @@ import {
   find,
   settled,
   waitFor,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
@@ -21,8 +22,9 @@ import {
   setupUserSubscription,
   percySnapshot,
   lookupService,
-  type TestContextWithSave,
   setupOnSave,
+  withSlowSave,
+  type TestContextWithSave,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -726,13 +728,23 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-cannot-write-intent-message]').doesNotExist();
     await percySnapshot(assert);
   });
-  test('have ability to create new spec instances', async function (assert) {
+  test<TestContextWithSave>('have ability to create new spec instances', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person-1.gts`,
     });
     assert.dom('[data-test-create-spec-button]').exists();
-    await click('[data-test-create-spec-button]');
+    let id: string | undefined;
+    this.onSave((url) => {
+      id = url.href;
+    });
+    await withSlowSave(1000, async () => {
+      click('[data-test-create-spec-button]');
+      await waitFor('[data-test-spec-item-path-creating]', {
+        timeoutMessage: 'creating message appears',
+      });
+      await waitUntil(() => id);
+    });
     //spec is opened
     assert.dom('[data-test-accordion-item="spec-preview"]').hasClass('open');
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Person1');
