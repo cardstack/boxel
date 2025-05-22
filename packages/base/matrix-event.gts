@@ -14,6 +14,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_DEBUG_MESSAGE_MSGTYPE,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -131,7 +132,7 @@ export interface MessageEvent extends BaseMatrixEvent {
 
 export interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
-  content: CardMessageContent;
+  content: CardMessageContent | DebugMessageContent;
   unsigned: {
     age: number;
     transaction_id: string;
@@ -181,9 +182,24 @@ export interface CardMessageContent {
       tools?: Tool[];
       toolChoice?: ToolChoice;
       submode?: string;
+      debug?: boolean;
       requireToolCall?: boolean;
       functions?: Tool['function'][];
     };
+  };
+}
+
+export interface DebugMessageContent {
+  msgtype: typeof APP_BOXEL_DEBUG_MESSAGE_MSGTYPE;
+  format: 'org.matrix.custom.html';
+  body: string;
+  isStreamingFinished?: boolean;
+  // ID from the client and can be used by client
+  // to verify whether the message is already sent or not.
+  clientGeneratedId?: string;
+  data: {
+    // we retrieve the content on the server side by downloading the file
+    attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
   };
 }
 

@@ -7,9 +7,10 @@ import {
   type PromptParts,
   isCommandResultStatusApplied,
   getPromptParts,
+  isInDebugMode,
 } from './helpers';
 
-import { handleDebugCommands } from './lib/debug';
+import { handleDebugCommands, isRecognisedDebugCommand } from './lib/debug';
 import { constructHistory } from './lib/history';
 import { Responder } from './lib/responder';
 import {
@@ -17,7 +18,11 @@ import {
   setTitle,
   roomTitleAlreadySet,
 } from './lib/set-title';
-import { getRoomEvents, type MatrixClient } from './lib/matrix/util';
+import {
+  getRoomEvents,
+  type MatrixClient,
+  sendPromptAndEventList,
+} from './lib/matrix/util';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CommandResultEvent,
@@ -104,13 +109,18 @@ class Assistant {
     }
   }
 
-  async handleDebugCommands(eventBody: string, roomId: string) {
+  async handleDebugCommands(
+    eventBody: string,
+    roomId: string,
+    eventList: DiscreteMatrixEvent[],
+  ) {
     return handleDebugCommands(
       this.openai,
       eventBody,
       this.client,
       roomId,
       this.id,
+      eventList,
     );
   }
 
@@ -154,6 +164,7 @@ Common issues are:
       process.exit(1);
     });
   let { user_id: aiBotUserId } = auth;
+
   let assistant = new Assistant(client, aiBotUserId);
   await assistant.loadToolCallCapableModels();
 
@@ -223,6 +234,11 @@ Common issues are:
           promptParts = await getPromptParts(eventList, aiBotUserId, client);
           if (!promptParts.shouldRespond) {
             return;
+          }
+          // if debug, send message with promptParts and event list
+          if (isInDebugMode(eventList, aiBotUserId)) {
+            // create files in memory
+            sendPromptAndEventList(client, room.roomId, promptParts, eventList);
           }
           await responder.ensureThinkingMessageSent();
         } catch (e) {
@@ -372,11 +388,14 @@ Common issues are:
     if (event.getType() !== 'm.room.message') {
       return;
     }
+    if (event.getSender() == aiBotUserId) {
+      return;
+    }
     if (!room) {
       return;
     }
     let eventBody = event.getContent().body;
-    let isDebugEvent = eventBody.startsWith('debug:');
+    let isDebugEvent = isRecognisedDebugCommand(eventBody);
     if (!isDebugEvent) {
       return;
     }
@@ -388,7 +407,13 @@ Common issues are:
       event.getSender(),
       eventBody,
     );
-    return await assistant.handleDebugCommands(eventBody, room.roomId);
+    let initial = await client.roomInitialSync(room!.roomId, 1000);
+    let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
+    return await assistant.handleDebugCommands(
+      eventBody,
+      room.roomId,
+      eventList,
+    );
   });
 
   await client.startClient();

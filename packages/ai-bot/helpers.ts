@@ -31,6 +31,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_DEBUG_MESSAGE_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   DEFAULT_LLM,
@@ -42,6 +43,7 @@ import {
   MatrixClient,
 } from './lib/matrix/util';
 import { constructHistory } from './lib/history';
+import { isRecognisedDebugCommand } from './lib/debug';
 
 let log = logger('ai-bot');
 
@@ -142,6 +144,15 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
   if (!lastEventExcludingCommandResults) {
     return false;
   }
+
+  // if the last event is a debug command from the user, we should not respond
+  if (
+    lastEventExcludingCommandResults.type == 'm.room.message' &&
+    isRecognisedDebugCommand(lastEventExcludingCommandResults.content.body)
+  ) {
+    return false;
+  }
+
   let commandRequests = (
     lastEventExcludingCommandResults.content as CardMessageContent
   )[APP_BOXEL_COMMAND_REQUESTS_KEY];
@@ -402,13 +413,18 @@ export async function getTools(
   );
 }
 
+export function getLastUserMessage(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): DiscreteMatrixEvent | undefined {
+  return history.findLast((event) => event.sender !== aiBotUserId);
+}
+
 export function getToolChoice(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): ToolChoice {
-  const lastUserMessage = history.findLast(
-    (event) => event.sender !== aiBotUserId,
-  );
+  const lastUserMessage = getLastUserMessage(history, aiBotUserId);
 
   if (
     !lastUserMessage ||
@@ -542,6 +558,9 @@ export async function getModifyPrompt(
     if (event.type !== 'm.room.message') {
       continue;
     }
+    if (event.content.msgtype === APP_BOXEL_DEBUG_MESSAGE_MSGTYPE) {
+      continue;
+    }
     if (isCommandResultEvent(event)) {
       continue; // we'll include these with the tool calls
     }
@@ -552,6 +571,7 @@ export async function getModifyPrompt(
       continue;
     }
     let body = event.content.body;
+
     if (event.sender === aiBotUserId) {
       let toolCalls = toToolCalls(event as CardMessageEvent);
       let commandResults = getCommandResults(
@@ -612,8 +632,15 @@ export async function getModifyPrompt(
     (event) => event.sender !== aiBotUserId,
   );
 
-  let realmUrl = (lastMessageEventByUser as CardMessageEvent).content.data
-    ?.context?.realmUrl;
+  let realmUrl;
+  if (
+    lastMessageEventByUser &&
+    lastMessageEventByUser.type === 'm.room.message' &&
+    lastMessageEventByUser.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
+  ) {
+    realmUrl = (lastMessageEventByUser.content as CardMessageContent).data
+      ?.context?.realmUrl;
+  }
 
   let systemMessage = `${MODIFY_SYSTEM_MESSAGE}
 The user currently has given you the following data to work with:
@@ -778,4 +805,29 @@ function elideCodeBlocks(
     codeBlockIndex++;
   }
   return content;
+}
+
+export function mxcUrlToHttp(mxc: string, baseUrl: string): string {
+  if (mxc.indexOf('mxc://') !== 0) {
+    throw new Error('Invalid MXC URL ' + mxc);
+  }
+  let serverAndMediaId = mxc.slice(6); // strips mxc://
+  let prefix = '/_matrix/client/v1/media/download/';
+
+  return baseUrl + prefix + serverAndMediaId;
+}
+
+export function isInDebugMode(
+  eventList: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): boolean {
+  let lastUserMessage = getLastUserMessage(eventList, aiBotUserId);
+  if (
+    !lastUserMessage ||
+    !lastUserMessage.content ||
+    typeof lastUserMessage.content !== 'object'
+  ) {
+    return false;
+  }
+  return (lastUserMessage.content as any).data?.context?.debug ?? false;
 }
