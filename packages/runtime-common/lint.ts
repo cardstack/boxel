@@ -69,6 +69,7 @@ export async function lintFix({ source }: LintArgs): Promise<LintResult> {
             importMappings: missingCardApiImportConfig.default.importMappings,
           },
         ],
+        '@cardstack/boxel/no-duplicate-imports': 'error',
       },
     },
   ];

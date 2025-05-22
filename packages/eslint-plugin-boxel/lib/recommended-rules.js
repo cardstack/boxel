@@ -6,5 +6,6 @@
  */
 module.exports = {
   "@cardstack/boxel/missing-card-api-import": "error",
+  "@cardstack/boxel/no-duplicate-imports": "error",
   "@cardstack/boxel/template-missing-invokable": "error"
 }
