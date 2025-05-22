@@ -52,7 +52,7 @@ import CardRendererPanel from '@cardstack/host/components/operator-mode/card-ren
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
 
 import SchemaEditor, {
-  SchemaEditorTitle,
+  SchemaEditorBadge,
 } from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
 import SpecPreview from '@cardstack/host/components/operator-mode/code-submode/spec-preview';
 import ToggleButton from '@cardstack/host/components/operator-mode/code-submode/toggle-button';
@@ -478,7 +478,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
             @isOpen={{true}}
           >
             <:title>
-              <SchemaEditorTitle @hasModuleError={{true}} />
+              <SchemaEditorBadge @hasModuleError={{true}} />
             </:title>
             <:content>
               <SyntaxErrorDisplay @syntaxErrors='File is empty' />
@@ -504,7 +504,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           @cardTypeResource={{@selectedCardOrField.cardType}}
           @goToDefinition={{@goToDefinitionAndResetCursorPosition}}
           @isReadOnly={{@isReadOnly}}
-          as |SchemaEditorTitle SchemaEditorPanel|
+          as |SchemaEditorBadge SchemaEditorPanel|
         >
 
           <header
@@ -525,7 +525,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
               >
                 {{capitalize moduleInspectorView}}
                 {{#if (eq moduleInspectorView 'spec')}}
-                  {{! FIXME ridiculous probs }}
                   <SpecPreviewTitle
                     @spec={{this.activeSpec}}
                     @showCreateSpec={{this.showCreateSpec}}
@@ -534,8 +533,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
                     @numberOfInstances={{this.specsForSelectedDefinition.length}}
                   />
                 {{else if (eq moduleInspectorView 'schema')}}
-                  <SchemaEditorTitle />
-
+                  <SchemaEditorBadge />
                 {{/if}}
               </ToggleButton>
             {{/each}}
@@ -593,7 +591,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
             data-test-module-error-panel
           >
             <:title>
-              <SchemaEditorTitle @hasModuleError={{true}} />
+              <SchemaEditorBadge @hasModuleError={{true}} />
             </:title>
             <:content>
               <SyntaxErrorDisplay

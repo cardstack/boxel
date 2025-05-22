@@ -37,7 +37,7 @@ interface Signature {
   };
   Blocks: {
     default: [
-      WithBoundArgs<typeof SchemaEditorTitle, 'totalFields' | 'hasModuleError'>,
+      WithBoundArgs<typeof SchemaEditorBadge, 'totalFields' | 'hasModuleError'>,
       WithBoundArgs<
         typeof CardAdoptionChain,
         | 'file'
@@ -63,7 +63,7 @@ interface TitleSignature {
   };
 }
 
-const SchemaEditorTitle: TemplateOnlyComponent<TitleSignature> = <template>
+const SchemaEditorBadge: TemplateOnlyComponent<TitleSignature> = <template>
   {{#if @hasModuleError}}
     {{! Exclamation point maybe? }}
     <span class='syntax-error'>Fail to parse</span>
@@ -96,7 +96,7 @@ const SchemaEditorTitle: TemplateOnlyComponent<TitleSignature> = <template>
   </style>
 </template>;
 
-export { SchemaEditorTitle };
+export { SchemaEditorBadge };
 
 export default class SchemaEditor extends Component<Signature> {
   @service declare loaderService: LoaderService;
@@ -139,7 +139,7 @@ export default class SchemaEditor extends Component<Signature> {
   <template>
     {{yield
       (component
-        SchemaEditorTitle
+        SchemaEditorBadge
         totalFields=this.totalFields
         hasModuleError=this.hasModuleError
       )
