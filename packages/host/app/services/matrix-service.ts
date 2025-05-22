@@ -1361,7 +1361,6 @@ export default class MatrixService extends Service {
         event.type === 'm.room.member' &&
         room.getMyMembership() === 'invite'
       ) {
-        console.log('event', event);
         if (event.content.membership === 'invite') {
           let stateEvents = room
             .getLiveTimeline()
