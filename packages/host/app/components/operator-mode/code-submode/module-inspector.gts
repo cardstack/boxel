@@ -756,8 +756,6 @@ class SpecPreviewTitle extends Component<SpecPreviewTitleSignature> {
   }
 
   <template>
-    Boxel Spec
-
     <span class='has-spec' data-test-has-spec>
       {{#if @showCreateSpec}}
         <BoxelButton
