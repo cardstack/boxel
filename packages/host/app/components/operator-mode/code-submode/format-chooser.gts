@@ -30,7 +30,7 @@ export default class FormatChooser extends Component<Signature> {
           >
             {{format}}
           </Button>
-          {{! FIXME green dot now required when card has a custom format… future PR? }}
+          {{! TODO in CS-8701: show indicator when custom template exists }}
         {{/each}}
       </div>
     </div>
