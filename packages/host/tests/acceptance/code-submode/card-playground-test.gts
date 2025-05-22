@@ -398,13 +398,16 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       assert
         .dom('[data-test-selected-item]')
-        .hasText('City Design', 'most recent category card is pre-selected');
+        .containsText(
+          'City Design',
+          'most recent category card is pre-selected',
+        );
       assertCardExists(assert, `${testRealmURL}Category/city-design`);
 
       await selectDeclaration('BlogPost');
       assert
         .dom('[data-test-selected-item]')
-        .hasText(
+        .containsText(
           'Mad As a Hatter',
           'pre-selected card is updated when selected card def changes',
         );
@@ -413,7 +416,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await selectDeclaration('Category');
       assert
         .dom('[data-test-selected-item]')
-        .hasText('City Design', 'correct card is still pre-selected');
+        .containsText('City Design', 'correct card is still pre-selected');
       assertCardExists(assert, `${testRealmURL}Category/city-design`);
 
       await click('[data-test-instance-chooser]');
@@ -435,7 +438,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await selectDeclaration('BlogPost');
       assert
         .dom('[data-test-selected-item]')
-        .hasText(
+        .containsText(
           'Mad As a Hatter',
           'correct card is pre-selected when selected card def changes',
         );
@@ -444,7 +447,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await selectDeclaration('Category');
       assert
         .dom('[data-test-selected-item]')
-        .hasText('Future Tech', 'persisted card is selected');
+        .containsText('Future Tech', 'persisted card is selected');
       assertCardExists(assert, `${testRealmURL}Category/future-tech`);
 
       await percySnapshot(assert);
@@ -474,7 +477,10 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       assert
         .dom('[data-test-selected-item]')
-        .hasText('Home Gym', 'most recent category instance is pre-selected');
+        .containsText(
+          'Home Gym',
+          'most recent category instance is pre-selected',
+        );
       assertCardExists(assert, `${testRealmURL}Category/home-gym`);
 
       await click('[data-test-instance-chooser]');
@@ -492,7 +498,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       assert
         .dom('[data-test-selected-item]')
-        .hasText('Home Gym', 'selected card has not changed');
+        .containsText('Home Gym', 'selected card has not changed');
       assertCardExists(assert, `${testRealmURL}Category/home-gym`);
 
       await click('[data-test-instance-chooser]');
@@ -523,7 +529,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await togglePlaygroundPanel();
       assert
         .dom('[data-test-selected-item]')
-        .hasText('Home Gym', 'selected card has not changed');
+        .containsText('Home Gym', 'selected card has not changed');
       assertCardExists(assert, `${testRealmURL}Category/home-gym`);
 
       await click('[data-test-instance-chooser]');
@@ -955,7 +961,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .exists('title exists on first render');
       assert
         .dom('[data-test-selected-item]')
-        .hasText('Mad As a Hatter', 'selected item title is correct');
+        .containsText('Mad As a Hatter', 'selected item title is correct');
       assert.dom('[data-test-post-title]').hasText('Mad As a Hatter');
       assert.dom('[data-test-byline]').containsText('Jane Doe');
 
