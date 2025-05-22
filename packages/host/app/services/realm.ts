@@ -592,9 +592,6 @@ export default class RealmService extends Service {
   }
 
   async reauthenticate(realmURL: string): Promise<string | undefined> {
-    if (this.reauthentications.has(realmURL)) {
-      return;
-    }
     let inProgressAuthentication = this.reauthentications.get(realmURL);
     if (inProgressAuthentication) {
       return inProgressAuthentication;

@@ -101,6 +101,7 @@ test.describe('Login', () => {
     await page.locator('[data-test-login-btn]').click();
 
     await assertLoggedIn(page);
+    await page.waitForSelector('[data-test-stack-item-content]');
     let boxelSession = await page.evaluate(async () => {
       // playwright needs a beat before it get access local storage
       await new Promise((res) => setTimeout(res, 1500));
@@ -128,6 +129,7 @@ test.describe('Login', () => {
   test('it can logout', async ({ page }) => {
     await login(page, 'user1', 'pass', { url: appURL });
     await assertLoggedIn(page);
+    await page.waitForSelector('[data-test-stack-item-content]');
     let boxelSession = await page.evaluate(async () => {
       // playwright needs a beat before it get access local storage
       await new Promise((res) => setTimeout(res, 1000));

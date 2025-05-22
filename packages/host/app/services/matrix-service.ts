@@ -542,13 +542,7 @@ export default class MatrixService extends Service {
           accountDataContent?.realms ?? [],
         );
         console.timeEnd('matrix-client-account-data');
-
-        console.time('matrix-client-realm-operations');
-        await Promise.all([
-          this.loginToRealms(),
-          this.realmServer.fetchCatalogRealms(),
-        ]);
-        console.timeEnd('matrix-client-realm-operations');
+        await this.realmServer.fetchCatalogRealms();
 
         this.postLoginCompleted = true;
       } catch (e) {
