@@ -184,6 +184,7 @@ test.describe('Skills', () => {
     page,
   }) => {
     await login(page, 'user1', 'pass', { url: appURL });
+    await page.locator(`[data-test-room-settled]`).waitFor();
 
     await page.locator('[data-test-submode-switcher] button').click();
     await page.locator('[data-test-boxel-menu-item-text="Code"]').click();
