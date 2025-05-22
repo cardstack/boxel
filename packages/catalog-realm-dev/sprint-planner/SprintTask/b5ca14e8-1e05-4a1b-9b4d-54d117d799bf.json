@@ -24,12 +24,12 @@
     "relationships": {
       "project": {
         "links": {
-          "self": "../sprint-planner/Project/f379cb36-a323-4213-8477-572a31d5d21d"
+          "self": "../Project/f379cb36-a323-4213-8477-572a31d5d21d"
         }
       },
       "team": {
         "links": {
-          "self": "../sprint-planner/Team/df163805-2f30-427d-b400-c9db1fa5db9e"
+          "self": "../Team/df163805-2f30-427d-b400-c9db1fa5db9e"
         }
       },
       "subtasks": {
@@ -39,7 +39,7 @@
       },
       "assignee": {
         "links": {
-          "self": null
+          "self": "../TeamMember/7bfbc444-5054-460f-b6e1-39e5443de074"
         }
       },
       "tags": {
@@ -50,7 +50,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../sprint-planner/sprint-task",
+        "module": "../sprint-task",
         "name": "SprintTask"
       }
     }
