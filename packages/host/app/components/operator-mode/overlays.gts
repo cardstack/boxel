@@ -112,6 +112,8 @@ export default class Overlays extends Component<OverlaySignature> {
   // events on the overlay. However, that prevents the browser from detecting hover state, which is needed to show the operator mode actions, and
   // click event, needed to open the card. To solve this, we add event listeners to the rendered cards underneath the overlay, and use those to
   // detect hover state and click event.
+  //
+  // TODO: make this accessible to keyboard events
   protected get renderedCardsForOverlayActionsWithEvents() {
     let renderedCards = this.args.renderedCardsForOverlayActions;
     for (const renderedCard of renderedCards) {

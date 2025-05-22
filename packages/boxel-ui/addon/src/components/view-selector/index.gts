@@ -26,19 +26,19 @@ interface Signature {
   Element: HTMLDivElement;
 }
 
-export default class ViewSelector extends Component<Signature> {
-  standardViewOptions: ViewItem[] = [
-    { id: 'card', icon: CardIcon },
-    { id: 'strip', icon: StripIcon },
-    { id: 'grid', icon: GridIcon },
-  ];
+export const VIEW_OPTIONS: ViewItem[] = [
+  { id: 'card', icon: CardIcon },
+  { id: 'strip', icon: StripIcon },
+  { id: 'grid', icon: GridIcon },
+];
 
-  get viewOptions() {
-    return this.args.items ?? this.standardViewOptions;
+export default class ViewSelector extends Component<Signature> {
+  private get viewOptions() {
+    return this.args.items ?? VIEW_OPTIONS;
   }
 
-  get selectedId() {
-    return this.args.selectedId ?? (this.viewOptions[0] as ViewItem).id;
+  private get selectedId() {
+    return this.args.selectedId ?? this.viewOptions[0]?.id;
   }
 
   <template>
@@ -72,12 +72,12 @@ export default class ViewSelector extends Component<Signature> {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: var(--boxel-sp-xxs) var(--boxel-sp-sm);
+        column-gap: var(--boxel-sp-sm);
         text-wrap: nowrap;
       }
       .view-options {
         display: flex;
-        gap: 0 var(--boxel-sp-4xs);
+        column-gap: var(--boxel-sp-4xs);
       }
       .view-option {
         display: flex;

@@ -170,35 +170,6 @@ export class Layout extends GlimmerComponent<LayoutSignature> {
         grid-template-rows: max-content 1fr;
         overflow-y: scroll;
       }
-
-      /* these help hide overlay button visibility through gaps during scroll */
-      .sidebar,
-      .content-header {
-        position: relative;
-        z-index: 1;
-        background-color: var(--layout-background-color);
-        border-top: 1px solid var(--boxel-400);
-      }
-
-      /* TODO: fix filter component styles in boxel-ui */
-      .sidebar-filters {
-        width: auto;
-        margin: 0;
-        gap: var(--boxel-sp-4xs);
-      }
-      .sidebar-filters > :deep(button) {
-        margin: 0;
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
-        font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-      .sidebar-filters > :deep(button > svg) {
-        width: var(--boxel-icon-sm);
-        height: var(--boxel-icon-sm);
-      }
-
       .content-header {
         min-height: calc(60px + 2 * var(--layout-padding));
         padding: var(--layout-padding);

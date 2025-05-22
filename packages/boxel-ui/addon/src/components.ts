@@ -8,6 +8,7 @@ import CardContainer from './components/card-container/index.gts';
 import CardContentContainer from './components/card-content-container/index.gts';
 import CardHeader from './components/card-header/index.gts';
 import CardList from './components/card-list/index.gts';
+import CardsGridLayout from './components/cards-grid-layout/index.gts';
 import CircleSpinner from './components/circle-spinner/index.gts';
 import ColorPalette from './components/color-palette/index.gts';
 import ColorPicker from './components/color-picker/index.gts';
@@ -36,7 +37,6 @@ import BoxelInput, {
 } from './components/input/index.gts';
 import BoxelInputGroup from './components/input-group/index.gts';
 import Label from './components/label/index.gts';
-import BoxelLayout from './components/layout/index.gts';
 import LoadingIndicator from './components/loading-indicator/index.gts';
 import Menu from './components/menu/index.gts';
 import BoxelMessage from './components/message/index.gts';
@@ -84,7 +84,6 @@ export {
   BoxelInputGroup,
   BoxelInputValidationState,
   BoxelInputValidationStates,
-  BoxelLayout,
   BoxelMessage,
   BoxelMultiSelect,
   BoxelMultiSelectBasic,
@@ -94,6 +93,7 @@ export {
   CardContentContainer,
   CardHeader,
   CardList,
+  CardsGridLayout,
   CircleSpinner,
   ColorPalette,
   ColorPicker,

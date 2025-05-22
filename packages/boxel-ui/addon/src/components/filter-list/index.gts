@@ -4,6 +4,9 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
 
+import { not } from '../../helpers/truth-helpers.ts';
+import Button from '../button/index.gts';
+
 export interface FilterListIconSignature {
   Element: SVGElement;
 }
@@ -23,6 +26,7 @@ export type Filter = {
 interface Signature {
   Args: {
     activeFilter?: Filter;
+    allowTextWrapping?: boolean;
     filters: Filter[];
     onChanged?: (filter: Filter) => void;
   };
@@ -36,55 +40,73 @@ export default class FilterList extends Component<Signature> {
   }
 
   <template>
-    <div class='filter-list' ...attributes>
+    <ul class='filter-list' ...attributes>
       {{#each @filters as |filter|}}
-        <button
-          class={{cn 'filter-list__button' selected=(eq @activeFilter filter)}}
-          {{on 'click' (fn this.onChanged filter)}}
-          data-test-boxel-filter-list-button={{filter.displayName}}
-        >
-          {{#if (isIconString filter.icon)}}
-            {{htmlSafe
-              (addClassToSVG filter.icon 'filter-list__icon')
-            }}{{filter.displayName}}
-          {{else}}
-            <filter.icon
-              class='filter-list__icon'
-            />{{filter.displayName}}{{/if}}</button>
-
+        <li>
+          <Button
+            @kind='text-only'
+            @size='small'
+            class={{cn
+              'filter-list__button'
+              selected=(eq @activeFilter filter)
+            }}
+            {{on 'click' (fn this.onChanged filter)}}
+            data-test-boxel-filter-list-button={{filter.displayName}}
+          >
+            {{#if (isIconString filter.icon)}}
+              {{htmlSafe (addClassToSVG filter.icon 'filter-list__icon')}}
+            {{else}}
+              <filter.icon class='filter-list__icon' />
+            {{/if}}
+            <span class={{cn 'filter-name' ellipsize=(not @allowTextWrapping)}}>
+              {{filter.displayName}}
+            </span>
+          </Button>
+        </li>
       {{/each}}
-    </div>
+    </ul>
     <style scoped>
-      .filter-list {
-        display: flex;
-        flex-direction: column;
-        width: 247px;
-        margin-bottom: var(--boxel-sp-xs);
-      }
-      .filter-list__button {
-        text-align: left;
-        background: none;
-        border: none;
-        font: 500 var(--boxel-font-sm);
-        padding: var(--boxel-sp-xxs);
-        margin-bottom: var(--boxel-sp-4xs);
-
-        display: flex;
-        gap: var(--boxel-sp-4xs);
-      }
-      .filter-list__button.selected {
-        color: var(--boxel-light);
-        background: var(--boxel-dark);
-        border-radius: 6px;
-      }
-      .filter-list__button:not(.selected):hover {
-        background: var(--boxel-300);
-        border-radius: 6px;
-      }
-      :global(.filter-list__icon) {
-        width: var(--boxel-icon-xs);
-        height: var(--boxel-icon-xs);
-        vertical-align: top;
+      @layer {
+        .filter-list {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-4xs);
+          list-style-type: none;
+          padding-inline-start: 0;
+          margin-block: 0;
+        }
+        .filter-list__button {
+          width: 100%;
+          display: flex;
+          justify-content: flex-start;
+          gap: var(--boxel-sp-xs);
+          font: 500 var(--boxel-font-sm);
+          letter-spacing: var(--boxel-lsp-xs);
+          border-radius: var(--boxel-border-radius-sm);
+          color: var(--boxel-dark);
+          background-color: var(--boxel-light);
+          max-width: 100%;
+          overflow: hidden;
+          text-align: left;
+        }
+        .filter-list__button.selected {
+          filter: invert(1);
+        }
+        .filter-list__button:not(.selected):hover {
+          background-color: var(--boxel-300);
+        }
+        .filter-list__icon {
+          flex-shrink: 0;
+          width: var(--boxel-icon-sm);
+          height: var(--boxel-icon-sm);
+          vertical-align: top;
+        }
+        .ellipsize {
+          white-space: nowrap;
+          text-overflow: ellipsis;
+          overflow: hidden;
+          max-width: 100%;
+        }
       }
     </style>
   </template>

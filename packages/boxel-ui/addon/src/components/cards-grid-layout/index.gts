@@ -7,34 +7,31 @@ import { TrackedArray } from 'tracked-built-ins';
 
 import cn from '../../helpers/cn.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
-import IconGrid from '../../icons/icon-grid.gts';
-import IconList from '../../icons/icon-list.gts';
 import CardList from '../card-list/index.gts';
 import FilterList, { type Filter } from '../filter-list/index.gts';
 import SortDropdown, { type SortOption } from '../sort-dropdown/index.gts';
-import ViewSelector, { type ViewItem } from '../view-selector/index.gts';
+import ViewSelector, {
+  type ViewItem,
+  VIEW_OPTIONS,
+} from '../view-selector/index.gts';
 
 interface Signature {
   Args: {
-    // Format
-    context: any;
+    context: any /* TODO: import type CardContext */;
     filters?: Filter[];
-    format: any;
+    format: any /* TODO: import type Format */;
     isLive?: boolean;
-    // CardContext
+    onSelectView?: () => void;
     realms: URL[];
+    selectedView?: ViewItem;
     sortOptions?: SortOption[];
     viewOptions?: ViewItem[];
   };
+  Blocks: { content: []; contentHeader: []; sidebar: [] };
   Element: HTMLElement;
 }
 
-const defaultViewOptions: ViewItem[] = [
-  { id: 'strip', icon: IconList },
-  { id: 'grid', icon: IconGrid },
-];
-
-const defaultSortOptions: SortOption[] = [
+const SORT_OPTIONS: SortOption[] = [
   {
     displayName: 'A-Z',
     sort: [
@@ -68,27 +65,31 @@ const defaultSortOptions: SortOption[] = [
   },
 ];
 
-export default class BoxelLayout extends Component<Signature> {
+export default class CardsGridLayout extends Component<Signature> {
   <template>
     <section
-      class={{cn 'boxel-layout' strip-view=(eq this.activeView 'strip')}}
+      class={{cn
+        'boxel-cards-grid-layout'
+        strip-view=(eq this.activeView 'strip')
+      }}
       ...attributes
     >
-      <aside class='sidebar'>
+      <aside class='sidebar scroll-container' tabindex='0'>
         <FilterList
           @filters={{this.filters}}
           @activeFilter={{this.activeFilter}}
           @onChanged={{this.onChangeFilter}}
         />
+        {{yield to='sidebar'}}
       </aside>
-      <section class='content'>
+      <section class='content scroll-container' tabindex='0'>
         <header
           class='content-header'
           aria-label={{this.activeFilter.displayName}}
         >
-          <div class='title'>
+          <h2 class='content-title'>
             {{this.activeFilter.displayName}}
-          </div>
+          </h2>
           <ViewSelector
             @items={{this.viewOptions}}
             @onChange={{this.onSelectView}}
@@ -99,10 +100,12 @@ export default class BoxelLayout extends Component<Signature> {
             @onSelect={{this.onSelectSort}}
             @selectedOption={{this.activeSort}}
           />
+          {{yield to='contentHeader'}}
         </header>
         {{#if this.query}}
           <CardList
             @format={{@format}}
+            @viewOption={{this.activeView}}
             @context={{@context}}
             @query={{this.query}}
             @realms={{@realms}}
@@ -110,67 +113,107 @@ export default class BoxelLayout extends Component<Signature> {
             data-test-cards-grid-cards
           />
         {{/if}}
+        {{yield to='content'}}
       </section>
     </section>
 
     <style scoped>
-      .boxel-layout {
+      .boxel-cards-grid-layout {
+        --padding: var(--boxel-cards-grid-layout-padding, var(--boxel-sp-lg));
+        --boxel-card-list-padding: var(
+          --boxel-cards-grid-padding,
+          0 var(--padding)
+        );
+        --sidebar-min-width: var(--boxel-cards-grid-sidebar-min-width, 11rem);
+        --sidebar-max-width: var(--boxel-cards-grid-sidebar-max-width, 22rem);
+
+        position: relative;
         display: flex;
-        gap: var(--boxel-sp-xl);
         width: 100%;
         max-width: 100%;
         height: 100%;
         max-height: 100vh;
         overflow: hidden;
       }
+      .scroll-container {
+        overflow: hidden;
+      }
+      .scroll-container:hover,
+      .scroll-container:focus {
+        overflow-y: auto;
+      }
       .sidebar {
         position: relative;
+        max-width: 100%;
+        width: var(--sidebar-max-width);
+        min-width: var(--sidebar-min-width);
+        padding: var(--boxel-cards-grid-layout-sidebar-padding, var(--padding));
       }
       .content {
         position: relative;
+        flex-grow: 1;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-lg);
         width: 100%;
         max-width: 100%;
-        overflow-y: auto;
+      }
+      .content-header {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        column-gap: var(--boxel-sp-lg);
+        row-gap: var(--boxel-sp-xs);
+        padding: var(--padding);
+      }
+      .content-title {
+        flex-grow: 1;
+        margin-block: 0;
+        font: 600 var(--boxel-font-lg);
+        font-size: 1.5rem;
+        letter-spacing: var(--boxel-lsp-xxs);
       }
     </style>
   </template>
 
-  private filters: Filter[] = new TrackedArray([
-    {
-      displayName: 'All Cards',
-      icon: CardsIcon,
-      query: {
-        filter: {
-          not: {
-            eq: {
-              _cardType: 'Cards Grid',
+  private filters: Filter[] = new TrackedArray(
+    this.args.filters ?? [
+      {
+        displayName: 'All Cards',
+        icon: CardsIcon,
+        query: {
+          filter: {
+            not: {
+              eq: {
+                _cardType: 'Cards Grid',
+              },
             },
           },
         },
       },
-    },
-  ]);
+    ],
+  );
   private sortOptions: SortOption[] = new TrackedArray(
-    this.args.sortOptions ?? defaultSortOptions,
+    this.args.sortOptions ?? SORT_OPTIONS,
   );
   private viewOptions: ViewItem[] = new TrackedArray(
-    this.args.viewOptions ?? defaultViewOptions,
+    this.args.viewOptions ?? VIEW_OPTIONS,
   );
 
   @tracked private activeSort?: SortOption = this.sortOptions[0];
   @tracked private activeFilter?: Filter = this.filters[0];
-  @tracked private activeView?: ViewItem['id'] = this.viewOptions[0]?.id;
+  @tracked private activeView =
+    this.args.selectedView?.id ??
+    this.viewOptions[0]?.id ??
+    VIEW_OPTIONS[0]?.id;
 
   @action onSelectSort(option: SortOption) {
     this.activeSort = option;
-    // this.activeFilter = this.activeFilter;
   }
 
-  @action onSelectView(view: ViewItem['id']) {
-    this.activeView = view;
+  @action onSelectView(viewId: string) {
+    this.activeView = viewId;
+    this.args.onSelectView?.();
   }
 
   @action onChangeFilter(filter: Filter) {

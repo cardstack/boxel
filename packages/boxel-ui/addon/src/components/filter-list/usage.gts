@@ -48,6 +48,7 @@ const Stack2: TemplateOnlyComponent<FilterListIconSignature> = <template>
 export default class FilterListUsage extends Component {
   private allItems = ['Author', 'BlogPost', 'Friend', 'Person', 'Pet'];
   @tracked private activeFilter: Filter = this.filters[0]!;
+  @tracked allowTextWrapping = false;
 
   @cached
   private get filters() {
@@ -86,6 +87,7 @@ export default class FilterListUsage extends Component {
             @filters={{this.filters}}
             @activeFilter={{this.activeFilter}}
             @onChanged={{fn (mut this.activeFilter)}}
+            @allowTextWrapping={{this.allowTextWrapping}}
           />
           <div class='items'>
             {{#each this.items as |item|}}
@@ -113,6 +115,13 @@ export default class FilterListUsage extends Component {
           @name='onChanged'
           @description='A callback function that is triggered when a filter is selected.'
           @defaultValue='undefined'
+        />
+        <Args.Bool
+          @name='allowTextWrapping'
+          @description='Whether to wrap or ellipsize overflow text'
+          @defaultValue='false'
+          @value={{this.allowTextWrapping}}
+          @onInput={{fn (mut this.allowTextWrapping)}}
         />
       </:api>
     </FreestyleUsage>

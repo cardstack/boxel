@@ -9,7 +9,8 @@ import {
   realmURL,
   type BaseDef,
 } from './card-api';
-import { BoxelLayout } from '@cardstack/boxel-ui/components';
+import { CardsGridLayout } from '@cardstack/boxel-ui/components';
+import { IconList, IconGrid } from '@cardstack/boxel-ui/icons';
 import {
   chooseCard,
   specRef,
@@ -19,50 +20,23 @@ import {
   subscribeToRealm,
   Query,
 } from '@cardstack/runtime-common';
-// @ts-ignore no types
-import cssUrl from 'ember-css-url';
 import { Spec } from './spec';
 import StringField from './string';
+
+import HighlightsIcon from '@cardstack/boxel-icons/layout-panel-top';
+import RecentIcon from '@cardstack/boxel-icons/clock';
+import StarIcon from '@cardstack/boxel-icons/star';
+
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import Captions from '@cardstack/boxel-icons/captions';
+import AllCardsIcon from '@cardstack/boxel-icons/square-stack';
 import { registerDestructor } from '@ember/destroyable';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
-    {{!-- <div class={{cn 'cards-grid' strip-view=(eq this.viewSize 'strip')}}>
-      <div class='sidebar'>
-        <FilterList
-          @filters={{this.filters}}
-          @activeFilter={{this.activeFilter}}
-          @onChanged={{this.onFilterChanged}}
-        />
-      </div>
-      <div class='content'>
-        <div class='top-bar'>
-          <div class='title'>
-            {{this.activeFilter.displayName}}
-          </div>
-          <ViewSelector
-            @items={{this.viewOptions}}
-            @onChange={{this.onViewChange}}
-            @selectedId={{this.viewSize}}
-          />
-          <SortDropdown
-            @options={{this.sortOptions}}
-            @onSelect={{this.setSelectedSortOption}}
-            @selectedOption={{this.selectedSortOption}}
-          />
-        </div>
-        <CardList
-          @format='fitted'
-          @context={{@context}}
-          @query={{this.query}}
-          @realms={{this.realms}}
-          @isLive={{true}}
-          data-test-cards-grid-cards
-        />
+    {{!--
         {{#if @context.actions.createCard}}
           <div class='add-button'>
             <Tooltip @placement='left' @offset={{6}}>
@@ -76,88 +50,19 @@ class Isolated extends Component<typeof CardsGrid> {
           </div>
         {{/if}}
       </div>
-    </div> --}}
+--}}
 
-    <BoxelLayout
+    <CardsGridLayout
       @format='fitted'
       @context={{@context}}
       @realms={{this.realms}}
       @isLive={{true}}
+      @viewOptions={{this.viewOptions}}
+      @selectedView={{this.selectedView}}
+      @filters={{this.filters}}
     />
 
     <style scoped>
-      .top-bar {
-        display: grid;
-        grid-template-columns: 1fr auto auto;
-        padding-right: var(--boxel-sp);
-        gap: var(--boxel-sp-xxxl);
-      }
-      .title {
-        font: bold var(--boxel-font-lg);
-        letter-spacing: 0.21px;
-      }
-      .cards-grid {
-        --cards-grid-padding-top: var(--boxel-sp-lg);
-        --grid-card-min-width: 10.625rem; /* 170px */
-        --grid-card-max-width: 10.625rem; /* 170px */
-        --grid-card-height: 15.625rem; /* 250px */
-
-        padding: var(--cards-grid-padding-top) 0 0 var(--boxel-sp-sm);
-
-        display: flex;
-        gap: var(--boxel-sp-xl);
-        height: 100%;
-        max-height: 100vh;
-        overflow: hidden;
-      }
-      .strip-view {
-        --grid-card-min-width: 21.875rem;
-        --grid-card-max-width: calc(50% - var(--boxel-sp));
-        --grid-card-height: 6.125rem;
-      }
-      .sidebar {
-        position: relative;
-      }
-      :deep(.filter-list) {
-        position: sticky;
-        top: var(--cards-grid-padding-top);
-        padding-right: var(--boxel-sp-sm);
-        height: 100%;
-        overflow-y: hidden;
-      }
-      :deep(.filter-list:hover) {
-        overflow-y: auto;
-      }
-      :deep(.filter-list__button:first-child) {
-        margin-bottom: var(--boxel-sp-xl);
-      }
-      .content {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-lg);
-        width: 100%;
-        position: relative; /* Do not change this */
-        overflow-y: auto;
-        padding-right: var(--boxel-sp-sm);
-      }
-      .cards {
-        list-style-type: none;
-        margin: 0;
-        padding: 0;
-        padding-left: 1px;
-        display: grid;
-        grid-template-columns: repeat(
-          auto-fill,
-          minmax(var(--grid-card-min-width), var(--grid-card-max-width))
-        );
-        grid-auto-rows: var(--grid-card-height);
-        gap: var(--boxel-sp);
-        flex-grow: 1;
-      }
-      .card {
-        container-name: fitted-card;
-        container-type: size;
-      }
       .add-button {
         display: inline-block;
         position: sticky;
@@ -172,6 +77,40 @@ class Isolated extends Component<typeof CardsGrid> {
       }
     </style>
   </template>
+
+  private filters = [
+    {
+      displayName: 'Highlights',
+      icon: HighlightsIcon,
+    },
+    {
+      displayName: 'Recent',
+      icon: RecentIcon,
+    },
+    {
+      displayName: 'Starred',
+      icon: StarIcon,
+    },
+    {
+      displayName: 'All Cards',
+      icon: AllCardsIcon,
+      query: {
+        filter: {
+          not: {
+            eq: {
+              _cardType: 'Cards Grid',
+            },
+          },
+        },
+      },
+    },
+  ];
+
+  private viewOptions = [
+    { id: 'strip', icon: IconList },
+    { id: 'grid', icon: IconGrid },
+  ];
+  private selectedView = this.viewOptions[1];
 
   constructor(owner: any, args: any) {
     super(owner, args);

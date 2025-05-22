@@ -3,19 +3,22 @@ import Component from '@glimmer/component';
 // import { type CardContext } from 'https://cardstack.com/base/card-api';
 // import { type Format } from '@cardstack/runtime-common';
 import cn from '../../helpers/cn.ts';
+import { eq } from '../../helpers/truth-helpers.ts';
 import CardContainer from '../card-container/index.gts';
 import LoadingIndicator from '../loading-indicator/index.gts';
 
 interface Signature {
   Args: {
-    context: any; // CardContext
-    // model?: Partial<CardDef>;
-    // cardTypeDisplayName?: string;
-    // fittedDisplayOption?: 'grid' | 'list';
-    format: any; // Format
+    context: any;
+    format: any;
+    // Format
     isLive?: boolean;
     query: any;
     realms: URL[];
+    // CardContext
+    // model?: Partial<CardDef>;
+    // cardTypeDisplayName?: string;
+    viewOption?: string;
     // hideOverlay?: boolean;
     // hideContainer?: boolean;
   };
@@ -28,7 +31,14 @@ function removeFileExtension(cardUrl: string) {
 
 export default class CardList extends Component<Signature> {
   <template>
-    <ul class='boxel-card-list' ...attributes>
+    <ul
+      class={{cn
+        'boxel-card-list'
+        grid-view=(eq @viewOption 'grid')
+        strip-view=(eq @viewOption 'strip')
+      }}
+      ...attributes
+    >
       <@context.prerenderedCardSearchComponent
         @query={{@query}}
         @format={{@format}}
@@ -69,20 +79,30 @@ export default class CardList extends Component<Signature> {
 
     <style scoped>
       .boxel-card-list {
+        --padding: var(--boxel-card-list-padding, var(--boxel-sp));
+
         display: grid;
-        grid-template-columns: repeat(auto-fill, 170px);
         gap: var(--boxel-sp);
         list-style-type: none;
         margin-block: 0;
-        padding: var(--boxel-sp);
+        padding: var(--padding);
+      }
+      .grid-view {
+        --item-width: 170px;
+        --item-height: 250px;
+        grid-template-columns: repeat(auto-fill, var(--item-width));
+      }
+      .strip-view {
+        --item-height: 105px;
+        grid-template-columns: repeat(auto-fill, minmax(49%, 1fr));
       }
       .boxel-card-list-item {
         max-width: 100%;
         display: flex;
         flex-wrap: wrap;
         gap: var(--boxel-sp) var(--boxel-sp-lg);
-        width: 170px;
-        height: 250px;
+        width: var(--item-width);
+        height: var(--item-height);
       }
       .boxel-fitted-card {
         container-name: fitted-card;
