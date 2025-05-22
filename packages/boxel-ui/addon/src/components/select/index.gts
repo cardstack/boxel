@@ -1,10 +1,9 @@
+import { eq } from '@cardstack/boxel-ui/helpers';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import PowerSelect, {
   type PowerSelectArgs,
 } from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
-
-import { eq } from '@cardstack/boxel-ui/helpers';
 
 import cn from '../../helpers/cn.ts';
 import { BoxelSelectDefaultTrigger } from './trigger.gts';

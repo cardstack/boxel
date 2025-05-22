@@ -7,10 +7,10 @@ import CaretDown from '../../icons/caret-down.gts';
 
 export interface TriggerSignature {
   Args: {
+    invertIcon?: boolean;
     placeholder?: string;
     select: Select;
     selectedItemComponent?: any;
-    invertIcon?: boolean;
   };
   Blocks: {
     default: [Select['selected'], Select];
