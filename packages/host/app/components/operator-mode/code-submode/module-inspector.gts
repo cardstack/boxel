@@ -21,6 +21,7 @@ import window from 'ember-window-mock';
 import { TrackedObject } from 'tracked-built-ins';
 
 import { Accordion, BoxelButton, Pill } from '@cardstack/boxel-ui/components';
+import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
@@ -634,7 +635,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
       .toggle-button {
         justify-content: space-between;
-        padding: 0 var(--boxel-sp-xs);
+        padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp);
       }
 
       .file-incompatible-message {
@@ -760,13 +761,14 @@ class SpecPreviewTitle extends Component<SpecPreviewTitleSignature> {
       {{#if @showCreateSpec}}
         <BoxelButton
           class='create-spec-button'
+          @icon='plus'
           @kind='primary'
           @size='extra-small'
           @loading={{@isCreateSpecInstanceRunning}}
           {{on 'click' @createSpec}}
           data-test-create-spec-button
         >
-          Create
+          <IconPlus width='10px' height='10px' />
         </BoxelButton>
       {{else if this.moreThanOneInstance}}
         <div
@@ -793,12 +795,15 @@ class SpecPreviewTitle extends Component<SpecPreviewTitleSignature> {
         font: 500 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-xl);
         text-transform: uppercase;
+        margin-right: -1px;
       }
       .create-spec-button {
         --boxel-button-min-height: auto;
         --boxel-button-min-width: auto;
-        font-weight: 500;
+        padding: 4px;
+        border-radius: var(--boxel-border-radius-xs);
       }
+
       .number-of-instance {
         margin-left: auto;
         display: inline-flex;
