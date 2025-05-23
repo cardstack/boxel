@@ -69,6 +69,7 @@ import InstanceSelectDropdown from './instance-chooser-dropdown';
 import PlaygroundPreview from './playground-preview';
 import SpecSearch from './spec-search';
 
+import PrerenderedCardSearch from '../../../prerendered-card-search';
 import type { PrerenderedCard } from '../../../prerendered-card-search';
 
 export type SelectedInstance = {
@@ -577,8 +578,56 @@ export default class PlaygroundPanel extends Component<Signature> {
     });
   }
 
+  // FIXME this is duplicated/adapted from InstanceChooserDropdown
+  private triggerPlaygroundSelections = (
+    prerenderedCards?: PrerenderedCard[],
+  ) => {
+    this.findSelectedCard(prerenderedCards);
+  };
+
+  private findSelectedCard = (prerenderedCards?: PrerenderedCard[]) => {
+    if (!prerenderedCards?.length) {
+      // it is possible that there's a persisted cardId in playground-selections local storage
+      // but that the card is no longer in recent-files local storage
+      // if that is the case, the card title will appear in dropdown menu but
+      // the card will not appear in dropdown options because the card is not in recent-files
+      // there are timing issues with trying to add it to recent-files service,
+      // see CS-8601 for suggested resolution for similar problems
+      return this.dropdownSelection;
+    }
+
+    if (!this.dropdownSelection?.card) {
+      if (this.persistedCardId || this.isBaseCardModule) {
+        // not displaying card preview for base card module unless user selects it specifically
+        return;
+      }
+      let recentCard = prerenderedCards[0];
+      // if there's no selected card, choose the most recent card as selected
+      this.persistToLocalStorage(recentCard.url, 'isolated');
+      return recentCard;
+    }
+
+    let selectedCardId = this.dropdownSelection.card.id;
+    let card = prerenderedCards.find(
+      (c) => trimJsonExtension(c.url) === selectedCardId,
+    );
+    return card;
+  };
+
   <template>
     {{consumeContext this.makeCardResource}}
+
+    {{! FIXME also from InstanceChooserDropdown }}
+    <PrerenderedCardSearch
+      @query={{this.query}}
+      @format='fitted'
+      @realms={{this.recentRealms}}
+      @isLive={{true}}
+    >
+      <:response as |cards|>
+        {{consumeContext (fn this.triggerPlaygroundSelections cards)}}
+      </:response>
+    </PrerenderedCardSearch>
 
     {{#if this.fieldChooserIsOpen}}
       <ToElsewhere
