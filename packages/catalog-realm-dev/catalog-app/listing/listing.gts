@@ -42,8 +42,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import AppListingHeader from '../components/app-listing-header';
 import { ListingFittedTemplate } from '../components/listing-fitted';
 
-import ListingUseCommand from '@cardstack/boxel-host/commands/listing-use';
-import ListingInstallCommand from '@cardstack/boxel-host/commands/listing-install';
+import ListingInitCommand from '@cardstack/boxel-host/commands/listing-action-init';
 
 import { Publisher } from './publisher';
 import { Category } from './category';
@@ -194,8 +193,6 @@ export function setupAllRealmsInfo(args: any) {
 
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
-  @tracked createdInstances = false;
-  @tracked installedListing = false;
   @tracked writableRealms: { name: string; url: string; iconURL?: string }[] =
     [];
 
@@ -231,11 +228,11 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     if (!commandContext) {
       throw new Error('Missing commandContext');
     }
-    await new ListingUseCommand(commandContext).execute({
+    await new ListingInitCommand(commandContext).execute({
       realm,
+      actionType: 'use',
       listing: this.args.model as Listing,
     });
-    this.createdInstances = true;
   });
 
   _install = task(async (realm: string) => {
@@ -243,11 +240,11 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     if (!commandContext) {
       throw new Error('Missing commandContext');
     }
-    await new ListingInstallCommand(commandContext).execute({
+    await new ListingInitCommand(commandContext).execute({
       realm,
+      actionType: 'install',
       listing: this.args.model as Listing,
     });
-    this.installedListing = true;
   });
 
   get hasOneOrMoreSpec() {
@@ -263,22 +260,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
   get useOrInstallDisabled() {
     return !this.hasOneOrMoreSpec && !this.hasSkills;
-  }
-
-  get useButtonDisabled() {
-    return (
-      this.createdInstances ||
-      !this.args.context?.actions?.createFromSpec ||
-      this.useOrInstallDisabled
-    );
-  }
-
-  get installButtonDisabled() {
-    return (
-      this.installedListing ||
-      !this.args.context?.actions?.copySource ||
-      this.useOrInstallDisabled
-    );
   }
 
   @action preview() {
@@ -365,16 +346,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 <BoxelButton
                   class='action-button'
                   data-test-catalog-listing-use-button
-                  @disabled={{this.useButtonDisabled}}
+                  @disabled={{this.useOrInstallDisabled}}
                   {{bindings}}
                 >
-                  {{#if this._use.isRunning}}
-                    Creating...
-                  {{else if this.createdInstances}}
-                    Created Instances
-                  {{else}}
-                    Use
-                  {{/if}}
+                  Use
                 </BoxelButton>
               </:trigger>
               <:content as |dd|>
@@ -391,16 +366,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 <BoxelButton
                   class='action-button'
                   data-test-catalog-listing-install-button
-                  @disabled={{this.installButtonDisabled}}
+                  @disabled={{this.useOrInstallDisabled}}
                   {{bindings}}
                 >
-                  {{#if this._install.isRunning}}
-                    Installing...
-                  {{else if this.installedListing}}
-                    Installed
-                  {{else}}
-                    Install
-                  {{/if}}
+                  Install
                 </BoxelButton>
               </:trigger>
               <:content as |dd|>

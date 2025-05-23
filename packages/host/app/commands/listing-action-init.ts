@@ -18,8 +18,8 @@ import type StoreService from '../services/store';
 
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
-export default class ListingInitCommand extends HostBaseCommand<
-  typeof BaseCommandModule.ListingInput
+export default class ListingActionInitCommand extends HostBaseCommand<
+  typeof BaseCommandModule.ListingActionInput
 > {
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
@@ -28,37 +28,54 @@ export default class ListingInitCommand extends HostBaseCommand<
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
-    const { ListingInput } = commandModule;
-    return ListingInput;
+    const { ListingActionInput } = commandModule;
+    return ListingActionInput;
   }
 
   protected async run(
-    input: BaseCommandModule.ListingInput,
+    input: BaseCommandModule.ListingActionInput,
   ): Promise<undefined> {
-    let { realm: realmUrl, listing: listingInput } = input;
+    let { realm: realmUrl, actionType, listing: listingInput } = input;
 
     const listing = listingInput as Listing;
+
+    let roomName = '';
+    switch (actionType) {
+      case 'remix':
+        roomName = `Remix of ${listing.name}`;
+        break;
+      case 'use':
+        roomName = `Use of ${listing.name}`;
+        break;
+      case 'install':
+        roomName = `Install of ${listing.name}`;
+        break;
+      default:
+        throw new Error(`Invalid listing action type: ${actionType}`);
+    }
 
     const { roomId } = await new CreateAiAssistantRoomCommand(
       this.commandContext,
     ).execute({
-      name: listing.name ? `Remix of ${listing.name}` : 'Remix',
+      name: roomName,
     });
 
-    const remixSkillCardId = `${baseRealm.url}Skill/remix`;
-    const remixSkillCard = (await this.store.peek(remixSkillCardId)) as Skill;
+    const listingSkillCardId = `${baseRealm.url}Skill/listing`;
+    const listingSkillCard = (await this.store.peek(
+      listingSkillCardId,
+    )) as Skill;
 
-    if (remixSkillCard) {
+    if (listingSkillCard) {
       await new AddSkillsToRoomCommand(this.commandContext).execute({
         roomId,
-        skills: [remixSkillCard],
+        skills: [listingSkillCard],
       });
     }
 
     if (roomId) {
       await new SendAiAssistantMessageCommand(this.commandContext).execute({
         roomId,
-        prompt: `I would like to remix this ${listing.name} under the following realm: ${realmUrl}`,
+        prompt: `I would like to ${actionType} this ${listing.name} under the following realm: ${realmUrl}`,
         openCardIds: [listing.id!],
         attachedCards: [listing],
       });

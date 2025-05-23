@@ -20,7 +20,7 @@ import {
   Menu as BoxelMenu,
 } from '@cardstack/boxel-ui/components';
 
-import ListingInitCommand from '@cardstack/boxel-host/commands/listing-init';
+import ListingInitCommand from '@cardstack/boxel-host/commands/listing-action-init';
 
 interface Signature {
   Element: HTMLElement;
@@ -379,6 +379,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     }
     await new ListingInitCommand(commandContext).execute({
       realm: realmUrl,
+      actionType: 'remix',
       listing: this.args.model as Listing,
     });
   });
