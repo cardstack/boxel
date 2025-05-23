@@ -17,6 +17,7 @@ import type CardService from '../services/card-service';
 import type MatrixService from '../services/matrix-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
+import ContextForAiAssistantService from '../services/context-for-ai-assistant-service';
 
 const { hostsOwnAssets } = ENV;
 
@@ -37,11 +38,13 @@ export default class Index extends Route<void> {
   @service declare private router: RouterService;
   @service declare private store: StoreService;
   @service declare private operatorModeStateService: OperatorModeStateService;
+  @service
+  declare private contextForAiAssistantService: ContextForAiAssistantService;
   @service declare realm: RealmService;
 
   didMatrixServiceStart = false;
 
-  // WARNING! Mke sure we are _very_ careful with our async in this model. This
+  // WARNING! Make sure we are _very_ careful with our async in this model. This
   // model hook is called _every_  time
   // OperatorModeStateService.schedulePersist() is called (due to the fact we
   // care about the back button, see note at bottom). Because of that make sure

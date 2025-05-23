@@ -50,6 +50,7 @@ import {
   assertRecentFileURLs,
 } from '../../helpers/recent-files-cards';
 import { setupApplicationTest } from '../../helpers/setup';
+import ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
 
 const codeRefDriverCard = `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
   import { Component } from 'https://cardstack.com/base/card-api';
@@ -197,7 +198,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
               attributes: {
                 title: 'The Ultimate Guide to Remote Work',
                 description:
-                  'In today’s digital age, remote work has transformed from a luxury to a necessity. This comprehensive guide will help you navigate the world of remote work, offering tips, tools, and best practices for success.',
+                  "In today's digital age, remote work has transformed from a luxury to a necessity. This comprehensive guide will help you navigate the world of remote work, offering tips, tools, and best practices for success.",
               },
               relationships: {
                 author: {
@@ -400,6 +401,21 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .dom('[data-test-selected-item]')
         .hasText('City Design', 'most recent category card is pre-selected');
       assertCardExists(assert, `${testRealmURL}Category/city-design`);
+
+      let contextForAiAssistantService = this.owner.lookup(
+        'service:context-for-ai-assistant-service',
+      ) as ContextForAiAssistantService;
+
+      assert.deepEqual(contextForAiAssistantService.getContext(), {
+        submode: 'code',
+        realmUrl: 'http://test-realm/test/',
+        codeMode: {
+          currentFile: 'http://test-realm/test/blog-post.gts',
+          currentPanel: 'playground',
+          playgroundPanelCardId: 'http://test-realm/test/Category/city-design',
+          playgroundPanelFormat: 'isolated',
+        },
+      });
 
       await selectDeclaration('BlogPost');
       assert

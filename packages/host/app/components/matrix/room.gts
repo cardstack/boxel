@@ -74,6 +74,7 @@ import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
 import type { RoomSkill } from '../../resources/room';
+import ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
 
 interface Signature {
   Args: {
@@ -252,6 +253,8 @@ export default class Room extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare loaderService: LoaderService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
+  @service
+  private declare contextForAiAssistantService: ContextForAiAssistantService;
 
   private autoAttachmentResource = getAutoAttachment(this, {
     topMostStackItems: () => this.topMostStackItems,
@@ -760,11 +763,12 @@ export default class Room extends Component<Signature> {
         ) || []),
         ...this.autoAttachedCardIds,
       ]);
+
       let context = {
-        submode: this.operatorModeStateService.state.submode,
+        ...this.contextForAiAssistantService.getContext(),
         openCardIds: this.makeRemoteIdsList([...openCardIds]),
-        realmUrl: this.operatorModeStateService.realmURL.href,
       };
+
       try {
         let cards: CardDef[] | undefined;
         if (typeof cardsOrIds?.[0] === 'string') {

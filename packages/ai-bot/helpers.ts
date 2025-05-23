@@ -332,9 +332,6 @@ export async function loadCurrentlySerializedFileDefs(
 export function attachedFilesToPrompt(
   attachedFiles: SerializedFileDef[],
 ): string {
-  if (!attachedFiles.length) {
-    return 'No attached files';
-  }
   return attachedFiles
     .map((f) => {
       let hyperlink = f.sourceUrl ? `[${f.name}](${f.sourceUrl})` : f.name;
@@ -612,19 +609,42 @@ export async function getModifyPrompt(
     (event) => event.sender !== aiBotUserId,
   );
 
-  let realmUrl = (lastMessageEventByUser as CardMessageEvent).content.data
-    ?.context?.realmUrl;
+  let boxelContext = (lastMessageEventByUser as CardMessageEvent).content.data
+    ?.context;
+
+  let realmUrl = boxelContext?.realmUrl;
 
   let systemMessage = `${MODIFY_SYSTEM_MESSAGE}
 The user currently has given you the following data to work with:
 
-Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}
+Attached card instances: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards) || 'no attached card instances'}
 
-Attached files:
-${attachedFilesToPrompt(attachedFiles)}
+Attached files: ${attachedFiles.length ? '\n' + attachedFilesToPrompt(attachedFiles) : 'no attached files'}
 
-The user is operating in a realm with this URL: ${realmUrl}
-`;
+The user is currently:`;
+
+  if (realmUrl) {
+    systemMessage += `\n- operating in a realm with this URL: ${realmUrl}`;
+  }
+
+  if (boxelContext?.submode) {
+    systemMessage += `\n- operating in ${boxelContext.submode} mode`;
+  }
+
+  if (boxelContext?.currentFile) {
+    systemMessage += `\n- viewing or editing this file in the code editor: ${boxelContext.currentFile}`;
+  }
+
+  if (boxelContext?.codeMode?.currentPanel) {
+    systemMessage += `\n- inspecting the file contents in this code mode panel: ${boxelContext.codeMode.currentPanel}`;
+  }
+
+  if (boxelContext?.codeMode?.playgroundPanelCardId) {
+    systemMessage += `\n- viewing this card instance in the UI: ${boxelContext.codeMode.playgroundPanelCardId}`;
+    if (boxelContext?.codeMode.playgroundPanelFormat) {
+      systemMessage += `, in this format: ${boxelContext.codeMode.playgroundPanelFormat}`;
+    }
+  }
 
   if (skillCards.length) {
     systemMessage += SKILL_INSTRUCTIONS_MESSAGE;

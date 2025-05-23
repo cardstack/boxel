@@ -95,10 +95,21 @@ module('getModifyPrompt', (hooks) => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
           isStreamingFinished: true,
+          data: {
+            context: {
+              submode: 'code',
+              realmUrl: 'http://my-realm.com',
+              codeMode: {
+                currentPanel: 'playground',
+                playgroundPanelCardId: 'http://localhost:4201/postcards/1',
+                playgroundPanelFormat: 'isolated',
+              },
+            },
+          },
         },
         sender: '@user:localhost',
         room_id: 'room1',
@@ -125,6 +136,21 @@ module('getModifyPrompt', (hooks) => {
     assert.equal(
       result[1].content,
       'User message: Hey\n          Context: the user has no open cards.',
+    );
+    assert.equal(
+      result[0].content,
+      `The user is using an application called Boxel, where they are working on editing "Cards" which are data models representable as JSON. The user may be non-technical and should not need to understand the inner workings of Boxel. The user may be asking questions about the contents of the cards rather than help editing them. Use your world knowledge to help them. If the user request is unclear, you may ask clarifying questions. You may make multiple function calls, all calls are gated by the user so multiple options can be explored.If a user asks you about things in the world, use your existing knowledge to help them. Only if necessary, add a *small* caveat at the end of your message to explain that you do not have live external data. If you need access to the cards the user can see, you can ask them to attach the cards. If you encounter JSON structures, please enclose them within backticks to ensure they are displayed stylishly in Markdown. If you encounter code, please indent code using 2 spaces per tab stop and enclose the code within triple backticks and indicate the language after the opening backticks so that the code is displayed stylishly in Markdown.
+The user currently has given you the following data to work with:
+
+Attached card instances: no attached card instances
+
+Attached files: no attached files
+
+The user is currently:
+- operating in a realm with this URL: http://my-realm.com
+- operating in code mode
+- inspecting the file contents in this code mode panel: playground
+- viewing this card instance: http://localhost:4201/postcards/1, in this format: isolated`,
     );
   });
 

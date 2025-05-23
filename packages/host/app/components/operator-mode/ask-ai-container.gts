@@ -67,6 +67,8 @@ export default class AskAiContainer extends Component<Signature> {
           : undefined,
         openCardIds: openCards?.map((c) => c.id),
         realmUrl: this.operatorModeStateService.realmURL.href,
+        submode: this.operatorModeStateService.state.submode,
+        currentFileURL: this.operatorModeStateService.state.codePath?.href,
       }),
     ]);
 

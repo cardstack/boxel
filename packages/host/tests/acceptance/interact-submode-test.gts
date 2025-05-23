@@ -53,6 +53,7 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+import ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
 
 const testRealm2URL = `http://test-realm/test2/`;
 const testRealm3URL = `http://test-realm/test3/`;
@@ -446,6 +447,15 @@ module('Acceptance | interact submode tests', function (hooks) {
         )
         .doesNotExist();
       assert.dom('[data-test-search-field]').hasValue('');
+
+      let contextForAiAssistantService = this.owner.lookup(
+        'service:context-for-ai-assistant-service',
+      ) as ContextForAiAssistantService;
+
+      assert.deepEqual(contextForAiAssistantService.getContext(), {
+        submode: 'interact',
+        realmUrl: 'http://test-realm/test2/',
+      });
     });
 
     test('Can search for an index card by URL (without "index" in path)', async function (assert) {

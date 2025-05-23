@@ -2,6 +2,7 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { hash } from '@ember/helper';
 
 import { restartableTask, task } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
@@ -45,6 +46,8 @@ import PlaygroundTitle from './playground-title';
 import type { PrerenderedCard } from '../../../prerendered-card-search';
 
 import type { WithBoundArgs } from '@glint/template';
+import ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
+import ReportUserContextForAiAssistant from '../../report-user-context-for-ai-assistant';
 
 export type SelectedInstance = {
   card: CardDef;
@@ -116,6 +119,8 @@ export default class PlaygroundPanel extends Component<Signature> {
   @service private declare recentCardsService: RecentCardsService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
   @service private declare store: StoreService;
+  @service
+  private declare contextForAiAssistantService: ContextForAiAssistantService;
 
   @tracked private cardResource: ReturnType<getCard> | undefined;
   @tracked private fieldChooserIsOpen = false;
@@ -142,7 +147,8 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get card(): CardDef | undefined {
-    return this.cardResource?.card;
+    let card = this.cardResource?.card;
+    return card;
   }
 
   private get cardError(): CardErrorJSONAPI | undefined {
@@ -274,6 +280,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     if (!this.card) {
       return undefined;
     }
+
     return {
       card: this.card,
       fieldIndex: this.args.isFieldDef ? this.fieldIndex : undefined,
@@ -313,10 +320,10 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get format(): Format {
-    return (
+    let format =
       this.playgroundPanelService.getSelection(this.moduleId)?.format ??
-      this.defaultFormat
-    );
+      this.defaultFormat;
+    return format;
   }
 
   private persistSelections = (
@@ -516,5 +523,12 @@ export default class PlaygroundPanel extends Component<Signature> {
         )
       )
     }}
+
+    <ReportUserContextForAiAssistant
+      @values={{hash
+        playgroundPanelCardId=this.card.id
+        playgroundPanelFormat=this.format
+      }}
+    />
   </template>
 }

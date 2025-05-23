@@ -88,6 +88,7 @@ import type {
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
+import { type SelectedAccordionItem as CodeModePanelSelection } from '../components/operator-mode/code-submode/module-inspector';
 import { isSkillCard } from '../lib/file-def-manager';
 import { importResource } from '../resources/import';
 
@@ -128,6 +129,12 @@ export type OperatorModeContext = {
   submode: Submode;
   openCardIds: string[];
   realmUrl: string;
+  codeMode?: {
+    currentFile: string | undefined;
+    currentPanel: CodeModePanelSelection | undefined;
+    playgroundPanelCardId: string | undefined;
+    playgroundPanelFormat: CardAPI.Format | undefined;
+  };
 };
 
 export default class MatrixService extends Service {
@@ -868,11 +875,11 @@ export default class MatrixService extends Service {
     attachedCards: CardDef[] = [],
     attachedFiles: FileDef[] = [],
     clientGeneratedId = uuidv4(),
-    context?: OperatorModeContext,
+    context: OperatorModeContext,
   ): Promise<void> {
     let tools: Tool[] = [];
     let attachedOpenCards: CardDef[] = [];
-    let { submode, realmUrl } = context ?? {};
+
     let mappings = await basicMappings(this.loaderService.loader);
     // Open cards are attached automatically
     // If they are not attached, the user is not allowing us to
@@ -907,10 +914,8 @@ export default class MatrixService extends Service {
         ),
         attachedCards: cardFileDefs.map((file: FileDef) => file.serialize()),
         context: {
+          ...context,
           openCardIds: attachedOpenCards.map((c) => c.id),
-          tools,
-          submode,
-          realmUrl,
           functions: [],
         },
       },
