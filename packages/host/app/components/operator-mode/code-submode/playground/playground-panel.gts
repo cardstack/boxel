@@ -627,16 +627,18 @@ export default class PlaygroundPanel extends Component<Signature> {
     {{consumeContext this.makeCardResource}}
 
     {{! FIXME also from InstanceChooserDropdown }}
-    <PrerenderedCardSearch
-      @query={{this.query}}
-      @format='fitted'
-      @realms={{this.recentRealms}}
-      @isLive={{true}}
-    >
-      <:response as |cards|>
-        {{consumeContext (fn this.triggerPlaygroundSelections cards)}}
-      </:response>
-    </PrerenderedCardSearch>
+    {{#if this.query}}
+      <PrerenderedCardSearch
+        @query={{this.query}}
+        @format='fitted'
+        @realms={{this.recentRealms}}
+        @isLive={{true}}
+      >
+        <:response as |cards|>
+          {{consumeContext (fn this.triggerPlaygroundSelections cards)}}
+        </:response>
+      </PrerenderedCardSearch>
+    {{/if}}
 
     {{#if this.fieldChooserIsOpen}}
       <ToElsewhere
