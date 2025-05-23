@@ -14,6 +14,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
+import MatrixService from '@cardstack/host/services/matrix-service';
 
 import {
   setupLocalIndexing,
@@ -256,6 +257,74 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         cards: [{ id: testCard, title: 'Updated Name Abdel-Rahman' }],
       },
     ]);
+  });
+
+  test('attached cards include computed fields', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    const testCard = `${testRealmURL}Person/hassan`;
+
+    await fillIn('[data-test-message-field]', `Message - 1`);
+    await selectCardFromCatalog(testCard);
+    await click('[data-test-send-message-btn]');
+
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message: 'Message - 1',
+        cards: [{ id: testCard, title: 'Hassan' }],
+      },
+    ]);
+
+    let roomEvents = mockMatrixUtils.getRoomEvents(matrixRoomId);
+    let lastMessageEvent = roomEvents[roomEvents.length - 1];
+
+    // This series of checks just covers common places this may
+    // fail as there are a lot of layers here.
+    assert.ok(lastMessageEvent, 'A message event was found');
+    let messageDataString = lastMessageEvent.content?.data;
+    assert.ok(messageDataString, 'Message has data string');
+    let messageData = JSON.parse(messageDataString); // Assuming data is a JSON string
+    assert.ok(messageData, 'Message data is parsable');
+    let attachedCards = messageData.attachedCards;
+    assert.ok(attachedCards, 'Message has attachedCards');
+    assert.strictEqual(attachedCards.length, 1, 'One card is attached');
+    let attachedCard = attachedCards[0];
+    assert.ok(attachedCard, 'Attached card is present');
+    const mxcUrl = attachedCard.url;
+
+    assert.ok(mxcUrl, 'Attached card has a URL (mxc)');
+    // The mock matrix server uses http://mock-server/ for its mxc content
+    assert.ok(
+      mxcUrl.startsWith('http://mock-server/'),
+      `Card URL "${mxcUrl}" should start with http://mock-server/`,
+    );
+    const matrixService = this.owner.lookup(
+      'service:matrix-service',
+    ) as MatrixService;
+    const mockClient = matrixService.client;
+    const httpUrl = mockClient.mxcUrlToHttp(mxcUrl);
+    const cardContentString = await mockClient.serverState.getContent(httpUrl);
+
+    // Here is the key part of the test, check that the computed title is
+    // present in the downloaded content
+
+    const cardContent = JSON.parse(cardContentString);
+    assert.strictEqual(
+      cardContent.data.attributes.title, // Adjust path based on actual card structure
+      'Hassan Abdel-Rahman',
+      'Computed card title is present in downloaded content',
+    );
   });
 
   test('displays active LLM in chat input', async function (assert) {
