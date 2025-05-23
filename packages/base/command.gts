@@ -210,6 +210,12 @@ export class ListingInput extends CardDef {
   @field listing = linksTo(CardDef);
 }
 
+export class ListingInstallResult extends CardDef {
+  @field selectedCodeRef = contains(JsonField);
+  @field shouldPersistPlaygroundSelection = contains(BooleanField);
+  @field firstExampleCardId = contains(StringField);
+}
+
 export {
   SearchCardsByQueryInput,
   SearchCardsByTypeAndTitleInput,

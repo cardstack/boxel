@@ -43,6 +43,7 @@ import AppListingHeader from '../components/app-listing-header';
 import { ListingFittedTemplate } from '../components/listing-fitted';
 
 import ListingUseCommand from '@cardstack/boxel-host/commands/listing-use';
+import ListingInstallCommand from '@cardstack/boxel-host/commands/listing-install';
 
 import { Publisher } from './publisher';
 import { Category } from './category';
@@ -238,7 +239,14 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   });
 
   _install = task(async (realm: string) => {
-    await installListing(this.args, realm);
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('Missing commandContext');
+    }
+    await new ListingInstallCommand(commandContext).execute({
+      realm,
+      listing: this.args.model as Listing,
+    });
     this.installedListing = true;
   });
 
