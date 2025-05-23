@@ -44,7 +44,7 @@ function nameWithUuid(listingName?: string) {
   return newPackageName;
 }
 export class RemixCommand extends HostBaseCommand<
-  typeof BaseCommandModule.RemixInput
+  typeof BaseCommandModule.ListingInput
 > {
   @service declare private realmServer: RealmServerService;
 
@@ -64,11 +64,13 @@ export class RemixCommand extends HostBaseCommand<
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
-    const { RemixInput } = commandModule;
-    return RemixInput;
+    const { ListingInput } = commandModule;
+    return ListingInput;
   }
 
-  protected async run(input: BaseCommandModule.RemixInput): Promise<undefined> {
+  protected async run(
+    input: BaseCommandModule.ListingInput,
+  ): Promise<undefined> {
     let realmUrls = this.realmServer.availableRealmURLs;
     let { realm: realmUrl, listing: listingInput } = input;
 

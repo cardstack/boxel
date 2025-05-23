@@ -42,6 +42,8 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import AppListingHeader from '../components/app-listing-header';
 import { ListingFittedTemplate } from '../components/listing-fitted';
 
+import ListingUseCommand from '@cardstack/boxel-host/commands/listing-use';
+
 import { Publisher } from './publisher';
 import { Category } from './category';
 import { License } from './license';
@@ -224,38 +226,14 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   }
 
   _use = task(async (realm: string) => {
-    const specsToCopy: Spec[] = this.args.model?.specs ?? [];
-    const specsWithoutFields = specsToCopy.filter(
-      (spec: Spec) => spec.specType !== 'field',
-    );
-
-    const localDir = nameWithUuid(this.args.model?.name);
-    for (const spec of specsWithoutFields) {
-      await this.args.context?.actions?.createFromSpec?.(spec, realm, localDir);
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('Missing commandContext');
     }
-
-    if (this.args.model instanceof SkillListing) {
-      await Promise.all(
-        this.args.model.skills.map((skill) => {
-          this.args.context?.actions?.copyCard?.(
-            skill,
-            realm,
-            undefined,
-            localDir,
-          );
-        }),
-      );
-    }
-    if (this.args.model.examples) {
-      const sourceCards = this.args.model.examples.map((example) => ({
-        sourceCard: example,
-      }));
-      await this.args.context?.actions?.copyCards?.(
-        sourceCards,
-        realm,
-        localDir,
-      );
-    }
+    await new ListingUseCommand(commandContext).execute({
+      realm,
+      listing: this.args.model as Listing,
+    });
     this.createdInstances = true;
   });
 
