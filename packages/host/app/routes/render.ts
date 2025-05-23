@@ -4,7 +4,7 @@ import { service } from '@ember/service';
 
 import { isCardInstance } from '@cardstack/runtime-common';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api.gts';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import LoaderService from '../services/loader-service';
 import StoreService from '../services/store';

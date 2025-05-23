@@ -6,7 +6,7 @@ import type {
   BoxComponent,
   CardDef,
   Format,
-} from 'https://cardstack.com/base/card-api.gts';
+} from 'https://cardstack.com/base/card-api';
 
 import { getClass, getTypes } from './meta';
 
