@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import { prerenderCard, type RenderResponse } from '../prerender';
+import { execSync } from 'child_process';
 
 import {
   setupBaseRealmServer,
@@ -14,6 +15,10 @@ module(basename(__filename), function () {
   module('prerender', function (hooks) {
     let { virtualNetwork } = createVirtualNetworkAndLoader();
     let realmURL: string;
+
+    hooks.before(() => {
+      execSync('pnpm puppeteer browsers install chrome');
+    });
 
     setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
 
