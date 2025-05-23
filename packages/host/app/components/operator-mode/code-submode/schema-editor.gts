@@ -37,7 +37,7 @@ interface Signature {
   };
   Blocks: {
     default: [
-      WithBoundArgs<typeof SchemaEditorTitle, 'totalFields' | 'hasModuleError'>,
+      WithBoundArgs<typeof SchemaEditorBadge, 'totalFields' | 'hasModuleError'>,
       WithBoundArgs<
         typeof CardAdoptionChain,
         | 'file'
@@ -63,27 +63,31 @@ interface TitleSignature {
   };
 }
 
-const SchemaEditorTitle: TemplateOnlyComponent<TitleSignature> = <template>
-  Schema Editor
-
+const SchemaEditorBadge: TemplateOnlyComponent<TitleSignature> = <template>
   {{#if @hasModuleError}}
+    {{! Exclamation point maybe? }}
     <span class='syntax-error'>Fail to parse</span>
   {{else}}
-    <span class='total-fields' data-test-total-fields>
+    <span
+      class='total-fields'
+      title='{{@totalFields}} {{getPlural "field" @totalFields}}'
+      data-test-total-fields
+    >
       {{@totalFields}}
-      {{getPlural 'Field' @totalFields}}
     </span>
   {{/if}}
 
   <style scoped>
     .syntax-error,
     .total-fields {
-      margin-left: auto;
       color: var(--boxel-450);
       font: 500 var(--boxel-font-xs);
-      letter-spacing: var(--boxel-lsp-xl);
-      text-transform: uppercase;
     }
+
+    .total-fields {
+      margin-right: var(--boxel-sp-xxxs);
+    }
+
     .loading-icon {
       display: inline-block;
       margin-right: var(--boxel-sp-xxxs);
@@ -92,7 +96,7 @@ const SchemaEditorTitle: TemplateOnlyComponent<TitleSignature> = <template>
   </style>
 </template>;
 
-export { SchemaEditorTitle };
+export { SchemaEditorBadge };
 
 export default class SchemaEditor extends Component<Signature> {
   @service declare loaderService: LoaderService;
@@ -135,7 +139,7 @@ export default class SchemaEditor extends Component<Signature> {
   <template>
     {{yield
       (component
-        SchemaEditorTitle
+        SchemaEditorBadge
         totalFields=this.totalFields
         hasModuleError=this.hasModuleError
       )

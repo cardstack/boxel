@@ -46,15 +46,21 @@ const getItemTitle = (selection: SelectedInstance | undefined) => {
 const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
   <template>
     <div class='selected-item' data-test-selected-item>
-      {{@title}}
+      <span class='label'>Instance:</span>
+      <span class='item'>{{@title}}</span>
     </div>
     <style scoped>
       .selected-item {
-        font: 500 var(--boxel-font-xs);
+        font-size: 500 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-sm);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+      }
+
+      .label {
+        font-weight: 600;
+        margin-right: var(--boxel-sp-xxs);
       }
     </style>
   </template>;
@@ -130,7 +136,7 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
       background-color: transparent;
       gap: var(--boxel-sp-xs);
       height: var(--boxel-form-control-height);
-      padding: var(--boxel-sp-xs);
+      padding: var(--boxel-sp-xs) var(--boxel-sp);
       border-radius: var(--boxel-border-radius);
       text-align: left;
       white-space: nowrap;
@@ -203,6 +209,7 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
         createNew=@createNew
         createNewIsRunning=@createNewIsRunning
       }}
+      @verticalPosition='above'
       data-playground-instance-chooser
       data-test-instance-chooser
       as |item|
@@ -230,6 +237,7 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
       .instance-chooser :deep(.boxel-loading-indicator) {
         --boxel-loading-indicator-size: var(--boxel-icon-xs);
       }
+
       :deep(
         .boxel-select__dropdown .ember-power-select-option[aria-current='true']
       ),
@@ -237,6 +245,16 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
         background-color: var(--boxel-light);
         flex-wrap: nowrap;
       }
+
+      .instance-chooser
+        + :deep(
+          .ember-basic-dropdown-content-wormhole-origin
+            .instances-dropdown-content
+        ) {
+        border: 1px solid var(--boxel-450);
+        border-radius: var(--boxel-border-radius);
+      }
+
       :deep(.ember-power-select-option:hover .card) {
         background-color: var(--boxel-100);
       }

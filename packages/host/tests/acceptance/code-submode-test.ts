@@ -914,7 +914,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}broken-country.gts`,
       });
 
-      await click('[data-test-accordion-item="playground"] button');
+      await click('[data-test-module-inspector-view="preview"]');
       await waitFor('[data-test-card-error]');
       await click('[data-test-toggle-details]');
       assert.dom('[data-test-error-details]').includesText('No stack trace');
@@ -1813,10 +1813,10 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     test('remembers open module inspector panel via local storage', async function (assert) {
       let accordionSelections = {
-        [`${testRealmURL}address.gts`]: 'spec-preview',
+        [`${testRealmURL}address.gts`]: 'spec',
         [`${testRealmURL}country.gts`]: null,
-        [`${testRealmURL}person.gts`]: 'schema-editor',
-        [`${testRealmURL}pet-person.gts`]: 'playground',
+        [`${testRealmURL}person.gts`]: 'schema',
+        [`${testRealmURL}pet-person.gts`]: 'preview',
       };
       window.localStorage.setItem(
         CodeModePanelSelections,
@@ -1830,40 +1830,28 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
 
       assert
-        .dom('[data-test-selected-accordion-item="schema-editor"]')
+        .dom('[data-test-active-module-inspector-view="schema"]')
         .exists('defaults to schema-editor view');
-      await click('[data-test-accordion-item="playground"] > button');
-      assert.dom('[data-test-selected-accordion-item="playground"]').exists();
+
+      await click('[data-test-module-inspector-view="preview"]');
+      assert.dom('[data-test-active-module-inspector-view="preview"]').exists();
 
       await click('[data-test-file-browser-toggle]');
       await click('[data-test-file="address.gts"]');
-      assert.dom('[data-test-selected-accordion-item="spec-preview"]').exists();
-      assert.dom('[data-test-accordion-item="spec-preview"]').hasClass('open');
-      await click('[data-test-accordion-item="spec-preview"] > button');
-      assert
-        .dom('[data-test-selected-accordion-item="playground"]')
-        .exists('closing the final panel opens the previous panel');
+      assert.dom('[data-test-active-module-inspector-view="spec"]').exists();
 
       await click('[data-test-file="country.gts"]');
       assert.dom('[data-test-module-inspector="card-or-field"]').exists();
-      assert
-        .dom('[data-test-selected-accordion-item="schema-editor"]')
-        .exists();
-      await click('[data-test-accordion-item="spec-preview"] > button'); // open spec preview
-      assert.dom('[data-test-selected-accordion-item="spec-preview"]').exists();
+      assert.dom('[data-test-active-module-inspector-view="schema"]').exists();
 
       await click('[data-test-file="person.gts"]');
-      assert
-        .dom('[data-test-selected-accordion-item="schema-editor"]')
-        .exists();
+      assert.dom('[data-test-active-module-inspector-view="schema"]').exists();
 
       await click('[data-test-file="pet-person.gts"]');
-      assert.dom('[data-test-selected-accordion-item="playground"]').exists();
-      await click('[data-test-accordion-item="playground"] > button'); // toggle playground closed
-      assert.dom('[data-test-module-inspector="card-or-field"]').exists();
-      assert
-        .dom('[data-test-selected-accordion-item="spec-preview"]')
-        .exists('closing panel toggles next panel open');
+      assert.dom('[data-test-active-module-inspector-view="preview"]').exists();
+
+      await click('[data-test-module-inspector-view="spec"]');
+      assert.dom('[data-test-active-module-inspector-view="spec"]').exists();
 
       let currentSelections = window.localStorage.getItem(
         CodeModePanelSelections,
@@ -1871,11 +1859,11 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.strictEqual(
         currentSelections,
         JSON.stringify({
-          [`${testRealmURL}address.gts`]: 'playground',
-          [`${testRealmURL}country.gts`]: 'spec-preview',
-          [`${testRealmURL}person.gts`]: 'schema-editor',
-          [`${testRealmURL}pet-person.gts`]: 'spec-preview',
-          [`${testRealmURL}pet.gts`]: 'playground',
+          [`${testRealmURL}address.gts`]: 'spec',
+          [`${testRealmURL}country.gts`]: null,
+          [`${testRealmURL}person.gts`]: 'schema',
+          [`${testRealmURL}pet-person.gts`]: 'spec',
+          [`${testRealmURL}pet.gts`]: 'preview',
         }),
       );
     });
