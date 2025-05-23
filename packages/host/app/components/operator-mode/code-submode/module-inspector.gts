@@ -41,6 +41,7 @@ import {
   ResolvedCodeRef,
   skillCardRef,
   specRef,
+  localId,
 } from '@cardstack/runtime-common';
 import {
   codeRefWithAbsoluteURL,
@@ -375,8 +376,8 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           doNotWaitForPersist: true,
         });
         this.specPanelService.setSelection(spec[localId]);
-        if (!this.args.isPanelOpen) {
-          this.args.toggleAccordionItem('spec-preview');
+        if (this.selectedView !== 'spec') {
+          this.toggleAccordionItem('spec');
         }
       } catch (e: any) {
         console.log('Error saving', e);
