@@ -624,9 +624,6 @@ The user is currently:
       fakeMatrixClient,
     );
 
-    console.log('Actual content:');
-    console.log(prompt[0].content);
-
     assert.ok(
       prompt[0].content?.includes(
         `Attached files: \n[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts): this is the content of the spaghetti-recipe.gts file
