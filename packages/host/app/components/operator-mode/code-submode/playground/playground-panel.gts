@@ -61,6 +61,7 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type { Spec } from 'https://cardstack.com/base/spec';
 
+import PrerenderedCardSearch from '../../../prerendered-card-search';
 import CardError from '../../card-error';
 import FormatChooser from '../format-chooser';
 
@@ -70,7 +71,6 @@ import InstanceSelectDropdown from './instance-chooser-dropdown';
 import PlaygroundPreview from './playground-preview';
 import SpecSearch from './spec-search';
 
-import PrerenderedCardSearch from '../../../prerendered-card-search';
 import type { PrerenderedCard } from '../../../prerendered-card-search';
 
 export type SelectedInstance = {

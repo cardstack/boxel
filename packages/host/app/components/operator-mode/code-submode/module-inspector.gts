@@ -21,9 +21,8 @@ import window from 'ember-window-mock';
 import { TrackedObject } from 'tracked-built-ins';
 
 import { Accordion, BoxelButton, Pill } from '@cardstack/boxel-ui/components';
-import { IconPlus } from '@cardstack/boxel-ui/icons';
-
 import { eq } from '@cardstack/boxel-ui/helpers';
+import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import {
   type getCards,
