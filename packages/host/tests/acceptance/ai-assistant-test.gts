@@ -309,19 +309,17 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       mxcUrl.startsWith('http://mock-server/'),
       `Card URL "${mxcUrl}" should start with http://mock-server/`,
     );
+
+    // Download the card file def
     const matrixService = this.owner.lookup(
       'service:matrix-service',
     ) as MatrixService;
-    const mockClient = matrixService.client;
-    const httpUrl = mockClient.mxcUrlToHttp(mxcUrl);
-    const cardContentString = await mockClient.serverState.getContent(httpUrl);
 
-    // Here is the key part of the test, check that the computed title is
-    // present in the downloaded content
+    let cardContent = await matrixService.downloadCardFileDef(attachedCard);
 
-    const cardContent = JSON.parse(cardContentString);
+    // Check that the computed title is present in the downloaded content
     assert.strictEqual(
-      cardContent.data.attributes.title, // Adjust path based on actual card structure
+      cardContent.data.attributes.title,
       'Hassan Abdel-Rahman',
       'Computed card title is present in downloaded content',
     );
