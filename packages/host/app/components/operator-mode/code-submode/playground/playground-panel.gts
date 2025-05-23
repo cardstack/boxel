@@ -33,7 +33,7 @@ import {
   loadCardDef,
   specRef,
   trimJsonExtension,
-  localId,
+  type LooseSingleCardDocument,
   type Query,
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
@@ -105,6 +105,7 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   @tracked private cardResource: ReturnType<getCard> | undefined;
   @tracked private fieldChooserIsOpen = false;
+  @tracked private cardCreationError: CardErrorJSONAPI | undefined = undefined;
 
   private fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
 
@@ -215,6 +216,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get isLoading() {
+    this.clearCardCreationError();
     return this.args.isFieldDef && this.args.isUpdating;
   }
 
@@ -234,8 +236,12 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get cardError(): CardErrorJSONAPI | undefined {
-    return this.cardResource?.cardError;
+    return this.cardCreationError ?? this.cardResource?.cardError;
   }
+
+  private clearCardCreationError = () => {
+    this.cardCreationError = undefined;
+  };
 
   private get specCard(): Spec | undefined {
     let card = this.card;
@@ -478,41 +484,61 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private createNewCard = restartableTask(async () => {
-    let cardClass = await loadCardDef(
-      // for field def, create a new spec card instance
-      this.args.isFieldDef ? specRef : this.args.codeRef,
-      {
-        loader: this.loaderService.loader,
-      },
-    );
-    let newInstance: CardDef;
+    this.clearCardCreationError();
+    let newCardJSON: LooseSingleCardDocument;
     if (this.args.isFieldDef) {
-      let field = await loadCardDef(this.args.codeRef, {
+      let fieldCard = await loadCardDef(this.args.codeRef, {
         loader: this.loaderService.loader,
       });
-      newInstance = new cardClass({
-        specType: 'field',
-        ref: this.args.codeRef,
-        title: this.args.codeRef.name,
-        containedExamples: [new field()],
-      }) as Spec;
+      // for field def, create a new spec card instance
+      newCardJSON = {
+        data: {
+          attributes: {
+            specType: 'field',
+            ref: this.args.codeRef,
+            title: this.args.codeRef.name,
+            containedExamples: [new fieldCard()],
+          },
+          meta: {
+            fields: {
+              containedExamples: [
+                {
+                  adoptsFrom: this.args.codeRef,
+                },
+              ],
+            },
+            adoptsFrom: specRef,
+            realmURL: this.currentRealm,
+          },
+        },
+      };
     } else {
-      newInstance = new cardClass() as CardDef;
+      newCardJSON = {
+        data: {
+          meta: {
+            adoptsFrom: this.args.codeRef,
+            realmURL: this.currentRealm,
+          },
+        },
+      };
     }
-
-    await this.store.add(newInstance, {
-      realm: this.currentRealm,
-      doNotWaitForPersist: true,
-    });
-    await this.recentCardsService.addNewCard(newInstance, {
-      addToRecentFiles: true,
-    });
-    this.playgroundPanelService.persistSelections(
-      this.moduleId,
-      newInstance[localId],
-      'edit',
-      this.args.isFieldDef ? 0 : undefined,
-    ); // open new instance in playground in edit format
+    let maybeId: string | CardErrorJSONAPI = await this.store.create(
+      newCardJSON,
+      {
+        realm: this.currentRealm,
+      },
+    );
+    if (typeof maybeId !== 'string') {
+      this.cardCreationError = maybeId;
+    } else {
+      let cardId = maybeId;
+      this.recentFilesService.addRecentFileUrl(`${cardId}.json`);
+      this.persistSelections(
+        cardId,
+        'edit',
+        this.args.isFieldDef ? 0 : undefined,
+      ); // open new instance in playground in edit format
+    }
     this.closeInstanceChooser();
   });
 
