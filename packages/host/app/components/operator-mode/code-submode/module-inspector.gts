@@ -3,7 +3,10 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
+import Modifier from 'ember-modifier';
+import { consume } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
 import { TrackedObject } from 'tracked-built-ins';
@@ -13,10 +16,16 @@ import { Accordion } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
+  type getCards,
+  type Query,
   isCardDocumentString,
+  isFieldDef,
+  internalKeyFor,
   CodeRef,
   CardErrorJSONAPI,
+  GetCardsContextName,
   ResolvedCodeRef,
+  specRef,
 } from '@cardstack/runtime-common';
 
 import CardError from '@cardstack/host/components/operator-mode/card-error';
@@ -28,6 +37,9 @@ import SchemaEditor, {
 } from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
 import SpecPreview from '@cardstack/host/components/operator-mode/code-submode/spec-preview';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
+
+import consumeContext from '@cardstack/host/helpers/consume-context';
+
 import { type Ready } from '@cardstack/host/resources/file';
 import type { FileResource } from '@cardstack/host/resources/file';
 import {
@@ -36,11 +48,17 @@ import {
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
+
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import type RealmServerService from '@cardstack/host/services/realm-server';
+import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 
 import { CodeModePanelSelections } from '@cardstack/host/utils/local-storage-keys';
+import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import { Spec } from 'https://cardstack.com/base/spec';
 
 export type SelectedAccordionItem =
   | 'schema-editor'
@@ -79,6 +97,13 @@ interface ModuleInspectorSignature {
 
 export default class ModuleInspector extends Component<ModuleInspectorSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare playgroundPanelService: PlaygroundPanelService;
+  @service private declare realmServer: RealmServerService;
+  @service private declare specPanelService: SpecPanelService;
+
+  @consume(GetCardsContextName) private declare getCards: getCards;
+
+  @tracked private specSearch: ReturnType<getCards<Spec>> | undefined;
 
   private panelSelections: Record<string, SelectedAccordionItem>;
 
@@ -188,6 +213,121 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     );
   }
 
+  private updatePlaygroundSelectionsFromSpec = (spec: Spec) => {
+    if (!spec.isField) {
+      return; // not a field spec
+    }
+    if (
+      this.selectedDeclarationAsCodeRef.name !== spec.ref.name ||
+      this.selectedDeclarationAsCodeRef.module !== spec.moduleHref // absolute url
+    ) {
+      return; // not the right field spec
+    }
+    this.updatePlaygroundSelections(spec.id, true);
+  };
+
+  private get selectedDeclarationAsCodeRef(): ResolvedCodeRef {
+    if (!this.args.selectedDeclaration?.exportName) {
+      return {
+        name: '',
+        module: '',
+      };
+    }
+    return {
+      name: this.args.selectedDeclaration.exportName,
+      module: `${this.operatorModeStateService.state.codePath!.href.replace(
+        /\.[^.]+$/,
+        '',
+      )}`,
+    };
+  }
+
+  @action private updatePlaygroundSelections(id: string, fieldDefOnly = false) {
+    const declaration = this.args.selectedDeclaration;
+
+    if (!declaration?.exportName || !isCardOrFieldDeclaration(declaration)) {
+      return;
+    }
+
+    const isField = isFieldDef(declaration.cardOrField);
+    if (fieldDefOnly && !isField) {
+      return;
+    }
+
+    const moduleId = internalKeyFor(
+      this.selectedDeclarationAsCodeRef,
+      undefined,
+    );
+    const cardId = id.replace(/\.json$/, '');
+
+    const selections = window.localStorage.getItem(PlaygroundSelections);
+    let existingFormat: Format = isField ? 'embedded' : 'isolated';
+
+    if (selections) {
+      const selection = JSON.parse(selections)[moduleId];
+      if (selection?.cardId === cardId) {
+        return;
+      }
+      // If we already have selections for this module, preserve the format
+      if (selection?.format) {
+        existingFormat = selection?.format;
+      }
+    }
+
+    this.playgroundPanelService.persistSelections(
+      moduleId,
+      cardId,
+      existingFormat,
+      isField ? 0 : undefined,
+    );
+  }
+
+  private get queryForSpecsForSelectedDefinition(): Query {
+    return {
+      filter: {
+        on: specRef,
+        eq: {
+          ref: this.selectedDeclarationAsCodeRef, //ref is primitive
+        },
+      },
+      sort: [
+        {
+          by: 'createdAt',
+          direction: 'desc',
+        },
+      ],
+    };
+  }
+
+  private findSpecsForSelectedDefinition = () => {
+    this.specSearch = this.getCards(
+      this,
+      () => this.queryForSpecsForSelectedDefinition,
+      () => this.realmServer.availableRealmURLs,
+      { isLive: true },
+    ) as ReturnType<getCards<Spec>>;
+  };
+
+  get specsForSelectedDefinition() {
+    return this.specSearch?.instances ?? [];
+  }
+
+  private get activeSpec() {
+    let selectedSpecId = this.specPanelService.specSelection;
+
+    if (selectedSpecId) {
+      let selectedSpec = this.specsForSelectedDefinition?.find(
+        (spec) => spec.id === selectedSpecId,
+      );
+
+      if (selectedSpec) {
+        return selectedSpec;
+      }
+    }
+
+    return this.specsForSelectedDefinition?.[0];
+  }
+
   <template>
     {{#if this.isCardPreviewError}}
       {{! this is here to make TS happy, this is always true }}
@@ -218,7 +358,12 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         {{this.fileIncompatibilityMessage}}
       </div>
     {{else if @selectedCardOrField.cardOrField}}
+      {{consumeContext this.findSpecsForSelectedDefinition}}
       <Accordion
+        {{SpecUpdatedModifier
+          spec=this.activeSpec
+          onSpecUpdated=this.updatePlaygroundSelectionsFromSpec
+        }}
         data-test-module-inspector='card-or-field'
         data-test-selected-accordion-item={{this.selectedAccordionItem}}
         as |A|
@@ -274,6 +419,11 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           @isLoadingNewModule={{@moduleContentsResource.isLoadingNewModule}}
           @toggleAccordionItem={{this.toggleAccordionItem}}
           @isPanelOpen={{eq this.selectedAccordionItem 'spec-preview'}}
+          @selectedDeclarationAsCodeRef={{this.selectedDeclarationAsCodeRef}}
+          @updatePlaygroundSelections={{this.updatePlaygroundSelections}}
+          @activeSpec={{this.activeSpec}}
+          @specsForSelectedDefinition={{this.specsForSelectedDefinition}}
+          @searchIsLoading={{this.specSearch.isLoading}}
           as |SpecPreviewTitle SpecPreviewContent|
         >
           <A.Item
@@ -403,4 +553,27 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       }
     </style>
   </template>
+}
+
+interface SpecUpdatedModifierSignature {
+  Args: {
+    Named: {
+      spec?: Spec;
+      onSpecUpdated?: (spec: Spec) => void;
+    };
+  };
+}
+
+export class SpecUpdatedModifier extends Modifier<SpecUpdatedModifierSignature> {
+  modify(
+    _element: HTMLElement,
+    _positional: [],
+    { spec, onSpecUpdated }: SpecUpdatedModifierSignature['Args']['Named'],
+  ) {
+    if (!spec || !onSpecUpdated) {
+      return;
+    }
+
+    onSpecUpdated(spec);
+  }
 }

@@ -2,14 +2,18 @@ import { SafeString, htmlSafe } from '@ember/template';
 
 import { unescapeHtml } from '@cardstack/runtime-common/helpers/html';
 
-import { CodeData } from '@cardstack/host/components/ai-assistant/formatted-message';
-
 import {
   isCompleteSearchReplaceBlock,
   parseSearchReplace,
 } from '../search-replace-block-parsing';
 
-export function extractCodeData(preElementString: string): CodeData {
+export function extractCodeData(
+  preElementString: string,
+  roomId: string,
+  eventId: string,
+  codeBlockIndex: number,
+): CodeData {
+  console.log('extractCodeData', preElementString);
   // We are creating a new element in the dom
   // so that we can easily parse the content of the top level <pre> tags.
   // Note that <pre> elements can have nested <pre> elements inside them and by querying the dom like that
@@ -25,6 +29,9 @@ export function extractCodeData(preElementString: string): CodeData {
       code: null,
       language: null,
       searchReplaceBlock: null,
+      roomId: '',
+      eventId: '',
+      codeBlockIndex: -1,
     };
   }
 
@@ -83,6 +90,9 @@ export function extractCodeData(preElementString: string): CodeData {
     searchReplaceBlock: isCompleteSearchReplaceBlock(contentWithoutFileUrl)
       ? contentWithoutFileUrl
       : null,
+    roomId,
+    eventId,
+    codeBlockIndex,
   };
 }
 
@@ -115,12 +125,41 @@ export function wrapLastTextNodeInStreamingTextSpan(
   return htmlSafe(doc.body.innerHTML);
 }
 
-export interface HtmlTagGroup {
-  type: 'pre_tag' | 'non_pre_tag';
-  content: string;
+export interface CodeData {
+  fileUrl: string | null;
+  code: string | null;
+  language: string | null;
+  searchReplaceBlock?: string | null;
+  roomId: string;
+  eventId: string;
+  codeBlockIndex: number;
 }
 
-export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
+export type HtmlTagGroup = HtmlPreTagGroup | HtmlNonPreTagGroup;
+
+export interface HtmlPreTagGroup {
+  type: 'pre_tag';
+  content: string;
+  codeData: CodeData;
+}
+
+export interface HtmlNonPreTagGroup {
+  type: 'non_pre_tag';
+  content: string;
+  codeData: null;
+}
+
+export function isHtmlPreTagGroup(
+  htmlTagGroup: HtmlTagGroup,
+): htmlTagGroup is HtmlPreTagGroup {
+  return htmlTagGroup.type === 'pre_tag';
+}
+
+export function parseHtmlContent(
+  htmlString: string,
+  roomId: string,
+  eventId: string,
+): HtmlTagGroup[] {
   let result: HtmlTagGroup[] = [];
 
   // Create a temporary DOM element to parse the HTML string.
@@ -131,6 +170,7 @@ export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
   let doc = document.createElement('div');
   doc.innerHTML = htmlString;
 
+  let codeBlockIndex = 0;
   Array.from(doc.childNodes).forEach((node) => {
     if (node.nodeType === Node.TEXT_NODE) {
       let textContent = node.textContent?.trim() || '';
@@ -138,6 +178,7 @@ export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
         result.push({
           type: 'non_pre_tag',
           content: textContent,
+          codeData: null,
         });
       }
     } else if (node.nodeType === Node.ELEMENT_NODE) {
@@ -145,14 +186,22 @@ export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
       let tagName = element.tagName.toLowerCase();
 
       if (tagName === 'pre') {
+        let codeData = extractCodeData(
+          element.outerHTML,
+          roomId,
+          eventId,
+          codeBlockIndex++,
+        );
         result.push({
           type: 'pre_tag',
           content: element.outerHTML,
+          codeData: codeData,
         });
       } else {
         result.push({
           type: 'non_pre_tag',
           content: element.outerHTML,
+          codeData: null,
         });
       }
     }

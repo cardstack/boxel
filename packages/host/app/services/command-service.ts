@@ -20,10 +20,13 @@ import {
   delay,
 } from '@cardstack/runtime-common';
 
+import PatchCodeCommand from '@cardstack/host/commands/patch-code';
+
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import MessageCommand from '../lib/matrix-classes/message-command';
 import { shortenUuid } from '../utils/uuid';
@@ -278,6 +281,93 @@ export default class CommandService extends Service {
     }
     return typedInput;
   }
+
+  patchCode = async (
+    _roomId: string,
+    fileUrl: string | null,
+    codeDataItems: {
+      searchReplaceBlock?: string | null;
+      eventId: string;
+      codeBlockIndex: number;
+    }[],
+  ) => {
+    if (!fileUrl) {
+      throw new Error('File URL is required to patch code');
+    }
+    for (const codeData of codeDataItems) {
+      this.currentlyExecutingCommandRequestIds.add(
+        `${codeData.eventId}:${codeData.codeBlockIndex}`,
+      );
+    }
+    try {
+      let patchCodeCommand = new PatchCodeCommand(this.commandContext);
+      await patchCodeCommand.execute({
+        fileUrl,
+        codeBlocks: codeDataItems.map(
+          (codeData) => codeData.searchReplaceBlock!,
+        ),
+      });
+      for (const codeBlock of codeDataItems) {
+        this.executedCommandRequestIds.add(
+          `${codeBlock.eventId}:${codeBlock.codeBlockIndex}`,
+        );
+      }
+      let resultSends: Promise<void>[] = [];
+
+      for (const _codeBlock of codeDataItems) {
+        // TODO: Uncomment this when we have the code patch result event
+        // resultSends.push(
+        //   this.matrixService.sendCodePatchResultEvent(
+        //     roomId,
+        //     codeBlock.eventId,
+        //     codeBlock.index,
+        //     'applied',
+        //   ),
+        // );
+      }
+      await Promise.all(resultSends);
+    } finally {
+      // remove the code blocks from the currently executing command request ids
+      for (const codeData of codeDataItems) {
+        this.currentlyExecutingCommandRequestIds.delete(
+          `${codeData.eventId}:${codeData.codeBlockIndex}`,
+        );
+      }
+    }
+  };
+
+  private isCodeBlockApplying(codeBlock: {
+    eventId: string;
+    codeBlockIndex: number;
+  }) {
+    return this.currentlyExecutingCommandRequestIds.has(
+      `${codeBlock.eventId}:${codeBlock.codeBlockIndex}`,
+    );
+  }
+
+  private isCodeBlockRecentlyApplied(codeBlock: {
+    eventId: string;
+    codeBlockIndex: number;
+  }) {
+    return this.executedCommandRequestIds.has(
+      `${codeBlock.eventId}:${codeBlock.codeBlockIndex}`,
+    );
+  }
+
+  getCodePatchStatus = (codeBlock: {
+    roomId: string;
+    eventId: string;
+    codeBlockIndex: number;
+  }): CodePatchStatus | 'applying' | 'ready' => {
+    if (this.isCodeBlockApplying(codeBlock)) {
+      return 'applying';
+    }
+    if (this.isCodeBlockRecentlyApplied(codeBlock)) {
+      return 'applied';
+    }
+    return 'ready';
+    // return this.getCodePatchResult(codeBlock)?.status ?? 'ready';
+  };
 }
 
 type PatchPayload = { attributes: { cardId: string; patch: PatchData } };

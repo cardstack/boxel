@@ -9,7 +9,6 @@ import {
   visit,
 } from '@ember/test-helpers';
 
-import window from 'ember-window-mock';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
@@ -21,11 +20,8 @@ import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
-
-import {
-  RecentCards,
-  RecentFiles,
-} from '@cardstack/host/utils/local-storage-keys';
+import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
+import RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import {
   elementIsVisible,
@@ -43,6 +39,7 @@ import {
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { assertRecentFileURLs } from '../../helpers/recent-files-cards';
 import { setupApplicationTest } from '../../helpers/setup';
 
 const testRealmURL2 = 'http://test-realm/test2/';
@@ -805,9 +802,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     });
 
     await waitForCodeEditor();
-    await waitFor('[data-test-card-inspector-panel]');
-    await waitFor('[data-test-current-module-name]');
-    await waitFor('[data-test-in-this-file-selector]');
 
     let defaultClassSelector =
       '[data-test-boxel-selector-item-text="DefaultClass"]';
@@ -971,14 +965,18 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('can delete a card instance from code submode with no recent files to fall back on', async function (assert) {
-    window.localStorage.setItem(
-      RecentCards,
-      JSON.stringify([`${testRealmURL}Pet/vangogh`, `${testRealmURL}Person/1`]),
+    let recentCardsService = this.owner.lookup(
+      'service:recent-cards-service',
+    ) as RecentCardsService;
+    let recentFilesService = this.owner.lookup(
+      'service:recent-files-service',
+    ) as RecentFilesService;
+
+    [`${testRealmURL}Pet/vangogh`, `${testRealmURL}Person/1`].map((url) =>
+      recentCardsService.add(url),
     );
-    window.localStorage.setItem(
-      RecentFiles,
-      JSON.stringify([[testRealmURL, 'Pet/vangogh.json', null]]),
-    );
+    recentFilesService.addRecentFileUrl(`${testRealmURL}Pet/vangogh.json`);
+
     await visitOperatorMode({
       stacks: [
         [
@@ -993,49 +991,52 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         ],
       ],
     });
-    await waitFor(`[data-test-stack-card="${testRealmURL}Person/1"]`);
     assert.dom(`[data-test-stack-card="${testRealmURL}Person/1"]`).exists();
-    await waitFor(`[data-test-stack-card="${testRealmURL}Pet/vangogh"]`);
     assert.dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"]`).exists();
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
     await waitForCodeEditor();
-    assert.strictEqual(
-      window.localStorage.getItem(RecentFiles),
-      JSON.stringify([[testRealmURL, 'Pet/vangogh.json', null]]),
+
+    assertRecentFileURLs(
+      assert,
+      recentFilesService.recentFiles,
+      [`${testRealmURL}Pet/vangogh.json`],
+      'recent file is correct',
     );
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
+    assert.dom('[data-test-empty-code-mode]').doesNotExist();
 
-    await waitFor(`[data-test-action-button="Delete"]`);
     await click('[data-test-action-button="Delete"]');
-    await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/vangogh"]`);
+    assert
+      .dom(`[data-test-delete-modal="${testRealmURL}Pet/vangogh"]`)
+      .exists();
     assert
       .dom('[data-test-delete-msg]')
       .includesText('Delete the card Van Gogh?');
     await percySnapshot(assert);
 
     await click('[data-test-confirm-delete-button]');
+    assert.dom('[data-test-empty-code-mode]').exists();
 
-    await waitFor('[data-test-empty-code-mode]');
     await percySnapshot(
       'Acceptance | operator mode tests | can delete a card instance from code submode with no recent files - empty code submode',
     );
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}Person/1"]`);
     assert.dom(`[data-test-stack-card="${testRealmURL}Person/1"`).exists();
     assert
       .dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`)
       .doesNotExist('stack item removed');
+
     assert.deepEqual(
-      window.localStorage.getItem(RecentCards),
-      JSON.stringify([`${testRealmURL}Person/1`]),
+      recentCardsService.recentCardIds,
+      [`${testRealmURL}Person/1`],
       'the deleted card has been removed from recent cards',
     );
     assert.deepEqual(
-      window.localStorage.getItem(RecentFiles),
-      '[]',
+      recentFilesService.recentFiles.length,
+      0,
       'the deleted card has been removed from recent files',
     );
 
@@ -1045,13 +1046,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('Can delete a card instance from code submode and fall back to recent file', async function (assert) {
-    window.localStorage.setItem(
-      RecentFiles,
-      JSON.stringify([
-        [testRealmURL, 'Pet/vangogh.json'],
-        [testRealmURL, 'Pet/mango.json'],
-      ]),
-    );
+    let recentFilesService = this.owner.lookup(
+      'service:recent-files-service',
+    ) as RecentFilesService;
 
     await visitOperatorMode({
       stacks: [
@@ -1067,26 +1064,25 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         ],
       ],
     });
-    await waitFor(`[data-test-stack-card="${testRealmURL}Person/1"]`);
     assert.dom(`[data-test-stack-card="${testRealmURL}Person/1"]`).exists();
-    await waitFor(`[data-test-stack-card="${testRealmURL}Pet/vangogh"]`);
     assert.dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"]`).exists();
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
 
     await waitForCodeEditor();
-    assert.strictEqual(
-      window.localStorage.getItem(RecentFiles),
-      JSON.stringify([
-        [testRealmURL, 'Pet/vangogh.json', null],
-        [testRealmURL, 'Pet/mango.json', null],
-      ]),
-    );
+    assert.strictEqual(recentFilesService.recentFiles.length, 1);
 
-    await waitFor(`[data-test-action-button="Delete"]`);
+    recentFilesService.addRecentFileUrl(`${testRealmURL}Pet/mango.json`);
+    assertRecentFileURLs(assert, recentFilesService.recentFiles, [
+      `${testRealmURL}Pet/mango.json`,
+      `${testRealmURL}Pet/vangogh.json`,
+    ]);
+
     await click('[data-test-action-button="Delete"]');
-    await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/vangogh"]`);
+    assert
+      .dom(`[data-test-delete-modal="${testRealmURL}Pet/vangogh"]`)
+      .exists();
 
     await click('[data-test-confirm-delete-button]');
     await waitForCodeEditor();
@@ -1110,55 +1106,49 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}Person/1"`);
     assert.dom(`[data-test-stack-card="${testRealmURL}Person/1"`).exists();
     assert
       .dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`)
       .doesNotExist('stack item removed');
-    assert.deepEqual(
-      window.localStorage.getItem(RecentFiles),
-      JSON.stringify([[testRealmURL, 'Pet/mango.json', null]]),
+    assertRecentFileURLs(
+      assert,
+      recentFilesService.recentFiles,
+      [`${testRealmURL}Pet/mango.json`],
       'the deleted card has been removed from recent files',
     );
   });
 
   test('can delete a card definition and fallback to recent file', async function (assert) {
-    window.localStorage.setItem(
-      RecentFiles,
-      JSON.stringify([
-        [testRealmURL, 'pet.gts', null],
-        [testRealmURL, 'Pet/mango.json', null],
-      ]),
-    );
+    let recentFilesService = this.owner.lookup(
+      'service:recent-files-service',
+    ) as RecentFilesService;
+
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
     await waitForCodeEditor();
-    assert.strictEqual(
-      window.localStorage.getItem(RecentFiles),
-      JSON.stringify([
-        [testRealmURL, 'pet.gts', { line: 5, column: 35 }],
-        [testRealmURL, 'Pet/mango.json', null],
-      ]),
-    );
+
+    recentFilesService.addRecentFileUrl(`${testRealmURL}Pet/mango.json`);
+    assertRecentFileURLs(assert, recentFilesService.recentFiles, [
+      `${testRealmURL}Pet/mango.json`,
+      `${testRealmURL}pet.gts`,
+    ]);
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
 
-    await waitFor(`[data-test-delete-module-button]`);
     await click('[data-test-delete-module-button]');
-    await waitFor(`[data-test-delete-modal="${testRealmURL}pet.gts"]`);
+    assert.dom(`[data-test-delete-modal="${testRealmURL}pet.gts"]`).exists();
 
     await click('[data-test-confirm-delete-button]');
     await waitForCodeEditor();
-
     assert
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}Pet/mango.json`);
-
-    assert.deepEqual(
-      window.localStorage.getItem(RecentFiles),
-      JSON.stringify([[testRealmURL, 'Pet/mango.json', null]]),
-      'the deleted card has been removed from recent files',
+    assertRecentFileURLs(
+      assert,
+      recentFilesService.recentFiles,
+      [`${testRealmURL}Pet/mango.json`],
+      'the deleted card def has been removed from recent files',
     );
 
     let notFound = await adapter.openFile('pet.gts');
@@ -1167,32 +1157,40 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('can delete a card definition with no recent files to fall back on', async function (assert) {
+    let recentFilesService = this.owner.lookup(
+      'service:recent-files-service',
+    ) as RecentFilesService;
+
     await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
-    window.localStorage.setItem(
-      RecentFiles,
-      JSON.stringify([[testRealmURL, 'pet.gts', null]]),
-    );
     await waitForCodeEditor();
-    assert.strictEqual(
-      window.localStorage.getItem(RecentFiles),
-      JSON.stringify([[testRealmURL, 'pet.gts', null]]),
-    );
 
-    await waitFor(`[data-test-delete-module-button]`);
+    assertRecentFileURLs(
+      assert,
+      recentFilesService.recentFiles,
+      [`${testRealmURL}pet.gts`],
+      'recent file is correct',
+    );
+    assert.dom('[data-test-empty-code-mode]').doesNotExist();
+
     await click('[data-test-delete-module-button]');
-    await waitFor(`[data-test-delete-modal="${testRealmURL}pet.gts"]`);
+    assert.dom(`[data-test-delete-modal="${testRealmURL}pet.gts"]`).exists();
 
     await click('[data-test-confirm-delete-button]');
-    await waitFor('[data-test-empty-code-mode]');
-
-    assert.deepEqual(
-      window.localStorage.getItem(RecentFiles),
-      '[]',
+    assert.dom('[data-test-empty-code-mode]').exists();
+    assert.strictEqual(
+      recentFilesService.recentFiles.length,
+      0,
       'the deleted card has been removed from recent files',
+    );
+    assertRecentFileURLs(
+      assert,
+      recentFilesService.recentFiles,
+      [],
+      'recent file is correct',
     );
 
     let notFound = await adapter.openFile('pet.gts');

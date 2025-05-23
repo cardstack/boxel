@@ -15,7 +15,7 @@ import { RecentFiles } from '../utils/local-storage-keys';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type ResetService from './reset';
 
-type SerialRecentFile = [URL, string, CursorPosition];
+type SerialRecentFile = [URL, string, CursorPosition, number];
 
 export type CursorPosition = {
   line: number;
@@ -24,7 +24,8 @@ export type CursorPosition = {
 export interface RecentFile {
   realmURL: URL;
   filePath: LocalPath;
-  cursorPosition?: CursorPosition;
+  cursorPosition: CursorPosition | null;
+  timestamp?: number;
 }
 
 export default class RecentFilesService extends Service {
@@ -101,7 +102,8 @@ export default class RecentFilesService extends Service {
     this.recentFiles.unshift({
       realmURL: new URL(currentRealmUrl),
       filePath: file,
-      cursorPosition,
+      cursorPosition: cursorPosition ?? null,
+      timestamp: Date.now(),
     });
 
     if (this.recentFiles.length > 100) {
@@ -122,7 +124,8 @@ export default class RecentFilesService extends Service {
   ) {
     const existingIndex = this.findRecentFileIndexByURL(urlString);
     if (existingIndex > -1) {
-      this.recentFiles[existingIndex].cursorPosition = cursorPosition;
+      this.recentFiles[existingIndex].cursorPosition = cursorPosition ?? null;
+      this.recentFiles[existingIndex].timestamp = Date.now();
       this.persistRecentFiles();
     }
   }
@@ -135,6 +138,7 @@ export default class RecentFilesService extends Service {
           recentFile.realmURL.toString(),
           recentFile.filePath,
           recentFile.cursorPosition,
+          recentFile.timestamp,
         ]),
       ),
     );
@@ -165,11 +169,16 @@ export default class RecentFilesService extends Service {
         this.recentFiles = new TrackedArray(
           JSON.parse(recentFilesString).reduce(function (
             recentFiles: RecentFile[],
-            [realmUrl, filePath, cursorPosition]: SerialRecentFile,
+            [realmUrl, filePath, cursorPosition, timestamp]: SerialRecentFile,
           ) {
             try {
               let url = new URL(realmUrl);
-              recentFiles.push({ realmURL: url, filePath, cursorPosition });
+              recentFiles.push({
+                realmURL: url,
+                filePath,
+                cursorPosition,
+                timestamp,
+              });
             } catch (e) {
               console.log(
                 `Ignoring non-URL recent file from storage: ${realmUrl}`,

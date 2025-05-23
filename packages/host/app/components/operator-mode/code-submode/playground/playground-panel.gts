@@ -28,6 +28,7 @@ import type PlaygroundPanelService from '@cardstack/host/services/playground-pan
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
+import type { RecentCard } from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type StoreService from '@cardstack/host/services/store';
 
@@ -84,6 +85,7 @@ interface Signature {
         | 'fieldChooserIsOpen'
         | 'chooseField'
         | 'moduleId'
+        | 'recentCardIds'
       >,
       (
         | WithBoundArgs<
@@ -163,17 +165,31 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get recentCardIds() {
-    return this.recentFilesService.recentFiles
-      .map((f) => `${f.realmURL}${f.filePath}`)
-      .filter((id) => id.endsWith('.json'))
-      .map((id) => id.slice(0, -1 * '.json'.length));
+    let cards: RecentCard[] = [];
+    for (let file of this.recentFilesService.recentFiles) {
+      let url = `${file.realmURL}${file.filePath}`;
+      if (url.endsWith('.json') && file.timestamp) {
+        cards.push({
+          cardId: trimJsonExtension(url),
+          timestamp: file.timestamp,
+        });
+      }
+    }
+    let recentCards = this.recentCardsService.recentCards.filter((c) =>
+      Boolean(c.timestamp),
+    );
+    let sortedCards = [...recentCards, ...cards].sort(
+      (a, b) => b.timestamp! - a.timestamp!,
+    );
+    return [...new Set(sortedCards.map((c) => c.cardId))];
   }
 
   private get recentRealms() {
     return [
-      ...new Set(
-        this.recentFilesService.recentFiles.map((f) => f.realmURL.href),
-      ),
+      ...new Set([
+        this.currentRealm,
+        ...this.recentFilesService.recentFiles.map((f) => f.realmURL.href),
+      ]),
     ];
   }
 
@@ -192,12 +208,6 @@ export default class PlaygroundPanel extends Component<Signature> {
           },
         ],
       },
-      sort: [
-        {
-          by: 'lastModified',
-          direction: 'desc',
-        },
-      ],
     };
   }
 
@@ -456,6 +466,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         chooseField=this.chooseField
         moduleId=this.moduleId
         persistSelections=this.persistToLocalStorage
+        recentCardIds=this.recentCardIds
       )
       (if
         this.isLoading
