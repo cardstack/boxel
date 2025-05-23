@@ -99,6 +99,16 @@ module.exports = {
           return;
         }
 
+        // Skip identifiers that are part of import declarations
+        if (
+          node.parent &&
+          (node.parent.type === 'ImportSpecifier' || 
+           node.parent.type === 'ImportDefaultSpecifier' ||
+           node.parent.type === 'ImportNamespaceSpecifier')
+        ) {
+          return;
+        }
+
         checkMissingImport(node);
       },
     };
