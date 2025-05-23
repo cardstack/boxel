@@ -11,13 +11,18 @@ import { flatMap, isEqual } from 'lodash';
 
 import { TrackedSet } from 'tracked-built-ins';
 
-import { Query, RealmPaths } from '@cardstack/runtime-common';
+import { type Query, RealmPaths } from '@cardstack/runtime-common';
 import {
   PrerenderedCardCollectionDocument,
   isPrerenderedCardCollectionDocument,
 } from '@cardstack/runtime-common/card-document';
 
-import { type Format } from 'https://cardstack.com/base/card-api';
+import {
+  type Format,
+  type PrerenderedCardData,
+  type PrerenderedCardLike,
+  type PrerenderedCardComponentSignature,
+} from 'https://cardstack.com/base/card-api';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
@@ -29,14 +34,7 @@ import type LoaderService from '../services/loader-service';
 
 const waiter = buildWaiter('prerendered-card-search:waiter');
 
-export interface PrerenderedCardData {
-  url: string;
-  realmUrl: string;
-  html: string;
-  isError: boolean;
-}
-
-export class PrerenderedCard {
+export class PrerenderedCard implements PrerenderedCardLike {
   component: HTMLComponent;
   constructor(private data: PrerenderedCardData) {
     if (data.isError && !data.html) {
@@ -98,22 +96,7 @@ function getErrorComponent(realmURL: string, url: string) {
   return DefaultErrorResultComponent;
 }
 
-interface Signature {
-  Element: undefined;
-  Args: {
-    query: Query;
-    format: Format;
-    cardUrls?: string[];
-    realms: string[];
-    isLive?: boolean;
-  };
-  Blocks: {
-    loading: [];
-    response: [cards: PrerenderedCard[]];
-  };
-}
-
-export default class PrerenderedCardSearch extends Component<Signature> {
+export default class PrerenderedCardSearch extends Component<PrerenderedCardComponentSignature> {
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
   _lastSearchQuery: Query | null = null;
@@ -122,7 +105,7 @@ export default class PrerenderedCardSearch extends Component<Signature> {
   _lastRealms: string[] | undefined;
   realmsNeedingRefresh = new TrackedSet<string>();
 
-  constructor(owner: unknown, args: Signature['Args']) {
+  constructor(owner: unknown, args: PrerenderedCardComponentSignature['Args']) {
     super(owner, args);
     for (const realm of this.args.realms) {
       this.realmsNeedingRefresh.add(realm);
