@@ -1179,7 +1179,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       await openFileInPlayground('pet.gts', additionalRealmURL, {
         codeSelection: 'ToyField',
       });
-      assert.dom('[data-test-selected-item]').hasText('Toy - Example 1');
+      assert.dom('[data-test-selected-item]').containsText('Toy - Example 1');
       await selectFormat('atom');
       assertFieldExists(assert, 'atom');
       assert

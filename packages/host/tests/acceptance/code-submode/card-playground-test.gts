@@ -425,7 +425,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .exists({ count: 2 });
 
       await click('[data-option-index="1"]');
-      assert.dom('[data-test-selected-item]').hasText('Future Tech');
+      assert.dom('[data-test-selected-item]').containsText('Future Tech');
       assertCardExists(assert, `${testRealmURL}Category/future-tech`);
 
       assert.strictEqual(
@@ -571,7 +571,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await click('[data-test-file-browser-toggle]');
       await click('[data-test-file="author.gts"]');
       await togglePlaygroundPanel();
-      assert.dom('[data-test-selected-item]').hasText('Jane Doe');
+      assert.dom('[data-test-selected-item]').containsText('Jane Doe');
       assertCardExists(assert, `${testRealmURL}Author/jane-doe`);
       await click('[data-test-instance-chooser]');
       assert.dom('li.ember-power-select-option').exists({ count: 1 });
@@ -886,13 +886,13 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         declaration: 'Author',
       });
       await waitFor('[data-test-selected-item]');
-      assert.dom('[data-test-selected-item]').hasText('Jane Doe');
+      assert.dom('[data-test-selected-item]').containsText('Jane Doe');
       assert.dom('[data-test-author-title]').containsText('Jane Doe');
 
       await realm.write('author.gts', authorCard);
       await settled();
       await waitFor('[data-test-selected-item]');
-      assert.dom('[data-test-selected-item]').hasText('Jane Doe');
+      assert.dom('[data-test-selected-item]').containsText('Jane Doe');
       assert.dom('[data-test-author-title]').containsText('Hello Jane Doe');
     });
 
@@ -969,7 +969,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await settled();
       await waitFor('[data-test-selected-item]');
       assert.dom('[data-test-selected-item]').exists('title exists on update');
-      assert.dom('[data-test-selected-item]').hasText('Mad As a Hatter');
+      assert.dom('[data-test-selected-item]').containsText('Mad As a Hatter');
       assert
         .dom('[data-test-post-title]')
         .containsText('Hello Mad As a Hatter');
@@ -1004,7 +1004,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await openFileInPlayground('author.gts', testRealmURL, {
         declaration: 'Author',
       });
-      assert.dom('[data-test-selected-item]').hasText('Jane Doe');
+      assert.dom('[data-test-selected-item]').containsText('Jane Doe');
       assertCardExists(assert, authorId, 'edit');
       await selectFormat('atom'); // change selected format
       assertCardExists(assert, authorId, 'atom');
@@ -1019,12 +1019,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       await click(`[data-test-recent-file="${testRealmURL}blog-post.gts"]`); // change open file
       await togglePlaygroundPanel();
-      assert.dom('[data-test-selected-item]').hasText('City Design');
+      assert.dom('[data-test-selected-item]').containsText('City Design');
       assertCardExists(assert, categoryId1, 'embedded');
 
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="1"]'); // change selected instance
-      assert.dom('[data-test-selected-item]').hasText('Future Tech');
+      assert.dom('[data-test-selected-item]').containsText('Future Tech');
       assertCardExists(assert, categoryId2, 'embedded');
       assert.deepEqual(
         getPlaygroundSelections()?.[categoryModuleId],

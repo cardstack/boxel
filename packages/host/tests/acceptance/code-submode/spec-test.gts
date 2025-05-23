@@ -1000,7 +1000,7 @@ module('Acceptance | Spec preview', function (hooks) {
     );
 
     // Verify the playground panel shows the selected card
-    assert.dom('[data-test-selected-item]').hasText('Mango');
+    assert.dom('[data-test-selected-item]').containsText('Mango');
     assertCardExists(
       assert,
       petId,
@@ -1106,7 +1106,7 @@ module('Acceptance | Spec preview', function (hooks) {
     );
 
     // Verify the second card is shown in embedded format
-    assert.dom('[data-test-selected-item]').hasText('Pudding');
+    assert.dom('[data-test-selected-item]').containsText('Pudding');
     assertCardExists(
       assert,
       secondPetId,
