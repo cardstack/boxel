@@ -917,6 +917,7 @@ export default class MatrixService extends Service {
           ...context,
           openCardIds: attachedOpenCards.map((c) => c.id),
           functions: [],
+          tools,
         },
       },
     } as CardMessageContent);
