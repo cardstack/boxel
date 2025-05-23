@@ -58,7 +58,7 @@ module.exports = {
       }
 
       const matched = context.options[0]?.importMappings?.[identifierName];
-      if (matched) {
+      if (Array.isArray(matched) && matched.length == 2) {
         reportedNodes.add(node);
         const [exportName, moduleName] = matched;
         context.report({
