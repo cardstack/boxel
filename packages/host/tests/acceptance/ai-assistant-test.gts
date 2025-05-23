@@ -13,8 +13,8 @@ import {
   DEFAULT_LLM_LIST,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
 import MatrixService from '@cardstack/host/services/matrix-service';
+import { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
 
 import {
   setupLocalIndexing,
