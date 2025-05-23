@@ -25,6 +25,7 @@ import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import {
+  baseCardRef,
   internalKeyFor,
   type ResolvedCodeRef,
   GetCardContextName,
@@ -613,6 +614,14 @@ export default class PlaygroundPanel extends Component<Signature> {
     );
     return card;
   };
+
+  private get persistedCardId() {
+    return this.playgroundPanelService.peekSelection(this.moduleId)?.cardId;
+  }
+
+  private get isBaseCardModule() {
+    return this.moduleId === `${baseCardRef.module}/${baseCardRef.name}`;
+  }
 
   <template>
     {{consumeContext this.makeCardResource}}
