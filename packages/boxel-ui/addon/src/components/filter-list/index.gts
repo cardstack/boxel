@@ -40,6 +40,7 @@ const FilterList: TemplateOnlyComponent<Signature> = <template>
         margin-block: 0;
       }
       .filter-list :deep(.filter-list) {
+        margin-top: var(--boxel-sp-4xs);
         padding-inline-start: var(--boxel-sp);
       }
     }
