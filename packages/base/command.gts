@@ -210,6 +210,10 @@ export class RemixInput extends CardDef {
   @field listing = linksTo(CardDef);
 }
 
+export class GetCardInput extends CardDef {
+  @field cardId = contains(StringField);
+}
+
 export {
   SearchCardsByQueryInput,
   SearchCardsByTypeAndTitleInput,
