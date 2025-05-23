@@ -42,6 +42,8 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import AppListingHeader from '../components/app-listing-header';
 import { ListingFittedTemplate } from '../components/listing-fitted';
 
+import ListingInitCommand from '@cardstack/boxel-host/commands/listing-action-init';
+
 import { Publisher } from './publisher';
 import { Category } from './category';
 import { License } from './license';
@@ -72,7 +74,7 @@ export async function installListing(args: any, realm: string) {
 
   // first spec as the selected code ref with new url
   // if there are examples, take the first example's code ref
-  let selectedCodeRef;
+  let selectedCodeRef: ResolvedCodeRef | undefined;
   let shouldPersistPlaygroundSelection = false;
   let firstExampleCardId;
 
@@ -191,8 +193,6 @@ export function setupAllRealmsInfo(args: any) {
 
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
-  @tracked createdInstances = false;
-  @tracked installedListing = false;
   @tracked writableRealms: { name: string; url: string; iconURL?: string }[] =
     [];
 
@@ -224,44 +224,27 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   }
 
   _use = task(async (realm: string) => {
-    const specsToCopy: Spec[] = this.args.model?.specs ?? [];
-    const specsWithoutFields = specsToCopy.filter(
-      (spec: Spec) => spec.specType !== 'field',
-    );
-
-    const localDir = nameWithUuid(this.args.model?.name);
-    for (const spec of specsWithoutFields) {
-      await this.args.context?.actions?.createFromSpec?.(spec, realm, localDir);
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('Missing commandContext');
     }
-
-    if (this.args.model instanceof SkillListing) {
-      await Promise.all(
-        this.args.model.skills.map((skill) => {
-          this.args.context?.actions?.copyCard?.(
-            skill,
-            realm,
-            undefined,
-            localDir,
-          );
-        }),
-      );
-    }
-    if (this.args.model.examples) {
-      const sourceCards = this.args.model.examples.map((example) => ({
-        sourceCard: example,
-      }));
-      await this.args.context?.actions?.copyCards?.(
-        sourceCards,
-        realm,
-        localDir,
-      );
-    }
-    this.createdInstances = true;
+    await new ListingInitCommand(commandContext).execute({
+      realm,
+      actionType: 'use',
+      listing: this.args.model as Listing,
+    });
   });
 
   _install = task(async (realm: string) => {
-    await installListing(this.args, realm);
-    this.installedListing = true;
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('Missing commandContext');
+    }
+    await new ListingInitCommand(commandContext).execute({
+      realm,
+      actionType: 'install',
+      listing: this.args.model as Listing,
+    });
   });
 
   get hasOneOrMoreSpec() {
@@ -277,22 +260,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
   get useOrInstallDisabled() {
     return !this.hasOneOrMoreSpec && !this.hasSkills;
-  }
-
-  get useButtonDisabled() {
-    return (
-      this.createdInstances ||
-      !this.args.context?.actions?.createFromSpec ||
-      this.useOrInstallDisabled
-    );
-  }
-
-  get installButtonDisabled() {
-    return (
-      this.installedListing ||
-      !this.args.context?.actions?.copySource ||
-      this.useOrInstallDisabled
-    );
   }
 
   @action preview() {
@@ -379,16 +346,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 <BoxelButton
                   class='action-button'
                   data-test-catalog-listing-use-button
-                  @disabled={{this.useButtonDisabled}}
+                  @disabled={{this.useOrInstallDisabled}}
                   {{bindings}}
                 >
-                  {{#if this._use.isRunning}}
-                    Creating...
-                  {{else if this.createdInstances}}
-                    Created Instances
-                  {{else}}
-                    Use
-                  {{/if}}
+                  Use
                 </BoxelButton>
               </:trigger>
               <:content as |dd|>
@@ -405,16 +366,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 <BoxelButton
                   class='action-button'
                   data-test-catalog-listing-install-button
-                  @disabled={{this.installButtonDisabled}}
+                  @disabled={{this.useOrInstallDisabled}}
                   {{bindings}}
                 >
-                  {{#if this._install.isRunning}}
-                    Installing...
-                  {{else if this.installedListing}}
-                    Installed
-                  {{else}}
-                    Install
-                  {{/if}}
+                  Install
                 </BoxelButton>
               </:trigger>
               <:content as |dd|>
