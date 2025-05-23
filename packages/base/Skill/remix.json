@@ -6,7 +6,7 @@
       "commands": [
         {
           "codeRef": {
-            "name": "RemixCommand",
+            "name": "default",
             "module": "@cardstack/boxel-host/commands/remix"
           },
           "requiresApproval": false

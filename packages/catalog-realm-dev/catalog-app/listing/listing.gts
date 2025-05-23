@@ -75,7 +75,7 @@ export async function installListing(args: any, realm: string) {
 
   // first spec as the selected code ref with new url
   // if there are examples, take the first example's code ref
-  let selectedCodeRef;
+  let selectedCodeRef: ResolvedCodeRef | undefined;
   let shouldPersistPlaygroundSelection = false;
   let firstExampleCardId;
 
