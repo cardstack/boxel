@@ -147,7 +147,20 @@ function cleanupCache() {
   }
 }
 
-export async function getRoomEvents(roomId: string, client: MatrixClient) {
+/**
+ * Retrieves the last 1000 non-replace events from a Matrix room
+ * @param roomId - The ID of the Matrix room
+ * @param client - Matrix client instance used to make authenticated requests
+ * @param lastEventId - Optional ID of the last event to retrieve events up to - use to filter
+ *                      out events that came in after the one that triggered the response
+ * @returns Array of Matrix events. If lastEventId is provided, returns events up to and including that event.
+ *          If lastEventId is not found or not provided, returns all available events.
+ */
+export async function getRoomEvents(
+  roomId: string,
+  client: MatrixClient,
+  lastEventId?: string,
+) {
   const messagesPath = encodeUri('/rooms/$roomId/messages', {
     $roomId: roomId,
   });
@@ -162,7 +175,18 @@ export async function getRoomEvents(roomId: string, client: MatrixClient) {
       }),
     },
   );
-  return (response?.chunk || []) as DiscreteMatrixEvent[];
+  let events = (response?.chunk || []) as DiscreteMatrixEvent[];
+  if (!lastEventId) {
+    // return all events
+    return events;
+  }
+  let eventIndex = events.findIndex(
+    (listEvent) => listEvent.event_id === lastEventId,
+  );
+  if (eventIndex == -1) {
+    return events;
+  }
+  return events.slice(0, eventIndex + 1);
 }
 
 export async function downloadFile(

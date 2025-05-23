@@ -218,7 +218,8 @@ Common issues are:
         }
 
         let promptParts: PromptParts;
-        let eventList = await getRoomEvents(room.roomId, client);
+        let eventList = await getRoomEvents(room.roomId, client, event.getId());
+
         try {
           promptParts = await getPromptParts(eventList, aiBotUserId, client);
           if (!promptParts.shouldRespond) {
@@ -344,7 +345,7 @@ Common issues are:
     );
     try {
       //TODO: optimise this so we don't need to sync room events within a reaction event
-      let eventList = await getRoomEvents(room.roomId, client);
+      let eventList = await getRoomEvents(room.roomId, client, event.getId());
       if (roomTitleAlreadySet(eventList)) {
         return;
       }
