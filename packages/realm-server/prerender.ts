@@ -12,6 +12,7 @@ export interface RenderResponse extends PrerenderMeta {
 export async function prerenderCard(url: string): Promise<RenderResponse> {
   const browser = await puppeteer.launch({
     headless: process.env.BOXEL_SHOW_PRERENDER !== 'true',
+    args: process.env.CI ? ['--no-sandbox'] : [],
   });
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
