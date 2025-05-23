@@ -319,7 +319,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // Check that the computed title is present in the downloaded content
     assert.strictEqual(
-      cardContent.data.attributes.title,
+      cardContent.data.attributes!.title,
       'Hassan Abdel-Rahman',
       'Computed card title is present in downloaded content',
     );
