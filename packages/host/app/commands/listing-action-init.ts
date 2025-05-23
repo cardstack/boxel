@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, isCardInstance } from '@cardstack/runtime-common';
 
 import * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -61,9 +61,10 @@ export default class ListingActionInitCommand extends HostBaseCommand<
     });
 
     const listingSkillCardId = `${baseRealm.url}Skill/listing`;
-    const listingSkillCard = (await this.store.peek(
-      listingSkillCardId,
-    )) as Skill;
+    const fetchSkillCard = await this.store.get<Skill>(listingSkillCardId);
+    let listingSkillCard = isCardInstance(fetchSkillCard)
+      ? fetchSkillCard
+      : undefined;
 
     if (listingSkillCard) {
       await new AddSkillsToRoomCommand(this.commandContext).execute({
