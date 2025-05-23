@@ -157,7 +157,7 @@ ruleTester.run('template-missing-invokable', rule, {
       ],
     },
 
-    // Modifier Inovcations
+    // Modifier Inovocations
     {
       code: `
         function doSomething() {}

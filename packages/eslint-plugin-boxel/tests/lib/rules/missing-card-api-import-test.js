@@ -197,5 +197,46 @@ import {
         },
       ],
     },
+    {
+      code: `import { FieldDef, field } from 'https://cardstack.com/base/card-api';
+import StringField from 'https://cardstack.com/base/string';
+
+export class CurrencyField extends FieldDef {
+  static displayName = "Currency";
+
+  @field currency = contains(StringField, {
+    computeVia: function() {
+      return "RUB"; // Default currency is RUB (Russian Ruble)
+    }
+  });
+}`,
+      output: `import { FieldDef, field, contains } from 'https://cardstack.com/base/card-api';
+import StringField from 'https://cardstack.com/base/string';
+
+export class CurrencyField extends FieldDef {
+  static displayName = "Currency";
+
+  @field currency = contains(StringField, {
+    computeVia: function() {
+      return "RUB"; // Default currency is RUB (Russian Ruble)
+    }
+  });
+}`,
+      options: [
+        {
+          importMappings: {
+            field: ['field', 'https://cardstack.com/base/card-api'],
+            contains: ['contains', 'https://cardstack.com/base/card-api'],
+            Component: ['Component', 'https://cardstack.com/base/card-api'],
+          },
+        },
+      ],
+      errors: [
+        {
+          type: 'Identifier',
+          message: rule.meta.messages['missing-card-api-import'],
+        },
+      ],
+    },
   ],
 });

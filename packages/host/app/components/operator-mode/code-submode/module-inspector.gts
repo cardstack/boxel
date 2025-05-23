@@ -353,7 +353,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     return selection ?? 'schema';
   }
 
-  private createSpecInstance = task(
+  private createSpecTask = task(
     async (ref: ResolvedCodeRef, specType: SpecType) => {
       let relativeTo = new URL(ref.module);
       let maybeAbsoluteRef = codeRefWithAbsoluteURL(ref, relativeTo);
@@ -364,18 +364,19 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         let SpecKlass = await loadCardDef(specRef, {
           loader: this.loaderService.loader,
         });
-        let card = new SpecKlass({
+        let spec = new SpecKlass({
           specType,
           ref,
           title: ref.name,
         }) as Spec;
         let currentRealm = this.operatorModeStateService.realmURL;
-        await this.store.add(card, { realm: currentRealm.href });
-        if (card.id) {
-          this.specPanelService.setSelection(card.id);
-          if (this.selectedView !== 'spec') {
-            this.toggleAccordionItem('spec');
-          }
+        await this.store.add(spec, {
+          realm: currentRealm.href,
+          doNotWaitForPersist: true,
+        });
+        this.specPanelService.setSelection(spec[localId]);
+        if (!this.args.isPanelOpen) {
+          this.args.toggleAccordionItem('spec-preview');
         }
       } catch (e: any) {
         console.log('Error saving', e);
@@ -392,10 +393,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       throw new Error('bug: no code ref');
     }
     let specType = await this.guessSpecType(this.args.selectedDeclaration);
-    this.createSpecInstance.perform(
-      this.selectedDeclarationAsCodeRef,
-      specType,
-    );
+    this.createSpecTask.perform(this.selectedDeclarationAsCodeRef, specType);
   }
 
   private async guessSpecType(
@@ -459,6 +457,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       Boolean(this.args.selectedDeclaration?.exportName) &&
       !this.specSearch?.isLoading &&
       this.specsForSelectedDefinition.length === 0 &&
+      !this.activeSpec &&
       this.canWrite
     );
   }
@@ -529,7 +528,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
                     @spec={{this.activeSpec}}
                     @showCreateSpec={{this.showCreateSpec}}
                     @createSpec={{this.createSpec}}
-                    @isCreateSpecInstanceRunning={{this.createSpecInstance.isRunning}}
+                    @isCreateSpecInstanceRunning={{this.createSpecTask.isRunning}}
                     @numberOfInstances={{this.specsForSelectedDefinition.length}}
                   />
                 {{else if (eq moduleInspectorView 'schema')}}

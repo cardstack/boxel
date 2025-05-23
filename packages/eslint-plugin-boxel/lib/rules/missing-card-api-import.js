@@ -58,7 +58,7 @@ module.exports = {
       }
 
       const matched = context.options[0]?.importMappings?.[identifierName];
-      if (matched) {
+      if (Array.isArray(matched) && matched.length == 2) {
         reportedNodes.add(node);
         const [exportName, moduleName] = matched;
         context.report({
@@ -95,6 +95,16 @@ module.exports = {
           node.parent.type === 'Property' &&
           node.parent.key === node &&
           !node.parent.computed
+        ) {
+          return;
+        }
+
+        // Skip identifiers that are part of import declarations
+        if (
+          node.parent &&
+          (node.parent.type === 'ImportSpecifier' || 
+           node.parent.type === 'ImportDefaultSpecifier' ||
+           node.parent.type === 'ImportNamespaceSpecifier')
         ) {
           return;
         }

@@ -24,6 +24,8 @@ import {
   GetCardsContextName,
   GetCardCollectionContextName,
   realmURL as realmURLSymbol,
+  localId,
+  isLocalId,
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
@@ -155,11 +157,11 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   }
 
   private get selectedId() {
-    return this.args.activeSpec?.id;
+    return this.args.activeSpec?.id ?? this.args.activeSpec?.[localId];
   }
 
   @action private viewSpecInstance() {
-    if (!this.selectedId) {
+    if (!this.selectedId || isLocalId(this.selectedId)) {
       return;
     }
 
@@ -199,22 +201,27 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                   @disabled={{this.onlyOneInstance}}
                   as |spec|
                 >
-                  {{#if spec.id}}
-                    {{#let (this.getDropdownData spec) as |data|}}
-                      {{#if data}}
-                        <div class='spec-selector-item'>
-                          <RealmIcon
-                            @canAnimate={{true}}
-                            class='url-realm-icon'
-                            @realmInfo={{data.realmInfo}}
-                          />
+                  {{#let (this.getDropdownData spec) as |data|}}
+                    {{#if data}}
+                      <div class='spec-selector-item'>
+                        <RealmIcon
+                          @canAnimate={{true}}
+                          class='url-realm-icon'
+                          @realmInfo={{data.realmInfo}}
+                        />
+                        {{#if spec.id}}
                           <span data-test-spec-selector-item-path>
                             {{data.localPath}}
                           </span>
-                        </div>
-                      {{/if}}
-                    {{/let}}
-                  {{/if}}
+                        {{else}}
+                          <LoadingIndicator />
+                          <span data-test-spec-item-path-creating>
+                            Creating...
+                          </span>
+                        {{/if}}
+                      </div>
+                    {{/if}}
+                  {{/let}}
                 </BoxelSelect>
               </div>
               <BoxelButton
