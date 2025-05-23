@@ -27,6 +27,7 @@ import {
   visitOperatorMode,
   waitForCodeEditor,
   setupUserSubscription,
+  withSlowSave,
   type TestContextWithSave,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
@@ -439,6 +440,52 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     assert
       .dom('[data-test-code-mode-card-renderer-body] [data-test-field="name"]')
       .containsText('MangoXXX');
+  });
+
+  test('card instance changes made in monaco editor are synchronized with store', async function (assert) {
+    assert.expect(2);
+    let expected: LooseSingleCardDocument = {
+      data: {
+        attributes: {
+          name: 'MangoXXX',
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}pet`,
+            name: 'Pet',
+          },
+        },
+      },
+    };
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Pet/mango`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Pet/mango.json`,
+    });
+
+    await waitForCodeEditor();
+    assert
+      .dom('[data-test-code-mode-card-renderer-body] [data-test-field="name"]')
+      .containsText('Mango');
+
+    // use a slow save so that we can be sure the synchronization we are seeing
+    // is not a result of indexing activity
+    await withSlowSave(1000, async () => {
+      setMonacoContent(JSON.stringify(expected));
+      await settled();
+      assert
+        .dom(
+          '[data-test-code-mode-card-renderer-body] [data-test-field="name"]',
+        )
+        .containsText('MangoXXX');
+    });
   });
 
   test<TestContextWithSave>('card instance change made in card editor is auto-saved', async function (assert) {
