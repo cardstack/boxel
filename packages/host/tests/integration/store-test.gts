@@ -1001,6 +1001,57 @@ module('Integration | Store', function (hooks) {
     assert.ok(instance.id, 'instance was assigned a remote id');
   });
 
+  test<TestContextWithSave>('can skip save when patching an instance', async function (assert) {
+    this.onSave(() => {
+      assert.ok(false, 'should not save');
+    });
+
+    let instance = await store.patch(
+      `${testRealmURL}Person/hassan`,
+      {
+        attributes: {
+          name: 'Hassan Updated',
+        },
+        relationships: {
+          bestFriend: {
+            links: { self: `${testRealmURL}Person/jade` },
+          },
+          'friends.0': {
+            links: { self: `${testRealmURL}Person/germaine` },
+          },
+        },
+      },
+      { doNotPersist: true },
+    );
+
+    let peekedInstance = store.peek(`${testRealmURL}Person/hassan`);
+    let jade = store.peek(`${testRealmURL}Person/jade`);
+    let germaine = store.peek(`${testRealmURL}Person/germaine`);
+    assert.strictEqual(
+      peekedInstance,
+      instance,
+      'the patched instance is in the store',
+    );
+    assert.ok(isCardInstance(jade), 'jade is in the store');
+    assert.ok(isCardInstance(germaine), 'germaine is in the store');
+
+    assert.strictEqual(
+      (instance as any).name,
+      'Hassan Updated',
+      'the contains field was patched',
+    );
+    assert.strictEqual(
+      (instance as any).bestFriend,
+      jade,
+      'the linksTo field was patched',
+    );
+    assert.deepEqual(
+      (instance as any).friends,
+      [germaine],
+      'the linksToMany field was patched',
+    );
+  });
+
   test('can search', async function (assert) {
     let results = await store.search(
       {
