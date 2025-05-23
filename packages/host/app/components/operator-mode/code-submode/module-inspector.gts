@@ -1,4 +1,4 @@
-import { fn } from '@ember/helper';
+import { fn, hash } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
@@ -51,6 +51,8 @@ import {
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 
+import ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
+
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -61,8 +63,7 @@ import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import { Spec } from 'https://cardstack.com/base/spec';
-import ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
-import { hash } from '@ember/helper';
+
 import ReportUserContextForAiAssistant from '../report-user-context-for-ai-assistant';
 
 export type SelectedAccordionItem =

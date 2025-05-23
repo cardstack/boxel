@@ -12,6 +12,7 @@ import { module, test } from 'qunit';
 
 import { trimJsonExtension, type Realm } from '@cardstack/runtime-common';
 
+import type ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
@@ -50,7 +51,6 @@ import {
   assertRecentFileURLs,
 } from '../../helpers/recent-files-cards';
 import { setupApplicationTest } from '../../helpers/setup';
-import ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
 
 const codeRefDriverCard = `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
   import { Component } from 'https://cardstack.com/base/card-api';

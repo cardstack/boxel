@@ -150,7 +150,7 @@ The user is currently:
 - operating in a realm with this URL: http://my-realm.com
 - operating in code mode
 - inspecting the file contents in this code mode panel: playground
-- viewing this card instance: http://localhost:4201/postcards/1, in this format: isolated`,
+- viewing this card instance in the UI: http://localhost:4201/postcards/1, in this format: isolated`,
     );
   });
 
@@ -624,15 +624,15 @@ The user is currently:
       fakeMatrixClient,
     );
 
+    console.log('Actual content:');
+    console.log(prompt[0].content);
+
     assert.ok(
       prompt[0].content?.includes(
-        `
-Attached files:
-[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts): this is the content of the spaghetti-recipe.gts file
+        `Attached files: \n[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts): this is the content of the spaghetti-recipe.gts file
 [best-friends.txt](http://test-realm-server/my-realm/best-friends.txt): this is the content of the best-friends.txt file
 [file-that-does-not-exist.txt](http://test.com/my-realm/file-that-does-not-exist.txt): Error loading attached file: HTTP error. Status: 404
-[example.pdf](http://test.com/my-realm/example.pdf): Error loading attached file: Unsupported file type: application/pdf. For now, only text files are supported.
-      `.trim(),
+[example.pdf](http://test.com/my-realm/example.pdf): Error loading attached file: Unsupported file type: application/pdf. For now, only text files are supported.`,
       ),
     );
   });

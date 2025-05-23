@@ -1,7 +1,10 @@
-import Component from '@glimmer/component';
 import { service } from '@ember/service';
-import type ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
+
+import Component from '@glimmer/component';
+
 import { modifier } from 'ember-modifier';
+
+import type ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
 
 interface Signature {
   Args: {
@@ -46,7 +49,7 @@ export default class ReportUserContextForAiAssistant extends Component<Signature
   <template>
     <span
       {{ValuesDidUpdate
-        values=this.args.values
+        values=@values
         service=this.contextForAiAssistantService
       }}
     >

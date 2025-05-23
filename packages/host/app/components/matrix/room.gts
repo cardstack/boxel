@@ -50,6 +50,7 @@ import { RoomResource } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
+import ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -74,7 +75,6 @@ import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
 import type { RoomSkill } from '../../resources/room';
-import ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
 
 interface Signature {
   Args: {

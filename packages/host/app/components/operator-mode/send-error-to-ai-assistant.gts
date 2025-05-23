@@ -6,6 +6,8 @@ import { restartableTask } from 'ember-concurrency';
 
 import { Button } from '@cardstack/boxel-ui/components';
 
+import ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
+
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
@@ -26,7 +28,8 @@ interface Signature {
 export default class SendErrorToAIAssistant extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare aiAssistantPanelService: AiAssistantPanelService;
-
+  @service
+  private declare contextForAiAssistantService: ContextForAiAssistantService;
   private get errorMessage() {
     let { error, errorType } = this.args;
     let prefix = errorType === 'syntax' ? 'Syntax Error' : 'Card Error';
@@ -43,11 +46,15 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
       throw new Error('No room found');
     }
 
+    let context = this.contextForAiAssistantService.getContext();
+
     await this.matrixService.sendMessage(
       this.matrixService.currentRoomId,
       `In the attachment file, I encountered an error that needs fixing:\n\n${this.errorMessage}.`,
       [],
       this.args.fileToAttach ? [this.args.fileToAttach] : [],
+      undefined,
+      context,
     );
   });
 

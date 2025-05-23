@@ -1,8 +1,8 @@
+import { hash } from '@ember/helper';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { hash } from '@ember/helper';
 
 import { restartableTask, task } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
@@ -23,6 +23,7 @@ import {
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
+import type ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
@@ -40,14 +41,14 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type { Spec } from 'https://cardstack.com/base/spec';
 
+import ReportUserContextForAiAssistant from '../../report-user-context-for-ai-assistant';
+
 import PlaygroundContent from './playground-content';
 import PlaygroundTitle from './playground-title';
 
 import type { PrerenderedCard } from '../../../prerendered-card-search';
 
 import type { WithBoundArgs } from '@glint/template';
-import ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
-import ReportUserContextForAiAssistant from '../../report-user-context-for-ai-assistant';
 
 export type SelectedInstance = {
   card: CardDef;

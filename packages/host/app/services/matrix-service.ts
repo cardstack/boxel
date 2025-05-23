@@ -127,7 +127,7 @@ const realmEventsLogger = logger('realm:events');
 
 export type OperatorModeContext = {
   submode: Submode;
-  openCardIds: string[];
+  openCardIds?: string[];
   realmUrl: string;
   codeMode?: {
     currentFile: string | undefined;

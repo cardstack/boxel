@@ -156,6 +156,7 @@ export class SendAiAssistantMessageInput extends CardDef {
   @field attachedFileURLs = containsMany(StringField);
   @field realmUrl = contains(StringField);
   @field openCardIds = containsMany(StringField);
+  @field submode = contains(StringField);
   @field requireCommandCall = contains(BooleanField);
   // This is a bit of a "fake" field in that it would not serialize properly.
   // It works OK for the purposes of transient input to SendAiAssistantMessageCommand.

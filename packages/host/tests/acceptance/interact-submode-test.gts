@@ -27,6 +27,7 @@ import {
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import type CardService from '@cardstack/host/services/card-service';
+import ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import { claimsFromRawToken } from '@cardstack/host/services/realm';
@@ -53,7 +54,6 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
-import ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
 
 const testRealm2URL = `http://test-realm/test2/`;
 const testRealm3URL = `http://test-realm/test3/`;

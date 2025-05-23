@@ -4,6 +4,8 @@ import { type Format } from 'https://cardstack.com/base/card-api';
 
 import { SelectedAccordionItem as CodeModePanelSelection } from '../components/operator-mode/code-submode/module-inspector';
 
+import { Submode } from '../components/submode-switcher';
+
 import OperatorModeStateService from './operator-mode-state-service';
 
 export default class ContextForAiAssistantService extends Service {
@@ -17,7 +19,7 @@ export default class ContextForAiAssistantService extends Service {
   getContext = () => {
     const submode = this.operatorModeStateService.state.submode;
     const context: {
-      submode: string;
+      submode: Submode;
       realmUrl: string;
       codeMode?: {
         currentFile: string | undefined;

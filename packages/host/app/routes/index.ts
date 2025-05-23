@@ -17,7 +17,6 @@ import type CardService from '../services/card-service';
 import type MatrixService from '../services/matrix-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
-import ContextForAiAssistantService from '../services/context-for-ai-assistant-service';
 
 const { hostsOwnAssets } = ENV;
 
@@ -38,8 +37,7 @@ export default class Index extends Route<void> {
   @service declare private router: RouterService;
   @service declare private store: StoreService;
   @service declare private operatorModeStateService: OperatorModeStateService;
-  @service
-  declare private contextForAiAssistantService: ContextForAiAssistantService;
+
   @service declare realm: RealmService;
 
   didMatrixServiceStart = false;
