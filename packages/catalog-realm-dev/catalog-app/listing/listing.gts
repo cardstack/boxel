@@ -213,6 +213,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 <BoxelButton
                   class='action-button'
                   data-test-catalog-listing-use-button
+                  @loading={{this._use.isRunning}}
                   @disabled={{this.useOrInstallDisabled}}
                   {{bindings}}
                 >
@@ -233,6 +234,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 <BoxelButton
                   class='action-button'
                   data-test-catalog-listing-install-button
+                  @loading={{this._install.isRunning}}
                   @disabled={{this.useOrInstallDisabled}}
                   {{bindings}}
                 >

@@ -427,6 +427,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
                 @kind='primary'
                 @size='extra-small'
                 class='card-remix-button'
+                @loading={{this._openRoomWithSkillAndPrompt.isRunning}}
                 {{on 'click' this._stopPropagation}}
                 {{bindings}}
               >
