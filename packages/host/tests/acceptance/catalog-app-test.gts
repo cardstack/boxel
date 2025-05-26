@@ -410,7 +410,7 @@ module('Acceptance | catalog app tests', function (hooks) {
     });
   });
 
-  test('catalog listingremix command installs the card and redirects to code mode with persisted playground selection for first example successfully', async function (assert) {
+  test('catalog listing remix command installs the card and redirects to code mode with persisted playground selection for first example successfully', async function (assert) {
     await visitOperatorMode({
       stacks: [[]],
     });

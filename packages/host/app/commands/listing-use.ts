@@ -1,8 +1,5 @@
 import { service } from '@ember/service';
 
-import deburr from 'lodash/deburr';
-import { v4 as uuidv4 } from 'uuid';
-
 import {
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,

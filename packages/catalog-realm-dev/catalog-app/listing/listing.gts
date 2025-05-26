@@ -7,15 +7,8 @@ import {
   StringField,
   linksTo,
   Component,
-  meta,
 } from 'https://cardstack.com/base/card-api';
-import {
-  codeRefWithAbsoluteURL,
-  isResolvedCodeRef,
-  type CopyCardsWithCodeRef,
-  type ResolvedCodeRef,
-  Actions,
-} from '@cardstack/runtime-common';
+import { Actions } from '@cardstack/runtime-common';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 import { Skill } from 'https://cardstack.com/base/skill';
@@ -25,8 +18,6 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
-import { v4 as uuidv4 } from 'uuid';
-import { deburr } from 'lodash';
 
 import {
   Accordion,
@@ -48,11 +39,6 @@ import { Publisher } from './publisher';
 import { Category } from './category';
 import { License } from './license';
 import { Tag } from './tag';
-
-interface CopyMeta {
-  sourceCodeRef: ResolvedCodeRef;
-  targetCodeRef: ResolvedCodeRef;
-}
 
 export function setupAllRealmsInfo(args: any) {
   let allRealmsInfo =
