@@ -567,7 +567,7 @@ export default class RealmService extends Service {
   }
 
   token = (url: string): string | undefined => {
-    return this.knownRealm(url)?.token;
+    return this.knownRealm(url, false)?.token;
   };
 
   logout() {
@@ -638,7 +638,7 @@ export default class RealmService extends Service {
   private identifyRealm = task(
     { maxConcurrency: 1, enqueue: true },
     async (url: string): Promise<void> => {
-      if (this.knownRealm(url)) {
+      if (this.knownRealm(url, false)) {
         // could have already been discovered while we were queued
         return;
       }
