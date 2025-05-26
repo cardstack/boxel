@@ -709,18 +709,14 @@ export default class CodeSubmode extends Component<Signature> {
                       {{/if}}
                     </:inspector>
                     <:browser>
-                      {{#if this.isLoading}}
-                        <LoadingIndicator class='loading-indicator' />
-                      {{else}}
-                        <FileTree
-                          @realmURL={{this.realmURL}}
-                          @selectedFile={{this.operatorModeStateService.codePathRelativeToRealm}}
-                          @openDirs={{this.operatorModeStateService.currentRealmOpenDirs}}
-                          @onFileSelected={{this.operatorModeStateService.onFileSelected}}
-                          @onDirectorySelected={{this.operatorModeStateService.toggleOpenDir}}
-                          @scrollPositionKey={{this.operatorModeStateService.codePathString}}
-                        />
-                      {{/if}}
+                      <FileTree
+                        @realmURL={{this.realmURL}}
+                        @selectedFile={{this.operatorModeStateService.codePathRelativeToRealm}}
+                        @openDirs={{this.operatorModeStateService.currentRealmOpenDirs}}
+                        @onFileSelected={{this.operatorModeStateService.onFileSelected}}
+                        @onDirectorySelected={{this.operatorModeStateService.toggleOpenDir}}
+                        @scrollPositionKey={{this.operatorModeStateService.codePathString}}
+                      />
                     </:browser>
                   </CodeSubmodeLeftPanelToggle>
                 </VerticallyResizablePanel>
