@@ -12,11 +12,10 @@ import {
   StringField,
   type CardContext,
   FieldsTypeFor,
-  type PrerenderedCardLike,
 } from 'https://cardstack.com/base/card-api';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import { and, bool, cn } from '@cardstack/boxel-ui/helpers';
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, type PrerenderedCardLike } from '@cardstack/runtime-common';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';

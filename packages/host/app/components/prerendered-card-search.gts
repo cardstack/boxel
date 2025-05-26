@@ -11,18 +11,19 @@ import { flatMap, isEqual } from 'lodash';
 
 import { TrackedSet } from 'tracked-built-ins';
 
-import { type Query, RealmPaths } from '@cardstack/runtime-common';
+import {
+  type Query,
+  RealmPaths,
+  type PrerenderedCardLike,
+  type PrerenderedCardData,
+  type PrerenderedCardComponentSignature,
+} from '@cardstack/runtime-common';
 import {
   PrerenderedCardCollectionDocument,
   isPrerenderedCardCollectionDocument,
 } from '@cardstack/runtime-common/card-document';
 
-import {
-  type Format,
-  type PrerenderedCardData,
-  type PrerenderedCardLike,
-  type PrerenderedCardComponentSignature,
-} from 'https://cardstack.com/base/card-api';
+import { type Format } from 'https://cardstack.com/base/card-api';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
@@ -36,7 +37,7 @@ const waiter = buildWaiter('prerendered-card-search:waiter');
 
 export class PrerenderedCard implements PrerenderedCardLike {
   component: HTMLComponent;
-  constructor(private data: PrerenderedCardData) {
+  constructor(public data: PrerenderedCardData) {
     if (data.isError && !data.html) {
       this.component = getErrorComponent(data.realmUrl, data.url);
     } else {

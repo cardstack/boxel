@@ -57,7 +57,7 @@ import {
   type getCards,
   type getCardCollection,
   type Store,
-  type Query,
+  type PrerenderedCardComponentSignature,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
@@ -133,35 +133,6 @@ interface Options {
 interface NotLoadedValue {
   type: 'not-loaded';
   reference: string;
-}
-
-export interface PrerenderedCardData {
-  url: string;
-  realmUrl: string;
-  html: string;
-  isError: boolean;
-}
-
-export interface PrerenderedCardLike {
-  url: string;
-  isError: boolean;
-  realmUrl: string;
-  component: ComponentLike<{ Args: {} }>;
-}
-
-export interface PrerenderedCardComponentSignature {
-  Element: undefined;
-  Args: {
-    query: Query;
-    format: Format;
-    cardUrls?: string[];
-    realms: string[];
-    isLive?: boolean;
-  };
-  Blocks: {
-    loading: [];
-    response: [cards: PrerenderedCardLike[]];
-  };
 }
 
 export interface CardContext<T extends CardDef = CardDef> {

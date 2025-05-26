@@ -7,11 +7,13 @@ import { tracked } from '@glimmer/tracking';
 import {
   type CardContext,
   type BaseDef,
-  type PrerenderedCardLike,
 } from 'https://cardstack.com/base/card-api';
 import { and } from '@cardstack/boxel-ui/helpers';
 
-import { type Query } from '@cardstack/runtime-common';
+import {
+  type PrerenderedCardLike,
+  type Query,
+} from '@cardstack/runtime-common';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
 

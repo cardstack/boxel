@@ -1,11 +1,11 @@
 import GlimmerComponent from '@glimmer/component';
 
-import {
-  type CardContext,
-  type PrerenderedCardLike,
-} from 'https://cardstack.com/base/card-api';
+import { type CardContext } from 'https://cardstack.com/base/card-api';
 
-import { type Query } from '@cardstack/runtime-common';
+import {
+  type Query,
+  type PrerenderedCardLike,
+} from '@cardstack/runtime-common';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
 
