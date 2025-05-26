@@ -11,6 +11,8 @@ export default class CopySourceCommand extends HostBaseCommand<
 > {
   @service declare private cardService: CardService;
 
+  static actionVerb = 'Copy';
+
   async getInputType() {
     let commandModule = await this.loadCommandModule();
     const { CopySourceInput } = commandModule;

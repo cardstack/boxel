@@ -17,6 +17,8 @@ export class SearchCardsByTypeAndTitleCommand extends HostBaseCommand<
 > {
   description = 'Search for card instances by type and/or title';
 
+  static actionVerb = 'Search';
+
   async getInputType() {
     let commandModule = await this.loadCommandModule();
     const { SearchCardsByTypeAndTitleInput } = commandModule;

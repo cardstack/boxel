@@ -29,6 +29,7 @@ class GetWeatherCommand extends Command<
   typeof WeatherLocationInput,
   typeof WeatherReport
 > {
+  static actionVerb = 'Retrieve';
   inputType = WeatherLocationInput;
 
   async getInputType() {

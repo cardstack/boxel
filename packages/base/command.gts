@@ -99,8 +99,6 @@ export class LintAndFixInput extends CardDef {
 
 export class LintAndFixResult extends CardDef {
   @field output = contains(StringField);
-  @field fixed = contains(BooleanField);
-  @field messages = containsMany(JsonField);
 }
 
 export class PatchCodeInput extends CardDef {

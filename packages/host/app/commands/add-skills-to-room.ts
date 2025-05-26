@@ -13,6 +13,8 @@ export default class AddSkillsToRoomCommand extends HostBaseCommand<
 > {
   @service declare private matrixService: MatrixService;
 
+  static actionVerb = 'Add';
+
   async getInputType() {
     let commandModule = await this.loadCommandModule();
     const { AddSkillsToRoomInput } = commandModule;
