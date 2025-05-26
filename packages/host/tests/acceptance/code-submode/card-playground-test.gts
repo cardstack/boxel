@@ -1153,7 +1153,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         declaration: 'Author',
       });
       assert.dom('[data-test-instance-chooser]').exists();
-      await click('[data-test-module-inspector-view="preview"]');
+      await click('[data-test-module-inspector-view="spec"]');
       assert.dom('[data-test-instance-chooser]').doesNotExist();
     });
 
