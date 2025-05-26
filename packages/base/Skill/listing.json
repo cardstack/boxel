@@ -21,7 +21,7 @@
         {
           "codeRef": {
             "name": "default",
-            "module": "@cardstack/boxel-host/commands/remix"
+            "module": "@cardstack/boxel-host/commands/listing-remix"
           },
           "requiresApproval": false
         }

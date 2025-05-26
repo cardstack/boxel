@@ -9,11 +9,11 @@ import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room'
 import * as GetBoxelUiStateModule from './get-boxel-ui-state';
 import * as ListingInitCommandModule from './listing-action-init';
 import * as ListingInstallCommandModule from './listing-install';
+import * as ListingRemixCommandModule from './listing-remix';
 import * as ListingUseCommandModule from './listing-use';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
 import * as PatchCardInstanceCommandModule from './patch-card-instance';
 import * as PatchCodeCommandModule from './patch-code';
-import * as RemixCommandModule from './remix';
 import * as SaveCardCommandModule from './save-card';
 import * as SearchCardsCommandModule from './search-cards';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
@@ -67,6 +67,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     ListingUseCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/listing-remix',
+    ListingRemixCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/patch-card-instance',
     PatchCardInstanceCommandModule,
   );
@@ -117,9 +121,5 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/write-text-file',
     WriteTextFileCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/remix',
-    RemixCommandModule,
   );
 }

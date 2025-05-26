@@ -9,12 +9,13 @@ import * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import ListingInstallCommand from './listing-install';
+import { installListing } from './listing-install';
 import SwitchSubmodeCommand from './switch-submode';
 import UpdateCodePathWithSelectionCommand from './update-code-path-with-selection';
 import UpdatePlaygroundSelectionCommand from './update-playground-selection';
 
 import type RealmServerService from '../services/realm-server';
+import type { Listing } from '@cardstack/catalog/listing/listing';
 
 export default class RemixCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInput
@@ -46,15 +47,23 @@ export default class RemixCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.ListingInput,
   ): Promise<undefined> {
+    let realmUrls = this.realmServer.availableRealmURLs;
     let { realm: realmUrl, listing: listingInput } = input;
+
+    // this is intentionally to type because base command cannot interpret Listing type from catalog
+    const listing = listingInput as Listing;
+    const cardAPI = await this.loadCardAPI();
 
     const {
       selectedCodeRef,
       shouldPersistPlaygroundSelection,
       firstExampleCardId,
-    } = await new ListingInstallCommand(this.commandContext).execute({
-      realm: realmUrl,
-      listing: listingInput,
+    } = await installListing({
+      realmUrls,
+      realmUrl,
+      listing,
+      commandContext: this.commandContext,
+      cardAPI,
     });
 
     if (selectedCodeRef && isResolvedCodeRef(selectedCodeRef)) {
