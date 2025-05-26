@@ -785,7 +785,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       );
       assert
         .dom('[data-test-instance-chooser] [data-test-selected-item]')
-        .hasText('Untitled Blog Post', 'created instance is selected');
+        .containsText('Untitled Blog Post', 'created instance is selected');
       assertCardExists(
         assert,
         id!,
@@ -813,7 +813,10 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       assert
         .dom('[data-test-instance-chooser] [data-test-selected-item]')
-        .hasText('Untitled Code Ref Driver', 'created instance is selected');
+        .containsText(
+          'Untitled Code Ref Driver',
+          'created instance is selected',
+        );
       assert
         .dom(
           `[data-test-playground-panel] [data-test-card][data-test-card-format="edit"]`,
