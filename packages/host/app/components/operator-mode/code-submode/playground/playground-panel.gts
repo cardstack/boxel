@@ -623,6 +623,16 @@ export default class PlaygroundPanel extends Component<Signature> {
     return this.moduleId === `${baseCardRef.module}/${baseCardRef.name}`;
   }
 
+  private createNewWhenNoCards = (results?: PrerenderedCard[]) => {
+    if (!results?.length) {
+      // if expanded search returns no instances, create new instance
+      this.createNew();
+      return;
+    }
+    let card = results[0];
+    return [card];
+  };
+
   <template>
     {{consumeContext this.makeCardResource}}
 
@@ -636,6 +646,21 @@ export default class PlaygroundPanel extends Component<Signature> {
       >
         <:response as |cards|>
           {{consumeContext (fn this.triggerPlaygroundSelections cards)}}
+        </:response>
+      </PrerenderedCardSearch>
+    {{/if}}
+
+    {{#if this.expandedQuery}}
+      <PrerenderedCardSearch
+        @query={{this.expandedQuery}}
+        @format='fitted'
+        @realms={{this.realmServer.availableRealmURLs}}
+        @isLive={{true}}
+      >
+        <:response as |maybeCards|>
+          {{#let (this.createNewWhenNoCards maybeCards) as |cards|}}
+            {{consumeContext (fn this.triggerPlaygroundSelections cards)}}
+          {{/let}}
         </:response>
       </PrerenderedCardSearch>
     {{/if}}
