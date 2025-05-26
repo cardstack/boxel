@@ -569,7 +569,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         );
 
         assert.dom(`[data-test-card-error]`).exists();
-        assert.dom(`[data-test-error-title]`).includesText('Link Not Found');
+        assert.dom(`[data-test-error-message]`).includesText('missing file');
       });
 
       test('can delete a card', async function (assert) {
@@ -626,10 +626,12 @@ module('Acceptance | operator mode tests', function (hooks) {
         `[data-test-stack-card="${testRealmURL}Person/error"] [data-test-card-error]`,
       )
       .exists('the error state of the card is displayed');
-    assert.dom('[data-test-error-title]').includesText('Link Not Found');
-    await click('[data-test-error-detail-toggle] button');
     assert
-      .dom('[data-test-error-detail]')
+      .dom('[data-test-error-message]')
+      .includesText(`missing file ${testRealmURL}Person/missing-link.json`);
+    await click('[data-test-toggle-details]');
+    assert
+      .dom('[data-test-error-details]')
       .includesText(`missing file ${testRealmURL}Person/missing-link.json`);
   });
 
@@ -768,8 +770,8 @@ module('Acceptance | operator mode tests', function (hooks) {
       .exists();
 
     await click('[data-test-workspace-chooser-toggle]');
-    await click('[data-test-workspace="Boxel Catalog"]');
-    assert.dom(`[data-test-realm-name]`).hasText('In Boxel Catalog');
+    await click('[data-test-workspace="Cardstack Catalog"]');
+    assert.dom(`[data-test-realm-name]`).hasText('In Cardstack Catalog');
     assert.dom(`[data-test-file="index.json"]`).hasClass('selected');
     assert.dom('[data-test-recent-file]').exists({ count: 4 });
     assert

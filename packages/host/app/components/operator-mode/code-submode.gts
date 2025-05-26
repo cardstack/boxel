@@ -746,7 +746,7 @@ export default class CodeSubmode extends Component<Signature> {
               @defaultSize={{this.defaultPanelWidths.codeEditorPanel}}
               @minSize={{20}}
             >
-              <InnerContainer>
+              <InnerContainer class='monaco-editor-panel'>
                 {{#if this.isReady}}
                   <CodeEditor
                     @file={{this.currentOpenFile}}
@@ -844,6 +844,8 @@ export default class CodeSubmode extends Component<Signature> {
           var(--operator-mode-top-bar-item-height) +
             (2 * (var(--operator-mode-spacing)))
         );
+        --monaco-background: var(--boxel-600);
+        --monaco-readonly-background: #606060;
       }
 
       .code-mode {
@@ -883,6 +885,14 @@ export default class CodeSubmode extends Component<Signature> {
 
       .recent-files-panel {
         background-color: var(--code-mode-panel-background-color);
+      }
+
+      .monaco-editor-panel {
+        background-color: var(--monaco-background);
+      }
+      .monaco-editor-panel :deep(.binary-info) {
+        --icon-color: var(--boxel-light);
+        color: var(--boxel-light);
       }
 
       .choose-file-prompt {

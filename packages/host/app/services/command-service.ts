@@ -147,7 +147,7 @@ export default class CommandService extends Service {
         if (this.executedCommandRequestIds.has(messageCommand.id!)) {
           continue;
         }
-        if (messageCommand.commandResultFileDef) {
+        if (messageCommand.status === 'applied') {
           continue;
         }
         if (!messageCommand.name) {
@@ -227,6 +227,9 @@ export default class CommandService extends Service {
         );
       }
       this.executedCommandRequestIds.add(commandRequestId!);
+      await this.matrixService.updateSkillsAndCommandsIfNeeded(
+        command.message.roomId,
+      );
       await this.matrixService.sendToolCallCommandResultEvent(
         command.message.roomId,
         eventId,
@@ -313,6 +316,7 @@ export default class CommandService extends Service {
           `${codeBlock.eventId}:${codeBlock.codeBlockIndex}`,
         );
       }
+      await this.matrixService.updateSkillsAndCommandsIfNeeded(roomId);
       let resultSends: Promise<unknown>[] = [];
       for (const codeData of codeDataItems) {
         resultSends.push(

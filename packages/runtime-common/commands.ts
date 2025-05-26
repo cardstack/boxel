@@ -62,6 +62,8 @@ export abstract class Command<
   CardInputType extends CardDefConstructor | undefined,
   CardResultType extends CardDefConstructor | undefined = undefined,
 > {
+  static actionVerb = 'Apply';
+
   abstract getInputType(): Promise<CardInputType>;
 
   invocations: CommandInvocation<CardInputType, CardResultType>[] = [];

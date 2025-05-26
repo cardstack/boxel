@@ -1,4 +1,4 @@
-import { IContent } from 'matrix-js-sdk';
+import { IContent, Method } from 'matrix-js-sdk';
 import { logger } from '@cardstack/runtime-common';
 import { OpenAIError } from 'openai/error';
 import * as Sentry from '@sentry/node';
@@ -11,6 +11,8 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import { encodeUri } from 'matrix-js-sdk/lib/utils';
 
 let log = logger('ai-bot');
 
@@ -62,9 +64,6 @@ export async function sendMatrixEvent(
   return await client.sendEvent(roomId, eventType, content);
 }
 
-// TODO we might want to think about how to handle patches that are larger than
-// 65KB (the maximum matrix event size), such that we split them into fragments
-// like we split cards into fragments
 export async function sendMessageEvent(
   client: MatrixClient,
   roomId: string,
@@ -146,6 +145,48 @@ function cleanupCache() {
       fileCache.delete(url);
     }
   }
+}
+
+/**
+ * Retrieves the last 1000 non-replace events from a Matrix room
+ * @param roomId - The ID of the Matrix room
+ * @param client - Matrix client instance used to make authenticated requests
+ * @param lastEventId - Optional ID of the last event to retrieve events up to - use to filter
+ *                      out events that came in after the one that triggered the response
+ * @returns Array of Matrix events. If lastEventId is provided, returns events up to and including that event.
+ *          If lastEventId is not found or not provided, returns all available events.
+ */
+export async function getRoomEvents(
+  roomId: string,
+  client: MatrixClient,
+  lastEventId?: string,
+) {
+  const messagesPath = encodeUri('/rooms/$roomId/messages', {
+    $roomId: roomId,
+  });
+  let response = await (client as any).http.authedRequest(
+    Method.Get,
+    messagesPath,
+    {
+      dir: 'f',
+      limit: '1000',
+      filter: JSON.stringify({
+        'org.matrix.msc3874.not_rel_types': ['m.replace'],
+      }),
+    },
+  );
+  let events = (response?.chunk || []) as DiscreteMatrixEvent[];
+  if (!lastEventId) {
+    // return all events
+    return events;
+  }
+  let eventIndex = events.findIndex(
+    (listEvent) => listEvent.event_id === lastEventId,
+  );
+  if (eventIndex == -1) {
+    return events;
+  }
+  return events.slice(0, eventIndex + 1);
 }
 
 export async function downloadFile(

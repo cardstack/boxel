@@ -310,12 +310,6 @@ export class Realm {
     this.#dbAdapter = dbAdapter;
 
     this.#router = new Router(new URL(url))
-      .post('(/|/.+/)', SupportedMimeType.CardJson, this.createCard.bind(this))
-      .patch(
-        '/.+(?<!.json)',
-        SupportedMimeType.CardJson,
-        this.patchCardInstance.bind(this),
-      )
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .query('/_lint', SupportedMimeType.JSON, this.lint.bind(this))
       .get('/_mtimes', SupportedMimeType.Mtimes, this.realmMtimes.bind(this))
@@ -352,9 +346,20 @@ export class Realm {
         this.patchRealmPermissions.bind(this),
       )
       .get(
+        '/_readiness-check',
+        SupportedMimeType.RealmInfo,
+        this.readinessCheck.bind(this),
+      )
+      .post('(/|/.+/)', SupportedMimeType.CardJson, this.createCard.bind(this))
+      .get(
         '/|/.+(?<!.json)',
         SupportedMimeType.CardJson,
         this.getCard.bind(this),
+      )
+      .patch(
+        '/.+(?<!.json)',
+        SupportedMimeType.CardJson,
+        this.patchCardInstance.bind(this),
       )
       .delete(
         '/|/.+(?<!.json)',
@@ -380,11 +385,6 @@ export class Realm {
         '.*/',
         SupportedMimeType.DirectoryListing,
         this.getDirectoryListing.bind(this),
-      )
-      .get(
-        '/_readiness-check',
-        SupportedMimeType.RealmInfo,
-        this.readinessCheck.bind(this),
       );
 
     Object.values(SupportedMimeType).forEach((mimeType) => {

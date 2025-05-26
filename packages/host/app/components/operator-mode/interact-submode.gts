@@ -366,8 +366,11 @@ export default class InteractSubmode extends Component {
       ): Promise<CardDef[]> => {
         return await here._copyCards.perform(cards, realm, localDir);
       },
-      allRealmsInfo: async () => {
-        return await here.realm.allRealmsInfo;
+      allRealmsInfo: () => {
+        return here.realm.allRealmsInfo;
+      },
+      fetchCard: async (url: string) => {
+        return await here.store.peek(url);
       },
     };
     return { ...actions, ...catalogActions };

@@ -1,0 +1,139 @@
+[
+  {
+    "type": "m.room.member",
+    "sender": "@host:localhost",
+    "content": {
+      "membership": "join",
+      "displayname": "Host"
+    },
+    "state_key": "@host:localhost",
+    "origin_server_ts": 1722374000000,
+    "room_id": "!testroom:localhost",
+    "event_id": "$member_event_1"
+  },
+  {
+    "type": "m.room.member",
+    "sender": "@aibot:localhost",
+    "content": {
+      "membership": "join",
+      "displayname": "AI Bot"
+    },
+    "state_key": "@aibot:localhost",
+    "origin_server_ts": 1722374010000,
+    "room_id": "!testroom:localhost",
+    "event_id": "$member_event_2"
+  },
+  {
+    "type": "app.boxel.room.skills",
+    "room_id": "!testroom:localhost",
+    "sender": "@host:localhost",
+    "content": {
+      "enabledSkillCards": [
+        {
+          "url": "mxc://mock-server/skill_card_v1",
+          "sourceUrl": "https://cardstack.com/base/Skill/skill_card_v1",
+          "contentType": "text/plain"
+        }
+      ],
+      "disabledSkillCards": [],
+      "commandDefinitions": [
+        {
+          "url": "mxc://mock-server/command_def_v1",
+          "sourceUrl": "",
+          "contentType": "text/plain"
+        }
+      ]
+    },
+    "state_key": "",
+    "origin_server_ts": 1722374040000,
+    "event_id": "$skill_state_1"
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!testroom:localhost",
+    "sender": "@user:localhost",
+    "content": {
+      "msgtype": "m.text",
+      "body": "Can you help me switch modes?"
+    },
+    "origin_server_ts": 1722374050000,
+    "event_id": "$message_1"
+  },
+  {
+    "type": "app.boxel.room.skills",
+    "room_id": "!testroom:localhost",
+    "sender": "@host:localhost",
+    "content": {
+      "enabledSkillCards": [
+        {
+          "url": "mxc://mock-server/skill_card_v2",
+          "sourceUrl": "https://cardstack.com/base/Skill/skill_card_v2",
+          "contentType": "text/plain"
+        }
+      ],
+      "disabledSkillCards": [],
+      "commandDefinitions": [
+        {
+          "url": "mxc://mock-server/command_def_v2",
+          "sourceUrl": "",
+          "contentType": "text/plain",
+          "name": "switch-submode_dd88"
+        }
+      ]
+    },
+    "state_key": "",
+    "origin_server_ts": 1722374080000,
+    "event_id": "$skill_state_2"
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!testroom:localhost",
+    "sender": "@user:localhost",
+    "content": {
+      "msgtype": "m.text",
+      "body": "Can you switch to interact?"
+    },
+    "origin_server_ts": 1722374090000,
+    "event_id": "$message_2"
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!testroom:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Switching to interact mode...",
+      "msgtype": "app.boxel.message",
+      "format": "org.matrix.custom.html",
+      "app.boxel.commandRequests": [
+        {
+          "id": "call_or0qFTa8y9Ef8ZVyRDNR2P1T",
+          "name": "switch-submode_dd88",
+          "arguments": {
+            "description": "Switch to interact mode",
+            "attributes": { "mode": "interact" }
+          }
+        }
+      ]
+    },
+    "origin_server_ts": 1722374090001,
+    "event_id": "$message_3",
+    "user_id": "@aibot:localhost"
+  },
+  {
+    "type": "app.boxel.commandResult",
+    "room_id": "!testroom:localhost",
+    "sender": "@user:localhost",
+    "content": {
+      "msgtype": "app.boxel.commandResultWithNoOutput",
+      "commandRequestId": "call_or0qFTa8y9Ef8ZVyRDNR2P1T",
+      "m.relates_to": {
+        "event_id": "$message_3",
+        "key": "applied",
+        "rel_type": "app.boxel.commandAnnotation"
+      }
+    },
+    "origin_server_ts": 1722374090002,
+    "event_id": "$message_4",
+    "user_id": "@user:localhost"
+  }
+]

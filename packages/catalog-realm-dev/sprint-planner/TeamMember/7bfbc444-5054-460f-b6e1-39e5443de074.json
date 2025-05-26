@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Richard",
+      "email": "richard@gmail.com",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "team": {
+        "links": {
+          "self": "../Team/df163805-2f30-427d-b400-c9db1fa5db9e"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "TeamMember"
+      }
+    }
+  }
+}

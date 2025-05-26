@@ -35,6 +35,7 @@ Then configure the rules you want to use under the rules section:
 
 | Name                                                                   | Description                                                                                     | 💼 | 🔧 |
 | :--------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------- | :- | :- |
+| [missing-card-api-import](docs/rules/missing-card-api-import.md)       | disallow usage of card-api with missing imports with auto-fix                                   | ✅  | 🔧 |
 | [template-missing-invokable](docs/rules/template-missing-invokable.md) | disallow missing helpers, modifiers, or components in \<template\> with auto-fix to import them | ✅  | 🔧 |
 
 <!-- end auto-generated rules list -->

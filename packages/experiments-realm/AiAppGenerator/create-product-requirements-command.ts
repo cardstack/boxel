@@ -31,6 +31,7 @@ export default class CreateProductRequirementsInstance extends Command<
   typeof CreateProductRequirementsInput,
   typeof CreateProductRequirementsResult
 > {
+  static actionVerb = 'Create';
   inputType = CreateProductRequirementsInput;
 
   get skillCard() {

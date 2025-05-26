@@ -19,6 +19,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
   @service declare private cardService: CardService;
   @service declare private realm: RealmService;
   description = `Apply code changes to file and then apply lint fixes`;
+  static actionVerb = 'Apply';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();

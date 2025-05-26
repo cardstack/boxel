@@ -25,6 +25,7 @@ export default class CopyCardCommand extends HostBaseCommand<
   @service declare private store: StoreService;
 
   description = 'Copy a card to a realm';
+  static actionVerb = 'Copy';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();

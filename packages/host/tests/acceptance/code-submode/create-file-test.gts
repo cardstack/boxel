@@ -381,14 +381,14 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       await click('[data-test-create-card-instance]');
       assert.dom('[data-test-error-container]').exists();
       assert
-        .dom('[data-test-error-detail-toggle]')
+        .dom('[data-test-error-type]')
         .containsText('Error creating card instance');
       assert
-        .dom('[data-test-create-file-modal] [data-test-error-title]')
+        .dom('[data-test-create-file-modal] [data-test-error-message]')
         .hasText('A deliberate constructor error');
-      await click('[data-test-error-detail-toggle] > button');
+      await click('[data-test-toggle-details]');
       assert
-        .dom('[data-test-error-detail]')
+        .dom('[data-test-error-details]')
         .containsText('A deliberate constructor error');
 
       await click('[data-test-cancel-create-file]');
@@ -717,14 +717,14 @@ export class TestCard extends Person {
       await click('[data-test-create-definition]');
       assert.dom('[data-test-error-container]').exists();
       assert
-        .dom('[data-test-error-detail-toggle]')
+        .dom('[data-test-error-type]')
         .containsText('Error creating card definition');
       assert
-        .dom('[data-test-create-file-modal] [data-test-error-title]')
+        .dom('[data-test-create-file-modal] [data-test-error-message]')
         .hasText('A deliberate fetch error');
-      await click('[data-test-error-detail-toggle] > button');
+      await click('[data-test-toggle-details]');
       assert
-        .dom('[data-test-error-detail]')
+        .dom('[data-test-error-details]')
         .containsText('A deliberate fetch error');
 
       await fillIn('[data-test-display-name-field]', 'Test Card');
@@ -797,14 +797,14 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
       await fillIn('[data-test-file-name-field]', 'test-fetch-failure-card');
       await click('[data-test-create-definition]');
       assert
-        .dom('[data-test-error-detail-toggle]')
+        .dom('[data-test-error-type]')
         .containsText('Error creating field definition');
       assert
-        .dom('[data-test-create-file-modal] [data-test-error-title]')
+        .dom('[data-test-create-file-modal] [data-test-error-message]')
         .hasText('A deliberate fetch error');
-      await click('[data-test-error-detail-toggle] > button');
+      await click('[data-test-toggle-details]');
       assert
-        .dom('[data-test-error-detail]')
+        .dom('[data-test-error-details]')
         .containsText('A deliberate fetch error');
     });
 

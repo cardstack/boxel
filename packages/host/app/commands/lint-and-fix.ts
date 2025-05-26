@@ -14,6 +14,7 @@ export default class LintAndFixCommand extends HostBaseCommand<
 > {
   @service declare private network: NetworkService;
   description = `Pass file content through linting endpoint`;
+  static actionVerb = 'Autofix';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
@@ -39,8 +40,6 @@ export default class LintAndFixCommand extends HostBaseCommand<
       let result = await response.json();
       return new LintAndFixResult({
         output: result.output,
-        fixed: result.fixed,
-        messages: result.messages,
       });
     }
     let result = await response.json();

@@ -6,7 +6,7 @@ import { inject as service } from '@ember/service';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import { ResolvedCodeRef } from '@cardstack/runtime-common';
+import { ResolvedCodeRef, getClass } from '@cardstack/runtime-common';
 
 import {
   CommandRequest,
@@ -18,6 +18,8 @@ import {
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
+  APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
@@ -27,6 +29,7 @@ import {
 import { RoomSkill } from '@cardstack/host/resources/room';
 import type CommandService from '@cardstack/host/services/command-service';
 
+import LoaderService from '@cardstack/host/services/loader-service';
 import MatrixService from '@cardstack/host/services/matrix-service';
 
 import type { CommandStatus } from 'https://cardstack.com/base/command';
@@ -70,6 +73,7 @@ export default class MessageBuilder {
   }
 
   @service declare private commandService: CommandService;
+  @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
 
   private get coreMessageArgs() {
@@ -89,6 +93,10 @@ export default class MessageBuilder {
       reasoningContent:
         (this.event.content as CardMessageContent)['app.boxel.reasoning'] ||
         null,
+      hasContinuation: hasContinuation(this.event),
+      continuationOf: isCardMessageEvent(this.event)
+        ? (this.event.content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] ?? null)
+        : null,
     });
   }
 
@@ -133,39 +141,46 @@ export default class MessageBuilder {
     return errorMessage;
   }
 
-  buildMessage(): Message {
+  async buildMessage(): Promise<Message> {
     let { event } = this;
     let message = this.coreMessageArgs;
     message.errorMessage = this.errorMessage;
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
       message.clientGeneratedId = this.clientGeneratedId;
+      message.setIsStreamingFinished(!!event.content.isStreamingFinished);
       message.attachedCardIds = this.attachedCardIds;
       if (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY]) {
-        message.commands = this.buildMessageCommands(message);
+        message.setCommands(await this.buildMessageCommands(message));
       }
       message.codePatchResults = this.buildMessageCodePatchResults(message);
     } else if (event.content.msgtype === 'm.text') {
-      message.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
+      message.setIsStreamingFinished(!!event.content.isStreamingFinished);
     }
     return message;
   }
 
-  updateMessage(message: Message) {
+  async updateMessage(message: Message) {
     if (message.created.getTime() > this.event.origin_server_ts) {
       message.created = new Date(this.event.origin_server_ts);
       return;
     }
 
-    message.body = this.event.content.body;
-    message.reasoningContent =
+    message.setBody(this.event.content.body);
+    message.setReasoningContent(
       (this.event.content as CardMessageContent)[
         APP_BOXEL_REASONING_CONTENT_KEY
-      ] || null;
-    message.isStreamingFinished =
+      ] || null,
+    );
+    message.setIsStreamingFinished(
       'isStreamingFinished' in this.event.content
         ? this.event.content.isStreamingFinished
-        : undefined;
-    message.updated = new Date();
+        : undefined,
+    );
+    message.hasContinuation = hasContinuation(this.event);
+    message.continuationOf = isCardMessageEvent(this.event)
+      ? (this.event.content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] ?? null)
+      : null;
+    message.setUpdated(new Date());
     message.errorMessage = this.errorMessage;
 
     let encodedCommandRequests =
@@ -180,7 +195,7 @@ export default class MessageBuilder {
         command.commandRequest = decodeCommandRequest(encodedCommandRequest);
       } else {
         message.commands.push(
-          this.buildMessageCommand(
+          await this.buildMessageCommand(
             message,
             decodeCommandRequest(encodedCommandRequest),
           ),
@@ -189,9 +204,9 @@ export default class MessageBuilder {
     }
   }
 
-  updateMessageCommandResult(message: Message) {
+  async updateMessageCommandResult(message: Message) {
     if (message.commands.length === 0) {
-      message.commands = this.buildMessageCommands(message);
+      message.setCommands(await this.buildMessageCommands(message));
     }
 
     if (this.builderContext.commandResultEvent && message.commands.length > 0) {
@@ -223,7 +238,7 @@ export default class MessageBuilder {
     message.codePatchResults = this.buildMessageCodePatchResults(message);
   }
 
-  private buildMessageCommands(message: Message) {
+  private async buildMessageCommands(message: Message) {
     let eventContent = this.event.content as CardMessageContent;
     let commandRequests = eventContent[APP_BOXEL_COMMAND_REQUESTS_KEY];
     if (!commandRequests) {
@@ -231,7 +246,7 @@ export default class MessageBuilder {
     }
     let commands = new TrackedArray<MessageCommand>();
     for (let commandRequest of commandRequests) {
-      let command = this.buildMessageCommand(
+      let command = await this.buildMessageCommand(
         message,
         decodeCommandRequest(commandRequest),
       );
@@ -240,7 +255,7 @@ export default class MessageBuilder {
     return commands;
   }
 
-  private buildMessageCommand(
+  private async buildMessageCommand(
     message: Message,
     commandRequest: Partial<CommandRequest>,
   ) {
@@ -274,12 +289,24 @@ export default class MessageBuilder {
       }
     }
 
+    let actionVerb = 'Apply';
+    if (skillCommand?.codeRef) {
+      let CommandKlass = (await getClass(
+        skillCommand?.codeRef,
+        this.loaderService.loader,
+      )) as { actionVerb: string };
+      if (CommandKlass?.actionVerb) {
+        actionVerb = CommandKlass.actionVerb;
+      }
+    }
+
     let messageCommand = new MessageCommand(
       message,
       commandRequest,
       skillCommand?.codeRef,
       this.builderContext.effectiveEventId,
       skillCommand?.requiresApproval ?? true,
+      actionVerb,
       (commandResultEvent?.content['m.relates_to']?.key ||
         'ready') as CommandStatus,
       commandResultEvent?.content.msgtype ===
@@ -318,4 +345,23 @@ export default class MessageBuilder {
     }
     return codePatchResults;
   }
+}
+
+export function isCardMessageEvent(
+  matrixEvent: DiscreteMatrixEvent,
+): matrixEvent is CardMessageEvent {
+  if (matrixEvent.type !== 'm.room.message') {
+    return false;
+  }
+  if (!matrixEvent.content) {
+    return false;
+  }
+  return matrixEvent.content?.msgtype === APP_BOXEL_MESSAGE_MSGTYPE;
+}
+
+function hasContinuation(matrixEvent: DiscreteMatrixEvent) {
+  return (
+    isCardMessageEvent(matrixEvent) &&
+    matrixEvent.content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY] === true
+  );
 }

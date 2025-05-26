@@ -36,6 +36,8 @@ import {
   isFieldDef,
   loadCardDef,
   realmURL as realmURLSymbol,
+  localId,
+  isLocalId,
   skillCardRef,
 } from '@cardstack/runtime-common';
 import {
@@ -269,11 +271,11 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   }
 
   private get selectedId() {
-    return this.args.activeSpec?.id;
+    return this.args.activeSpec?.id ?? this.args.activeSpec?.[localId];
   }
 
   @action private viewSpecInstance() {
-    if (!this.selectedId) {
+    if (!this.selectedId || isLocalId(this.selectedId)) {
       return;
     }
 
@@ -313,22 +315,27 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                   @disabled={{this.onlyOneInstance}}
                   as |spec|
                 >
-                  {{#if spec.id}}
-                    {{#let (this.getDropdownData spec) as |data|}}
-                      {{#if data}}
-                        <div class='spec-selector-item'>
-                          <RealmIcon
-                            @canAnimate={{true}}
-                            class='url-realm-icon'
-                            @realmInfo={{data.realmInfo}}
-                          />
+                  {{#let (this.getDropdownData spec) as |data|}}
+                    {{#if data}}
+                      <div class='spec-selector-item'>
+                        <RealmIcon
+                          @canAnimate={{true}}
+                          class='url-realm-icon'
+                          @realmInfo={{data.realmInfo}}
+                        />
+                        {{#if spec.id}}
                           <span data-test-spec-selector-item-path>
                             {{data.localPath}}
                           </span>
-                        </div>
-                      {{/if}}
-                    {{/let}}
-                  {{/if}}
+                        {{else}}
+                          <LoadingIndicator />
+                          <span data-test-spec-item-path-creating>
+                            Creating...
+                          </span>
+                        {{/if}}
+                      </div>
+                    {{/if}}
+                  {{/let}}
                 </BoxelSelect>
               </div>
               <BoxelButton
@@ -460,7 +467,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare specPanelService: SpecPanelService;
   @service private declare store: StoreService;
 
-  private createSpecInstance = task(
+  private createSpecTask = task(
     async (ref: ResolvedCodeRef, specType: SpecType) => {
       let relativeTo = new URL(ref.module);
       let maybeAbsoluteRef = codeRefWithAbsoluteURL(ref, relativeTo);
@@ -471,18 +478,19 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         let SpecKlass = await loadCardDef(specRef, {
           loader: this.loaderService.loader,
         });
-        let card = new SpecKlass({
+        let spec = new SpecKlass({
           specType,
           ref,
           title: ref.name,
         }) as Spec;
         let currentRealm = this.operatorModeStateService.realmURL;
-        await this.store.add(card, { realm: currentRealm.href });
-        if (card.id) {
-          this.specPanelService.setSelection(card.id);
-          if (!this.args.isPanelOpen) {
-            this.args.toggleAccordionItem('spec-preview');
-          }
+        await this.store.add(spec, {
+          realm: currentRealm.href,
+          doNotWaitForPersist: true,
+        });
+        this.specPanelService.setSelection(spec[localId]);
+        if (!this.args.isPanelOpen) {
+          this.args.toggleAccordionItem('spec-preview');
         }
       } catch (e: any) {
         console.log('Error saving', e);
@@ -551,7 +559,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       throw new Error('bug: no code ref');
     }
     let specType = await this.guessSpecType(this.args.selectedDeclaration);
-    this.createSpecInstance.perform(
+    this.createSpecTask.perform(
       this.args.selectedDeclarationAsCodeRef,
       specType,
     );
@@ -570,6 +578,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       Boolean(this.args.selectedDeclaration?.exportName) &&
       !this.args.searchIsLoading &&
       this.args.specsForSelectedDefinition.length === 0 &&
+      !this.args.activeSpec &&
       this.canWrite
     );
   }
@@ -593,7 +602,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           SpecPreviewTitle
           showCreateSpec=false
           createSpec=this.createSpec
-          isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
+          isCreateSpecInstanceRunning=this.createSpecTask.isRunning
           spec=@activeSpec
         )
         (component SpecPreviewLoading)
@@ -604,7 +613,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           SpecPreviewTitle
           showCreateSpec=this.showCreateSpec
           createSpec=this.createSpec
-          isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
+          isCreateSpecInstanceRunning=this.createSpecTask.isRunning
           spec=@activeSpec
           numberOfInstances=@specsForSelectedDefinition.length
         )
