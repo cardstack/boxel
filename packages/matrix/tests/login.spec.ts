@@ -100,10 +100,58 @@ test.describe('Login', () => {
     await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
     await page.locator('[data-test-login-btn]').click();
 
+    let boxelSessionBeforeCardLoaded = await page.evaluate(async () => {
+      return window.localStorage.getItem('boxel-session');
+    });
+    expect(boxelSessionBeforeCardLoaded).toBeNull();
+
     await assertLoggedIn(page);
     // the authentication to the realm could possibly processed when fetching card,
     // so we have to wait until the card loaded before checking the tokens
     await page.waitForSelector('[data-test-stack-item-content]');
+    let boxelSession = await page.evaluate(async () => {
+      // playwright needs a beat before it get access local storage
+      await new Promise((res) => setTimeout(res, 1500));
+      return window.localStorage.getItem('boxel-session');
+    });
+    let token = (JSON.parse(boxelSession!) as { [realmURL: string]: string })[
+      `${appURL}/`
+    ];
+    let claims = jwt.verify(token, REALM_SECRET_SEED) as {
+      user: string;
+      realm: string;
+      sessionRoom: string;
+      permissions: ('read' | 'write' | 'realm-owner')[];
+    };
+    expect(claims.user).toStrictEqual('@user1:localhost');
+    expect(claims.realm).toStrictEqual(`${appURL}/`);
+    expect(claims.sessionRoom).toMatch(/!\w*:localhost/);
+    expect(claims.permissions).toMatchObject(['read', 'write']);
+
+    // reload to page to show that the access token persists
+    await page.reload();
+    await assertLoggedIn(page);
+  });
+
+  test('it can login to workspace chooser page', async ({ page }) => {
+    await openRoot(page, new URL(appURL).origin);
+
+    await assertLoggedOut(page);
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-username-field]').fill('user1');
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-password-field]').fill('pass');
+    await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
+    await page.locator('[data-test-login-btn]').click();
+    let boxelSessionBeforeWorkspaceLoaded = await page.evaluate(async () => {
+      return window.localStorage.getItem('boxel-session');
+    });
+    expect(boxelSessionBeforeWorkspaceLoaded).toBeNull();
+
+    await assertLoggedIn(page);
+    await expect(page.locator('[data-test-workspace-visibility]')).toHaveCount(
+      1,
+    );
     let boxelSession = await page.evaluate(async () => {
       // playwright needs a beat before it get access local storage
       await new Promise((res) => setTimeout(res, 1500));
