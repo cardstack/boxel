@@ -244,6 +244,9 @@ export async function registerUser(
       },
     })
   ).json();
+
+  // Set the test realm in the user's account data
+  // so it appears in the list of available realms
   if (username.startsWith('user')) {
     await updateAccountData(
       response.user_id,
