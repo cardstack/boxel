@@ -302,7 +302,7 @@ I am a newly created file2
 http://test-realm/test/hi.txt
 <<<<<<< SEARCH
 =======
-I am a newly created hi.txt file but I will get a suffix because hi.txt already exists!
+This file was supposed to be hi.txt but it got a suffix because hi.txt already exists
 >>>>>>> REPLACE
 \`\`\``;
 
@@ -346,9 +346,12 @@ I am a newly created hi.txt file but I will get a suffix because hi.txt already 
     await click('[data-test-file="hi-1.txt"]');
 
     assert.equal(
-      (document.getElementsByClassName('view-lines')[0] as HTMLElement)
-        .innerText,
-      'I am a newly \ncreated hi.txt file \nbut I will get a \nsuffix because hi.\ntxt already exists!',
+      (
+        document.getElementsByClassName('view-lines')[0] as HTMLElement
+      ).innerText
+        .replace(/\s+/g, ' ')
+        .trim(),
+      'This file was supposed to be hi.txt but it got a suffix because hi.txt already exists',
     );
   });
 });
