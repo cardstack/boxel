@@ -9,6 +9,7 @@ import {
   isResolvedCodeRef,
   type CopyCardsWithCodeRef,
   type Command,
+  listingNameWithUuid,
 } from '@cardstack/runtime-common';
 
 import * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -27,18 +28,6 @@ import type { Listing } from '@cardstack/catalog/listing/listing';
 interface CopyMeta {
   sourceCodeRef: ResolvedCodeRef;
   targetCodeRef: ResolvedCodeRef;
-}
-
-function nameWithUuid(listingName?: string) {
-  if (!listingName) {
-    return '';
-  }
-  // sanitize the listing name, eg: Blog App -> blog-app
-  const sanitizedListingName = deburr(listingName.toLocaleLowerCase())
-    .replace(/ /g, '-')
-    .replace(/'/g, '');
-  const newPackageName = `${sanitizedListingName}-${uuidv4()}`;
-  return newPackageName;
 }
 
 interface InstallListingInput {
@@ -71,7 +60,7 @@ export async function installListing({
 
   const copyMeta: CopyMeta[] = [];
 
-  const localDir = nameWithUuid(listing.name);
+  const localDir = listingNameWithUuid(listing.name);
 
   // first spec as the selected code ref with new url
   // if there are examples, take the first example's code ref

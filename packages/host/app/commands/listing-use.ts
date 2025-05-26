@@ -7,6 +7,7 @@ import {
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
   loadCardDef,
+  listingNameWithUuid,
 } from '@cardstack/runtime-common';
 
 import * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -22,17 +23,6 @@ import SaveCardCommand from './save-card';
 import type RealmServerService from '../services/realm-server';
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
-function nameWithUuid(listingName?: string) {
-  if (!listingName) {
-    return '';
-  }
-  // sanitize the listing name, eg: Blog App -> blog-app
-  const sanitizedListingName = deburr(listingName.toLocaleLowerCase())
-    .replace(/ /g, '-')
-    .replace(/'/g, '');
-  const newPackageName = `${sanitizedListingName}-${uuidv4()}`;
-  return newPackageName;
-}
 export default class ListingUseCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInput
 > {
@@ -64,7 +54,7 @@ export default class ListingUseCommand extends HostBaseCommand<
       (spec) => spec.specType !== 'field',
     );
 
-    const localDir = nameWithUuid(listing.name);
+    const localDir = listingNameWithUuid(listing.name);
 
     for (const spec of specsWithoutFields) {
       if (spec.isComponent) {
