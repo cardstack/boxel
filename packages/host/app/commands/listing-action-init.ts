@@ -60,7 +60,7 @@ export default class ListingActionInitCommand extends HostBaseCommand<
       name: roomName,
     });
 
-    const listingSkillCardId = `${baseRealm.url}Skill/listing`;
+    const listingSkillCardId = `${baseRealm.url}Skill/catalog-listing`;
     const fetchSkillCard = await this.store.get<Skill>(listingSkillCardId);
     let listingSkillCard = isCardInstance(fetchSkillCard)
       ? fetchSkillCard
