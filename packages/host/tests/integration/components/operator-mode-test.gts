@@ -634,10 +634,14 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-boxel-card-header-title]')
       .includesText('Link Not Found', 'card error title is displayed');
-    assert.dom('[data-test-error-title]').containsText('Link Not Found');
-    await click('[data-test-error-detail-toggle] button');
     assert
-      .dom('[data-test-error-detail]')
+      .dom('[data-test-error-message]')
+      .containsText(
+        `missing file ${testRealmURL}FriendWithCSS/does-not-exist.json`,
+      );
+    await click('[data-test-toggle-details]');
+    assert
+      .dom('[data-test-error-details]')
       .containsText(
         `missing file ${testRealmURL}FriendWithCSS/does-not-exist.json`,
       );
@@ -716,9 +720,9 @@ module('Integration | operator-mode', function (hooks) {
         // use percy snapshot to ensure the CSS has been applied--a red color
         await percySnapshot(assert);
 
-        await click('[data-test-error-detail-toggle] button');
+        await click('[data-test-toggle-details]');
         assert
-          .dom('[data-test-error-detail]')
+          .dom('[data-test-error-details]')
           .containsText(
             `missing file ${testRealmURL}FriendWithCSS/does-not-exist.json`,
           );

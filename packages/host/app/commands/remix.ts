@@ -48,6 +48,8 @@ export class RemixCommand extends HostBaseCommand<
 > {
   @service declare private realmServer: RealmServerService;
 
+  static actionVerb = 'Remix';
+
   #cardAPI?: typeof CardAPI;
 
   async loadCardAPI() {

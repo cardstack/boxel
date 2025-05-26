@@ -45,6 +45,7 @@ class ConstructApplicationCodeCommand extends Command<
   typeof ConstructApplicationCodeInput,
   typeof ConstructApplicationCodeInput
 > {
+  static actionVerb = 'Create';
   public result: ConstructApplicationCodeInput =
     new ConstructApplicationCodeInput();
   async getInputType() {
@@ -113,6 +114,7 @@ export default class GenerateCodeCommand extends Command<
   typeof GenerateCodeInput,
   typeof ConstructApplicationCodeInput
 > {
+  static actionVerb = 'Generate';
   async getInputType() {
     return GenerateCodeInput;
   }

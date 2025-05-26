@@ -157,7 +157,7 @@ ruleTester.run('template-missing-invokable', rule, {
       ],
     },
 
-    // Modifier Inovcations
+    // Modifier Inovocations
     {
       code: `
         function doSomething() {}
@@ -189,9 +189,10 @@ ruleTester.run('template-missing-invokable', rule, {
 
     // Multiple copies of a fixable invocation
     {
-      code: `
+      code: `import { not } from 'ember-truth-helpers';
+
         let other = <template>
-          {{#if (eq 3 3) }}
+          {{#if (not (eq 3 3)) }}
             three is three
           {{/if}}
         </template>
@@ -205,10 +206,10 @@ ruleTester.run('template-missing-invokable', rule, {
           {{/if}}
         </template>
       `,
-      output: `import { eq } from 'ember-truth-helpers';
+      output: `import { not, eq } from 'ember-truth-helpers';
 
         let other = <template>
-          {{#if (eq 3 3) }}
+          {{#if (not (eq 3 3)) }}
             three is three
           {{/if}}
         </template>

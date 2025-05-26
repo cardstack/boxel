@@ -2,6 +2,7 @@ import {
   type RenderingTestContext,
   waitUntil,
   waitFor,
+  click,
   typeIn,
 } from '@ember/test-helpers';
 
@@ -1136,9 +1137,11 @@ module('Integration | Store', function (hooks) {
     );
 
     await waitFor('[data-test-card-error]');
+    assert.dom('[data-test-error-message]').hasText('intentional error thrown');
+    await click('[data-test-toggle-details]');
     assert
-      .dom('[data-test-error-detail]')
-      .includesText('intentional error thrown');
+      .dom('[data-test-error-details]')
+      .includesText('Stack trace: No stack trace is available.');
 
     await testRealm.write(
       'Person/hassan.json',

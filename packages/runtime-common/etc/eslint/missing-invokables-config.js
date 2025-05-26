@@ -8,6 +8,7 @@ module.exports = {
     array: ['array', '@ember/helper'],
     bool: ['bool', '@cardstack/boxel-ui/helpers'],
     concat: ['concat', '@ember/helper'],
+    dayjsFormat: ['dayjsFormat', '@cardstack/boxel-ui/helpers'],
     divide: ['divide', '@cardstack/boxel-ui/helpers'],
     eq: ['eq', '@cardstack/boxel-ui/helpers'],
     fn: ['fn', '@ember/helper'],

@@ -14,6 +14,7 @@ export default class UpdateCodePathWithSelectionCommand extends HostBaseCommand<
   @service declare private recentFilesService: RecentFilesService;
   description =
     'Update the selected code path when the user navigates to code mode.';
+  static actionVerb = 'Open';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
