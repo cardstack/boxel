@@ -35,7 +35,17 @@ export default class PatchCodeCommand extends HostBaseCommand<
     let getSourceResult = await this.cardService.getSource(new URL(fileUrl));
     let fileExists = getSourceResult.status !== 404;
     let fileHasContent = fileExists && getSourceResult.content.trim() !== '';
-    let source = fileExists && fileHasContent ? getSourceResult.content : '';
+    let isCreatingANewFileOrWritingToABlankFile = false;
+    if (codeBlocks.length === 1) {
+      let searchReplaceBlock = codeBlocks[0];
+      let searchPortion = parseSearchReplace(searchReplaceBlock).searchContent;
+      if (searchPortion.trim() === '') {
+        isCreatingANewFileOrWritingToABlankFile = true;
+      }
+    }
+    let source = isCreatingANewFileOrWritingToABlankFile
+      ? ''
+      : getSourceResult.content;
 
     let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
       this.commandContext,
@@ -59,16 +69,11 @@ export default class PatchCodeCommand extends HostBaseCommand<
       fileContent: patchedCode,
     });
 
-    let isCreatingNewFile = false;
-    if (codeBlocks.length === 1) {
-      let searchReplaceBlock = codeBlocks[0];
-      let searchPortion = parseSearchReplace(searchReplaceBlock).searchContent;
-      if (searchPortion.trim() === '') {
-        isCreatingNewFile = true;
-      }
-    }
-
-    if (isCreatingNewFile && fileExists && fileHasContent) {
+    if (
+      isCreatingANewFileOrWritingToABlankFile &&
+      fileExists &&
+      fileHasContent
+    ) {
       let counter = 1;
       let baseFileName = fileUrl.replace(/\.([^.]+)$/, '');
       let extension = fileUrl.match(/\.([^.]+)$/)?.[0] || '';

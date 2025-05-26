@@ -342,5 +342,13 @@ I am a newly created hi.txt file but I will get a suffix because hi.txt already 
 
     // hi-1.txt got created because hi.txt already exists
     assert.dom('[data-test-file="hi-1.txt"]').exists();
+
+    await click('[data-test-file="hi-1.txt"]');
+
+    assert.equal(
+      (document.getElementsByClassName('view-lines')[0] as HTMLElement)
+        .innerText,
+      'I am a newly \ncreated hi.txt file \nbut I will get a \nsuffix because hi.\ntxt already exists!',
+    );
   });
 });
