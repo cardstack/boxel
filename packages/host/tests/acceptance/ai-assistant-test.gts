@@ -289,7 +289,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.strictEqual(roomState.model, 'anthropic/claude-3.7-sonnet');
   });
 
-  test('defaults to anthropic/claude-3.7-sonnet in code mode', async function (assert) {
+  test('defaults to anthropic/claude-sonnet-4 in code mode', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -305,7 +305,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    assert.dom('[data-test-llm-select-selected]').hasText('claude-3.7-sonnet');
+    assert.dom('[data-test-llm-select-selected]').hasText('claude-sonnet-4');
 
     createAndJoinRoom({
       sender: '@testuser:localhost',
@@ -315,7 +315,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-past-sessions-button]');
     await waitFor("[data-test-enter-room='mock_room_1']");
     await click('[data-test-enter-room="mock_room_1"]');
-    assert.dom('[data-test-llm-select-selected]').hasText('claude-3.7-sonnet');
+    assert.dom('[data-test-llm-select-selected]').hasText('claude-sonnet-4');
   });
 
   test('auto-attached file is not displayed in interact mode', async function (assert) {
