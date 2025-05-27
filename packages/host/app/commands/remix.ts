@@ -14,6 +14,8 @@ import {
 import * as CardAPI from 'https://cardstack.com/base/card-api';
 import * as BaseCommandModule from 'https://cardstack.com/base/command';
 
+import type { Skill } from 'https://cardstack.com/base/skill';
+
 import HostBaseCommand from '../lib/host-base-command';
 
 import CopyCardCommand from './copy-card';
@@ -23,6 +25,7 @@ import UpdateCodePathWithSelectionCommand from './update-code-path-with-selectio
 import UpdatePlaygroundSelectionCommand from './update-playground-selection';
 
 import type RealmServerService from '../services/realm-server';
+import type { Listing } from '@cardstack/catalog/listing/listing';
 
 interface CopyMeta {
   sourceCodeRef: ResolvedCodeRef;
@@ -73,7 +76,8 @@ export class RemixCommand extends HostBaseCommand<
 
     let cardAPI = await this.loadCardAPI();
 
-    const listing = listingInput as any;
+    // this is intentionally to type because base command cannot interpret Listing type from catalog
+    const listing = listingInput as Listing;
 
     // Make sure realm is valid
     if (!realmUrls.includes(realmUrl)) {
@@ -125,7 +129,7 @@ export class RemixCommand extends HostBaseCommand<
 
     if (listing.examples) {
       // Create serialized objects for each example with modified adoptsFrom
-      const results = listing.examples.map((instance: CardAPI.CardDef) => {
+      const results = listing.examples.map((instance) => {
         let adoptsFrom = instance[cardAPI.meta]?.adoptsFrom;
         if (!adoptsFrom) {
           return null;
@@ -157,7 +161,7 @@ export class RemixCommand extends HostBaseCommand<
         return null;
       });
       const copyCardsWithCodeRef = results.filter(
-        (result: any) => result !== null,
+        (result) => result !== null,
       ) as CopyCardsWithCodeRef[];
       for (const cardWithNewCodeRef of copyCardsWithCodeRef) {
         const { newCardId } = await new CopyCardCommand(
@@ -174,9 +178,9 @@ export class RemixCommand extends HostBaseCommand<
       }
     }
 
-    if (listing.displayName === 'SkillListing') {
+    if ('skills' in listing && Array.isArray(listing.skills)) {
       await Promise.all(
-        listing.skills.map((skill: any) =>
+        listing.skills.map((skill: Skill) =>
           new CopyCardCommand(this.commandContext).execute({
             sourceCard: skill,
             realm: realmUrl,
