@@ -8,7 +8,6 @@ import {
   linksTo,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import { Actions } from '@cardstack/runtime-common';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 import { Skill } from 'https://cardstack.com/base/skill';
@@ -40,24 +39,6 @@ import { Category } from './category';
 import { License } from './license';
 import { Tag } from './tag';
 import { setupAllRealmsInfo } from '../helper';
-
-export function setupAllRealmsInfo(args: any) {
-  let allRealmsInfo =
-    (args.context?.actions as Actions)?.allRealmsInfo?.() ?? {};
-  let writableRealms: { name: string; url: string; iconURL?: string }[] = [];
-  if (allRealmsInfo) {
-    Object.entries(allRealmsInfo).forEach(([realmUrl, realmInfo]) => {
-      if (realmInfo.canWrite) {
-        writableRealms.push({
-          name: realmInfo.info.name,
-          url: realmUrl,
-          iconURL: realmInfo.info.iconURL ?? '/default-realm-icon.png',
-        });
-      }
-    });
-  }
-  return writableRealms;
-}
 
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
