@@ -704,38 +704,39 @@ export default class PlaygroundPanel extends Component<Signature> {
                   data-test-error-container
                 >
                   {{! FIXME this is hideous, but fixes a test? }}
-                  <section class='picker-and-chooser'>
-                    <button
-                      class='instance-chooser-container'
-                      {{on 'click' this.handleClick}}
-                      {{on 'mouseup' this.handleClick}}
-                    >
-                      <InstanceSelectDropdown
-                        @prerenderedCardQuery={{hash
-                          query=this.query
-                          realms=this.recentRealms
-                        }}
-                        @expandedSearchQuery={{hash
-                          query=this.expandedQuery
-                          realms=this.realmServer.availableRealmURLs
-                        }}
-                        @fieldOptions={{this.fieldInstances}}
-                        @selection={{this.dropdownSelection}}
-                        @onSelect={{this.onSelect}}
-                        @chooseCard={{this.chooseInstance}}
-                        @createNew={{if this.canWriteRealm this.createNew}}
-                        @createNewIsRunning={{this.createNewIsRunning}}
-                        @moduleId={{this.moduleId}}
-                        @persistSelections={{this.persistToLocalStorage}}
-                        @recentCardIds={{this.recentCardIds}}
-                      />
-                    </button>
-                    <CardError
-                      @error={{this.cardError}}
-                      @cardCreationError={{this.cardError.meta.isCreationError}}
-                      @fileToFixWithAi={{this.fileToFixWithAi}}
-                    />
-                  </section>
+                  <CardError
+                    @error={{this.cardError}}
+                    @cardCreationError={{this.cardError.meta.isCreationError}}
+                    @fileToFixWithAi={{this.fileToFixWithAi}}
+                  >
+                    <:error>
+                      <button
+                        class='instance-chooser-container with-error'
+                        {{on 'click' this.handleClick}}
+                        {{on 'mouseup' this.handleClick}}
+                      >
+                        <InstanceSelectDropdown
+                          @prerenderedCardQuery={{hash
+                            query=this.query
+                            realms=this.recentRealms
+                          }}
+                          @expandedSearchQuery={{hash
+                            query=this.expandedQuery
+                            realms=this.realmServer.availableRealmURLs
+                          }}
+                          @fieldOptions={{this.fieldInstances}}
+                          @selection={{this.dropdownSelection}}
+                          @onSelect={{this.onSelect}}
+                          @chooseCard={{this.chooseInstance}}
+                          @createNew={{if this.canWriteRealm this.createNew}}
+                          @createNewIsRunning={{this.createNewIsRunning}}
+                          @moduleId={{this.moduleId}}
+                          @persistSelections={{this.persistToLocalStorage}}
+                          @recentCardIds={{this.recentCardIds}}
+                        />
+                      </button>
+                    </:error>
+                  </CardError>
                 </CardContainer>
               {{/if}}
             {{else if card}}
