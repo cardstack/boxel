@@ -16,10 +16,12 @@ import { trackedFunction } from 'ember-resources/util/function';
 import {
   Button,
   BoxelInput,
+  IconButton,
   BoxelInputBottomTreatments,
 } from '@cardstack/boxel-ui/components';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
+import { IconSearch } from '@cardstack/boxel-ui/icons';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
@@ -232,51 +234,62 @@ export default class SearchSheet extends Component<Signature> {
       data-test-search-sheet={{@mode}}
       {{onClickOutside @onBlur exceptSelector='.add-card-to-neighbor-stack'}}
     >
-      <BoxelInput
-        @type='search'
-        @variant={{if (eq @mode 'closed') 'default' 'large'}}
-        @bottomTreatment={{this.inputBottomTreatment}}
-        @value={{this.searchKey}}
-        @state={{this.inputValidationState}}
-        @placeholder={{this.placeholderText}}
-        @onFocus={{@onFocus}}
-        @onInput={{this.debouncedSetSearchKey}}
-        {{elementCallback @onInputInsertion}}
-        {{on 'keydown' this.onSearchInputKeyDown}}
-        class='search-sheet__search-input-group'
-        autocomplete='off'
-        data-test-search-field
-      />
-      <div class='search-sheet-content'>
-        {{#if this.searchKeyIsURL}}
-          <CardURLResults
-            @url={{this.searchKey}}
-            @handleCardSelect={{this.handleCardSelect}}
-            @isCompact={{this.isCompact}}
-            @searchKeyAsURL={{this.searchKeyAsURL}}
-          />
-        {{else if this.isSearchKeyEmpty}}
-          {{! nothing }}
-        {{else}}
-          <CardQueryResults
-            @searchKey={{this.searchKey}}
-            @handleCardSelect={{this.handleCardSelect}}
-            @isCompact={{this.isCompact}}
-          />
-        {{/if}}
-        <RecentCardsSection
-          @handleCardSelect={{this.handleCardSelect}}
-          @isCompact={{this.isCompact}}
+      {{#if (eq @mode 'closed')}}
+        <IconButton
+          class='open-search-field'
+          @icon={{IconSearch}}
+          @width='24'
+          @height='24'
+          {{on 'click' @onFocus}}
+          data-test-open-search-field
         />
-      </div>
-      <div class='footer'>
-        <div class='buttons'>
-          <Button
-            {{on 'click' this.onCancel}}
-            data-test-search-sheet-cancel-button
-          >Cancel</Button>
+      {{else}}
+        <BoxelInput
+          @type='search'
+          @variant='large'
+          @bottomTreatment={{this.inputBottomTreatment}}
+          @value={{this.searchKey}}
+          @state={{this.inputValidationState}}
+          @placeholder={{this.placeholderText}}
+          @onFocus={{@onFocus}}
+          @onInput={{this.debouncedSetSearchKey}}
+          {{elementCallback @onInputInsertion}}
+          {{on 'keydown' this.onSearchInputKeyDown}}
+          class='search-sheet__search-input-group'
+          autocomplete='off'
+          data-test-search-field
+        />
+        <div class='search-sheet-content'>
+          {{#if this.searchKeyIsURL}}
+            <CardURLResults
+              @url={{this.searchKey}}
+              @handleCardSelect={{this.handleCardSelect}}
+              @isCompact={{this.isCompact}}
+              @searchKeyAsURL={{this.searchKeyAsURL}}
+            />
+          {{else if this.isSearchKeyEmpty}}
+            {{! nothing }}
+          {{else}}
+            <CardQueryResults
+              @searchKey={{this.searchKey}}
+              @handleCardSelect={{this.handleCardSelect}}
+              @isCompact={{this.isCompact}}
+            />
+          {{/if}}
+          <RecentCardsSection
+            @handleCardSelect={{this.handleCardSelect}}
+            @isCompact={{this.isCompact}}
+          />
         </div>
-      </div>
+        <div class='footer'>
+          <div class='buttons'>
+            <Button
+              {{on 'click' this.onCancel}}
+              data-test-search-sheet-cancel-button
+            >Cancel</Button>
+          </div>
+        </div>
+      {{/if}}
     </div>
     <style scoped>
       :global(:root) {
@@ -393,6 +406,15 @@ export default class SearchSheet extends Component<Signature> {
       }
       .prompt .search-sheet-content {
         overflow-x: auto;
+      }
+      .open-search-field {
+        padding: 10px;
+        border-radius: 20px;
+        box-shadow: 0 5px 15px 0 rgba(0, 0, 0, 0.75);
+        border: solid 1px rgba(255, 255, 255, 0.35);
+        background-color: var(--boxel-700);
+
+        --icon-color: var(--boxel-teal);
       }
     </style>
   </template>
