@@ -1525,7 +1525,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await openFileInPlayground('boom-person.gts', testRealmURL, {
         declaration: 'BoomPerson',
       });
-      // FIXME currently the instance chooser won’t render when there’s an error…!
       assert.dom('[data-test-instance-chooser]').containsText('Please Select');
 
       assert
