@@ -14,15 +14,18 @@ import * as ListingUseCommandModule from './listing-use';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
 import * as PatchCardInstanceCommandModule from './patch-card-instance';
 import * as PatchCodeCommandModule from './patch-code';
+import * as ReadTextFileCommandModule from './read-text-file';
 import * as SaveCardCommandModule from './save-card';
 import * as SearchCardsCommandModule from './search-cards';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SetActiveLlmModule from './set-active-llm';
 import * as ShowCardCommandModule from './show-card';
 import * as SwitchSubmodeCommandModule from './switch-submode';
+import * as TransformCardsCommandModule from './transform-cards';
 import * as UpdateCodePathWithSelectionCommandModule from './update-code-path-with-selection';
 import * as UpdatePlaygroundSelectionCommandModule from './update-playground-selection';
 import * as UpdateSkillActivationCommandModule from './update-skill-activation';
+import * as VisitCardsCommandModule from './visit-cards';
 import * as WriteTextFileCommandModule from './write-text-file';
 
 export function shimHostCommands(virtualNetwork: VirtualNetwork) {
@@ -91,6 +94,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     OpenAiAssistantRoomCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/read-text-file',
+    ReadTextFileCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/send-ai-assistant-message',
     SendAiAssistantMessageModule,
   );
@@ -107,6 +114,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     SwitchSubmodeCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/transform-cards',
+    TransformCardsCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/update-code-path-with-selection',
     UpdateCodePathWithSelectionCommandModule,
   );
@@ -117,6 +128,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/update-skill-activation',
     UpdateSkillActivationCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/visit-cards',
+    VisitCardsCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/write-text-file',

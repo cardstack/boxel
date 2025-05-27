@@ -374,9 +374,13 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   async search(query: Query, realmURL: URL): Promise<CardDef[]> {
-    let json = await this.cardService.fetchJSON(
-      `${realmURL}_search?${stringify(query, { strictNullHandling: true })}`,
-    );
+    let json = await this.cardService.fetchJSON(`${realmURL}_search`, {
+      method: 'QUERY',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(query),
+    });
     if (!isCardCollectionDocument(json)) {
       throw new Error(
         `The realm search response was not a card collection document:

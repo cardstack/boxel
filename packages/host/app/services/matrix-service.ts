@@ -1574,11 +1574,11 @@ export default class MatrixService extends Service {
     });
   }
 
-  setLLMForCodeMode() {
-    this.setLLMModel(DEFAULT_CODING_LLM);
+  async setLLMForCodeMode() {
+    return this.setLLMModel(DEFAULT_CODING_LLM);
   }
 
-  private setLLMModel(model: string) {
+  private async setLLMModel(model: string) {
     if (!DEFAULT_LLM_LIST.includes(model)) {
       throw new Error(`Cannot find LLM model: ${model}`);
     }
@@ -1589,7 +1589,7 @@ export default class MatrixService extends Service {
     if (!roomResource) {
       return;
     }
-    roomResource.activateLLMTask.perform(model);
+    return roomResource.activateLLMTask.perform(model);
   }
 
   loadMoreAIRooms() {

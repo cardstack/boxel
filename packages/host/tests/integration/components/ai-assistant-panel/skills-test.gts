@@ -194,7 +194,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
                 if (searchResult.cardIds.length > 0) {
                   let showCardCommand = new ShowCardCommand(this.commandContext);
                   await showCardCommand.execute({
-                    cardIdToShow: searchResult.cardIds[0],
+                    cardId: searchResult.cardIds[0],
                   });
                 }
                 return undefined;

@@ -14,6 +14,7 @@ import NumberField from './number';
 import { Skill } from './skill';
 import {
   JsonField,
+  QueryField,
   SearchCardsByQueryInput,
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
@@ -49,13 +50,26 @@ export class PatchCardInput extends CardDef {
   @field patch = contains(JsonField);
 }
 
-export class ShowCardInput extends CardDef {
-  @field cardIdToShow = contains(StringField);
+export class CardIdInput extends CardDef {
+  @field cardId = contains(StringField);
+}
+
+export class JsonCard extends CardDef {
+  @field json = contains(JsonField);
 }
 
 export class SwitchSubmodeInput extends CardDef {
   @field submode = contains(StringField);
   @field codePath = contains(StringField);
+}
+
+export class ReadTextFileInput extends CardDef {
+  @field realm = contains(StringField);
+  @field path = contains(StringField);
+}
+
+export class FileContents extends CardDef {
+  @field content = contains(StringField);
 }
 
 export class WriteTextFileInput extends CardDef {
@@ -213,6 +227,13 @@ export class ListingInput extends CardDef {
   @field realm = contains(StringField);
   @field listing = linksTo(CardDef);
 }
+
+export class VisitCardsInput extends CardDef {
+  @field query = contains(QueryField);
+  @field commandRef = contains(CodeRefField);
+}
+
+export class VisitCardsOutput extends CardDef {}
 
 export {
   SearchCardsByQueryInput,

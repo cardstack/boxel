@@ -6,7 +6,7 @@ import Service, { service } from '@ember/service';
 
 import { tracked, cached } from '@glimmer/tracking';
 
-import { task, restartableTask } from 'ember-concurrency';
+import { task, restartableTask, all } from 'ember-concurrency';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
@@ -358,13 +358,15 @@ export default class OperatorModeStateService extends Service {
     return this.schedulePersist();
   }
 
-  updateSubmode(submode: Submode) {
+  async updateSubmode(submode: Submode) {
     this.state.submode = submode;
     this.schedulePersist();
 
     if (submode === Submodes.Code) {
-      this.matrixService.setLLMForCodeMode();
-      this.matrixService.activateCodingSkill();
+      return Promise.all([
+        this.matrixService.setLLMForCodeMode(),
+        this.matrixService.activateCodingSkill(),
+      ]);
     }
   }
 
