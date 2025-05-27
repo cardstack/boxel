@@ -586,6 +586,15 @@ export default class PlaygroundPanel extends Component<Signature> {
     this.findSelectedCard(prerenderedCards);
   };
 
+  private showResults = (cards: PrerenderedCard[] | undefined) => {
+    return (
+      cards?.length ||
+      this.persistedCardId ||
+      this.createNewIsRunning ||
+      this.isBaseCardModule // means we do not conduct the expanded search for baseCardModule
+    );
+  };
+
   private findSelectedCard = (prerenderedCards?: PrerenderedCard[]) => {
     if (!prerenderedCards?.length) {
       // it is possible that there's a persisted cardId in playground-selections local storage
@@ -645,22 +654,21 @@ export default class PlaygroundPanel extends Component<Signature> {
         @isLive={{true}}
       >
         <:response as |cards|>
-          {{consumeContext (fn this.triggerPlaygroundSelections cards)}}
-        </:response>
-      </PrerenderedCardSearch>
-    {{/if}}
-
-    {{#if this.expandedQuery}}
-      <PrerenderedCardSearch
-        @query={{this.expandedQuery}}
-        @format='fitted'
-        @realms={{this.realmServer.availableRealmURLs}}
-        @isLive={{true}}
-      >
-        <:response as |maybeCards|>
-          {{#let (this.createNewWhenNoCards maybeCards) as |cards|}}
+          {{#if (this.showResults cards)}}
             {{consumeContext (fn this.triggerPlaygroundSelections cards)}}
-          {{/let}}
+          {{else if this.expandedQuery}}
+            <PrerenderedCardSearch
+              @query={{this.expandedQuery}}
+              @format='fitted'
+              @realms={{this.realmServer.availableRealmURLs}}
+            >
+              <:response as |maybeCards|>
+                {{#let (this.createNewWhenNoCards maybeCards) as |cards|}}
+                  {{consumeContext (fn this.triggerPlaygroundSelections cards)}}
+                {{/let}}
+              </:response>
+            </PrerenderedCardSearch>
+          {{/if}}
         </:response>
       </PrerenderedCardSearch>
     {{/if}}
