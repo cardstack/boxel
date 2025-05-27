@@ -7,11 +7,8 @@ import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import AppsIcon from '@cardstack/boxel-icons/apps';
-import Brain from '@cardstack/boxel-icons/brain';
+import Check from '@cardstack/boxel-icons/check';
 import DotIcon from '@cardstack/boxel-icons/dot';
-import LayoutList from '@cardstack/boxel-icons/layout-list';
-import StackIcon from '@cardstack/boxel-icons/stack';
 
 import { task } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
@@ -20,7 +17,7 @@ import window from 'ember-window-mock';
 
 import { TrackedObject } from 'tracked-built-ins';
 
-import { Accordion, BoxelButton, Pill } from '@cardstack/boxel-ui/components';
+import { Accordion, BoxelButton } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
@@ -775,7 +772,11 @@ class SpecPreviewTitle extends Component<SpecPreviewTitleSignature> {
         </div>
       {{else}}
         {{#if this.specType}}
-          <SpecTag @specType={{this.specType}} />
+          <Check
+            class='spec-checkmark'
+            data-test-spec-tag={{this.specType}}
+            title='Spec type: {{this.specType}}'
+          />
         {{/if}}
       {{/if}}
     </span>
@@ -783,10 +784,6 @@ class SpecPreviewTitle extends Component<SpecPreviewTitleSignature> {
     <style scoped>
       .has-spec {
         display: flex;
-        font: 500 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-xl);
-        text-transform: uppercase;
-        margin-right: -1px;
       }
       .create-spec-button {
         --boxel-button-min-height: auto;
@@ -814,60 +811,15 @@ class SpecPreviewTitle extends Component<SpecPreviewTitleSignature> {
         width: 18px;
         height: 18px;
       }
-    </style>
-  </template>
-}
 
-interface SpecTagSignature {
-  Element: HTMLDivElement;
-  Args: {
-    specType: SpecType;
-  };
-}
+      .boxel-button:not(.active) .spec-checkmark {
+        color: var(--boxel-400);
+      }
 
-export class SpecTag extends Component<SpecTagSignature> {
-  get icon() {
-    return getIcon(this.args.specType);
-  }
-  <template>
-    {{#if this.icon}}
-      <Pill
-        data-test-spec-tag={{@specType}}
-        class='spec-tag-pill'
-        title={{@specType}}
-        ...attributes
-      >
-        <:iconLeft>
-          {{this.icon}}
-        </:iconLeft>
-      </Pill>
-
-    {{/if}}
-    <style scoped>
-      .spec-tag-pill {
-        --pill-font: 500 var(--boxel-font-xs);
-        --pill-font-color: currentColor;
-        --pill-background-color: transparent;
-        --pill-icon-size: var(--boxel-sp);
-        word-break: initial;
-        border: 0;
-        margin-right: calc(-1 * var(--boxel-sp-xxs));
+      .spec-checkmark {
+        stroke: currentColor;
+        width: var(--boxel-sp);
       }
     </style>
   </template>
-}
-
-function getIcon(specType: SpecType) {
-  switch (specType) {
-    case 'card':
-      return StackIcon;
-    case 'app':
-      return AppsIcon;
-    case 'field':
-      return LayoutList;
-    case 'skill':
-      return Brain;
-    default:
-      return;
-  }
 }
