@@ -3187,8 +3187,9 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 12 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
     assert
-      .dom(`[data-test-boxel-filter-list-button="All Cards"]`)
-      .hasClass('selected');
+      .dom(`[data-test-filter-list-item="All Cards"] > span`)
+      .hasClass('is-selected');
+    assert.dom(`[data-test-selected-filter="All Cards"]`).exists({ count: 1 });
   });
 
   test('edit card and finish editing should not animate', async function (assert) {

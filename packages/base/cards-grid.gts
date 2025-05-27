@@ -233,19 +233,18 @@ class Isolated extends Component<typeof CardsGrid> {
       }
       .sidebar {
         position: relative;
+        max-width: 15.625rem; /* 250px */
+        width: 100%;
       }
       :deep(.filter-list) {
-        position: sticky;
-        top: var(--cards-grid-padding-top);
-        padding-right: var(--boxel-sp-sm);
         height: 100%;
         overflow-y: hidden;
       }
       :deep(.filter-list:hover) {
         overflow-y: auto;
       }
-      :deep(.filter-list__button:first-child) {
-        margin-bottom: var(--boxel-sp-xl);
+      :deep(.filter-list-item:first-child) {
+        margin-bottom: var(--boxel-sp-lg);
       }
       .content {
         display: flex;
