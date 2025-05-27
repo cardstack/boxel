@@ -5,6 +5,11 @@ import type CommandService from '@cardstack/host/services/command-service';
 
 import { lookupService } from '../../helpers';
 import { setupRenderingTest } from '../../helpers/setup';
+import {
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+} from '@cardstack/runtime-common';
 
 module('Integration | commands | apply-search-replace-block', function (hooks) {
   setupRenderingTest(hooks);
@@ -32,12 +37,12 @@ export class Task extends CardDef {
   @field dueDate = contains(DatetimeField);
   @field priority = contains(NumberField);
 }`;
-    const codeBlock = `<<<<<<< SEARCH
+    const codeBlock = `${SEARCH_MARKER}
 import NumberField from 'https://cardstack.com/base/number';
-=======
+${SEPARATOR_MARKER}
 import NumberField from 'https://cardstack.com/base/number';
 import BooleanField from 'https://cardstack.com/base/boolean';
->>>>>>> REPLACE`;
+${REPLACE_MARKER}`;
 
     let result = await applyCommand.execute({
       fileContent,
@@ -93,11 +98,11 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
     </article>
   </template>
 }`;
-    const codeBlock = `<<<<<<< SEARCH
+    const codeBlock = `${SEARCH_MARKER}
       <h2 class='title'><@fields.title /></h2>
-=======
+${SEPARATOR_MARKER}
       <h2 class='title' data-test-title><@fields.title /></h2>
->>>>>>> REPLACE`;
+${REPLACE_MARKER}`;
 
     let result = await applyCommand.execute({
       fileContent,
@@ -143,12 +148,12 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
   @field inStock = contains(BooleanField);
   @field category = linksTo(ProductCategory);
 }`;
-    const codeBlock = `<<<<<<< SEARCH
+    const codeBlock = `${SEARCH_MARKER}
     @field category = linksTo(ProductCategory);
-=======
+${SEPARATOR_MARKER}
   @field category = linksTo(ProductCategory);
   @field images = linksToMany(ImageAsset);
->>>>>>> REPLACE`;
+${REPLACE_MARKER}`;
 
     let result = await applyCommand.execute({
       fileContent,
@@ -186,12 +191,12 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
     },
   });
 }`;
-    const codeBlock = `<<<<<<< SEARCH
+    const codeBlock = `${SEARCH_MARKER}
   @field author = linksTo(Author);
-=======
+${SEPARATOR_MARKER}
   @field author = linksTo(Author);
   @field editor = linksTo(Editor);
->>>>>>> REPLACE`;
+${REPLACE_MARKER}`;
 
     let result = await applyCommand.execute({
       fileContent,
@@ -219,10 +224,10 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
 }`;
     const codeBlock = `<<<<<<< WRONG_KEYWORD
   @field phone = contains(StringField);
-=======
+${SEPARATOR_MARKER}
   @field phone = contains(StringField);
   @field address = contains(AddressField);
->>>>>>> REPLACE`;
+${REPLACE_MARKER}`;
 
     try {
       await applyCommand.execute({
@@ -266,17 +271,17 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
     </div>
   </template>
 }`;
-    const codeBlock = `<<<<<<< SEARCH
+    const codeBlock = `${SEARCH_MARKER}
       <div class="current-conditions">
         <span>{{@model.temperature}}°{{@model.unit}}</span>
         <span>{{@model.conditions}}</span>
       </div>
-=======
+${SEPARATOR_MARKER}
       <div class="current-conditions" data-test-current-weather>
         <span>{{@model.temperature}}°{{@model.unit}}</span>
         <span>{{@model.conditions}}</span>
       </div>
->>>>>>> REPLACE`;
+${REPLACE_MARKER}`;
 
     let result = await applyCommand.execute({
       fileContent,
@@ -338,7 +343,7 @@ class CardTemplate extends Component<typeof ContactCard> {
 }`;
 
     // Note: The search pattern has different indentation (2 spaces) than the file (4 spaces)
-    const codeBlock = `<<<<<<< SEARCH
+    const codeBlock = `${SEARCH_MARKER}
   <div class="contact-details">
     <div class="contact-email">
       <label>Email:</label>
@@ -349,7 +354,7 @@ class CardTemplate extends Component<typeof ContactCard> {
       <span>{{@model.phone}}</span>
     </div>
   </div>
-=======
+${SEPARATOR_MARKER}
       <div class="contact-details">
         <div class="contact-email">
           <label>Email:</label>
@@ -364,7 +369,7 @@ class CardTemplate extends Component<typeof ContactCard> {
           <span>{{@model.address}}</span>
         </div>
       </div>
->>>>>>> REPLACE`;
+${REPLACE_MARKER}`;
 
     let result = await applyCommand.execute({
       fileContent,
@@ -423,19 +428,19 @@ class CardTemplate extends Component<typeof ContactCard> {
 }`;
 
     // Search pattern uses tabs instead of spaces
-    const codeBlock = `<<<<<<< SEARCH
+    const codeBlock = `${SEARCH_MARKER}
 	@field status = contains(StringField, {
 		computeVia: function() {
 			return 'Todo';
 		}
 	});
-=======
+${SEPARATOR_MARKER}
   @field status = contains(StringField, {
     computeVia: function() {
       return 'In Progress';
     }
   });
->>>>>>> REPLACE`;
+${REPLACE_MARKER}`;
 
     let result = await applyCommand.execute({
       fileContent,
@@ -477,12 +482,12 @@ class CardTemplate extends Component<typeof ContactCard> {
 }`;
 
     // Search pattern has spurious blank lines at beginning and end
-    const codeBlock = `<<<<<<< SEARCH
+    const codeBlock = `${SEARCH_MARKER}
 
   @field bio = contains(StringField);
   @field avatar = linksTo(ImageAsset);
 
-=======
+${SEPARATOR_MARKER}
   @field bio = contains(StringField);
   @field avatar = linksTo(ImageAsset);
   @field websiteUrl = contains(StringField, {
@@ -490,7 +495,7 @@ class CardTemplate extends Component<typeof ContactCard> {
       return '';
     }
   });
->>>>>>> REPLACE`;
+${REPLACE_MARKER}`;
 
     let result = await applyCommand.execute({
       fileContent,
@@ -537,11 +542,11 @@ class CardTemplate extends Component<typeof ContactCard> {
 }`;
 
     // Search pattern has spurious blank
-    const codeBlock = `<<<<<<< SEARCH
+    const codeBlock = `${SEARCH_MARKER}
   @field bio = contains(StringField);
 
   @field avatar = linksTo(ImageAsset);
-=======
+${SEPARATOR_MARKER}
   @field bio = contains(StringField);
   @field avatar = linksTo(ImageAsset);
   @field websiteUrl = contains(StringField, {
@@ -549,7 +554,7 @@ class CardTemplate extends Component<typeof ContactCard> {
       return '';
     }
   });
->>>>>>> REPLACE`;
+${REPLACE_MARKER}`;
 
     let result = await applyCommand.execute({
       fileContent,
@@ -593,16 +598,16 @@ class CardTemplate extends Component<typeof ContactCard> {
 
     // Search uses CRLF line endings (\r\n)
     // Note: We're simulating the mixed line endings here with the string representation
-    const codeBlock = `<<<<<<< SEARCH
+    const codeBlock = `${SEARCH_MARKER}
   @field name = contains(StringField);\r
   @field price = contains(MonetaryAmountField);\r
   @field description = contains(StringField);
-=======
+${SEPARATOR_MARKER}
   @field name = contains(StringField);
   @field price = contains(MonetaryAmountField);
   @field description = contains(StringField);
   @field inStock = contains(BooleanField);
->>>>>>> REPLACE`;
+${REPLACE_MARKER}`;
 
     let result = await applyCommand.execute({
       fileContent,
@@ -643,12 +648,12 @@ class CardTemplate extends Component<typeof ContactCard> {
 }`;
 
     // Search pattern has trailing spaces on some lines
-    const codeBlock = `<<<<<<< SEARCH
+    const codeBlock = `${SEARCH_MARKER}
       <div class="form-group">
         <label for="date">Date:</label>
         <Input @value={{@model.date}} id="date" type="date" />
       </div>
-=======
+${SEPARATOR_MARKER}
       <div class="form-group">
         <label for="date">Date:</label>
         <Input @value={{@model.date}} id="date" type="date" />
@@ -657,7 +662,7 @@ class CardTemplate extends Component<typeof ContactCard> {
         <label for="time">Time:</label>
         <Input @value={{@model.time}} id="time" type="time" />
       </div>
->>>>>>> REPLACE`;
+${REPLACE_MARKER}`;
 
     let result = await applyCommand.execute({
       fileContent,
@@ -697,12 +702,12 @@ class CardTemplate extends Component<typeof ContactCard> {
   @field title = contains(StringField);
   @field description = contains(StringField);
 }`;
-    const codeBlock = `<<<<<<< SEARCH
+    const codeBlock = `${SEARCH_MARKER}
   class Task extends CardDef {
     static displayName = 'Task';
     @field title = contains(StringField);
-=======
->>>>>>> REPLACE`;
+${SEPARATOR_MARKER}
+${REPLACE_MARKER}`;
 
     let result = await applyCommand.execute({
       fileContent,

@@ -349,10 +349,10 @@ const data = {
 \`\`\`
 
 \`\`\`typescript
-  <<<<<<< SEARCH
+  ${SEARCH_MARKER}
     let a = 1;
     let c = 3;
-  =======
+  ${SEPARATOR_MARKER}
     let a = 2;
 \`\`\`
 
@@ -584,7 +584,7 @@ And some regular text with <b>HTML tags</b> that should be displayed as actual H
 
 \`\`\`gts
 https://example.com/component.gts
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 import Component from '@glimmer/component';
 
 export default class MyComponent extends Component {
@@ -598,7 +598,7 @@ export default class MyComponent extends Component {
     </div>
   </template>
 }
-=======
+${SEPARATOR_MARKER}
 import Component from '@glimmer/component';
 
 export default class MyComponent extends Component {
@@ -613,7 +613,7 @@ export default class MyComponent extends Component {
     </div>
   </template>
 }
->>>>>>> REPLACE
+${REPLACE_MARKER}
 \`\`\`
 
 Above code blocks are now complete`;
@@ -652,10 +652,10 @@ Above code blocks are now complete`;
 
 \`\`\`txt
 https://example.com/blank.txt
-<<<<<<< SEARCH
-=======
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
 hello
->>>>>>> REPLACE
+${REPLACE_MARKER}
 \`\`\`
 
 Above code blocks are now complete`;

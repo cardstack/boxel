@@ -50,5 +50,5 @@ export interface Permissions {
 }
 
 export const SEARCH_MARKER: string = '╔═══ SEARCH ════╗';
-export const SEPARATOR_MARKER: string = '╠═══════════════╣';
+export const SEPARATOR_MARKER: string = '╠══════════════╣';
 export const REPLACE_MARKER: string = '╚═══ REPLACE ═══╝';

@@ -15,6 +15,11 @@ import {
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+import {
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+} from '@cardstack/runtime-common';
 
 module('Integration | commands | patch-code', function (hooks) {
   setupRenderingTest(hooks);
@@ -67,16 +72,16 @@ export class Task extends CardDef {
     let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
 
     // note that `eq` import will be missing after this is applied
-    const codeBlock = `<<<<<<< SEARCH
+    const codeBlock = `${SEARCH_MARKER}
   @field priority = contains(NumberField);
-=======
+${SEPARATOR_MARKER}
   @field priority = contains(NumberField);
   <template>
     {{#if (eq priority 1)}}
       <p>High Priority</p>
     {{/if}}
   </template>
->>>>>>> REPLACE`;
+${REPLACE_MARKER}`;
 
     let result = await patchCodeCommand.execute({
       fileUrl,

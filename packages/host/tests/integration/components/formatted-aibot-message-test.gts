@@ -22,6 +22,11 @@ import MonacoService from '@cardstack/host/services/monaco-service';
 
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+import {
+  SEPARATOR_MARKER,
+  SEARCH_MARKER,
+  REPLACE_MARKER,
+} from '@cardstack/runtime-common';
 
 module('Integration | Component | FormattedAiBotMessage', function (hooks) {
   setupRenderingTest(hooks);
@@ -129,7 +134,7 @@ puts "💎"
       htmlParts: parseHtmlContent(
         `
 <pre data-code-language="typescript">
-<<<<<<< SEARCH
+${SEARCH_MARKER}
           let a = 1;
           let b = 2;
           let c = 3;
@@ -155,10 +160,10 @@ puts "💎"
       htmlParts: parseHtmlContent(
         `
 <pre data-code-language="typescript">
-<<<<<<< SEARCH
+${SEARCH_MARKER}
           let a = 1;
           let c = 3;
-=======
+${SEPARATOR_MARKER}
           let a = 2;
 </pre>`,
         roomId,
@@ -184,12 +189,12 @@ puts "💎"
         `
 <pre data-code-language="typescript">
 https://example.com/file.ts
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 let a = 1;
 let b = 2;
-=======
+${SEPARATOR_MARKER}
 let a = 3;
->>>>>>> REPLACE
+${REPLACE_MARKER}
 </pre>`,
         roomId,
         eventId,
@@ -219,17 +224,17 @@ let a = 3;
         `
 <pre data-code-language="typescript">
 https://example.com/file.ts
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 let a = 1;
 let b = 2;
-=======
+${SEPARATOR_MARKER}
 let a = 3;
->>>>>>> REPLACE
+${REPLACE_MARKER}
 </pre>
 <p>the above block is now complete, now I am sending you another one:</p>
 <pre data-code-language="typescript">
 https://example.com/file.ts
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 let a = 1;
 let c = 3;
 </pre>
@@ -254,20 +259,20 @@ let c = 3;
         `<p>We need to fix this:</p>
 <pre data-code-language="typescript">
 https://example.com/file.ts
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 let a = 1;
-=======
+${SEPARATOR_MARKER}
 let a = 2;
->>>>>>> REPLACE
+${REPLACE_MARKER}
 </pre>
 <p>We need to fix this too:</p>
 <pre data-code-language="typescript">
 https://example.com/file.ts
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 let c = 1;
-=======
+${SEPARATOR_MARKER}
 let c = 2;
->>>>>>> REPLACE
+${REPLACE_MARKER}
 </pre>
 `,
         roomId,
@@ -285,20 +290,20 @@ let c = 2;
         `<p>We need to fix this:</p>
 <pre data-code-language="typescript">
 https://example.com/file.ts
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 let a = 1;
-=======
+${SEPARATOR_MARKER}
 let a = 2;
->>>>>>> REPLACE
+${REPLACE_MARKER}
 </pre>
 <p>We need to fix this too:</p>
 <pre data-code-language="typescript">
 https://example.com/file.ts
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 let c = 1;
-=======
+${SEPARATOR_MARKER}
 let c = 2;
->>>>>>> REPLACE
+${REPLACE_MARKER}
 </pre>
 `,
         roomId,
@@ -397,9 +402,9 @@ let c = 2;
     component.htmlParts = parseHtmlContent(
       `<pre data-code-language="typescript">
 https://example.com/file.ts
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 let a = 1;
-=======
+${SEPARATOR_MARKER}
 let a = 2;`,
       roomId,
       eventId,
@@ -417,11 +422,11 @@ let a = 2;`,
     component.htmlParts = parseHtmlContent(
       `<pre data-code-language="typescript">
 https://example.com/file.ts
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 let a = 1;
-=======
+${SEPARATOR_MARKER}
 let a = 2;
->>>>>>> REPLACE
+${REPLACE_MARKER}
 </pre>
 `,
       roomId,
@@ -461,12 +466,12 @@ let a = 2;
       htmlParts: parseHtmlContent(
         `<pre data-code-language="typescript">
 malformed file url
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 let a = 1;
 let b = 2;
-=======
+${SEPARATOR_MARKER}
 let a = 3;
->>>>>>> REPLACE
+${REPLACE_MARKER}
 </pre>`,
         roomId,
         eventId,
