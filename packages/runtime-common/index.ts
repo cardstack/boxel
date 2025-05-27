@@ -73,6 +73,7 @@ import { RealmPaths, type LocalPath } from './paths';
 import { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './cached-fetch';
+export * from './catalog';
 export * from './commands';
 export * from './constants';
 export * from './matrix-constants';
