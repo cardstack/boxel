@@ -129,7 +129,7 @@ export class RoomResource extends Resource<Args> {
       if (!memberIds || !memberIds.includes(this.matrixService.aiBotUserId)) {
         return;
       }
-      await this.loadSkillCards(this.matrixRoom.skillsConfig.enabledSkillCards);
+      await this.loadSkills(this.matrixRoom.skillsConfig.enabledSkillCards);
 
       let index = this._messageCache.size;
       // This is brought up to this level so if the
@@ -368,7 +368,7 @@ export class RoomResource extends Resource<Args> {
     return event.content.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE;
   }
 
-  private async createSkillCard(doc: LooseSingleCardDocument) {
+  private async loadSkill(doc: LooseSingleCardDocument) {
     let cardId = doc.data.id;
     if (!cardId) {
       throw new Error(
@@ -383,12 +383,12 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
-  private async loadSkillCards(skillCardFileDefs: SerializedFile[]) {
+  private async loadSkills(skillCardFileDefs: SerializedFile[]) {
     let skillIds: string[] = [];
     for (let skillCardFileDef of skillCardFileDefs) {
       let cardDoc =
         await this.matrixService.downloadCardFileDef(skillCardFileDef);
-      let skill = await this.createSkillCard(cardDoc);
+      let skill = await this.loadSkill(cardDoc);
       if (skill?.id) {
         skillIds.push(skill.id);
       }
