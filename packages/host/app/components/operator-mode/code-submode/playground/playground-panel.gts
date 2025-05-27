@@ -623,6 +623,21 @@ export default class PlaygroundPanel extends Component<Signature> {
     return card;
   };
 
+  // sort prerendered-search card results by most recently viewed
+  private getSortedCards = (cards: PrerenderedCardLike[]) => {
+    if (!this.recentCardIds?.length) {
+      return;
+    }
+    let sortedCards: PrerenderedCardLike[] = [];
+    for (let id of this.recentCardIds) {
+      let card = cards.find((c) => trimJsonExtension(c.url) === id);
+      if (card) {
+        sortedCards.push(card);
+      }
+    }
+    return sortedCards;
+  };
+
   private get persistedCardId() {
     return this.playgroundPanelService.peekSelection(this.moduleId)?.cardId;
   }
@@ -654,7 +669,11 @@ export default class PlaygroundPanel extends Component<Signature> {
       >
         <:response as |cards|>
           {{#if (this.showResults cards)}}
-            {{consumeContext (fn this.triggerPlaygroundSelections cards)}}
+            {{#let (this.getSortedCards cards) as |sortedCards|}}
+              {{consumeContext
+                (fn this.triggerPlaygroundSelections sortedCards)
+              }}
+            {{/let}}
           {{else if this.expandedQuery}}
             <PrerenderedCardSearch
               @query={{this.expandedQuery}}
