@@ -579,7 +579,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     });
 
     test<TestContextWithSave>('can create a new card definition in different realm than inherited definition', async function (assert) {
-      assert.expect(11);
+      assert.expect(12);
       let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
