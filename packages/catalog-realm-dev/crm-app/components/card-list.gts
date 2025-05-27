@@ -2,14 +2,12 @@ import GlimmerComponent from '@glimmer/component';
 
 import { type CardContext } from 'https://cardstack.com/base/card-api';
 
-import { type Query } from '@cardstack/runtime-common';
+import {
+  type Query,
+  type PrerenderedCardLike,
+} from '@cardstack/runtime-common';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
-
-interface PrerenderedCard {
-  url: string;
-  component: any;
-}
 
 interface CardListSignature {
   Args: {
@@ -18,7 +16,7 @@ interface CardListSignature {
     context?: CardContext;
   };
   Blocks: {
-    meta: [card: PrerenderedCard];
+    meta: [card: PrerenderedCardLike];
   };
   Element: HTMLElement;
 }

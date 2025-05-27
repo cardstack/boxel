@@ -10,7 +10,10 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { and } from '@cardstack/boxel-ui/helpers';
 
-import { type Query, type PrerenderedCard } from '@cardstack/runtime-common';
+import {
+  type PrerenderedCardLike,
+  type Query,
+} from '@cardstack/runtime-common';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
 
@@ -29,7 +32,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
   cardResource = this.args.context?.getCard(this, () => this.hydratedCardId);
 
   @action
-  async hydrateCard(card: PrerenderedCard | undefined) {
+  async hydrateCard(card: PrerenderedCardLike | undefined) {
     if (!card) {
       this.hydratedCardId = undefined;
       return;
@@ -39,7 +42,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
   }
 
   @action
-  viewCard(card: PrerenderedCard) {
+  viewCard(card: PrerenderedCardLike) {
     if (!this.args.context?.actions?.viewCard) {
       throw new Error('viewCard action is not available');
     }

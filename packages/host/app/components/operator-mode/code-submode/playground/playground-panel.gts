@@ -37,6 +37,7 @@ import {
   type LooseSingleCardDocument,
   type Query,
   type CardErrorJSONAPI,
+  type PrerenderedCardLike,
 } from '@cardstack/runtime-common';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
@@ -70,8 +71,6 @@ import FieldPickerModal from './field-chooser-modal';
 import InstanceSelectDropdown from './instance-chooser-dropdown';
 import PlaygroundPreview from './playground-preview';
 import SpecSearch from './spec-search';
-
-import type { PrerenderedCard } from '../../../prerendered-card-search';
 
 export type SelectedInstance = {
   card: CardDef;
@@ -372,7 +371,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     };
   }
 
-  @action private onSelect(item: PrerenderedCard | FieldOption) {
+  @action private onSelect(item: PrerenderedCardLike | FieldOption) {
     if (this.args.isFieldDef) {
       this.persistSelections(
         this.card!.id,
@@ -380,7 +379,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         (item as FieldOption).index,
       );
     } else {
-      this.persistSelections((item as PrerenderedCard).url);
+      this.persistSelections((item as PrerenderedCardLike).url);
     }
   }
 
@@ -581,12 +580,12 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   // FIXME this is duplicated/adapted from InstanceChooserDropdown
   private triggerPlaygroundSelections = (
-    prerenderedCards?: PrerenderedCard[],
+    prerenderedCards?: PrerenderedCardLike[],
   ) => {
     this.findSelectedCard(prerenderedCards);
   };
 
-  private showResults = (cards: PrerenderedCard[] | undefined) => {
+  private showResults = (cards: PrerenderedCardLike[] | undefined) => {
     return (
       cards?.length ||
       this.persistedCardId ||
@@ -595,7 +594,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     );
   };
 
-  private findSelectedCard = (prerenderedCards?: PrerenderedCard[]) => {
+  private findSelectedCard = (prerenderedCards?: PrerenderedCardLike[]) => {
     if (!prerenderedCards?.length) {
       // it is possible that there's a persisted cardId in playground-selections local storage
       // but that the card is no longer in recent-files local storage
@@ -632,7 +631,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     return this.moduleId === `${baseCardRef.module}/${baseCardRef.name}`;
   }
 
-  private createNewWhenNoCards = (results?: PrerenderedCard[]) => {
+  private createNewWhenNoCards = (results?: PrerenderedCardLike[]) => {
     if (!results?.length) {
       // if expanded search returns no instances, create new instance
       this.createNew();

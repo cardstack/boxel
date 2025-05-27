@@ -15,7 +15,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import { and, bool, cn } from '@cardstack/boxel-ui/helpers';
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, type PrerenderedCardLike } from '@cardstack/runtime-common';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -49,11 +49,6 @@ export interface DefaultTabSignature extends TabComponentSignature {
   context?: CardContext;
 }
 
-interface PrerenderedCard {
-  url: string;
-  component: typeof GlimmerComponent;
-}
-
 export class Tab extends FieldDef {
   @field displayName = contains(StringField);
   @field tabId = contains(StringField);
@@ -62,7 +57,7 @@ export class Tab extends FieldDef {
 }
 
 class TableView extends GlimmerComponent<{
-  Args: { cards: PrerenderedCard[]; context?: CardContext };
+  Args: { cards: PrerenderedCardLike[]; context?: CardContext };
 }> {
   <template>
     {{#if this.isLoaded}}
@@ -481,7 +476,7 @@ export class AppCard extends CardDef {
 
 export class CardsGrid extends GlimmerComponent<{
   Args: {
-    cards: PrerenderedCard[];
+    cards: PrerenderedCardLike[];
     context?: CardContext;
     isListFormat?: boolean;
   };

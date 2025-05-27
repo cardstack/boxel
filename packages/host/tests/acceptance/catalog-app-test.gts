@@ -2,7 +2,7 @@ import { click, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { module, skip, test } from 'qunit';
 
-import { RemixCommand } from '@cardstack/host/commands/remix';
+import ListingRemixCommand from '@cardstack/host/commands/listing-remix';
 import { SearchCardsByQueryCommand } from '@cardstack/host/commands/search-cards';
 import type CommandService from '@cardstack/host/services/command-service';
 import type StoreService from '@cardstack/host/services/store';
@@ -410,7 +410,7 @@ module('Acceptance | catalog app tests', function (hooks) {
     });
   });
 
-  test('remix command installs the card and redirects to code mode with persisted playground selection for first example successfully', async function (assert) {
+  test('catalog listing remix command installs the card and redirects to code mode with persisted playground selection for first example successfully', async function (assert) {
     await visitOperatorMode({
       stacks: [[]],
     });
@@ -418,7 +418,7 @@ module('Acceptance | catalog app tests', function (hooks) {
     let commandService = lookupService<CommandService>('command-service');
     let store = lookupService<StoreService>('store');
 
-    let remixCommand = new RemixCommand(commandService.commandContext);
+    let remixCommand = new ListingRemixCommand(commandService.commandContext);
     const listingUrl = testRealmURL + 'Listing/author.json';
     const listing = (await store.get(listingUrl)) as CardDef;
 
