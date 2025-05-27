@@ -8,7 +8,6 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import Check from '@cardstack/boxel-icons/check';
-import DotIcon from '@cardstack/boxel-icons/dot';
 
 import { task } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
@@ -734,6 +733,7 @@ interface SpecPreviewTitleSignature {
   };
 }
 
+// FIXME what should this be called?
 class SpecPreviewTitle extends Component<SpecPreviewTitleSignature> {
   private get moreThanOneInstance() {
     return this.args.numberOfInstances && this.args.numberOfInstances > 1;
@@ -744,7 +744,7 @@ class SpecPreviewTitle extends Component<SpecPreviewTitleSignature> {
   }
 
   <template>
-    <span class='has-spec' data-test-has-spec>
+    <span class='spec-indicator'>
       {{#if @showCreateSpec}}
         <BoxelButton
           class='create-spec-button'
@@ -760,16 +760,11 @@ class SpecPreviewTitle extends Component<SpecPreviewTitleSignature> {
           {{/unless}}
         </BoxelButton>
       {{else if this.moreThanOneInstance}}
-        <div
+        <Check
+          class='spec-checkmark'
           data-test-number-of-instance={{@numberOfInstances}}
-          class='number-of-instance'
-        >
-          <DotIcon class='dot-icon' />
-          <div class='number-of-instance-text'>
-            {{@numberOfInstances}}
-            instances
-          </div>
-        </div>
+          title='{{@numberOfInstances}} instances'
+        />
       {{else}}
         {{#if this.specType}}
           <Check
@@ -782,7 +777,7 @@ class SpecPreviewTitle extends Component<SpecPreviewTitleSignature> {
     </span>
 
     <style scoped>
-      .has-spec {
+      .spec-indicator {
         display: flex;
       }
       .create-spec-button {
