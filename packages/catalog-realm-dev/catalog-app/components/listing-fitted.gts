@@ -458,6 +458,12 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           display: flex;
           overflow: hidden;
         }
+        .fitted-template :deep(.ember-basic-dropdown-content-placeholder) {
+          display: none;
+        }
+        .fitted-template :deep(.ember-basic-dropdown-content-wormhole-origin) {
+          position: absolute;
+        }
         .display-section {
           flex-shrink: 0;
           display: flex;
