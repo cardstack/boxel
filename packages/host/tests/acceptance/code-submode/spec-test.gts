@@ -769,7 +769,7 @@ module('Acceptance | Spec preview', function (hooks) {
       .dom('[data-test-title] [data-test-boxel-input]')
       .hasValue('NewSkill');
     assert.dom('[data-test-exported-type]').hasText('skill');
-    assert.dom('[data-test-spec-tag]').hasText('skill');
+    assert.dom('[data-test-spec-tag]').hasAttribute('title', 'skill');
     assert.dom('[data-test-exported-name]').hasText('NewSkill');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}new-skill`);
   });
@@ -787,7 +787,7 @@ module('Acceptance | Spec preview', function (hooks) {
       .dom('[data-test-title] [data-test-boxel-input]')
       .hasValue('ExtendedNewSkill');
     assert.dom('[data-test-exported-type]').hasText('skill');
-    assert.dom('[data-test-spec-tag]').hasText('skill');
+    assert.dom('[data-test-spec-tag]').hasAttribute('title', 'skill');
     assert.dom('[data-test-exported-name]').hasText('ExtendedNewSkill');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}new-skill`);
   });
@@ -827,7 +827,7 @@ module('Acceptance | Spec preview', function (hooks) {
     await click('[data-test-module-inspector-view="spec"]');
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('');
     assert.dom('[data-test-exported-name]').containsText('default');
-    assert.dom('[data-test-spec-tag]').hasText('card');
+    assert.dom('[data-test-spec-tag]').hasAttribute('title', 'card');
   });
 
   test<TestContextWithSave>('spec auto saved (with stability)', async function (assert) {
@@ -1132,7 +1132,7 @@ module('Acceptance | Spec preview', function (hooks) {
       .hasValue('PetField');
     assert.dom('[data-test-exported-type]').hasText('field');
     assert.dom('[data-test-exported-name]').hasText('PetField');
-    assert.dom('[data-test-spec-tag]').hasText('field');
+    assert.dom('[data-test-spec-tag]').hasAttribute('title', 'field');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}pet`);
 
     await click('[data-test-boxel-selector-item-text="Pet"]');

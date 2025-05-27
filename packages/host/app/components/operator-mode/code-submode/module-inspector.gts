@@ -783,7 +783,6 @@ class SpecPreviewTitle extends Component<SpecPreviewTitleSignature> {
     <style scoped>
       .has-spec {
         display: flex;
-        color: var(--boxel-450);
         font: 500 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-xl);
         text-transform: uppercase;
@@ -835,22 +834,24 @@ export class SpecTag extends Component<SpecTagSignature> {
       <Pill
         data-test-spec-tag={{@specType}}
         class='spec-tag-pill'
+        title={{@specType}}
         ...attributes
       >
         <:iconLeft>
           {{this.icon}}
         </:iconLeft>
-        <:default>
-          {{@specType}}
-        </:default>
       </Pill>
 
     {{/if}}
     <style scoped>
       .spec-tag-pill {
         --pill-font: 500 var(--boxel-font-xs);
-        --pill-background-color: var(--boxel-200);
+        --pill-font-color: currentColor;
+        --pill-background-color: transparent;
+        --pill-icon-size: var(--boxel-sp);
         word-break: initial;
+        border: 0;
+        margin-right: calc(-1 * var(--boxel-sp-xxs));
       }
     </style>
   </template>
