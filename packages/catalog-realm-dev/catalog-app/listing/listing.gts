@@ -39,6 +39,7 @@ import { Publisher } from './publisher';
 import { Category } from './category';
 import { License } from './license';
 import { Tag } from './tag';
+import { setupAllRealmsInfo } from '../helper';
 
 export function setupAllRealmsInfo(args: any) {
   let allRealmsInfo =

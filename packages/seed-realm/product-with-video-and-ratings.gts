@@ -133,10 +133,10 @@ export class ProductWithVideoAndRatings extends Product {
   @field videoUrl = contains(StringField);
   @field ratingsSummary = contains(RatingsSummaryField, {
     computeVia(this: ProductWithVideoAndRatings) {
-      return {
+      return new RatingsSummaryField({
         average: Math.floor(Math.random() * 6), // random number between 0 and 5 inclusive
         count: Math.floor(Math.random() * 29701) + 300, // random number between 300 and 30000
-      };
+      });
     },
   });
   static isolated = Isolated;

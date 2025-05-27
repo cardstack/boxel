@@ -12,7 +12,8 @@ import { on } from '@ember/modifier';
 import { add, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 
-import { type Listing, setupAllRealmsInfo } from '../listing/listing';
+import { type Listing } from '../listing/listing';
+import { setupAllRealmsInfo } from '../helper';
 
 import {
   BoxelDropdown,
