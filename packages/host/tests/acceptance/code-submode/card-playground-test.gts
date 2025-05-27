@@ -483,11 +483,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         );
       assertCardExists(assert, `${testRealmURL}Category/home-gym`);
 
-      window.ccc = click;
-      await this.pauseTest();
-
       await click('[data-test-instance-chooser]');
-      await this.pauseTest();
       assert.dom('[data-option-index]').exists({ count: 4 });
       assert.dom('[data-option-index="0"]').containsText('Home Gym');
       assert.dom('[data-option-index="1"]').containsText('Landscaping');
@@ -837,7 +833,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await openFileInPlayground('code-ref-driver.gts', testRealmURL, {
         declaration: 'CodeRefDriver',
       });
-      await this.pauseTest();
       await createNewInstance();
 
       assert
@@ -1303,7 +1298,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await openFileInPlayground('author-card.gts', additionalRealmURL, {
         declaration: 'Author',
       });
-      await this.pauseTest();
       assert
         .dom(
           '[data-test-playground-panel] [data-test-card][data-test-card-format="edit"]',
