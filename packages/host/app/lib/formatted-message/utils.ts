@@ -6,6 +6,7 @@ import {
   isCompleteSearchReplaceBlock,
   parseSearchReplace,
 } from '../search-replace-block-parsing';
+import { SEARCH_MARKER } from '@cardstack/runtime-common';
 
 export function extractCodeData(
   preElementString: string,
@@ -71,7 +72,7 @@ export function extractCodeData(
 
   let fileUrl: string | undefined = undefined;
   let isBeginningOfSearchReplaceBlock =
-    lines.length > 1 && lines[1].startsWith('<<<<<<<');
+    lines.length > 1 && lines[1].startsWith(SEARCH_MARKER.slice(0, 3));
 
   if (isBeginningOfSearchReplaceBlock) {
     fileUrl = lines[0];

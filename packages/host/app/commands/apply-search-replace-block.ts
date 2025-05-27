@@ -1,6 +1,11 @@
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
+import {
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+} from '@cardstack/runtime-common';
 
 export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
   typeof BaseCommandModule.ApplySearchReplaceBlockInput,
@@ -57,24 +62,20 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
     searchPattern: string | null;
     replacePattern: string | null;
   } {
-    const searchMarker = '<<<<<<< SEARCH';
-    const dividerMarker = '=======';
-    const replaceMarker = '>>>>>>> REPLACE';
-
     // Make sure the code block has all the required markers
     if (
-      !codeBlock.includes(searchMarker) ||
-      !codeBlock.includes(dividerMarker) ||
-      !codeBlock.includes(replaceMarker)
+      !codeBlock.includes(SEARCH_MARKER) ||
+      !codeBlock.includes(SEPARATOR_MARKER) ||
+      !codeBlock.includes(REPLACE_MARKER)
     ) {
       return { searchPattern: null, replacePattern: null };
     }
 
     // Extract the search and replace patterns
-    const searchStart = codeBlock.indexOf(searchMarker) + searchMarker.length;
-    const dividerPos = codeBlock.indexOf(dividerMarker);
-    const replaceStart = dividerPos + dividerMarker.length;
-    const replaceEnd = codeBlock.indexOf(replaceMarker);
+    const searchStart = codeBlock.indexOf(SEARCH_MARKER) + SEARCH_MARKER.length;
+    const dividerPos = codeBlock.indexOf(SEPARATOR_MARKER);
+    const replaceStart = dividerPos + SEPARATOR_MARKER.length;
+    const replaceEnd = codeBlock.indexOf(REPLACE_MARKER);
 
     if (searchStart >= dividerPos || replaceStart >= replaceEnd) {
       return { searchPattern: null, replacePattern: null };

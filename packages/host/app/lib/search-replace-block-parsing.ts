@@ -94,8 +94,8 @@ export function isCompleteSearchReplaceBlock(code?: string | null): boolean {
     return false;
   }
   return (
-    code.includes('<<<<<<< SEARCH') &&
-    code.includes('=======') &&
-    code.includes('>>>>>>> REPLACE')
+    code.includes(SEARCH_MARKER) &&
+    code.includes(SEPARATOR_MARKER) &&
+    code.includes(REPLACE_MARKER)
   );
 }
