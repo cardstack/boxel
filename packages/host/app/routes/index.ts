@@ -75,10 +75,22 @@ export default class Index extends Route<void> {
       if (hostsOwnAssets) {
         let realmUrl = Object.keys(this.realm.allRealmsInfo).find(
           (realmUrl) => {
-            let realmPaths = realmUrl.split('/');
-            return (
-              cardPath!.split('/')[0] === realmPaths[realmPaths.length - 2]
-            );
+            let realmPathParts = new URL(realmUrl).pathname
+              .split('/')
+              .filter((part) => part !== '');
+            let cardPathParts = cardPath!
+              .split('/')
+              .filter((part) => part !== '');
+            let isMatch = false;
+            for (let i = 0; i < realmPathParts.length; i++) {
+              if (realmPathParts[i] === cardPathParts[i]) {
+                isMatch = true;
+              } else {
+                isMatch = false;
+                break;
+              }
+            }
+            return isMatch;
           },
         );
         cardUrl = new URL(
