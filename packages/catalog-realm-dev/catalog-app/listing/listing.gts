@@ -14,7 +14,6 @@ import {
   isResolvedCodeRef,
   type CopyCardsWithCodeRef,
   type ResolvedCodeRef,
-  Actions,
 } from '@cardstack/runtime-common';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
@@ -46,6 +45,7 @@ import { Publisher } from './publisher';
 import { Category } from './category';
 import { License } from './license';
 import { Tag } from './tag';
+import { setupAllRealmsInfo } from '../helper';
 
 interface CopyMeta {
   sourceCodeRef: ResolvedCodeRef;
@@ -169,24 +169,6 @@ export async function installListing(args: any, realm: string) {
     shouldPersistPlaygroundSelection,
     firstExampleCardId,
   };
-}
-
-export function setupAllRealmsInfo(args: any) {
-  let allRealmsInfo =
-    (args.context?.actions as Actions)?.allRealmsInfo?.() ?? {};
-  let writableRealms: { name: string; url: string; iconURL?: string }[] = [];
-  if (allRealmsInfo) {
-    Object.entries(allRealmsInfo).forEach(([realmUrl, realmInfo]) => {
-      if (realmInfo.canWrite) {
-        writableRealms.push({
-          name: realmInfo.info.name,
-          url: realmUrl,
-          iconURL: realmInfo.info.iconURL ?? '/default-realm-icon.png',
-        });
-      }
-    });
-  }
-  return writableRealms;
 }
 
 class EmbeddedTemplate extends Component<typeof Listing> {
