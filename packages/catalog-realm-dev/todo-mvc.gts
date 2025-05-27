@@ -101,10 +101,7 @@ class TodoItemComponent extends GlimmerComponent<TodoItemComponentArgs> {
   };
 
   <template>
-    <article
-      class='todo-item {{if @todo.isCompleted "completed"}}'
-      role='article'
-    >
+    <article class='todo-item {{if @todo.isCompleted "completed"}}'>
       <div class='todo-view'>
         <div class='todo-checkbox-container'>
           <input
@@ -129,14 +126,18 @@ class TodoItemComponent extends GlimmerComponent<TodoItemComponentArgs> {
               {{on 'input' this.updateEditText}}
               {{on 'keydown' this.handleKeyDown}}
               {{on 'blur' this.saveEdit}}
-              autofocus
               aria-label='Edit todo text'
             />
           </div>
         {{else}}
-          <p class='todo-text' {{on 'dblclick' this.startEditing}}>
+          <div
+            class='todo-text'
+            role='button'
+            tabindex='0'
+            {{on 'dblclick' this.startEditing}}
+          >
             {{if @todo.text @todo.text 'Empty todo'}}
-          </p>
+          </div>
 
           <IconButton
             @icon={{IconTrash}}
@@ -405,13 +406,14 @@ class IsolatedTemplate extends Component<typeof TodoMvc> {
       <h1>todos</h1>
       <main class='todoapp'>
         <header class='new-todo-container'>
-          <div class='toggle-all-container' {{on 'click' this.toggleAll}}>
+          <div class='toggle-all-container'>
             <input
               type='checkbox'
               class='toggle-all-checkbox'
               checked={{this.allCompleted}}
               disabled={{not this.hasTodos}}
               aria-label='Toggle all todos'
+              {{on 'change' this.toggleAll}}
             />
             <span class='custom-checkbox'>
               {{#if this.allCompleted}}
@@ -426,7 +428,6 @@ class IsolatedTemplate extends Component<typeof TodoMvc> {
             value={{this.newTodoText}}
             {{on 'input' this.updateNewTodoText}}
             {{on 'keydown' this.addTodo}}
-            autofocus
             aria-label='New todo text'
           />
         </header>
@@ -455,7 +456,7 @@ class IsolatedTemplate extends Component<typeof TodoMvc> {
         </section>
 
         {{#if this.footerShouldShow}}
-          <footer class='footer'>
+          <footer class='footer' aria-label='Todo list controls'>
             <span class='todo-count'>
               <strong>{{this.activeTodoCount}}</strong>
               {{if (eq this.activeTodoCount 1) 'item' 'items'}}
@@ -507,10 +508,20 @@ class IsolatedTemplate extends Component<typeof TodoMvc> {
         {{/if}}
       </main>
 
-      <footer class='info'>
+      <footer class='info' aria-label='Todo app information'>
         <p>Double-click to edit a todo</p>
-        <p>Created with <a href='https://boxel.ai' target='_blank'>Boxel</a></p>
-        <p>Part of <a href='http://todomvc.com' target='_blank'>TodoMVC</a></p>
+        <p>Created with
+          <a
+            href='https://boxel.ai'
+            target='_blank'
+            rel='noopener noreferrer'
+          >Boxel</a></p>
+        <p>Part of
+          <a
+            href='http://todomvc.com'
+            target='_blank'
+            rel='noopener noreferrer'
+          >TodoMVC</a></p>
       </footer>
     </div>
 
