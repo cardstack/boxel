@@ -29,6 +29,8 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
 
   #cardAPI?: typeof CardAPI;
 
+  static actionVerb = 'Send';
+
   async getInputType() {
     let commandModule = await this.loadCommandModule();
     const { UseAiAssistantInput } = commandModule;

@@ -7,15 +7,7 @@ import {
   StringField,
   linksTo,
   Component,
-  meta,
 } from 'https://cardstack.com/base/card-api';
-import {
-  codeRefWithAbsoluteURL,
-  isResolvedCodeRef,
-  type CopyCardsWithCodeRef,
-  type ResolvedCodeRef,
-  Actions,
-} from '@cardstack/runtime-common';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 import { Skill } from 'https://cardstack.com/base/skill';
@@ -25,8 +17,6 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
-import { v4 as uuidv4 } from 'uuid';
-import { deburr } from 'lodash';
 
 import {
   Accordion,
@@ -42,163 +32,22 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import AppListingHeader from '../components/app-listing-header';
 import { ListingFittedTemplate } from '../components/listing-fitted';
 
+import ListingInitCommand from '@cardstack/boxel-host/commands/listing-action-init';
+
 import { Publisher } from './publisher';
 import { Category } from './category';
 import { License } from './license';
 import { Tag } from './tag';
-
-interface CopyMeta {
-  sourceCodeRef: ResolvedCodeRef;
-  targetCodeRef: ResolvedCodeRef;
-}
-
-function nameWithUuid(listingName?: string) {
-  if (!listingName) {
-    return '';
-  }
-  // sanitize the listing name, eg: Blog App -> blog-app
-  const sanitizedListingName = deburr(listingName.toLocaleLowerCase())
-    .replace(/ /g, '-')
-    .replace(/'/g, '');
-  const newPackageName = `${sanitizedListingName}-${uuidv4()}`;
-  return newPackageName;
-}
-
-export async function installListing(args: any, realm: string) {
-  const listing = args.model as Partial<Listing>;
-  const copyMeta: CopyMeta[] = [];
-
-  const localDir = nameWithUuid(listing.name);
-
-  // first spec as the selected code ref with new url
-  // if there are examples, take the first example's code ref
-  let selectedCodeRef;
-  let shouldPersistPlaygroundSelection = false;
-  let firstExampleCardId;
-
-  // Copy the gts file based on the attached spec's moduleHref
-  for (const spec of listing.specs ?? []) {
-    const absoluteModulePath = spec.moduleHref;
-    const relativeModulePath = spec.ref.module;
-    const normalizedPath = relativeModulePath.split('/').slice(2).join('/');
-    const newPath = localDir.concat('/').concat(normalizedPath);
-    const fileTargetUrl = new URL(newPath, realm).href;
-    const targetFilePath = fileTargetUrl.concat('.gts');
-
-    await args.context?.actions?.copySource?.(
-      absoluteModulePath,
-      targetFilePath,
-    );
-    copyMeta.push({
-      sourceCodeRef: {
-        module: absoluteModulePath,
-        name: spec.ref.name,
-      },
-      targetCodeRef: {
-        module: fileTargetUrl,
-        name: spec.ref.name,
-      },
-    });
-
-    if (!selectedCodeRef) {
-      selectedCodeRef = {
-        module: fileTargetUrl,
-        name: spec.ref.name,
-      };
-    }
-  }
-
-  if (listing.examples) {
-    // Create serialized objects for each example with modified adoptsFrom
-    const results = listing.examples.map((instance: CardDef) => {
-      let adoptsFrom = instance[meta]?.adoptsFrom;
-      if (!adoptsFrom) {
-        return null;
-      }
-      let exampleCodeRef = instance.id
-        ? codeRefWithAbsoluteURL(adoptsFrom, new URL(instance.id))
-        : adoptsFrom;
-      if (!isResolvedCodeRef(exampleCodeRef)) {
-        throw new Error('exampleCodeRef is NOT resolved');
-      }
-      let maybeCopyMeta = copyMeta.find(
-        (meta) =>
-          meta.sourceCodeRef.module ===
-            (exampleCodeRef as ResolvedCodeRef).module &&
-          meta.sourceCodeRef.name === (exampleCodeRef as ResolvedCodeRef).name,
-      );
-      if (maybeCopyMeta) {
-        if (!shouldPersistPlaygroundSelection) {
-          selectedCodeRef = maybeCopyMeta.targetCodeRef;
-          shouldPersistPlaygroundSelection = true;
-        }
-
-        return {
-          sourceCard: instance,
-          codeRef: maybeCopyMeta.targetCodeRef,
-        };
-      }
-      return null;
-    });
-    const copyCardsWithCodeRef = results.filter(
-      (result) => result !== null,
-    ) as CopyCardsWithCodeRef[];
-    for (const cardWithNewCodeRef of copyCardsWithCodeRef) {
-      const { newCardId } = await args.context?.actions?.copyCard(
-        cardWithNewCodeRef.sourceCard,
-        realm,
-        cardWithNewCodeRef.codeRef,
-        localDir,
-      );
-      if (!firstExampleCardId) {
-        firstExampleCardId = newCardId;
-      }
-    }
-  }
-
-  if (listing instanceof SkillListing) {
-    await Promise.all(
-      listing.skills.map((skill) => {
-        args.context?.actions?.copyCard?.(skill, realm, undefined, localDir);
-      }),
-    );
-  }
-
-  return {
-    selectedCodeRef,
-    shouldPersistPlaygroundSelection,
-    firstExampleCardId,
-  };
-}
-
-export async function setupAllRealmsInfo(args: any) {
-  let allRealmsInfo =
-    (await (args.context?.actions as Actions)?.allRealmsInfo?.()) ?? {};
-  let writableRealms: { name: string; url: string; iconURL?: string }[] = [];
-  if (allRealmsInfo) {
-    Object.entries(allRealmsInfo).forEach(([realmUrl, realmInfo]) => {
-      if (realmInfo.canWrite) {
-        writableRealms.push({
-          name: realmInfo.info.name,
-          url: realmUrl,
-          iconURL: realmInfo.info.iconURL ?? '/default-realm-icon.png',
-        });
-      }
-    });
-  }
-  return writableRealms;
-}
+import { setupAllRealmsInfo } from '../helper';
 
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
-  @tracked createdInstances = false;
-  @tracked installedListing = false;
   @tracked writableRealms: { name: string; url: string; iconURL?: string }[] =
     [];
 
   constructor(owner: any, args: any) {
     super(owner, args);
-    this._setup.perform();
+    this.writableRealms = setupAllRealmsInfo(this.args);
   }
 
   get useRealmOptions() {
@@ -223,49 +72,28 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     });
   }
 
-  _setup = task(async () => {
-    this.writableRealms = await setupAllRealmsInfo(this.args);
-  });
-
   _use = task(async (realm: string) => {
-    const specsToCopy: Spec[] = this.args.model?.specs ?? [];
-    const specsWithoutFields = specsToCopy.filter(
-      (spec: Spec) => spec.specType !== 'field',
-    );
-
-    const localDir = nameWithUuid(this.args.model?.name);
-    for (const spec of specsWithoutFields) {
-      await this.args.context?.actions?.createFromSpec?.(spec, realm, localDir);
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('Missing commandContext');
     }
-
-    if (this.args.model instanceof SkillListing) {
-      await Promise.all(
-        this.args.model.skills.map((skill) => {
-          this.args.context?.actions?.copyCard?.(
-            skill,
-            realm,
-            undefined,
-            localDir,
-          );
-        }),
-      );
-    }
-    if (this.args.model.examples) {
-      const sourceCards = this.args.model.examples.map((example) => ({
-        sourceCard: example,
-      }));
-      await this.args.context?.actions?.copyCards?.(
-        sourceCards,
-        realm,
-        localDir,
-      );
-    }
-    this.createdInstances = true;
+    await new ListingInitCommand(commandContext).execute({
+      realm,
+      actionType: 'use',
+      listing: this.args.model as Listing,
+    });
   });
 
   _install = task(async (realm: string) => {
-    await installListing(this.args, realm);
-    this.installedListing = true;
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('Missing commandContext');
+    }
+    await new ListingInitCommand(commandContext).execute({
+      realm,
+      actionType: 'install',
+      listing: this.args.model as Listing,
+    });
   });
 
   get hasOneOrMoreSpec() {
@@ -281,22 +109,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
   get useOrInstallDisabled() {
     return !this.hasOneOrMoreSpec && !this.hasSkills;
-  }
-
-  get useButtonDisabled() {
-    return (
-      this.createdInstances ||
-      !this.args.context?.actions?.createFromSpec ||
-      this.useOrInstallDisabled
-    );
-  }
-
-  get installButtonDisabled() {
-    return (
-      this.installedListing ||
-      !this.args.context?.actions?.copySource ||
-      this.useOrInstallDisabled
-    );
   }
 
   @action preview() {
@@ -361,201 +173,186 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
   <template>
     <div class='app-listing-embedded'>
-      {{#if this._setup.isRunning}}
-        Loading...
-      {{else}}
-
-        <AppListingHeader
-          @thumbnailUrl={{@model.thumbnailURL}}
-          @name={{this.appName}}
-          @description={{@model.description}}
-          @publisher={{this.publisherName}}
-        >
-          <:action>
-            <div class='action-buttons'>
-              {{#if this.hasExamples}}
+      <AppListingHeader
+        @thumbnailUrl={{@model.thumbnailURL}}
+        @name={{this.appName}}
+        @description={{@model.description}}
+        @publisher={{this.publisherName}}
+      >
+        <:action>
+          <div class='action-buttons'>
+            {{#if this.hasExamples}}
+              <BoxelButton
+                class='action-button'
+                data-test-catalog-listing-preview-button
+                {{on 'click' this.preview}}
+              >
+                Preview
+              </BoxelButton>
+            {{/if}}
+            <BoxelDropdown>
+              <:trigger as |bindings|>
                 <BoxelButton
                   class='action-button'
-                  data-test-catalog-listing-preview-button
-                  {{on 'click' this.preview}}
+                  data-test-catalog-listing-use-button
+                  @loading={{this._use.isRunning}}
+                  @disabled={{this.useOrInstallDisabled}}
+                  {{bindings}}
                 >
-                  Preview
+                  Use
                 </BoxelButton>
-              {{/if}}
-              <BoxelDropdown>
-                <:trigger as |bindings|>
-                  <BoxelButton
-                    class='action-button'
-                    data-test-catalog-listing-use-button
-                    @disabled={{this.useButtonDisabled}}
-                    {{bindings}}
-                  >
-                    {{#if this._use.isRunning}}
-                      Creating...
-                    {{else if this.createdInstances}}
-                      Created Instances
-                    {{else}}
-                      Use
-                    {{/if}}
-                  </BoxelButton>
-                </:trigger>
-                <:content as |dd|>
-                  <BoxelMenu
-                    class='realm-dropdown-menu'
-                    @closeMenu={{dd.close}}
-                    @items={{this.useRealmOptions}}
-                    data-test-catalog-listing-use-dropdown
-                  />
-                </:content>
-              </BoxelDropdown>
-              <BoxelDropdown>
-                <:trigger as |bindings|>
-                  <BoxelButton
-                    class='action-button'
-                    data-test-catalog-listing-install-button
-                    @disabled={{this.installButtonDisabled}}
-                    {{bindings}}
-                  >
-                    {{#if this._install.isRunning}}
-                      Installing...
-                    {{else if this.installedListing}}
-                      Installed
-                    {{else}}
-                      Install
-                    {{/if}}
-                  </BoxelButton>
-                </:trigger>
-                <:content as |dd|>
-                  <BoxelMenu
-                    class='realm-dropdown-menu'
-                    @closeMenu={{dd.close}}
-                    @items={{this.installRealmOptions}}
-                    data-test-catalog-listing-install-dropdown
-                  />
-                </:content>
-              </BoxelDropdown>
-            </div>
-          </:action>
-        </AppListingHeader>
-
-        <section class='app-listing-info'>
-          <div class='app-listing-price-plan'>
-            <Pill class='free-plan-pill'>
-              <:default>Free Plan</:default>
-            </Pill>
-          </div>
-
-          <div class='app-listing-summary info-box'>
-            <h2>Summary</h2>
-            {{#if @model.summary}}
-              <@fields.summary />
-            {{else}}
-              <p class='no-data-text'>No Summary Provided</p>
-            {{/if}}
-
-          </div>
-
-          <div class='license-section'>
-            <h2>License</h2>
-            {{#if @model.license.name}}
-              {{@model.license.name}}
-            {{else}}
-              <p class='no-data-text'>No license Provided</p>
-            {{/if}}
-          </div>
-        </section>
-
-        <hr class='divider' />
-
-        <section class='app-listing-images'>
-          <h2>Images</h2>
-          {{#if this.hasImages}}
-            <ul class='images-list'>
-              {{#each @model.images as |image|}}
-                <li class='images-item'>
-                  <img src={{image}} alt={{@model.name}} />
-                </li>
-              {{/each}}
-            </ul>
-          {{else}}
-            <p class='no-data-text'>No Images Provided</p>
-          {{/if}}
-        </section>
-
-        <section class='app-listing-examples'>
-          <h2>Examples</h2>
-          {{#if this.hasExamples}}
-            <ul class='examples-list'>
-              {{#each @fields.examples as |Example|}}
-                <li>
-                  <Example />
-                </li>
-              {{/each}}
-            </ul>
-          {{else}}
-            <p class='no-data-text'>No Examples Provided</p>
-          {{/if}}
-        </section>
-
-        <hr class='divider' />
-
-        <section class='app-listing-categories'>
-          <h2>Categories</h2>
-          {{#if this.hasCategories}}
-            <ul class='categories-list'>
-              {{#each @model.categories as |category|}}
-                <li class='categories-item'>
-                  <Pill>{{category.name}}</Pill>
-                </li>
-              {{/each}}
-            </ul>
-          {{else}}
-            <p class='no-data-text'>No Categories Provided</p>
-          {{/if}}
-        </section>
-
-        <hr class='divider' />
-        <section class='app-listing-spec-breakdown'>
-          <h2>Includes These Boxels</h2>
-          {{#if this.hasNonEmptySpecBreakdown}}
-            <Accordion
-              data-test-selected-accordion-item={{this.selectedAccordionItem}}
-              as |A|
-            >
-              {{#each-in this.specBreakdown as |specType specs|}}
-                <A.Item
-                  @onClick={{fn this.selectAccordionItem specType}}
-                  @isOpen={{eq this.selectedAccordionItem specType}}
-                  data-test-accordion-item={{specType}}
+              </:trigger>
+              <:content as |dd|>
+                <BoxelMenu
+                  class='realm-dropdown-menu'
+                  @closeMenu={{dd.close}}
+                  @items={{this.useRealmOptions}}
+                  data-test-catalog-listing-use-dropdown
+                />
+              </:content>
+            </BoxelDropdown>
+            <BoxelDropdown>
+              <:trigger as |bindings|>
+                <BoxelButton
+                  class='action-button'
+                  data-test-catalog-listing-install-button
+                  @loading={{this._install.isRunning}}
+                  @disabled={{this.useOrInstallDisabled}}
+                  {{bindings}}
                 >
-                  <:title>
-                    {{specType}}
-                    ({{specs.length}})
-                  </:title>
-                  <:content>
-                    {{#each specs as |card|}}
-                      {{#let (this.getComponent card) as |CardComponent|}}
-                        <CardContainer
-                          {{@context.cardComponentModifier
-                            cardId=card.id
-                            format='data'
-                            fieldType=undefined
-                            fieldName=undefined
-                          }}
-                        >
-                          <CardComponent @format='fitted' />
-                        </CardContainer>
-                      {{/let}}
-                    {{/each}}
-                  </:content>
-                </A.Item>
-              {{/each-in}}
-            </Accordion>
+                  Install
+                </BoxelButton>
+              </:trigger>
+              <:content as |dd|>
+                <BoxelMenu
+                  class='realm-dropdown-menu'
+                  @closeMenu={{dd.close}}
+                  @items={{this.installRealmOptions}}
+                  data-test-catalog-listing-install-dropdown
+                />
+              </:content>
+            </BoxelDropdown>
+          </div>
+        </:action>
+      </AppListingHeader>
+
+      <section class='app-listing-info'>
+        <div class='app-listing-price-plan'>
+          <Pill class='free-plan-pill'>
+            <:default>Free Plan</:default>
+          </Pill>
+        </div>
+
+        <div class='app-listing-summary info-box'>
+          <h2>Summary</h2>
+          {{#if @model.summary}}
+            <@fields.summary />
           {{else}}
-            <p class='no-data-text'>No Specs Provided</p>
+            <p class='no-data-text'>No Summary Provided</p>
           {{/if}}
-        </section>
-      {{/if}}
+
+        </div>
+
+        <div class='license-section'>
+          <h2>License</h2>
+          {{#if @model.license.name}}
+            {{@model.license.name}}
+          {{else}}
+            <p class='no-data-text'>No license Provided</p>
+          {{/if}}
+        </div>
+      </section>
+
+      <hr class='divider' />
+
+      <section class='app-listing-images'>
+        <h2>Images</h2>
+        {{#if this.hasImages}}
+          <ul class='images-list'>
+            {{#each @model.images as |image|}}
+              <li class='images-item'>
+                <img src={{image}} alt={{@model.name}} />
+              </li>
+            {{/each}}
+          </ul>
+        {{else}}
+          <p class='no-data-text'>No Images Provided</p>
+        {{/if}}
+      </section>
+
+      <section class='app-listing-examples'>
+        <h2>Examples</h2>
+        {{#if this.hasExamples}}
+          <ul class='examples-list'>
+            {{#each @fields.examples as |Example|}}
+              <li>
+                <Example />
+              </li>
+            {{/each}}
+          </ul>
+        {{else}}
+          <p class='no-data-text'>No Examples Provided</p>
+        {{/if}}
+      </section>
+
+      <hr class='divider' />
+
+      <section class='app-listing-categories'>
+        <h2>Categories</h2>
+        {{#if this.hasCategories}}
+          <ul class='categories-list'>
+            {{#each @model.categories as |category|}}
+              <li class='categories-item'>
+                <Pill>{{category.name}}</Pill>
+              </li>
+            {{/each}}
+          </ul>
+        {{else}}
+          <p class='no-data-text'>No Categories Provided</p>
+        {{/if}}
+      </section>
+
+      <hr class='divider' />
+      <section class='app-listing-spec-breakdown'>
+        <h2>Includes These Boxels</h2>
+        {{#if this.hasNonEmptySpecBreakdown}}
+          <Accordion
+            data-test-selected-accordion-item={{this.selectedAccordionItem}}
+            as |A|
+          >
+            {{#each-in this.specBreakdown as |specType specs|}}
+              <A.Item
+                @onClick={{fn this.selectAccordionItem specType}}
+                @isOpen={{eq this.selectedAccordionItem specType}}
+                data-test-accordion-item={{specType}}
+              >
+                <:title>
+                  {{specType}}
+                  ({{specs.length}})
+                </:title>
+                <:content>
+                  {{#each specs as |card|}}
+                    {{#let (this.getComponent card) as |CardComponent|}}
+                      <CardContainer
+                        {{@context.cardComponentModifier
+                          cardId=card.id
+                          format='data'
+                          fieldType=undefined
+                          fieldName=undefined
+                        }}
+                      >
+                        <CardComponent @format='fitted' />
+                      </CardContainer>
+                    {{/let}}
+                  {{/each}}
+                </:content>
+              </A.Item>
+            {{/each-in}}
+          </Accordion>
+        {{else}}
+          <p class='no-data-text'>No Specs Provided</p>
+        {{/if}}
+      </section>
     </div>
 
     <style scoped>

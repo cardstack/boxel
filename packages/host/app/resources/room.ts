@@ -141,7 +141,7 @@ export class RoomResource extends Resource<Args> {
             }
             break;
           case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
-            this.updateMessageCommandResult({ roomId, event, index });
+            await this.updateMessageCommandResult({ roomId, event, index });
             break;
           case APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE:
             this.updateMessageCodePatchResult({
@@ -389,7 +389,7 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
-  private loadRoomMessage({
+  private async loadRoomMessage({
     roomId,
     event,
     index,
@@ -416,13 +416,13 @@ export class RoomResource extends Resource<Args> {
       });
 
       if (!message) {
-        message = messageBuilder.buildMessage();
+        message = await messageBuilder.buildMessage();
         this._messageCache.set(
           message.clientGeneratedId ?? effectiveEventId,
           message as any,
         );
       } else {
-        messageBuilder.updateMessage(message);
+        await messageBuilder.updateMessage(message);
       }
     }
 
@@ -434,7 +434,7 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
-  private updateMessageCommandResult({
+  private async updateMessageCommandResult({
     roomId,
     event,
     index,
@@ -474,7 +474,7 @@ export class RoomResource extends Resource<Args> {
         skillCardsCache: this._skillCardsCache,
       },
     );
-    messageBuilder.updateMessageCommandResult(message);
+    await messageBuilder.updateMessageCommandResult(message);
   }
 
   private updateMessageCodePatchResult({

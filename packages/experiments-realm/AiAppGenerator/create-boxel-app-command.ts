@@ -15,6 +15,7 @@ export default class CreateBoxelApp extends Command<
   typeof CreateProductRequirementsInput,
   typeof CardDef
 > {
+  static actionVerb = 'Create';
   inputType = CreateProductRequirementsInput;
 
   protected async run(input: CreateProductRequirementsInput): Promise<CardDef> {

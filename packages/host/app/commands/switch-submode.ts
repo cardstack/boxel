@@ -15,6 +15,8 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private store: StoreService;
 
+  static actionVerb = 'Switch';
+
   description =
     'Navigate the UI to another submode. Possible values for submode are "interact" and "code".';
 

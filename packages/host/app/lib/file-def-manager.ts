@@ -167,10 +167,10 @@ export default class FileDefManagerImpl implements FileDefManager {
       serialization: LooseSingleCardDocument;
     }[] = await Promise.all(
       cards.map(async (card) => {
-        let opts: CardAPI.SerializeOpts = { useAbsoluteURL: true };
-        if (isSkillCard in card) {
-          opts['includeComputeds'] = true;
-        }
+        let opts: CardAPI.SerializeOpts = {
+          useAbsoluteURL: true,
+          includeComputeds: true,
+        };
 
         let { default: Base64ImageField } =
           await this.loaderService.loader.import<{

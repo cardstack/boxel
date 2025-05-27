@@ -6,7 +6,7 @@ import { inject as service } from '@ember/service';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import { ResolvedCodeRef } from '@cardstack/runtime-common';
+import { ResolvedCodeRef, getClass } from '@cardstack/runtime-common';
 
 import {
   CommandRequest,
@@ -30,6 +30,7 @@ import {
 import { RoomSkill } from '@cardstack/host/resources/room';
 import type CommandService from '@cardstack/host/services/command-service';
 
+import LoaderService from '@cardstack/host/services/loader-service';
 import MatrixService from '@cardstack/host/services/matrix-service';
 
 import type { CommandStatus } from 'https://cardstack.com/base/command';
@@ -73,6 +74,7 @@ export default class MessageBuilder {
   }
 
   @service declare private commandService: CommandService;
+  @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
 
   private get coreMessageArgs() {
@@ -140,7 +142,7 @@ export default class MessageBuilder {
     return errorMessage;
   }
 
-  buildMessage(): Message {
+  async buildMessage(): Promise<Message> {
     let { event } = this;
     let message = this.coreMessageArgs;
     message.errorMessage = this.errorMessage;
@@ -149,7 +151,7 @@ export default class MessageBuilder {
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
       message.attachedCardIds = this.attachedCardIds;
       if (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY]) {
-        message.setCommands(this.buildMessageCommands(message));
+        message.setCommands(await this.buildMessageCommands(message));
       }
       message.codePatchResults = this.buildMessageCodePatchResults(message);
     } else if (event.content.msgtype === 'm.text') {
@@ -161,7 +163,7 @@ export default class MessageBuilder {
     return message;
   }
 
-  updateMessage(message: Message) {
+  async updateMessage(message: Message) {
     if (message.created.getTime() > this.event.origin_server_ts) {
       message.created = new Date(this.event.origin_server_ts);
       return;
@@ -197,7 +199,7 @@ export default class MessageBuilder {
         command.commandRequest = decodeCommandRequest(encodedCommandRequest);
       } else {
         message.commands.push(
-          this.buildMessageCommand(
+          await this.buildMessageCommand(
             message,
             decodeCommandRequest(encodedCommandRequest),
           ),
@@ -206,9 +208,9 @@ export default class MessageBuilder {
     }
   }
 
-  updateMessageCommandResult(message: Message) {
+  async updateMessageCommandResult(message: Message) {
     if (message.commands.length === 0) {
-      message.setCommands(this.buildMessageCommands(message));
+      message.setCommands(await this.buildMessageCommands(message));
     }
 
     if (this.builderContext.commandResultEvent && message.commands.length > 0) {
@@ -240,7 +242,7 @@ export default class MessageBuilder {
     message.codePatchResults = this.buildMessageCodePatchResults(message);
   }
 
-  private buildMessageCommands(message: Message) {
+  private async buildMessageCommands(message: Message) {
     let eventContent = this.event.content as CardMessageContent;
     let commandRequests = eventContent[APP_BOXEL_COMMAND_REQUESTS_KEY];
     if (!commandRequests) {
@@ -248,7 +250,7 @@ export default class MessageBuilder {
     }
     let commands = new TrackedArray<MessageCommand>();
     for (let commandRequest of commandRequests) {
-      let command = this.buildMessageCommand(
+      let command = await this.buildMessageCommand(
         message,
         decodeCommandRequest(commandRequest),
       );
@@ -257,7 +259,7 @@ export default class MessageBuilder {
     return commands;
   }
 
-  private buildMessageCommand(
+  private async buildMessageCommand(
     message: Message,
     commandRequest: Partial<CommandRequest>,
   ) {
@@ -291,12 +293,24 @@ export default class MessageBuilder {
       }
     }
 
+    let actionVerb = 'Apply';
+    if (skillCommand?.codeRef) {
+      let CommandKlass = (await getClass(
+        skillCommand?.codeRef,
+        this.loaderService.loader,
+      )) as { actionVerb: string };
+      if (CommandKlass?.actionVerb) {
+        actionVerb = CommandKlass.actionVerb;
+      }
+    }
+
     let messageCommand = new MessageCommand(
       message,
       commandRequest,
       skillCommand?.codeRef,
       this.builderContext.effectiveEventId,
       skillCommand?.requiresApproval ?? true,
+      actionVerb,
       (commandResultEvent?.content['m.relates_to']?.key ||
         'ready') as CommandStatus,
       commandResultEvent?.content.msgtype ===

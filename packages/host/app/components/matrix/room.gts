@@ -767,9 +767,6 @@ export default class Room extends Component<Signature> {
         realmUrl: this.operatorModeStateService.realmURL.href,
       };
       try {
-        if (files?.length) {
-          files = await this.matrixService.uploadFiles(files);
-        }
         let cards: CardDef[] | undefined;
         if (typeof cardsOrIds?.[0] === 'string') {
           // we use detached instances since these are just
