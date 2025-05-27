@@ -520,7 +520,13 @@ export default class MatrixService extends Service {
         await this.initSlidingSync(accountDataContent);
         await this.client.startClient({ slidingSync: this.slidingSync });
 
-        await this.realmServer.fetchCatalogRealms();
+        // Do not need to wait for theses to complete,
+        // in the workspace chooser we'll retrigger login and wait fo them to complete
+        // and when fetching cards or files we have reautentication mechanism.
+        Promise.all([
+          this.loginToRealms(),
+          this.realmServer.fetchCatalogRealms(),
+        ]);
 
         this.postLoginCompleted = true;
       } catch (e) {
