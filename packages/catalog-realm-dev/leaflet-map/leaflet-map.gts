@@ -11,7 +11,7 @@ import { action } from '@ember/object';
 import MapIcon from '@cardstack/boxel-icons/map';
 
 declare global {
-  let L: any;
+  var L: any;
 }
 
 export class LeafletMap extends CardDef {
@@ -72,6 +72,10 @@ export class LeafletMap extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
+
+
 
 
 
