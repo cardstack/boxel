@@ -770,14 +770,6 @@ export default class PlaygroundPanel extends Component<Signature> {
                   {{on 'mouseup' this.handleClick}}
                 >
                   <InstanceSelectDropdown
-                    {{!-- @prerenderedCardQuery={{hash
-                      query=this.query
-                      realms=this.recentRealms
-                    }}
-                    @expandedSearchQuery={{hash
-                      query=this.expandedQuery
-                      realms=this.realmServer.availableRealmURLs
-                    }} --}}
                     @cardOptions={{this.cardOptions}}
                     @fieldOptions={{this.fieldInstances}}
                     @selection={{this.dropdownSelection}}
