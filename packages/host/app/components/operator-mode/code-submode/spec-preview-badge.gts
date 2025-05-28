@@ -63,6 +63,7 @@ export default class SpecPreviewBadge extends Component<SpecPreviewBadgeSignatur
       .spec-indicator {
         display: flex;
       }
+
       .create-spec-button {
         --boxel-button-min-height: auto;
         --boxel-button-min-width: auto;
@@ -80,10 +81,7 @@ export default class SpecPreviewBadge extends Component<SpecPreviewBadgeSignatur
         display: inline-flex;
         align-items: center;
       }
-      .number-of-instance-text {
-        font: 500 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-xl);
-      }
+
       .dot-icon {
         flex-shrink: 0;
         width: 18px;
