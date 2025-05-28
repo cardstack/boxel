@@ -873,6 +873,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       .format-chooser {
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
+        background-color: var(--boxel-dark);
       }
 
       .format-chooser :deep(.format-chooser__buttons) {
@@ -880,8 +881,14 @@ export default class PlaygroundPanel extends Component<Signature> {
       }
 
       .format-chooser :deep(.format-chooser__button) {
+        --boxel-button-text-color: var(--boxel-light);
         min-height: unset;
         padding: var(--boxel-sp-xxxs);
+      }
+
+      .format-chooser :deep(.format-chooser__button.active) {
+        --boxel-button-color: var(--boxel-light);
+        --boxel-button-text-color: var(--boxel-dark);
       }
 
       .playground-panel {
