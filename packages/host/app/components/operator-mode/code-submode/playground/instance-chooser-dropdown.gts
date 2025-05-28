@@ -157,6 +157,9 @@ interface Signature {
   Args: {
     cardOptions: PrerenderedCardLike[];
     fieldOptions?: FieldOption[];
+    findSelectedCard: (
+      cards: PrerenderedCardLike[],
+    ) => PrerenderedCardLike | undefined;
     selection: SelectedInstance | undefined;
     onSelect: (item: PrerenderedCardLike | FieldOption) => void;
     chooseCard: () => void;
@@ -273,7 +276,7 @@ export default class InstanceSelectDropdown extends Component<Signature> {
     {{#if @cardOptions}}
       <OptionsDropdown
         @options={{@cardOptions}}
-        @selected={{@selection}}
+        @selected={{@findSelectedCard @cardOptions}}
         @selection={{@selection}}
         @onSelect={{@onSelect}}
         @chooseCard={{@chooseCard}}

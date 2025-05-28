@@ -731,6 +731,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                         <InstanceSelectDropdown
                           @cardOptions={{this.cardOptions}}
                           @fieldOptions={{this.fieldInstances}}
+                          @findSelectedCard={{this.findSelectedCard}}
                           @selection={{this.dropdownSelection}}
                           @onSelect={{this.onSelect}}
                           @chooseCard={{this.chooseInstance}}
@@ -772,6 +773,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                   <InstanceSelectDropdown
                     @cardOptions={{this.cardOptions}}
                     @fieldOptions={{this.fieldInstances}}
+                    @findSelectedCard={{this.findSelectedCard}}
                     @selection={{this.dropdownSelection}}
                     @onSelect={{this.onSelect}}
                     @chooseCard={{this.chooseInstance}}
