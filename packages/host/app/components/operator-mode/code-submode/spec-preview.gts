@@ -62,7 +62,7 @@ interface Signature {
     selectedDeclarationAsCodeRef: ResolvedCodeRef;
     showCreateSpec: boolean;
     specsForSelectedDefinition: Spec[];
-    toggleAccordionItem: (item: ActiveModuleInspectorView) => void;
+    setActiveModuleInspectorPanel: (item: ActiveModuleInspectorView) => void;
     updatePlaygroundSelections(id: string, fieldDefOnly?: boolean): void;
   };
   Blocks: {
@@ -370,7 +370,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     const fileUrl = id.endsWith('.json') ? id : `${id}.json`;
     this.recentFilesService.addRecentFileUrl(fileUrl);
     this.args.updatePlaygroundSelections(id);
-    this.args.toggleAccordionItem('preview');
+    this.args.setActiveModuleInspectorPanel('preview');
   };
 
   <template>

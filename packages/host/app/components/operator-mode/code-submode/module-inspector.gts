@@ -536,7 +536,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
             <SpecPreview
               @selectedDeclaration={{@selectedDeclaration}}
               @isLoadingNewModule={{@moduleContentsResource.isLoadingNewModule}}
-              @toggleAccordionItem={{this.setActivePanel}}
+              @setActiveModuleInspectorPanel={{this.setActivePanel}}
               @isPanelOpen={{eq this.activePanel 'spec'}}
               @selectedDeclarationAsCodeRef={{this.selectedDeclarationAsCodeRef}}
               @updatePlaygroundSelections={{this.updatePlaygroundSelections}}
