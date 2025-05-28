@@ -209,6 +209,11 @@ Common issues are:
           return;
         }
 
+        // Return early here if it's a debug event
+        if (isRecognisedDebugCommand(eventBody)) {
+          return;
+        }
+
         if (!Responder.eventMayTriggerResponse(event)) {
           return; // early exit for events that will not trigger a response
         }

@@ -22,7 +22,7 @@ import {
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
-  APP_BOXEL_DEBUG_MESSAGE_MSGTYPE,
+  APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -39,6 +39,7 @@ import type {
   CardMessageContent,
   CardMessageEvent,
   CodePatchResultEvent,
+  DebugMessageEvent,
   CommandResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
@@ -56,7 +57,7 @@ const ErrorMessage: Record<string, string> = {
 
 export default class MessageBuilder {
   constructor(
-    private event: MessageEvent | CardMessageEvent,
+    private event: MessageEvent | CardMessageEvent | DebugMessageEvent,
     owner: Owner,
     private builderContext: {
       roomId: string;
@@ -156,7 +157,8 @@ export default class MessageBuilder {
       message.codePatchResults = this.buildMessageCodePatchResults(message);
     } else if (event.content.msgtype === 'm.text') {
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
-    } else if (event.content.msgtype === APP_BOXEL_DEBUG_MESSAGE_MSGTYPE) {
+    }
+    if (event.type === APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE) {
       message.isDebugMessage = true;
     }
 
@@ -354,6 +356,9 @@ export default class MessageBuilder {
 export function isCardMessageEvent(
   matrixEvent: DiscreteMatrixEvent,
 ): matrixEvent is CardMessageEvent {
+  if (matrixEvent.type === APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE) {
+    return true;
+  }
   if (matrixEvent.type !== 'm.room.message') {
     return false;
   }

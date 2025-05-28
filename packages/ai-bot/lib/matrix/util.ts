@@ -10,7 +10,7 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_DEBUG_MESSAGE_MSGTYPE,
+  APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import { PromptParts, mxcUrlToHttp } from '../../helpers';
@@ -144,9 +144,9 @@ export async function sendPromptAndEventList(
   let sharedFile = await client.uploadContent(stringContent, {
     type: 'text/plain',
   });
-  await client.sendEvent(roomId, 'm.room.message', {
+  await client.sendEvent(roomId, APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE, {
+    msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
     body: 'Debug: attached the prompt sent to the AI and the raw event list',
-    msgtype: APP_BOXEL_DEBUG_MESSAGE_MSGTYPE,
     isStreamingFinished: true,
     data: JSON.stringify({
       attachedFiles: [
