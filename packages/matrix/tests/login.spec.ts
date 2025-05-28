@@ -66,6 +66,95 @@ test.describe('Login', () => {
     await assertLoggedOut(page);
   });
 
+  test('it can log in with query parameters to access interact submode with multiple stack items', async ({
+    page,
+  }) => {
+    const operatorModeState = {
+      stacks: [
+        [
+          {
+            id: `${appURL}/fadhlan`,
+            format: 'isolated',
+          },
+          {
+            id: `${appURL}/jersey`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'interact',
+      fileView: 'inspector',
+      openDirs: {},
+    };
+    const stateParam = encodeURIComponent(JSON.stringify(operatorModeState));
+    await page.goto(`${appURL}?operatorModeState=${stateParam}`);
+
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-username-field]').fill('user1');
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-password-field]').fill('pass');
+    await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
+    await page.locator('[data-test-login-btn]').click();
+
+    await expect(
+      page.locator('[data-test-operator-mode-stack="0"]'),
+    ).toHaveCount(1);
+    await expect(
+      page.locator(`[data-test-stack-card="${appURL}/fadhlan"]`),
+    ).toHaveCount(1);
+    await expect(
+      page.locator(`[data-test-stack-card="${appURL}/jersey"]`),
+    ).toHaveCount(1);
+
+    await logout(page);
+    await assertLoggedOut(page);
+  });
+
+  test('it can log in with query parameters to access code submode', async ({
+    page,
+  }) => {
+    const operatorModeState = {
+      stacks: [
+        [
+          {
+            id: `${appURL}/fadhlan`,
+            format: 'isolated',
+          },
+          {
+            id: `${appURL}/jersey`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      codePath: `${appURL}/Person.gts`,
+      submode: 'code',
+      fileView: 'inspector',
+      openDirs: {},
+    };
+    const stateParam = encodeURIComponent(JSON.stringify(operatorModeState));
+    await page.goto(`${appURL}?operatorModeState=${stateParam}`);
+
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-username-field]').fill('user1');
+    await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
+    await page.locator('[data-test-password-field]').fill('pass');
+    await expect(page.locator('[data-test-login-btn]')).toBeEnabled();
+    await page.locator('[data-test-login-btn]').click();
+
+    await expect(
+      page.locator(`[data-test-card-url-bar-realm-info]`),
+    ).toContainText('in Test Workspace A');
+    await expect(page.locator(`[data-test-card-url-bar] input`)).toHaveValue(
+      `${appURL}/Person.gts`,
+    );
+    await expect(page.locator(`[data-test-editor]`)).toContainText(
+      'export class Person extends CardDef',
+    );
+
+    await logout(page);
+    await assertLoggedOut(page);
+  });
+
   test('it can login after visiting a card and then see the attempted card without choosing a workspace', async ({
     page,
   }) => {
@@ -106,8 +195,8 @@ test.describe('Login', () => {
     expect(boxelSessionBeforeCardLoaded).toBeNull();
 
     await assertLoggedIn(page);
-    // the authentication to the realm could possibly processed when fetching card,
-    // so we have to wait until the card loaded before checking the tokens
+    // The authentication to the realm could possibly be processed when fetching the card,
+    // so we have to wait until the card is loaded before checking the tokens.
     await page.waitForSelector('[data-test-stack-item-content]');
     let boxelSession = await page.evaluate(async () => {
       // playwright needs a beat before it get access local storage
@@ -179,8 +268,8 @@ test.describe('Login', () => {
   test('it can logout', async ({ page }) => {
     await login(page, 'user1', 'pass', { url: appURL });
     await assertLoggedIn(page);
-    // the authentication to the realm could possibly processed when fetching card,
-    // so we have to wait until the card loaded before checking the tokens
+    // The authentication to the realm could possibly be processed when fetching the card,
+    // so we have to wait until the card is loaded before checking the tokens.
     await page.waitForSelector('[data-test-stack-item-content]');
     let boxelSession = await page.evaluate(async () => {
       // playwright needs a beat before it get access local storage

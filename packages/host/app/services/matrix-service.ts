@@ -513,20 +513,20 @@ export default class MatrixService extends Service {
         let accountDataContent = await this._client.getAccountDataFromServer<{
           realms: string[];
         }>(APP_BOXEL_REALMS_EVENT_TYPE);
-        await this.realmServer.setAvailableRealmURLs(
-          accountDataContent?.realms ?? [],
-        );
+        await Promise.all([
+          this.realmServer.fetchCatalogRealms(),
+          this.realmServer.setAvailableRealmURLs(
+            accountDataContent?.realms ?? [],
+          ),
+        ]);
 
         await this.initSlidingSync(accountDataContent);
         await this.client.startClient({ slidingSync: this.slidingSync });
 
-        // Do not need to wait for theses to complete,
-        // in the workspace chooser we'll retrigger login and wait fo them to complete
+        // Do not need to wait for these to complete,
+        // in the workspace chooser we'll retrigger login and wait for them to complete
         // and when fetching cards or files we have reautentication mechanism.
-        Promise.all([
-          this.loginToRealms(),
-          this.realmServer.fetchCatalogRealms(),
-        ]);
+        this.loginToRealms();
 
         this.postLoginCompleted = true;
       } catch (e) {

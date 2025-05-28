@@ -60,6 +60,7 @@ import {
 import { setupApplicationTest } from '../helpers/setup';
 
 let matrixRoomId: string;
+let realm2URL = 'http://test-realm/user/test2/';
 module('Acceptance | operator mode tests', function (hooks) {
   let testRealm: Realm;
   setupApplicationTest(hooks);
@@ -71,8 +72,13 @@ module('Acceptance | operator mode tests', function (hooks) {
     activeRealms: [testRealmURL],
   });
 
-  let { setExpiresInSec, createAndJoinRoom, simulateRemoteMessage } =
-    mockMatrixUtils;
+  let {
+    setActiveRealms,
+    setExpiresInSec,
+    createAndJoinRoom,
+    simulateRemoteMessage,
+    setRealmPermissions,
+  } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
@@ -450,6 +456,33 @@ module('Acceptance | operator mode tests', function (hooks) {
         },
       },
     }));
+
+    setActiveRealms([testRealmURL, realm2URL]);
+
+    await setupAcceptanceTestRealm({
+      mockMatrixUtils,
+      realmURL: realm2URL,
+      contents: {
+        'person.gts': { Person },
+        'Person/1.json': {
+          data: {
+            attributes: {
+              firstName: 'Fadhlan',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${realm2URL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    setRealmPermissions({
+      [realm2URL]: ['read', 'write'],
+    });
   });
 
   test('visiting operator mode', async function (assert) {
@@ -633,6 +666,13 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert
       .dom('[data-test-error-details]')
       .includesText(`missing file ${testRealmURL}Person/missing-link.json`);
+  });
+
+  test('can visit a card via canonical URL from second realm', async function (assert) {
+    await visit(`/user/test2/Person/1`);
+
+    assert.dom(`[data-test-stack-card="${realm2URL}Person/1"]`).exists();
+    assert.dom('[data-test-person]').hasText('Fadhlan');
   });
 
   test('can open code submode when card or field has no embedded template', async function (assert) {

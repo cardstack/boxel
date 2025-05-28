@@ -12,6 +12,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import { Submodes } from '../components/submode-switcher';
 
+import RealmServerService from '../services/realm-server';
+
 import type BillingService from '../services/billing-service';
 import type CardService from '../services/card-service';
 import type MatrixService from '../services/matrix-service';
@@ -38,6 +40,7 @@ export default class Index extends Route<void> {
   @service declare private store: StoreService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare realm: RealmService;
+  @service declare realmServer: RealmServerService;
 
   didMatrixServiceStart = false;
 
@@ -70,50 +73,9 @@ export default class Index extends Route<void> {
       await this.billingService.initializeSubscriptionData();
     }
 
-    let cardUrl: string | undefined;
-    if (cardPath) {
-      if (hostsOwnAssets) {
-        let realmUrl = Object.keys(this.realm.allRealmsInfo).find(
-          (realmUrl) => {
-            let realmPathParts = new URL(realmUrl).pathname
-              .split('/')
-              .filter((part) => part !== '');
-            let cardPathParts = cardPath!
-              .split('/')
-              .filter((part) => part !== '');
-            let isMatch = false;
-            for (let i = 0; i < realmPathParts.length; i++) {
-              if (realmPathParts[i] === cardPathParts[i]) {
-                isMatch = true;
-              } else {
-                isMatch = false;
-                break;
-              }
-            }
-            return isMatch;
-          },
-        );
-        cardUrl = new URL(
-          `/${cardPath}`,
-          realmUrl ?? this.realm.defaultReadableRealm.path,
-        ).href;
-      } else {
-        cardUrl = new URL(cardPath, window.location.origin).href;
-      }
-
-      // we only get a card to understand its canonical URL so it's ok to fetch
-      // a card that is detached from the store as we only care about it's ID.
-      let canonicalCardUrl: string | undefined;
-      // the peek takes advantage of the store cache so this should be quick
-      canonicalCardUrl = (await this.store.get(cardUrl))?.id;
-      if (!canonicalCardUrl) {
-        // TODO: show a 404 page
-        // https://linear.app/cardstack/issue/CS-7364/show-user-a-clear-message-when-they-try-to-access-a-realm-they-cannot
-        alert(`Card not found: ${cardUrl}`);
-      }
-      cardUrl = canonicalCardUrl;
-    }
-
+    let cardUrl: string | undefined = cardPath
+      ? await this.getCardUrl(cardPath)
+      : undefined;
     let stacks: { id: string; format: string }[][] = [];
     if (cardUrl) {
       stacks = [
@@ -161,5 +123,49 @@ export default class Index extends Route<void> {
         operatorModeStateObject || { stacks: [] },
       );
     }
+  }
+
+  private async getCardUrl(cardPath: string): Promise<string | undefined> {
+    let cardUrl;
+    if (hostsOwnAssets) {
+      // availableRealmURLs is set in matrixService.start(), so we can use it here
+      let realmUrl = this.realmServer.availableRealmURLs.find((realmUrl) => {
+        console.log(realmUrl);
+        let realmPathParts = new URL(realmUrl).pathname
+          .split('/')
+          .filter((part) => part !== '');
+        let cardPathParts = cardPath!.split('/').filter((part) => part !== '');
+        let isMatch = false;
+        for (let i = 0; i < realmPathParts.length; i++) {
+          if (realmPathParts[i] === cardPathParts[i]) {
+            isMatch = true;
+          } else {
+            isMatch = false;
+            break;
+          }
+        }
+        return isMatch;
+      });
+      cardUrl = new URL(
+        `/${cardPath}`,
+        realmUrl ?? this.realm.defaultReadableRealm.path,
+      ).href;
+    } else {
+      cardUrl = new URL(cardPath, window.location.origin).href;
+    }
+
+    // we only get a card to understand its canonical URL so it's ok to fetch
+    // a card that is detached from the store as we only care about it's ID.
+    let canonicalCardUrl: string | undefined;
+    // the peek takes advantage of the store cache so this should be quick
+    canonicalCardUrl = (await this.store.get(cardUrl))?.id;
+    if (!canonicalCardUrl) {
+      // TODO: show a 404 page
+      // https://linear.app/cardstack/issue/CS-7364/show-user-a-clear-message-when-they-try-to-access-a-realm-they-cannot
+      alert(`Card not found: ${cardUrl}`);
+    }
+    cardUrl = canonicalCardUrl;
+
+    return cardUrl;
   }
 }
