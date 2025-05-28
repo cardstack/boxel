@@ -136,7 +136,7 @@ module('Integration | ask-ai', function (hooks) {
       .hasText('New AI Assistant Chat');
     assert
       .dom('[data-test-pill-menu-header]')
-      .containsText('1 of 1 Skill Active');
+      .containsText('2 of 2 Skills Active');
     await assertMessages(assert, [
       {
         from: 'testuser',
@@ -172,7 +172,7 @@ module('Integration | ask-ai', function (hooks) {
       .hasText('New AI Assistant Chat');
     assert
       .dom('[data-test-pill-menu-header]')
-      .containsText('1 of 1 Skill Active');
+      .containsText('2 of 2 Skills Active');
     await assertMessages(assert, [
       {
         from: 'testuser',
@@ -216,7 +216,7 @@ module('Integration | ask-ai', function (hooks) {
       .hasText('New AI Assistant Chat');
     assert
       .dom('[data-test-pill-menu-header]')
-      .containsText('2 of 2 Skills Active');
+      .containsText('3 of 3 Skills Active');
     await assertMessages(assert, [
       {
         from: 'testuser',

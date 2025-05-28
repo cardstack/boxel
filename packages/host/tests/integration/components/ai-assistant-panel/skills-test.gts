@@ -17,6 +17,8 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import { FileDef } from 'https://cardstack.com/base/file-api';
+
 import {
   testRealmURL,
   setupCardLogs,
@@ -504,34 +506,58 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
       'room state has changed',
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[0].contentHash,
-      initialRoomStateSkillsJson.enabledSkillCards[0].contentHash,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).contentHash,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).contentHash,
       'skill card instructions have changed',
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[0].url,
-      initialRoomStateSkillsJson.enabledSkillCards[0].url,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).url,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).url,
       'skill card instructions have changed',
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[0].sourceUrl,
-      initialRoomStateSkillsJson.enabledSkillCards[0].sourceUrl,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).sourceUrl,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).sourceUrl,
       'skill card source URL has not changed',
     );
 
     assert.notStrictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[1].contentHash,
-      initialRoomStateSkillsJson.enabledSkillCards[1].contentHash,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).contentHash,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).contentHash,
       'skill card instructions have changed',
     );
     assert.notStrictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[1].url,
-      initialRoomStateSkillsJson.enabledSkillCards[1].url,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).url,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).url,
       'skill card instructions have changed',
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[1].sourceUrl,
-      initialRoomStateSkillsJson.enabledSkillCards[1].sourceUrl,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).sourceUrl,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).sourceUrl,
       'skill card source URL has not changed',
     );
   });
@@ -592,34 +618,58 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
       'room state has changed',
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[0].contentHash,
-      initialRoomStateSkillsJson.enabledSkillCards[0].contentHash,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).contentHash,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).contentHash,
       'skill card instructions have changed',
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[0].url,
-      initialRoomStateSkillsJson.enabledSkillCards[0].url,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).url,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).url,
       'skill card instructions have changed',
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[0].sourceUrl,
-      initialRoomStateSkillsJson.enabledSkillCards[0].sourceUrl,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).sourceUrl,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).sourceUrl,
       'skill card source URL has not changed',
     );
 
     assert.notStrictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[1].contentHash,
-      initialRoomStateSkillsJson.enabledSkillCards[1].contentHash,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).contentHash,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).contentHash,
       'skill card instructions have changed',
     );
     assert.notStrictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[1].url,
-      initialRoomStateSkillsJson.enabledSkillCards[1].url,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).url,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).url,
       'skill card instructions have changed',
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[1].sourceUrl,
-      initialRoomStateSkillsJson.enabledSkillCards[1].sourceUrl,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).sourceUrl,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).sourceUrl,
       'skill card source URL has not changed',
     );
   });
@@ -672,34 +722,58 @@ Hi, world!
       'room state has changed',
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[0].contentHash,
-      initialRoomStateSkillsJson.enabledSkillCards[0].contentHash,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).contentHash,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).contentHash,
       'skill card instructions have changed',
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[0].url,
-      initialRoomStateSkillsJson.enabledSkillCards[0].url,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).url,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).url,
       'skill card instructions have changed',
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[0].sourceUrl,
-      initialRoomStateSkillsJson.enabledSkillCards[0].sourceUrl,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).sourceUrl,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).sourceUrl,
       'skill card source URL has not changed',
     );
 
     assert.notStrictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[1].contentHash,
-      initialRoomStateSkillsJson.enabledSkillCards[1].contentHash,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).contentHash,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).contentHash,
       'skill card instructions have changed',
     );
     assert.notStrictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[1].url,
-      initialRoomStateSkillsJson.enabledSkillCards[1].url,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).url,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).url,
       'skill card instructions have changed',
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[1].sourceUrl,
-      initialRoomStateSkillsJson.enabledSkillCards[1].sourceUrl,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).sourceUrl,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).sourceUrl,
       'skill card source URL has not changed',
     );
   });
