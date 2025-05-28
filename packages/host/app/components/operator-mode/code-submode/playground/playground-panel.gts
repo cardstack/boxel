@@ -108,6 +108,8 @@ export default class PlaygroundPanel extends Component<Signature> {
   @tracked private fieldChooserIsOpen = false;
   @tracked private cardCreationError: CardErrorJSONAPI | undefined = undefined;
 
+  @tracked private cardOptions: PrerenderedCardLike[] = [];
+
   private fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
 
   private get specQuery(): Query {
@@ -573,6 +575,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   private triggerPlaygroundSelections = (
     prerenderedCards?: PrerenderedCardLike[],
   ) => {
+    this.cardOptions = prerenderedCards ?? [];
     this.findSelectedCard(prerenderedCards);
   };
 
@@ -726,15 +729,9 @@ export default class PlaygroundPanel extends Component<Signature> {
                         {{on 'click' this.handleClick}}
                         {{on 'mouseup' this.handleClick}}
                       >
+                        {{! FIXME unduplicate for non-error state}}
                         <InstanceSelectDropdown
-                          @prerenderedCardQuery={{hash
-                            query=this.query
-                            realms=this.recentRealms
-                          }}
-                          @expandedSearchQuery={{hash
-                            query=this.expandedQuery
-                            realms=this.realmServer.availableRealmURLs
-                          }}
+                          @cardOptions={{this.cardOptions}}
                           @fieldOptions={{this.fieldInstances}}
                           @selection={{this.dropdownSelection}}
                           @onSelect={{this.onSelect}}
@@ -775,14 +772,15 @@ export default class PlaygroundPanel extends Component<Signature> {
                   {{on 'mouseup' this.handleClick}}
                 >
                   <InstanceSelectDropdown
-                    @prerenderedCardQuery={{hash
+                    {{!-- @prerenderedCardQuery={{hash
                       query=this.query
                       realms=this.recentRealms
                     }}
                     @expandedSearchQuery={{hash
                       query=this.expandedQuery
                       realms=this.realmServer.availableRealmURLs
-                    }}
+                    }} --}}
+                    @cardOptions={{this.cardOptions}}
                     @fieldOptions={{this.fieldInstances}}
                     @selection={{this.dropdownSelection}}
                     @onSelect={{this.onSelect}}
