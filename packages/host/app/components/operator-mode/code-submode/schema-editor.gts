@@ -37,7 +37,7 @@ interface Signature {
   };
   Blocks: {
     default: [
-      WithBoundArgs<typeof SchemaEditorBadge, 'totalFields' | 'hasModuleError'>,
+      WithBoundArgs<typeof SchemaEditorBadge, 'totalFields'>,
       WithBoundArgs<
         typeof CardAdoptionChain,
         | 'file'
@@ -59,23 +59,17 @@ export type CardInheritance = {
 interface TitleSignature {
   Args: {
     totalFields?: number;
-    hasModuleError?: boolean;
   };
 }
 
 const SchemaEditorBadge: TemplateOnlyComponent<TitleSignature> = <template>
-  {{#if @hasModuleError}}
-    {{! Exclamation point maybe? }}
-    <span class='syntax-error'>Fail to parse</span>
-  {{else}}
-    <span
-      class='total-fields'
-      title='{{@totalFields}} {{getPlural "field" @totalFields}}'
-      data-test-total-fields
-    >
-      {{@totalFields}}
-    </span>
-  {{/if}}
+  <span
+    class='total-fields'
+    title='{{@totalFields}} {{getPlural "field" @totalFields}}'
+    data-test-total-fields
+  >
+    {{@totalFields}}
+  </span>
 
   <style scoped>
     .syntax-error,
@@ -125,10 +119,6 @@ export default class SchemaEditor extends Component<Signature> {
     );
   }
 
-  get hasModuleError() {
-    return !!this.args?.moduleContentsResource?.moduleError?.message;
-  }
-
   get isLoading() {
     return (
       this.args.moduleContentsResource.isLoadingNewModule ||
@@ -138,11 +128,7 @@ export default class SchemaEditor extends Component<Signature> {
 
   <template>
     {{yield
-      (component
-        SchemaEditorBadge
-        totalFields=this.totalFields
-        hasModuleError=this.hasModuleError
-      )
+      (component SchemaEditorBadge totalFields=this.totalFields)
       (component
         CardAdoptionChain
         file=@file
