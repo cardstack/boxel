@@ -59,27 +59,6 @@ export class LeafletMap extends CardDef {
       />
     </template>
   };
-
-  /*
-  static embedded = class Embedded extends Component<typeof this> {
-    <template></template>
-  }
-
-  static atom = class Atom extends Component<typeof this> {
-    <template></template>
-  }
-
-  static edit = class Edit extends Component<typeof this> {
-    <template></template>
-  }
-
-
-
-
-
-
-
-  */
 }
 
 interface LeafletModifierSignature {
