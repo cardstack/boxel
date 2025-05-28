@@ -9,7 +9,7 @@ import { CardContainer } from '@cardstack/boxel-ui/components';
 interface CardsGridSignature {
   Args: {
     query: Query;
-    realms: URL[];
+    realms: string[];
     selectedView: string;
     context?: CardContext;
   };

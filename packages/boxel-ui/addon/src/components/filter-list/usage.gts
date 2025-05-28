@@ -1,82 +1,68 @@
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import FilterList, {
-  type Filter,
-  type FilterListIconSignature,
-} from './index.gts';
-
-const Captions: TemplateOnlyComponent<FilterListIconSignature> = <template>
-  <svg
-    xmlns='http://www.w3.org/2000/svg'
-    width='24'
-    height='24'
-    fill='none'
-    stroke='currentColor'
-    stroke-linecap='round'
-    stroke-linejoin='round'
-    stroke-width='2'
-    class='lucide lucide-captions'
-    viewBox='0 0 24 24'
-    ...attributes
-  ><rect width='18' height='14' x='3' y='5' rx='2' ry='2' /><path
-      d='M7 15h4m4 0h2M7 11h2m4 0h4'
-    /></svg>
-</template>;
-
-const Stack2: TemplateOnlyComponent<FilterListIconSignature> = <template>
-  <svg
-    xmlns='http://www.w3.org/2000/svg'
-    width='24'
-    height='24'
-    fill='none'
-    stroke='currentColor'
-    stroke-linecap='round'
-    stroke-linejoin='round'
-    stroke-width='2'
-    class='icon icon-tabler icons-tabler-outline icon-tabler-stack-2'
-    viewBox='0 0 24 24'
-    ...attributes
-  ><path stroke='none' d='M0 0h24v24H0z' /><path
-      d='M12 4 4 8l8 4 8-4-8-4M4 12l8 4 8-4M4 16l8 4 8-4'
-    /></svg>
-</template>;
+import Card from '../../icons/card.gts';
+import File from '../../icons/file.gts';
+import Star from '../../icons/star.gts';
+import FilterList, { type Filter } from './index.gts';
 
 export default class FilterListUsage extends Component {
-  private allItems = ['Author', 'BlogPost', 'Friend', 'Person', 'Pet'];
-  @tracked private activeFilter: Filter = this.filters[0]!;
+  private nestedItems = ['Author', 'BlogPost', 'Friend', 'Person', 'Pet'];
+  private items = [
+    {
+      displayName: 'Highlights',
+      icon: File,
+      filters: [
+        {
+          displayName: 'Category 1',
+        },
+        {
+          displayName: 'Category 2',
+          filters: [
+            {
+              displayName: 'Item 1',
+              icon: Star,
+            },
+            {
+              displayName: 'Item 2',
+            },
+          ],
+        },
+        {
+          displayName: 'Category 3',
+        },
+      ],
+    },
+    {
+      displayName: 'Recent',
+      icon: File,
+    },
+    {
+      displayName: 'All Cards',
+      icon: Card,
+      filters: [],
+      isExpanded: true,
+    },
+    {
+      displayName: 'Starred',
+      icon: Star,
+    },
+  ];
+  @tracked private activeFilter: Filter | undefined = this.filters?.[0];
 
-  @cached
-  private get filters() {
-    let _filters = [
-      {
-        displayName: 'All Items',
-        icon: Stack2,
-      },
-    ];
-    this.allItems.forEach((item) => {
-      _filters.push({
+  private get filters(): Filter[] {
+    let _filters: Filter[] = this.items;
+    this.nestedItems.forEach((item) => {
+      _filters[2]!['filters']!.push({
         displayName: item,
-        icon: Captions,
+        icon: File,
       });
     });
-
     return _filters;
   }
 
-  @cached
-  private get items() {
-    if (this.activeFilter.displayName === 'All Items') {
-      return this.allItems;
-    }
-
-    return this.allItems.filter(
-      (item) => item === this.activeFilter.displayName,
-    );
-  }
+  private onChange = (filter: Filter) => (this.activeFilter = filter);
 
   <template>
     <FreestyleUsage @name='Filter List'>
@@ -85,23 +71,18 @@ export default class FilterListUsage extends Component {
           <FilterList
             @filters={{this.filters}}
             @activeFilter={{this.activeFilter}}
-            @onChanged={{fn (mut this.activeFilter)}}
+            @onChanged={{this.onChange}}
           />
-          <div class='items'>
-            {{#each this.items as |item|}}
-              <span class='item'>
-                {{item}}
-              </span>
-            {{/each}}
-          </div>
+          <h2>{{this.activeFilter.displayName}}</h2>
         </div>
       </:example>
 
       <:api as |Args|>
         <Args.Object
           @name='filters'
-          @description='An array of Filters, where the Filter interface requires only displayName and icon properties.'
+          @description='An array of objects of type Filter, where the displayName property is required.'
           @value={{this.filters}}
+          @defaultValue='[]'
         />
         <Args.Object
           @name='activeFilter'
@@ -118,20 +99,9 @@ export default class FilterListUsage extends Component {
     </FreestyleUsage>
     <style scoped>
       .filter-usage {
-        display: flex;
+        display: grid;
+        grid-template-columns: 250px 1fr;
         gap: var(--boxel-sp-sm);
-      }
-      .items {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: var(--boxel-sp-xs);
-      }
-      .item {
-        padding: var(--boxel-sp-xs);
-        border-radius: 6px;
-        border: 2px solid var(--boxel-400);
-        height: fit-content;
       }
     </style>
   </template>

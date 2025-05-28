@@ -203,7 +203,13 @@ export class AddFieldToCardDefinitionInput extends CardDef {
   @field computedFieldFunctionSourceCode = contains(StringField); // if provided, the field will be added as a computed field
 }
 
-export class RemixInput extends CardDef {
+export class ListingActionInput extends CardDef {
+  @field realm = contains(StringField);
+  @field actionType = contains(StringField);
+  @field listing = linksTo(CardDef);
+}
+
+export class ListingInput extends CardDef {
   @field realm = contains(StringField);
   @field listing = linksTo(CardDef);
 }
