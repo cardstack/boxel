@@ -681,6 +681,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         </:response>
       </PrerenderedCardSearch>
     {{/if}}
+    {{! FIXME there’s an else in ICD for field options}}
 
     {{#if this.fieldChooserIsOpen}}
       <ToElsewhere
