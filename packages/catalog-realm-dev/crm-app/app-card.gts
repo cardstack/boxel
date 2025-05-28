@@ -15,7 +15,11 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import { and, bool, cn } from '@cardstack/boxel-ui/helpers';
-import { baseRealm, type PrerenderedCardLike } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  type PrerenderedCardLike,
+  type Query,
+} from '@cardstack/runtime-common';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -163,21 +167,23 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
   <template>
     <div class='app-card-content'>
       {{#if this.activeTabRef}}
-        <@context.prerenderedCardSearchComponent
-          @query={{this.query}}
-          @format='fitted'
-          @realms={{@realms}}
-          @isLive={{true}}
-        >
-          <:loading>Loading...</:loading>
-          <:response as |cards|>
-            {{#if @activeTab.isTable}}
-              <TableView @cards={{cards}} @context={{@context}} />
-            {{else}}
-              <CardsGrid @cards={{cards}} @context={{@context}} />
-            {{/if}}
-          </:response>
-        </@context.prerenderedCardSearchComponent>
+        {{#if this.query}}
+          <@context.prerenderedCardSearchComponent
+            @query={{this.query}}
+            @format='fitted'
+            @realms={{@realms}}
+            @isLive={{true}}
+          >
+            <:loading>Loading...</:loading>
+            <:response as |cards|>
+              {{#if @activeTab.isTable}}
+                <TableView @cards={{cards}} @context={{@context}} />
+              {{else}}
+                <CardsGrid @cards={{cards}} @context={{@context}} />
+              {{/if}}
+            </:response>
+          </@context.prerenderedCardSearchComponent>
+        {{/if}}
       {{else}}
         <p>No cards available</p>
       {{/if}}
@@ -311,7 +317,7 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
           by: 'title',
         },
       ],
-    };
+    } as Query;
   }
 
   @action createNew(value: unknown) {
