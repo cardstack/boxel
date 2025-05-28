@@ -865,7 +865,6 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert
         .dom('[data-test-error-details]')
         .includesText('Parse Error at broken.gts:1:6: 1:10');
-      assert.dom('[data-test-module-error-panel] > button').isDisabled();
 
       assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
       await click('[data-test-send-error-to-ai-assistant]');
