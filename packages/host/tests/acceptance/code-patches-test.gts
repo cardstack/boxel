@@ -307,7 +307,7 @@ ${REPLACE_MARKER}
 http://test-realm/test/hi.txt
 ${SEARCH_MARKER}
 ${SEPARATOR_MARKER}
-This file was supposed to be hi.txt but it got a suffix because hi.txt already exists
+This file will be created with a suffix because hi.txt already exists
 ${REPLACE_MARKER}
 \`\`\``;
 
@@ -356,7 +356,7 @@ ${REPLACE_MARKER}
       ).innerText
         .replace(/\s+/g, ' ')
         .trim(),
-      'This file was supposed to be hi.txt but it got a suffix because hi.txt already exists',
+      'This file will be created with a suffix because hi.txt already exists',
     );
   });
 });

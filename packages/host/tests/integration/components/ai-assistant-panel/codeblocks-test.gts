@@ -6,6 +6,9 @@ import { module, test } from 'qunit';
 
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
   baseRealm,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
