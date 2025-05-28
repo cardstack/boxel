@@ -1,5 +1,3 @@
-import { hash } from '@ember/helper';
-
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
