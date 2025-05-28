@@ -1,4 +1,5 @@
 import { on } from '@ember/modifier';
+
 import Component from '@glimmer/component';
 
 import Check from '@cardstack/boxel-icons/check';
