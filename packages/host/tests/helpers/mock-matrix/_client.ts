@@ -155,6 +155,10 @@ export class MockClient implements ExtendedClient {
     return this.clientOpts.baseUrl;
   }
 
+  downloadContentAsBlob(_file: FileDef): Promise<Blob> {
+    throw new Error('Method not implemented.');
+  }
+
   hashMessageWithSecret(_message: string): Promise<string> {
     throw new Error('Method not implemented.');
   }

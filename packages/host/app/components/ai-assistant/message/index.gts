@@ -29,7 +29,6 @@ import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -180,7 +179,6 @@ function isPresent(val: SafeString | string | null | undefined) {
 export default class AiAssistantMessage extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
 
   get isReasoningExpandedByDefault() {
     let result =
@@ -203,18 +201,6 @@ export default class AiAssistantMessage extends Component<Signature> {
       !this.isReasoningExpanded,
     );
   };
-
-  get shouldShowDownloadFile() {
-    // Show the download file button
-    if (this.operatorModeStateService.operatorModeController.debug) {
-      return true;
-    }
-    // Show the download button if this event is a debug event
-    if (this.args.isDebugMessage) {
-      return true;
-    }
-    return false;
-  }
 
   @action
   private async downloadFile(file: FileDef) {
@@ -321,10 +307,7 @@ export default class AiAssistantMessage extends Component<Signature> {
                 {{else}}
                   <FilePill
                     @file={{item}}
-                    @downloadFile={{if
-                      this.shouldShowDownloadFile
-                      this.downloadFile
-                    }}
+                    @downloadFile={{if @isDebugMessage this.downloadFile}}
                   />
                 {{/if}}
               {{/each}}

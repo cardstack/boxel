@@ -31,7 +31,6 @@ import {
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
-  APP_BOXEL_DEBUG_MESSAGE_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   DEFAULT_LLM,
@@ -556,9 +555,6 @@ export async function getModifyPrompt(
   let historicalMessages: OpenAIPromptMessage[] = [];
   for (let event of history) {
     if (event.type !== 'm.room.message') {
-      continue;
-    }
-    if (event.content.msgtype === APP_BOXEL_DEBUG_MESSAGE_MSGTYPE) {
       continue;
     }
     if (isCommandResultEvent(event)) {
