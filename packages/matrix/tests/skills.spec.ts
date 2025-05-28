@@ -69,7 +69,7 @@ test.describe('Skills', () => {
   const defaultSkillCardForInteractMode = `https://cardstack.com/base/Skill/card-editing`;
   const defaultSkillCardsForCodeMode = [
     `https://cardstack.com/base/Skill/source-code-editing`,
-    `https://cardstack.com/base/Skill/boxel-coding`,
+    `https://cardstack.com/base/Skill/boxel-development`,
   ];
   const skillCard1 = `${appURL}/skill-pirate-speak`;
   const skillCard2 = `${appURL}/skill-seo`;

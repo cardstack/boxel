@@ -291,7 +291,7 @@ export default class EditFieldModal extends Component<Signature> {
     // any code after this write will not be executed since the component will
     // get torn down before subsequent code can execute
 
-    await this.args.file.write(src, true);
+    await this.args.file.write(src, { flushLoader: true });
     this.args.onClose();
   });
 

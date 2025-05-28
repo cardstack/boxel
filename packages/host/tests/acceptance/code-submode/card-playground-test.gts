@@ -516,7 +516,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .dom(`[data-test-stack-card="${testRealmURL}Category/home-gym"]`)
         .exists();
 
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
       await click('[data-test-search-result-index="4"]');
       assert
         .dom(`[data-test-stack-card="${testRealmURL}Category/landscaping"]`)
