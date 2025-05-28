@@ -510,7 +510,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .dom(`[data-test-stack-card="${testRealmURL}Category/home-gym"]`)
         .exists();
 
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
       await click('[data-test-search-result-index="4"]');
       assert
         .dom(`[data-test-stack-card="${testRealmURL}Category/landscaping"]`)
@@ -1462,16 +1462,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await openFileInPlayground('boom-person.gts', testRealmURL, {
         declaration: 'BoomPerson',
       });
-      assert
-        .dom('[data-test-instance-chooser]')
-        .hasText('Untitled Boom Person');
+      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
       assert
         .dom('[data-test-card-error]')
-        .doesNotExist('auto-generated card has not error in edit format');
+        .exists('auto-generated card has error in it');
 
       await createNewInstance();
-      // switch to isolated mode to see the current server state
-      await click('[data-test-format-chooser="isolated"]');
 
       assert
         .dom('[data-test-playground-panel] [data-test-card]')
@@ -1520,15 +1516,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await openFileInPlayground('boom-person.gts', testRealmURL, {
         declaration: 'BoomPerson',
       });
-      assert
-        .dom('[data-test-instance-chooser]')
-        .hasText('Untitled Boom Person');
-      assert.dom('[data-test-error-container]').doesNotExist();
-
-      await createNewInstance();
-      // switch to isolated mode to see the current server state
-      await click('[data-test-format-chooser="isolated"]');
-
+      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
       assert
         .dom('[data-test-error-container]')
         .containsText(

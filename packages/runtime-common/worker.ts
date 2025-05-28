@@ -264,6 +264,17 @@ export class Worker {
     });
     await this.#runner(optsId);
     let result = await deferred.promise;
+    try {
+      // the result needs to be safe to stringify
+      // so we check for issues here where we can gracefully handle it
+      JSON.stringify(result);
+    } catch (e: any) {
+      this.#log.error(
+        `${jobIdentity(args.jobInfo)} Unable to stringify the job result`,
+        e,
+      );
+      throw e;
+    }
     this.runnerOptsMgr.removeOptions(optsId);
     return result;
   }

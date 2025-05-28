@@ -10,9 +10,7 @@ import { task } from 'ember-concurrency';
 
 import cloneDeep from 'lodash/cloneDeep';
 import isEqual from 'lodash/isEqual';
-import mergeWith from 'lodash/mergeWith';
-
-import { stringify } from 'qs';
+import merge from 'lodash/merge';
 
 import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 
@@ -317,15 +315,19 @@ export default class StoreService extends Service implements StoreInterface {
   async patch<T extends CardDef = CardDef>(
     id: string,
     patch: PatchData,
+    opts?: { doNotPersist?: true },
   ): Promise<T | CardErrorJSONAPI | undefined> {
     // eslint-disable-next-line ember/classic-decorator-no-classic-methods
     let instance = await this.get<T>(id);
     if (!instance || !isCardInstance(instance)) {
       return;
     }
+    if (opts?.doNotPersist) {
+      await this.stopAutoSaving(instance);
+    }
     let doc = await this.cardService.serializeCard(instance);
     if (patch.attributes) {
-      doc.data.attributes = mergeWith(doc.data.attributes, patch.attributes);
+      doc.data.attributes = merge(doc.data.attributes, patch.attributes);
     }
     if (patch.relationships) {
       let mergedRel = mergeRelationships(
@@ -335,6 +337,9 @@ export default class StoreService extends Service implements StoreInterface {
       if (mergedRel && Object.keys(mergedRel).length !== 0) {
         doc.data.relationships = mergedRel;
       }
+    }
+    if (patch.meta) {
+      doc.data.meta = merge(doc.data.meta, patch.meta);
     }
     let linkedCards = await this.loadPatchedInstances(
       patch,
@@ -353,22 +358,27 @@ export default class StoreService extends Service implements StoreInterface {
         }
         (inner as any)[leaf.match(/^\d+$/) ? Number(leaf) : leaf] = value;
       } else {
-        // TODO this could trigger a save. perhaps instead we could
-        // introduce a new option to updateFromSerialized to accept a list of
-        // fields to pre-load? which in this case would be any relationships that
-        // were patched in
         (instance as any)[field] = value;
       }
     }
     let api = await this.cardService.getAPI();
     await api.updateFromSerialized(instance, doc, this.identityContext);
-    return (await this.persistAndUpdate(instance)) as T | CardErrorJSONAPI;
+    if (opts?.doNotPersist) {
+      await this.startAutoSaving(instance);
+    } else {
+      await this.persistAndUpdate(instance);
+    }
+    return instance as T | CardErrorJSONAPI;
   }
 
   async search(query: Query, realmURL: URL): Promise<CardDef[]> {
-    let json = await this.cardService.fetchJSON(
-      `${realmURL}_search?${stringify(query, { strictNullHandling: true })}`,
-    );
+    let json = await this.cardService.fetchJSON(`${realmURL}_search`, {
+      method: 'QUERY',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(query),
+    });
     if (!isCardCollectionDocument(json)) {
       throw new Error(
         `The realm search response was not a card collection document:
@@ -552,7 +562,10 @@ export default class StoreService extends Service implements StoreInterface {
             `reloading file resource ${invalidation} because event has no clientRequestId`,
           );
         } else if (this.cardService.clientRequestIds.has(clientRequestId)) {
-          if (clientRequestId.startsWith('instance:')) {
+          if (
+            clientRequestId.startsWith('instance:') ||
+            clientRequestId.startsWith('editor-with-instance')
+          ) {
             realmEventsLogger.debug(
               `ignoring invalidation for card ${invalidation} because request id ${clientRequestId} is ours and an instance type`,
             );

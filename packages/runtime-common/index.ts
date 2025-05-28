@@ -1,4 +1,4 @@
-import { CardResource } from './card-document';
+import { CardResource, Meta } from './card-document';
 import type { ResolvedCodeRef } from './code-ref';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
@@ -17,6 +17,9 @@ export interface LooseSingleCardDocument {
 export type PatchData = {
   attributes?: CardResource['attributes'];
   relationships?: CardResource['relationships'];
+  meta?: {
+    fields: Meta['fields'];
+  };
 };
 
 export { Deferred } from './deferred';
@@ -73,6 +76,7 @@ import { RealmPaths, type LocalPath } from './paths';
 import { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './cached-fetch';
+export * from './catalog';
 export * from './commands';
 export * from './constants';
 export * from './matrix-constants';
@@ -571,3 +575,5 @@ export function unixTime(epochTimeMs: number) {
 export function isLocalId(id: string) {
   return !id.startsWith('http');
 }
+
+export * from './prerendered-card-search';
