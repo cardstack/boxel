@@ -14,6 +14,12 @@ import { tracked } from '@glimmer/tracking';
 import percySnapshot from '@percy/ember';
 import { module, test } from 'qunit';
 
+import {
+  SEPARATOR_MARKER,
+  SEARCH_MARKER,
+  REPLACE_MARKER,
+} from '@cardstack/runtime-common';
+
 import FormattedAiBotMessage from '@cardstack/host/components/ai-assistant/formatted-aibot-message';
 
 import { parseHtmlContent } from '@cardstack/host/lib/formatted-message/utils';
@@ -22,11 +28,6 @@ import MonacoService from '@cardstack/host/services/monaco-service';
 
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
-import {
-  SEPARATOR_MARKER,
-  SEARCH_MARKER,
-  REPLACE_MARKER,
-} from '@cardstack/runtime-common';
 
 module('Integration | Component | FormattedAiBotMessage', function (hooks) {
   setupRenderingTest(hooks);

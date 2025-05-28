@@ -1,15 +1,16 @@
 import { module, test, skip } from 'qunit';
 
-import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
-import type CommandService from '@cardstack/host/services/command-service';
-
-import { lookupService } from '../../helpers';
-import { setupRenderingTest } from '../../helpers/setup';
 import {
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
+
+import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
+import type CommandService from '@cardstack/host/services/command-service';
+
+import { lookupService } from '../../helpers';
+import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | commands | apply-search-replace-block', function (hooks) {
   setupRenderingTest(hooks);

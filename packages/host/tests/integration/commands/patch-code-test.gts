@@ -1,5 +1,11 @@
 import { module, test } from 'qunit';
 
+import {
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+} from '@cardstack/runtime-common';
+
 import { LintResult } from '@cardstack/runtime-common/lint';
 
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
@@ -15,11 +21,6 @@ import {
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
-import {
-  REPLACE_MARKER,
-  SEARCH_MARKER,
-  SEPARATOR_MARKER,
-} from '@cardstack/runtime-common';
 
 module('Integration | commands | patch-code', function (hooks) {
   setupRenderingTest(hooks);

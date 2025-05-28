@@ -1,11 +1,12 @@
 import { module, test } from 'qunit';
 
-import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
 import {
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
+
+import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
 
 module(
   'Unit | code patching | parse search replace blocks',

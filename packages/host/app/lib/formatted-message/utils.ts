@@ -1,12 +1,12 @@
 import { SafeString, htmlSafe } from '@ember/template';
 
+import { SEARCH_MARKER } from '@cardstack/runtime-common';
 import { unescapeHtml } from '@cardstack/runtime-common/helpers/html';
 
 import {
   isCompleteSearchReplaceBlock,
   parseSearchReplace,
 } from '../search-replace-block-parsing';
-import { SEARCH_MARKER } from '@cardstack/runtime-common';
 
 export function extractCodeData(
   preElementString: string,
