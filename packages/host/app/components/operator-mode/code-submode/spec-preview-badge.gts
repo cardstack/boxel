@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
 import Check from '@cardstack/boxel-icons/check';
+
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
