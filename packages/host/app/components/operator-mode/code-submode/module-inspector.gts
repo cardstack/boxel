@@ -210,12 +210,12 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     return null;
   }
 
-  private get selectedAccordionItem(): ActiveModuleInspectorView {
+  private get activePanel(): ActiveModuleInspectorView {
     let selection = this.panelSelections[this.args.readyFile.url];
     return selection ?? 'schema';
   }
 
-  @action private toggleAccordionItem(item: ActiveModuleInspectorView) {
+  @action private setActivePanel(item: ActiveModuleInspectorView) {
     this.panelSelections[this.args.readyFile.url] = item;
     // persist in local storage
     window.localStorage.setItem(
@@ -372,7 +372,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         });
         this.specPanelService.setSelection(spec[localId]);
         if (this.selectedView !== 'spec') {
-          this.toggleAccordionItem('spec');
+          this.setActivePanel('spec');
         }
       } catch (e: any) {
         console.log('Error saving', e);
@@ -501,7 +501,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
             <ToggleButton
               class='toggle-button'
               @isActive={{eq this.selectedView moduleInspectorView}}
-              {{on 'click' (fn this.toggleAccordionItem moduleInspectorView)}}
+              {{on 'click' (fn this.setActivePanel moduleInspectorView)}}
               data-test-module-inspector-view={{moduleInspectorView}}
             >
               {{capitalize moduleInspectorView}}
@@ -529,7 +529,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
             <SchemaEditorPanel class='accordion-content' />
           {{else if (eq this.selectedView 'preview')}}
             <Playground
-              @isOpen={{eq this.selectedAccordionItem 'preview'}}
+              @isOpen={{eq this.activePanel 'preview'}}
               @codeRef={{@selectedCodeRef}}
               @isUpdating={{@moduleContentsResource.isLoading}}
               @cardOrField={{@selectedCardOrField.cardOrField}}
@@ -539,8 +539,8 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
             <SpecPreview
               @selectedDeclaration={{@selectedDeclaration}}
               @isLoadingNewModule={{@moduleContentsResource.isLoadingNewModule}}
-              @toggleAccordionItem={{this.toggleAccordionItem}}
-              @isPanelOpen={{eq this.selectedAccordionItem 'spec'}}
+              @toggleAccordionItem={{this.setActivePanel}}
+              @isPanelOpen={{eq this.activePanel 'spec'}}
               @selectedDeclarationAsCodeRef={{this.selectedDeclarationAsCodeRef}}
               @updatePlaygroundSelections={{this.updatePlaygroundSelections}}
               @activeSpec={{this.activeSpec}}
