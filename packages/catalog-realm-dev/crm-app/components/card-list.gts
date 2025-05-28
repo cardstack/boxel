@@ -12,7 +12,7 @@ import { CardContainer } from '@cardstack/boxel-ui/components';
 interface CardListSignature {
   Args: {
     query: Query;
-    realms: URL[];
+    realms: string[];
     context?: CardContext;
   };
   Blocks: {

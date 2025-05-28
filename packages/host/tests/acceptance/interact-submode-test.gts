@@ -420,7 +420,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       // Click on search-input
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
@@ -445,13 +445,13 @@ module('Acceptance | interact submode tests', function (hooks) {
           '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"]',
         )
         .doesNotExist();
-      assert.dom('[data-test-search-field]').hasValue('');
+      assert.dom('[data-test-open-search-field]').hasValue('');
     });
 
     test('Can search for an index card by URL (without "index" in path)', async function (assert) {
       await visitOperatorMode({});
 
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
 
       await fillIn('[data-test-search-field]', testRealmURL);
 
@@ -466,7 +466,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     test('Can open a recent card in empty stack', async function (assert) {
       await visitOperatorMode({});
 
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
       await fillIn('[data-test-search-field]', `${testRealmURL}person-entry`);
 
       await click('[data-test-card="http://test-realm/test/person-entry"]');
@@ -480,7 +480,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         `[data-test-stack-card="${testRealmURL}person-entry"] [data-test-close-button]`,
       );
 
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
       assert.dom('[data-test-search-sheet]').hasClass('prompt');
 
       await click(`[data-test-search-result="${testRealmURL}person-entry"]`);
@@ -748,7 +748,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // Replace the current stack by interacting with search prompt directly
       // Click on search-input
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
@@ -793,7 +793,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       // Click on search-input
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
@@ -818,7 +818,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
     test('search can be dismissed with escape', async function (assert) {
       await visitOperatorMode({});
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt');
 
@@ -1852,7 +1852,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
 
       // Click on search-input
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 

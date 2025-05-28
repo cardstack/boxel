@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "todos": [
+        {
+          "text": "Buy Groceries",
+          "isCompleted": true
+        },
+        {
+          "text": "Finish Project Report",
+          "isCompleted": false
+        },
+        {
+          "text": "Schedule Doctor’s Appointment",
+          "isCompleted": false
+        },
+        {
+          "text": "Organize Workspace",
+          "isCompleted": false
+        }
+      ],
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../todo-mvc",
+        "name": "TodoMvc"
+      }
+    }
+  }
+}
