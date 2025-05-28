@@ -126,7 +126,7 @@ test.describe('Login', () => {
           },
         ],
       ],
-      codePath: `${appURL}/Person.gts`,
+      codePath: `${appURL}/person.gts`,
       submode: 'code',
       fileView: 'inspector',
       openDirs: {},
@@ -145,8 +145,9 @@ test.describe('Login', () => {
       page.locator(`[data-test-card-url-bar-realm-info]`),
     ).toContainText('in Test Workspace A');
     await expect(page.locator(`[data-test-card-url-bar] input`)).toHaveValue(
-      `${appURL}/Person.gts`,
+      `${appURL}/person.gts`,
     );
+    await page.locator(`[data-test-editor]`).waitFor();
     await expect(page.locator(`[data-test-editor]`)).toContainText(
       'export class Person extends CardDef',
     );
