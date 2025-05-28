@@ -493,7 +493,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           }}
           data-test-preview-panel-header
         >
-
           {{#each moduleInspectorPanels as |moduleInspectorView|}}
             <ToggleButton
               class='toggle-button'
@@ -532,7 +531,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
               @cardOrField={{@selectedCardOrField.cardOrField}}
             />
           {{else if (eq this.selectedView 'spec')}}
-
             <SpecPreview
               @selectedDeclaration={{@selectedDeclaration}}
               @isLoadingNewModule={{@moduleContentsResource.isLoadingNewModule}}
