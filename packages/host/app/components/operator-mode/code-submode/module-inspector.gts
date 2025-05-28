@@ -7,8 +7,6 @@ import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import Check from '@cardstack/boxel-icons/check';
-
 import { task } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
@@ -16,9 +14,7 @@ import window from 'ember-window-mock';
 
 import { TrackedObject } from 'tracked-built-ins';
 
-import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import {
   type getCards,
@@ -47,10 +43,11 @@ import CardError from '@cardstack/host/components/operator-mode/card-error';
 import CardRendererPanel from '@cardstack/host/components/operator-mode/card-renderer-panel/index';
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
 
-import SchemaEditor, {
-  SchemaEditorBadge,
-} from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
+import SchemaEditor from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
+
 import SpecPreview from '@cardstack/host/components/operator-mode/code-submode/spec-preview';
+import SpecPreviewBadge from '@cardstack/host/components/operator-mode/code-submode/spec-preview-badge';
+
 import ToggleButton from '@cardstack/host/components/operator-mode/code-submode/toggle-button';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 import consumeContext from '@cardstack/host/helpers/consume-context';
@@ -80,7 +77,7 @@ import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 export type ActiveModuleInspectorView = 'schema' | 'spec' | 'preview';
 
-const accordionItems: ActiveModuleInspectorView[] = [
+const moduleInspectorPanels: ActiveModuleInspectorView[] = [
   'schema',
   'preview',
   'spec',
@@ -497,7 +494,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           data-test-preview-panel-header
         >
 
-          {{#each accordionItems as |moduleInspectorView|}}
+          {{#each moduleInspectorPanels as |moduleInspectorView|}}
             <ToggleButton
               class='toggle-button'
               @isActive={{eq this.selectedView moduleInspectorView}}
@@ -506,7 +503,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
             >
               {{capitalize moduleInspectorView}}
               {{#if (eq moduleInspectorView 'spec')}}
-                <SpecPreviewTitle
+                <SpecPreviewBadge
                   @spec={{this.activeSpec}}
                   @showCreateSpec={{this.showCreateSpec}}
                   @createSpec={{this.createSpec}}
@@ -526,7 +523,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           data-test-active-module-inspector-view={{this.selectedView}}
         >
           {{#if (eq this.selectedView 'schema')}}
-            <SchemaEditorPanel class='accordion-content' />
+            <SchemaEditorPanel class='non-preview-panel-content' />
           {{else if (eq this.selectedView 'preview')}}
             <Playground
               @isOpen={{eq this.activePanel 'preview'}}
@@ -549,7 +546,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
               as |SpecPreviewContent|
             >
               {{#if this.showSpecPreview}}
-                <SpecPreviewContent class='accordion-content' />
+                <SpecPreviewContent class='non-preview-panel-content' />
               {{else}}
                 <p
                   class='file-incompatible-message'
@@ -616,24 +613,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         max-width: 400px;
       }
 
-      .accordion-item {
-        --accordion-item-title-font: 600 var(--boxel-font-sm);
-        box-sizing: content-box; /* prevent shift during accordion toggle because of border-width */
-      }
-      .playground-accordion-item > :deep(.title) {
-        padding-block: var(--boxel-sp-4xs);
-      }
-      .accordion-item > :deep(.title) {
-        height: var(--accordion-item-closed-height);
-      }
-      .accordion-item :deep(.accordion-item-content) {
-        overflow-y: auto;
-      }
-      .accordion-item:last-child {
-        border-bottom: var(--boxel-border);
-      }
-
-      .accordion-content {
+      .non-preview-panel-content {
         padding: var(--boxel-sp-xs);
         background-color: var(--code-mode-panel-background-color);
         min-height: 100%;
@@ -692,102 +672,4 @@ export class SpecUpdatedModifier extends Modifier<SpecUpdatedModifierSignature> 
 
     onSpecUpdated(spec);
   }
-}
-
-// FIXME where is a good place for these?
-
-interface SpecPreviewTitleSignature {
-  Args: {
-    spec?: Spec;
-    numberOfInstances?: number;
-    showCreateSpec: boolean;
-    createSpec: (event: MouseEvent) => void;
-    isCreateSpecInstanceRunning: boolean;
-  };
-}
-
-// FIXME what should this be called?
-class SpecPreviewTitle extends Component<SpecPreviewTitleSignature> {
-  private get moreThanOneInstance() {
-    return this.args.numberOfInstances && this.args.numberOfInstances > 1;
-  }
-
-  private get specType() {
-    return this.args.spec?.specType as SpecType | undefined;
-  }
-
-  <template>
-    <span class='spec-indicator'>
-      {{#if @showCreateSpec}}
-        <BoxelButton
-          class='create-spec-button'
-          @icon='plus'
-          @kind='primary'
-          @size='extra-small'
-          @loading={{@isCreateSpecInstanceRunning}}
-          {{on 'click' @createSpec}}
-          data-test-create-spec-button
-        >
-          {{#unless @isCreateSpecInstanceRunning}}
-            <IconPlus width='10px' height='10px' />
-          {{/unless}}
-        </BoxelButton>
-      {{else if this.moreThanOneInstance}}
-        <Check
-          class='spec-checkmark'
-          data-test-number-of-instance={{@numberOfInstances}}
-          title='{{@numberOfInstances}} instances'
-        />
-      {{else}}
-        {{#if this.specType}}
-          <Check
-            class='spec-checkmark'
-            data-test-spec-tag={{this.specType}}
-            title='Spec type: {{this.specType}}'
-          />
-        {{/if}}
-      {{/if}}
-    </span>
-
-    <style scoped>
-      .spec-indicator {
-        display: flex;
-      }
-      .create-spec-button {
-        --boxel-button-min-height: auto;
-        --boxel-button-min-width: auto;
-        padding: 4px;
-        border-radius: var(--boxel-border-radius-xs);
-      }
-
-      .create-spec-button :deep(.boxel-loading-indicator) {
-        --loading-indicator-size: 12px;
-        margin-right: 0;
-      }
-
-      .number-of-instance {
-        margin-left: auto;
-        display: inline-flex;
-        align-items: center;
-      }
-      .number-of-instance-text {
-        font: 500 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-xl);
-      }
-      .dot-icon {
-        flex-shrink: 0;
-        width: 18px;
-        height: 18px;
-      }
-
-      .boxel-button:not(.active) .spec-checkmark {
-        color: var(--boxel-400);
-      }
-
-      .spec-checkmark {
-        stroke: currentColor;
-        width: var(--boxel-sp);
-      }
-    </style>
-  </template>
 }

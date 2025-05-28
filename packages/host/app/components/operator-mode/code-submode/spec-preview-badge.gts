@@ -1,0 +1,103 @@
+import { on } from '@ember/modifier';
+import Component from '@glimmer/component';
+
+import Check from '@cardstack/boxel-icons/check';
+import { BoxelButton } from '@cardstack/boxel-ui/components';
+import { IconPlus } from '@cardstack/boxel-ui/icons';
+
+import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
+
+interface SpecPreviewBadgeSignature {
+  Args: {
+    spec?: Spec;
+    numberOfInstances?: number;
+    showCreateSpec: boolean;
+    createSpec: (event: MouseEvent) => void;
+    isCreateSpecInstanceRunning: boolean;
+  };
+}
+
+export default class SpecPreviewBadge extends Component<SpecPreviewBadgeSignature> {
+  private get moreThanOneInstance() {
+    return this.args.numberOfInstances && this.args.numberOfInstances > 1;
+  }
+
+  private get specType() {
+    return this.args.spec?.specType as SpecType | undefined;
+  }
+
+  <template>
+    <span class='spec-indicator'>
+      {{#if @showCreateSpec}}
+        <BoxelButton
+          class='create-spec-button'
+          @icon='plus'
+          @kind='primary'
+          @size='extra-small'
+          @loading={{@isCreateSpecInstanceRunning}}
+          {{on 'click' @createSpec}}
+          data-test-create-spec-button
+        >
+          {{#unless @isCreateSpecInstanceRunning}}
+            <IconPlus width='10px' height='10px' />
+          {{/unless}}
+        </BoxelButton>
+      {{else if this.moreThanOneInstance}}
+        <Check
+          class='spec-checkmark'
+          data-test-number-of-instance={{@numberOfInstances}}
+          title='{{@numberOfInstances}} instances'
+        />
+      {{else}}
+        {{#if this.specType}}
+          <Check
+            class='spec-checkmark'
+            data-test-spec-tag={{this.specType}}
+            title='Spec type: {{this.specType}}'
+          />
+        {{/if}}
+      {{/if}}
+    </span>
+
+    <style scoped>
+      .spec-indicator {
+        display: flex;
+      }
+      .create-spec-button {
+        --boxel-button-min-height: auto;
+        --boxel-button-min-width: auto;
+        padding: 4px;
+        border-radius: var(--boxel-border-radius-xs);
+      }
+
+      .create-spec-button :deep(.boxel-loading-indicator) {
+        --loading-indicator-size: 12px;
+        margin-right: 0;
+      }
+
+      .number-of-instance {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+      }
+      .number-of-instance-text {
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xl);
+      }
+      .dot-icon {
+        flex-shrink: 0;
+        width: 18px;
+        height: 18px;
+      }
+
+      .boxel-button:not(.active) .spec-checkmark {
+        color: var(--boxel-400);
+      }
+
+      .spec-checkmark {
+        stroke: currentColor;
+        width: var(--boxel-sp);
+      }
+    </style>
+  </template>
+}
