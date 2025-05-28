@@ -45,7 +45,7 @@ const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
     </div>
     <style scoped>
       .selected-item {
-        font-size: 500 var(--boxel-font-xs);
+        font: 500 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-sm);
         overflow: hidden;
         text-overflow: ellipsis;
