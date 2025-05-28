@@ -16,7 +16,7 @@ import window from 'ember-window-mock';
 
 import { TrackedObject } from 'tracked-built-ins';
 
-import { Accordion, BoxelButton } from '@cardstack/boxel-ui/components';
+import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
@@ -465,20 +465,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         <CardError @error={{@cardError}} @hideHeader={{true}} />
       {{/if}}
     {{else if this.isEmptyFile}}
-      <Accordion as |A|>
-        <A.Item
-          class='accordion-item'
-          @contentClass='accordion-item-content'
-          @isOpen={{true}}
-        >
-          <:title>
-            <SchemaEditorBadge @hasModuleError={{true}} />
-          </:title>
-          <:content>
-            <SyntaxErrorDisplay @syntaxErrors='File is empty' />
-          </:content>
-        </A.Item>
-      </Accordion>
+      <SyntaxErrorDisplay @syntaxErrors='File is empty' />
     {{else if this.fileIncompatibilityMessage}}
 
       <div
@@ -577,23 +564,9 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         </section>
       </SchemaEditor>
     {{else if @moduleContentsResource.moduleError}}
-      <Accordion as |A|>
-        <A.Item
-          class='accordion-item'
-          @contentClass='accordion-item-content'
-          @isOpen={{true}}
-          data-test-module-error-panel
-        >
-          <:title>
-            <SchemaEditorBadge @hasModuleError={{true}} />
-          </:title>
-          <:content>
-            <SyntaxErrorDisplay
-              @syntaxErrors={{@moduleContentsResource.moduleError.message}}
-            />
-          </:content>
-        </A.Item>
-      </Accordion>
+      <SyntaxErrorDisplay
+        @syntaxErrors={{@moduleContentsResource.moduleError.message}}
+      />
     {{else if @card}}
       <CardRendererPanel
         class='card-renderer-panel'
