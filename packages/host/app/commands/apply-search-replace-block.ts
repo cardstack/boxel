@@ -15,9 +15,9 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
   description = `Apply search/replace blocks to file contents. The format is:
 ╔═══ SEARCH ════╗
 [original code to find]
-╠═══════════════╣
+╠══════════════╣
 [new code to replace with]
-'╚═══ REPLACE ═══╝
+╚═══ REPLACE ═══╝
 `;
   static actionVerb = 'Apply';
 
@@ -32,7 +32,7 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.ApplySearchReplaceBlockResult> {
     let commandModule = await this.loadCommandModule();
     const { ApplySearchReplaceBlockResult } = commandModule;
-    debugger;
+
     // Parse the search and replace blocks from the provided code block
     const { searchPattern, replacePattern } = this.parseCodeBlock(
       input.codeBlock,
