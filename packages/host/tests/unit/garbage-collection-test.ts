@@ -1,5 +1,6 @@
 import { type RenderingTestContext } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -18,7 +19,7 @@ import IdentityContext, {
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type CardDef as CardInstance } from 'https://cardstack.com/base/card-api';
 
-import { saveCard, lookupLoaderService, testRealmURL } from '../helpers';
+import { saveCard, testRealmURL } from '../helpers';
 import {
   CardDef,
   contains,
@@ -38,7 +39,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
   let api: typeof CardAPI;
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
     api = await loader.import(`${baseRealm.url}card-api`);
   });
 

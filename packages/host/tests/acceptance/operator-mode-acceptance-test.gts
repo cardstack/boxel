@@ -8,6 +8,7 @@ import {
   triggerEvent,
 } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { getPageTitle } from 'ember-page-title/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
@@ -39,8 +40,6 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
-  lookupLoaderService,
-  lookupNetworkService,
   createJWT,
   testRealmSecretSeed,
   setupUserSubscription,
@@ -83,7 +82,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     setExpiresInSec(60 * 60);
 
-    let loader = lookupLoaderService().loader;
+    let loader = getService('loader-service').loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
@@ -680,7 +679,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   test('open workspace chooser when boxel icon is clicked', async function (assert) {
-    lookupNetworkService().mount(
+    getService('network').mount(
       async (req: Request) => {
         let isOnWorkspaceChooser = document.querySelector(
           '[data-test-workspace-chooser]',

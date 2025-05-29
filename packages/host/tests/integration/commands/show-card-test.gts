@@ -4,6 +4,7 @@ import { RenderingTestContext } from '@ember/test-helpers';
 
 import { tracked } from '@glimmer/tracking';
 
+import { getService } from '@universal-ember/test-support';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 
 import { module, test, skip } from 'qunit';
@@ -13,13 +14,10 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import ShowCardCommand from '@cardstack/host/commands/show-card';
 import { StackItem } from '@cardstack/host/lib/stack-item';
-import type CommandService from '@cardstack/host/services/command-service';
 
 import RealmService from '@cardstack/host/services/realm';
 
 import {
-  lookupService,
-  lookupLoaderService,
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -114,7 +112,7 @@ module('Integration | Command | show-card', function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   setupLocalIndexing(hooks);
@@ -231,9 +229,7 @@ module('Integration | Command | show-card', function (hooks) {
       { instantiate: false },
     );
 
-    command = new ShowCardCommand(
-      lookupService<CommandService>('command-service').commandContext,
-    );
+    command = new ShowCardCommand(getService('command-service').commandContext);
   });
 
   hooks.afterEach(function () {
