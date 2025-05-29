@@ -7,14 +7,14 @@ import {
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
+
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
-
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
   testRealmURL,
@@ -180,9 +180,7 @@ module('Integration | card-catalog', function (hooks) {
       },
     });
 
-    let operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
+    let operatorModeStateService = getService('operator-mode-state-service');
 
     operatorModeStateService.restore({
       stacks: [

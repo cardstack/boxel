@@ -2,6 +2,8 @@ import Service from '@ember/service';
 import { waitFor, click, findAll } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
+
 import { module, skip } from 'qunit';
 
 import { baseRealm, Loader, type Realm } from '@cardstack/runtime-common';
@@ -63,9 +65,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
   );
 
   hooks.beforeEach(async function () {
-    operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
+    operatorModeStateService = getService('operator-mode-state-service');
   });
 
   // TODO: extract test helper

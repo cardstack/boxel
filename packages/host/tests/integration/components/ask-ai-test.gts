@@ -1,6 +1,8 @@
 import { click, fillIn, triggerEvent } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
+
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -53,9 +55,7 @@ module('Integration | ask-ai', function (hooks) {
   let noop = () => {};
 
   hooks.beforeEach(async function () {
-    operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
+    operatorModeStateService = getService('operator-mode-state-service');
 
     const petCard = `import { CardDef, Component } from "https://cardstack.com/base/card-api";
       export class Pet extends CardDef {

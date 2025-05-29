@@ -46,9 +46,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import MonacoService from '@cardstack/host/services/monaco-service';
 import type NetworkService from '@cardstack/host/services/network';
 
-import RealmServerService, {
-  RealmServerTokenClaims,
-} from '@cardstack/host/services/realm-server';
+import { RealmServerTokenClaims } from '@cardstack/host/services/realm-server';
 
 import type StoreService from '@cardstack/host/services/store';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
@@ -395,7 +393,7 @@ async function setupTestRealm({
 
   realmURL = realmURL ?? testRealmURL;
 
-  let realmServer = owner.lookup('service:realm-server') as RealmServerService;
+  let realmServer = getService('realm-server');
   if (!realmServer.availableRealmURLs.includes(realmURL)) {
     realmServer.setAvailableRealmURLs([realmURL]);
   }

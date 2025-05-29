@@ -2,6 +2,8 @@ import { waitFor, waitUntil, click } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
+
 import { module, test } from 'qunit';
 
 import {
@@ -16,7 +18,6 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
@@ -78,12 +79,10 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
   let noop = () => {};
 
   hooks.beforeEach(async function () {
-    operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
+    operatorModeStateService = getService('operator-mode-state-service');
 
     // Add cardService mock for example.com/component.gts
-    let cardService = this.owner.lookup('service:card-service') as CardService;
+    let cardService = getService('card-service');
     cardService.getSource = async (url: URL) => {
       if (url.toString() === 'https://example.com/component.gts') {
         return {

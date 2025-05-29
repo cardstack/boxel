@@ -3,6 +3,7 @@ import { waitUntil, waitFor, click, triggerEvent } from '@ember/test-helpers';
 import { buildWaiter } from '@ember/test-waiters';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
@@ -17,8 +18,6 @@ import { Realm } from '@cardstack/runtime-common/realm';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
-
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
   IncrementalIndexEventContent,
@@ -78,9 +77,7 @@ module('Integration | card-copy', function (hooks) {
       leftCards: string[],
       rightCards: string[] = [],
     ) => {
-      let operatorModeStateService = this.owner.lookup(
-        'service:operator-mode-state-service',
-      ) as OperatorModeStateService;
+      let operatorModeStateService = getService('operator-mode-state-service');
 
       let stacks = [
         leftCards.map((url) => ({

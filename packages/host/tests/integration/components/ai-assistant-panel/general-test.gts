@@ -9,6 +9,8 @@ import { settled } from '@ember/test-helpers';
 import { fillIn } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
+
 import { format, subMinutes } from 'date-fns';
 
 import window from 'ember-window-mock';
@@ -28,7 +30,6 @@ import {
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { CurrentRoomIdPersistenceKey } from '@cardstack/host/utils/local-storage-keys';
@@ -101,9 +102,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
   let noop = () => {};
 
   hooks.beforeEach(async function () {
-    operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
+    operatorModeStateService = getService('operator-mode-state-service');
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -687,9 +686,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     await click(`[data-test-enter-room="${anotherRoomId}"]`);
     await waitFor('[data-test-message-idx="0"]');
 
-    let matrixService = this.owner.lookup(
-      'service:matrix-service',
-    ) as MatrixService;
+    let matrixService = getService('matrix-service');
     assert.deepEqual(
       Array.from(matrixService.currentUserEventReadReceipts.keys()),
       [eventId2, eventId3],

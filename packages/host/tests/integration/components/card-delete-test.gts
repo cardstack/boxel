@@ -1,6 +1,8 @@
 import { waitUntil, waitFor, click, triggerEvent } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
+
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -9,9 +11,6 @@ import { Realm } from '@cardstack/runtime-common/realm';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
-
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -81,9 +80,7 @@ module('Integration | card-delete', function (hooks) {
       leftCards: string[],
       rightCards: string[] = [],
     ) => {
-      let operatorModeStateService = this.owner.lookup(
-        'service:operator-mode-state-service',
-      ) as OperatorModeStateService;
+      let operatorModeStateService = getService('operator-mode-state-service');
 
       let stacks = [
         leftCards.map((url) => ({
@@ -532,9 +529,7 @@ module('Integration | card-delete', function (hooks) {
 
   test('can delete a card that is a recent item', async function (assert) {
     // creates a recent item
-    let recentCardsService = this.owner.lookup(
-      'service:recent-cards-service',
-    ) as RecentCardsService;
+    let recentCardsService = getService('recent-cards-service');
     let mango = await loadCard(`${testRealmURL}Pet/mango`);
     recentCardsService.add(mango.id);
 

@@ -2,6 +2,8 @@ import { waitFor, waitUntil, click } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
+
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -70,9 +72,7 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
   let noop = () => {};
 
   hooks.beforeEach(async function () {
-    operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
+    operatorModeStateService = getService('operator-mode-state-service');
 
     class Person extends CardDef {
       static displayName = 'Person';

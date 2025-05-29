@@ -1,5 +1,6 @@
 import { fillIn, RenderingTestContext } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import formatISO from 'date-fns/formatISO';
 import parseISO from 'date-fns/parseISO';
 
@@ -15,8 +16,6 @@ import {
   type Permissions,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
-
-import type StoreService from '@cardstack/host/services/store';
 
 import { type CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
@@ -4303,7 +4302,7 @@ module('Integration | serialization', function (hooks) {
       },
     });
 
-    let store = this.owner.lookup('service:store') as StoreService;
+    let store = getService('store');
     let captainMango = await store.get(`${testRealmURL}Captain/mango`);
     let mangoTheBoat = (captainMango as Captain).createEponymousBoat();
 
