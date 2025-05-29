@@ -83,6 +83,7 @@ jobs:
 
   ai-bot-test:
     name: AI bot Tests
+    needs: change-check
     if: needs.change-check.outputs.ai-bot == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
@@ -97,6 +98,7 @@ jobs:
 
   boxel-motion-test:
     name: Boxel Motion Tests
+    needs: change-check
     if: needs.change-check.outputs.boxel-motion == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
@@ -114,6 +116,7 @@ jobs:
 
   boxel-ui-test:
     name: Boxel UI Tests
+    needs: change-check
     if: needs.change-check.outputs.boxel-ui == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
@@ -134,6 +137,7 @@ jobs:
 
   boxel-ui-raw-icon-changes-only:
     name: Boxel UI ensure raw icon changes only
+    needs: change-check
     if: needs.change-check.outputs.boxel-ui == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
@@ -150,6 +154,7 @@ jobs:
 
   boxel-icons-raw-icon-changes-only:
     name: Boxel Icons ensure raw icon changes only
+    needs: change-check
     if: needs.change-check.outputs.boxel-icons == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
@@ -166,6 +171,7 @@ jobs:
 
   matrix-client-test:
     name: Matrix Client Tests
+    needs: change-check
     if: needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     strategy:
@@ -234,6 +240,7 @@ jobs:
 
   matrix-client-merge-reports-and-publish:
     name: Merge Matrix reports and publish
+    needs: change-check
     # always() makes it run even if a matrix-client-test shard fails
     if: always() && (needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main')
     needs: matrix-client-test
@@ -309,6 +316,7 @@ jobs:
 
   realm-server-test:
     name: Realm Server Tests
+    needs: change-check
     if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
@@ -389,6 +397,7 @@ jobs:
 
   vscode-boxel-tools-package:
     name: Boxel Tools VS Code Extension package
+    needs: change-check
     if: needs.change-check.outputs.vscode-boxel-tools == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
