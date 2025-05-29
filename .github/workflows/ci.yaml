@@ -32,17 +32,54 @@ jobs:
               - '.github/workflows/ci.yaml'
               - 'packages/ai-bot/**'
               - 'packages/base/**'
-              - 'packages/boxel-ui/**'
               - 'packages/boxel-icons/**'
+              - 'packages/boxel-ui/**'
               - 'packages/host/**'
               - 'packages/realm-server/**'
               - 'packages/runtime-common/**'
               - 'pnpm-lock.yaml'
             ai-bot:
+              - '.github/workflows/ci.yaml'
               - '.github/workflows/pr-ai-bot.yml'
               - 'packages/ai-bot/**'
               - 'packages/billing/**'
               - 'packages/postgres/**'
+              - 'packages/runtime-common/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+            boxel-icons:
+              - '.github/workflows/ci.yaml'
+              - 'packages/boxel-icons/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+            boxel-ui:
+              - '.github/workflows/ci.yaml'
+              - 'packages/boxel-icons/**'
+              - 'packages/boxel-ui/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+            matrix:
+              - '.github/workflows/ci.yaml'
+              - 'packages/base/**'
+              - 'packages/boxel-icons/**'
+              - 'packages/boxel-ui/**'
+              - 'packages/host/**'
+              - 'packages/realm-server/**'
+              - 'packages/runtime-common/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+            realm-server:
+              - '.github/workflows/ci.yaml'
+              - 'packages/billing/**'
+              - 'packages/boxel-icons/**'
+              - 'packages/boxel-ui/**'
+              - 'packages/eslint-plugin-boxel/**'
+              - 'packages/postgres/**'
+              - 'packages/runtime-common/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+            vscode-boxel-tools:
+              - '.github/workflows/ci.yaml'
               - 'packages/runtime-common/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
@@ -79,6 +116,7 @@ jobs:
 
   boxel-ui-test:
     name: Boxel UI Tests
+    if: needs.change-check.outputs.boxel-ui == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
       group: boxel-ui-test-${{ github.head_ref || github.run_id }}
@@ -98,6 +136,7 @@ jobs:
 
   boxel-ui-raw-icon-changes-only:
     name: Boxel UI ensure raw icon changes only
+    if: needs.change-check.outputs.boxel-ui == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
       group: boxel-ui-raw-icon-changes-only-${{ github.head_ref || github.run_id }}
@@ -113,6 +152,7 @@ jobs:
 
   boxel-icons-raw-icon-changes-only:
     name: Boxel Icons ensure raw icon changes only
+    if: needs.change-check.outputs.boxel-icons == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
       group: boxel-icons-raw-icon-changes-only-${{ github.head_ref || github.run_id }}
@@ -128,6 +168,7 @@ jobs:
 
   matrix-client-test:
     name: Matrix Client Tests
+    if: needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -195,7 +236,8 @@ jobs:
 
   matrix-client-merge-reports-and-publish:
     name: Merge Matrix reports and publish
-    if: always()
+    # always() makes it run even if a matrix-client-test shard fails
+    if: always() && (needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main')
     needs: matrix-client-test
     runs-on: ubuntu-latest
 
@@ -269,6 +311,7 @@ jobs:
 
   realm-server-test:
     name: Realm Server Tests
+    if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
       group: realm-server-test-${{ matrix.testModule }}-${{ github.head_ref || github.run_id }}
@@ -348,6 +391,7 @@ jobs:
 
   vscode-boxel-tools-package:
     name: Boxel Tools VS Code Extension package
+    if: needs.change-check.outputs.vscode-boxel-tools == 'true' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
       group: vscode-boxel-tools-test-${{ github.head_ref || github.run_id }}
