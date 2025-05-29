@@ -1,5 +1,6 @@
 import { RenderingTestContext } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -16,7 +17,6 @@ import {
   provideConsumeContext,
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  lookupLoaderService,
 } from '../../helpers';
 import {
   setupBaseRealm,
@@ -52,7 +52,7 @@ module('Integration | computeds', function (hooks) {
     };
     provideConsumeContext(PermissionsContextName, permissions);
 
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
   setupLocalIndexing(hooks);
 

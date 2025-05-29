@@ -1,6 +1,7 @@
 import { getOwner } from '@ember/owner';
 import { RenderingTestContext } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -8,15 +9,12 @@ import { Command } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import TransformCardsCommand from '@cardstack/host/commands/transform-cards';
-import type CommandService from '@cardstack/host/services/command-service';
-import type NetworkService from '@cardstack/host/services/network';
-import type RealmService from '@cardstack/host/services/realm';
+
+import RealmService from '@cardstack/host/services/realm';
 
 import type * as CommandModule from 'https://cardstack.com/base/command';
 
 import {
-  lookupService,
-  lookupLoaderService,
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -44,7 +42,7 @@ module('Integration | commands | transform-cards', function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   setupLocalIndexing(hooks);
@@ -61,7 +59,7 @@ module('Integration | commands | transform-cards', function (hooks) {
   });
 
   hooks.beforeEach(async function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
     let CommandModule: typeof import('https://cardstack.com/base/command');
@@ -239,7 +237,7 @@ module('Integration | commands | transform-cards', function (hooks) {
   });
 
   test('transforms all cards matching a query', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let transformCommand = new TransformCardsCommand(
       commandService.commandContext,
     );
@@ -277,7 +275,7 @@ module('Integration | commands | transform-cards', function (hooks) {
       },
     });
 
-    let networkService = lookupService<NetworkService>('network');
+    let networkService = getService('network');
 
     for (let cardId of cardIds) {
       let url = new URL(cardId + '.json', testRealmURL);
@@ -292,7 +290,7 @@ module('Integration | commands | transform-cards', function (hooks) {
   });
 
   test('transforms specific cards using title filter', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let transformCommand = new TransformCardsCommand(
       commandService.commandContext,
     );
@@ -314,7 +312,7 @@ module('Integration | commands | transform-cards', function (hooks) {
     });
 
     // Verify only Alice's card was transformed
-    let networkService = lookupService<NetworkService>('network');
+    let networkService = getService('network');
 
     let response = await networkService.authedFetch(
       new URL(`${testRealmURL}Person/alice.json`),
@@ -333,7 +331,7 @@ module('Integration | commands | transform-cards', function (hooks) {
   });
 
   test('transforms Pet cards with different command', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let transformCommand = new TransformCardsCommand(
       commandService.commandContext,
     );
@@ -354,7 +352,7 @@ module('Integration | commands | transform-cards', function (hooks) {
     });
 
     // Verify that Pet cards were transformed
-    let networkService = lookupService<NetworkService>('network');
+    let networkService = getService('network');
 
     let response = await networkService.authedFetch(
       new URL(`${testRealmURL}Pet/fluffy.json`),
@@ -378,7 +376,7 @@ module('Integration | commands | transform-cards', function (hooks) {
   });
 
   test('handles empty search results gracefully', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let transformCommand = new TransformCardsCommand(
       commandService.commandContext,
     );
@@ -401,13 +399,13 @@ module('Integration | commands | transform-cards', function (hooks) {
   });
 
   test('preserves JSON structure while transforming', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let transformCommand = new TransformCardsCommand(
       commandService.commandContext,
     );
 
     // Get original structure first
-    let networkService = lookupService<NetworkService>('network');
+    let networkService = getService('network');
 
     let response = await networkService.authedFetch(
       new URL(`${testRealmURL}Person/alice.json`),
@@ -452,7 +450,7 @@ module('Integration | commands | transform-cards', function (hooks) {
 
   // Skipped because we don't have the ability to capture command errors in the current test setup
   skip('handles malformed command references gracefully', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let transformCommand = new TransformCardsCommand(
       commandService.commandContext,
     );

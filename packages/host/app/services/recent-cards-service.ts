@@ -145,3 +145,9 @@ export default class RecentCardsService extends Service {
     );
   }
 }
+
+declare module '@ember/service' {
+  interface Registry {
+    'recent-cards-service': RecentCardsService;
+  }
+}
