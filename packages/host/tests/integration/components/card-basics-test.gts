@@ -13,10 +13,10 @@ import {
 import { tracked } from '@glimmer/tracking';
 
 import percySnapshot from '@percy/ember';
+import { getService } from '@universal-ember/test-support';
 import format from 'date-fns/format';
 import parseISO from 'date-fns/parseISO';
 
-import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { BoxelInput } from '@cardstack/boxel-ui/components';
