@@ -579,10 +579,11 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   private showResults = (cards: PrerenderedCardLike[] | undefined) => {
     return (
-      cards?.length ||
-      this.persistedCardId ||
-      this.createNewIsRunning ||
-      this.isBaseCardModule // means we do not conduct the expanded search for baseCardModule
+      !this.args.isFieldDef &&
+      (cards?.length ||
+        this.persistedCardId ||
+        this.createNewIsRunning ||
+        this.isBaseCardModule) // means we do not conduct the expanded search for baseCardModule
     );
   };
 
@@ -729,7 +730,11 @@ export default class PlaygroundPanel extends Component<Signature> {
                       >
                         {{! FIXME unduplicate for non-error state}}
                         <InstanceSelectDropdown
-                          @cardOptions={{this.cardOptions}}
+                          @cardOptions={{if
+                            @isFieldDef
+                            undefined
+                            this.cardOptions
+                          }}
                           @fieldOptions={{this.fieldInstances}}
                           @findSelectedCard={{this.findSelectedCard}}
                           @selection={{this.dropdownSelection}}
@@ -771,7 +776,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                   {{on 'mouseup' this.handleClick}}
                 >
                   <InstanceSelectDropdown
-                    @cardOptions={{this.cardOptions}}
+                    @cardOptions={{if @isFieldDef undefined this.cardOptions}}
                     @fieldOptions={{this.fieldInstances}}
                     @findSelectedCard={{this.findSelectedCard}}
                     @selection={{this.dropdownSelection}}
