@@ -23,7 +23,7 @@ export default class ShowCardCommand extends HostBaseCommand<
   @service declare private store: StoreService;
 
   description =
-    'Show a card in the UI. The cardId mush be a fully qualified URL.';
+    'Show a card in the UI. The cardId must be a fully qualified URL.';
 
   static actionVerb = 'Show Card';
 

@@ -445,7 +445,7 @@ module('Integration | Command | show-card', function (hooks) {
     test('has correct description and action verb', function (assert) {
       assert.strictEqual(
         command.description,
-        'Show a card in the UI. The cardId mush be a fully qualified URL.',
+        'Show a card in the UI. The cardId must be a fully qualified URL.',
         'Command has correct description',
       );
       assert.strictEqual(
