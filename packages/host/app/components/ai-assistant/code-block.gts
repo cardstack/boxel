@@ -38,7 +38,7 @@ interface CopyCodeButtonSignature {
 interface ApplyCodePatchButtonSignature {
   Args: {
     patchCodeStatus: CodePatchStatus | 'ready' | 'applying';
-    performPatch: () => void;
+    performPatch?: () => void;
     codeData: CodeData;
     originalCode?: string | null;
     modifiedCode?: string | null;
@@ -62,7 +62,10 @@ interface CodeBlockActionsSignature {
 }
 
 interface CodeBlockEditorSignature {
-  Args: {};
+  Args: {
+    code?: string | null;
+    dimmed?: boolean;
+  };
 }
 
 interface CodeBlockDiffEditorSignature {
@@ -80,6 +83,8 @@ interface Signature {
     originalCode?: string | null;
     modifiedCode?: string | null;
     language?: string | null;
+    code?: string | null;
+    dimmed?: boolean;
   };
   Blocks: {
     default: [
@@ -114,6 +119,7 @@ export default CodeBlockComponent;
 interface MonacoEditorSignature {
   Args: {
     Named: {
+      code?: string | null;
       codeData?: Partial<CodeData>;
       monacoSDK: MonacoSDK;
       editorDisplayOptions: MonacoEditorOptions;
@@ -218,6 +224,7 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
     element: HTMLElement,
     _positional: [],
     {
+      code,
       codeData,
       monacoSDK,
       editorDisplayOptions,
@@ -227,7 +234,7 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
       return;
     }
 
-    let { code, language } = codeData;
+    let { language } = codeData;
     if (!code || !language) {
       return;
     }
@@ -350,6 +357,7 @@ class CodeBlockEditor extends Component<Signature> {
     fontSize: 10,
     scrollBeyondLastLine: false,
     padding: {
+      top: 8,
       bottom: 8,
     },
     theme: 'vs-dark',
@@ -363,14 +371,20 @@ class CodeBlockEditor extends Component<Signature> {
         margin-left: calc(-1 * var(--boxel-sp));
         max-height: 250px;
       }
+
+      .dimmed {
+        opacity: 0.6;
+      }
     </style>
+
     <div
       {{MonacoEditor
+        code=@code
         monacoSDK=@monacoSDK
         codeData=@codeData
         editorDisplayOptions=this.editorDisplayOptions
       }}
-      class='code-block'
+      class='code-block {{if @dimmed "dimmed"}}'
       data-test-editor
     >
       {{! Don't put anything here in this div as monaco modifier will override this element }}
@@ -537,16 +551,21 @@ class ApplyCodePatchButton extends Component<ApplyCodePatchButtonSignature> {
     return this.operatorModeStateService.operatorModeController.debug;
   }
 
+  private performPatch = () => {
+    this.args.performPatch?.();
+  };
+
   <template>
     {{#if this.debugButtonEnabled}}
       <button {{on 'click' this.logCodePatchAction}} class='debug-button'>
         👁️
       </button>
     {{/if}}
+
     <ApplyButton
       data-test-apply-code-button
       @state={{@patchCodeStatus}}
-      {{on 'click' @performPatch}}
+      {{on 'click' this.performPatch}}
     >
       Apply
     </ApplyButton>

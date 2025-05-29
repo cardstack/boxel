@@ -10,7 +10,7 @@ import { tracked } from '@glimmer/tracking';
 import { dropTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
-import { and, bool } from '@cardstack/boxel-ui/helpers';
+import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
 
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
@@ -36,6 +36,7 @@ import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import ApplyButton from './apply-button';
 import CodeBlock from './code-block';
+import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
 
 interface FormattedAiBotMessageSignature {
   Element: HTMLDivElement;
@@ -45,6 +46,7 @@ interface FormattedAiBotMessageSignature {
     eventId: string;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
+    isLastAssistantMessage: boolean;
   };
 }
 
@@ -69,6 +71,9 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
 
   private get isApplyAllButtonDisplayed() {
     if (this.args.isStreaming) {
+      return false;
+    }
+    if (!this.args.isLastAssistantMessage) {
       return false;
     }
     return (
@@ -162,6 +167,7 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
               (array htmlPart.codeData)
             }}
             @monacoSDK={{@monacoSDK}}
+            @isLastAssistantMessage={{@isLastAssistantMessage}}
           />
         {{else}}
           {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
@@ -249,6 +255,7 @@ interface HtmlGroupCodeBlockSignature {
     codePatchStatus: CodePatchStatus | 'ready' | 'applying';
     onPatchCode: (codeData: CodeData) => void;
     monacoSDK: MonacoSDK;
+    isLastAssistantMessage: boolean;
   };
 }
 
@@ -282,43 +289,84 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
     return this._codeDiffResource;
   }
 
+  private extractReplaceCode(searchReplaceBlock: string | null | undefined) {
+    if (!searchReplaceBlock) {
+      return null;
+    }
+    return parseSearchReplace(searchReplaceBlock).replaceContent;
+  }
+
+  private get codeForEditor() {
+    if (this.isAppliedOrIgnoredCodePatch) {
+      return this.extractReplaceCode(this.args.codeData.searchReplaceBlock);
+    } else {
+      return this.args.codeData.code;
+    }
+  }
+
+  private get isAppliedOrIgnoredCodePatch() {
+    // Ignored means the user moved on to the next message
+    return (
+      this.args.codePatchStatus === 'applied' ||
+      !this.args.isLastAssistantMessage
+    );
+  }
+
   <template>
     <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
       {{#if (bool @codeData.searchReplaceBlock)}}
-        {{#if this.codeDiffResource.errorMessage}}
-          <div
-            class='error-message'
-            data-test-error-message={{this.codeDiffResource.errorMessage}}
-          >
-            <FailureBordered class='error-icon' />
-            <div class='error-message-content'>
-              <b>Code could not be displayed: </b>
-              {{this.codeDiffResource.errorMessage}}
-            </div>
+        {{#if this.isAppliedOrIgnoredCodePatch}}
+          <div>
+            <codeBlock.actions as |actions|>
+              <actions.copyCode
+                @code={{this.extractReplaceCode @codeData.searchReplaceBlock}}
+              />
+              {{#if (eq @codePatchStatus 'applied')}}
+                {{! This is just to show the ✅ icon to signalize that the code patch has been applied }}
+                <actions.applyCodePatch
+                  @codeData={{@codeData}}
+                  @patchCodeStatus={{@codePatchStatus}}
+                />
+              {{/if}}
+            </codeBlock.actions>
+            <codeBlock.editor @code={{this.codeForEditor}} @dimmed={{true}} />
           </div>
-        {{/if}}
-        {{#if this.codeDiffResource.isDataLoaded}}
-          <codeBlock.actions as |actions|>
-            <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
-            <actions.applyCodePatch
-              @codeData={{@codeData}}
-              @performPatch={{fn @onPatchCode @codeData}}
-              @patchCodeStatus={{@codePatchStatus}}
+        {{else}}
+          {{#if this.codeDiffResource.errorMessage}}
+            <div
+              class='error-message'
+              data-test-error-message={{this.codeDiffResource.errorMessage}}
+            >
+              <FailureBordered class='error-icon' />
+              <div class='error-message-content'>
+                <b>Code could not be displayed: </b>
+                {{this.codeDiffResource.errorMessage}}
+              </div>
+            </div>
+          {{/if}}
+          {{#if this.codeDiffResource.isDataLoaded}}
+            <codeBlock.actions as |actions|>
+              <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
+              <actions.applyCodePatch
+                @codeData={{@codeData}}
+                @performPatch={{fn @onPatchCode @codeData}}
+                @patchCodeStatus={{@codePatchStatus}}
+                @originalCode={{this.codeDiffResource.originalCode}}
+                @modifiedCode={{this.codeDiffResource.modifiedCode}}
+              />
+            </codeBlock.actions>
+            <codeBlock.diffEditor
               @originalCode={{this.codeDiffResource.originalCode}}
               @modifiedCode={{this.codeDiffResource.modifiedCode}}
+              @language={{@codeData.language}}
             />
-          </codeBlock.actions>
-          <codeBlock.diffEditor
-            @originalCode={{this.codeDiffResource.originalCode}}
-            @modifiedCode={{this.codeDiffResource.modifiedCode}}
-            @language={{@codeData.language}}
-          />
+          {{/if}}
         {{/if}}
       {{else}}
         <codeBlock.actions as |actions|>
           <actions.copyCode @code={{@codeData.code}} />
         </codeBlock.actions>
-        <codeBlock.editor />
+        <codeBlock.editor @code={{this.codeForEditor}} />
       {{/if}}
     </CodeBlock>
 

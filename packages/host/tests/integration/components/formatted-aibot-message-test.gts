@@ -56,6 +56,7 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
         @eventId={{testScenario.eventId}}
         @htmlParts={{testScenario.htmlParts}}
         @isStreaming={{testScenario.isStreaming}}
+        @isLastAssistantMessage={{testScenario.isLastAssistantMessage}}
       />
     </template>);
   }
@@ -78,6 +79,7 @@ puts "💎"
         eventId,
       ),
       isStreaming: false,
+      isLastAssistantMessage: true,
     });
 
     let messageElement = (this as RenderingTestContext).element.querySelector(
@@ -119,6 +121,7 @@ puts "💎"
         eventId,
       ),
       isStreaming: false,
+      isLastAssistantMessage: true,
     });
 
     assert.dom('[data-test-apply-code-button]').doesNotExist();
@@ -138,6 +141,7 @@ puts "💎"
         eventId,
       ),
       isStreaming: false,
+      isLastAssistantMessage: true,
     });
     await waitUntil(() => document.querySelectorAll('.view-line').length > 3);
 
@@ -165,6 +169,7 @@ puts "💎"
         eventId,
       ),
       isStreaming: false,
+      isLastAssistantMessage: true,
     });
 
     await waitUntil(() => document.querySelectorAll('.view-line').length > 4);
@@ -195,6 +200,7 @@ let a = 3;
         eventId,
       ),
       isStreaming: false,
+      isLastAssistantMessage: true,
     });
 
     // monaco diff editor is rendered when the diff block is complete (i.e. code block streaming has finished)
@@ -238,6 +244,7 @@ let c = 3;
         eventId,
       ),
       isStreaming: false,
+      isLastAssistantMessage: true,
     });
 
     // First editor is a diff editor, the second is a standard code block
@@ -274,6 +281,7 @@ let c = 2;
         eventId,
       ),
       isStreaming: false,
+      isLastAssistantMessage: true,
     });
 
     assert.dom('[data-test-apply-all-code-patches-button]').exists();
@@ -305,6 +313,7 @@ let c = 2;
         eventId,
       ),
       isStreaming: true,
+      isLastAssistantMessage: true,
     });
 
     assert.dom('[data-test-apply-all-code-patches-button]').doesNotExist();
@@ -334,6 +343,7 @@ let c = 2;
           @roomId='!abcd'
           @eventId='1234'
           @isStreaming={{true}}
+          @isLastAssistantMessage={{true}}
         />
       </template>
     }
@@ -381,6 +391,7 @@ let c = 2;
           @roomId='!abcd'
           @eventId='1234'
           @isStreaming={{this.isStreaming}}
+          @isLastAssistantMessage={{true}}
         />
       </template>
     }
@@ -472,6 +483,7 @@ let a = 3;
         eventId,
       ),
       isStreaming: false,
+      isLastAssistantMessage: true,
     });
 
     assert
