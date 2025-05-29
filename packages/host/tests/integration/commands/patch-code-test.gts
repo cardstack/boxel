@@ -1,5 +1,11 @@
 import { module, test } from 'qunit';
 
+import {
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+} from '@cardstack/runtime-common';
+
 import { LintResult } from '@cardstack/runtime-common/lint';
 
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
@@ -67,16 +73,16 @@ export class Task extends CardDef {
     let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
 
     // note that `eq` import will be missing after this is applied
-    const codeBlock = `<<<<<<< SEARCH
+    const codeBlock = `${SEARCH_MARKER}
   @field priority = contains(NumberField);
-=======
+${SEPARATOR_MARKER}
   @field priority = contains(NumberField);
   <template>
     {{#if (eq priority 1)}}
       <p>High Priority</p>
     {{/if}}
   </template>
->>>>>>> REPLACE`;
+${REPLACE_MARKER}`;
 
     let result = await patchCodeCommand.execute({
       fileUrl,
