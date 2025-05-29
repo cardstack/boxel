@@ -77,6 +77,7 @@
     "@types/uuid": "catalog:",
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
+    "@universal-ember/test-support": "catalog:",
     "broccoli-asset-rev": "catalog:",
     "broccoli-funnel": "catalog:",
     "broccoli-merge-trees": "catalog:",
