@@ -20,7 +20,6 @@ export interface Signature {
  * @example
  * const formatted = formatDateTime(date, "MMM D, YYYY");
  */
-// prettier-ignore
 export function formatDateTime(
   date: dayjs.ConfigType,
   formatString: string = DEFAULT_OUTPUT_FORMAT,
@@ -41,7 +40,6 @@ export function formatDateTime(
  * @example
  * {{dayjsFormat @model.createdAt "MMM D, YYYY"}}
  */
-// prettier-ignore
 export const dayjsFormat = helper<Signature>(function computed(
   positional: unknown[],
   hash: { locale?: string },
