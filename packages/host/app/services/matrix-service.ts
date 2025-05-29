@@ -988,9 +988,13 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [`${baseRealm.url}Skill/card-editing`];
+    let interactModeDefaultSkills = [
+      `${baseRealm.url}Skill/boxel-environment`,
+      `${baseRealm.url}Skill/card-editing`,
+    ];
 
     let codeModeDefaultSkills = [
+      `${baseRealm.url}Skill/boxel-environment`,
       `${baseRealm.url}Skill/boxel-development`,
       `${baseRealm.url}Skill/source-code-editing`,
     ];

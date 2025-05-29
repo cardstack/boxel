@@ -49,6 +49,6 @@ export interface Permissions {
   readonly canWrite: boolean;
 }
 
-export const SEARCH_MARKER: string = '<<<<<<< SEARCH';
-export const SEPARATOR_MARKER: string = '=======';
-export const REPLACE_MARKER: string = '>>>>>>> REPLACE';
+export const SEARCH_MARKER: string = '╔═══ SEARCH ════╗';
+export const SEPARATOR_MARKER: string = '╠══════════════╣';
+export const REPLACE_MARKER: string = '╚═══ REPLACE ═══╝';

@@ -53,6 +53,15 @@ export class CardIdCard extends CardDef {
   @field cardId = contains(StringField);
 }
 
+export class ReadTextFileInput extends CardDef {
+  @field realm = contains(StringField);
+  @field path = contains(StringField);
+}
+
+export class FileContents extends CardDef {
+  @field content = contains(StringField);
+}
+
 export class SwitchSubmodeInput extends CardDef {
   @field submode = contains(StringField);
   @field codePath = contains(StringField);
