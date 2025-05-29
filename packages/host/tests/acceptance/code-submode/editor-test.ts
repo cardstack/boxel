@@ -1,5 +1,7 @@
 import { click, waitFor, fillIn, find, settled } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
+
 import window from 'ember-window-mock';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
@@ -10,8 +12,6 @@ import {
   Deferred,
   baseRealm,
 } from '@cardstack/runtime-common';
-
-import type EnvironmentService from '@cardstack/host/services/environment-service';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
@@ -58,9 +58,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     });
     setupUserSubscription(matrixRoomId);
 
-    monacoService = this.owner.lookup(
-      'service:monaco-service',
-    ) as MonacoService;
+    monacoService = getService('monaco-service');
 
     window.localStorage.setItem(
       RecentFiles,
@@ -588,9 +586,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   });
 
   test<TestContextWithSave>('unsaved changes made in monaco editor are saved when opening a different file', async function (assert) {
-    let environment = this.owner.lookup(
-      'service:environment-service',
-    ) as EnvironmentService;
+    let environment = getService('environment-service');
     environment.autoSaveDelayMs = 1000; // slowdown the auto save so it doesn't interfere with this test
     assert.expect(2);
     await visitOperatorMode({
@@ -616,9 +612,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   });
 
   test<TestContextWithSave>('unsaved changes made in card editor are saved when switching out of code submode', async function (assert) {
-    let environment = this.owner.lookup(
-      'service:environment-service',
-    ) as EnvironmentService;
+    let environment = getService('environment-service');
     environment.autoSaveDelayMs = 1000; // slowdown the auto save so it doesn't interfere with this test
     let numSaves = 0;
     assert.expect(2);

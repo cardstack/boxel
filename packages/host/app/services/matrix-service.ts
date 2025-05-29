@@ -1676,3 +1676,9 @@ function getAuth(): LoginResponse | undefined {
   }
   return JSON.parse(auth) as LoginResponse;
 }
+
+declare module '@ember/service' {
+  interface Registry {
+    'matrix-service': MatrixService;
+  }
+}

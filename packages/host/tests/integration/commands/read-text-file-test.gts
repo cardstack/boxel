@@ -1,17 +1,16 @@
 import { getOwner } from '@ember/owner';
 import { RenderingTestContext } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
 import ReadTextFileCommand from '@cardstack/host/commands/read-text-file';
-import type CommandService from '@cardstack/host/services/command-service';
 
 import RealmService from '@cardstack/host/services/realm';
 
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  lookupService,
   testRealmURL,
   testRealmInfo,
 } from '../../helpers';
@@ -49,7 +48,7 @@ module('Integration | commands | read-text-file', function (hooks) {
         'component.gts': `import Component from '@glimmer/component';\n\nexport default class TestComponent extends Component {}`,
       },
     });
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     readTextFileCommand = new ReadTextFileCommand(
       commandService.commandContext,
     );

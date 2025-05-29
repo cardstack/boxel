@@ -1,5 +1,7 @@
 import { click, fillIn, waitFor, waitUntil, visit } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
+
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
@@ -12,9 +14,6 @@ import {
   DEFAULT_LLM,
   DEFAULT_LLM_LIST,
 } from '@cardstack/runtime-common/matrix-constants';
-
-import MatrixService from '@cardstack/host/services/matrix-service';
-import { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
 
 import {
   setupLocalIndexing,
@@ -311,9 +310,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
 
     // Download the card file def
-    const matrixService = this.owner.lookup(
-      'service:matrix-service',
-    ) as MatrixService;
+    const matrixService = getService('matrix-service');
 
     let cardContent = await matrixService.downloadCardFileDef(attachedCard);
 
@@ -653,9 +650,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-ai-assistant-panel]').exists();
 
     // Verify URL contains updated state with aiAssistantOpen: true
-    let operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeState;
+    let operatorModeStateService = getService('operator-mode-state-service');
     assert.true(
       operatorModeStateService.aiAssistantOpen,
       'URL state should have aiAssistantOpen: true',

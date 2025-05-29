@@ -1245,3 +1245,9 @@ function resolveDocUrl(id?: string, realm?: string, local?: string) {
   }
   return path.url;
 }
+
+declare module '@ember/service' {
+  interface Registry {
+    store: StoreService;
+  }
+}

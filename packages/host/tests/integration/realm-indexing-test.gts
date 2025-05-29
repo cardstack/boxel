@@ -1,6 +1,7 @@
 import { RenderingTestContext } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -22,7 +23,6 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
-  lookupLoaderService,
 } from '../helpers';
 import {
   CardDef,
@@ -49,7 +49,7 @@ module(`Integration | realm indexing`, function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   setupLocalIndexing(hooks);
