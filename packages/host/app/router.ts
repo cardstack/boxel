@@ -9,6 +9,11 @@ export default class Router extends EmberRouter {
 Router.map(function () {
   this.route('host-freestyle', { path: '/_freestyle' });
   this.route('indexer', { path: '/indexer/:id' });
+  this.route('render', { path: '/render/:id' }, function () {
+    this.route('html', { path: '/html/:format/:ancestor_level' });
+    this.route('icon');
+    this.route('meta');
+  });
   this.route('card', { path: '/*path' });
 
   // this route is empty but lets the application.hbs render, so that the CardPrerender
