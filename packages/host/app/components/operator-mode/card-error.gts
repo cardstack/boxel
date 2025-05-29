@@ -68,20 +68,17 @@ export default class CardErrorComponent extends Component<Signature> {
       {{/if}}
     </div>
 
-    <section
-      class='error-container {{if (has-block "error") "has-error-block"}}'
+    <CardErrorDetail
+      class={{if (has-block 'error') 'has-error-block'}}
+      @error={{@error}}
+      @title={{this.errorTitle}}
+      @viewInCodeMode={{@viewInCodeMode}}
+      @fileToFixWithAi={{@fileToFixWithAi}}
     >
-      <CardErrorDetail
-        @error={{@error}}
-        @title={{this.errorTitle}}
-        @viewInCodeMode={{@viewInCodeMode}}
-        @fileToFixWithAi={{@fileToFixWithAi}}
-      >
-        <:error>
-          {{yield to='error'}}
-        </:error>
-      </CardErrorDetail>
-    </section>
+      <:error>
+        {{yield to='error'}}
+      </:error>
+    </CardErrorDetail>
 
     <style scoped>
       .icon {
@@ -115,7 +112,7 @@ export default class CardErrorComponent extends Component<Signature> {
         background-color: var(--boxel-100);
         box-shadow: 0 1px 0 0 rgba(0 0 0 / 15%);
       }
-      .error-container.has-error-block :deep(.error-display) {
+      .has-error-block :deep(.error-display) {
         border-top-left-radius: 0;
         border-top-right-radius: 0;
       }
