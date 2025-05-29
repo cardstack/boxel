@@ -443,6 +443,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom('[data-test-autoattached-file]').exists();
     assert.dom('[data-test-autoattached-card]').exists();
+    await click(`[data-test-autoattached-card] [data-test-remove-card-btn]`);
+    assert.dom('[data-test-autoattached-card]').doesNotExist();
   });
 
   test<TestContextWithSave>('can send a newly created auto-attached card', async function (assert) {
