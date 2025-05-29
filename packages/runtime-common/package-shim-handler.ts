@@ -25,7 +25,10 @@ export class PackageShimHandler {
   }
 
   handle = async (request: Request): Promise<Response | null> => {
-    if (request.url.startsWith(PACKAGES_FAKE_ORIGIN)) {
+    if (
+      request.url.startsWith(PACKAGES_FAKE_ORIGIN) ||
+      request.url.startsWith('https://cardstack.com/base/')
+    ) {
       try {
         let shimmedModule =
           (await this.getModule(request.url)) ||

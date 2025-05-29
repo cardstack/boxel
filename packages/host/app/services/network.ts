@@ -11,6 +11,7 @@ import {
 
 import config from '@cardstack/host/config/environment';
 
+import { shimBase } from '../base-shims';
 import { shimHostCommands } from '../commands/index';
 import { shimExternals } from '../lib/externals';
 
@@ -77,13 +78,8 @@ export default class NetworkService extends Service {
 
   private makeVirtualNetwork() {
     let virtualNetwork = new VirtualNetwork(getNativeFetch());
-    if (!this.fastboot.isFastBoot) {
-      virtualNetwork.addURLMapping(
-        new URL(baseRealm.url),
-        new URL(config.resolvedBaseRealmURL),
-      );
-    }
     shimExternals(virtualNetwork);
+    shimBase(virtualNetwork);
     shimHostCommands(virtualNetwork);
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
       return `${config.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;
