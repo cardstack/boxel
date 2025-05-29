@@ -20,7 +20,6 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   provideConsumeContext,
-  lookupLoaderService,
 } from '../../helpers';
 import {
   CardDef,
@@ -74,7 +73,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       canRead: true,
     };
     provideConsumeContext(PermissionsContextName, permissions);
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
 
     setCardInOperatorModeState = async (
       cardURL?: string,

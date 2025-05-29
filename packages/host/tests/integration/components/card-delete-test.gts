@@ -21,7 +21,6 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupIntegrationTestRealm,
-  lookupLoaderService,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -59,7 +58,7 @@ module('Integration | card-delete', function (hooks) {
   }
   setupRenderingTest(hooks);
   hooks.beforeEach(async function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
   });
   setupLocalIndexing(hooks);

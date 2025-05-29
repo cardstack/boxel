@@ -43,8 +43,6 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
-  lookupLoaderService,
-  lookupNetworkService,
   setupUserSubscription,
   type TestContextWithSave,
 } from '../helpers';
@@ -77,7 +75,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
     setupUserSubscription(matrixRoomId);
 
-    let loader = lookupLoaderService().loader;
+    let loader = getService('loader-service').loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
     let spec: typeof import('https://cardstack.com/base/spec');
@@ -1581,7 +1579,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         ],
       });
 
-      lookupNetworkService().mount(
+      getService('network').mount(
         async (req) => {
           if (req.method !== 'GET' && req.method !== 'HEAD') {
             let token = req.headers.get('Authorization');

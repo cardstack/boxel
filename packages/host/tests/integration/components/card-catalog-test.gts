@@ -20,7 +20,6 @@ import {
   testRealmURL,
   setupLocalIndexing,
   setupIntegrationTestRealm,
-  lookupLoaderService,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
@@ -42,7 +41,7 @@ module('Integration | card-catalog', function (hooks) {
   const noop = () => {};
 
   hooks.beforeEach(async function () {
-    let loader = lookupLoaderService().loader;
+    let loader = getService('loader-service').loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
     let textArea: typeof import('https://cardstack.com/base/text-area');

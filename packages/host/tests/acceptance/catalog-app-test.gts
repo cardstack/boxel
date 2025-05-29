@@ -1,16 +1,14 @@
 import { click, waitFor, waitUntil } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
 import ListingRemixCommand from '@cardstack/host/commands/listing-remix';
 import { SearchCardsByQueryCommand } from '@cardstack/host/commands/search-cards';
-import type CommandService from '@cardstack/host/services/command-service';
-import type StoreService from '@cardstack/host/services/store';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
-  lookupService,
   setupLocalIndexing,
   setupOnSave,
   testRealmURL,
@@ -119,7 +117,7 @@ const authorCardSource = `
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
     });
-  } 
+  }
 `;
 
 let matrixRoomId: string;
@@ -301,7 +299,7 @@ module('Acceptance | catalog app tests', function (hooks) {
           ?.textContent?.includes('Created Instances');
       });
 
-      let commandService = lookupService<CommandService>('command-service');
+      let commandService = getService('command-service');
       let searchCommand = new SearchCardsByQueryCommand(
         commandService.commandContext,
       );
@@ -415,8 +413,8 @@ module('Acceptance | catalog app tests', function (hooks) {
       stacks: [[]],
     });
 
-    let commandService = lookupService<CommandService>('command-service');
-    let store = lookupService<StoreService>('store');
+    let commandService = getService('command-service');
+    let store = getService('store');
 
     let remixCommand = new ListingRemixCommand(commandService.commandContext);
     const listingUrl = testRealmURL + 'Listing/author.json';

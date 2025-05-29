@@ -42,13 +42,8 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-import MonacoService from '@cardstack/host/services/monaco-service';
-import type NetworkService from '@cardstack/host/services/network';
-
 import { RealmServerTokenClaims } from '@cardstack/host/services/realm-server';
 
-import type StoreService from '@cardstack/host/services/store';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
 
 import {
@@ -91,7 +86,7 @@ export function getMonacoContent(
   editor: 'main' | 'firstAvailable' = 'main',
 ): string {
   if (editor === 'main') {
-    let monacoService = lookupService('monaco-service') as MonacoService;
+    let monacoService = getService('monaco-service');
     return monacoService.getMonacoContent()!;
   } else {
     return (window as any).monaco.editor.getModels()[0].getValue();
@@ -134,7 +129,7 @@ export async function withSlowSave(
   delayMs: number,
   cb: () => Promise<void>,
 ): Promise<void> {
-  let store = lookupService('store') as StoreService;
+  let store = getService('store');
   (store as any)._originalPersist = (store as any).persistAndUpdate;
   (store as any).persistAndUpdate = async (
     card: CardDef,
@@ -289,13 +284,13 @@ export function setupLocalIndexing(hooks: NestedHooks) {
     // Without this, we have been experiencing test failures related to a destroyed owner, e.g.
     // "Cannot call .factoryFor('template:index-card_error') after the owner has been destroyed"
     await settled();
-    await lookupService<StoreService>('store').flushSaves();
+    await getService('store').flushSaves();
   });
 }
 
 export function setupOnSave(hooks: NestedHooks) {
   hooks.beforeEach<TestContextWithSave>(function () {
-    let store = this.owner.lookup('service:store') as StoreService;
+    let store = getService('store');
     this.onSave = store._onSave.bind(store);
     this.unregisterOnSave = store._unregisterSaveSubscriber.bind(store);
   });
@@ -349,21 +344,6 @@ export async function setupIntegrationTestRealm({
   });
 }
 
-export function lookupLoaderService(): LoaderService {
-  let owner = (getContext() as TestContext).owner;
-  return owner.lookup('service:loader-service') as LoaderService;
-}
-
-export function lookupService<T extends Service>(name: string): T {
-  let owner = (getContext() as TestContext).owner;
-  return owner.lookup(`service:${name}`) as T;
-}
-
-export function lookupNetworkService(): NetworkService {
-  let owner = (getContext() as TestContext).owner;
-  return owner.lookup('service:network') as NetworkService;
-}
-
 export async function withoutLoaderMonitoring<T>(cb: () => Promise<T>) {
   (globalThis as any).__disableLoaderMonitoring = true;
   try {
@@ -388,7 +368,7 @@ async function setupTestRealm({
   mockMatrixUtils: MockUtils;
 }) {
   let owner = (getContext() as TestContext).owner;
-  let { virtualNetwork } = lookupNetworkService();
+  let { virtualNetwork } = getService('network');
   let { queue } = getService('queue');
 
   realmURL = realmURL ?? testRealmURL;
@@ -509,7 +489,7 @@ export function setupUserSubscription(matrixRoomId: string) {
     ],
   };
 
-  lookupNetworkService().mount(
+  getService('network').mount(
     async (req: Request) => {
       if (req.url.includes('_user')) {
         return new Response(JSON.stringify(userResponseBody));
@@ -783,7 +763,7 @@ export function setupRealmServerEndpoints(
   };
 
   hooks.beforeEach(function () {
-    lookupNetworkService().mount(handleRealmServerRequest, { prepend: true });
+    getService('network').mount(handleRealmServerRequest, { prepend: true });
   });
 }
 

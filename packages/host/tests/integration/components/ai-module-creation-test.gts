@@ -26,7 +26,6 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  lookupLoaderService,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
@@ -54,7 +53,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
   let { getRoomEvents, simulateRemoteMessage, getRoomState } = mockMatrixUtils;
 
   hooks.beforeEach(function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
     this.owner.register('service:router', MockRouterService);
   });
 

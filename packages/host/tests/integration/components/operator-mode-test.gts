@@ -38,8 +38,6 @@ import {
   setupLocalIndexing,
   setupOnSave,
   type TestContextWithSave,
-  lookupLoaderService,
-  lookupService,
   withSlowSave,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
@@ -57,10 +55,8 @@ module('Integration | operator-mode', function (hooks) {
   let operatorModeStateService: OperatorModeStateService;
 
   hooks.beforeEach(function () {
-    loader = lookupLoaderService().loader;
-    operatorModeStateService = lookupService<OperatorModeStateService>(
-      'operator-mode-state-service',
-    );
+    loader = getService('loader-service').loader;
+    operatorModeStateService = getService('operator-mode-state-service');
   });
 
   setupLocalIndexing(hooks);

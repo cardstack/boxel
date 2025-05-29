@@ -21,7 +21,6 @@ import {
   setupUserSubscription,
   testRealmURL,
   visitOperatorMode,
-  lookupLoaderService,
   withoutLoaderMonitoring,
   type TestContextWithSave,
   assertMessages,
@@ -1479,7 +1478,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await withoutLoaderMonitoring(async () => {
         // The loader service is shared between the realm server and the host.
         // need to reset the loader to pick up the changed module in the indexer
-        lookupLoaderService().resetLoader();
+        getService('loader-service').resetLoader();
         // fix error
         await realm.write(
           'boom-person.gts',

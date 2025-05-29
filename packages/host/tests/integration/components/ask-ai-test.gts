@@ -19,7 +19,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
-  lookupLoaderService,
   assertMessages,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
@@ -36,7 +35,7 @@ module('Integration | ask-ai', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   setupLocalIndexing(hooks);

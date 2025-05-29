@@ -23,7 +23,6 @@ import type StoreService from '@cardstack/host/services/store';
 
 import {
   CardDocFiles,
-  lookupLoaderService,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
@@ -62,7 +61,7 @@ module(`Integration | search resource`, function (hooks) {
   setupRenderingTest(hooks);
   hooks.beforeEach(function () {
     getOwner(this)!.register('service:realm', StubRealmService);
-    loaderService = lookupLoaderService();
+    loaderService = getService('loader-service');
     loader = loaderService.loader;
     storeService = getService('store');
   });

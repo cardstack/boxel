@@ -1,3 +1,4 @@
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -9,11 +10,8 @@ import {
 import { LintResult } from '@cardstack/runtime-common/lint';
 
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
-import type CommandService from '@cardstack/host/services/command-service';
-import type RealmService from '@cardstack/host/services/realm';
 
 import {
-  lookupService,
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -64,12 +62,12 @@ export class Task extends CardDef {
         messages: [],
       };
     };
-    let realmService = lookupService<RealmService>('realm');
+    let realmService = getService('realm');
     await realmService.login(testRealmURL);
   });
 
   test('lint-fixes contents before returning them', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
 
     // note that `eq` import will be missing after this is applied

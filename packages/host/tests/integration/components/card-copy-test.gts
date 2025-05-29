@@ -32,8 +32,6 @@ import {
   setupOnSave,
   type TestContextWithSave,
   setupIntegrationTestRealm,
-  lookupLoaderService,
-  lookupNetworkService,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
@@ -52,7 +50,7 @@ module('Integration | card-copy', function (hooks) {
 
   setupRenderingTest(hooks);
   hooks.beforeEach(function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
@@ -905,7 +903,7 @@ module('Integration | card-copy', function (hooks) {
 
     let waiter = buildWaiter('body-interception-middleware');
 
-    lookupNetworkService().mount(
+    getService('network').mount(
       async (req) => {
         if (
           req.method !== 'GET' &&
@@ -1050,7 +1048,7 @@ module('Integration | card-copy', function (hooks) {
 
     let waiter = buildWaiter('body-interception-middleware');
 
-    lookupNetworkService().mount(
+    getService('network').mount(
       async (req) => {
         if (
           req.method !== 'GET' &&

@@ -22,7 +22,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
-  lookupLoaderService,
 } from '../../../helpers';
 import {
   CardDef,
@@ -45,7 +44,7 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   setupLocalIndexing(hooks);

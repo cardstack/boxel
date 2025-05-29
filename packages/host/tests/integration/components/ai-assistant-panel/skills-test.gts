@@ -31,7 +31,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
-  lookupLoaderService,
   getMonacoContent,
   setMonacoContent,
 } from '../../../helpers';
@@ -59,7 +58,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   setupLocalIndexing(hooks);

@@ -28,7 +28,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
-  lookupLoaderService,
 } from '../../helpers';
 
 import {
@@ -76,7 +75,7 @@ module('Integration | serialization', function (hooks) {
     };
     provideConsumeContext(PermissionsContextName, permissions);
 
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
   setupLocalIndexing(hooks);
 
