@@ -12,11 +12,19 @@ export interface Signature {
   Return: string;
 }
 
-export function dayjsFormat(
+/**
+ * Utility function for formatting dates in JavaScript/TypeScript code.
+ * Use this function when you need to format dates in your component logic,
+ * computed properties, or any JavaScript/TypeScript code.
+ *
+ * @example
+ * const formatted = formatDateTime(date, "MMM D, YYYY");
+ */
+export function formatDateTime(
   date: dayjs.ConfigType,
   formatString: string = DEFAULT_OUTPUT_FORMAT,
   locale: string = DEFAULT_LOCALE,
-  option?: dayjs.OptionType,
+  option?: dayjs.OptionType
 ): string {
   if (option) {
     return dayjs(date, option).locale(locale).format(formatString);
@@ -25,14 +33,23 @@ export function dayjsFormat(
   }
 }
 
-export default helper<Signature>(function computed(
+/**
+ * Template helper for formatting dates in templates.
+ * Use this helper when you need to format dates directly in your .hbs or .gts templates.
+ *
+ * @example
+ * {{dayjsFormat @model.createdAt "MMM D, YYYY"}}
+ */
+export const dayjsFormat = helper<Signature>(function computed(
   positional: unknown[],
-  hash: { locale?: string },
+  hash: { locale?: string }
 ) {
-  return dayjsFormat(
+  return formatDateTime(
     positional[0] as dayjs.ConfigType,
     positional[1] as string,
     hash.locale,
-    positional[3] as dayjs.OptionType | undefined,
+    positional[3] as dayjs.OptionType | undefined
   );
 });
+
+export default dayjsFormat;
