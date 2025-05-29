@@ -356,3 +356,9 @@ function claimsFromRawToken(rawToken: string): RealmServerJWTPayload {
   let [_header, payload] = rawToken.split('.');
   return JSON.parse(atob(payload)) as RealmServerJWTPayload;
 }
+
+declare module '@ember/service' {
+  interface Registry {
+    'realm-server': RealmServerService;
+  }
+}
