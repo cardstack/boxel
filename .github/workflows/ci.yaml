@@ -427,7 +427,7 @@ jobs:
 
   deploy:
     name: Deploy boxel to staging
-    if: ${{ needs.change-check.outputs.boxel == 'true' }}
+    if: needs.change-check.outputs.boxel == 'true' && github.ref == 'refs/heads/main'
     needs:
       - change-check
       - ai-bot-test
