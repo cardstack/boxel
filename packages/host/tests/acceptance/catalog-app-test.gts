@@ -1,8 +1,10 @@
-import { click, waitFor, waitUntil } from '@ember/test-helpers';
+import { click, waitFor } from '@ember/test-helpers';
 
-import { module, skip, test } from 'qunit';
+import { module, test } from 'qunit';
 
+import ListingInstallCommand from '@cardstack/host/commands/listing-install';
 import ListingRemixCommand from '@cardstack/host/commands/listing-remix';
+import ListingUseCommand from '@cardstack/host/commands/listing-use';
 import { SearchCardsByQueryCommand } from '@cardstack/host/commands/search-cards';
 import type CommandService from '@cardstack/host/services/command-service';
 import type StoreService from '@cardstack/host/services/store';
@@ -22,7 +24,6 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
-const catalogRealmURL = 'http://localhost:4201/catalog/';
 const testRealm2URL = `http://test-realm/test2/`;
 
 const listingCardSource = `
@@ -273,35 +274,24 @@ module('Acceptance | catalog app tests', function (hooks) {
     });
   });
 
-  skip('catalog listing', async function () {
-    test('able to "Use"', async function (assert) {
+  module('catalog listing', async function () {
+    test('use command copy the card to the workspace successfully', async function (assert) {
       await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${catalogRealmURL}CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`,
-              format: 'isolated',
-            },
-          ],
-        ],
-      });
-
-      await waitFor('[data-test-catalog-listing-use-button]');
-      assert
-        .dom('[data-test-catalog-listing-use-button]')
-        .containsText('Use', '"Use" button exist in listing');
-      await click('[data-test-catalog-listing-use-button]');
-      await click(`[data-test-boxel-menu-item-text="Test Workspace B"]`);
-
-      await waitFor('[data-test-catalog-listing-use-button]');
-
-      await waitUntil(() => {
-        return document
-          .querySelector('[data-test-catalog-listing-use-button]')
-          ?.textContent?.includes('Created Instances');
+        stacks: [[]],
       });
 
       let commandService = lookupService<CommandService>('command-service');
+      let store = lookupService<StoreService>('store');
+
+      let useCommand = new ListingUseCommand(commandService.commandContext);
+      const listingUrl = testRealmURL + 'Listing/author.json';
+      const listing = (await store.get(listingUrl)) as CardDef;
+
+      await useCommand.execute({
+        realm: testRealm2URL,
+        listing,
+      });
+
       let searchCommand = new SearchCardsByQueryCommand(
         commandService.commandContext,
       );
@@ -309,8 +299,8 @@ module('Acceptance | catalog app tests', function (hooks) {
         query: {
           filter: {
             type: {
-              module: `${catalogRealmURL}mortgage-calculator/mortgage-calculator`,
-              name: 'MortgageCalculator',
+              module: `${testRealmURL}author/author`,
+              name: 'Author',
             },
           },
         },
@@ -318,74 +308,59 @@ module('Acceptance | catalog app tests', function (hooks) {
       assert.ok(
         result.cardIds.some(
           (id) =>
-            id.includes(`${testRealmURL}mortgage-calculator`) &&
-            id.includes('MortgageCalculator'),
+            id.includes(`${testRealm2URL}author`) && id.includes('Author'),
         ),
         'Listing should create a new instance from the example',
       );
     });
 
-    test('able to "Install"', async function (assert) {
+    test('install command installs the card and example successfully', async function (assert) {
       await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${catalogRealmURL}CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`,
-              format: 'isolated',
-            },
-          ],
-        ],
+        stacks: [[]],
       });
 
-      await waitFor('[data-test-catalog-listing-install-button]', {
-        timeout: 5_000,
-      });
-      await click('[data-test-catalog-listing-install-button]');
-      await click(`[data-test-boxel-menu-item-text="Test Workspace B"]`);
+      let commandService = lookupService<CommandService>('command-service');
+      let store = lookupService<StoreService>('store');
 
-      assert
-        .dom('[data-test-catalog-listing-install-button]')
-        .containsText('Install', '"Install" button exist in listing');
-
-      await waitFor('[data-test-catalog-listing-install-button]');
-
-      await waitUntil(
-        () => {
-          return document
-            .querySelector('[data-test-catalog-listing-install-button]')
-            ?.textContent?.includes('Installed');
-        },
-        { timeout: 5_000 },
+      let installCommand = new ListingInstallCommand(
+        commandService.commandContext,
       );
+      const listingUrl = testRealmURL + 'Listing/author.json';
+      const listing = (await store.get(listingUrl)) as CardDef;
+
+      await installCommand.execute({
+        realm: testRealm2URL,
+        listing,
+      });
 
       // Check gts file is installed/copied successfully
       await visitOperatorMode({
         submode: 'code',
         fileView: 'browser',
-        codePath: `${testRealmURL}index`,
+        codePath: `${testRealm2URL}index`,
       });
 
       await waitForCodeEditor();
 
-      await waitFor('[data-test-directory^="mortgage-calculator-"]');
+      await waitFor('[data-test-directory^="author-"]');
       const element = document.querySelector(
-        '[data-test-directory^="mortgage-calculator-"]',
+        '[data-test-directory^="author-"]',
       );
       const fullPath = element?.getAttribute('data-test-directory');
       await click(`[data-test-directory="${fullPath}"]`);
 
       assert.dom(`[data-test-directory="${fullPath}"] .icon`).hasClass('open');
 
-      const filePath = `${fullPath}mortgage-calculator.gts`;
+      const filePath = `${fullPath}author.gts`;
       await waitFor(`[data-test-file="${filePath}"]`);
       await click(`[data-test-file="${filePath}"]`);
       assert
         .dom(`[data-test-file="${filePath}"]`)
-        .exists('mortgage-calculator.gts file exists')
-        .hasClass('selected', 'mortgage-calculator.gts file is selected');
+        .exists('author.gts file exists')
+        .hasClass('selected', 'author.gts file is selected');
 
       // able to see example install successfully
-      const examplePath = `${fullPath}MortgageCalculator/`;
+      const examplePath = `${fullPath}Author/`;
       await waitFor(`[data-test-directory="${examplePath}"]`);
       await click(`[data-test-directory="${examplePath}"]`);
 
@@ -402,37 +377,34 @@ module('Acceptance | catalog app tests', function (hooks) {
 
       assert
         .dom(`[data-test-file^="${examplePath}"][data-test-file$=".json"]`)
-        .exists('Mortgage Calculator Example with uuid instance exists')
-        .hasClass(
-          'selected',
-          'Mortgage Calculator Example with uuid instance is selected',
-        );
-    });
-  });
-
-  test('catalog listing remix command installs the card and redirects to code mode with persisted playground selection for first example successfully', async function (assert) {
-    await visitOperatorMode({
-      stacks: [[]],
+        .exists('Author Example with uuid instance exists')
+        .hasClass('selected', 'Author Example with uuid instance is selected');
     });
 
-    let commandService = lookupService<CommandService>('command-service');
-    let store = lookupService<StoreService>('store');
+    test('remix command installs the card and redirects to code mode with persisted playground selection for first example successfully', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[]],
+      });
 
-    let remixCommand = new ListingRemixCommand(commandService.commandContext);
-    const listingUrl = testRealmURL + 'Listing/author.json';
-    const listing = (await store.get(listingUrl)) as CardDef;
+      let commandService = lookupService<CommandService>('command-service');
+      let store = lookupService<StoreService>('store');
 
-    await remixCommand.execute({
-      realm: testRealm2URL,
-      listing,
+      let remixCommand = new ListingRemixCommand(commandService.commandContext);
+      const listingUrl = testRealmURL + 'Listing/author.json';
+      const listing = (await store.get(listingUrl)) as CardDef;
+
+      await remixCommand.execute({
+        realm: testRealm2URL,
+        listing,
+      });
+
+      await waitFor('[data-test-accordion-item="playground"]', {
+        timeout: 5_000,
+      });
+      await click('[data-test-accordion-item="playground"] button');
+      assert
+        .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
+        .hasText('Author');
     });
-
-    await waitFor('[data-test-accordion-item="playground"]', {
-      timeout: 5_000,
-    });
-    await click('[data-test-accordion-item="playground"] button');
-    assert
-      .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
-      .hasText('Author');
   });
 });
