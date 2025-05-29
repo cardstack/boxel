@@ -32,7 +32,6 @@ jobs:
         with:
           filters: |
             shared: &shared
-              - '.github/workflows/ci.yaml'
               - 'packages/runtime-common/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
