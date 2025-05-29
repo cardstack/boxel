@@ -5,18 +5,8 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { TrackedArray } from 'tracked-built-ins';
 
-import {
-  AddButton,
-  Tooltip,
-  type Filter,
-} from '@cardstack/boxel-ui/components';
-import {
-  Grid3x3 as IconGrid,
-  Rows4 as IconList,
-} from '@cardstack/boxel-ui/icons';
+import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
 
-import HighlightsIcon from '@cardstack/boxel-icons/layout-panel-top';
-import RecentIcon from '@cardstack/boxel-icons/clock';
 import StarIcon from '@cardstack/boxel-icons/star';
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import Captions from '@cardstack/boxel-icons/captions';
@@ -29,10 +19,14 @@ import {
   isCardInstance,
   SupportedMimeType,
   subscribeToRealm,
-  Query,
+  type Query,
 } from '@cardstack/runtime-common';
 
-import CardsGridLayout from './components/cards-grid-layout';
+import CardsGridLayout, {
+  VIEW_OPTIONS,
+  type FilterOption,
+  type ViewOption,
+} from './components/cards-grid-layout';
 
 import {
   contains,
@@ -41,26 +35,41 @@ import {
   CardDef,
   realmInfo,
   realmURL,
+  linksToMany,
   type BaseDef,
 } from './card-api';
 import type { RealmEventContent } from './matrix-event';
 import { Spec } from './spec';
 import StringField from './string';
 
+const [CardView, StripView, GridView] = VIEW_OPTIONS;
+
 class Isolated extends Component<typeof CardsGrid> {
   <template>
     <CardsGridLayout
+      class='{{this.activeFilter.displayName}}-layout'
       @format='fitted'
       @context={{@context}}
       @realms={{this.realms}}
       @isLive={{true}}
       @viewOptions={{this.viewOptions}}
-      @selectedView={{this.selectedView}}
+      @activeView={{this.selectedView}}
       @activeFilter={{this.activeFilter}}
-      @filters={{this.filters}}
+      @filterOptions={{this.filterOptions}}
+      @onChangeFilter={{this.onChangeFilter}}
     >
+      <:cards>
+        {{#each this.activeFilter.cards as |Card|}}
+          <li
+            class='{{this.activeFilter.displayName}}-card boxel-card-list-item'
+          >
+            <Card @format='embedded' class='boxel-embedded-card' />
+          </li>
+        {{/each}}
+      </:cards>
+
       <:content>
-        {{#if @context.actions.createCard}}
+        {{#unless this.activeFilter.hideAddButton}}
           <div class='add-button'>
             <Tooltip @placement='left' @offset={{6}}>
               <:trigger>
@@ -71,16 +80,16 @@ class Isolated extends Component<typeof CardsGrid> {
               </:content>
             </Tooltip>
           </div>
-        {{/if}}
+        {{/unless}}
       </:content>
     </CardsGridLayout>
     <style scoped>
       .add-button {
         display: inline-block;
         position: sticky;
-        left: 100%;
+        left: 93%;
         width: fit-content;
-        bottom: var(--boxel-sp-xl);
+        bottom: var(--boxel-sp);
         z-index: 1;
       }
       .operator-mode .buried .cards,
@@ -90,18 +99,14 @@ class Isolated extends Component<typeof CardsGrid> {
     </style>
   </template>
 
-  private filters: Filter[] = new TrackedArray([
-    {
-      displayName: 'Highlights',
-      icon: HighlightsIcon,
-    },
-    {
-      displayName: 'Recent',
-      icon: RecentIcon,
-    },
+  private filterOptions: FilterOption[] = new TrackedArray([
     {
       displayName: 'Starred',
       icon: StarIcon,
+      cards: this.args.fields.starred,
+      hideAddButton: true,
+      viewOptions: [],
+      activeView: CardView,
     },
     {
       displayName: 'All Cards',
@@ -119,13 +124,11 @@ class Isolated extends Component<typeof CardsGrid> {
       isExpanded: true,
     },
   ]);
-  private viewOptions = new TrackedArray([
-    { id: 'strip', icon: IconList },
-    { id: 'grid', icon: IconGrid },
-  ]);
 
-  @tracked private selectedView = this.viewOptions[1];
-  @tracked private activeFilter = this.filters[0];
+  private viewOptions: ViewOption[] = new TrackedArray([StripView, GridView]);
+
+  @tracked private selectedView: ViewOption = this.viewOptions[1];
+  @tracked private activeFilter: FilterOption = this.filterOptions[0];
 
   constructor(owner: any, args: any) {
     super(owner, args);
@@ -135,7 +138,7 @@ class Isolated extends Component<typeof CardsGrid> {
     registerDestructor(this, unsubscribe);
   }
 
-  @action createNew() {
+  @action private createNew() {
     this.createCard.perform();
   }
 
@@ -143,9 +146,14 @@ class Isolated extends Component<typeof CardsGrid> {
     return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
   }
 
+  @action private onChangeFilter(filter: FilterOption) {
+    this.activeFilter = filter;
+  }
+
   private createCard = restartableTask(async () => {
     let preselectedCardTypeQuery: Query | undefined;
-    let activeFilterRef = this.activeFilter?.query?.filter?.type;
+    let filter = this.activeFilter?.query?.filter;
+    let activeFilterRef = filter && 'type' in filter ? filter.type : undefined;
     if (activeFilterRef) {
       preselectedCardTypeQuery = {
         filter: {
@@ -222,7 +230,7 @@ class Isolated extends Component<typeof CardsGrid> {
         return;
       }
       const lastIndex = summary.id.lastIndexOf('/');
-      this.filters[this.filters.length - 1].filters?.push({
+      this.filterOptions[this.filterOptions.length - 1].filters?.push({
         displayName: summary.attributes.displayName,
         icon: summary.attributes.iconHTML ?? Captions,
         query: {
@@ -236,8 +244,8 @@ class Isolated extends Component<typeof CardsGrid> {
       });
     });
 
-    let flattenedFilters: Filter[] = [];
-    this.filters.map((f) =>
+    let flattenedFilters: FilterOption[] = [];
+    this.filterOptions.map((f) =>
       f.filters?.length
         ? flattenedFilters.push(f, ...f.filters)
         : flattenedFilters.push(f),
@@ -246,7 +254,7 @@ class Isolated extends Component<typeof CardsGrid> {
     this.activeFilter =
       flattenedFilters.find(
         (filter) => filter.displayName === this.activeFilter.displayName,
-      ) ?? this.filters[0];
+      ) ?? this.filterOptions[0];
   });
 
   private refreshFilterList = (ev: RealmEventContent) => {
@@ -271,6 +279,7 @@ export class CardsGrid extends CardDef {
       return this.realmName;
     },
   });
+  @field starred = linksToMany(() => CardDef);
 
   static getDisplayName(instance: BaseDef) {
     if (isCardInstance(instance)) {

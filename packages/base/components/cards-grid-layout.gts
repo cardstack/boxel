@@ -1,30 +1,61 @@
-import {
-  baseRealm,
-  type Format,
-  type Sort,
-  type Query,
-} from '@cardstack/runtime-common';
-import CardsIcon from '@cardstack/boxel-icons/cards'; // TODO: copy icon
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
 
+import CardsIcon from '@cardstack/boxel-icons/cards';
+
 import {
   FilterList,
   SortDropdown,
   ViewSelector,
-  type Filter,
-  SortOption,
-  type ViewItem,
 } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import {
+  Card as CardViewIcon,
+  Grid3x3 as GridViewIcon,
+  Rows4 as StripViewIcon,
+  type Icon,
+} from '@cardstack/boxel-ui/icons';
 
-import type { CardContext } from '../card-api';
+import {
+  baseRealm,
+  type Format,
+  type Query,
+  type Sort,
+  type PrerenderedCardComponentSignature,
+} from '@cardstack/runtime-common';
+
+import type { CardContext, BoxComponent } from '../card-api';
 
 import CardList from './card-list';
 
-const SORT_OPTIONS: SortOption[] = [
+export interface ViewOption {
+  id: string;
+  icon: Icon;
+}
+
+export interface SortOption {
+  displayName: string;
+  sort: Sort;
+}
+
+export interface FilterOption {
+  displayName: string;
+  icon?: Icon | string;
+  query?: Query;
+  cards?: BoxComponent & BoxComponent[];
+  format?: Format;
+  filters?: FilterOption[];
+  sortOptions?: SortOption[];
+  viewOptions?: ViewOption[];
+  activeFilter?: FilterOption;
+  activeSort?: SortOption;
+  activeView?: ViewOption;
+  hideAddButton?: boolean;
+}
+
+export const SORT_OPTIONS: SortOption[] = [
   {
     displayName: 'A-Z',
     sort: [
@@ -58,23 +89,29 @@ const SORT_OPTIONS: SortOption[] = [
   },
 ];
 
+export const VIEW_OPTIONS = [
+  { id: 'card', icon: CardViewIcon },
+  { id: 'strip', icon: StripViewIcon },
+  { id: 'grid', icon: GridViewIcon },
+];
+
 interface Signature {
   Args: {
-    activeFilter?: Filter;
-    activeSort?: SortOption;
     context?: CardContext;
-    filters?: Filter[];
     format: Format;
-    isLive?: boolean;
-    onChangeFilter?: (filter?: Filter) => void;
-    onSelectSort?: (sort: SortOption) => void;
-    onSelectView?: (viewId: string) => void;
     realms: string[];
-    selectedView?: ViewItem;
+    isLive?: boolean;
+    filterOptions?: FilterOption[];
     sortOptions?: SortOption[];
-    viewOptions?: ViewItem[];
+    viewOptions?: ViewOption[];
+    activeFilter?: FilterOption;
+    activeSort?: SortOption;
+    activeView?: ViewOption;
+    onChangeFilter?: (filter: FilterOption) => void;
+    onChangeSort?: (sort: SortOption) => void;
+    onChangeView?: (viewId: string) => void;
   };
-  Blocks: { content: []; contentHeader: []; sidebar: [] };
+  Blocks: { content: []; contentHeader: []; sidebar: []; cards: [] };
   Element: HTMLElement;
 }
 
@@ -84,15 +121,18 @@ export default class CardsGridLayout extends Component<Signature> {
       class={{cn
         'boxel-cards-grid-layout'
         strip-view=(eq this.activeView 'strip')
+        card-view=(eq this.activeView 'card')
       }}
       ...attributes
     >
       <aside class='sidebar scroll-container' tabindex='0'>
-        <FilterList
-          @filters={{this.filters}}
-          @activeFilter={{this.activeFilter}}
-          @onChanged={{this.onChangeFilter}}
-        />
+        {{#if this.filterOptions.length}}
+          <FilterList
+            @filters={{this.filterOptions}}
+            @activeFilter={{this.activeFilter}}
+            @onChanged={{this.onChangeFilter}}
+          />
+        {{/if}}
         {{yield to='sidebar'}}
       </aside>
       <section class='content scroll-container' tabindex='0'>
@@ -103,29 +143,36 @@ export default class CardsGridLayout extends Component<Signature> {
           <h2 class='content-title'>
             {{this.activeFilter.displayName}}
           </h2>
-          <ViewSelector
-            @items={{this.viewOptions}}
-            @onChange={{this.onSelectView}}
-            @selectedId={{this.activeView}}
-          />
-          <SortDropdown
-            @options={{this.sortOptions}}
-            @onSelect={{this.onSelectSort}}
-            @selectedOption={{this.activeSort}}
-          />
+          {{#if this.viewOptions.length}}
+            <ViewSelector
+              @items={{this.viewOptions}}
+              @onChange={{this.onSelectView}}
+              @selectedId={{this.activeView}}
+            />
+          {{/if}}
+          {{#if this.sortOptions.length}}
+            <SortDropdown
+              @options={{this.sortOptions}}
+              @onSelect={{this.onSelectSort}}
+              @selectedOption={{this.activeSort}}
+            />
+          {{/if}}
           {{yield to='contentHeader'}}
         </header>
-        {{#if this.query}}
-          <CardList
-            @format={{@format}}
-            @viewOption={{this.activeView}}
-            @context={{@context}}
-            @query={{this.query}}
-            @realms={{@realms}}
-            @isLive={{@isLive}}
-            data-test-cards-grid-cards
-          />
-        {{/if}}
+        <CardList
+          class='{{this.activeFilter.displayName}}-list'
+          @context={{@context}}
+          @prerenderedCardSearchQuery={{this.prerenderedCardSearchQuery}}
+          @cards={{this.activeFilter.cards}}
+          @viewOption={{this.activeView}}
+          data-test-cards-grid-cards
+        >
+          <:cards>
+            {{#if (has-block 'cards')}}
+              {{yield to='cards'}}
+            {{/if}}
+          </:cards>
+        </CardList>
         {{yield to='content'}}
       </section>
     </section>
@@ -165,8 +212,8 @@ export default class CardsGridLayout extends Component<Signature> {
       .content {
         position: relative;
         flex-grow: 1;
-        display: flex;
-        flex-direction: column;
+        display: grid;
+        grid-template-rows: auto 1fr;
         gap: var(--boxel-sp-lg);
         width: 100%;
         max-width: 100%;
@@ -188,9 +235,8 @@ export default class CardsGridLayout extends Component<Signature> {
     </style>
   </template>
 
-  private filters: Filter[] =
-    this.args.filters ??
-    new TrackedArray([
+  private filterOptions: FilterOption[] = new TrackedArray(
+    this.args.filterOptions ?? [
       {
         displayName: 'All Cards',
         icon: CardsIcon,
@@ -204,41 +250,68 @@ export default class CardsGridLayout extends Component<Signature> {
           },
         },
       },
-    ]);
-  private sortOptions: SortOption[] = new TrackedArray(
-    this.args.sortOptions ?? SORT_OPTIONS,
+    ],
   );
-  private viewOptions: ViewItem[] = new TrackedArray(this.args.viewOptions);
 
   @tracked private activeSort?: SortOption =
-    this.args.activeSort ?? this.sortOptions[0];
-  @tracked private activeFilter?: Filter =
-    this.args.activeFilter ?? this.filters[0];
-  @tracked private activeView: string =
-    this.args.selectedView?.id ?? this.viewOptions[0]?.id;
+    this.args.activeSort ?? this.sortOptions?.[0];
+  @tracked private activeFilter?: FilterOption =
+    this.args.activeFilter ?? this.filterOptions?.[0];
+  @tracked private _activeView: string =
+    this.args.activeView?.id ?? this.viewOptions[0]?.id;
+
+  private get activeView() {
+    return this.activeFilter?.activeView?.id ?? this._activeView;
+  }
+
+  private get viewOptions(): ViewOption[] {
+    return (
+      this.activeFilter?.viewOptions ?? this.args.viewOptions ?? VIEW_OPTIONS
+    );
+  }
+
+  private get sortOptions(): SortOption[] {
+    return (
+      this.activeFilter?.sortOptions ?? this.args.sortOptions ?? SORT_OPTIONS
+    );
+  }
 
   @action onSelectSort(option: SortOption) {
     this.activeSort = option;
-    this.args.onSelectSort?.(option);
+    this.args.onChangeSort?.(option);
   }
 
   @action onSelectView(viewId: string) {
-    this.activeView = viewId;
-    this.args.onSelectView?.(viewId);
+    this._activeView = viewId;
+    this.args.onChangeView?.(viewId);
   }
 
-  @action onChangeFilter(filter: Filter) {
+  @action onChangeFilter(filter: FilterOption) {
     this.activeFilter = filter;
     this.args.onChangeFilter?.(filter);
   }
 
-  private get query() {
-    if (!this.activeFilter) {
+  private get query(): Query | undefined {
+    if (!this.activeFilter?.query) {
       return undefined;
     }
     return {
       ...this.activeFilter.query,
       sort: this.activeSort?.sort,
+    };
+  }
+
+  private get prerenderedCardSearchQuery():
+    | PrerenderedCardComponentSignature['Args']
+    | undefined {
+    if (!this.query) {
+      return undefined;
+    }
+    return {
+      query: this.query,
+      realms: this.args.realms,
+      format: this.args.format,
+      isLive: this.args.isLive,
     };
   }
 }
