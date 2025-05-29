@@ -7,11 +7,13 @@ import { TrackedArray } from 'tracked-built-ins';
 
 import {
   AddButton,
-  CardsGridLayout,
-  type Filter,
   Tooltip,
+  type Filter,
 } from '@cardstack/boxel-ui/components';
-import { IconList, IconGrid } from '@cardstack/boxel-ui/icons';
+import {
+  Grid3x3 as IconGrid,
+  Rows4 as IconList,
+} from '@cardstack/boxel-ui/icons';
 
 import HighlightsIcon from '@cardstack/boxel-icons/layout-panel-top';
 import RecentIcon from '@cardstack/boxel-icons/clock';
@@ -29,6 +31,8 @@ import {
   subscribeToRealm,
   Query,
 } from '@cardstack/runtime-common';
+
+import CardsGridLayout from './components/cards-grid-layout';
 
 import {
   contains,
@@ -115,10 +119,11 @@ class Isolated extends Component<typeof CardsGrid> {
       isExpanded: true,
     },
   ]);
-  private viewOptions = [
+  private viewOptions = new TrackedArray([
     { id: 'strip', icon: IconList },
     { id: 'grid', icon: IconGrid },
-  ];
+  ]);
+
   @tracked private selectedView = this.viewOptions[1];
   @tracked private activeFilter = this.filters[0];
 

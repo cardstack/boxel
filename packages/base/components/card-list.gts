@@ -1,19 +1,23 @@
 import Component from '@glimmer/component';
 
-// import { type CardContext } from 'https://cardstack.com/base/card-api';
-// import { type Format } from '@cardstack/runtime-common';
-import cn from '../../helpers/cn.ts';
-import { eq } from '../../helpers/truth-helpers.ts';
-import CardContainer from '../card-container/index.gts';
-import LoadingIndicator from '../loading-indicator/index.gts';
+import {
+  CardContainer,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
+
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
+
+import type { Query } from '@cardstack/runtime-common';
+
+import type { CardContext, Format } from '../card-api';
 
 interface Signature {
   Args: {
-    context: any /* CardContext */;
-    format: any /* Format */;
+    context?: CardContext;
+    format: Format;
     isLive?: boolean;
-    query: any /* Query */;
-    realms: URL[];
+    query: Query;
+    realms: string[];
     // model?: Partial<CardDef>;
     // cardTypeDisplayName?: string;
     viewOption?: string;

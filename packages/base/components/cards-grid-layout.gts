@@ -1,43 +1,28 @@
-// import { baseRealm, type Format, type Sort, type Query } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  type Format,
+  type Sort,
+  type Query,
+} from '@cardstack/runtime-common';
 import CardsIcon from '@cardstack/boxel-icons/cards'; // TODO: copy icon
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
 
-import cn from '../../helpers/cn.ts';
-import { eq } from '../../helpers/truth-helpers.ts';
-import CardList from '../card-list/index.gts';
-import FilterList, { type Filter } from '../filter-list/index.gts';
-import SortDropdown, { type SortOption } from '../sort-dropdown/index.gts';
-import ViewSelector, {
+import {
+  FilterList,
+  SortDropdown,
+  ViewSelector,
+  type Filter,
+  SortOption,
   type ViewItem,
-  VIEW_OPTIONS,
-} from '../view-selector/index.gts';
+} from '@cardstack/boxel-ui/components';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
-interface QueryFilter extends Filter {
-  query?: any /* TODO: import type Query */;
-}
+import type { CardContext } from '../card-api';
 
-interface Signature {
-  Args: {
-    activeFilter?: QueryFilter;
-    activeSort?: SortOption;
-    context: any /* TODO: import type CardContext */;
-    filters?: QueryFilter[];
-    format: any /* TODO: import type Format */;
-    isLive?: boolean;
-    onChangeFilter?: (filter?: QueryFilter) => void;
-    onSelectSort?: (sort: SortOption) => void;
-    onSelectView?: (viewId: string) => void;
-    realms: URL[];
-    selectedView?: ViewItem;
-    sortOptions?: SortOption[];
-    viewOptions?: ViewItem[];
-  };
-  Blocks: { content: []; contentHeader: []; sidebar: [] };
-  Element: HTMLElement;
-}
+import CardList from './card-list';
 
 const SORT_OPTIONS: SortOption[] = [
   {
@@ -45,7 +30,7 @@ const SORT_OPTIONS: SortOption[] = [
     sort: [
       {
         on: {
-          module: `https://cardstack.com/base/card-api`, // baseRealm.url
+          module: `${baseRealm.url}card-api`,
           name: 'CardDef',
         },
         by: 'title',
@@ -72,6 +57,26 @@ const SORT_OPTIONS: SortOption[] = [
     ],
   },
 ];
+
+interface Signature {
+  Args: {
+    activeFilter?: Filter;
+    activeSort?: SortOption;
+    context?: CardContext;
+    filters?: Filter[];
+    format: Format;
+    isLive?: boolean;
+    onChangeFilter?: (filter?: Filter) => void;
+    onSelectSort?: (sort: SortOption) => void;
+    onSelectView?: (viewId: string) => void;
+    realms: string[];
+    selectedView?: ViewItem;
+    sortOptions?: SortOption[];
+    viewOptions?: ViewItem[];
+  };
+  Blocks: { content: []; contentHeader: []; sidebar: [] };
+  Element: HTMLElement;
+}
 
 export default class CardsGridLayout extends Component<Signature> {
   <template>
@@ -203,18 +208,14 @@ export default class CardsGridLayout extends Component<Signature> {
   private sortOptions: SortOption[] = new TrackedArray(
     this.args.sortOptions ?? SORT_OPTIONS,
   );
-  private viewOptions: ViewItem[] = new TrackedArray(
-    this.args.viewOptions ?? VIEW_OPTIONS,
-  );
+  private viewOptions: ViewItem[] = new TrackedArray(this.args.viewOptions);
 
   @tracked private activeSort?: SortOption =
     this.args.activeSort ?? this.sortOptions[0];
-  @tracked private activeFilter?: QueryFilter =
+  @tracked private activeFilter?: Filter =
     this.args.activeFilter ?? this.filters[0];
-  @tracked private activeView =
-    this.args.selectedView?.id ??
-    this.viewOptions[0]?.id ??
-    VIEW_OPTIONS[0]?.id;
+  @tracked private activeView: string =
+    this.args.selectedView?.id ?? this.viewOptions[0]?.id;
 
   @action onSelectSort(option: SortOption) {
     this.activeSort = option;
@@ -226,7 +227,7 @@ export default class CardsGridLayout extends Component<Signature> {
     this.args.onSelectView?.(viewId);
   }
 
-  @action onChangeFilter(filter: QueryFilter) {
+  @action onChangeFilter(filter: Filter) {
     this.activeFilter = filter;
     this.args.onChangeFilter?.(filter);
   }

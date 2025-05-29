@@ -68,31 +68,33 @@ export default class ViewSelector extends Component<Signature> {
       </RadioInput>
     </div>
     <style scoped>
-      .view-options-group {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        column-gap: var(--boxel-sp-sm);
-        text-wrap: nowrap;
-      }
-      .view-options {
-        display: flex;
-        column-gap: var(--boxel-sp-4xs);
-      }
-      .view-option {
-        display: flex;
-        color: var(--boxel-450);
-        box-shadow: none;
-        transition: none;
-        flex-shrink: 0;
-      }
-      .view-options > :deep(div),
-      .view-option > :deep(div) {
-        display: contents;
-      }
-      .view-option:hover,
-      .view-option.is-selected {
-        color: var(--boxel-dark);
+      @layer {
+        .view-options-group {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          column-gap: var(--boxel-sp-sm);
+          text-wrap: nowrap;
+        }
+        .view-options {
+          display: flex;
+          column-gap: var(--boxel-sp-6xs);
+        }
+        .view-option {
+          display: flex;
+          color: var(--boxel-450);
+          box-shadow: none;
+          transition: none;
+          flex-shrink: 0;
+        }
+        .view-options > :deep(div),
+        .view-option > :deep(div) {
+          display: contents;
+        }
+        .view-option:hover,
+        .view-option.is-selected {
+          color: var(--boxel-dark);
+        }
       }
     </style>
   </template>

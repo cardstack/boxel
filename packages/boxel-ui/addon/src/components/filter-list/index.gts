@@ -116,7 +116,6 @@ export class ListItem extends Component<ListItemSignature> {
           />
         {{/if}}
       </span>
-      {{log this.isExpanded @filter}}
       {{#if this.isExpanded}}
         <FilterList
           @filters={{@filter.filters}}
