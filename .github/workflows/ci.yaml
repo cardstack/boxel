@@ -19,6 +19,12 @@ jobs:
     outputs:
       boxel: ${{ steps.filter.outputs.boxel }}
       ai-bot: ${{ steps.filter.outputs.ai-bot }}
+      boxel-icons: ${{ steps.filter.outputs.boxel-icons }}
+      boxel-motion: ${{ steps.filter.outputs.boxel-motion }}
+      boxel-ui: ${{ steps.filter.outputs.boxel-ui }}
+      matrix: ${{ steps.filter.outputs.matrix }}
+      realm-server: ${{ steps.filter.outputs.realm-server }}
+      vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # 3.0.2
