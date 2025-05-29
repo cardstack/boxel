@@ -19,6 +19,9 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import type { SerializedFile } from 'https://cardstack.com/base/file-api';
+import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event';
+
 import {
   testRealmURL,
   setupCardLogs,
@@ -31,9 +34,6 @@ import { setupBaseRealm } from '../../../helpers/base-realm';
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
-
-import type { SerializedFile } from '@cardstack/base/file-api';
-import type { CardMessageContent } from '@cardstack/base/matrix-event';
 
 module('Integration | ai-assistant-panel | debug-message', function (hooks) {
   const realmName = 'Debug Message Test Realm';
