@@ -8,6 +8,8 @@ import {
 import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
+
 import ms from 'ms';
 
 import {
@@ -43,8 +45,6 @@ import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import MonacoService from '@cardstack/host/services/monaco-service';
 import type NetworkService from '@cardstack/host/services/network';
-
-import type QueueService from '@cardstack/host/services/queue';
 
 import RealmServerService, {
   RealmServerTokenClaims,
@@ -391,7 +391,7 @@ async function setupTestRealm({
 }) {
   let owner = (getContext() as TestContext).owner;
   let { virtualNetwork } = lookupNetworkService();
-  let { queue } = owner.lookup('service:queue') as QueueService;
+  let { queue } = getService('queue');
 
   realmURL = realmURL ?? testRealmURL;
 
