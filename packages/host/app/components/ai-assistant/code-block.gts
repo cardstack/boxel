@@ -437,7 +437,7 @@ class CodeBlockDiffEditor extends Component<Signature> {
         modifiedCode=@modifiedCode
       }}
       class='code-block code-block-diff'
-      data-test-editor
+      data-test-code-diff-editor
     >
       {{! Don't put anything here in this div as monaco modifier will override this element }}
     </div>
