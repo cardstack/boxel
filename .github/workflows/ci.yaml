@@ -13,6 +13,54 @@ permissions:
   pull-requests: write
 
 jobs:
+  change-check:
+    name: Check which packages changed
+    runs-on: ubuntu-latest
+    outputs:
+      boxel: ${{ steps.filter.outputs.boxel }}
+      ai-bot: ${{ steps.filter.outputs.ai-bot }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # 3.0.2
+        id: filter
+        with:
+          filters: |
+            boxel:
+              - '.github/workflows/build-host.yml'
+              - '.github/workflows/deploy-host.yml'
+              - '.github/workflows/manual-deploy.yml'
+              - '.github/workflows/ci.yaml'
+              - 'packages/ai-bot/**'
+              - 'packages/base/**'
+              - 'packages/boxel-ui/**'
+              - 'packages/boxel-icons/**'
+              - 'packages/host/**'
+              - 'packages/realm-server/**'
+              - 'packages/runtime-common/**'
+              - 'pnpm-lock.yaml'
+            ai-bot:
+              - '.github/workflows/pr-ai-bot.yml'
+              - 'packages/ai-bot/**'
+              - 'packages/billing/**'
+              - 'packages/postgres/**'
+              - 'packages/runtime-common/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+
+  ai-bot-test:
+    name: AI bot Tests
+    if: needs.change-check.outputs.ai-bot == 'true' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ai-bot-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: ./.github/actions/init
+      - name: AI Bot test suite
+        run: pnpm test
+        working-directory: packages/ai-bot
+
   boxel-motion-test:
     name: Boxel Motion Tests
     runs-on: ubuntu-latest
@@ -324,32 +372,6 @@ jobs:
         with:
           name: vscode-boxel-tools
           path: packages/vscode-boxel-tools/boxel-tools*vsix
-
-  change-check:
-    name: Check which packages changed
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    outputs:
-      boxel: ${{ steps.filter.outputs.boxel }}
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # 3.0.2
-        id: filter
-        with:
-          filters: |
-            boxel:
-              - '.github/workflows/build-host.yml'
-              - '.github/workflows/deploy-host.yml'
-              - '.github/workflows/manual-deploy.yml'
-              - '.github/workflows/ci.yaml'
-              - 'packages/ai-bot/**'
-              - 'packages/base/**'
-              - 'packages/boxel-ui/**'
-              - 'packages/boxel-icons/**'
-              - 'packages/host/**'
-              - 'packages/realm-server/**'
-              - 'packages/runtime-common/**'
-              - 'pnpm-lock.yaml'
 
   deploy:
     name: Deploy boxel to staging
