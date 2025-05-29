@@ -701,6 +701,12 @@ export class MockClient implements ExtendedClient {
     return JSON.parse(content.toString()) as LooseSingleCardDocument;
   }
 
+  async downloadAsFileInBrowser(
+    _serializedFile: SerializedFile,
+  ): Promise<void> {
+    throw new Error('Method not implemented: downloadAsFileInBrowser');
+  }
+
   mxcUrlToHttp(mxcUrl: string): string {
     return mxcUrl.replace('mxc://', 'http://mock-server/');
   }
