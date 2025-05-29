@@ -155,11 +155,11 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
 
 interface Signature {
   Args: {
-    cardOptions: PrerenderedCardLike[];
+    cardOptions: PrerenderedCardLike[] | undefined;
     fieldOptions?: FieldOption[];
     findSelectedCard: (
-      cards: PrerenderedCardLike[],
-    ) => PrerenderedCardLike | undefined;
+      cards?: PrerenderedCardLike[],
+    ) => PrerenderedCardLike | SelectedInstance | undefined;
     selection: SelectedInstance | undefined;
     onSelect: (item: PrerenderedCardLike | FieldOption) => void;
     chooseCard: () => void;
