@@ -23,6 +23,8 @@ import {
   CodeData,
 } from '@cardstack/host/lib/formatted-message/utils';
 
+import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
+
 import {
   type CodeDiffResource,
   getCodeDiffResultResource,
@@ -36,7 +38,6 @@ import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import ApplyButton from './apply-button';
 import CodeBlock from './code-block';
-import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
 
 interface FormattedAiBotMessageSignature {
   Element: HTMLDivElement;
