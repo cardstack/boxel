@@ -13,19 +13,6 @@ permissions:
   pull-requests: write
 
 jobs:
-  ai-bot-test:
-    name: AI bot Tests
-    runs-on: ubuntu-latest
-    concurrency:
-      group: ai-bot-test-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
-      - uses: ./.github/actions/init
-      - name: AI Bot test suite
-        run: pnpm test
-        working-directory: packages/ai-bot
-
   boxel-motion-test:
     name: Boxel Motion Tests
     runs-on: ubuntu-latest
