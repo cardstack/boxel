@@ -3,7 +3,10 @@ import { module, test } from 'qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { SearchCardsByTypeAndTitleCommand } from '@cardstack/host/commands/search-cards';
+import {
+  SearchCardsByQueryCommand,
+  SearchCardsByTypeAndTitleCommand,
+} from '@cardstack/host/commands/search-cards';
 import type CommandService from '@cardstack/host/services/command-service';
 
 import {
@@ -103,5 +106,22 @@ module('Integration | commands | search', function (hooks) {
       result.cardIds.every((id) => id.includes('Author')),
       'All results should be Author cards',
     );
+  });
+
+  test('search with a query', async function (assert) {
+    let commandService = lookupService<CommandService>('command-service');
+    let searchCommand = new SearchCardsByQueryCommand(
+      commandService.commandContext,
+    );
+    let result = await searchCommand.execute({
+      query: {
+        filter: {
+          eq: { firstName: 'R2-D2' },
+          on: { module: 'http://test-realm/test/author', name: 'Author' },
+        },
+      },
+    });
+    assert.strictEqual(result.cardIds.length, 1);
+    assert.strictEqual(result.cardIds[0], 'http://test-realm/test/Author/r2');
   });
 });

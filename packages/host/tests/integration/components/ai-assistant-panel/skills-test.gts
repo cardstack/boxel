@@ -3,7 +3,13 @@ import GlimmerComponent from '@glimmer/component';
 
 import { module, test } from 'qunit';
 
-import { baseRealm, skillCardRef } from '@cardstack/runtime-common';
+import {
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+  baseRealm,
+  skillCardRef,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -194,7 +200,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
                 if (searchResult.cardIds.length > 0) {
                   let showCardCommand = new ShowCardCommand(this.commandContext);
                   await showCardCommand.execute({
-                    cardIdToShow: searchResult.cardIds[0],
+                    cardId: searchResult.cardIds[0],
                   });
                 }
                 return undefined;
@@ -647,11 +653,12 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
     let codeBlock = `\`\`\`
 http://test-realm/test/hello.txt
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 Hello, world!
-=======
+${SEPARATOR_MARKER}
 Hi, world!
->>>>>>> REPLACE\n\`\`\``;
+${REPLACE_MARKER}
+\`\`\``;
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: codeBlock,
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
