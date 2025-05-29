@@ -240,10 +240,11 @@ jobs:
 
   matrix-client-merge-reports-and-publish:
     name: Merge Matrix reports and publish
-    needs: change-check
+    needs:
+      - change-check
+      - matrix-client-test
     # always() makes it run even if a matrix-client-test shard fails
     if: always() && (needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main')
-    needs: matrix-client-test
     runs-on: ubuntu-latest
 
     permissions:
