@@ -22,7 +22,6 @@ import {
 
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
-import downloadAsFileInBrowser from '@cardstack/host/helpers/download-file';
 import { type HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
@@ -205,8 +204,7 @@ export default class AiAssistantMessage extends Component<Signature> {
   @action
   private async downloadFile(file: FileDef) {
     try {
-      const blob = await this.matrixService.downloadContentAsBlob(file);
-      await downloadAsFileInBrowser(blob, file.name);
+      await this.matrixService.downloadAsFileInBrowser(file);
     } catch (error) {
       console.error('Error downloading file:', error);
     }

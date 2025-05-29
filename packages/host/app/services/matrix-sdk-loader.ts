@@ -281,8 +281,8 @@ function extendedClient({
           return fileDefManager.uploadFiles.bind(fileDefManager);
         case 'uploadContent':
           return fileDefManager.uploadContent.bind(fileDefManager);
-        case 'downloadContentAsBlob':
-          return fileDefManager.downloadContentAsBlob.bind(fileDefManager);
+        case 'downloadAsFileInBrowser':
+          return fileDefManager.downloadAsFileInBrowser.bind(fileDefManager);
         case 'downloadCardFileDef':
           return fileDefManager.downloadCardFileDef.bind(fileDefManager);
         case 'cacheContentHashIfNeeded':

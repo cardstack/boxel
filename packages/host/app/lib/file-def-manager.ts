@@ -80,11 +80,11 @@ export interface FileDefManager {
 
   cacheContentHashIfNeeded(event: MatrixEvent): Promise<void>;
   /**
-   * Downloads content from a file definition as a Blob
+   * Downloads content from a file definition as a file in the browser
    * @param serializedFile File definition to download from
-   * @returns Promise resolving to the downloaded Blob
+   * @returns Promise resolving to the downloaded file in the browser
    */
-  downloadContentAsBlob(serializedFile: SerializedFile): Promise<Blob>;
+  downloadAsFileInBrowser(serializedFile: SerializedFile): Promise<void>;
 }
 
 export default class FileDefManagerImpl implements FileDefManager {
@@ -312,6 +312,25 @@ export default class FileDefManagerImpl implements FileDefManager {
       throw new Error(`HTTP error. Status: ${response.status}`);
     }
     return await response.blob();
+  }
+
+  async downloadAsFileInBrowser(serializedFile: SerializedFile) {
+    const blob = await this.downloadContentAsBlob(serializedFile);
+    // Create a URL for the blob
+    const blobUrl = URL.createObjectURL(blob);
+
+    // Create a temporary link element
+    const downloadLink = document.createElement('a');
+    downloadLink.href = blobUrl;
+    downloadLink.download = serializedFile.name;
+
+    // Append the link to the body, click it, and remove it
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+
+    // Clean up the blob URL
+    URL.revokeObjectURL(blobUrl);
   }
 
   /**

@@ -760,8 +760,8 @@ export default class MatrixService extends Service {
     );
   }
 
-  async downloadContentAsBlob(serializedFile: FileAPI.SerializedFile) {
-    return await this.client.downloadContentAsBlob(serializedFile);
+  async downloadAsFileInBrowser(serializedFile: FileAPI.SerializedFile) {
+    return await this.client.downloadAsFileInBrowser(serializedFile);
   }
 
   async uploadCards(cards: CardDef[]) {
