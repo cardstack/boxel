@@ -25,64 +25,52 @@ jobs:
         id: filter
         with:
           filters: |
+            shared: &shared
+              - '.github/workflows/ci.yaml'
+              - 'packages/runtime-common/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
             boxel:
+              - *shared
               - '.github/workflows/build-host.yml'
               - '.github/workflows/deploy-host.yml'
               - '.github/workflows/manual-deploy.yml'
-              - '.github/workflows/ci.yaml'
               - 'packages/ai-bot/**'
               - 'packages/base/**'
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
               - 'packages/host/**'
               - 'packages/realm-server/**'
-              - 'packages/runtime-common/**'
-              - 'pnpm-lock.yaml'
             ai-bot:
-              - '.github/workflows/ci.yaml'
+              - *shared
               - '.github/workflows/pr-ai-bot.yml'
               - 'packages/ai-bot/**'
               - 'packages/billing/**'
               - 'packages/postgres/**'
-              - 'packages/runtime-common/**'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
             boxel-icons:
-              - '.github/workflows/ci.yaml'
+              - *shared
               - 'packages/boxel-icons/**'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
             boxel-ui:
-              - '.github/workflows/ci.yaml'
+              - *shared
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
             matrix:
-              - '.github/workflows/ci.yaml'
+              - *shared
               - 'packages/base/**'
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
               - 'packages/host/**'
               - 'packages/realm-server/**'
-              - 'packages/runtime-common/**'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
             realm-server:
-              - '.github/workflows/ci.yaml'
+              - *shared
               - 'packages/billing/**'
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
               - 'packages/eslint-plugin-boxel/**'
               - 'packages/postgres/**'
-              - 'packages/runtime-common/**'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
             vscode-boxel-tools:
-              - '.github/workflows/ci.yaml'
-              - 'packages/runtime-common/**'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
+              - *shared
+              - 'packages/vscode-boxel-tools/**'
 
   ai-bot-test:
     name: AI bot Tests
