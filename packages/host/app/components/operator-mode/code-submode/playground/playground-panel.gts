@@ -17,6 +17,7 @@ import {
   loadCardDef,
   specRef,
   trimJsonExtension,
+  uuidv4,
   type LooseSingleCardDocument,
   type Query,
   type CardErrorJSONAPI,
@@ -118,14 +119,15 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   @tracked private cardResource: ReturnType<getCard> | undefined;
   @tracked private fieldChooserIsOpen = false;
-  @tracked private cardCreationError: CardErrorJSONAPI | undefined = undefined;
+  // we rely on a unique stable local id per successful new card creation.
+  // this allows us to correlate on failed new card creation errors from the server
+  #newCardLocalId = uuidv4();
 
   private get moduleId() {
     return internalKeyFor(this.args.codeRef, undefined);
   }
 
   private get isLoading() {
-    this.clearCardCreationError();
     return this.args.isFieldDef && this.args.isUpdating;
   }
 
@@ -145,12 +147,8 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get cardError(): CardErrorJSONAPI | undefined {
-    return this.cardCreationError ?? this.cardResource?.cardError;
+    return this.cardResource?.cardError;
   }
-
-  private clearCardCreationError = () => {
-    this.cardCreationError = undefined;
-  };
 
   private get specCard(): Spec | undefined {
     let card = this.card;
@@ -392,7 +390,6 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private createNewCard = restartableTask(async () => {
-    this.clearCardCreationError();
     let newCardJSON: LooseSingleCardDocument;
     if (this.args.isFieldDef) {
       let fieldCard = await loadCardDef(this.args.codeRef, {
@@ -401,6 +398,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       // for field def, create a new spec card instance
       newCardJSON = {
         data: {
+          lid: this.#newCardLocalId,
           attributes: {
             specType: 'field',
             ref: this.args.codeRef,
@@ -423,6 +421,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     } else {
       newCardJSON = {
         data: {
+          lid: this.#newCardLocalId,
           meta: {
             adoptsFrom: this.args.codeRef,
             realmURL: this.currentRealm,
@@ -436,9 +435,14 @@ export default class PlaygroundPanel extends Component<Signature> {
         realm: this.currentRealm,
       },
     );
-    if (typeof maybeId !== 'string') {
-      this.cardCreationError = maybeId;
-    } else {
+    if (typeof maybeId === 'string') {
+      // reset the local ID for making new cards after each successful attempt
+      // such that failed attempts will use the same local ID. that way when we
+      // get an error doc in the store for a particular local id based on the
+      // server error response, when a new card is successfully created that
+      // uses a correlating local ID we will automatically clear the error in
+      // the store.
+      this.#newCardLocalId = uuidv4();
       let cardId = maybeId;
       this.recentFilesService.addRecentFileUrl(`${cardId}.json`);
       this.persistSelections(
