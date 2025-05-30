@@ -569,7 +569,6 @@ export default class PlaygroundPanel extends Component<Signature> {
     });
   }
 
-  // FIXME this is duplicated/adapted from InstanceChooserDropdown
   private triggerPlaygroundSelections = (
     prerenderedCards?: PrerenderedCardLike[],
   ) => {
