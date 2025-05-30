@@ -569,9 +569,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     });
   }
 
-  private triggerPlaygroundSelections = (
-    prerenderedCards?: PrerenderedCardLike[],
-  ) => {
+  private processSearchResults = (prerenderedCards?: PrerenderedCardLike[]) => {
     this.cardOptions = prerenderedCards ?? [];
     this.findSelectedCard(prerenderedCards);
   };
@@ -662,9 +660,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         <:response as |cards|>
           {{#if (this.showResults cards)}}
             {{#let (this.getSortedCards cards) as |sortedCards|}}
-              {{consumeContext
-                (fn this.triggerPlaygroundSelections sortedCards)
-              }}
+              {{consumeContext (fn this.processSearchResults sortedCards)}}
             {{/let}}
           {{else if this.expandedQuery}}
             <PrerenderedCardSearch
@@ -674,7 +670,7 @@ export default class PlaygroundPanel extends Component<Signature> {
             >
               <:response as |maybeCards|>
                 {{#let (this.createNewWhenNoCards maybeCards) as |cards|}}
-                  {{consumeContext (fn this.triggerPlaygroundSelections cards)}}
+                  {{consumeContext (fn this.processSearchResults cards)}}
                 {{/let}}
               </:response>
             </PrerenderedCardSearch>
