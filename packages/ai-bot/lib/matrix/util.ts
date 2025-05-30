@@ -136,6 +136,7 @@ export async function sendPromptAndEventList(
   roomId: string,
   promptParts: PromptParts,
   eventList: DiscreteMatrixEvent[],
+  customMessage: string = '',
 ) {
   let stringContent = JSON.stringify({
     promptParts,
@@ -146,7 +147,9 @@ export async function sendPromptAndEventList(
   });
   await client.sendEvent(roomId, APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE, {
     msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-    body: 'Debug: attached the prompt sent to the AI and the raw event list',
+    body:
+      'Debug: attached the prompt sent to the AI and the raw event list.\n\n' +
+      customMessage,
     isStreamingFinished: true,
     data: JSON.stringify({
       attachedFiles: [

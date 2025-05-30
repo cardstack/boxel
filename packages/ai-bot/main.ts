@@ -209,11 +209,6 @@ Common issues are:
           return;
         }
 
-        // Return early here if it's a debug event
-        if (isRecognisedDebugCommand(eventBody)) {
-          return;
-        }
-
         if (!Responder.eventMayTriggerResponse(event)) {
           return; // early exit for events that will not trigger a response
         }
@@ -227,14 +222,23 @@ Common issues are:
           eventBody,
         );
 
+        let promptParts: PromptParts;
+        let eventList = await getRoomEvents(room.roomId, client, event.getId());
+
+        // Return early here if it's a debug event
+        if (isRecognisedDebugCommand(eventBody)) {
+          return await assistant.handleDebugCommands(
+            eventBody,
+            room.roomId,
+            eventList,
+          );
+        }
+
         const responder = new Responder(client, room.roomId);
 
         if (Responder.eventWillDefinitelyTriggerResponse(event)) {
           await responder.ensureThinkingMessageSent();
         }
-
-        let promptParts: PromptParts;
-        let eventList = await getRoomEvents(room.roomId, client, event.getId());
 
         try {
           promptParts = await getPromptParts(eventList, aiBotUserId, client);
@@ -384,42 +388,6 @@ Common issues are:
       Sentry.captureException(e);
       return;
     }
-  });
-
-  //handle debug events
-  client.on(RoomEvent.Timeline, async function (event, room) {
-    if (event.event.origin_server_ts! < startTime) {
-      return;
-    }
-    if (event.getType() !== 'm.room.message') {
-      return;
-    }
-    if (event.getSender() == aiBotUserId) {
-      return;
-    }
-    if (!room) {
-      return;
-    }
-    let eventBody = event.getContent().body;
-    let isDebugEvent = isRecognisedDebugCommand(eventBody);
-    if (!isDebugEvent) {
-      return;
-    }
-    log.info(
-      '(%s) (Room: "%s" %s) (Message: %s %s)',
-      event.getType(),
-      room?.name,
-      room?.roomId,
-      event.getSender(),
-      eventBody,
-    );
-    let initial = await client.roomInitialSync(room!.roomId, 1000);
-    let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
-    return await assistant.handleDebugCommands(
-      eventBody,
-      room.roomId,
-      eventList,
-    );
   });
 
   await client.startClient();

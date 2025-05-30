@@ -29,12 +29,25 @@ export async function handleDebugCommands(
   eventList: DiscreteMatrixEvent[],
 ) {
   if (eventBody.startsWith('debug:promptandevents')) {
-    let promptParts = await getPromptParts(
-      eventList.slice(0, -1),
-      userId,
+    let customMessage =
+      'Add a number to remove that many user and LLM events from the event list:\n' +
+      'debug:promptandevents:<number of events to remove>\n\n' +
+      'Example: debug:promptandevents:3';
+    if (eventBody.startsWith('debug:promptandevents:')) {
+      let removeEventsString = eventBody.split('debug:promptandevents:')[1];
+      let numberOfEventsToRemove = parseInt(removeEventsString) || 0;
+      eventList = eventList.slice(0, -numberOfEventsToRemove);
+      customMessage = `Removed ${numberOfEventsToRemove} events`;
+    }
+
+    let promptParts = await getPromptParts(eventList, userId, client);
+    sendPromptAndEventList(
       client,
+      roomId,
+      promptParts,
+      eventList,
+      customMessage,
     );
-    sendPromptAndEventList(client, roomId, promptParts, eventList);
   }
   // Explicitly set the room name
   if (eventBody.startsWith('debug:title:set:')) {
