@@ -451,7 +451,7 @@ class HomeworkIsolated extends Component<typeof Homework> {
           <div class='question-wrapper'>
             <div class='question-number'>{{add index 1}}</div>
             <div class='question-content'>
-              <Question @format='fitted' style='width: 100%; height: 100%' />
+              <Question @format='fitted' />
             </div>
             <div class='question-points'>
               {{#let (this.getPointsDisplay index) as |points|}}
@@ -626,6 +626,8 @@ class HomeworkIsolated extends Component<typeof Homework> {
       .question-content {
         padding: 1.25rem;
         flex: 1;
+        width: 100%;
+        height: 100%;
       }
 
       .question-points {
