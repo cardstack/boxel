@@ -652,7 +652,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   <template>
     {{consumeContext this.makeCardResource}}
 
-    {{! FIXME also from InstanceChooserDropdown }}
+    {{! TODO: remove side-effects for instance chooser in CS-8746 }}
     {{#if this.query}}
       <PrerenderedCardSearch
         @query={{this.query}}
@@ -683,7 +683,6 @@ export default class PlaygroundPanel extends Component<Signature> {
         </:response>
       </PrerenderedCardSearch>
     {{/if}}
-    {{! FIXME there’s an else in ICD for field options}}
 
     {{#if this.fieldChooserIsOpen}}
       <ToElsewhere
