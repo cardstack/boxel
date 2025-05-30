@@ -13,13 +13,10 @@ import { module, test } from 'qunit';
 
 import { trimJsonExtension, type Realm } from '@cardstack/runtime-common';
 
-<<<<<<< HEAD
 import type ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-=======
->>>>>>> main
 import {
   percySnapshot,
   setupAcceptanceTestRealm,
