@@ -3,9 +3,9 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { restartableTask } from 'ember-concurrency';
-
 import Folder from '@cardstack/boxel-icons/folder';
+
+import { restartableTask } from 'ember-concurrency';
 
 import {
   LoadingIndicator,
