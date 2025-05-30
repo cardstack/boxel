@@ -794,3 +794,9 @@ export default class OperatorModeStateService extends Service {
     return controller;
   }
 }
+
+declare module '@ember/service' {
+  interface Registry {
+    'operator-mode-state-service': OperatorModeStateService;
+  }
+}

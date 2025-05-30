@@ -5,6 +5,7 @@ import GlimmerComponent from '@glimmer/component';
 // @ts-expect-error says unused but the component uses it
 import { tracked } from '@glimmer/tracking';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -23,7 +24,6 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
-  lookupLoaderService,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
@@ -34,7 +34,7 @@ module('Integration | message service subscription', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   setupLocalIndexing(hooks);

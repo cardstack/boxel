@@ -13,6 +13,7 @@ import {
 import { tracked } from '@glimmer/tracking';
 
 import percySnapshot from '@percy/ember';
+import { getService } from '@universal-ember/test-support';
 import format from 'date-fns/format';
 import parseISO from 'date-fns/parseISO';
 
@@ -41,7 +42,6 @@ import {
   setupCardLogs,
   saveCard,
   provideConsumeContext,
-  lookupLoaderService,
 } from '../../helpers';
 import {
   Base64ImageField,
@@ -86,7 +86,7 @@ module('Integration | card-basics', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   setupCardLogs(hooks, async () => {
@@ -188,7 +188,7 @@ module('Integration | card-basics', function (hooks) {
       class Baz extends Bar {}
       loader.shimModule(`${testRealmURL}test-cards`, { Foo, Bar, Baz });
 
-      lookupLoaderService().resetLoader();
+      getService('loader-service').resetLoader();
 
       assert.true(
         instanceOf(new Baz(), Foo),
