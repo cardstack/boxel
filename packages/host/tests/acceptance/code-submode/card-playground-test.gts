@@ -1538,7 +1538,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await withoutLoaderMonitoring(async () => {
         // The loader service is shared between the realm server and the host.
         // need to reset the loader to pick up the changed module in the indexer
-        lookupLoaderService().resetLoader();
+        getService('loader-service').resetLoader();
         // the error was introduced in a part of the card that is run directly
         // in the realm server so we also need to make sure to reset the realm's loader
         // (not just the loader for the index). This is a test env idiosyncrasy
@@ -1607,7 +1607,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await withoutLoaderMonitoring(async () => {
         // The loader service is shared between the realm server and the host.
         // need to reset the loader to pick up the changed module in the indexer
-        lookupLoaderService().resetLoader();
+        getService('loader-service').resetLoader();
         // fix error
         await realm.write(
           'boom-person.gts',
