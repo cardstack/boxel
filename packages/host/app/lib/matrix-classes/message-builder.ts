@@ -6,7 +6,11 @@ import { inject as service } from '@ember/service';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import { ResolvedCodeRef, getClass } from '@cardstack/runtime-common';
+import {
+  type ResolvedCodeRef,
+  getClass,
+  isCardInstance,
+} from '@cardstack/runtime-common';
 
 import {
   CommandRequest,
@@ -27,10 +31,11 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { RoomSkill } from '@cardstack/host/resources/room';
-import type CommandService from '@cardstack/host/services/command-service';
 
-import LoaderService from '@cardstack/host/services/loader-service';
-import MatrixService from '@cardstack/host/services/matrix-service';
+import type CommandService from '@cardstack/host/services/command-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import type { CommandStatus } from 'https://cardstack.com/base/command';
 import { SerializedFile } from 'https://cardstack.com/base/file-api';
@@ -66,7 +71,6 @@ export default class MessageBuilder {
       events: DiscreteMatrixEvent[];
       codePatchResultEvent?: CodePatchResultEvent;
       commandResultEvent?: CommandResultEvent;
-      skillCardsCache: Map<string, Skill>;
     },
   ) {
     setOwner(this, owner);
@@ -75,6 +79,7 @@ export default class MessageBuilder {
   @service declare private commandService: CommandService;
   @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
+  @service declare private store: StoreService;
 
   private get coreMessageArgs() {
     return new Message({
@@ -277,8 +282,8 @@ export default class MessageBuilder {
       | { codeRef: ResolvedCodeRef; requiresApproval: boolean }
       | undefined;
     findCommand: for (let skill of this.builderContext.skills) {
-      let skillCard = this.builderContext.skillCardsCache.get(skill.cardId);
-      if (!skillCard) {
+      let skillCard = await this.store.get<Skill>(skill.cardId);
+      if (!skillCard || !isCardInstance(skillCard)) {
         continue;
       }
       for (let candidateSkillCommand of skillCard.commands) {

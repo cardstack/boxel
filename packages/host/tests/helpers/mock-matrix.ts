@@ -1,9 +1,9 @@
 import Owner from '@ember/owner';
 
+import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import MessageService from '@cardstack/host/services/message-service';
 
 import { MockSDK } from './mock-matrix/_sdk';
 import { MockSlidingSync } from './mock-matrix/_sliding-sync';
@@ -56,7 +56,7 @@ export function setupMockMatrix(
     testState.sdk = sdk;
 
     // Needed for realm event subscriptions to receive events
-    (this.owner.lookup('service:message-service') as MessageService).register();
+    getService('message-service').register();
 
     const { loggedInAs } = opts;
     if (loggedInAs) {

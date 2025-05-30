@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "instructions": "Before running the operation, ensure the following conditions are met:\n\n1. The use, install, and remix commands must exist and be callable.\n2. The user must provide all of the following:\n- A valid Realm URL\n- A Listing Card\n- An Action Type: \"use\", \"install\", or \"remix\"\n\nIf any value is missing, prompt the user to provide the missing input(s). If all inputs are available, proceed automatically without asking for confirmation.\n\nBased on the action type:\n- If actionType === \"use\" → run the use command\n- If actionType === \"install\" → run the install command\n- If actionType === \"remix\" → run the remix command\n\nUse the following inputs to run the command:\n- Realm URL: [user input]\n- Listing: [user input]\n\nIf actionType is remix:\n- After running remix, also run remix code to generate two example prompts.\n- Respond with:\n    1. A confirmation message summarizing the remix operation.\n    2. A follow-up message with two listing-related remix prompts.If specific prompts can't be generated, provide two general suggestions (e.g., \"Change to dark theme\", \"Convert to minimalist layout).",
+      "commands": [
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/listing-use"
+          },
+          "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/listing-install"
+          },
+          "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/listing-remix"
+          },
+          "requiresApproval": false
+        }
+      ],
+      "title": "Catalog Listing",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/skill",
+        "name": "Skill"
+      }
+    }
+  }
+}

@@ -4,8 +4,6 @@ import {
   CardContext,
 } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
-import { Skill } from 'https://cardstack.com/base/skill';
-import { baseRealm } from '@cardstack/runtime-common';
 
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
@@ -14,7 +12,8 @@ import { on } from '@ember/modifier';
 import { add, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 
-import { type Listing, setupAllRealmsInfo } from '../listing/listing';
+import { type Listing } from '../listing/listing';
+import { setupAllRealmsInfo } from '../helper';
 
 import {
   BoxelDropdown,
@@ -22,10 +21,7 @@ import {
   Menu as BoxelMenu,
 } from '@cardstack/boxel-ui/components';
 
-import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
-import OpenAiAssistantRoomCommand from '@cardstack/boxel-host/commands/open-ai-assistant-room';
-import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
-import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
+import ListingInitCommand from '@cardstack/boxel-host/commands/listing-action-init';
 
 interface Signature {
   Element: HTMLElement;
@@ -382,38 +378,11 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     if (!commandContext) {
       throw new Error('Missing commandContext');
     }
-
-    const { roomId } = await new CreateAiAssistantRoomCommand(
-      commandContext,
-    ).execute({
-      name: this.args.model.name ? `Remix of ${this.args.model.name}` : 'Remix',
+    await new ListingInitCommand(commandContext).execute({
+      realm: realmUrl,
+      actionType: 'remix',
+      listing: this.args.model as Listing,
     });
-    this.roomId = roomId;
-
-    const remixSkillCardId = `${baseRealm.url}Skill/remix`;
-    const remixSkillCard = (await this.args.context?.actions?.fetchCard(
-      remixSkillCardId,
-    )) as Skill;
-
-    if (remixSkillCard) {
-      await new AddSkillsToRoomCommand(commandContext).execute({
-        roomId: this.roomId,
-        skills: [remixSkillCard],
-      });
-    }
-
-    if (this.roomId) {
-      await new SendAiAssistantMessageCommand(commandContext).execute({
-        roomId: this.roomId,
-        prompt: `I would like to remix this ${this.args.model.name} under the following realm: ${realmUrl}`,
-        openCardIds: [this.args.model.id!],
-        attachedCards: [this.args.model as CardDef],
-      });
-
-      await new OpenAiAssistantRoomCommand(commandContext).execute({
-        roomId: this.roomId,
-      });
-    }
   });
 
   @action remix(realmUrl: string) {
@@ -459,6 +428,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
                 @kind='primary'
                 @size='extra-small'
                 class='card-remix-button'
+                @loading={{this._openRoomWithSkillAndPrompt.isRunning}}
                 {{on 'click' this._stopPropagation}}
                 {{bindings}}
               >
@@ -487,6 +457,12 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           height: 100%;
           display: flex;
           overflow: hidden;
+        }
+        .fitted-template :deep(.ember-basic-dropdown-content-placeholder) {
+          display: none;
+        }
+        .fitted-template :deep(.ember-basic-dropdown-content-wormhole-origin) {
+          position: absolute;
         }
         .display-section {
           flex-shrink: 0;

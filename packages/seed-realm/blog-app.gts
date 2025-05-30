@@ -225,7 +225,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
             <CardList
               @context={{@context}}
               @query={{this.query}}
-              @realms={{this.realms}}
+              @realms={{this.realmHrefs}}
               class='blog-app-card-list {{this.gridClass}}'
             >
               <:meta as |card|>
@@ -242,7 +242,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
               @selectedView={{this.selectedView}}
               @context={{@context}}
               @query={{this.query}}
-              @realms={{this.realms}}
+              @realms={{this.realmHrefs}}
               class={{this.gridClass}}
             />
           {{/if}}
@@ -352,6 +352,10 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
 
   private get realms() {
     return [this.args.model[realmURL]!];
+  }
+
+  private get realmHrefs() {
+    return this.realms.map((url) => url.href);
   }
 
   private get query() {

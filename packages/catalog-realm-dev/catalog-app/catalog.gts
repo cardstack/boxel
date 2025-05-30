@@ -227,7 +227,7 @@ const CATALOG_VIEW_OPTIONS: ViewItem[] = [
 interface CatalogListViewArgs {
   Args: {
     query: Query;
-    realms: URL[];
+    realms: string[];
     context?: CardContext;
   };
   Element: HTMLElement;
@@ -566,7 +566,7 @@ class Isolated extends Component<typeof Catalog> {
                 {{else}}
                   <CatalogListView
                     @query={{this.query}}
-                    @realms={{this.realms}}
+                    @realms={{this.realmHrefs}}
                     @context={{@context}}
                   />
                 {{/if}}

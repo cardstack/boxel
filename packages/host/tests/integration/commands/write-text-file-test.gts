@@ -1,10 +1,10 @@
 import { getOwner } from '@ember/owner';
 import { RenderingTestContext } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import WriteTextFileCommand from '@cardstack/host/commands/write-text-file';
-import type CommandService from '@cardstack/host/services/command-service';
 import type NetworkService from '@cardstack/host/services/network';
 
 import RealmService from '@cardstack/host/services/realm';
@@ -12,8 +12,6 @@ import RealmService from '@cardstack/host/services/realm';
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  lookupNetworkService,
-  lookupService,
   testRealmURL,
   testRealmInfo,
 } from '../../helpers';
@@ -39,7 +37,7 @@ module('Integration | commands | write-text-file', function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
-    fetch = lookupNetworkService().fetch;
+    fetch = getService('network').fetch;
   });
 
   hooks.beforeEach(async function () {
@@ -50,7 +48,7 @@ module('Integration | commands | write-text-file', function (hooks) {
   });
 
   test('writes a text file', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let writeTextFileCommand = new WriteTextFileCommand(
       commandService.commandContext,
     );
@@ -65,7 +63,7 @@ module('Integration | commands | write-text-file', function (hooks) {
   });
 
   test('fails if the file already exists', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let writeTextFileCommand = new WriteTextFileCommand(
       commandService.commandContext,
     );
@@ -93,7 +91,7 @@ module('Integration | commands | write-text-file', function (hooks) {
   });
 
   test('is able to overwrite a file', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let writeTextFileCommand = new WriteTextFileCommand(
       commandService.commandContext,
     );

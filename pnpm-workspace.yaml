@@ -84,6 +84,7 @@ catalog:
   "@types/yargs": ^17.0.10
   "@typescript-eslint/eslint-plugin": ^7.18.0
   "@typescript-eslint/parser": ^7.18.0
+  "@universal-ember/test-support": ^0.5.1
   "@vscode/vsce": ^3.1.0
   awesome-phonenumber: ^7.2.0
   babel-eslint: ^10.1.0

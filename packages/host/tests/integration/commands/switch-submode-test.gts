@@ -1,13 +1,12 @@
 import { getOwner } from '@ember/owner';
 import { RenderingTestContext } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { localId } from '@cardstack/runtime-common';
 
 import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
-import type CommandService from '@cardstack/host/services/command-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
@@ -16,7 +15,6 @@ import { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  lookupService,
   testRealmURL,
   testRealmInfo,
 } from '../../helpers';
@@ -48,7 +46,7 @@ module('Integration | commands | switch-submode', function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
-    store = lookupService<StoreService>('store');
+    store = getService('store');
   });
 
   hooks.beforeEach(async function () {
@@ -60,10 +58,8 @@ module('Integration | commands | switch-submode', function (hooks) {
 
   test('switch to code submode by local id of a saved instance', async function (assert) {
     let instance = (await store.add(new CardDef())) as CardDefType;
-    let commandService = lookupService<CommandService>('command-service');
-    let operatorModeStateService = lookupService<OperatorModeStateService>(
-      'operator-mode-state-service',
-    );
+    let commandService = getService('command-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
     operatorModeStateService.restore({
       stacks: [[{ id: instance[localId], format: 'isolated' }]],
       submode: 'interact',
@@ -84,10 +80,8 @@ module('Integration | commands | switch-submode', function (hooks) {
 
   test('switch to code submode by remote id of a saved instance', async function (assert) {
     let instance = await store.add(new CardDef());
-    let commandService = lookupService<CommandService>('command-service');
-    let operatorModeStateService = lookupService<OperatorModeStateService>(
-      'operator-mode-state-service',
-    );
+    let commandService = getService('command-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
     operatorModeStateService.restore({
       stacks: [[{ id: instance.id!, format: 'isolated' }]],
       submode: 'interact',

@@ -195,7 +195,7 @@ module('Acceptance | Commands tests', function (hooks) {
 
         let showCardCommand = new ShowCardCommand(this.commandContext);
         await showCardCommand.execute({
-          cardIdToShow: meeting.id,
+          cardId: meeting.id,
         });
 
         return undefined;
@@ -249,7 +249,7 @@ module('Acceptance | Commands tests', function (hooks) {
         if (searchResult.cardIds.length > 0) {
           let showCardCommand = new ShowCardCommand(this.commandContext);
           await showCardCommand.execute({
-            cardIdToShow: searchResult.cardIds[0],
+            cardId: searchResult.cardIds[0],
           });
         }
         return undefined;
@@ -1117,7 +1117,7 @@ module('Acceptance | Commands tests', function (hooks) {
             description:
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
-              cardIdToShow: 'http://test-realm/test/Person/hassan',
+              cardId: 'http://test-realm/test/Person/hassan',
               title: 'Asclepias',
             },
           }),

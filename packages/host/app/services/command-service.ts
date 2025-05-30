@@ -398,3 +398,9 @@ function hasPatchData(payload: any): payload is PatchPayload {
       payload.attributes?.patch?.relationships)
   );
 }
+
+declare module '@ember/service' {
+  interface Registry {
+    'command-service': CommandService;
+  }
+}

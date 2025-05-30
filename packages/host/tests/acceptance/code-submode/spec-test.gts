@@ -5,13 +5,13 @@ import {
   find,
   settled,
   waitFor,
+  waitUntil,
 } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
-
-import MessageService from '@cardstack/host/services/message-service';
 
 import {
   setupLocalIndexing,
@@ -20,9 +20,9 @@ import {
   visitOperatorMode,
   setupUserSubscription,
   percySnapshot,
-  lookupService,
-  type TestContextWithSave,
   setupOnSave,
+  withSlowSave,
+  type TestContextWithSave,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -665,7 +665,7 @@ module('Acceptance | Spec preview', function (hooks) {
   });
   test('does not lose input field focus when editing spec', async function (assert) {
     const receivedEventDeferred = new Deferred<void>();
-    const messageService = lookupService<MessageService>('message-service');
+    const messageService = getService('message-service');
 
     messageService.listenerCallbacks.get(testRealmURL)!.push((e) => {
       if (
@@ -726,14 +726,26 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-cannot-write-intent-message]').doesNotExist();
     await percySnapshot(assert);
   });
-  test('have ability to create new spec instances', async function (assert) {
+  test<TestContextWithSave>('have ability to create new spec instances', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person-1.gts`,
     });
     assert.dom('[data-test-create-spec-button]').exists();
-    await click('[data-test-create-spec-button]');
-    //spec is opened
+    let id: string | undefined;
+    this.onSave((url) => {
+      id = url.href;
+    });
+    await withSlowSave(1000, async () => {
+      click('[data-test-create-spec-button]');
+      await waitFor('[data-test-spec-item-path-creating]', {
+        timeoutMessage: 'creating message appears',
+      });
+      await waitUntil(() => id);
+    });
+    assert
+      .dom('[data-test-spec-item-path-creating]')
+      .doesNotExist('creating message is dismissed');
     assert.dom('[data-test-accordion-item="spec-preview"]').hasClass('open');
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Person1');
     assert.dom('[data-test-exported-type]').hasText('card');

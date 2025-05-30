@@ -1,5 +1,6 @@
 import { RenderingTestContext } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { stringify } from 'qs';
 import { module, test } from 'qunit';
 
@@ -24,7 +25,6 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
-  lookupLoaderService,
 } from '../helpers';
 import {
   setupBaseRealm,
@@ -46,7 +46,7 @@ module('Integration | realm', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   let mockMatrixUtils = setupMockMatrix(hooks);

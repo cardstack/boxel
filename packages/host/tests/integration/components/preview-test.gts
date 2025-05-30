@@ -2,6 +2,7 @@ import Service from '@ember/service';
 import { waitFor } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -9,7 +10,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
-import { lookupLoaderService, testRealmURL } from '../../helpers';
+import { testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -25,7 +26,7 @@ module('Integration | preview', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(async function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     this.owner.register('service:local-indexer', MockLocalIndexer);

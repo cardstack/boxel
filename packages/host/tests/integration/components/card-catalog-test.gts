@@ -7,6 +7,8 @@ import {
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
+
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -14,13 +16,10 @@ import { baseRealm } from '@cardstack/runtime-common';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
 import {
   testRealmURL,
   setupLocalIndexing,
   setupIntegrationTestRealm,
-  lookupLoaderService,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
@@ -42,7 +41,7 @@ module('Integration | card-catalog', function (hooks) {
   const noop = () => {};
 
   hooks.beforeEach(async function () {
-    let loader = lookupLoaderService().loader;
+    let loader = getService('loader-service').loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
     let textArea: typeof import('https://cardstack.com/base/text-area');
@@ -180,9 +179,7 @@ module('Integration | card-catalog', function (hooks) {
       },
     });
 
-    let operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
+    let operatorModeStateService = getService('operator-mode-state-service');
 
     operatorModeStateService.restore({
       stacks: [

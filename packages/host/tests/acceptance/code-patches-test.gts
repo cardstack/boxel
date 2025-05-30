@@ -2,7 +2,12 @@ import { click, waitFor, findAll, waitUntil } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import {
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+  baseRealm,
+} from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
@@ -76,11 +81,11 @@ module('Acceptance | Code patches tests', function (hooks) {
 
     let codeBlock = `\`\`\`
 http://test-realm/test/hello.txt
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 Hello, world!
-=======
+${SEPARATOR_MARKER}
 Hi, world!
->>>>>>> REPLACE\n\`\`\``;
+${REPLACE_MARKER}\n\`\`\``;
     let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: codeBlock,
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -121,31 +126,31 @@ Hi, world!
 
     let codeBlock = `\`\`\`
 http://test-realm/test/hello.txt
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 Hello, world!
-=======
+${SEPARATOR_MARKER}
 Hi, world!
->>>>>>> REPLACE
+${REPLACE_MARKER}
 \`\`\`
 
 I will also update the second file per your request.
 
  \`\`\`
 http://test-realm/test/hi.txt
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 Hi, world!
-=======
+${SEPARATOR_MARKER}
 Greetings, world!
->>>>>>> REPLACE
+${REPLACE_MARKER}
 \`\`\`
 
 \`\`\`
 http://test-realm/test/hi.txt
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 How are you?
-=======
+${SEPARATOR_MARKER}
 We are one!
->>>>>>> REPLACE
+${REPLACE_MARKER}
 \`\`\``;
 
     await click('[data-test-open-ai-assistant]');
@@ -206,31 +211,31 @@ We are one!
 
     let codeBlock = `\`\`\`
 http://test-realm/test/hello.txt
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 Hello, world!
-=======
+${SEPARATOR_MARKER}
 Hi, world!
->>>>>>> REPLACE
+${REPLACE_MARKER}
 \`\`\`
 
  \`\`\`
 http://test-realm/test/hi.txt
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 Hi, world!
-=======
+${SEPARATOR_MARKER}
 Greetings, world!
->>>>>>> REPLACE
+${REPLACE_MARKER}
 \`\`\`
 
 I will also update the second file per your request.
 
 \`\`\`
 http://test-realm/test/hi.txt
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 How are you?
-=======
+${SEPARATOR_MARKER}
 We are one!
->>>>>>> REPLACE
+${REPLACE_MARKER}
 \`\`\``;
 
     let roomId = createAndJoinRoom({
@@ -286,24 +291,24 @@ We are one!
 
     let codeBlock = `\`\`\`
 http://test-realm/test/file1.gts
-<<<<<<< SEARCH
-=======
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
 I am a newly created file1
->>>>>>> REPLACE
+${REPLACE_MARKER}
 \`\`\`
  \`\`\`
 http://test-realm/test/file2.gts
-<<<<<<< SEARCH
-=======
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
 I am a newly created file2
->>>>>>> REPLACE
+${REPLACE_MARKER}
 \`\`\`
 \`\`\`
 http://test-realm/test/hi.txt
-<<<<<<< SEARCH
-=======
-I am a newly created hi.txt file but I will get a suffix because hi.txt already exists!
->>>>>>> REPLACE
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+This file will be created with a suffix because hi.txt already exists
+${REPLACE_MARKER}
 \`\`\``;
 
     await click('[data-test-open-ai-assistant]');
@@ -342,5 +347,16 @@ I am a newly created hi.txt file but I will get a suffix because hi.txt already 
 
     // hi-1.txt got created because hi.txt already exists
     assert.dom('[data-test-file="hi-1.txt"]').exists();
+
+    await click('[data-test-file="hi-1.txt"]');
+
+    assert.equal(
+      (
+        document.getElementsByClassName('view-lines')[0] as HTMLElement
+      ).innerText
+        .replace(/\s+/g, ' ')
+        .trim(),
+      'This file will be created with a suffix because hi.txt already exists',
+    );
   });
 });

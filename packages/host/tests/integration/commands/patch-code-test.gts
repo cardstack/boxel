@@ -1,13 +1,17 @@
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
+
+import {
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+} from '@cardstack/runtime-common';
 
 import { LintResult } from '@cardstack/runtime-common/lint';
 
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
-import type CommandService from '@cardstack/host/services/command-service';
-import type RealmService from '@cardstack/host/services/realm';
 
 import {
-  lookupService,
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -58,25 +62,25 @@ export class Task extends CardDef {
         messages: [],
       };
     };
-    let realmService = lookupService<RealmService>('realm');
+    let realmService = getService('realm');
     await realmService.login(testRealmURL);
   });
 
   test('lint-fixes contents before returning them', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
 
     // note that `eq` import will be missing after this is applied
-    const codeBlock = `<<<<<<< SEARCH
+    const codeBlock = `${SEARCH_MARKER}
   @field priority = contains(NumberField);
-=======
+${SEPARATOR_MARKER}
   @field priority = contains(NumberField);
   <template>
     {{#if (eq priority 1)}}
       <p>High Priority</p>
     {{/if}}
   </template>
->>>>>>> REPLACE`;
+${REPLACE_MARKER}`;
 
     let result = await patchCodeCommand.execute({
       fileUrl,
@@ -104,7 +108,5 @@ export class Task extends CardDef {
   </template>
 }`;
     assert.strictEqual(result.output, expectedResult);
-    assert.strictEqual(result.fixed, true);
-    assert.deepEqual(result.messages, []);
   });
 });

@@ -8,6 +8,8 @@ import {
 
 import { waitUntil } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
+
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
@@ -205,9 +207,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       name: 'room-test',
     });
     setupUserSubscription(matrixRoomId);
-    monacoService = this.owner.lookup(
-      'service:monaco-service',
-    ) as MonacoService;
+    monacoService = getService('monaco-service');
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader

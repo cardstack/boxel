@@ -8,6 +8,7 @@ import {
   triggerEvent,
 } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { getPageTitle } from 'ember-page-title/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
@@ -39,8 +40,6 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
-  lookupLoaderService,
-  lookupNetworkService,
   createJWT,
   testRealmSecretSeed,
   setupUserSubscription,
@@ -60,6 +59,7 @@ import {
 import { setupApplicationTest } from '../helpers/setup';
 
 let matrixRoomId: string;
+let realm2URL = 'http://test-realm/user/test2/';
 module('Acceptance | operator mode tests', function (hooks) {
   let testRealm: Realm;
   setupApplicationTest(hooks);
@@ -71,8 +71,13 @@ module('Acceptance | operator mode tests', function (hooks) {
     activeRealms: [testRealmURL],
   });
 
-  let { setExpiresInSec, createAndJoinRoom, simulateRemoteMessage } =
-    mockMatrixUtils;
+  let {
+    setActiveRealms,
+    setExpiresInSec,
+    createAndJoinRoom,
+    simulateRemoteMessage,
+    setRealmPermissions,
+  } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
@@ -83,7 +88,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     setExpiresInSec(60 * 60);
 
-    let loader = lookupLoaderService().loader;
+    let loader = getService('loader-service').loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
@@ -450,6 +455,33 @@ module('Acceptance | operator mode tests', function (hooks) {
         },
       },
     }));
+
+    setActiveRealms([testRealmURL, realm2URL]);
+
+    await setupAcceptanceTestRealm({
+      mockMatrixUtils,
+      realmURL: realm2URL,
+      contents: {
+        'person.gts': { Person },
+        'Person/1.json': {
+          data: {
+            attributes: {
+              firstName: 'Fadhlan',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${realm2URL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    setRealmPermissions({
+      [realm2URL]: ['read', 'write'],
+    });
   });
 
   test('visiting operator mode', async function (assert) {
@@ -635,6 +667,13 @@ module('Acceptance | operator mode tests', function (hooks) {
       .includesText(`missing file ${testRealmURL}Person/missing-link.json`);
   });
 
+  test('can visit a card via canonical URL from second realm', async function (assert) {
+    await visit(`/user/test2/Person/1`);
+
+    assert.dom(`[data-test-stack-card="${realm2URL}Person/1"]`).exists();
+    assert.dom('[data-test-person]').hasText('Fadhlan');
+  });
+
   test('can open code submode when card or field has no embedded template', async function (assert) {
     await visitOperatorMode({
       stacks: [
@@ -680,7 +719,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   test('open workspace chooser when boxel icon is clicked', async function (assert) {
-    lookupNetworkService().mount(
+    getService('network').mount(
       async (req: Request) => {
         let isOnWorkspaceChooser = document.querySelector(
           '[data-test-workspace-chooser]',

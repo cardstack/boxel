@@ -105,3 +105,9 @@ export default class LoaderService extends Service {
     return loader;
   }
 }
+
+declare module '@ember/service' {
+  interface Registry {
+    'loader-service': LoaderService;
+  }
+}

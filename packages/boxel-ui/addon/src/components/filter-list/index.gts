@@ -1,100 +1,219 @@
-import { fn } from '@ember/helper';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import Component from '@glimmer/component';
-import type { ComponentLike } from '@glint/template';
-
-export interface FilterListIconSignature {
-  Element: SVGElement;
-}
-
-export type FilterListIcon = ComponentLike<FilterListIconSignature>;
-
 import { htmlSafe } from '@ember/template';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
-import { cn, eq } from '../../helpers.ts';
+import { cn } from '../../helpers.ts';
+import DropdownArrow from '../../icons/dropdown-arrow-down.gts';
+import type { Icon } from '../../icons/types.ts';
+import Button from '../button/index.gts';
+import IconButton from '../icon-button/index.gts';
 
 export type Filter = {
   displayName: string;
-  icon: FilterListIcon | string;
+  filters?: Filter[];
+  icon?: Icon | string;
+  isExpanded?: boolean;
 };
 
 interface Signature {
   Args: {
     activeFilter?: Filter;
-    filters: Filter[];
-    onChanged?: (filter: Filter) => void;
+    filters: Filter[] | undefined;
+    onChanged: (filter: Filter) => void;
   };
   Element: HTMLElement;
 }
 
-export default class FilterList extends Component<Signature> {
-  @action
-  onChanged(filter: Filter) {
-    this.args.onChanged?.(filter);
-  }
-
-  <template>
-    <div class='filter-list' ...attributes>
-      {{#each @filters as |filter|}}
-        <button
-          class={{cn 'filter-list__button' selected=(eq @activeFilter filter)}}
-          {{on 'click' (fn this.onChanged filter)}}
-          data-test-boxel-filter-list-button={{filter.displayName}}
-        >
-          {{#if (isIconString filter.icon)}}
-            {{htmlSafe
-              (addClassToSVG filter.icon 'filter-list__icon')
-            }}{{filter.displayName}}
-          {{else}}
-            <filter.icon
-              class='filter-list__icon'
-            />{{filter.displayName}}{{/if}}</button>
-
-      {{/each}}
-    </div>
-    <style scoped>
+const FilterList: TemplateOnlyComponent<Signature> = <template>
+  <ul class='filter-list' role='tree' ...attributes>
+    {{#each @filters key='displayName' as |filter|}}
+      <ListItem
+        @filter={{filter}}
+        @onChanged={{@onChanged}}
+        @activeFilter={{@activeFilter}}
+      />
+    {{/each}}
+  </ul>
+  <style scoped>
+    @layer {
       .filter-list {
         display: flex;
         flex-direction: column;
-        width: 247px;
-        margin-bottom: var(--boxel-sp-xs);
-      }
-      .filter-list__button {
-        text-align: left;
-        background: none;
-        border: none;
-        font: 500 var(--boxel-font-sm);
-        padding: var(--boxel-sp-xxs);
-        margin-bottom: var(--boxel-sp-4xs);
-
-        display: flex;
         gap: var(--boxel-sp-4xs);
+        list-style-type: none;
+        padding-inline-start: 0;
+        margin-block: 0;
       }
-      .filter-list__button.selected {
-        color: var(--boxel-light);
-        background: var(--boxel-dark);
-        border-radius: 6px;
+      .filter-list :deep(.filter-list) {
+        margin-top: var(--boxel-sp-4xs);
+        padding-inline-start: var(--boxel-sp);
       }
-      .filter-list__button:not(.selected):hover {
-        background: var(--boxel-300);
-        border-radius: 6px;
-      }
-      :global(.filter-list__icon) {
-        width: var(--boxel-icon-xs);
-        height: var(--boxel-icon-xs);
-        vertical-align: top;
+    }
+  </style>
+</template>;
+
+export default FilterList;
+
+interface ListItemSignature {
+  Args: {
+    activeFilter?: Filter;
+    filter: Filter;
+    onChanged: (filter: Filter) => void;
+  };
+  Element: HTMLElement;
+}
+
+export class ListItem extends Component<ListItemSignature> {
+  <template>
+    <li
+      class='filter-list-item'
+      role='treeitem'
+      aria-expanded={{if
+        this.isExpanded
+        'true'
+        (if this.hasNestedItems 'false')
+      }}
+      aria-selected='{{this.isSelected}}'
+      aria-label={{@filter.displayName}}
+      data-test-filter-list-item={{@filter.displayName}}
+      ...attributes
+    >
+      <span
+        class={{cn
+          'list-item-buttons'
+          is-selected=this.isSelected
+          is-expanded=this.isExpanded
+        }}
+      >
+        <Button
+          @kind='text-only'
+          @size='small'
+          class='filter-list__button'
+          {{on 'click' this.onChange}}
+          data-test-boxel-filter-list-button={{@filter.displayName}}
+          data-test-selected-filter={{if this.isSelected @filter.displayName}}
+        >
+          {{#if (isString @filter.icon)}}
+            {{htmlSafe (addClassToSVG @filter.icon 'filter-list__icon')}}
+          {{else if @filter.icon}}
+            <@filter.icon class='filter-list__icon' role='presentation' />
+          {{/if}}
+          <span class='filter-name ellipsize'>
+            {{@filter.displayName}}
+          </span>
+        </Button>
+        {{#if this.hasNestedItems}}
+          <IconButton
+            class='dropdown-toggle'
+            @icon={{DropdownArrow}}
+            @width='10'
+            @height='10'
+            aria-label='Toggle {{@filter.displayName}} group items'
+            {{on 'click' this.toggleExpanded}}
+          />
+        {{/if}}
+      </span>
+      {{#if this.isExpanded}}
+        <FilterList
+          @filters={{@filter.filters}}
+          @onChanged={{@onChanged}}
+          @activeFilter={{@activeFilter}}
+          role='group'
+          aria-label='{{@filter.displayName}} group'
+        />
+      {{/if}}
+    </li>
+    <style scoped>
+      @layer {
+        .list-item-buttons {
+          display: flex;
+          border-radius: var(--boxel-border-radius-sm);
+          color: var(--boxel-dark);
+          background-color: var(--boxel-light);
+        }
+        .list-item-buttons:not(.is-selected):hover {
+          background-color: var(--boxel-200);
+        }
+        .list-item-buttons.is-selected {
+          filter: invert(1);
+        }
+        .list-item-buttons.is-expanded {
+          background-color: var(--boxel-100);
+        }
+        .dropdown-toggle {
+          --boxel-icon-button-width: 2rem;
+          --boxel-icon-button-height: 2rem;
+          flex-shrink: 0;
+        }
+        .is-expanded > .dropdown-toggle {
+          transform: rotate(180deg);
+        }
+        .filter-list__button {
+          flex-grow: 1;
+          width: 100%;
+          display: flex;
+          justify-content: flex-start;
+          gap: var(--boxel-sp-xs);
+          font: 500 var(--boxel-font-sm);
+          letter-spacing: var(--boxel-lsp-xs);
+          border-radius: var(--boxel-border-radius-sm);
+          max-width: 100%;
+          overflow: hidden;
+          text-align: left;
+          transition: none;
+        }
+        .filter-list__button:hover,
+        .filter-list__button:focus {
+          color: inherit;
+          background-color: inherit;
+        }
+        :deep(.filter-list__icon) {
+          flex-shrink: 0;
+          width: var(--boxel-icon-xs);
+          height: var(--boxel-icon-xs);
+          vertical-align: top;
+        }
+        .ellipsize {
+          white-space: nowrap;
+          text-overflow: ellipsis;
+          overflow: hidden;
+          max-width: 100%;
+        }
       }
     </style>
   </template>
+
+  @tracked private isExpanded = this.args.filter?.isExpanded ?? false;
+
+  private get isSelected() {
+    return this.args.filter === this.args.activeFilter;
+  }
+
+  private get hasNestedItems() {
+    return Boolean(this.args.filter?.filters);
+  }
+
+  @action private toggleExpanded() {
+    return (this.isExpanded = !this.isExpanded);
+  }
+
+  @action private onChange() {
+    this.args.onChanged(this.args.filter);
+  }
 }
 
 function addClassToSVG(svgString: string, className: string) {
   return svgString
     .replace(/<svg\b([^>]*)\sclass="([^"]*)"/, `<svg$1 class="$2 ${className}"`)
-    .replace(/<svg\b([^>]*)>/, `<svg$1 class="${className}">`);
+    .replace(
+      /<svg\b([^>]*)>/,
+      `<svg$1 class="${className}" role="presentation">`,
+    );
 }
 
-function isIconString(icon: FilterListIcon | string): icon is string {
-  return typeof icon === 'string';
+function isString(item: unknown): item is string {
+  return typeof item === 'string';
 }

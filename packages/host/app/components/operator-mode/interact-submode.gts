@@ -433,7 +433,7 @@ export default class InteractSubmode extends Component {
         if (!selections) {
           continue;
         }
-        let removedCard = [...selections].find((c) => c.id === cardId);
+        let removedCard = [...selections].find((c: CardDef) => c.id === cardId);
         if (removedCard) {
           selections.delete(removedCard);
         }

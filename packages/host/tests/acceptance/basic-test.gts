@@ -1,5 +1,6 @@
 import { click, find, visit } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -7,7 +8,6 @@ import { baseRealm } from '@cardstack/runtime-common';
 import {
   setupLocalIndexing,
   setupAcceptanceTestRealm,
-  lookupLoaderService,
   testRealmURL,
   setupUserSubscription,
 } from '../helpers';
@@ -33,7 +33,7 @@ module('Acceptance | basic tests', function (hooks) {
     });
     setupUserSubscription(matrixRoomId);
 
-    let loaderService = lookupLoaderService();
+    let loaderService = getService('loader-service');
     let loader = loaderService.loader;
     let { field, contains, CardDef, Component } = await loader.import<
       typeof import('https://cardstack.com/base/card-api')

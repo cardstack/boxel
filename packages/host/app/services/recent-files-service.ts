@@ -193,3 +193,9 @@ export default class RecentFilesService extends Service {
     }
   }
 }
+
+declare module '@ember/service' {
+  interface Registry {
+    'recent-files-service': RecentFilesService;
+  }
+}

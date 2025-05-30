@@ -1,15 +1,14 @@
 import { getOwner } from '@ember/owner';
 import { RenderingTestContext } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { Command, CommandContext } from '@cardstack/runtime-common';
 
-import type CommandService from '@cardstack/host/services/command-service';
-
 import RealmService from '@cardstack/host/services/realm';
 
-import { lookupService, testRealmURL, testRealmInfo } from '../../helpers';
+import { testRealmURL, testRealmInfo } from '../../helpers';
 import {
   CardDef,
   StringField,
@@ -36,7 +35,7 @@ module('Integration | commands | commands-calling', function (hooks) {
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
 
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     commandContext = commandService.commandContext;
   });
 

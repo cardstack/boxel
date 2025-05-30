@@ -192,3 +192,9 @@ export default class MonacoService extends Service {
     return this.editor?.getContentHeight();
   }
 }
+
+declare module '@ember/service' {
+  interface Registry {
+    'monaco-service': MonacoService;
+  }
+}

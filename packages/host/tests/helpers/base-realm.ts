@@ -1,8 +1,6 @@
-import { type TestContext, getContext } from '@ember/test-helpers';
+import { getService } from '@universal-ember/test-support';
 
 import { baseRealm } from '@cardstack/runtime-common';
-
-import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type * as Base64ImageFieldModule from 'https://cardstack.com/base/base64-image';
 import type * as BigIntegerModule from 'https://cardstack.com/base/big-integer';
@@ -83,8 +81,7 @@ let ReadOnlyField: (typeof CardAPIModule)['ReadOnlyField'];
 let instanceOf: (typeof CardAPIModule)['instanceOf'];
 
 async function initialize() {
-  let owner = (getContext() as TestContext).owner;
-  let loader = (owner.lookup('service:loader-service') as LoaderService).loader;
+  let loader = getService('loader-service').loader;
 
   StringField = (
     await loader.import<typeof StringFieldModule>(`${baseRealm.url}string`)

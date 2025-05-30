@@ -9,11 +9,23 @@ import { cached, tracked } from '@glimmer/tracking';
 import { task, restartableTask, timeout, all } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
+
+import isEqual from 'lodash/isEqual';
+
 import { Position } from 'monaco-editor';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
-import { hasExecutableExtension, logger } from '@cardstack/runtime-common';
+import {
+  hasExecutableExtension,
+  logger,
+  isSingleCardDocument,
+  isCardInstance,
+  meta as metaSymbol,
+  codeRefWithAbsoluteURL,
+  type SingleCardDocument,
+  type PatchData,
+} from '@cardstack/runtime-common';
 import { getName } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
@@ -25,14 +37,13 @@ import {
 
 import { type ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
+import type { SaveType } from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
-
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
-
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import RecentFilesService from '@cardstack/host/services/recent-files-service';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import BinaryFileInfo from './binary-file-info';
 
@@ -59,6 +70,7 @@ export default class CodeEditor extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare environmentService: EnvironmentService;
   @service private declare recentFilesService: RecentFilesService;
+  @service private declare store: StoreService;
 
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
@@ -305,10 +317,86 @@ export default class CodeEditor extends Component<Signature> {
       return;
     }
 
+    // intentionally not awaiting this
+    this.syncWithStore.perform(content);
+
     await timeout(this.environmentService.autoSaveDelayMs);
-    this.writeSourceCodeToFile(this.args.file, content);
+    this.writeSourceCodeToFile(
+      this.args.file,
+      content,
+      this.canSyncWithStore(content) ? 'editor-with-instance' : 'editor',
+    );
     this.waitForSourceCodeWrite.perform();
     this.hasUnsavedSourceChanges = false;
+  });
+
+  private canSyncWithStore(content: string): boolean {
+    if (!isReady(this.args.file) || !this.args.file.url.endsWith('.json')) {
+      return false;
+    }
+
+    let json: Record<string, any> | undefined;
+    try {
+      json = JSON.parse(content);
+    } catch (e) {
+      return false;
+    }
+
+    if (!json || !isSingleCardDocument(json)) {
+      return false;
+    }
+
+    let instance = this.store.peek(this.args.file.url.replace(/\.json$/, ''));
+    if (!instance || !isCardInstance(instance)) {
+      return false;
+    }
+
+    let { adoptsFrom } = instance[metaSymbol] ?? {};
+    if (!adoptsFrom) {
+      return false;
+    }
+    adoptsFrom = codeRefWithAbsoluteURL(
+      adoptsFrom,
+      new URL(this.args.file.url),
+    );
+    if (
+      !isEqual(
+        adoptsFrom,
+        codeRefWithAbsoluteURL(
+          json.data.meta.adoptsFrom,
+          new URL(this.args.file.url),
+        ),
+      )
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private syncWithStore = restartableTask(async (content: string) => {
+    if (!isReady(this.args.file)) {
+      return;
+    }
+
+    if (!this.canSyncWithStore(content)) {
+      return;
+    }
+
+    // we checked above to make sure that we are dealing with a SingleCardDocument
+    let doc: SingleCardDocument = JSON.parse(content);
+    let patch: PatchData = {
+      ...(doc.data.attributes ? { attributes: doc.data.attributes } : {}),
+      ...(doc.data.relationships
+        ? { relationships: doc.data.relationships }
+        : {}),
+      ...(doc.data.meta.fields
+        ? { meta: { fields: doc.data.meta.fields } }
+        : {}),
+    };
+    await this.store.patch(this.args.file.url.replace(/\.json$/, ''), patch, {
+      doNotPersist: true,
+    });
   });
 
   // these saves can happen so fast that we'll make sure to wait at
@@ -321,9 +409,11 @@ export default class CodeEditor extends Component<Signature> {
     }
   });
 
-  // We use this to write non-cards to the realm--so it doesn't make
-  // sense to go thru the card-service for this
-  private writeSourceCodeToFile(file: FileResource, content: string) {
+  private writeSourceCodeToFile(
+    file: FileResource,
+    content: string,
+    saveType: SaveType,
+  ) {
     if (file.state !== 'ready') {
       throw new Error('File is not ready to be written to');
     }
@@ -338,8 +428,12 @@ export default class CodeEditor extends Component<Signature> {
       return;
     }
 
-    // flush the loader so that the preview (when card instance data is shown), or schema editor (when module code is shown) gets refreshed on save
-    return file.write(content, hasExecutableExtension(file.name));
+    // flush the loader so that the preview (when card instance data is shown),
+    // or schema editor (when module code is shown) gets refreshed on save
+    return file.write(content, {
+      flushLoader: hasExecutableExtension(file.name),
+      saveType,
+    });
   }
 
   private safeJSONParse(content: string) {

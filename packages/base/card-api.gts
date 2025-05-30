@@ -57,6 +57,7 @@ import {
   type getCards,
   type getCardCollection,
   type Store,
+  type PrerenderedCardComponentSignature,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
@@ -148,7 +149,7 @@ export interface CardContext<T extends CardDef = CardDef> {
       };
     };
   }>;
-  prerenderedCardSearchComponent: any;
+  prerenderedCardSearchComponent: typeof GlimmerComponent<PrerenderedCardComponentSignature>;
   getCard: getCard<T>;
   getCards: getCards;
   getCardCollection: getCardCollection;

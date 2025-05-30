@@ -653,13 +653,13 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
             <CardList
               @context={{@context}}
               @query={{this.query}}
-              @realms={{this.realms}}
+              @realms={{this.realmHrefs}}
               class='crm-app-grid'
             />
           {{else}}
             <CardsGrid
               @query={{this.query}}
-              @realms={{this.realms}}
+              @realms={{this.realmHrefs}}
               @selectedView={{this.selectedView}}
               @context={{@context}}
               class='crm-app-grid'

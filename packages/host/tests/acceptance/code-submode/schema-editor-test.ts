@@ -6,6 +6,8 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
+
 import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
@@ -319,9 +321,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       },
     });
 
-    monacoService = this.owner.lookup(
-      'service:monaco-service',
-    ) as MonacoService;
+    monacoService = getService('monaco-service');
   });
 
   test('schema editor lists the inheritance chain', async function (assert) {

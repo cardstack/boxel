@@ -1,5 +1,6 @@
 import { RenderingTestContext } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -15,12 +16,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import { primitive as primitiveType } from 'https://cardstack.com/base/card-api';
 
-import {
-  setupLocalIndexing,
-  setupOnSave,
-  setupCardLogs,
-  lookupLoaderService,
-} from '../helpers';
+import { setupLocalIndexing, setupOnSave, setupCardLogs } from '../helpers';
 import { setupRenderingTest } from '../helpers/setup';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -38,7 +34,7 @@ let loader: Loader;
 module('Unit | ai-function-generation-test', function (hooks) {
   setupRenderingTest(hooks);
   hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
   hooks.beforeEach(async function () {
     cardApi = await loader.import(`${baseRealm.url}card-api`);

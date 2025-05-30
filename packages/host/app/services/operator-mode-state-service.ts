@@ -358,13 +358,15 @@ export default class OperatorModeStateService extends Service {
     return this.schedulePersist();
   }
 
-  updateSubmode(submode: Submode) {
+  async updateSubmode(submode: Submode) {
     this.state.submode = submode;
     this.schedulePersist();
 
     if (submode === Submodes.Code) {
-      this.matrixService.setLLMForCodeMode();
-      this.matrixService.activateCodingSkill();
+      await Promise.all([
+        this.matrixService.setLLMForCodeMode(),
+        this.matrixService.activateCodingSkill(),
+      ]);
     }
   }
 
@@ -790,5 +792,11 @@ export default class OperatorModeStateService extends Service {
     ) as IndexController;
 
     return controller;
+  }
+}
+
+declare module '@ember/service' {
+  interface Registry {
+    'operator-mode-state-service': OperatorModeStateService;
   }
 }

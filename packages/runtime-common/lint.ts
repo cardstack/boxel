@@ -6,7 +6,9 @@ export interface LintArgs {
 
 export type LintResult = Linter.FixReport;
 
-export async function lintFix({ source }: LintArgs): Promise<LintResult> {
+export async function lintFix({
+  source,
+}: LintArgs): Promise<Pick<LintResult, 'output'>> {
   if (typeof (globalThis as any).document !== 'undefined') {
     throw new Error(
       'Linting is not supported in the browser environment. Please run this in a Node.js environment.',
@@ -69,10 +71,11 @@ export async function lintFix({ source }: LintArgs): Promise<LintResult> {
             importMappings: missingCardApiImportConfig.default.importMappings,
           },
         ],
+        '@cardstack/boxel/no-duplicate-imports': 'error',
       },
     },
   ];
   const linter = new eslintModule.Linter({ configType: 'flat' });
-  let fixReport = linter.verifyAndFix(source, CONFIG, 'input.gts');
-  return fixReport;
+  let { output } = linter.verifyAndFix(source, CONFIG, 'input.gts');
+  return { output };
 }

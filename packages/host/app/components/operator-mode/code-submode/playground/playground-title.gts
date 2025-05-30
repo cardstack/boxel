@@ -7,7 +7,11 @@ import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
-import type { Format, Query } from '@cardstack/runtime-common';
+import type {
+  Format,
+  Query,
+  PrerenderedCardLike,
+} from '@cardstack/runtime-common';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
@@ -18,7 +22,6 @@ import FieldPickerModal from './field-chooser-modal';
 import InstanceSelectDropdown from './instance-chooser-dropdown';
 
 import type { FieldOption, SelectedInstance } from './playground-panel';
-import type { PrerenderedCard } from '../../../prerendered-card-search';
 
 interface Signature {
   Args: {
@@ -29,7 +32,7 @@ interface Signature {
     availableRealmURLs: string[];
     fieldOptions: FieldOption[] | undefined;
     selection: SelectedInstance | undefined;
-    onSelect: (item: PrerenderedCard | FieldOption) => void;
+    onSelect: (item: PrerenderedCardLike | FieldOption) => void;
     chooseCard: () => void;
     chooseField: (index: number) => void;
     createNew: () => void;

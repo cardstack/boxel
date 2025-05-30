@@ -61,6 +61,6 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
         throw new Error(`invalid submode specified: ${input.submode}`);
     }
 
-    this.operatorModeStateService.updateSubmode(input.submode);
+    await this.operatorModeStateService.updateSubmode(input.submode);
   }
 }

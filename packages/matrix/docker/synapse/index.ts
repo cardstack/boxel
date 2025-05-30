@@ -10,6 +10,8 @@ import {
   dockerRun,
   dockerStop,
 } from '../index';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '../../helpers/matrix-constants';
+import { appURL } from '../../helpers/isolated-realm-server';
 
 export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
 export const SYNAPSE_PORT = 8008;
@@ -242,6 +244,19 @@ export async function registerUser(
       },
     })
   ).json();
+
+  // Set the test realm in the user's account data
+  // so it appears in the list of available realms
+  if (username.startsWith('user')) {
+    await updateAccountData(
+      response.user_id,
+      response.access_token,
+      APP_BOXEL_REALMS_EVENT_TYPE,
+      JSON.stringify({
+        realms: [`${appURL}/`],
+      }),
+    );
+  }
 
   return {
     homeServer: response.home_server,

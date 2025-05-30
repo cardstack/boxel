@@ -21,6 +21,7 @@ import {
   type LooseSingleCardDocument,
   type Query,
   type CardErrorJSONAPI,
+  type PrerenderedCardLike,
 } from '@cardstack/runtime-common';
 
 import type ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
@@ -45,8 +46,6 @@ import ReportUserContextForAiAssistant from '../../report-user-context-for-ai-as
 
 import PlaygroundContent from './playground-content';
 import PlaygroundTitle from './playground-title';
-
-import type { PrerenderedCard } from '../../../prerendered-card-search';
 
 import type { WithBoundArgs } from '@glint/template';
 
@@ -288,7 +287,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     };
   }
 
-  @action private onSelect(item: PrerenderedCard | FieldOption) {
+  @action private onSelect(item: PrerenderedCardLike | FieldOption) {
     if (this.args.isFieldDef) {
       this.persistSelections(
         this.card!.id,
@@ -296,7 +295,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         (item as FieldOption).index,
       );
     } else {
-      this.persistSelections((item as PrerenderedCard).url);
+      this.persistSelections((item as PrerenderedCardLike).url);
     }
   }
 

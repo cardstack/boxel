@@ -11,6 +11,7 @@ import {
 
 import { triggerEvent } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
@@ -31,7 +32,6 @@ import ContextForAiAssistantService from '@cardstack/host/services/context-for-a
 import type MessageService from '@cardstack/host/services/message-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import { claimsFromRawToken } from '@cardstack/host/services/realm';
-import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
 import { RecentCards } from '@cardstack/host/utils/local-storage-keys';
 
@@ -47,8 +47,6 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
-  lookupLoaderService,
-  lookupNetworkService,
   setupUserSubscription,
   type TestContextWithSave,
 } from '../helpers';
@@ -81,7 +79,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
     setupUserSubscription(matrixRoomId);
 
-    let loader = lookupLoaderService().loader;
+    let loader = getService('loader-service').loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
     let spec: typeof import('https://cardstack.com/base/spec');
@@ -421,7 +419,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       // Click on search-input
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
@@ -456,12 +454,13 @@ module('Acceptance | interact submode tests', function (hooks) {
         submode: 'interact',
         realmUrl: 'http://test-realm/test2/',
       });
+      assert.dom('[data-test-open-search-field]').hasValue('');
     });
 
     test('Can search for an index card by URL (without "index" in path)', async function (assert) {
       await visitOperatorMode({});
 
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
 
       await fillIn('[data-test-search-field]', testRealmURL);
 
@@ -476,7 +475,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     test('Can open a recent card in empty stack', async function (assert) {
       await visitOperatorMode({});
 
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
       await fillIn('[data-test-search-field]', `${testRealmURL}person-entry`);
 
       await click('[data-test-card="http://test-realm/test/person-entry"]');
@@ -490,7 +489,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         `[data-test-stack-card="${testRealmURL}person-entry"] [data-test-close-button]`,
       );
 
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
       assert.dom('[data-test-search-sheet]').hasClass('prompt');
 
       await click(`[data-test-search-result="${testRealmURL}person-entry"]`);
@@ -621,9 +620,8 @@ module('Acceptance | interact submode tests', function (hooks) {
       await deferred.promise;
       await click('[data-test-edit-button]');
 
-      let knownClientRequestIds = (
-        this.owner.lookup('service:card-service') as CardService
-      ).clientRequestIds.values();
+      let knownClientRequestIds =
+        getService('card-service').clientRequestIds.values();
 
       let knownClientRequestId = knownClientRequestIds.next().value;
 
@@ -681,12 +679,8 @@ module('Acceptance | interact submode tests', function (hooks) {
         ],
       });
 
-      let operatorModeStateService = this.owner.lookup(
-        'service:operator-mode-state-service',
-      ) as OperatorModeStateService;
-      let recentCardsService = this.owner.lookup(
-        'service:recent-cards-service',
-      ) as RecentCardsService;
+      let operatorModeStateService = getService('operator-mode-state-service');
+      let recentCardsService = getService('recent-cards-service');
 
       operatorModeStateService.state.stacks[0].map((item) =>
         recentCardsService.add(item.id),
@@ -758,7 +752,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // Replace the current stack by interacting with search prompt directly
       // Click on search-input
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
@@ -786,12 +780,8 @@ module('Acceptance | interact submode tests', function (hooks) {
         ],
       });
 
-      let operatorModeStateService = this.owner.lookup(
-        'service:operator-mode-state-service',
-      ) as OperatorModeStateService;
-      let recentCardsService = this.owner.lookup(
-        'service:recent-cards-service',
-      ) as RecentCardsService;
+      let operatorModeStateService = getService('operator-mode-state-service');
+      let recentCardsService = getService('recent-cards-service');
 
       operatorModeStateService.state.stacks[0].map((item) =>
         recentCardsService.add(item.id),
@@ -803,7 +793,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       // Click on search-input
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
@@ -828,7 +818,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
     test('search can be dismissed with escape', async function (assert) {
       await visitOperatorMode({});
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt');
 
@@ -1603,7 +1593,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         ],
       });
 
-      lookupNetworkService().mount(
+      getService('network').mount(
         async (req) => {
           if (req.method !== 'GET' && req.method !== 'HEAD') {
             let token = req.headers.get('Authorization');
@@ -1833,9 +1823,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
     test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
       // creates a recent search
-      let recentCardsService = this.owner.lookup(
-        'service:recent-cards-service',
-      ) as RecentCardsService;
+      let recentCardsService = getService('recent-cards-service');
       recentCardsService.add(`${testRealmURL}Person/fadhlan`);
 
       await visitOperatorMode({
@@ -1862,7 +1850,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
 
       // Click on search-input
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
@@ -2095,9 +2083,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
-      const messageService = this.owner.lookup(
-        'service:message-service',
-      ) as MessageService;
+      const messageService = getService('message-service');
       const receivedEventDeferred = new Deferred<void>();
       messageService.listenerCallbacks
         .get(testRealmURL)!

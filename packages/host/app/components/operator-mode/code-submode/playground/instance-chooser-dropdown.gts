@@ -18,6 +18,7 @@ import {
   trimJsonExtension,
   type Format,
   type Query,
+  type PrerenderedCardLike,
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
@@ -25,9 +26,7 @@ import CardRenderer from '@cardstack/host/components/card-renderer';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import PrerenderedCardSearch, {
-  type PrerenderedCard,
-} from '../../../prerendered-card-search';
+import PrerenderedCardSearch from '../../../prerendered-card-search';
 
 import type { FieldOption, SelectedInstance } from './playground-panel';
 
@@ -159,7 +158,7 @@ interface Signature {
     expandedSearchQuery?: { query?: Query; realms: string[] };
     fieldOptions?: FieldOption[];
     selection: SelectedInstance | undefined;
-    onSelect: (item: PrerenderedCard | FieldOption) => void;
+    onSelect: (item: PrerenderedCardLike | FieldOption) => void;
     chooseCard: () => void;
     createNew?: () => void;
     createNewIsRunning?: boolean;
@@ -172,10 +171,10 @@ interface Signature {
 interface OptionsDropdownSignature {
   Args: {
     isField?: boolean;
-    options: PrerenderedCard[] | FieldOption[] | undefined;
-    selected?: PrerenderedCard | FieldOption | SelectedInstance;
+    options: PrerenderedCardLike[] | FieldOption[] | undefined;
+    selected?: PrerenderedCardLike | FieldOption | SelectedInstance;
     selection: SelectedInstance | undefined;
-    onSelect: (item: PrerenderedCard | FieldOption) => void;
+    onSelect: (item: PrerenderedCardLike | FieldOption) => void;
     chooseCard: () => void;
     createNew?: () => void;
     createNewIsRunning?: boolean;
@@ -338,7 +337,7 @@ export default class InstanceSelectDropdown extends Component<Signature> {
     return this.args.moduleId === `${baseCardRef.module}/${baseCardRef.name}`;
   }
 
-  private showResults = (cards: PrerenderedCard[] | undefined) => {
+  private showResults = (cards: PrerenderedCardLike[] | undefined) => {
     return (
       cards?.length ||
       this.persistedCardId ||
@@ -348,11 +347,11 @@ export default class InstanceSelectDropdown extends Component<Signature> {
   };
 
   // sort prerendered-search card results by most recently viewed
-  private getSortedCards = (cards: PrerenderedCard[]) => {
+  private getSortedCards = (cards: PrerenderedCardLike[]) => {
     if (!this.args.recentCardIds?.length) {
       return;
     }
-    let sortedCards: PrerenderedCard[] = [];
+    let sortedCards: PrerenderedCardLike[] = [];
     for (let id of this.args.recentCardIds) {
       let card = cards.find((c) => trimJsonExtension(c.url) === id);
       if (card) {
@@ -367,7 +366,7 @@ export default class InstanceSelectDropdown extends Component<Signature> {
       ?.cardId;
   }
 
-  private findSelectedCard = (prerenderedCards?: PrerenderedCard[]) => {
+  private findSelectedCard = (prerenderedCards?: PrerenderedCardLike[]) => {
     if (!prerenderedCards?.length) {
       // it is possible that there's a persisted cardId in playground-selections local storage
       // but that the card is no longer in recent-files local storage
@@ -404,7 +403,7 @@ export default class InstanceSelectDropdown extends Component<Signature> {
     return fields.find((f) => f.index === selection.fieldIndex);
   };
 
-  private handleResults = (results?: PrerenderedCard[]) => {
+  private handleResults = (results?: PrerenderedCardLike[]) => {
     if (!results?.length) {
       // if expanded search returns no instances, create new instance
       this.args.createNew?.();

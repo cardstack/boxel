@@ -15,7 +15,11 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import { and, bool, cn } from '@cardstack/boxel-ui/helpers';
-import { baseRealm } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  type PrerenderedCardLike,
+  type Query,
+} from '@cardstack/runtime-common';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -49,11 +53,6 @@ export interface DefaultTabSignature extends TabComponentSignature {
   context?: CardContext;
 }
 
-interface PrerenderedCard {
-  url: string;
-  component: typeof GlimmerComponent;
-}
-
 export class Tab extends FieldDef {
   @field displayName = contains(StringField);
   @field tabId = contains(StringField);
@@ -62,7 +61,7 @@ export class Tab extends FieldDef {
 }
 
 class TableView extends GlimmerComponent<{
-  Args: { cards: PrerenderedCard[]; context?: CardContext };
+  Args: { cards: PrerenderedCardLike[]; context?: CardContext };
 }> {
   <template>
     {{#if this.isLoaded}}
@@ -168,21 +167,23 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
   <template>
     <div class='app-card-content'>
       {{#if this.activeTabRef}}
-        <@context.prerenderedCardSearchComponent
-          @query={{this.query}}
-          @format='fitted'
-          @realms={{@realms}}
-          @isLive={{true}}
-        >
-          <:loading>Loading...</:loading>
-          <:response as |cards|>
-            {{#if @activeTab.isTable}}
-              <TableView @cards={{cards}} @context={{@context}} />
-            {{else}}
-              <CardsGrid @cards={{cards}} @context={{@context}} />
-            {{/if}}
-          </:response>
-        </@context.prerenderedCardSearchComponent>
+        {{#if this.query}}
+          <@context.prerenderedCardSearchComponent
+            @query={{this.query}}
+            @format='fitted'
+            @realms={{@realms}}
+            @isLive={{true}}
+          >
+            <:loading>Loading...</:loading>
+            <:response as |cards|>
+              {{#if @activeTab.isTable}}
+                <TableView @cards={{cards}} @context={{@context}} />
+              {{else}}
+                <CardsGrid @cards={{cards}} @context={{@context}} />
+              {{/if}}
+            </:response>
+          </@context.prerenderedCardSearchComponent>
+        {{/if}}
       {{else}}
         <p>No cards available</p>
       {{/if}}
@@ -316,7 +317,7 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
           by: 'title',
         },
       ],
-    };
+    } as Query;
   }
 
   @action createNew(value: unknown) {
@@ -481,7 +482,7 @@ export class AppCard extends CardDef {
 
 export class CardsGrid extends GlimmerComponent<{
   Args: {
-    cards: PrerenderedCard[];
+    cards: PrerenderedCardLike[];
     context?: CardContext;
     isListFormat?: boolean;
   };

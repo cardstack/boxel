@@ -1,11 +1,7 @@
-import {
-  waitUntil,
-  waitFor,
-  click,
-  focus,
-  triggerEvent,
-} from '@ember/test-helpers';
+import { waitUntil, waitFor, click, triggerEvent } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
+
+import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
@@ -16,9 +12,6 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import RecentCardsService from '@cardstack/host/services/recent-cards-service';
-
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
@@ -28,7 +21,6 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupIntegrationTestRealm,
-  lookupLoaderService,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -66,7 +58,7 @@ module('Integration | card-delete', function (hooks) {
   }
   setupRenderingTest(hooks);
   hooks.beforeEach(async function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
   });
   setupLocalIndexing(hooks);
@@ -87,9 +79,7 @@ module('Integration | card-delete', function (hooks) {
       leftCards: string[],
       rightCards: string[] = [],
     ) => {
-      let operatorModeStateService = this.owner.lookup(
-        'service:operator-mode-state-service',
-      ) as OperatorModeStateService;
+      let operatorModeStateService = getService('operator-mode-state-service');
 
       let stacks = [
         leftCards.map((url) => ({
@@ -538,9 +528,7 @@ module('Integration | card-delete', function (hooks) {
 
   test('can delete a card that is a recent item', async function (assert) {
     // creates a recent item
-    let recentCardsService = this.owner.lookup(
-      'service:recent-cards-service',
-    ) as RecentCardsService;
+    let recentCardsService = getService('recent-cards-service');
     let mango = await loadCard(`${testRealmURL}Pet/mango`);
     recentCardsService.add(mango.id);
 
@@ -562,7 +550,7 @@ module('Integration | card-delete', function (hooks) {
     await waitFor(
       `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
     );
-    await focus(`[data-test-search-field]`);
+    await click(`[data-test-open-search-field]`);
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     await click('[data-test-search-sheet-cancel-button]');
     await triggerEvent(
@@ -587,7 +575,7 @@ module('Integration | card-delete', function (hooks) {
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
-    await focus(`[data-test-search-field]`);
+    await click(`[data-test-open-search-field]`);
     assert
       .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
       .doesNotExist('recent item removed');
