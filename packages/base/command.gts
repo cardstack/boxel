@@ -49,8 +49,17 @@ export class PatchCardInput extends CardDef {
   @field patch = contains(JsonField);
 }
 
-export class ShowCardInput extends CardDef {
-  @field cardIdToShow = contains(StringField);
+export class CardIdCard extends CardDef {
+  @field cardId = contains(StringField);
+}
+
+export class ReadTextFileInput extends CardDef {
+  @field realm = contains(StringField);
+  @field path = contains(StringField);
+}
+
+export class FileContents extends CardDef {
+  @field content = contains(StringField);
 }
 
 export class SwitchSubmodeInput extends CardDef {

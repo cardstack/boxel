@@ -35,6 +35,14 @@ export type CardSaveSubscriber = (
   content: SingleCardDocument | string,
 ) => void;
 
+export type SaveType =
+  | 'bot-patch'
+  | 'editor'
+  | 'editor-with-instance'
+  | 'create-file'
+  | 'copy'
+  | 'instance';
+
 export default class CardService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
@@ -164,7 +172,7 @@ export default class CardService extends Service {
     };
   }
 
-  async saveSource(url: URL, content: string, type: string) {
+  async saveSource(url: URL, content: string, type: SaveType) {
     try {
       let clientRequestId = `${type}:${uuidv4()}`;
       this.clientRequestIds.add(clientRequestId);
@@ -262,5 +270,11 @@ export default class CardService extends Service {
       );
     }
     return (await response.json()).data.attributes;
+  }
+}
+
+declare module '@ember/service' {
+  interface Registry {
+    'card-service': CardService;
   }
 }

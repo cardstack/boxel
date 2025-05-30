@@ -11,6 +11,7 @@ import { Resource } from 'ember-resources';
 import { SupportedMimeType, logger } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
+import type { SaveType } from '@cardstack/host/services/card-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
@@ -57,7 +58,10 @@ export interface Ready {
   lastModified: string | undefined;
   realmURL: string;
   size: number; // size in bytes
-  write(content: string, flushLoader?: boolean): Promise<void>;
+  write(
+    content: string,
+    opts?: { flushLoader?: boolean; saveType?: SaveType },
+  ): Promise<void>;
   lastModifiedAsDate?: Date;
   isBinary?: boolean;
   writing?: Promise<void>;
@@ -193,10 +197,13 @@ class _FileResource extends Resource<Args> {
       name: rawName ? decodeURIComponent(rawName) : rawName!,
       size,
       url: response.url,
-      write(content: string, flushLoader?: true) {
+      write(
+        content: string,
+        opts?: { flushLoader?: boolean; saveType?: SaveType },
+      ) {
         self.writing = self.writeTask
           .unlinked() // If the component which performs this task from within another task is destroyed, for example the "add field" modal, we want this task to continue running
-          .perform(this, content, flushLoader);
+          .perform(this, content, opts);
         return self.writing;
       },
     });
@@ -231,7 +238,10 @@ class _FileResource extends Resource<Args> {
           realmEventsLogger.debug(
             `reloading file resource ${normalizedURL} because realm event has ${!clientRequestId ? 'no clientRequestId' : 'clientRequestId from instance editor'}`,
           );
-        } else if (clientRequestId.startsWith('editor:')) {
+        } else if (
+          clientRequestId.startsWith('editor:') ||
+          clientRequestId.startsWith('editor-with-instance:')
+        ) {
           if (this.cardService.clientRequestIds.has(clientRequestId)) {
             realmEventsLogger.debug(
               `ignoring because request id is contained in known clientRequestIds`,
@@ -259,11 +269,15 @@ class _FileResource extends Resource<Args> {
   });
 
   writeTask = restartableTask(
-    async (state: Ready, content: string, flushLoader?: true) => {
+    async (
+      state: Ready,
+      content: string,
+      opts?: { flushLoader?: boolean; saveType?: SaveType },
+    ) => {
       let response = await this.cardService.saveSource(
         new URL(this._url),
         content,
-        'editor',
+        opts?.saveType ?? 'editor',
       );
       if (this.innerState.state === 'not-found') {
         // TODO think about the "unauthorized" scenario
@@ -284,7 +298,7 @@ class _FileResource extends Resource<Args> {
         realmURL: state.realmURL,
       });
 
-      if (flushLoader) {
+      if (opts?.flushLoader) {
         this.loaderService.resetLoader();
       }
     },

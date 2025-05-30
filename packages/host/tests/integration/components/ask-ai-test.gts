@@ -1,6 +1,8 @@
 import { click, fillIn, triggerEvent } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
+
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -17,7 +19,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
-  lookupLoaderService,
   assertMessages,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
@@ -34,7 +35,7 @@ module('Integration | ask-ai', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   setupLocalIndexing(hooks);
@@ -53,9 +54,7 @@ module('Integration | ask-ai', function (hooks) {
   let noop = () => {};
 
   hooks.beforeEach(async function () {
-    operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
+    operatorModeStateService = getService('operator-mode-state-service');
 
     const petCard = `import { CardDef, Component } from "https://cardstack.com/base/card-api";
       export class Pet extends CardDef {
@@ -136,7 +135,7 @@ module('Integration | ask-ai', function (hooks) {
       .hasText('New AI Assistant Chat');
     assert
       .dom('[data-test-pill-menu-header]')
-      .containsText('1 of 1 Skill Active');
+      .containsText('2 of 2 Skills Active');
     await assertMessages(assert, [
       {
         from: 'testuser',
@@ -172,7 +171,7 @@ module('Integration | ask-ai', function (hooks) {
       .hasText('New AI Assistant Chat');
     assert
       .dom('[data-test-pill-menu-header]')
-      .containsText('1 of 1 Skill Active');
+      .containsText('2 of 2 Skills Active');
     await assertMessages(assert, [
       {
         from: 'testuser',
@@ -216,7 +215,7 @@ module('Integration | ask-ai', function (hooks) {
       .hasText('New AI Assistant Chat');
     assert
       .dom('[data-test-pill-menu-header]')
-      .containsText('2 of 2 Skills Active');
+      .containsText('3 of 3 Skills Active');
     await assertMessages(assert, [
       {
         from: 'testuser',

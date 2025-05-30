@@ -66,10 +66,11 @@ test.describe('Skills', () => {
     ).toHaveClass('switch checked');
   }
 
-  const defaultSkillCardForInteractMode = `https://cardstack.com/base/Skill/card-editing`;
+  const cardEditingSkillCardId = `https://cardstack.com/base/Skill/card-editing`;
   const defaultSkillCardsForCodeMode = [
     `https://cardstack.com/base/Skill/source-code-editing`,
-    `https://cardstack.com/base/Skill/boxel-coding`,
+    `https://cardstack.com/base/Skill/boxel-development`,
+    `https://cardstack.com/base/Skill/boxel-environment`,
   ];
   const skillCard1 = `${appURL}/skill-pirate-speak`;
   const skillCard2 = `${appURL}/skill-seo`;
@@ -101,7 +102,7 @@ test.describe('Skills', () => {
     ).toHaveCSS('visibility', 'visible');
     await expect(
       page.locator('[data-test-pill-menu-header] .detail'),
-    ).toContainText('1 of 1 Skill Active');
+    ).toContainText('2 of 2 Skills Active');
     await expect(
       page.locator('[data-test-pill-menu-header-button]'),
     ).toHaveText('Show');
@@ -113,15 +114,13 @@ test.describe('Skills', () => {
     await expect(
       page.locator('[data-test-pill-menu-header-button]'),
     ).toHaveText('Hide');
-    await expect(page.locator('[data-test-pill-menu-item]')).toHaveCount(1);
+    await expect(page.locator('[data-test-pill-menu-item]')).toHaveCount(2);
     await expect(
-      page.locator(
-        `[data-test-pill-menu-item="${defaultSkillCardForInteractMode}"]`,
-      ),
+      page.locator(`[data-test-pill-menu-item="${cardEditingSkillCardId}"]`),
     ).toHaveCount(1);
     await expect(
       page.locator(
-        `[data-test-card-pill-toggle="${defaultSkillCardForInteractMode}-on"]`,
+        `[data-test-card-pill-toggle="${cardEditingSkillCardId}-on"]`,
       ),
     ).toHaveCount(1);
     await expect(page.locator('[data-test-pill-menu-add-button]')).toHaveCount(
@@ -133,7 +132,7 @@ test.describe('Skills', () => {
       page.locator(`[data-test-pill-menu-item="${skillCard1}"]`),
     ).toContainText('Talk Like a Pirate');
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '2 of 2 Skills Active',
+      '3 of 3 Skills Active',
     );
 
     await page
@@ -146,7 +145,7 @@ test.describe('Skills', () => {
       page.locator(`[data-test-card-pill-toggle="${skillCard1}-on"]`),
     ).toHaveCount(0);
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '1 of 2 Skills Active',
+      '2 of 3 Skills Active',
     );
 
     await attachSkill(page, skillCard2);
@@ -154,14 +153,14 @@ test.describe('Skills', () => {
       page.locator(`[data-test-pill-menu-item="${skillCard2}"]`),
     ).toContainText('SEO');
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '2 of 3 Skills Active',
+      '3 of 4 Skills Active',
     );
 
     await page
       .locator(`[data-test-card-pill-toggle="${skillCard1}-off"]`)
       .click();
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '3 of 3 Skills Active',
+      '4 of 4 Skills Active',
     );
 
     await attachSkill(page, skillCard3);
@@ -169,14 +168,14 @@ test.describe('Skills', () => {
       page.locator(`[data-test-pill-menu-item="${skillCard3}"]`),
     ).toContainText('Card Title & Description Editing');
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '4 of 4 Skills Active',
+      '5 of 5 Skills Active',
     );
 
     await page
       .locator(`[data-test-card-pill-toggle="${skillCard3}-on"]`)
       .click();
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '3 of 4 Skills Active',
+      '4 of 5 Skills Active',
     );
   });
 
@@ -215,23 +214,23 @@ test.describe('Skills', () => {
     await attachSkill(page, skillCard2);
     await attachSkill(page, skillCard3);
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '4 of 4 Skills Active',
+      '5 of 5 Skills Active',
     );
     await sendMessage(page, room1, 'Room 1'); // sending a message to be able to create new room
 
     let room2 = await createRoom(page);
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '1 of 1 Skill Active',
+      '2 of 2 Skills Active',
     );
     await attachSkill(page, skillCard2, true);
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '2 of 2 Skills Active',
+      '3 of 3 Skills Active',
     );
     await sendMessage(page, room2, 'Room 2'); // sending a message to be able to create new room
 
     let room3 = await createRoom(page);
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '1 of 1 Skill Active',
+      '2 of 2 Skills Active',
     );
     await attachSkill(page, skillCard3, true);
     await attachSkill(page, skillCard2);
@@ -239,25 +238,25 @@ test.describe('Skills', () => {
       .locator(`[data-test-card-pill-toggle="${skillCard2}-on"]`)
       .click();
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '2 of 3 Skills Active',
+      '3 of 4 Skills Active',
     );
 
     await openRoom(page, room1);
     await isInRoom(page, room1);
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '4 of 4 Skills Active',
+      '5 of 5 Skills Active',
     );
 
     await openRoom(page, room2);
     await isInRoom(page, room2);
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '2 of 2 Skills Active',
+      '3 of 3 Skills Active',
     );
 
     await openRoom(page, room3);
     await isInRoom(page, room3);
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '2 of 3 Skills Active',
+      '3 of 4 Skills Active',
     );
   });
 
@@ -284,13 +283,11 @@ test.describe('Skills', () => {
     await sendMessage(page, room1, 'Message 1');
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
-    expect(page.locator('[data-test-active-skills-count]')).toHaveText('3');
+    expect(page.locator('[data-test-active-skills-count]')).toHaveText('4');
     await page.locator('[data-test-skill-menu]').hover();
     await page.locator('[data-test-pill-menu-header-button]').click();
     await page
-      .locator(
-        `[data-test-card-pill-toggle="${defaultSkillCardForInteractMode}-on"]`,
-      )
+      .locator(`[data-test-card-pill-toggle="${cardEditingSkillCardId}-on"]`)
       .click(); // toggle off default skill card
     await page
       .locator(`[data-test-card-pill-toggle="${skillCard1}-on"]`)
@@ -300,7 +297,7 @@ test.describe('Skills', () => {
       .click(); // toggle off skill 2
     await expect(
       page.locator(
-        `[data-test-card-pill-toggle="${defaultSkillCardForInteractMode}-off"]`,
+        `[data-test-card-pill-toggle="${cardEditingSkillCardId}-off"]`,
       ),
     ).toHaveCount(1);
     await expect(
@@ -314,7 +311,7 @@ test.describe('Skills', () => {
       { from: 'user1', message: 'Message 1' },
       { from: 'user1', message: 'Message 2' },
     ]);
-    expect(page.locator('[data-test-active-skills-count]')).toHaveText('0');
+    expect(page.locator('[data-test-active-skills-count]')).toHaveText('1');
   });
 
   test(`previously disabled skills can be enabled`, async ({ page }) => {
@@ -357,31 +354,31 @@ test.describe('Skills', () => {
       .locator(`[data-test-card-pill-toggle="${skillCard1}-on"]`)
       .click();
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '2 of 3 Skills Active',
+      '3 of 4 Skills Active',
     );
 
     await reloadAndOpenAiAssistant(page);
     await openRoom(page, room1);
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '2 of 3 Skills Active',
+      '3 of 4 Skills Active',
     );
 
     await logout(page);
     await login(page, 'user2', 'pass', { url: appURL });
     await getRoomId(page);
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '1 of 1 Skill Active',
+      '2 of 2 Skills Active',
     );
     await attachSkill(page, skillCard3, true);
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '2 of 2 Skills Active',
+      '3 of 3 Skills Active',
     );
 
     await logout(page);
     await login(page, 'user1', 'pass', { url: appURL });
     await openRoom(page, room1);
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
-      '2 of 3 Skills Active',
+      '3 of 4 Skills Active',
     );
   });
 

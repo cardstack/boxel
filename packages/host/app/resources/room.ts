@@ -1,9 +1,12 @@
+import { registerDestructor } from '@ember/destroyable';
 import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
 
 import { TaskInstance, restartableTask, timeout } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
+
+import difference from 'lodash/difference';
 
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -72,8 +75,9 @@ interface Args {
 }
 
 export class RoomResource extends Resource<Args> {
+  #skillIds = new Set<string>();
+  #hasRegisteredDestructor = false;
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
-  private _skillCardsCache: TrackedMap<string, Skill> = new TrackedMap();
   private _nameEventsCache: TrackedMap<string, RoomNameEvent> =
     new TrackedMap();
   @tracked private _createEvent: RoomCreateEvent | undefined;
@@ -99,6 +103,14 @@ export class RoomResource extends Resource<Args> {
     }
     this.roomId = named.roomId;
     this.processing = this.processRoomTask.perform(named.roomId);
+    if (!this.#hasRegisteredDestructor) {
+      this.#hasRegisteredDestructor = true;
+      registerDestructor(this, () => {
+        for (let id of this.#skillIds ?? []) {
+          this.store.dropReference(id);
+        }
+      });
+    }
   }
 
   get isProcessing() {
@@ -121,7 +133,7 @@ export class RoomResource extends Resource<Args> {
       if (!memberIds || !memberIds.includes(this.matrixService.aiBotUserId)) {
         return;
       }
-      await this.loadSkillCards(this.matrixRoom.skillsConfig.enabledSkillCards);
+      await this.loadSkills(this.matrixRoom.skillsConfig.enabledSkillCards);
 
       let index = this._messageCache.size;
       // This is brought up to this level so if the
@@ -274,8 +286,8 @@ export class RoomResource extends Resource<Args> {
     // Usable commands are all commands on *active* skills
     let commands = [];
     for (let skill of this.skills) {
-      let skillCard = this._skillCardsCache.get(skill.cardId);
-      if (skillCard && skill.isActive) {
+      let skillCard = this.store.peek<Skill>(skill.cardId);
+      if (skillCard && isCardInstance(skillCard) && skill.isActive) {
         commands.push(...skillCard.commands);
       }
     }
@@ -363,34 +375,41 @@ export class RoomResource extends Resource<Args> {
     return event.content.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE;
   }
 
-  private async createSkillCard(cardDoc: LooseSingleCardDocument) {
-    let cardId = cardDoc.data.id;
+  private async loadSkill(doc: LooseSingleCardDocument) {
+    let cardId = doc.data.id;
     if (!cardId) {
-      console.warn(
-        `No card id found, this should not happen, this can happen if you add a skill card to a room without saving it, and without giving it an ID`,
+      throw new Error(
+        `SKill card document has no id, this should not happen: ${JSON.stringify(doc, null, 2)}`,
       );
-      return;
     }
-    if (this._skillCardsCache.has(cardId)) {
-      return this._skillCardsCache.get(cardId);
-    }
-
-    let skillCard: Skill;
-    let maybeSkillCard = await this.store.get(cardId);
-    if (isCardInstance(maybeSkillCard)) {
-      skillCard = maybeSkillCard as Skill;
+    let skillCard = await this.store.get<Skill>(cardId);
+    if (isCardInstance(skillCard)) {
+      return skillCard;
     } else {
-      skillCard = await this.store.add<Skill>(cardDoc);
+      throw new Error(`Cannot find skill ${cardId}`);
     }
-    this._skillCardsCache.set(cardId, skillCard);
-    return skillCard;
   }
 
-  private async loadSkillCards(skillCardFileDefs: SerializedFile[]) {
+  private async loadSkills(skillCardFileDefs: SerializedFile[]) {
+    let skillIds: string[] = [];
     for (let skillCardFileDef of skillCardFileDefs) {
       let cardDoc =
         await this.matrixService.downloadCardFileDef(skillCardFileDef);
-      await this.createSkillCard(cardDoc);
+      let skill = await this.loadSkill(cardDoc);
+      if (skill?.id) {
+        skillIds.push(skill.id);
+      }
+    }
+    let oldReferences = [...(this.#skillIds ?? [])];
+    let newReferences = [...(skillIds ?? [])];
+    this.#skillIds = new Set(skillIds);
+    let referencesToDrop = difference(oldReferences, newReferences);
+    for (let id of referencesToDrop) {
+      this.store.dropReference(id);
+    }
+    let referencesToAdd = difference(newReferences, oldReferences);
+    for (let id of referencesToAdd) {
+      this.store.addReference(id);
     }
   }
 
@@ -417,7 +436,6 @@ export class RoomResource extends Resource<Args> {
         index,
         events: this.events,
         skills: this.skills,
-        skillCardsCache: this._skillCardsCache,
       });
 
       if (!message) {
@@ -476,7 +494,6 @@ export class RoomResource extends Resource<Args> {
         events: this.events,
         skills: this.skills,
         commandResultEvent: event,
-        skillCardsCache: this._skillCardsCache,
       },
     );
     await messageBuilder.updateMessageCommandResult(message);
@@ -511,7 +528,6 @@ export class RoomResource extends Resource<Args> {
       index,
       events: this.events,
       skills: this.skills,
-      skillCardsCache: this._skillCardsCache,
       codePatchResultEvent,
     });
     messageBuilder.updateMessageCodePatchResult(message);
