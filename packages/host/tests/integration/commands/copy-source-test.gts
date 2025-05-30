@@ -1,10 +1,10 @@
 import { getOwner } from '@ember/owner';
 import { RenderingTestContext } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import CopySourceCommand from '@cardstack/host/commands/copy-source';
-import type CommandService from '@cardstack/host/services/command-service';
 import type NetworkService from '@cardstack/host/services/network';
 
 import RealmService from '@cardstack/host/services/realm';
@@ -12,8 +12,6 @@ import RealmService from '@cardstack/host/services/realm';
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  lookupNetworkService,
-  lookupService,
   testRealmURL,
   testRealmInfo,
 } from '../../helpers';
@@ -39,7 +37,7 @@ module('Integration | commands | copy-source', function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
-    fetch = lookupNetworkService().fetch;
+    fetch = getService('network').fetch;
   });
 
   hooks.beforeEach(async function () {
@@ -60,7 +58,7 @@ module('Integration | commands | copy-source', function (hooks) {
   });
 
   test('able to copy source or file', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let copySourceCommand = new CopySourceCommand(
       commandService.commandContext,
     );

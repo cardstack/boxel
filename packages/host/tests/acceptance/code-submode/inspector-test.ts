@@ -9,6 +9,8 @@ import {
   visit,
 } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
+
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
@@ -20,8 +22,6 @@ import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
-import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
-import RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import {
   elementIsVisible,
@@ -548,9 +548,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       },
     }));
 
-    monacoService = this.owner.lookup(
-      'service:monaco-service',
-    ) as MonacoService;
+    monacoService = getService('monaco-service');
   });
 
   test('inspector will show json instance definition and module definition in card inheritance panel', async function (assert) {
@@ -965,12 +963,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('can delete a card instance from code submode with no recent files to fall back on', async function (assert) {
-    let recentCardsService = this.owner.lookup(
-      'service:recent-cards-service',
-    ) as RecentCardsService;
-    let recentFilesService = this.owner.lookup(
-      'service:recent-files-service',
-    ) as RecentFilesService;
+    let recentCardsService = getService('recent-cards-service');
+    let recentFilesService = getService('recent-files-service');
 
     [`${testRealmURL}Pet/vangogh`, `${testRealmURL}Person/1`].map((url) =>
       recentCardsService.add(url),
@@ -1046,9 +1040,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('Can delete a card instance from code submode and fall back to recent file', async function (assert) {
-    let recentFilesService = this.owner.lookup(
-      'service:recent-files-service',
-    ) as RecentFilesService;
+    let recentFilesService = getService('recent-files-service');
 
     await visitOperatorMode({
       stacks: [
@@ -1119,9 +1111,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('can delete a card definition and fallback to recent file', async function (assert) {
-    let recentFilesService = this.owner.lookup(
-      'service:recent-files-service',
-    ) as RecentFilesService;
+    let recentFilesService = getService('recent-files-service');
 
     await visitOperatorMode({
       submode: 'code',
@@ -1157,9 +1147,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('can delete a card definition with no recent files to fall back on', async function (assert) {
-    let recentFilesService = this.owner.lookup(
-      'service:recent-files-service',
-    ) as RecentFilesService;
+    let recentFilesService = getService('recent-files-service');
 
     await visitOperatorMode({
       stacks: [[]],

@@ -700,3 +700,9 @@ let SessionStorage = {
     }
   },
 };
+
+declare module '@ember/service' {
+  interface Registry {
+    realm: RealmService;
+  }
+}

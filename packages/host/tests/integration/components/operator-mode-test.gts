@@ -12,6 +12,7 @@ import {
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { FieldContainer } from '@cardstack/boxel-ui/components';
@@ -27,7 +28,6 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
@@ -38,8 +38,6 @@ import {
   setupLocalIndexing,
   setupOnSave,
   type TestContextWithSave,
-  lookupLoaderService,
-  lookupService,
   withSlowSave,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
@@ -57,10 +55,8 @@ module('Integration | operator-mode', function (hooks) {
   let operatorModeStateService: OperatorModeStateService;
 
   hooks.beforeEach(function () {
-    loader = lookupLoaderService().loader;
-    operatorModeStateService = lookupService<OperatorModeStateService>(
-      'operator-mode-state-service',
-    );
+    loader = getService('loader-service').loader;
+    operatorModeStateService = getService('operator-mode-state-service');
   });
 
   setupLocalIndexing(hooks);
@@ -929,7 +925,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('a 403 from Web Application Firewall is handled gracefully when auto-saving', async function (assert) {
-    let networkService = this.owner.lookup('service:network') as NetworkService;
+    let networkService = getService('network');
     networkService.virtualNetwork.mount(
       async (req: Request) => {
         if (req.method === 'PATCH' && req.url.includes('test/Pet/buzz')) {

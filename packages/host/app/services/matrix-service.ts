@@ -983,9 +983,13 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [`${baseRealm.url}Skill/card-editing`];
+    let interactModeDefaultSkills = [
+      `${baseRealm.url}Skill/boxel-environment`,
+      `${baseRealm.url}Skill/card-editing`,
+    ];
 
     let codeModeDefaultSkills = [
+      `${baseRealm.url}Skill/boxel-environment`,
       `${baseRealm.url}Skill/boxel-development`,
       `${baseRealm.url}Skill/source-code-editing`,
     ];
@@ -1569,11 +1573,11 @@ export default class MatrixService extends Service {
     });
   }
 
-  setLLMForCodeMode() {
-    this.setLLMModel(DEFAULT_CODING_LLM);
+  async setLLMForCodeMode() {
+    return this.setLLMModel(DEFAULT_CODING_LLM);
   }
 
-  private setLLMModel(model: string) {
+  private async setLLMModel(model: string) {
     if (!DEFAULT_LLM_LIST.includes(model)) {
       throw new Error(`Cannot find LLM model: ${model}`);
     }
@@ -1584,7 +1588,7 @@ export default class MatrixService extends Service {
     if (!roomResource) {
       return;
     }
-    roomResource.activateLLMTask.perform(model);
+    return roomResource.activateLLMTask.perform(model);
   }
 
   loadMoreAIRooms() {
@@ -1666,4 +1670,10 @@ function getAuth(): LoginResponse | undefined {
     return;
   }
   return JSON.parse(auth) as LoginResponse;
+}
+
+declare module '@ember/service' {
+  interface Registry {
+    'matrix-service': MatrixService;
+  }
 }
