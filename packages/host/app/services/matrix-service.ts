@@ -114,6 +114,7 @@ import type ResetService from './reset';
 import type StoreService from './store';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
+import { Filter } from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
@@ -1261,16 +1262,37 @@ export default class MatrixService extends Service {
 
     this.timelineLoadingState.set(roomId, true);
     try {
-      while (room.oldState.paginationToken != null) {
-        await this.client.scrollback(room);
-        let rs = room.getLiveTimeline().getState('f' as MatrixSDK.Direction);
-        if (rs) {
-          roomData.notifyRoomStateUpdated(rs);
-        }
+      // Create a filter that includes all events
+      let filter = new Filter(this.client.getUserId()!, 'old_messages');
+      filter.setDefinition({
+        room: {
+          timeline: {
+            limit: 30,
+          },
+        },
+      });
+
+      // Get or create a filtered timeline set
+      let timelineSet = room.getOrCreateFilteredTimelineSet(filter, {
+        prepopulateTimeline: true,
+        useSyncEvents: true,
+      });
+
+      let timeline = timelineSet.getLiveTimeline();
+      while (timeline.getPaginationToken('b') != null) {
+        await this.client.paginateEventTimeline(timeline, {
+          backwards: true,
+          limit: 30,
+        });
+      }
+
+      // Get the state from the paginated timeline
+      let rs = room.getLiveTimeline().getState('f' as MatrixSDK.Direction);
+      if (rs) {
+        roomData.notifyRoomStateUpdated(rs);
       }
 
       // Wait for all events to be loaded in roomResource
-      let timeline = room.getLiveTimeline();
       let events = timeline.getEvents();
       this.timelineQueue.push(...events.map((e) => ({ event: e })));
       await this.drainTimeline();
