@@ -8,12 +8,10 @@ import {
 
 import { triggerEvent } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { trimJsonExtension, type Realm } from '@cardstack/runtime-common';
-
-import type RealmServerService from '@cardstack/host/services/realm-server';
-import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import {
   percySnapshot,
@@ -23,7 +21,6 @@ import {
   setupUserSubscription,
   testRealmURL,
   visitOperatorMode,
-  lookupLoaderService,
   withoutLoaderMonitoring,
   type TestContextWithSave,
   assertMessages,
@@ -701,9 +698,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('can choose another instance to be opened in playground panel', async function (assert) {
       removeRecentFiles();
-      let recentFilesService = this.owner.lookup(
-        'service:recent-files-service',
-      ) as RecentFilesService;
+      let recentFilesService = getService('recent-files-service');
       assert.strictEqual(recentFilesService.recentFiles?.length, 0);
 
       await openFileInPlayground('blog-post.gts', testRealmURL, {
@@ -745,9 +740,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test<TestContextWithSave>('can create new instance', async function (assert) {
       removeRecentFiles();
-      let recentFilesService = this.owner.lookup(
-        'service:recent-files-service',
-      ) as RecentFilesService;
+      let recentFilesService = getService('recent-files-service');
       assert.strictEqual(recentFilesService.recentFiles?.length, 0);
 
       await visitOperatorMode({
@@ -1245,9 +1238,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       setupUserSubscription(matrixRoomId);
 
-      let realmServerService = this.owner.lookup(
-        'service:realm-server',
-      ) as RealmServerService;
+      let realmServerService = getService('realm-server');
       personalRealmURL = `${realmServerService.url}testuser/personal/`;
       additionalRealmURL = `${realmServerService.url}testuser/aaa/`; // writeable realm that is lexically before the personal realm
       setActiveRealms([additionalRealmURL, personalRealmURL]);
@@ -1500,7 +1491,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await withoutLoaderMonitoring(async () => {
         // The loader service is shared between the realm server and the host.
         // need to reset the loader to pick up the changed module in the indexer
-        lookupLoaderService().resetLoader();
+        getService('loader-service').resetLoader();
         // fix error
         await realm.write(
           'boom-person.gts',

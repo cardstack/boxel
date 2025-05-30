@@ -47,3 +47,9 @@ export default class MessageService extends Service {
     });
   }
 }
+
+declare module '@ember/service' {
+  interface Registry {
+    'message-service': MessageService;
+  }
+}

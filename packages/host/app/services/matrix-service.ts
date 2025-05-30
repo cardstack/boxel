@@ -510,18 +510,24 @@ export default class MatrixService extends Service {
         if (this.startedAtTs === -1) {
           this.startedAtTs = 0;
         }
-        await this.initSlidingSync();
-        await this.client.startClient({ slidingSync: this.slidingSync });
         let accountDataContent = await this._client.getAccountDataFromServer<{
           realms: string[];
         }>(APP_BOXEL_REALMS_EVENT_TYPE);
-        await this.realmServer.setAvailableRealmURLs(
-          accountDataContent?.realms ?? [],
-        );
         await Promise.all([
-          this.loginToRealms(),
           this.realmServer.fetchCatalogRealms(),
+          this.realmServer.setAvailableRealmURLs(
+            accountDataContent?.realms ?? [],
+          ),
         ]);
+
+        await this.initSlidingSync(accountDataContent);
+        await this.client.startClient({ slidingSync: this.slidingSync });
+
+        // Do not need to wait for these to complete,
+        // in the workspace chooser we'll retrigger login and wait for them to complete
+        // and when fetching cards or files we have reautentication mechanism.
+        this.loginToRealms();
+
         this.postLoginCompleted = true;
       } catch (e) {
         console.log('Error starting Matrix client', e);
@@ -534,11 +540,7 @@ export default class MatrixService extends Service {
     }
   }
 
-  private async initSlidingSync() {
-    let accountData = await this.client.getAccountDataFromServer<{
-      realms: string[];
-    }>(APP_BOXEL_REALMS_EVENT_TYPE);
-
+  private async initSlidingSync(accountData?: { realms: string[] } | null) {
     let lists: Map<string, MSC3575List> = new Map();
     lists.set(SLIDING_SYNC_AI_ROOM_LIST_NAME, {
       ranges: [[0, SLIDING_SYNC_LIST_RANGE_END]],
@@ -549,14 +551,7 @@ export default class MatrixService extends Service {
       required_state: [['*', '*']],
     });
     lists.set(SLIDING_SYNC_AUTH_ROOM_LIST_NAME, {
-      ranges: [
-        [
-          0,
-          accountData
-            ? accountData?.realms.length
-            : SLIDING_SYNC_LIST_RANGE_END,
-        ],
-      ],
+      ranges: [[0, accountData?.realms.length ?? SLIDING_SYNC_LIST_RANGE_END]],
       filters: {
         is_dm: true,
       },
@@ -988,9 +983,13 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [`${baseRealm.url}Skill/card-editing`];
+    let interactModeDefaultSkills = [
+      `${baseRealm.url}Skill/boxel-environment`,
+      `${baseRealm.url}Skill/card-editing`,
+    ];
 
     let codeModeDefaultSkills = [
+      `${baseRealm.url}Skill/boxel-environment`,
       `${baseRealm.url}Skill/boxel-development`,
       `${baseRealm.url}Skill/source-code-editing`,
     ];
@@ -1671,4 +1670,10 @@ function getAuth(): LoginResponse | undefined {
     return;
   }
   return JSON.parse(auth) as LoginResponse;
+}
+
+declare module '@ember/service' {
+  interface Registry {
+    'matrix-service': MatrixService;
+  }
 }

@@ -756,11 +756,15 @@ export class Realm {
       }
     } catch (e) {
       if (e instanceof AuthenticationError) {
-        return new Response(`${e.message}`, {
-          status: 401,
-          headers: {
-            'X-Boxel-Realm-Url': requestContext.realm.url,
+        return createResponse({
+          body: e.message,
+          init: {
+            status: 401,
+            headers: {
+              'X-Boxel-Realm-Url': requestContext.realm.url,
+            },
           },
+          requestContext,
         });
       }
 

@@ -8,7 +8,7 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { dropTask, restartableTask, timeout, task } from 'ember-concurrency';
+import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { provide, consume } from 'ember-provide-consume-context';
 
@@ -39,15 +39,10 @@ import {
   type CardActions,
   type CodeRef,
   type LooseSingleCardDocument,
-  isResolvedCodeRef,
-  type ResolvedCodeRef,
-  type CopyCardsWithCodeRef,
   type LocalPath,
 } from '@cardstack/runtime-common';
 
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
-import CopySourceCommand from '@cardstack/host/commands/copy-source';
-import SaveCardCommand from '@cardstack/host/commands/save-card';
 
 import config from '@cardstack/host/config/environment';
 import { StackItem } from '@cardstack/host/lib/stack-item';
@@ -61,7 +56,6 @@ import {
   type CardDef,
   type Format,
 } from 'https://cardstack.com/base/card-api';
-import { type Spec } from 'https://cardstack.com/base/spec';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -341,36 +335,8 @@ export default class InteractSubmode extends Component {
       },
     };
     let catalogActions: CatalogActions = {
-      createFromSpec: async (
-        spec: Spec,
-        realm: string,
-        localDir?: LocalPath,
-      ) => {
-        await here._createFromSpec.perform(spec, realm, localDir);
-      },
-      copySource: async (fromUrl: string, toUrl: string) => {
-        return await here._copySource.perform(fromUrl, toUrl);
-      },
-      copyCard: async (
-        card: CardDef,
-        realm: string,
-        codeRef?: ResolvedCodeRef,
-        localDir?: LocalPath,
-      ) => {
-        return await here._copyCard.perform(card, realm, codeRef, localDir);
-      },
-      copyCards: async (
-        cards: CopyCardsWithCodeRef[],
-        realm: string,
-        localDir?: LocalPath,
-      ): Promise<CardDef[]> => {
-        return await here._copyCards.perform(cards, realm, localDir);
-      },
       allRealmsInfo: () => {
         return here.realm.allRealmsInfo;
-      },
-      fetchCard: async (url: string) => {
-        return await here.store.peek(url);
       },
     };
     return { ...actions, ...catalogActions };
@@ -433,7 +399,7 @@ export default class InteractSubmode extends Component {
         if (!selections) {
           continue;
         }
-        let removedCard = [...selections].find((c) => c.id === cardId);
+        let removedCard = [...selections].find((c: CardDef) => c.id === cardId);
         if (removedCard) {
           selections.delete(removedCard);
         }
@@ -461,71 +427,6 @@ export default class InteractSubmode extends Component {
       waiter.endAsync(token);
     }
   }
-
-  private _createFromSpec = task(
-    async (spec: Spec, realm: string, localDir?: string) => {
-      if (spec.isComponent) {
-        return;
-      }
-      let url = new URL(spec.id);
-      let ref = codeRefWithAbsoluteURL(spec.ref, url);
-      if (!isResolvedCodeRef(ref)) {
-        throw new Error('ref is not a resolved code ref');
-      }
-      let Klass = await loadCardDef(ref, {
-        loader: this.loaderService.loader,
-      });
-      let card = new Klass({}) as CardDef;
-      await new SaveCardCommand(this.commandService.commandContext).execute({
-        card,
-        realm,
-        localDir,
-      });
-    },
-  );
-
-  private _copyCard = dropTask(
-    async (
-      sourceCard: CardDef,
-      realm: string,
-      codeRef?: ResolvedCodeRef,
-      localDir?: LocalPath,
-    ) => {
-      let { commandContext } = this.commandService;
-      let newCard = await new CopyCardCommand(commandContext).execute({
-        sourceCard,
-        realm,
-        localDir,
-        codeRef,
-      });
-      return newCard;
-    },
-  );
-
-  private _copySource = task(async (fromUrl: string, toUrl: string) => {
-    let { commandContext } = this.commandService;
-    await new CopySourceCommand(commandContext).execute({
-      fromRealmUrl: fromUrl,
-      toRealmUrl: toUrl,
-    });
-  });
-
-  private _copyCards = dropTask(
-    async (cards: CopyCardsWithCodeRef[], realm: string, localDir?: string) => {
-      let { commandContext } = this.commandService;
-      return await Promise.all(
-        cards.map(async (cardWithNewCodeRef) => {
-          let newCard = await new CopyCardCommand(commandContext).execute({
-            sourceCard: cardWithNewCodeRef.sourceCard,
-            realm,
-            localDir,
-            codeRef: cardWithNewCodeRef.codeRef,
-          });
-          return newCard;
-        }),
-      );
-    },
-  );
 
   // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(

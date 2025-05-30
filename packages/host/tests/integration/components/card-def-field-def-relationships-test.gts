@@ -1,5 +1,6 @@
 import { click, waitFor, triggerEvent } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -11,7 +12,6 @@ import { type Loader } from '@cardstack/runtime-common/loader';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
   percySnapshot,
@@ -20,7 +20,6 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   provideConsumeContext,
-  lookupLoaderService,
 } from '../../helpers';
 import {
   CardDef,
@@ -74,15 +73,13 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       canRead: true,
     };
     provideConsumeContext(PermissionsContextName, permissions);
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
 
     setCardInOperatorModeState = async (
       cardURL?: string,
       format: 'isolated' | 'edit' = 'isolated',
     ) => {
-      let operatorModeStateService = this.owner.lookup(
-        'service:operator-mode-state-service',
-      ) as OperatorModeStateService;
+      let operatorModeStateService = getService('operator-mode-state-service');
       operatorModeStateService.restore({
         stacks: cardURL ? [[{ id: cardURL, format }]] : [[]],
       });

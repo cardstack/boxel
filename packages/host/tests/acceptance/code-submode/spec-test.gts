@@ -8,11 +8,10 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
-
-import MessageService from '@cardstack/host/services/message-service';
 
 import {
   setupLocalIndexing,
@@ -21,7 +20,6 @@ import {
   visitOperatorMode,
   setupUserSubscription,
   percySnapshot,
-  lookupService,
   setupOnSave,
   withSlowSave,
   type TestContextWithSave,
@@ -667,7 +665,7 @@ module('Acceptance | Spec preview', function (hooks) {
   });
   test('does not lose input field focus when editing spec', async function (assert) {
     const receivedEventDeferred = new Deferred<void>();
-    const messageService = lookupService<MessageService>('message-service');
+    const messageService = getService('message-service');
 
     messageService.listenerCallbacks.get(testRealmURL)!.push((e) => {
       if (
