@@ -27,7 +27,7 @@
       "@cardstack/host/*": ["app/*"],
       "@cardstack/boxel-host/commands/*": ["app/commands/*"],
       "https://cardstack.com/base/*": ["../base/*"],
-      "@cardstack/catalog/*": ["../catalog-realm-dev/catalog-app/*"],
+      "@cardstack/catalog/*": ["../catalog-realm/catalog-app/*"],
       "*": ["types/*"]
     }
   },
@@ -38,7 +38,6 @@
         "../experiments-realm/**",
         "../seed-realm/**",
         "../catalog-realm/**/*",
-        "../catalog-realm-dev/**/*",
         "../base/**",
         "app/**",
         "tests/**",
@@ -50,7 +49,6 @@
     "../base/**/*",
     "../experiments-realm/**/*",
     "../catalog-realm/**/*",
-    "../catalog-realm-dev/**/*",
     "../seed-realm/**/*",
     "app/**/*",
     "tests/**/*",
