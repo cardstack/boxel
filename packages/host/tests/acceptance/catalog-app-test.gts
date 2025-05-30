@@ -297,6 +297,26 @@ module('Acceptance | catalog app tests', function (hooks) {
     assert.strictEqual(message.content.body, expectedMessage);
   }
 
+  async function executeCommand(
+    commandClass:
+      | typeof ListingUseCommand
+      | typeof ListingInstallCommand
+      | typeof ListingRemixCommand,
+    listingUrl: string,
+    realm: string,
+  ) {
+    const commandService = lookupService<CommandService>('command-service');
+    const store = lookupService<StoreService>('store');
+
+    const command = new commandClass(commandService.commandContext);
+    const listing = (await store.get(listingUrl)) as CardDef;
+
+    return command.execute({
+      realm,
+      listing,
+    });
+  }
+
   module('catalog listing', async function () {
     test('after clicking "Use" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
       await visitOperatorMode({
@@ -376,17 +396,11 @@ module('Acceptance | catalog app tests', function (hooks) {
         stacks: [[]],
       });
 
-      let commandService = lookupService<CommandService>('command-service');
-      let store = lookupService<StoreService>('store');
-
-      let useCommand = new ListingUseCommand(commandService.commandContext);
-      const listingUrl = testRealmURL + 'Listing/author.json';
-      const listing = (await store.get(listingUrl)) as CardDef;
-
-      await useCommand.execute({
-        realm: testRealm2URL,
-        listing,
-      });
+      await executeCommand(
+        ListingUseCommand,
+        testRealmURL + 'Listing/author.json',
+        testRealm2URL,
+      );
 
       // Check example is copied successfully
       await visitOperatorMode({
@@ -433,19 +447,11 @@ module('Acceptance | catalog app tests', function (hooks) {
         stacks: [[]],
       });
 
-      let commandService = lookupService<CommandService>('command-service');
-      let store = lookupService<StoreService>('store');
-
-      let installCommand = new ListingInstallCommand(
-        commandService.commandContext,
+      await executeCommand(
+        ListingInstallCommand,
+        testRealmURL + 'Listing/author.json',
+        testRealm2URL,
       );
-      const listingUrl = testRealmURL + 'Listing/author.json';
-      const listing = (await store.get(listingUrl)) as CardDef;
-
-      await installCommand.execute({
-        realm: testRealm2URL,
-        listing,
-      });
 
       // Check gts file is installed/copied successfully
       await visitOperatorMode({
@@ -500,17 +506,11 @@ module('Acceptance | catalog app tests', function (hooks) {
         stacks: [[]],
       });
 
-      let commandService = lookupService<CommandService>('command-service');
-      let store = lookupService<StoreService>('store');
-
-      let remixCommand = new ListingRemixCommand(commandService.commandContext);
-      const listingUrl = testRealmURL + 'Listing/author.json';
-      const listing = (await store.get(listingUrl)) as CardDef;
-
-      await remixCommand.execute({
-        realm: testRealm2URL,
-        listing,
-      });
+      await executeCommand(
+        ListingRemixCommand,
+        testRealmURL + 'Listing/author.json',
+        testRealm2URL,
+      );
 
       await waitFor('[data-test-accordion-item="playground"]', {
         timeout: 5_000,
