@@ -1,18 +1,29 @@
 import { service } from '@ember/service';
 
+import {
+  ResolvedCodeRef,
+  identifyCard,
+  internalKeyFor,
+} from '@cardstack/runtime-common';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type PlaygroundPanelService from '../services/playground-panel-service';
+import type StoreService from '../services/store';
 
 export default class ShowCardCommand extends HostBaseCommand<
   typeof BaseCommandModule.CardIdCard
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private playgroundPanelService: PlaygroundPanelService;
+  @service declare private store: StoreService;
 
   description =
-    'Show a card in the UI. The cardId mush be a fully qualified URL.';
+    'Show a card in the UI. The cardId must be a fully qualified URL.';
 
   static actionVerb = 'Show Card';
 
@@ -23,18 +34,46 @@ export default class ShowCardCommand extends HostBaseCommand<
   }
 
   protected async run(input: BaseCommandModule.CardIdCard): Promise<undefined> {
-    if (this.operatorModeStateService.state?.submode != 'interact') {
-      // switch to interact mode
-      this.operatorModeStateService.updateSubmode('interact');
+    let { operatorModeStateService, store } = this;
+    if (operatorModeStateService.state?.submode === 'interact') {
+      let newStackIndex = Math.min(
+        operatorModeStateService.numberOfStacks(),
+        1,
+      );
+      let newStackItem = await operatorModeStateService.createStackItem(
+        input.cardId,
+        newStackIndex,
+      );
+      operatorModeStateService.addItemToStack(newStackItem);
+    } else if (operatorModeStateService.state?.submode === 'code') {
+      let cardInstance = await store.get<CardDef>(input.cardId);
+      let cardDefRef = identifyCard(
+        cardInstance.constructor as typeof CardDef,
+      ) as ResolvedCodeRef;
+      if (!cardDefRef) {
+        throw new Error(`Card definition for ${input.cardId} not found.`);
+      }
+      if (
+        operatorModeStateService.codePathString?.startsWith(
+          cardDefRef.module,
+        ) ||
+        operatorModeStateService.state.codeSelection !== cardDefRef.name
+      ) {
+        operatorModeStateService.updateCodePath(
+          new URL(cardDefRef.module + '.gts'),
+        );
+      }
+      this.playgroundPanelService.persistSelections(
+        internalKeyFor(cardDefRef, undefined),
+        input.cardId,
+        'isolated',
+        undefined,
+      );
+    } else {
+      console.error(
+        'Unknown submode:',
+        this.operatorModeStateService.state?.submode,
+      );
     }
-    let newStackIndex = Math.min(
-      this.operatorModeStateService.numberOfStacks(),
-      1,
-    );
-    let newStackItem = await this.operatorModeStateService.createStackItem(
-      input.cardId,
-      newStackIndex,
-    );
-    this.operatorModeStateService.addItemToStack(newStackItem);
   }
 }

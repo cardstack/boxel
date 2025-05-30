@@ -1,5 +1,6 @@
 import { click, fillIn, waitFor } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
@@ -14,7 +15,6 @@ import {
   getMonacoContent,
   visitOperatorMode as _visitOperatorMode,
   type TestContextWithSave,
-  lookupNetworkService,
   setupUserSubscription,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
@@ -224,7 +224,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     });
     setupUserSubscription(matrixRoomId);
 
-    lookupNetworkService().mount(
+    getService('network').mount(
       async (req: Request) => {
         // Some tests need a simulated creation failure
         if (req.url.includes('fetch-failure')) {

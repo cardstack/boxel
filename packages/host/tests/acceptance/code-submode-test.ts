@@ -9,6 +9,7 @@ import {
   settled,
 } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
 import * as MonacoSDK from 'monaco-editor';
 import { module, skip, test } from 'qunit';
@@ -23,7 +24,6 @@ import {
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
-import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import { CodeModePanelSelections } from '@cardstack/host/utils/local-storage-keys';
 
@@ -436,9 +436,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
       setupUserSubscription(matrixRoomId);
 
-      let realmServerService = this.owner.lookup(
-        'service:realm-server',
-      ) as RealmServerService;
+      let realmServerService = getService('realm-server');
       personalRealmURL = `${realmServerService.url}testuser/personal/`;
       additionalRealmURL = `${realmServerService.url}testuser/aaa/`; // writeable realm that is lexically before the personal realm
       catalogRealmURL = `${realmServerService.url}catalog/`;
@@ -549,9 +547,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
       setupUserSubscription(matrixRoomId);
 
-      monacoService = this.owner.lookup(
-        'service:monaco-service',
-      ) as MonacoService;
+      monacoService = getService('monaco-service');
 
       // this seeds the loader used during index which obtains url mappings
       // from the global loader

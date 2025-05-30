@@ -272,3 +272,9 @@ export default class CardService extends Service {
     return (await response.json()).data.attributes;
   }
 }
+
+declare module '@ember/service' {
+  interface Registry {
+    'card-service': CardService;
+  }
+}

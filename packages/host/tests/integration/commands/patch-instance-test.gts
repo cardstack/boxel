@@ -1,5 +1,6 @@
 import { waitUntil } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { localId } from '@cardstack/runtime-common';
@@ -8,12 +9,10 @@ import { type RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-inde
 import PatchCardInstanceCommand from '@cardstack/host/commands/patch-card-instance';
 
 import type CommandService from '@cardstack/host/services/command-service';
-import type StoreService from '@cardstack/host/services/store';
 
 import { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
 import {
-  lookupService,
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -42,7 +41,7 @@ module('Integration | commands | patch-instance', function (hooks) {
   let indexQuery: RealmIndexQueryEngine;
 
   hooks.beforeEach(async function () {
-    commandService = lookupService<CommandService>('command-service');
+    commandService = getService('command-service');
     class Person extends CardDef {
       @field name = contains(StringField);
       @field nickNames = containsMany(StringField);
@@ -275,7 +274,7 @@ module('Integration | commands | patch-instance', function (hooks) {
   });
 
   test('can patch an unsaved instance', async function (assert) {
-    let store = lookupService<StoreService>('store');
+    let store = getService('store');
     let andrea = new PersonDef({ name: 'Andrea' });
     await store.add(andrea, { realm: testRealmURL, doNotPersist: true });
 

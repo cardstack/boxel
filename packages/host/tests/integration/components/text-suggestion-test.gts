@@ -1,5 +1,6 @@
 import { RenderingTestContext } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Loader } from '@cardstack/runtime-common';
@@ -13,7 +14,6 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  lookupLoaderService,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -29,7 +29,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   hooks.beforeEach(async function () {
