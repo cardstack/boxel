@@ -334,7 +334,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await waitFor('[data-test-card-schema]');
 
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
-    assert.dom('[data-test-total-fields]').containsText('8 Fields');
+    assert.dom('[data-test-total-fields]').containsText('8');
 
     assert
       .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
@@ -471,7 +471,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click(`button[data-test-clickable-definition-container`);
     await waitFor('[data-test-card-schema]');
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
-    assert.dom('[data-test-total-fields]').containsText('8 Fields');
+    assert.dom('[data-test-total-fields]').containsText('8');
   });
 
   test('shows displayName of CardResource when field refers to itself', async function (assert) {

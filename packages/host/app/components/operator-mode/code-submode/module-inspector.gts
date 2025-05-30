@@ -1,17 +1,18 @@
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { task } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
 import { TrackedObject } from 'tracked-built-ins';
-
-import { Accordion } from '@cardstack/boxel-ui/components';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
@@ -19,27 +20,36 @@ import {
   type getCards,
   type getCard,
   type Query,
+  isCardDef,
   isCardDocumentString,
   isFieldDef,
   internalKeyFor,
+  loadCardDef,
   CodeRef,
   CardErrorJSONAPI,
   GetCardsContextName,
   GetCardContextName,
   ResolvedCodeRef,
+  skillCardRef,
   specRef,
+  localId,
 } from '@cardstack/runtime-common';
+import {
+  codeRefWithAbsoluteURL,
+  isResolvedCodeRef,
+} from '@cardstack/runtime-common/code-ref';
 
 import CardError from '@cardstack/host/components/operator-mode/card-error';
 import CardRendererPanel from '@cardstack/host/components/operator-mode/card-renderer-panel/index';
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
 
-import SchemaEditor, {
-  SchemaEditorTitle,
-} from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
-import SpecPreview from '@cardstack/host/components/operator-mode/code-submode/spec-preview';
-import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
+import SchemaEditor from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
 
+import SpecPreview from '@cardstack/host/components/operator-mode/code-submode/spec-preview';
+import SpecPreviewBadge from '@cardstack/host/components/operator-mode/code-submode/spec-preview-badge';
+
+import ToggleButton from '@cardstack/host/components/operator-mode/code-submode/toggle-button';
+import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import { type Ready } from '@cardstack/host/resources/file';
@@ -51,26 +61,26 @@ import {
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import { CodeModePanelSelections } from '@cardstack/host/utils/local-storage-keys';
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-import { Spec } from 'https://cardstack.com/base/spec';
+import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
-export type SelectedAccordionItem =
-  | 'schema-editor'
-  | 'spec-preview'
-  | 'playground';
+export type ActiveModuleInspectorView = 'schema' | 'spec' | 'preview';
 
-const accordionItems: SelectedAccordionItem[] = [
-  'schema-editor',
-  'playground',
-  'spec-preview',
+const moduleInspectorPanels: ActiveModuleInspectorView[] = [
+  'schema',
+  'preview',
+  'spec',
 ];
 
 interface ModuleInspectorSignature {
@@ -98,10 +108,13 @@ interface ModuleInspectorSignature {
 }
 
 export default class ModuleInspector extends Component<ModuleInspectorSignature> {
+  @service private declare loaderService: LoaderService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
+  @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
   @service private declare specPanelService: SpecPanelService;
+  @service private declare store: StoreService;
 
   @consume(GetCardsContextName) private declare getCards: getCards;
   @consume(GetCardContextName) private declare getCard: getCard;
@@ -109,7 +122,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   @tracked private specSearch: ReturnType<getCards<Spec>> | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
-  private panelSelections: Record<string, SelectedAccordionItem>;
+  private panelSelections: Record<string, ActiveModuleInspectorView>;
 
   constructor(owner: Owner, args: ModuleInspectorSignature['Args']) {
     super(owner, args);
@@ -194,21 +207,12 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     return null;
   }
 
-  private get selectedAccordionItem(): SelectedAccordionItem {
+  private get activePanel(): ActiveModuleInspectorView {
     let selection = this.panelSelections[this.args.readyFile.url];
-    return selection ?? 'schema-editor';
+    return selection ?? 'schema';
   }
 
-  @action private toggleAccordionItem(item: SelectedAccordionItem) {
-    if (this.selectedAccordionItem === item) {
-      let index = accordionItems.indexOf(item);
-      if (index !== -1 && index === accordionItems.length - 1) {
-        index--;
-      } else if (index !== -1) {
-        index++;
-      }
-      item = accordionItems[index];
-    }
+  @action private setActivePanel(item: ActiveModuleInspectorView) {
     this.panelSelections[this.args.readyFile.url] = item;
     // persist in local storage
     window.localStorage.setItem(
@@ -337,6 +341,120 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     return this.cardResource?.card as Spec;
   }
 
+  private get selectedView(): ActiveModuleInspectorView {
+    let selection = this.panelSelections[this.args.readyFile.url];
+    return selection ?? 'schema';
+  }
+
+  private createSpecTask = task(
+    async (ref: ResolvedCodeRef, specType: SpecType) => {
+      let relativeTo = new URL(ref.module);
+      let maybeAbsoluteRef = codeRefWithAbsoluteURL(ref, relativeTo);
+      if (isResolvedCodeRef(maybeAbsoluteRef)) {
+        ref = maybeAbsoluteRef;
+      }
+      try {
+        let SpecKlass = await loadCardDef(specRef, {
+          loader: this.loaderService.loader,
+        });
+        let spec = new SpecKlass({
+          specType,
+          ref,
+          title: ref.name,
+        }) as Spec;
+        let currentRealm = this.operatorModeStateService.realmURL;
+        await this.store.add(spec, {
+          realm: currentRealm.href,
+          doNotWaitForPersist: true,
+        });
+        this.specPanelService.setSelection(spec[localId]);
+        if (this.selectedView !== 'spec') {
+          this.setActivePanel('spec');
+        }
+      } catch (e: any) {
+        console.log('Error saving', e);
+      }
+    },
+  );
+
+  @action private async createSpec(event: MouseEvent) {
+    event.stopPropagation();
+    if (!this.args.selectedDeclaration) {
+      throw new Error('bug: no selected declaration');
+    }
+    if (!this.selectedDeclarationAsCodeRef) {
+      throw new Error('bug: no code ref');
+    }
+    let specType = await this.guessSpecType(this.args.selectedDeclaration);
+    this.createSpecTask.perform(this.selectedDeclarationAsCodeRef, specType);
+  }
+
+  private async guessSpecType(
+    selectedDeclaration: ModuleDeclaration,
+  ): Promise<SpecType> {
+    if (isCardOrFieldDeclaration(selectedDeclaration)) {
+      if (isCardDef(selectedDeclaration.cardOrField)) {
+        if (this.isApp(selectedDeclaration)) {
+          return 'app';
+        }
+        if (await this.isSkill(selectedDeclaration)) {
+          return 'skill';
+        }
+        return 'card';
+      }
+      if (isFieldDef(selectedDeclaration.cardOrField)) {
+        return 'field';
+      }
+    }
+    throw new Error('Unidentified spec');
+  }
+
+  //TODO: Improve identification of isApp and isSkill
+  // isApp and isSkill are far from perfect functions
+  //We have good primitives to identify card and field but not for app and skill
+  //Here we are trying our best based upon schema analyses what is an app and a skill
+  //We don't try to capture deep ancestry of app and skill
+  private isApp(selectedDeclaration: CardOrFieldDeclaration) {
+    if (selectedDeclaration.exportName === 'AppCard') {
+      return true;
+    }
+    if (
+      selectedDeclaration.super &&
+      selectedDeclaration.super.type === 'external' &&
+      selectedDeclaration.super.name === 'AppCard'
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  private async isSkill(selectedDeclaration: CardOrFieldDeclaration) {
+    const isInClassChain = await selectedDeclaration.cardType.isClassInChain(
+      selectedDeclaration.cardOrField,
+      skillCardRef,
+    );
+
+    if (isInClassChain) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private get canWrite() {
+    return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
+  }
+
+  get showCreateSpec() {
+    return (
+      Boolean(this.args.selectedDeclaration?.exportName) &&
+      !this.specSearch?.isLoading &&
+      this.specsForSelectedDefinition.length === 0 &&
+      !this.activeSpec &&
+      this.canWrite
+    );
+  }
+
   <template>
     {{#if this.isCardPreviewError}}
       {{! this is here to make TS happy, this is always true }}
@@ -344,20 +462,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         <CardError @error={{@cardError}} @hideHeader={{true}} />
       {{/if}}
     {{else if this.isEmptyFile}}
-      <Accordion as |A|>
-        <A.Item
-          class='accordion-item'
-          @contentClass='accordion-item-content'
-          @isOpen={{true}}
-        >
-          <:title>
-            <SchemaEditorTitle @hasModuleError={{true}} />
-          </:title>
-          <:content>
-            <SyntaxErrorDisplay @syntaxErrors='File is empty' />
-          </:content>
-        </A.Item>
-      </Accordion>
+      <SyntaxErrorDisplay @syntaxErrors='File is empty' />
     {{else if this.fileIncompatibilityMessage}}
 
       <div
@@ -369,86 +474,77 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     {{else if @selectedCardOrField.cardOrField}}
       {{consumeContext this.makeCardResource}}
       {{consumeContext this.findSpecsForSelectedDefinition}}
-      <Accordion
-        {{SpecUpdatedModifier
-          spec=this.activeSpec
-          onSpecUpdated=this.updatePlaygroundSelectionsFromSpec
-        }}
-        data-test-module-inspector='card-or-field'
-        data-test-selected-accordion-item={{this.selectedAccordionItem}}
-        as |A|
+
+      <SchemaEditor
+        @file={{@readyFile}}
+        @moduleContentsResource={{@moduleContentsResource}}
+        @card={{@selectedCardOrField.cardOrField}}
+        @cardTypeResource={{@selectedCardOrField.cardType}}
+        @goToDefinition={{@goToDefinitionAndResetCursorPosition}}
+        @isReadOnly={{@isReadOnly}}
+        as |SchemaEditorBadge SchemaEditorPanel|
       >
-        <SchemaEditor
-          @file={{@readyFile}}
-          @moduleContentsResource={{@moduleContentsResource}}
-          @card={{@selectedCardOrField.cardOrField}}
-          @cardTypeResource={{@selectedCardOrField.cardType}}
-          @goToDefinition={{@goToDefinitionAndResetCursorPosition}}
-          @isReadOnly={{@isReadOnly}}
-          as |SchemaEditorTitle SchemaEditorPanel|
+
+        <header
+          class='module-inspector-header'
+          {{SpecUpdatedModifier
+            spec=this.activeSpec
+            onSpecUpdated=this.updatePlaygroundSelectionsFromSpec
+          }}
+          data-test-preview-panel-header
         >
-          <A.Item
-            class='accordion-item'
-            @contentClass='accordion-item-content'
-            @onClick={{fn this.toggleAccordionItem 'schema-editor'}}
-            @isOpen={{eq this.selectedAccordionItem 'schema-editor'}}
-            data-test-accordion-item='schema-editor'
-          >
-            <:title>
-              <SchemaEditorTitle />
-            </:title>
-            <:content>
-              <SchemaEditorPanel class='accordion-content' />
-            </:content>
-          </A.Item>
-        </SchemaEditor>
-        <Playground
-          @isOpen={{eq this.selectedAccordionItem 'playground'}}
-          @codeRef={{@selectedCodeRef}}
-          @isUpdating={{@moduleContentsResource.isLoading}}
-          @cardOrField={{@selectedCardOrField.cardOrField}}
-          as |PlaygroundTitle PlaygroundContent|
-        >
-          <A.Item
-            class='accordion-item playground-accordion-item'
-            @contentClass='accordion-item-content'
-            @onClick={{fn this.toggleAccordionItem 'playground'}}
-            @isOpen={{eq this.selectedAccordionItem 'playground'}}
-            data-test-accordion-item='playground'
-          >
-            <:title><PlaygroundTitle /></:title>
-            <:content>
-              {{#if (eq this.selectedAccordionItem 'playground')}}
-                <PlaygroundContent />
+          {{#each moduleInspectorPanels as |moduleInspectorView|}}
+            <ToggleButton
+              class='toggle-button'
+              @isActive={{eq this.selectedView moduleInspectorView}}
+              {{on 'click' (fn this.setActivePanel moduleInspectorView)}}
+              data-test-module-inspector-view={{moduleInspectorView}}
+            >
+              {{capitalize moduleInspectorView}}
+              {{#if (eq moduleInspectorView 'spec')}}
+                <SpecPreviewBadge
+                  @spec={{this.activeSpec}}
+                  @showCreateSpec={{this.showCreateSpec}}
+                  @createSpec={{this.createSpec}}
+                  @isCreateSpecInstanceRunning={{this.createSpecTask.isRunning}}
+                  @numberOfInstances={{this.specsForSelectedDefinition.length}}
+                />
+              {{else if (eq moduleInspectorView 'schema')}}
+                <SchemaEditorBadge />
               {{/if}}
-            </:content>
-          </A.Item>
-        </Playground>
-        <SpecPreview
-          @selectedDeclaration={{@selectedDeclaration}}
-          @isLoadingNewModule={{@moduleContentsResource.isLoadingNewModule}}
-          @toggleAccordionItem={{this.toggleAccordionItem}}
-          @isPanelOpen={{eq this.selectedAccordionItem 'spec-preview'}}
-          @selectedDeclarationAsCodeRef={{this.selectedDeclarationAsCodeRef}}
-          @updatePlaygroundSelections={{this.updatePlaygroundSelections}}
-          @activeSpec={{this.activeSpec}}
-          @specsForSelectedDefinition={{this.specsForSelectedDefinition}}
-          @searchIsLoading={{this.specSearch.isLoading}}
-          as |SpecPreviewTitle SpecPreviewContent|
+            </ToggleButton>
+          {{/each}}
+        </header>
+
+        <section
+          class='module-inspector-content'
+          data-test-module-inspector='card-or-field'
+          data-test-active-module-inspector-view={{this.selectedView}}
         >
-          <A.Item
-            class='accordion-item'
-            @contentClass='accordion-item-content'
-            @onClick={{fn this.toggleAccordionItem 'spec-preview'}}
-            @isOpen={{eq this.selectedAccordionItem 'spec-preview'}}
-            data-test-accordion-item='spec-preview'
-          >
-            <:title>
-              <SpecPreviewTitle />
-            </:title>
-            <:content>
+          {{#if (eq this.selectedView 'schema')}}
+            <SchemaEditorPanel class='non-preview-panel-content' />
+          {{else if (eq this.selectedView 'preview')}}
+            <Playground
+              @isOpen={{eq this.activePanel 'preview'}}
+              @codeRef={{@selectedCodeRef}}
+              @isUpdating={{@moduleContentsResource.isLoading}}
+              @cardOrField={{@selectedCardOrField.cardOrField}}
+            />
+          {{else if (eq this.selectedView 'spec')}}
+            <SpecPreview
+              @selectedDeclaration={{@selectedDeclaration}}
+              @isLoadingNewModule={{@moduleContentsResource.isLoadingNewModule}}
+              @setActiveModuleInspectorPanel={{this.setActivePanel}}
+              @isPanelOpen={{eq this.activePanel 'spec'}}
+              @selectedDeclarationAsCodeRef={{this.selectedDeclarationAsCodeRef}}
+              @updatePlaygroundSelections={{this.updatePlaygroundSelections}}
+              @activeSpec={{this.activeSpec}}
+              @specsForSelectedDefinition={{this.specsForSelectedDefinition}}
+              @showCreateSpec={{this.showCreateSpec}}
+              as |SpecPreviewContent|
+            >
               {{#if this.showSpecPreview}}
-                <SpecPreviewContent class='accordion-content' />
+                <SpecPreviewContent class='non-preview-panel-content' />
               {{else}}
                 <p
                   class='file-incompatible-message'
@@ -458,30 +554,17 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
                     definitions that are not exported.</span>
                 </p>
               {{/if}}
-            </:content>
-          </A.Item>
-        </SpecPreview>
-      </Accordion>
+            </SpecPreview>
+          {{/if}}
+        </section>
+      </SchemaEditor>
     {{else if @moduleContentsResource.moduleError}}
-      <Accordion as |A|>
-        <A.Item
-          class='accordion-item'
-          @contentClass='accordion-item-content'
-          @isOpen={{true}}
-          data-test-module-error-panel
-        >
-          <:title>
-            <SchemaEditorTitle @hasModuleError={{true}} />
-          </:title>
-          <:content>
-            <SyntaxErrorDisplay
-              @syntaxErrors={{@moduleContentsResource.moduleError.message}}
-            />
-          </:content>
-        </A.Item>
-      </Accordion>
+      <SyntaxErrorDisplay
+        @syntaxErrors={{@moduleContentsResource.moduleError.message}}
+      />
     {{else if @card}}
       <CardRendererPanel
+        class='card-renderer-panel'
         @card={{@card}}
         @realmURL={{this.operatorModeStateService.realmURL}}
         @format={{@previewFormat}}
@@ -491,6 +574,24 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     {{/if}}
 
     <style scoped>
+      .module-inspector-header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs);
+        border-bottom: var(--boxel-border);
+      }
+
+      .module-inspector-content {
+        overflow: scroll;
+        height: 100%;
+      }
+
+      .toggle-button {
+        justify-content: space-between;
+        padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp);
+      }
+
       .file-incompatible-message {
         display: flex;
         flex-wrap: wrap;
@@ -510,24 +611,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         max-width: 400px;
       }
 
-      .accordion-item {
-        --accordion-item-title-font: 600 var(--boxel-font-sm);
-        box-sizing: content-box; /* prevent shift during accordion toggle because of border-width */
-      }
-      .playground-accordion-item > :deep(.title) {
-        padding-block: var(--boxel-sp-4xs);
-      }
-      .accordion-item > :deep(.title) {
-        height: var(--accordion-item-closed-height);
-      }
-      .accordion-item :deep(.accordion-item-content) {
-        overflow-y: auto;
-      }
-      .accordion-item:last-child {
-        border-bottom: var(--boxel-border);
-      }
-
-      .accordion-content {
+      .non-preview-panel-content {
         padding: var(--boxel-sp-xs);
         background-color: var(--code-mode-panel-background-color);
         min-height: 100%;
