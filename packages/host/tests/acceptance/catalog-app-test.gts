@@ -276,6 +276,27 @@ module('Acceptance | catalog app tests', function (hooks) {
     });
   });
 
+  async function verifyButtonAction(
+    buttonSelector: string,
+    expectedText: string,
+    expectedMessage: string,
+    assert: Assert,
+  ) {
+    await waitFor(buttonSelector);
+    assert.dom(buttonSelector).containsText(expectedText);
+    await click(buttonSelector);
+    await click(`[data-test-boxel-menu-item-text="Test Workspace B"]`);
+
+    await waitFor(`[data-room-settled]`);
+    await waitUntil(() => getRoomIds().length > 0);
+
+    const roomId = getRoomIds().pop()!;
+    const message = getRoomEvents(roomId).pop()!;
+
+    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
+    assert.strictEqual(message.content.body, expectedMessage);
+  }
+
   module('catalog listing', async function () {
     test('after clicking "Use" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
       await visitOperatorMode({
@@ -288,24 +309,11 @@ module('Acceptance | catalog app tests', function (hooks) {
           ],
         ],
       });
-
-      await waitFor('[data-test-catalog-listing-use-button]');
-      assert
-        .dom('[data-test-catalog-listing-use-button]')
-        .containsText('Use', '"Use" button exist in listing');
-      await click('[data-test-catalog-listing-use-button]');
-      await click(`[data-test-boxel-menu-item-text="Test Workspace B"]`);
-
-      await waitFor(`[data-room-settled]`);
-
-      await waitUntil(() => getRoomIds().length > 0);
-      let roomId = getRoomIds().pop()!;
-      let message = getRoomEvents(roomId).pop()!;
-
-      assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
-      assert.strictEqual(
-        message.content.body,
+      await verifyButtonAction(
+        '[data-test-catalog-listing-use-button]',
+        'Use',
         'I would like to use this Mortgage Calculator under the following realm: http://test-realm/test/',
+        assert,
       );
     });
 
@@ -320,24 +328,11 @@ module('Acceptance | catalog app tests', function (hooks) {
           ],
         ],
       });
-
-      await waitFor('[data-test-catalog-listing-install-button]');
-      assert
-        .dom('[data-test-catalog-listing-install-button]')
-        .containsText('Install', '"Install" button exist in listing');
-      await click('[data-test-catalog-listing-install-button]');
-      await click(`[data-test-boxel-menu-item-text="Test Workspace B"]`);
-
-      await waitFor(`[data-room-settled]`);
-
-      await waitUntil(() => getRoomIds().length > 0);
-      let roomId = getRoomIds().pop()!;
-      let message = getRoomEvents(roomId).pop()!;
-
-      assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
-      assert.strictEqual(
-        message.content.body,
+      await verifyButtonAction(
+        '[data-test-catalog-listing-install-button]',
+        'Install',
         'I would like to install this Mortgage Calculator under the following realm: http://test-realm/test/',
+        assert,
       );
     });
 
@@ -354,14 +349,11 @@ module('Acceptance | catalog app tests', function (hooks) {
       });
 
       const mortgageCalculatorCardId = `${catalogRealmURL}CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`;
-
       await waitFor('.catalog-content');
       await waitFor('.showcase-center-div');
-
       await waitFor(
         `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
       );
-
       assert
         .dom(
           `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
@@ -371,30 +363,11 @@ module('Acceptance | catalog app tests', function (hooks) {
           '"Mortgage Calculator" button exist in listing',
         );
 
-      await waitFor(
+      await verifyButtonAction(
         `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-remix-button]`,
-      );
-      assert
-        .dom(
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-remix-button]`,
-        )
-        .containsText('Remix', '"Remix" button exist in listing');
-
-      await click(
-        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-remix-button]`,
-      );
-      await click(`[data-test-boxel-menu-item-text="Test Workspace B"]`);
-
-      await waitFor(`[data-room-settled]`);
-
-      await waitUntil(() => getRoomIds().length > 0);
-      let roomId = getRoomIds().pop()!;
-      let message = getRoomEvents(roomId).pop()!;
-
-      assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
-      assert.strictEqual(
-        message.content.body,
+        'Remix',
         'I would like to remix this Mortgage Calculator under the following realm: http://test-realm/test/',
+        assert,
       );
     });
 
