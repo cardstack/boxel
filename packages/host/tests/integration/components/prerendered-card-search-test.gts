@@ -1,13 +1,8 @@
-import {
-  RenderingTestContext,
-  type TestContext,
-  getContext,
-  render,
-  waitFor,
-} from '@ember/test-helpers';
+import { RenderingTestContext, render, waitFor } from '@ember/test-helpers';
 
 import { waitUntil } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -19,8 +14,6 @@ import {
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
-
-import type CardService from '@cardstack/host/services/card-service';
 
 import {
   CardDocFiles,
@@ -489,8 +482,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     await waitFor('.card-container');
     assert.dom('.card-container').exists({ count: 2 });
 
-    let owner = (getContext() as TestContext).owner;
-    let cardService = owner.lookup('service:card-service') as CardService;
+    let cardService = getService('card-service');
     await cardService.deleteSource(new URL(`${testRealmURL}card-2.json`));
 
     await waitUntil(() => {

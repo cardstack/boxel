@@ -52,7 +52,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       assert.strictEqual(response.status, 401, 'HTTP 401 status');
     });
 
-    test('user can do a lint with fix', async function (assert) {
+    test('user can do a lint with missing template invokable fix', async function (assert) {
       let response = await request
         .post('/_lint')
         .set(
@@ -76,6 +76,65 @@ import MyComponent from 'somewhere';
 <template>
   <MyComponent @flag={{eq 1 1}} />
 </template>
+`,
+      );
+    });
+
+    test('user can do a lint with missing card api fix', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .send(`import { CardDef } from 'https://cardstack.com/base/card-api';
+export class MyCard extends CardDef {
+  @field name = contains(StringField);
+}
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      assert.strictEqual(
+        responseJson.output,
+        `import StringField from 'https://cardstack.com/base/string';
+import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+export class MyCard extends CardDef {
+  @field name = contains(StringField);
+}
+`,
+      );
+    });
+
+    test('user can do a lint with duplicate import fix', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .send(`import StringField from 'https://cardstack.com/base/string';
+import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import StringField from 'https://cardstack.com/base/string';
+export class MyCard extends CardDef {
+  @field name = contains(StringField);
+}
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      assert.strictEqual(
+        responseJson.output,
+        `import StringField from 'https://cardstack.com/base/string';
+import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+
+export class MyCard extends CardDef {
+  @field name = contains(StringField);
+}
 `,
       );
     });

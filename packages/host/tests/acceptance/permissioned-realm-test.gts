@@ -1,3 +1,4 @@
+import { getService } from '@universal-ember/test-support';
 import { module } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -6,7 +7,6 @@ import {
   setupLocalIndexing,
   setupAcceptanceTestRealm,
   testRealmURL,
-  lookupLoaderService,
   setupUserSubscription,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -31,7 +31,7 @@ module('Acceptance | permissioned realm tests', function (hooks) {
     });
     setupUserSubscription(matrixRoomId);
 
-    let loader = lookupLoaderService().loader;
+    let loader = getService('loader-service').loader;
     let { field, contains, CardDef, Component } = await loader.import<
       typeof import('https://cardstack.com/base/card-api')
     >(`${baseRealm.url}card-api`);

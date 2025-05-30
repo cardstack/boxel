@@ -71,6 +71,7 @@ export async function lintFix({
             importMappings: missingCardApiImportConfig.default.importMappings,
           },
         ],
+        '@cardstack/boxel/no-duplicate-imports': 'error',
       },
     },
   ];

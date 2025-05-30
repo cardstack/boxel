@@ -1,3 +1,4 @@
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -11,7 +12,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
-  lookupLoaderService,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
@@ -25,7 +25,7 @@ module('Integration | loading', function (hooks) {
   let cardApi: typeof import('https://cardstack.com/base/card-api');
 
   hooks.beforeEach(function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   setupLocalIndexing(hooks);
