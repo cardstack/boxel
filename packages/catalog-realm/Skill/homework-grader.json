@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "instructions": "THE USER ASKING IS THE STUDENT.\n\nGrade the student's homework assignment and provide an overall letter grade (A, B, C, D, F) along with detailed feedback. Use PatchCardInstanceCommand to update the homework card's grade field.\n\nGrading Process:\n1. Examine each question and award points based on correctness (up to each question's maxPoints)\n2. Create a questionPoints array with the SAME LENGTH as the questions array\n3. Calculate overall letter grade from total points earned vs total possible\n4. Provide constructive feedback\n\nPatch format:\n\n```\n{\n  \"attributes\": {\n    \"grade\": {\n      \"overallGrade\": \"[A/B/C/D/F]\",\n      \"overallFeedback\": \"[Detailed feedback in markdown]\",\n      \"questionPoints\": [points for each question]\n    }\n  }\n}\n```\n\nNever modify student answers or questions ",
+      "commands": [],
+      "title": "Grading Skill",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/skill",
+        "name": "Skill"
+      }
+    }
+  }
+}
