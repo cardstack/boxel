@@ -1,20 +1,19 @@
 import { getOwner } from '@ember/owner';
 import { RenderingTestContext } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
 import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
-import type CommandService from '@cardstack/host/services/command-service';
 
 import RealmService from '@cardstack/host/services/realm';
 
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  lookupService,
   testRealmURL,
   testRealmInfo,
 } from '../../helpers';
@@ -58,7 +57,7 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
 
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
       commandService.commandContext,
@@ -78,7 +77,7 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
 
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
       commandService.commandContext,
@@ -104,7 +103,7 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
 
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
       commandService.commandContext,
@@ -131,7 +130,7 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
 
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
       commandService.commandContext,
@@ -158,7 +157,7 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-test',
     });
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
 
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
       commandService.commandContext,

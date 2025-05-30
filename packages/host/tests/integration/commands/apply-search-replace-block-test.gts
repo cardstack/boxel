@@ -1,3 +1,4 @@
+import { getService } from '@universal-ember/test-support';
 import { module, test, skip } from 'qunit';
 
 import {
@@ -7,16 +8,14 @@ import {
 } from '@cardstack/runtime-common';
 
 import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
-import type CommandService from '@cardstack/host/services/command-service';
 
-import { lookupService } from '../../helpers';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | commands | apply-search-replace-block', function (hooks) {
   setupRenderingTest(hooks);
 
   test('handles basic search and replace pattern', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let applyCommand = new ApplySearchReplaceBlockCommand(
       commandService.commandContext,
     );
@@ -72,7 +71,7 @@ export class Task extends CardDef {
   });
 
   test('handles multiple occurrences of the search pattern, only replacing the first', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let applyCommand = new ApplySearchReplaceBlockCommand(
       commandService.commandContext,
     );
@@ -136,7 +135,7 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
   });
 
   test('handles search pattern with whitespace differences', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let applyCommand = new ApplySearchReplaceBlockCommand(
       commandService.commandContext,
     );
@@ -174,7 +173,7 @@ ${REPLACE_MARKER}`;
   });
 
   test('handles no match found', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let applyCommand = new ApplySearchReplaceBlockCommand(
       commandService.commandContext,
     );
@@ -210,7 +209,7 @@ ${REPLACE_MARKER}`;
 
   // Skipping this test for now as throwing errors causes issues
   skip('handles malformed search/replace block', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let applyCommand = new ApplySearchReplaceBlockCommand(
       commandService.commandContext,
     );
@@ -247,7 +246,7 @@ ${REPLACE_MARKER}`;
   });
 
   test('handles search with additional context for clarity', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let applyCommand = new ApplySearchReplaceBlockCommand(
       commandService.commandContext,
     );
@@ -313,7 +312,7 @@ ${REPLACE_MARKER}`;
   });
 
   test('handles different indentation in search pattern', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let applyCommand = new ApplySearchReplaceBlockCommand(
       commandService.commandContext,
     );
@@ -409,7 +408,7 @@ class CardTemplate extends Component<typeof ContactCard> {
   });
 
   test('handles tabs vs spaces in search pattern', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let applyCommand = new ApplySearchReplaceBlockCommand(
       commandService.commandContext,
     );
@@ -464,7 +463,7 @@ ${REPLACE_MARKER}`;
   });
 
   test('handles spurious blank lines in search pattern', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let applyCommand = new ApplySearchReplaceBlockCommand(
       commandService.commandContext,
     );
@@ -524,7 +523,7 @@ ${REPLACE_MARKER}`;
   });
 
   test('handles spurious blank lines in the middle of the search pattern', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let applyCommand = new ApplySearchReplaceBlockCommand(
       commandService.commandContext,
     );
@@ -583,7 +582,7 @@ ${REPLACE_MARKER}`;
   });
 
   test('handles carriage return differences in search pattern', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let applyCommand = new ApplySearchReplaceBlockCommand(
       commandService.commandContext,
     );
@@ -627,7 +626,7 @@ ${REPLACE_MARKER}`;
   });
 
   test('handles trailing whitespace differences', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let applyCommand = new ApplySearchReplaceBlockCommand(
       commandService.commandContext,
     );
@@ -693,7 +692,7 @@ ${REPLACE_MARKER}`;
   });
 
   test('it applies search/replace block when replace block is empty', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let applyCommand = new ApplySearchReplaceBlockCommand(
       commandService.commandContext,
     );

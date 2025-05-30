@@ -1,5 +1,6 @@
 import { click, waitFor, waitUntil } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
@@ -13,7 +14,6 @@ import type StoreService from '@cardstack/host/services/store';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
-  lookupService,
   setupLocalIndexing,
   setupOnSave,
   testRealmURL,
@@ -122,7 +122,7 @@ const authorCardSource = `
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
     });
-  } 
+  }
 `;
 
 let matrixRoomId: string;
@@ -305,8 +305,8 @@ module('Acceptance | catalog app tests', function (hooks) {
     listingUrl: string,
     realm: string,
   ) {
-    const commandService = lookupService<CommandService>('command-service');
-    const store = lookupService<StoreService>('store');
+    const commandService = getService('command-service');
+    const store = getService('store');
 
     const command = new commandClass(commandService.commandContext);
     const listing = (await store.get(listingUrl)) as CardDef;

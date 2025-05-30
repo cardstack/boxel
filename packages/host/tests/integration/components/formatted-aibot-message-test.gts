@@ -12,6 +12,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import percySnapshot from '@percy/ember';
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -38,11 +39,9 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
   let eventId = '1234';
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    monacoService = this.owner.lookup(
-      'service:monaco-service',
-    ) as MonacoService;
+    monacoService = getService('monaco-service');
 
-    cardService = this.owner.lookup('service:card-service') as CardService;
+    cardService = getService('card-service');
 
     cardService.getSource = async () => {
       return Promise.resolve({

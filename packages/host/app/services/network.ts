@@ -95,3 +95,9 @@ export default class NetworkService extends Service {
     this.virtualNetwork = this.makeVirtualNetwork();
   };
 }
+
+declare module '@ember/service' {
+  interface Registry {
+    network: NetworkService;
+  }
+}

@@ -9,6 +9,7 @@ import {
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -31,9 +32,7 @@ import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { getSearch } from '@cardstack/host/resources/search';
 import type LoaderService from '@cardstack/host/services/loader-service';
-import type MessageService from '@cardstack/host/services/message-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 import { type CardErrorJSONAPI } from '@cardstack/host/services/store';
 
@@ -42,8 +41,6 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import {
-  lookupLoaderService,
-  lookupService,
   testRealmURL,
   setupLocalIndexing,
   setupOnSave,
@@ -143,13 +140,11 @@ module('Integration | Store', function (hooks) {
       };
     }
     BoomPersonDef = BoomPerson;
-    loaderService = lookupLoaderService();
+    loaderService = getService('loader-service');
     loader = loaderService.loader;
     api = await loader.import(`${baseRealm.url}card-api`);
-    store = lookupService<StoreService>('store');
-    operatorModeStateService = lookupService<OperatorModeStateService>(
-      'operator-mode-state-service',
-    );
+    store = getService('store');
+    operatorModeStateService = getService('operator-mode-state-service');
     identityContext = (store as any).identityContext as IdentityContext;
 
     ({ adapter: testRealmAdapter, realm: testRealm } =
@@ -165,7 +160,7 @@ module('Integration | Store', function (hooks) {
           'Person/boris.json': new Person({ name: 'Boris' }),
         },
       }));
-    let realmService = lookupService<RealmService>('realm');
+    let realmService = getService('realm');
     await realmService.login(testRealmURL);
   });
 
@@ -1681,7 +1676,7 @@ module('Integration | Store', function (hooks) {
     );
 
     let deferred = new Deferred<void>();
-    lookupService<MessageService>('message-service')
+    getService('message-service')
       .listenerCallbacks.get(testRealmURL)!
       .push((ev: RealmEventContent) => {
         if (ev.eventName === 'index' && ev.indexType === 'incremental') {
@@ -1776,7 +1771,7 @@ module('Integration | Store', function (hooks) {
     );
 
     let deferred = new Deferred<void>();
-    lookupService<MessageService>('message-service')
+    getService('message-service')
       .listenerCallbacks.get(testRealmURL)!
       .push((ev: RealmEventContent) => {
         if (ev.eventName === 'index' && ev.indexType === 'incremental') {
@@ -1868,7 +1863,7 @@ module('Integration | Store', function (hooks) {
     );
 
     let deferred = new Deferred<void>();
-    lookupService<MessageService>('message-service')
+    getService('message-service')
       .listenerCallbacks.get(testRealmURL)!
       .push((ev: RealmEventContent) => {
         if (ev.eventName === 'index' && ev.indexType === 'incremental') {
