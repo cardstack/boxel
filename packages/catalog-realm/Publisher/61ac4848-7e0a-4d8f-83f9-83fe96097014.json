@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "NYU Students",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/publisher",
+        "name": "Publisher"
+      }
+    }
+  }
+}
