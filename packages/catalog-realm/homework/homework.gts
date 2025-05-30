@@ -98,7 +98,6 @@ class GradeField extends FieldDef {
 
       <style scoped>
         .grade-display {
-          /* ⁽¹⁾ Enhanced grade display box */
           display: flex;
           flex-direction: column;
           gap: 0.75rem;
@@ -109,7 +108,6 @@ class GradeField extends FieldDef {
         }
 
         .grade-layout {
-          /* ⁽²⁾ Improved layout spacing */
           display: flex;
           align-items: flex-start;
           gap: 2.5rem;
@@ -129,7 +127,6 @@ class GradeField extends FieldDef {
         }
 
         .points-section {
-          /* ⁽³²⁾ Simplified points styling without background */
           display: flex;
           align-items: center;
           gap: 0.75rem;
@@ -160,7 +157,6 @@ class GradeField extends FieldDef {
         }
 
         .points-value {
-          /* ⁽⁴⁾ Enhanced points value styling */
           font-weight: 700;
           color: #4338ca;
           font-size: 1.125rem;
@@ -453,7 +449,6 @@ class HomeworkIsolated extends Component<typeof Homework> {
     </section>
 
     <style scoped>
-      /* ⁽³⁰⁾ Course header styling - clean separation */
       .course-header {
         background: #f9fafb;
         padding: 1.5rem;
@@ -477,11 +472,10 @@ class HomeworkIsolated extends Component<typeof Homework> {
         line-height: 1.5;
       }
 
-      /* ⁽³¹⁾ Assessment data section - standalone grade display */
       .assessment-data {
         background: white;
         border-radius: 0.5rem;
-        padding: 1rem; /* ⁽⁴⁷⁾ Reduced padding */
+        padding: 1rem;
         box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
       }
 
@@ -502,7 +496,6 @@ class HomeworkIsolated extends Component<typeof Homework> {
       }
 
       .grade-button {
-        /* ⁽¹⁾ Enhanced button styling with rounded corners */
         background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
         border: none;
         color: white;
@@ -531,11 +524,10 @@ class HomeworkIsolated extends Component<typeof Homework> {
         transform: none;
       }
 
-      .instructions /* ⁽³⁹⁾ Updated instructions padding */ {
-        padding: 1rem; /* ⁽⁴⁸⁾ Reduced padding */
+      .instructions {
+        padding: 1rem;
       }
 
-      /* ⁽⁵⁰⁾ Yellow callout box styling for instructions */
       .instructions-wrapper {
         background: #fef3c7;
         border: 1px solid #f59e0b;
@@ -548,7 +540,6 @@ class HomeworkIsolated extends Component<typeof Homework> {
         background: #fbbf24;
         border-bottom: 1px solid #f59e0b;
         padding: 0.75rem 1rem;
-        /* ⁽²⁶⁾ Flex layout for instructions and max points */
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -561,7 +552,6 @@ class HomeworkIsolated extends Component<typeof Homework> {
         color: #92400e;
       }
 
-      /* ⁽⁵¹⁾ Max Points with darker yellow/amber color */
       .metadata-item label {
         font-size: 0.875rem;
         font-weight: 600;
@@ -575,15 +565,14 @@ class HomeworkIsolated extends Component<typeof Homework> {
         padding: 1rem;
       }
 
-      .questions-section /* ⁽⁴⁰⁾ Standardized questions section padding */ {
+      .questions-section {
         background: white;
         border-radius: 0.5rem;
-        padding: 1rem; /* ⁽⁴⁹⁾ Reduced padding */
+        padding: 1rem;
         box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
       }
 
       .questions-container {
-        /* ⁽⁸⁾ Enhanced questions container */
         display: flex;
         flex-direction: column;
         gap: 1.25rem;
@@ -618,7 +607,6 @@ class HomeworkIsolated extends Component<typeof Homework> {
       }
 
       .question-points {
-        /* ⁽⁷⁾ Enhanced question points styling */
         background: #f9fafb;
         border-left: 1px solid #e5e7eb;
         padding: 1.25rem;
@@ -769,7 +757,6 @@ export class Homework extends CardDef {
 
       <style scoped>
         .fitted-homework {
-          /* ⁽⁴⁾ Compact card layout */
           display: flex;
           flex-direction: column;
           height: 100%;
@@ -782,13 +769,11 @@ export class Homework extends CardDef {
         }
 
         .fitted-homework:hover {
-          /* ⁽⁵⁾ Subtle hover effect */
           box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
           border-color: #d1d5db;
         }
 
         .homework-header {
-          /* ⁽⁶⁾ Header with title and grade */
           display: flex;
           align-items: flex-start;
           justify-content: space-between;
@@ -797,21 +782,19 @@ export class Homework extends CardDef {
         }
 
         .homework-title {
-          /* ⁽⁷⁾ Compact title styling with ellipsis ⁽¹⁸⁾ */
           font-size: 0.875rem;
           font-weight: 600;
           color: #111827;
           margin: 0;
           line-height: 1.3;
           flex: 1;
-          min-width: 0; /* Allow text truncation */
-          overflow: hidden; /* ⁽¹⁸⁾ Hide overflow text */
-          text-overflow: ellipsis; /* ⁽¹⁸⁾ Add ellipsis for long titles */
-          white-space: nowrap; /* ⁽¹⁸⁾ Prevent line wrapping */
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .grade-badge {
-          /* ⁽⁸⁾ Grade badge styling */
           padding: 0.25rem 0.5rem;
           border-radius: 0.375rem;
           font-size: 0.75rem;
@@ -821,7 +804,6 @@ export class Homework extends CardDef {
           flex-shrink: 0;
         }
 
-        /* ⁽⁹⁾ Grade-specific colors */
         .grade-badge.A,
         .grade-badge.A-plus {
           background: #dcfce7;
@@ -865,7 +847,6 @@ export class Homework extends CardDef {
         }
 
         .homework-stats {
-          /* ⁽¹⁰⁾ Stats section layout */
           display: flex;
           gap: 1rem;
           margin-bottom: 0.75rem;
@@ -878,7 +859,6 @@ export class Homework extends CardDef {
         }
 
         .stat-label {
-          /* ⁽¹¹⁾ Subtle stat labels */
           font-size: 0.6875rem;
           color: #6b7280;
           font-weight: 500;
@@ -893,13 +873,11 @@ export class Homework extends CardDef {
         }
 
         .status-section {
-          /* ⁽¹⁶⁾ Status section layout */
           margin-top: auto;
           padding-top: 0.5rem;
         }
 
         .status-item {
-          /* ⁽¹⁷⁾ Status item styling */
           padding: 0.375rem 0.75rem;
           border-radius: 0.375rem;
           font-size: 0.75rem;
