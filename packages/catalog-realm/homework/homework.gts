@@ -1,4 +1,4 @@
-import { add, multiply, divide } from '@cardstack/boxel-ui/helpers';
+import { add } from '@cardstack/boxel-ui/helpers';
 import {
   contains,
   containsMany,
