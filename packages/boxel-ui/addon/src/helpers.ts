@@ -3,7 +3,7 @@ import compact from './helpers/compact.ts';
 import { getContrastColor } from './helpers/contrast-color.ts';
 import cssVar from './helpers/css-var.ts';
 import currencyFormat from './helpers/currency-format.ts';
-import { dayjsFormat, formatDateTime } from './helpers/dayjs-format.ts';
+import { formatDateTime } from './helpers/dayjs-format.ts';
 import element from './helpers/element.ts';
 import { add, divide, multiply, subtract } from './helpers/math-helpers.ts';
 import menuDivider, { MenuDivider } from './helpers/menu-divider.ts';
@@ -20,7 +20,6 @@ export {
   compact,
   cssVar,
   currencyFormat,
-  dayjsFormat,
   divide,
   element,
   eq,
