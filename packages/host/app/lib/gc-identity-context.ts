@@ -316,13 +316,19 @@ export default class IdentityContextWithGarbageCollection
   }
 
   private setItem(id: string, item: CardDef | CardError, notTracked?: true) {
-    if (!isLocalId(id) && isCardInstance(item)) {
-      this.#idResolver.addIdPair(item[localIdSymbol], id);
-    }
     let cardBucket = notTracked ? this.#nonTrackedCards : this.#cards;
     let errorBucket = notTracked
       ? this.#nonTrackedCardErrors
       : this.#cardErrors;
+    if (!isLocalId(id) && isCardInstance(item)) {
+      this.#idResolver.addIdPair(item[localIdSymbol], id);
+    } else if (!isLocalId(id)) {
+      let maybeLocalId = id.split('/').pop()!;
+      let item = cardBucket.get(maybeLocalId) ?? errorBucket.get(maybeLocalId);
+      if (item) {
+        this.#idResolver.addIdPair(maybeLocalId, id);
+      }
+    }
     let instance = isCardInstance(item) ? item : undefined;
     let error = !isCardInstance(item) ? item : undefined;
     let localId = isLocalId(id) ? id : undefined;

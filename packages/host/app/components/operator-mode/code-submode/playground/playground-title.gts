@@ -35,7 +35,7 @@ interface Signature {
     onSelect: (item: PrerenderedCardLike | FieldOption) => void;
     chooseCard: () => void;
     chooseField: (index: number) => void;
-    createNew: () => void;
+    createNew: (onCreate?: (id: string | undefined) => void) => void;
     createNewIsRunning: boolean;
     canWriteRealm: boolean;
     field?: FieldDef;
