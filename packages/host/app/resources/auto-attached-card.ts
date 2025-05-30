@@ -87,18 +87,20 @@ export class AutoAttachment extends Resource<Args> {
           this.cardIds.add(item.id);
         }
       } else if (submode === Submodes.Code) {
-        // also get the card ids of the cards that are open in code mode
+        let cardId = autoAttachedFileUrl?.endsWith('.json')
+          ? autoAttachedFileUrl?.replace(/\.json$/, '')
+          : undefined;
         if (
-          autoAttachedFileUrl?.endsWith('.json') &&
-          !removedCardIds?.includes(autoAttachedFileUrl.replace(/\.json$/, ''))
+          cardId &&
+          !removedCardIds?.includes(cardId) &&
+          !attachedCardIds?.includes(cardId)
         ) {
-          // remove the json extension. TODO: is there a way of getting the actual card id
-          let cardId = autoAttachedFileUrl.replace(/\.json$/, '');
           this.cardIds.add(cardId);
         }
         if (
           playgroundPanelCardId &&
-          !removedCardIds?.includes(playgroundPanelCardId)
+          !removedCardIds?.includes(playgroundPanelCardId) &&
+          !attachedCardIds?.includes(playgroundPanelCardId)
         ) {
           this.cardIds.add(playgroundPanelCardId);
         }
