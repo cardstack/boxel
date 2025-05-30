@@ -192,7 +192,9 @@ Common issues are:
     RoomEvent.Timeline,
     async function (event, room, toStartOfTimeline) {
       try {
-        let eventBody = event.getContent().body;
+        // Ensure that the event body we have is a string
+        // it's possible that this is sent undefined
+        let eventBody = event.getContent().body || '';
         let senderMatrixUserId = event.getSender()!;
         if (!room) {
           return;
