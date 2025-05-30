@@ -4,9 +4,13 @@
     "attributes": {
       "name": "Homework Grader",
       "summary": "An AI-assisted card for grading assignments. Define questions, collect student answers, and trigger grading through a linked AI skill. The system creates an assistant room, sends the assignment and skill, and executes a grading command. The AI returns a letter grade, individual question scores, and markdown-formatted feedback, which are displayed in a styled summary.",
-      "images": [],
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/homework-grader-listing/screenshot-01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/homework-grader-listing/screenshot-02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/homework-grader-listing/screenshot-03.png"
+      ],
       "description": null,
-      "thumbnailURL": null
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/homework-grader-listing/thumbnail.png"
     },
     "relationships": {
       "skills.0": {
@@ -21,7 +25,7 @@
       },
       "publisher": {
         "links": {
-          "self": null
+          "self": "../Publisher/61ac4848-7e0a-4d8f-83f9-83fe96097014"
         }
       },
       "categories.0": {
@@ -39,9 +43,14 @@
           "self": null
         }
       },
-      "examples": {
+      "examples.0": {
         "links": {
-          "self": null
+          "self": "../homework/Homework/math"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../homework/Homework/history"
         }
       }
     },
