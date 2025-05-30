@@ -3,6 +3,8 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { restartableTask } from 'ember-concurrency';
+
 import Folder from '@cardstack/boxel-icons/folder';
 
 import {
@@ -16,6 +18,7 @@ import {
   baseCardRef,
   cardTypeDisplayName,
   trimJsonExtension,
+  Deferred,
   type Format,
   type Query,
   type PrerenderedCardLike,
@@ -160,7 +163,7 @@ interface Signature {
     selection: SelectedInstance | undefined;
     onSelect: (item: PrerenderedCardLike | FieldOption) => void;
     chooseCard: () => void;
-    createNew?: () => void;
+    createNew?: (onCreate?: (id: string | undefined) => void) => void;
     createNewIsRunning?: boolean;
     moduleId: string;
     persistSelections?: (cardId: string, format: Format) => void;
@@ -176,7 +179,7 @@ interface OptionsDropdownSignature {
     selection: SelectedInstance | undefined;
     onSelect: (item: PrerenderedCardLike | FieldOption) => void;
     chooseCard: () => void;
-    createNew?: () => void;
+    createNew?: (onCreate?: (id: string | undefined) => void) => void;
     createNewIsRunning?: boolean;
   };
 }
@@ -332,6 +335,7 @@ export default class InstanceSelectDropdown extends Component<Signature> {
 
   @service private declare playgroundPanelService: PlaygroundPanelService;
   @service private declare recentFilesService: RecentFilesService;
+  #creationError = false;
 
   private get isBaseCardModule() {
     return this.args.moduleId === `${baseCardRef.module}/${baseCardRef.name}`;
@@ -404,12 +408,32 @@ export default class InstanceSelectDropdown extends Component<Signature> {
   };
 
   private handleResults = (results?: PrerenderedCardLike[]) => {
+    if (this.#creationError) {
+      // if we have a creation error then don't auto generate a new instance,
+      // otherwise we'll trap ourselves in a loop
+      this.#creationError = false;
+      return;
+    }
+
     if (!results?.length) {
       // if expanded search returns no instances, create new instance
-      this.args.createNew?.();
+      this.autoGenerateInstance.perform();
       return;
     }
     let card = results[0];
     return [card];
   };
+
+  private autoGenerateInstance = restartableTask(async () => {
+    if (!this.args.createNew) {
+      return;
+    }
+
+    this.#creationError = false;
+    // need to be careful that we don't cast a task.perform to a promise
+    let deferred = new Deferred<string | undefined>();
+    this.args.createNew((maybeId) => deferred.fulfill(maybeId));
+    let result = await deferred.promise;
+    this.#creationError = !result;
+  });
 }

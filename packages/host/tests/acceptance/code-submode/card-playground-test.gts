@@ -1512,6 +1512,52 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-error-container]').doesNotExist();
     });
 
+    test('it can clear card-creation error that did not result in new file in the realm', async function (assert) {
+      await openFileInPlayground('boom-pet.gts', testRealmURL, {
+        declaration: 'BoomPet',
+      });
+
+      assert
+        .dom('[data-test-card-error]')
+        .exists('auto-generated card has error in it');
+
+      await createNewInstance();
+
+      assert
+        .dom('[data-test-playground-panel] [data-test-card]')
+        .doesNotExist();
+      assert
+        .dom('[data-test-card-error]')
+        .hasText('This card contains an error.');
+      assert.dom('[data-test-error-message]').hasText('Boom!');
+
+      await withoutLoaderMonitoring(async () => {
+        // The loader service is shared between the realm server and the host.
+        // need to reset the loader to pick up the changed module in the indexer
+        lookupLoaderService().resetLoader();
+        // the error was introduced in a part of the card that is run directly
+        // in the realm so we also need to make sure to reset the realm's loader
+        // (not just the loader for the index). This is a test env idiosyncrasy
+        // that doesn't exist in real life.
+        realm.__resetLoaderForTest();
+        // fix error
+        await realm.write(
+          'boom-pet.gts',
+          `import { contains, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
+            export class BoomPet extends CardDef {
+              static displayName = 'Boom Pet';
+              @field boom = contains(StringField);
+            }
+          `,
+        );
+      });
+      await waitFor(`[data-test-error-container]`, {
+        count: 0,
+        timeout: 5_000,
+      });
+      assert.dom('[data-test-error-container]').doesNotExist();
+    });
+
     test('it can clear card-creation error (that resulted in new file in the realm) when different card-def is selected', async function (assert) {
       await openFileInPlayground('boom-person.gts', testRealmURL, {
         declaration: 'BoomPerson',

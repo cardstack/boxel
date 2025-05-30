@@ -347,12 +347,23 @@ export function notFound(
   );
 }
 
-export function badRequest(
-  message: string,
-  requestContext: RequestContext,
-): Response {
+export function badRequest({
+  message,
+  requestContext,
+  id,
+  lid,
+}: {
+  message: string;
+  requestContext: RequestContext;
+  id?: string;
+  lid?: string;
+}): Response {
   return responseWithError(
-    new CardError(message, { status: 400 }),
+    new CardError(message, {
+      status: 400,
+      ...(id ? { id } : {}),
+      ...(lid ? { lid } : {}),
+    }),
     requestContext,
   );
 }
@@ -373,14 +384,20 @@ export function systemError({
   additionalError,
   body,
   id,
+  lid,
 }: {
   requestContext: RequestContext;
   message: string;
   additionalError?: CardError | Error;
   body?: Record<string, any>;
   id?: string;
+  lid?: string;
 }): Response {
-  let err = new CardError(message, { status: 500, ...(id ? { id } : {}) });
+  let err = new CardError(message, {
+    status: 500,
+    ...(id ? { id } : {}),
+    ...(lid ? { lid } : {}),
+  });
   if (additionalError) {
     err.additionalErrors = [additionalError];
   }

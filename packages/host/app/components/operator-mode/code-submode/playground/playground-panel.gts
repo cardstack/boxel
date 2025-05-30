@@ -1,7 +1,7 @@
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import { restartableTask, task } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
@@ -119,9 +119,7 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   @tracked private cardResource: ReturnType<getCard> | undefined;
   @tracked private fieldChooserIsOpen = false;
-  // we rely on a unique stable local id per successful new card creation.
-  // this allows us to correlate on failed new card creation errors from the server
-  #newCardLocalId = uuidv4();
+  @tracked private newCardNonce = 0;
 
   private get moduleId() {
     return internalKeyFor(this.args.codeRef, undefined);
@@ -379,80 +377,101 @@ export default class PlaygroundPanel extends Component<Signature> {
     }
   });
 
-  @action private createNew() {
+  @action private createNew(onCreate?: (id: string | undefined) => void) {
     this.args.isFieldDef && this.specCard
       ? this.createNewField.perform(this.specCard)
-      : this.createNewCard.perform();
+      : this.createNewCard.perform(onCreate);
   }
 
   private get createNewIsRunning() {
     return this.createNewCard.isRunning || this.createNewField.isRunning;
   }
 
-  private createNewCard = restartableTask(async () => {
-    let newCardJSON: LooseSingleCardDocument;
-    if (this.args.isFieldDef) {
-      let fieldCard = await loadCardDef(this.args.codeRef, {
-        loader: this.loaderService.loader,
-      });
-      // for field def, create a new spec card instance
-      newCardJSON = {
-        data: {
-          lid: this.#newCardLocalId,
-          attributes: {
-            specType: 'field',
-            ref: this.args.codeRef,
-            title: this.args.codeRef.name,
-            containedExamples: [new fieldCard()],
-          },
-          meta: {
-            fields: {
-              containedExamples: [
-                {
-                  adoptsFrom: this.args.codeRef,
-                },
-              ],
+  @cached
+  private get newCardLocalId() {
+    // we want our local id's to cycle after each successful
+    // new card creation and when the module id changes
+    this.newCardNonce;
+    this.moduleId;
+    return uuidv4();
+  }
+
+  private createNewCard = restartableTask(
+    async (onCreate?: (id: string | undefined) => void) => {
+      let newCardJSON: LooseSingleCardDocument;
+      if (this.args.isFieldDef) {
+        let fieldCard = await loadCardDef(this.args.codeRef, {
+          loader: this.loaderService.loader,
+        });
+        // for field def, create a new spec card instance
+        newCardJSON = {
+          data: {
+            lid: this.newCardLocalId,
+            attributes: {
+              specType: 'field',
+              ref: this.args.codeRef,
+              title: this.args.codeRef.name,
+              containedExamples: [new fieldCard()],
             },
-            adoptsFrom: specRef,
-            realmURL: this.currentRealm,
+            meta: {
+              fields: {
+                containedExamples: [
+                  {
+                    adoptsFrom: this.args.codeRef,
+                  },
+                ],
+              },
+              adoptsFrom: specRef,
+              realmURL: this.currentRealm,
+            },
           },
-        },
-      };
-    } else {
-      newCardJSON = {
-        data: {
-          lid: this.#newCardLocalId,
-          meta: {
-            adoptsFrom: this.args.codeRef,
-            realmURL: this.currentRealm,
+        };
+      } else {
+        newCardJSON = {
+          data: {
+            lid: this.newCardLocalId,
+            meta: {
+              adoptsFrom: this.args.codeRef,
+              realmURL: this.currentRealm,
+            },
           },
+        };
+      }
+      let maybeId: string | CardErrorJSONAPI = await this.store.create(
+        newCardJSON,
+        {
+          realm: this.currentRealm,
         },
-      };
-    }
-    let maybeId: string | CardErrorJSONAPI = await this.store.create(
-      newCardJSON,
-      {
-        realm: this.currentRealm,
-      },
-    );
-    if (typeof maybeId === 'string') {
-      // reset the local ID for making new cards after each successful attempt
-      // such that failed attempts will use the same local ID. that way when we
-      // get an error doc in the store for a particular local id based on the
-      // server error response, when a new card is successfully created that
-      // uses a correlating local ID we will automatically clear the error in
-      // the store.
-      this.#newCardLocalId = uuidv4();
-      let cardId = maybeId;
-      this.recentFilesService.addRecentFileUrl(`${cardId}.json`);
+      );
       this.persistSelections(
-        cardId,
+        // in the case of an error we still need to persist it in
+        // order render the error doc
+        typeof maybeId === 'string' ? maybeId : this.newCardLocalId,
+        // open new instance in playground in edit format
         'edit',
         this.args.isFieldDef ? 0 : undefined,
-      ); // open new instance in playground in edit format
-    }
-    this.closeInstanceChooser();
-  });
+      );
+      if (typeof maybeId === 'string') {
+        // reset the local ID for making new cards after each successful attempt
+        // such that failed attempts will use the same local ID. that way when we
+        // get an error doc in the store for a particular local id based on the
+        // server error response, when a new card is successfully created that
+        // uses a correlating local ID we will automatically clear the error in
+        // the store.
+        this.newCardNonce++;
+        let cardId = maybeId;
+        this.recentFilesService.addRecentFileUrl(`${cardId}.json`);
+        if (typeof onCreate === 'function') {
+          onCreate(cardId);
+        }
+      } else {
+        if (typeof onCreate === 'function') {
+          onCreate(undefined);
+        }
+      }
+      this.closeInstanceChooser();
+    },
+  );
 
   private createNewField = restartableTask(async (specCard: Spec) => {
     let fieldCard = await loadCardDef(this.args.codeRef, {
