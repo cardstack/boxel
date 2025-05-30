@@ -1,4 +1,4 @@
-import { add } from '@cardstack/boxel-ui/helpers';
+import { add, multiply, divide } from '@cardstack/boxel-ui/helpers';
 import {
   contains,
   containsMany,
@@ -689,11 +689,241 @@ export class Homework extends CardDef {
   static isolated = HomeworkIsolated;
 
   static fitted = class Fitted extends Component<typeof Homework> {
+    get hasGrade() {
+      return this.args.model?.grade?.overallGrade;
+    }
+
+    get questionsCount() {
+      return this.args.model?.questions?.length ?? 0;
+    }
+
+    get totalPoints() {
+      if (!this.args.model?.grade?.questionPoints) return 0;
+      return this.args.model.grade.questionPoints.reduce(
+        (sum, points) => sum + (points || 0),
+        0,
+      );
+    }
+
+    get maxPoints() {
+      if (!this.args.model?.questions) return 0;
+      return this.args.model.questions.reduce(
+        (sum, q) => sum + (q.maxPoints || 0),
+        0,
+      );
+    }
+
     <template>
       <div class='fitted-homework'>
-        <div class='title'>{{@model.title}}</div>
-        <div class='grade'>{{@model.grade.overallGrade}}%</div>
+        <!-- ⁽¹⁾ Header with title and grade badge -->
+        <header class='homework-header'>
+          <h3 class='homework-title'>{{if
+              @model.title
+              @model.title
+              'Untitled Homework'
+            }}</h3>
+          {{#if this.hasGrade}}
+            <div
+              class='grade-badge {{@model.grade.overallGrade}}'
+            >{{@model.grade.overallGrade}}</div>
+          {{else}}
+            <div class='grade-badge ungraded'>Not Graded</div>
+          {{/if}}
+        </header>
+
+        <!-- ⁽²⁾ Homework stats -->
+        <div class='homework-stats'>
+          <div class='stat-item'>
+            <span class='stat-label'>Questions:</span>
+            <span class='stat-value'>{{this.questionsCount}}</span>
+          </div>
+
+          {{#if this.hasGrade}}
+            <div class='stat-item'>
+              <span class='stat-label'>Score:</span>
+              <span
+                class='stat-value'
+              >{{this.totalPoints}}/{{this.maxPoints}}</span>
+            </div>
+          {{else}}
+            <div class='stat-item'>
+              <span class='stat-label'>Max Points:</span>
+              <span class='stat-value'>{{this.maxPoints}}</span>
+            </div>
+          {{/if}}
+        </div>
+
+        <!-- ⁽³⁾ Simple status info -->
+        <div class='status-section'>
+          {{#if this.hasGrade}}
+            <div class='status-item graded'>
+              <span class='status-label'>Graded</span>
+            </div>
+          {{else}}
+            <div class='status-item ungraded'>
+              <span class='status-label'>Not Graded</span>
+            </div>
+          {{/if}}
+        </div>
       </div>
+
+      <style scoped>
+        .fitted-homework {
+          /* ⁽⁴⁾ Compact card layout */
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          padding: 1rem;
+          background: white;
+          border: 1px solid #e5e7eb;
+          border-radius: 0.75rem;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+          transition: all 0.2s ease;
+        }
+
+        .fitted-homework:hover {
+          /* ⁽⁵⁾ Subtle hover effect */
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+          border-color: #d1d5db;
+        }
+
+        .homework-header {
+          /* ⁽⁶⁾ Header with title and grade */
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 0.75rem;
+          margin-bottom: 0.75rem;
+        }
+
+        .homework-title {
+          /* ⁽⁷⁾ Compact title styling with ellipsis ⁽¹⁸⁾ */
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: #111827;
+          margin: 0;
+          line-height: 1.3;
+          flex: 1;
+          min-width: 0; /* Allow text truncation */
+          overflow: hidden; /* ⁽¹⁸⁾ Hide overflow text */
+          text-overflow: ellipsis; /* ⁽¹⁸⁾ Add ellipsis for long titles */
+          white-space: nowrap; /* ⁽¹⁸⁾ Prevent line wrapping */
+        }
+
+        .grade-badge {
+          /* ⁽⁸⁾ Grade badge styling */
+          padding: 0.25rem 0.5rem;
+          border-radius: 0.375rem;
+          font-size: 0.75rem;
+          font-weight: 600;
+          text-align: center;
+          min-width: 2.5rem;
+          flex-shrink: 0;
+        }
+
+        /* ⁽⁹⁾ Grade-specific colors */
+        .grade-badge.A,
+        .grade-badge.A-plus {
+          background: #dcfce7;
+          color: #166534;
+          border: 1px solid #bbf7d0;
+        }
+
+        .grade-badge.B,
+        .grade-badge.B-plus,
+        .grade-badge.A-minus {
+          background: #dbeafe;
+          color: #1e40af;
+          border: 1px solid #bfdbfe;
+        }
+
+        .grade-badge.C,
+        .grade-badge.C-plus,
+        .grade-badge.B-minus {
+          background: #fef3c7;
+          color: #92400e;
+          border: 1px solid #fde68a;
+        }
+
+        .grade-badge.D,
+        .grade-badge.C-minus {
+          background: #fee2e2;
+          color: #dc2626;
+          border: 1px solid #fecaca;
+        }
+
+        .grade-badge.F {
+          background: #fef2f2;
+          color: #991b1b;
+          border: 1px solid #fca5a5;
+        }
+
+        .grade-badge.ungraded {
+          background: #f3f4f6;
+          color: #4b5563;
+          border: 1px solid #d1d5db;
+        }
+
+        .homework-stats {
+          /* ⁽¹⁰⁾ Stats section layout */
+          display: flex;
+          gap: 1rem;
+          margin-bottom: 0.75rem;
+        }
+
+        .stat-item {
+          display: flex;
+          flex-direction: column;
+          gap: 0.125rem;
+        }
+
+        .stat-label {
+          /* ⁽¹¹⁾ Subtle stat labels */
+          font-size: 0.6875rem;
+          color: #6b7280;
+          font-weight: 500;
+          text-transform: uppercase;
+          letter-spacing: 0.025em;
+        }
+
+        .stat-value {
+          font-size: 0.875rem;
+          color: #374151;
+          font-weight: 600;
+        }
+
+        .status-section {
+          /* ⁽¹⁶⁾ Status section layout */
+          margin-top: auto;
+          padding-top: 0.5rem;
+        }
+
+        .status-item {
+          /* ⁽¹⁷⁾ Status item styling */
+          padding: 0.375rem 0.75rem;
+          border-radius: 0.375rem;
+          font-size: 0.75rem;
+          font-weight: 500;
+          text-align: center;
+          border: 1px solid;
+        }
+
+        .status-item.graded {
+          background: #f0fdf4;
+          color: #166534;
+          border-color: #bbf7d0;
+        }
+
+        .status-item.ungraded {
+          background: #f3f4f6;
+          color: #4b5563;
+          border-color: #d1d5db;
+        }
+
+        .status-label {
+          font-weight: 600;
+        }
+      </style>
     </template>
   };
 }
