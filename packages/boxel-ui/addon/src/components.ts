@@ -55,6 +55,9 @@ import ResizablePanelGroup, {
 } from './components/resizable-panel-group/index.gts';
 import BoxelSelect from './components/select/index.gts';
 import SkeletonPlaceholder from './components/skeleton-placeholder/index.gts';
+import SortDropdown, {
+  type SortOption,
+} from './components/sort-dropdown/index.gts';
 import Switch from './components/switch/index.gts';
 import TabbedHeader from './components/tabbed-header/index.gts';
 import Tooltip from './components/tooltip/index.gts';
@@ -63,6 +66,9 @@ import ViewSelector, {
 } from './components/view-selector/index.gts';
 
 export {
+  type Filter,
+  type SortOption,
+  type ViewItem,
   Accordion,
   AddButton,
   Avatar,
@@ -96,7 +102,6 @@ export {
   EntityDisplayWithIcon,
   EntityDisplayWithThumbnail,
   FieldContainer,
-  Filter,
   FilterList,
   GridContainer,
   Header,
@@ -116,9 +121,9 @@ export {
   ResizablePanelGroup,
   ResizeHandle,
   SkeletonPlaceholder,
+  SortDropdown,
   Switch,
   TabbedHeader,
   Tooltip,
-  ViewItem,
   ViewSelector,
 };

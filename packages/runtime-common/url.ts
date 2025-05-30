@@ -75,3 +75,7 @@ export function maybeRelativeURL(
 export function trimJsonExtension(str: string) {
   return str.replace(/\.json$/, '');
 }
+
+export function removeFileExtension(fileURL: string | undefined) {
+  return fileURL?.replace(/\.[^/.]+$/, '');
+}
