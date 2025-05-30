@@ -412,7 +412,9 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
       </div>
       <div class='info-section'>
         <div class='card-content'>
-          <h3 class='card-title' data-test-card-title>{{@model.name}}</h3>
+          <h3 class='card-title' data-test-card-title={{@model.name}}>
+            {{@model.name}}
+          </h3>
           <h4 class='card-display-name' data-test-card-display-name>
             {{this.publisherInfo}}
           </h4>

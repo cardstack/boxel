@@ -1,11 +1,12 @@
-import { click, waitFor } from '@ember/test-helpers';
+import { click, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
+
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import ListingInstallCommand from '@cardstack/host/commands/listing-install';
 import ListingRemixCommand from '@cardstack/host/commands/listing-remix';
 import ListingUseCommand from '@cardstack/host/commands/listing-use';
-import { SearchCardsByQueryCommand } from '@cardstack/host/commands/search-cards';
 import type CommandService from '@cardstack/host/services/command-service';
 import type StoreService from '@cardstack/host/services/store';
 
@@ -24,6 +25,7 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
+const catalogRealmURL = 'http://localhost:4201/catalog/';
 const testRealm2URL = `http://test-realm/test2/`;
 
 const listingCardSource = `
@@ -134,7 +136,7 @@ module('Acceptance | catalog app tests', function (hooks) {
     activeRealms: [testRealmURL, testRealm2URL],
   });
 
-  let { createAndJoinRoom } = mockMatrixUtils;
+  let { getRoomIds, getRoomEvents, createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
@@ -275,6 +277,127 @@ module('Acceptance | catalog app tests', function (hooks) {
   });
 
   module('catalog listing', async function () {
+    test('after clicking "Use" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${catalogRealmURL}CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      await waitFor('[data-test-catalog-listing-use-button]');
+      assert
+        .dom('[data-test-catalog-listing-use-button]')
+        .containsText('Use', '"Use" button exist in listing');
+      await click('[data-test-catalog-listing-use-button]');
+      await click(`[data-test-boxel-menu-item-text="Test Workspace B"]`);
+
+      await waitFor(`[data-room-settled]`);
+
+      await waitUntil(() => getRoomIds().length > 0);
+      let roomId = getRoomIds().pop()!;
+      let message = getRoomEvents(roomId).pop()!;
+
+      assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
+      assert.strictEqual(
+        message.content.body,
+        'I would like to use this Mortgage Calculator under the following realm: http://test-realm/test/',
+      );
+    });
+
+    test('after clicking "Install" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${catalogRealmURL}CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      await waitFor('[data-test-catalog-listing-install-button]');
+      assert
+        .dom('[data-test-catalog-listing-install-button]')
+        .containsText('Install', '"Install" button exist in listing');
+      await click('[data-test-catalog-listing-install-button]');
+      await click(`[data-test-boxel-menu-item-text="Test Workspace B"]`);
+
+      await waitFor(`[data-room-settled]`);
+
+      await waitUntil(() => getRoomIds().length > 0);
+      let roomId = getRoomIds().pop()!;
+      let message = getRoomEvents(roomId).pop()!;
+
+      assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
+      assert.strictEqual(
+        message.content.body,
+        'I would like to install this Mortgage Calculator under the following realm: http://test-realm/test/',
+      );
+    });
+
+    test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${catalogRealmURL}`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      const mortgageCalculatorCardId = `${catalogRealmURL}CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`;
+
+      await waitFor('.catalog-content');
+      await waitFor('.showcase-center-div');
+
+      await waitFor(
+        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
+      );
+
+      assert
+        .dom(
+          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
+        )
+        .containsText(
+          'Mortgage Calculator',
+          '"Mortgage Calculator" button exist in listing',
+        );
+
+      await waitFor(
+        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-remix-button]`,
+      );
+      assert
+        .dom(
+          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-remix-button]`,
+        )
+        .containsText('Remix', '"Remix" button exist in listing');
+
+      await click(
+        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-remix-button]`,
+      );
+      await click(`[data-test-boxel-menu-item-text="Test Workspace B"]`);
+
+      await waitFor(`[data-room-settled]`);
+
+      await waitUntil(() => getRoomIds().length > 0);
+      let roomId = getRoomIds().pop()!;
+      let message = getRoomEvents(roomId).pop()!;
+
+      assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
+      assert.strictEqual(
+        message.content.body,
+        'I would like to remix this Mortgage Calculator under the following realm: http://test-realm/test/',
+      );
+    });
+
     test('use command copy the card to the workspace successfully', async function (assert) {
       await visitOperatorMode({
         stacks: [[]],
@@ -292,26 +415,44 @@ module('Acceptance | catalog app tests', function (hooks) {
         listing,
       });
 
-      let searchCommand = new SearchCardsByQueryCommand(
-        commandService.commandContext,
-      );
-      let result = await searchCommand.execute({
-        query: {
-          filter: {
-            type: {
-              module: `${testRealmURL}author/author`,
-              name: 'Author',
-            },
-          },
-        },
+      // Check example is copied successfully
+      await visitOperatorMode({
+        submode: 'code',
+        fileView: 'browser',
+        codePath: `${testRealm2URL}index`,
       });
-      assert.ok(
-        result.cardIds.some(
-          (id) =>
-            id.includes(`${testRealm2URL}author`) && id.includes('Author'),
-        ),
-        'Listing should create a new instance from the example',
+
+      await waitForCodeEditor();
+
+      await waitFor('[data-test-directory^="author-"]');
+      const element = document.querySelector(
+        '[data-test-directory^="author-"]',
       );
+      const fullPath = element?.getAttribute('data-test-directory');
+      await click(`[data-test-directory="${fullPath}"]`);
+
+      assert.dom(`[data-test-directory="${fullPath}"] .icon`).hasClass('open');
+
+      // able to see example install successfully
+      const examplePath = `${fullPath}Author/`;
+      await waitFor(`[data-test-directory="${examplePath}"]`);
+      await click(`[data-test-directory="${examplePath}"]`);
+
+      assert
+        .dom(`[data-test-directory="${examplePath}"] .icon`)
+        .hasClass('open');
+
+      await waitFor(
+        `[data-test-file^="${examplePath}"][data-test-file$=".json"]`,
+      );
+      await click(
+        `[data-test-file^="${examplePath}"][data-test-file$=".json"]`,
+      );
+
+      assert
+        .dom(`[data-test-file^="${examplePath}"][data-test-file$=".json"]`)
+        .exists('Author Example with uuid instance exists')
+        .hasClass('selected', 'Author Example with uuid instance is selected');
     });
 
     test('install command installs the card and example successfully', async function (assert) {
