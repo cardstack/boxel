@@ -769,7 +769,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                   @isFieldDef={{@isFieldDef}}
                 />
               </div>
-              <section class='picker-and-chooser'>
+              <section class='instance-and-format'>
                 <button
                   class='instance-chooser-container'
                   {{on 'click' this.handleClick}}
@@ -855,7 +855,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         flex-direction: column;
       }
 
-      .picker-and-chooser {
+      .instance-and-format {
         position: sticky;
         bottom: 100px;
         border: 1px solid var(--boxel-450);
