@@ -44,7 +44,7 @@
     "classnames": "catalog:",
     "countries-list": "catalog:",
     "dayjs": "catalog:",
-    "ember-basic-dropdown": "^8.0.0",
+    "ember-basic-dropdown": "8.0.4",
     "ember-css-url": "^1.0.0",
     "ember-concurrency": "catalog:",
     "ember-concurrency-ts": "catalog:",
