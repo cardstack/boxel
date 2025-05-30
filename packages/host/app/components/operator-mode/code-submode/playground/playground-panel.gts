@@ -707,104 +707,93 @@ export default class PlaygroundPanel extends Component<Signature> {
           style={{this.styleForPlaygroundContent}}
         >
           {{#let (if @isFieldDef this.field this.card) as |card|}}
-            {{#if this.showError}}
-              {{! this is for types--@cardError is always true in this case !}}
-              {{#if this.cardError}}
-                <CardContainer
-                  class='error-container'
-                  @displayBoundaries={{true}}
-                  data-test-error-container
-                >
-                  <CardError
-                    @error={{this.cardError}}
-                    @cardCreationError={{this.cardError.meta.isCreationError}}
-                    @fileToFixWithAi={{this.fileToFixWithAi}}
+            {{#let
+              (component
+                InstanceSelectDropdown
+                cardOptions=(if @isFieldDef undefined this.cardOptions)
+                fieldOptions=this.fieldInstances
+                findSelectedCard=this.findSelectedCard
+                selection=this.dropdownSelection
+                onSelect=this.onSelect
+                chooseCard=this.chooseInstance
+                createNew=(if this.canWriteRealm this.createNew)
+                createNewIsRunning=this.createNewIsRunning
+                moduleId=this.moduleId
+                persistSelections=this.persistToLocalStorage
+                recentCardIds=this.recentCardIds
+              )
+              as |InstanceChooser|
+            }}
+              {{#if this.showError}}
+                {{! this is for types--@cardError is always true in this case !}}
+                {{#if this.cardError}}
+                  <CardContainer
+                    class='error-container'
+                    @displayBoundaries={{true}}
+                    data-test-error-container
                   >
-                    <:error>
-                      <button
-                        class='instance-chooser-container with-error'
-                        {{on 'click' this.handleClick}}
-                        {{on 'mouseup' this.handleClick}}
-                      >
-                        {{! FIXME unduplicate for non-error state}}
-                        <InstanceSelectDropdown
-                          @cardOptions={{if
-                            @isFieldDef
-                            undefined
-                            this.cardOptions
-                          }}
-                          @fieldOptions={{this.fieldInstances}}
-                          @findSelectedCard={{this.findSelectedCard}}
-                          @selection={{this.dropdownSelection}}
-                          @onSelect={{this.onSelect}}
-                          @chooseCard={{this.chooseInstance}}
-                          @createNew={{if this.canWriteRealm this.createNew}}
-                          @createNewIsRunning={{this.createNewIsRunning}}
-                          @moduleId={{this.moduleId}}
-                          @persistSelections={{this.persistToLocalStorage}}
-                          @recentCardIds={{this.recentCardIds}}
-                        />
-                      </button>
-                    </:error>
-                  </CardError>
-                </CardContainer>
-              {{/if}}
-            {{else if card}}
-              <div
-                class='preview-area'
-                data-test-field-preview-card={{@isFieldDef}}
-              >
-                <PlaygroundPreview
-                  @card={{card}}
-                  @format={{this.format}}
-                  @realmInfo={{this.realmInfo}}
-                  @contextMenuItems={{this.contextMenuItems}}
-                  @onEdit={{if this.canEditCard (fn this.setFormat 'edit')}}
-                  @onFinishEditing={{if
-                    (eq this.format 'edit')
-                    (fn this.setFormat this.defaultFormat)
-                  }}
-                  @isFieldDef={{@isFieldDef}}
-                />
-              </div>
-              <section class='instance-and-format'>
-                <button
-                  class='instance-chooser-container'
-                  {{on 'click' this.handleClick}}
-                  {{on 'mouseup' this.handleClick}}
+                    <CardError
+                      @error={{this.cardError}}
+                      @cardCreationError={{this.cardError.meta.isCreationError}}
+                      @fileToFixWithAi={{this.fileToFixWithAi}}
+                    >
+                      <:error>
+                        <button
+                          class='instance-chooser-container with-error'
+                          {{on 'click' this.handleClick}}
+                          {{on 'mouseup' this.handleClick}}
+                        >
+                          <InstanceChooser />
+                        </button>
+                      </:error>
+                    </CardError>
+                  </CardContainer>
+                {{/if}}
+              {{else if card}}
+                <div
+                  class='preview-area'
+                  data-test-field-preview-card={{@isFieldDef}}
                 >
-                  <InstanceSelectDropdown
-                    @cardOptions={{if @isFieldDef undefined this.cardOptions}}
-                    @fieldOptions={{this.fieldInstances}}
-                    @findSelectedCard={{this.findSelectedCard}}
-                    @selection={{this.dropdownSelection}}
-                    @onSelect={{this.onSelect}}
-                    @chooseCard={{this.chooseInstance}}
-                    @createNew={{if this.canWriteRealm this.createNew}}
-                    @createNewIsRunning={{this.createNewIsRunning}}
-                    @moduleId={{this.moduleId}}
-                    @persistSelections={{this.persistToLocalStorage}}
-                    @recentCardIds={{this.recentCardIds}}
+                  <PlaygroundPreview
+                    @card={{card}}
+                    @format={{this.format}}
+                    @realmInfo={{this.realmInfo}}
+                    @contextMenuItems={{this.contextMenuItems}}
+                    @onEdit={{if this.canEditCard (fn this.setFormat 'edit')}}
+                    @onFinishEditing={{if
+                      (eq this.format 'edit')
+                      (fn this.setFormat this.defaultFormat)
+                    }}
+                    @isFieldDef={{@isFieldDef}}
                   />
-                </button>
-                <FormatChooser
-                  class='format-chooser'
-                  @formats={{if @isFieldDef this.fieldFormats}}
-                  @format={{this.format}}
-                  @setFormat={{this.setFormat}}
-                  data-test-playground-format-chooser
+                </div>
+                <section class='instance-and-format'>
+                  <button
+                    class='instance-chooser-container'
+                    {{on 'click' this.handleClick}}
+                    {{on 'mouseup' this.handleClick}}
+                  >
+                    <InstanceChooser />
+                  </button>
+                  <FormatChooser
+                    class='format-chooser'
+                    @formats={{if @isFieldDef this.fieldFormats}}
+                    @format={{this.format}}
+                    @setFormat={{this.setFormat}}
+                    data-test-playground-format-chooser
+                  />
+                </section>
+              {{else if this.createNewIsRunning}}
+                <LoadingIndicator @color='var(--boxel-light)' />
+              {{else if this.maybeGenerateFieldSpec}}
+                <SpecSearch
+                  @query={{this.specQuery}}
+                  @realms={{this.realmServer.availableRealmURLs}}
+                  @canWriteRealm={{this.canWriteRealm}}
+                  @createNewCard={{this.createNew}}
                 />
-              </section>
-            {{else if this.createNewIsRunning}}
-              <LoadingIndicator @color='var(--boxel-light)' />
-            {{else if this.maybeGenerateFieldSpec}}
-              <SpecSearch
-                @query={{this.specQuery}}
-                @realms={{this.realmServer.availableRealmURLs}}
-                @canWriteRealm={{this.canWriteRealm}}
-                @createNewCard={{this.createNew}}
-              />
-            {{/if}}
+              {{/if}}
+            {{/let}}
           {{/let}}
         </div>
       </section>
