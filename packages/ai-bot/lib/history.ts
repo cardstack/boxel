@@ -1,5 +1,6 @@
 import type {
   CardMessageEvent,
+  CardMessageContent,
   CodePatchResultEvent,
   CommandResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
@@ -112,27 +113,28 @@ export async function constructHistory(
       event.type === 'm.room.message' &&
       event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
     ) {
-      let hasContinuation =
-        event.content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY];
+      // Content types here must be CardMessageContent
+      // as we have already filtered for APP_BOXEL_MESSAGE_MSGTYPE
+      let content = event.content as CardMessageContent;
+      let hasContinuation = content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY];
       if (hasContinuation) {
         let continuationEvent = continuationEventsMap.get(event.event_id!);
         if (continuationEvent) {
-          event.content.body += continuationEvent.content.body;
-          event.content[APP_BOXEL_REASONING_CONTENT_KEY] =
-            event.content[APP_BOXEL_REASONING_CONTENT_KEY] ??
-            '' + continuationEvent.content[APP_BOXEL_REASONING_CONTENT_KEY] ??
-            '';
-          event.content[APP_BOXEL_COMMAND_REQUESTS_KEY] = (
-            event.content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []
-          ).concat(
-            continuationEvent.content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? [],
-          );
+          let continuationContent =
+            continuationEvent.content as CardMessageContent;
+          content.body += continuationContent.body;
+          content[APP_BOXEL_REASONING_CONTENT_KEY] =
+            content[APP_BOXEL_REASONING_CONTENT_KEY] ??
+            '' + (continuationContent[APP_BOXEL_REASONING_CONTENT_KEY] ?? '');
+          content[APP_BOXEL_COMMAND_REQUESTS_KEY] = (
+            content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []
+          ).concat(continuationContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []);
           event.origin_server_ts = continuationEvent.origin_server_ts;
-          delete event.content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY];
+          delete content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY];
         }
       }
       let continuationOfEventId =
-        event.content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY];
+        content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY];
       if (continuationOfEventId) {
         continuationEventsMap.set(
           continuationOfEventId,
