@@ -15,7 +15,7 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
   description = `Apply search/replace blocks to file contents. The format is:
 ╔═══ SEARCH ════╗
 [original code to find]
-╠══════════════╣
+╠═══════════════╣
 [new code to replace with]
 ╚═══ REPLACE ═══╝
 `;
