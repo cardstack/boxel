@@ -569,6 +569,13 @@ export default class PlaygroundPanel extends Component<Signature> {
     });
   }
 
+  private triggerPlaygroundSelections = (
+    prerenderedCards?: PrerenderedCardLike[],
+  ) => {
+    this.cardOptions = prerenderedCards ?? [];
+    this.findSelectedCard(prerenderedCards);
+  };
+
   private showResults = (cards: PrerenderedCardLike[] | undefined) => {
     return (
       !this.args.isFieldDef &&
@@ -579,10 +586,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     );
   };
 
-  private setPlaygroundSelectionsFromSearchResults = (
-    prerenderedCards?: PrerenderedCardLike[],
-  ) => {
-    this.cardOptions = prerenderedCards ?? [];
+  private findSelectedCard = (prerenderedCards?: PrerenderedCardLike[]) => {
     if (!prerenderedCards?.length) {
       // it is possible that there's a persisted cardId in playground-selections local storage
       // but that the card is no longer in recent-files local storage
@@ -659,7 +663,7 @@ export default class PlaygroundPanel extends Component<Signature> {
           {{#if (this.showResults cards)}}
             {{#let (this.getSortedCards cards) as |sortedCards|}}
               {{consumeContext
-                (fn this.setPlaygroundSelectionsFromSearchResults sortedCards)
+                (fn this.triggerPlaygroundSelections sortedCards)
               }}
             {{/let}}
           {{else if this.expandedQuery}}
@@ -670,9 +674,7 @@ export default class PlaygroundPanel extends Component<Signature> {
             >
               <:response as |maybeCards|>
                 {{#let (this.createNewWhenNoCards maybeCards) as |cards|}}
-                  {{consumeContext
-                    (fn this.setPlaygroundSelectionsFromSearchResults cards)
-                  }}
+                  {{consumeContext (fn this.triggerPlaygroundSelections cards)}}
                 {{/let}}
               </:response>
             </PrerenderedCardSearch>
@@ -709,7 +711,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                 InstanceSelectDropdown
                 cardOptions=(if @isFieldDef undefined this.cardOptions)
                 fieldOptions=this.fieldInstances
-                findSelectedCard=this.setPlaygroundSelectionsFromSearchResults
+                findSelectedCard=this.findSelectedCard
                 selection=this.dropdownSelection
                 onSelect=this.onSelect
                 chooseCard=this.chooseInstance
