@@ -722,7 +722,7 @@ export default class PlaygroundPanel extends Component<Signature> {
               as |InstanceChooser|
             }}
               {{#if this.showError}}
-                {{! this is for types--@cardError is always true in this case !}}
+                {{! this is for types--cardError is always true in this case !}}
                 {{#if this.cardError}}
                   <CardContainer
                     class='error-container'
