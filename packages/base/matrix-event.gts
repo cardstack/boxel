@@ -181,6 +181,12 @@ export interface CardMessageContent {
       tools?: Tool[];
       toolChoice?: ToolChoice;
       submode?: string;
+      currentFile?: string;
+      codeMode?: {
+        currentPanel?: string;
+        playgroundPanelCardId?: string;
+        playgroundPanelFormat?: string;
+      };
       requireToolCall?: boolean;
       functions?: Tool['function'][];
     };

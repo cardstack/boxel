@@ -27,6 +27,10 @@ import {
 } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
+import type CardService from '@cardstack/host/services/card-service';
+import ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
+import type MessageService from '@cardstack/host/services/message-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import { claimsFromRawToken } from '@cardstack/host/services/realm';
 
 import { RecentCards } from '@cardstack/host/utils/local-storage-keys';
@@ -440,6 +444,16 @@ module('Acceptance | interact submode tests', function (hooks) {
           '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"]',
         )
         .doesNotExist();
+      assert.dom('[data-test-search-field]').hasValue('');
+
+      let contextForAiAssistantService = this.owner.lookup(
+        'service:context-for-ai-assistant-service',
+      ) as ContextForAiAssistantService;
+
+      assert.deepEqual(contextForAiAssistantService.getContext(), {
+        submode: 'interact',
+        realmUrl: 'http://test-realm/test2/',
+      });
       assert.dom('[data-test-open-search-field]').hasValue('');
     });
 

@@ -332,9 +332,6 @@ export async function loadCurrentlySerializedFileDefs(
 export function attachedFilesToPrompt(
   attachedFiles: SerializedFileDef[],
 ): string {
-  if (!attachedFiles.length) {
-    return 'No attached files';
-  }
   return attachedFiles
     .map((f) => {
       let hyperlink = f.sourceUrl ? `[${f.name}](${f.sourceUrl})` : f.name;
@@ -577,18 +574,11 @@ export async function getModifyPrompt(
         ).forEach((message) => historicalMessages.push(message));
       }
     }
+
     if (body && event.sender !== aiBotUserId) {
-      if (
-        event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
-        event.content.data?.context?.openCardIds
-      ) {
+      if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
         body = `User message: ${body}
-          Context: the user has the following cards open: ${JSON.stringify(
-            event.content.data.context.openCardIds,
-          )}`;
-      } else {
-        body = `User message: ${body}
-          Context: the user has no open cards.`;
+\n User UI context: ${buildUserContext(event as CardMessageEvent)}`;
       }
       historicalMessages.push({
         role: 'user',
@@ -608,23 +598,12 @@ export async function getModifyPrompt(
     aiBotUserId,
   );
 
-  let lastMessageEventByUser = history.findLast(
-    (event) => event.sender !== aiBotUserId,
-  );
-
-  let realmUrl = (lastMessageEventByUser as CardMessageEvent).content.data
-    ?.context?.realmUrl;
-
   let systemMessage = `${MODIFY_SYSTEM_MESSAGE}
 The user currently has given you the following data to work with:
 
-Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}
+Attached card instances: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards) || 'no attached card instances'}
 
-Attached files:
-${attachedFilesToPrompt(attachedFiles)}
-
-The user is operating in a realm with this URL: ${realmUrl}
-`;
+Attached files: ${attachedFiles.length ? '\n' + attachedFilesToPrompt(attachedFiles) : 'no attached files'}`;
 
   if (skillCards.length) {
     systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
@@ -650,6 +629,33 @@ The user is operating in a realm with this URL: ${realmUrl}
 
   messages = messages.concat(historicalMessages);
   return messages;
+}
+
+function buildUserContext(event: CardMessageEvent) {
+  let context = event.content.data?.context;
+  let contextString = '';
+  if (context?.openCardIds) {
+    contextString += `\n- has the following card instances open: ${JSON.stringify(context.openCardIds)}`;
+  }
+  if (context?.realmUrl) {
+    contextString += `\n- is operating in a realm with this URL: ${context.realmUrl}`;
+  }
+  if (context?.submode) {
+    contextString += `\n- is operating in ${context.submode} mode`;
+  }
+  if (context?.currentFile) {
+    contextString += `\n- is viewing or editing this file in the code editor: ${context.currentFile}`;
+  }
+  if (context?.codeMode?.currentPanel) {
+    contextString += `\n- is inspecting the file contents in this code mode panel: ${context.codeMode.currentPanel}`;
+  }
+  if (context?.codeMode?.playgroundPanelCardId) {
+    contextString += `\n- is viewing this card instance in the playground UI: ${context.codeMode.playgroundPanelCardId}`;
+    if (context?.codeMode.playgroundPanelFormat) {
+      contextString += `, in this format: ${context.codeMode.playgroundPanelFormat}`;
+    }
+  }
+  return contextString;
 }
 
 export const attachedCardsToMessage = (
