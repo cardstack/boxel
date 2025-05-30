@@ -226,6 +226,11 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
         border: 1px solid var(--boxel-dark);
         outline: none;
       }
+
+      .instance-chooser :deep(.boxel-trigger) {
+        padding: var(--boxel-sp-sm);
+      }
+
       .instance-chooser :deep(.boxel-trigger-content) {
         font: var(--boxel-font-xs);
         overflow: hidden;
@@ -249,6 +254,10 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
         ) {
         border: 1px solid var(--boxel-450);
         border-radius: var(--boxel-border-radius);
+      }
+
+      :deep(.ember-basic-dropdown) {
+        width: 100%;
       }
 
       :deep(.ember-power-select-option:hover .card) {

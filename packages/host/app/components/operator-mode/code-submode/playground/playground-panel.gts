@@ -830,16 +830,6 @@ export default class PlaygroundPanel extends Component<Signature> {
         border-top-right-radius: var(--boxel-border-radius);
       }
 
-      /* FIXME these can be styled directly in the component, which is only used here */
-
-      .instance-chooser-container :deep(.instance-chooser .boxel-trigger) {
-        padding: var(--boxel-sp-sm);
-      }
-
-      .instance-chooser-container > :deep(.ember-basic-dropdown) {
-        width: 100%;
-      }
-
       .playground-panel-content {
         display: flex;
         flex-direction: column;
