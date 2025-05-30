@@ -5,26 +5,22 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 
-import { cn, eq, not } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
-import {
-  removeFileExtension,
-  type PrerenderedCardComponentSignature,
-} from '@cardstack/runtime-common';
+import { removeFileExtension, type Query } from '@cardstack/runtime-common';
 
 import type { CardContext, BoxComponent, Format } from '../card-api';
 
 interface Signature {
   Args: {
     context?: CardContext;
+    query?: Query;
+    realms: string[];
+    isLive?: boolean;
+    format: Format;
     cards?: BoxComponent & BoxComponent[];
-    format?: Format;
-    prerenderedCardSearchQuery?: PrerenderedCardComponentSignature['Args'];
     viewOption?: string;
-    hideOverlay?: boolean;
-    hideCardContainer?: boolean;
   };
-  Blocks: { cards: [] };
   Element: HTMLElement;
 }
 
@@ -39,12 +35,12 @@ export default class CardList extends Component<Signature> {
       }}
       ...attributes
     >
-      {{#if @prerenderedCardSearchQuery}}
+      {{#if @query}}
         <@context.prerenderedCardSearchComponent
-          @query={{@prerenderedCardSearchQuery.query}}
-          @format={{@prerenderedCardSearchQuery.format}}
-          @realms={{@prerenderedCardSearchQuery.realms}}
-          @isLive={{@prerenderedCardSearchQuery.isLive}}
+          @query={{@query}}
+          @format={{@format}}
+          @realms={{@realms}}
+          @isLive={{@isLive}}
         >
           <:loading>
             <LoadingIndicator />
@@ -53,50 +49,46 @@ export default class CardList extends Component<Signature> {
             {{#each cards key='url' as |card|}}
               <li
                 class={{cn 'boxel-card-list-item' instance-error=card.isError}}
+                {{@context.cardComponentModifier
+                  cardId=card.url
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
                 data-test-instance-error={{card.isError}}
                 data-test-cards-grid-item={{removeFileExtension card.url}}
                 {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
                 data-cards-grid-item={{removeFileExtension card.url}}
               >
-                {{#if @hideOverlay}}
-                  <CardContainer
-                    class='boxel-{{@prerenderedCardSearchQuery.format}}-card'
-                    @displayBoundaries={{not @hideCardContainer}}
-                  >
-                    <card.component />
-                  </CardContainer>
-                {{else}}
-                  <CardContainer
-                    {{@context.cardComponentModifier
-                      cardId=card.url
-                      format='data'
-                      fieldType=undefined
-                      fieldName=undefined
-                    }}
-                    class='boxel-{{@prerenderedCardSearchQuery.format}}-card'
-                    @displayBoundaries={{not @hideCardContainer}}
-                  >
-                    <card.component />
-                  </CardContainer>
-                {{/if}}
+                <CardContainer
+                  class='card-item {{@format}}-card-item'
+                  @displayBoundaries={{true}}
+                >
+                  <card.component />
+                </CardContainer>
               </li>
             {{else}}
               <p>No results were found</p>
             {{/each}}
           </:response>
         </@context.prerenderedCardSearchComponent>
-      {{else if (has-block 'cards')}}
-        {{yield to='cards'}}
+      {{else if @cards}}
+        {{#each @cards key='id' as |Card|}}
+          <li class='boxel-card-list-item'>
+            <Card @format={{@format}} class='card-item {{@format}}-card-item' />
+          </li>
+        {{/each}}
       {{/if}}
     </ul>
 
     <style scoped>
       .boxel-card-list {
         --padding: var(--boxel-card-list-padding, var(--boxel-sp));
+        --gap: var(--boxel-card-list-gap, var(--boxel-sp));
 
         display: grid;
         align-content: start;
-        gap: var(--boxel-sp);
+        gap: var(--gap);
         list-style-type: none;
         margin-block: 0;
         padding: var(--padding);
@@ -108,12 +100,15 @@ export default class CardList extends Component<Signature> {
       }
       .strip-view {
         --item-height: 6.563rem; /* 105px; */
-        grid-template-columns: repeat(auto-fill, minmax(49%, 1fr));
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(calc(50% - var(--gap) / 2), 1fr)
+        );
       }
       .card-view {
         --item-height: auto;
       }
-      :deep(.boxel-card-list-item) {
+      .boxel-card-list-item {
         max-width: 100%;
         display: flex;
         flex-wrap: wrap;
@@ -121,20 +116,17 @@ export default class CardList extends Component<Signature> {
         width: var(--item-width);
         height: var(--item-height);
       }
-      :deep(.boxel-card-list-item > .boxel-fitted-card),
-      :deep(.boxel-card-list-item > .field-component-card.boxel-fitted-card) {
+      .boxel-card-list-item > :deep(.fitted-card-item) {
         container-name: fitted-card;
         container-type: size;
         height: 100%;
         width: 100%;
       }
-      :deep(.boxel-card-list-item > .boxel-atom-card),
-      :deep(.boxel-card-list-item > .field-component-card.boxel-atom-card) {
+      .boxel-card-list-item > :deep(.atom-card-item) {
         width: fit-content;
         max-width: 100%;
       }
-      :deep(.boxel-card-list-item > .boxel-embedded-card),
-      :deep(.boxel-card-list-item > .field-component-card.boxel-embedded-card) {
+      .boxel-card-list-item > :deep(.embedded-card-item) {
         width: 100%;
         height: auto;
         max-width: var(--embedded-card-max-width);

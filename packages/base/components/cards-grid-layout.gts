@@ -1,16 +1,10 @@
-import { action } from '@ember/object';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
-import { TrackedArray } from 'tracked-built-ins';
-
-import CardsIcon from '@cardstack/boxel-icons/cards';
 
 import {
   FilterList,
   SortDropdown,
   ViewSelector,
 } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import {
   Card as CardViewIcon,
   Grid3x3 as GridViewIcon,
@@ -23,7 +17,6 @@ import {
   type Format,
   type Query,
   type Sort,
-  type PrerenderedCardComponentSignature,
 } from '@cardstack/runtime-common';
 
 import type { CardContext, BoxComponent } from '../card-api';
@@ -45,14 +38,8 @@ export interface FilterOption {
   icon?: Icon | string;
   query?: Query;
   cards?: BoxComponent & BoxComponent[];
-  format?: Format;
   filters?: FilterOption[];
-  sortOptions?: SortOption[];
-  viewOptions?: ViewOption[];
-  activeFilter?: FilterOption;
-  activeSort?: SortOption;
-  activeView?: ViewOption;
-  hideAddButton?: boolean;
+  isExpanded?: boolean;
 }
 
 export const SORT_OPTIONS: SortOption[] = [
@@ -99,80 +86,62 @@ interface Signature {
   Args: {
     context?: CardContext;
     format: Format;
+    query?: Query;
     realms: string[];
     isLive?: boolean;
-    filterOptions?: FilterOption[];
-    sortOptions?: SortOption[];
-    viewOptions?: ViewOption[];
-    activeFilter?: FilterOption;
-    activeSort?: SortOption;
-    activeView?: ViewOption;
-    onChangeFilter?: (filter: FilterOption) => void;
-    onChangeSort?: (sort: SortOption) => void;
-    onChangeView?: (viewId: string) => void;
+    filterOptions: FilterOption[];
+    sortOptions: SortOption[];
+    viewOptions: ViewOption[];
+    activeFilter: FilterOption;
+    activeSort: SortOption;
+    activeViewId: ViewOption['id'];
+    onChangeFilter: (filter: FilterOption) => void;
+    onChangeSort: (sort: SortOption) => void;
+    onChangeView: (viewId: ViewOption['id']) => void;
   };
-  Blocks: { content: []; contentHeader: []; sidebar: []; cards: [] };
+  Blocks: { content: []; contentHeader: []; sidebar: [] };
   Element: HTMLElement;
 }
 
 export default class CardsGridLayout extends Component<Signature> {
   <template>
-    <section
-      class={{cn
-        'boxel-cards-grid-layout'
-        strip-view=(eq this.activeView 'strip')
-        card-view=(eq this.activeView 'card')
-      }}
-      ...attributes
-    >
+    <section class='boxel-cards-grid-layout' ...attributes>
       <aside class='sidebar scroll-container' tabindex='0'>
-        {{#if this.filterOptions.length}}
-          <FilterList
-            @filters={{this.filterOptions}}
-            @activeFilter={{this.activeFilter}}
-            @onChanged={{this.onChangeFilter}}
-          />
-        {{/if}}
+        <FilterList
+          @filters={{@filterOptions}}
+          @activeFilter={{@activeFilter}}
+          @onChanged={{@onChangeFilter}}
+        />
         {{yield to='sidebar'}}
       </aside>
       <section class='content scroll-container' tabindex='0'>
-        <header
-          class='content-header'
-          aria-label={{this.activeFilter.displayName}}
-        >
+        <header class='content-header' aria-label={{@activeFilter.displayName}}>
           <h2 class='content-title'>
-            {{this.activeFilter.displayName}}
+            {{@activeFilter.displayName}}
           </h2>
-          {{#if this.viewOptions.length}}
-            <ViewSelector
-              @items={{this.viewOptions}}
-              @onChange={{this.onSelectView}}
-              @selectedId={{this.activeView}}
-            />
-          {{/if}}
-          {{#if this.sortOptions.length}}
-            <SortDropdown
-              @options={{this.sortOptions}}
-              @onSelect={{this.onSelectSort}}
-              @selectedOption={{this.activeSort}}
-            />
-          {{/if}}
+          <ViewSelector
+            @items={{@viewOptions}}
+            @onChange={{@onChangeView}}
+            @selectedId={{@activeViewId}}
+          />
+          <SortDropdown
+            @options={{@sortOptions}}
+            @onSelect={{@onChangeSort}}
+            @selectedOption={{@activeSort}}
+          />
           {{yield to='contentHeader'}}
         </header>
         <CardList
-          class='{{this.activeFilter.displayName}}-list'
+          class='cards'
           @context={{@context}}
-          @prerenderedCardSearchQuery={{this.prerenderedCardSearchQuery}}
-          @cards={{this.activeFilter.cards}}
-          @viewOption={{this.activeView}}
+          @query={{@query}}
+          @realms={{@realms}}
+          @isLive={{@isLive}}
+          @format={{@format}}
+          @cards={{@activeFilter.cards}}
+          @viewOption={{@activeViewId}}
           data-test-cards-grid-cards
-        >
-          <:cards>
-            {{#if (has-block 'cards')}}
-              {{yield to='cards'}}
-            {{/if}}
-          </:cards>
-        </CardList>
+        />
         {{yield to='content'}}
       </section>
     </section>
@@ -234,84 +203,4 @@ export default class CardsGridLayout extends Component<Signature> {
       }
     </style>
   </template>
-
-  private filterOptions: FilterOption[] = new TrackedArray(
-    this.args.filterOptions ?? [
-      {
-        displayName: 'All Cards',
-        icon: CardsIcon,
-        query: {
-          filter: {
-            not: {
-              eq: {
-                _cardType: 'Cards Grid',
-              },
-            },
-          },
-        },
-      },
-    ],
-  );
-
-  @tracked private activeSort?: SortOption =
-    this.args.activeSort ?? this.sortOptions?.[0];
-  @tracked private activeFilter?: FilterOption =
-    this.args.activeFilter ?? this.filterOptions?.[0];
-  @tracked private _activeView: string =
-    this.args.activeView?.id ?? this.viewOptions[0]?.id;
-
-  private get activeView() {
-    return this.activeFilter?.activeView?.id ?? this._activeView;
-  }
-
-  private get viewOptions(): ViewOption[] {
-    return (
-      this.activeFilter?.viewOptions ?? this.args.viewOptions ?? VIEW_OPTIONS
-    );
-  }
-
-  private get sortOptions(): SortOption[] {
-    return (
-      this.activeFilter?.sortOptions ?? this.args.sortOptions ?? SORT_OPTIONS
-    );
-  }
-
-  @action onSelectSort(option: SortOption) {
-    this.activeSort = option;
-    this.args.onChangeSort?.(option);
-  }
-
-  @action onSelectView(viewId: string) {
-    this._activeView = viewId;
-    this.args.onChangeView?.(viewId);
-  }
-
-  @action onChangeFilter(filter: FilterOption) {
-    this.activeFilter = filter;
-    this.args.onChangeFilter?.(filter);
-  }
-
-  private get query(): Query | undefined {
-    if (!this.activeFilter?.query) {
-      return undefined;
-    }
-    return {
-      ...this.activeFilter.query,
-      sort: this.activeSort?.sort,
-    };
-  }
-
-  private get prerenderedCardSearchQuery():
-    | PrerenderedCardComponentSignature['Args']
-    | undefined {
-    if (!this.query) {
-      return undefined;
-    }
-    return {
-      query: this.query,
-      realms: this.args.realms,
-      format: this.args.format,
-      isLive: this.args.isLive,
-    };
-  }
 }

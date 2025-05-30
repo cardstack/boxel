@@ -7,7 +7,6 @@ import { TrackedArray } from 'tracked-built-ins';
 
 import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
 
-import StarIcon from '@cardstack/boxel-icons/star';
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import Captions from '@cardstack/boxel-icons/captions';
 import AllCardsIcon from '@cardstack/boxel-icons/square-stack';
@@ -24,8 +23,10 @@ import {
 
 import CardsGridLayout, {
   VIEW_OPTIONS,
+  SORT_OPTIONS,
   type FilterOption,
   type ViewOption,
+  type SortOption,
 } from './components/cards-grid-layout';
 
 import {
@@ -35,52 +36,43 @@ import {
   CardDef,
   realmInfo,
   realmURL,
-  linksToMany,
   type BaseDef,
 } from './card-api';
 import type { RealmEventContent } from './matrix-event';
 import { Spec } from './spec';
 import StringField from './string';
 
-const [CardView, StripView, GridView] = VIEW_OPTIONS;
+const [_CardView, StripView, GridView] = VIEW_OPTIONS;
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
     <CardsGridLayout
-      class='{{this.activeFilter.displayName}}-layout'
       @format='fitted'
       @context={{@context}}
+      @query={{this.query}}
       @realms={{this.realms}}
       @isLive={{true}}
-      @viewOptions={{this.viewOptions}}
-      @activeView={{this.selectedView}}
-      @activeFilter={{this.activeFilter}}
       @filterOptions={{this.filterOptions}}
+      @sortOptions={{this.sortOptions}}
+      @viewOptions={{this.viewOptions}}
+      @activeViewId={{this.activeViewId}}
+      @activeFilter={{this.activeFilter}}
+      @activeSort={{this.activeSort}}
       @onChangeFilter={{this.onChangeFilter}}
+      @onChangeView={{this.onChangeView}}
+      @onChangeSort={{this.onChangeSort}}
     >
-      <:cards>
-        {{#each this.activeFilter.cards as |Card|}}
-          <li
-            class='{{this.activeFilter.displayName}}-card boxel-card-list-item'
-          >
-            <Card @format='embedded' class='boxel-embedded-card' />
-          </li>
-        {{/each}}
-      </:cards>
-
       <:content>
-        {{#unless this.activeFilter.hideAddButton}}
-          <div class='add-button'>
-            <Tooltip @placement='left' @offset={{6}}>
-              <:trigger>
-                <AddButton {{on 'click' this.createNew}} />
-              </:trigger>
-              <:content>
-                Add a new card to this collection
-              </:content>
-            </Tooltip>
-          </div>
-        {{/unless}}
+        <div class='add-button'>
+          <Tooltip @placement='left' @offset={{6}}>
+            <:trigger>
+              <AddButton {{on 'click' this.createNew}} />
+            </:trigger>
+            <:content>
+              Add a new card to this collection
+            </:content>
+          </Tooltip>
+        </div>
       </:content>
     </CardsGridLayout>
     <style scoped>
@@ -99,15 +91,8 @@ class Isolated extends Component<typeof CardsGrid> {
     </style>
   </template>
 
-  private filterOptions: FilterOption[] = new TrackedArray([
-    {
-      displayName: 'Starred',
-      icon: StarIcon,
-      cards: this.args.fields.starred,
-      hideAddButton: true,
-      viewOptions: [],
-      activeView: CardView,
-    },
+  private cardTypeFilters: FilterOption[] = new TrackedArray();
+  private filterOptions: FilterOption[] = [
     {
       displayName: 'All Cards',
       icon: AllCardsIcon,
@@ -120,15 +105,16 @@ class Isolated extends Component<typeof CardsGrid> {
           },
         },
       },
-      filters: new TrackedArray(),
+      filters: this.cardTypeFilters,
       isExpanded: true,
     },
-  ]);
-
+  ];
   private viewOptions: ViewOption[] = new TrackedArray([StripView, GridView]);
+  private sortOptions: SortOption[] = new TrackedArray(SORT_OPTIONS);
 
-  @tracked private selectedView: ViewOption = this.viewOptions[1];
+  @tracked private activeViewId: ViewOption['id'] = this.viewOptions[1].id;
   @tracked private activeFilter: FilterOption = this.filterOptions[0];
+  @tracked private activeSort: SortOption = this.sortOptions[0];
 
   constructor(owner: any, args: any) {
     super(owner, args);
@@ -142,12 +128,30 @@ class Isolated extends Component<typeof CardsGrid> {
     this.createCard.perform();
   }
 
+  private get query(): Query | undefined {
+    if (!this.activeFilter?.query) {
+      return undefined;
+    }
+    return {
+      ...this.activeFilter.query,
+      sort: this.activeSort?.sort,
+    };
+  }
+
   private get realms(): string[] {
     return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
   }
 
   @action private onChangeFilter(filter: FilterOption) {
     this.activeFilter = filter;
+  }
+
+  @action private onChangeSort(option: SortOption) {
+    this.activeSort = option;
+  }
+
+  @action private onChangeView(viewId: ViewOption['id']) {
+    this.activeViewId = viewId;
   }
 
   private createCard = restartableTask(async () => {
@@ -225,12 +229,14 @@ class Isolated extends Component<typeof CardsGrid> {
       `${baseRealm.url}cards-grid/CardsGrid`,
     ];
 
+    this.cardTypeFilters.splice(0, this.cardTypeFilters.length);
+
     cardTypeSummaries.forEach((summary) => {
       if (excludedCardTypeIds.includes(summary.id)) {
         return;
       }
       const lastIndex = summary.id.lastIndexOf('/');
-      this.filterOptions[this.filterOptions.length - 1].filters?.push({
+      this.cardTypeFilters.push({
         displayName: summary.attributes.displayName,
         icon: summary.attributes.iconHTML ?? Captions,
         query: {
@@ -279,7 +285,6 @@ export class CardsGrid extends CardDef {
       return this.realmName;
     },
   });
-  @field starred = linksToMany(() => CardDef);
 
   static getDisplayName(instance: BaseDef) {
     if (isCardInstance(instance)) {
