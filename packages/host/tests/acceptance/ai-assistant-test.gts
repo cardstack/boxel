@@ -48,6 +48,13 @@ async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-card-catalog-go-button]');
 }
 
+let countryDefinition = `import { field, contains, CardDef } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+  export class Country extends CardDef {
+    static displayName = 'Country';
+    @field name = contains(StringField);
+  }`;
+
 let matrixRoomId: string;
 module('Acceptance | AI Assistant tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -155,6 +162,20 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       contents: {
         'person.gts': { Person },
         'pet.gts': { Pet },
+        'country.gts': countryDefinition,
+        'Country/indonesia.json': {
+          data: {
+            attributes: {
+              name: 'Indonesia',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}country`,
+                name: 'Country',
+              },
+            },
+          },
+        },
         'Pet/ringo.json': new Pet({ name: 'Ringo' }),
         'Person/hassan.json': new Person({
           firstName: 'Hassan',
@@ -440,6 +461,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom('[data-test-autoattached-file]').exists();
     assert.dom('[data-test-autoattached-card]').exists();
+    await click(`[data-test-autoattached-card] [data-test-remove-card-btn]`);
+    assert.dom('[data-test-autoattached-card]').doesNotExist();
   });
 
   test<TestContextWithSave>('can send a newly created auto-attached card', async function (assert) {
@@ -684,5 +707,119 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       )}`,
     );
     assert.dom('[data-test-ai-assistant-panel]').exists();
+  });
+
+  test('auto-attached cards behaviour', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      codePath: `${testRealmURL}index.json`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    // In interact mode, auto-attached cards must be the top most cards in the stack
+    // unless the card is manually chosen
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    assert.dom('[data-test-autoattached-file]').doesNotExist();
+    assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Person/fadhlan"][data-test-autoattached-card]`,
+      )
+      .exists();
+
+    await click('[data-test-add-card-right-stack]');
+    await fillIn('[data-test-search-field]', 'Mango');
+    await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+    assert.dom('[data-test-autoattached-card]').exists({ count: 2 });
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Person/fadhlan"][data-test-autoattached-card]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Pet/mango"][data-test-autoattached-card]`,
+      )
+      .exists();
+
+    await click('[data-test-choose-card-btn]');
+    await fillIn('[data-test-search-field]', 'Mango');
+    await click(`[data-test-select="${testRealmURL}Pet/mango"]`);
+    await click('[data-test-card-catalog-go-button]');
+    assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Person/fadhlan"][data-test-autoattached-card]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Pet/mango"][data-test-autoattached-card]`,
+      )
+      .doesNotExist();
+    assert.dom(`[data-test-attached-card="${testRealmURL}Pet/mango"]`).exists();
+
+    // In code mode, auto-attached card must be the playground panel card and the card of the opened file with json extension
+    // unless the card is manually chosen
+    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Person/fadhlan"][data-test-autoattached-card]`,
+      )
+      .doesNotExist();
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Pet/mango"][data-test-autoattached-card]`,
+      )
+      .doesNotExist();
+    assert.dom(`[data-test-attached-card="${testRealmURL}Pet/mango"]`).exists();
+
+    await click('[data-test-file-browser-toggle]');
+    await click('[data-test-directory="Person/"]');
+    await click('[data-test-file="Person/fadhlan.json"]');
+    assert.dom('[data-test-attached-card]').exists({ count: 2 });
+    assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
+    assert.dom('[data-test-autoattached-file]').exists({ count: 1 });
+    assert.dom(`[data-test-attached-card="${testRealmURL}Pet/mango"]`).exists();
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Person/fadhlan"][data-test-autoattached-card]`,
+      )
+      .exists();
+
+    await click('[data-test-file="country.gts"]');
+    await click('[data-test-accordion-item="playground"] button');
+    assert.dom('[data-test-attached-card]').exists({ count: 2 });
+    assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
+    assert.dom('[data-test-autoattached-file]').exists({ count: 1 });
+    assert.dom(`[data-test-attached-card="${testRealmURL}Pet/mango"]`).exists();
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Country/indonesia"][data-test-autoattached-card]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-attached-file="${testRealmURL}country.gts"][data-test-autoattached-file]`,
+      )
+      .exists();
+
+    // auto-attached cards should be removable
+    await click(
+      `[data-test-attached-card="${testRealmURL}Country/indonesia"] [data-test-remove-card-btn]`,
+    );
+    assert
+      .dom(`[data-test-attached-card="${testRealmURL}Country/indonesia"]`)
+      .doesNotExist();
   });
 });
