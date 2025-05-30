@@ -450,21 +450,7 @@ export interface CopyCardsWithCodeRef {
 }
 
 export interface CatalogActions {
-  createFromSpec: (spec: Spec, realm: string, localDir?: LocalPath) => void;
-  copyCard: (
-    card: CardDef,
-    realm: string,
-    codeRef?: ResolvedCodeRef,
-    localDir?: LocalPath,
-  ) => Promise<CardDef>;
-  copyCards: (
-    cards: CopyCardsWithCodeRef[],
-    realm: string,
-    localDir?: LocalPath,
-  ) => Promise<CardDef[]>;
-  copySource: (fromUrl: string, toUrl: string) => Promise<void>;
   allRealmsInfo: () => Record<string, { canWrite: boolean; info: RealmInfo }>;
-  fetchCard: (url: string) => Promise<CardDef | CardErrorJSONAPI | undefined>;
 }
 
 export type Actions = CardActions & CatalogActions;
