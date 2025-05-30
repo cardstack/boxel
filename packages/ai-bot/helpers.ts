@@ -574,18 +574,38 @@ export async function getModifyPrompt(
         ).forEach((message) => historicalMessages.push(message));
       }
     }
+
+    let buildUserContext = (event: CardMessageEvent) => {
+      let context = event.content.data?.context;
+      let contextString = '';
+      if (context?.openCardIds) {
+        contextString += `\n- has the following cards open: ${JSON.stringify(context.openCardIds)}`;
+      }
+      if (context?.realmUrl) {
+        contextString += `\n- is operating in a realm with this URL: ${context.realmUrl}`;
+      }
+      if (context?.submode) {
+        contextString += `\n- is operating in ${context.submode} mode`;
+      }
+      if (context?.currentFile) {
+        contextString += `\n- is viewing or editing this file in the code editor: ${context.currentFile}`;
+      }
+      if (context?.codeMode?.currentPanel) {
+        contextString += `\n- is inspecting the file contents in this code mode panel: ${context.codeMode.currentPanel}`;
+      }
+      if (context?.codeMode?.playgroundPanelCardId) {
+        contextString += `\n- is viewing this card instance in the UI: ${context.codeMode.playgroundPanelCardId}`;
+        if (context?.codeMode.playgroundPanelFormat) {
+          contextString += `\n- in this format: ${context.codeMode.playgroundPanelFormat}`;
+        }
+      }
+      return contextString;
+    };
+
     if (body && event.sender !== aiBotUserId) {
-      if (
-        event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
-        event.content.data?.context?.openCardIds
-      ) {
+      if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
         body = `User message: ${body}
-          Context: the user has the following cards open: ${JSON.stringify(
-            event.content.data.context.openCardIds,
-          )}`;
-      } else {
-        body = `User message: ${body}
-          Context: the user has no open cards.`;
+          User UI context: ${buildUserContext(event as CardMessageEvent)}`;
       }
       historicalMessages.push({
         role: 'user',
@@ -605,46 +625,16 @@ export async function getModifyPrompt(
     aiBotUserId,
   );
 
-  let lastMessageEventByUser = history.findLast(
-    (event) => event.sender !== aiBotUserId,
-  );
-
-  let boxelContext = (lastMessageEventByUser as CardMessageEvent).content.data
-    ?.context;
-
-  let realmUrl = boxelContext?.realmUrl;
+  // let lastMessageEventByUser = history.findLast(
+  //   (event) => event.sender !== aiBotUserId,
+  // );
 
   let systemMessage = `${MODIFY_SYSTEM_MESSAGE}
 The user currently has given you the following data to work with:
 
 Attached card instances: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards) || 'no attached card instances'}
 
-Attached files: ${attachedFiles.length ? '\n' + attachedFilesToPrompt(attachedFiles) : 'no attached files'}
-
-The user is currently:`;
-
-  if (realmUrl) {
-    systemMessage += `\n- operating in a realm with this URL: ${realmUrl}`;
-  }
-
-  if (boxelContext?.submode) {
-    systemMessage += `\n- operating in ${boxelContext.submode} mode`;
-  }
-
-  if (boxelContext?.currentFile) {
-    systemMessage += `\n- viewing or editing this file in the code editor: ${boxelContext.currentFile}`;
-  }
-
-  if (boxelContext?.codeMode?.currentPanel) {
-    systemMessage += `\n- inspecting the file contents in this code mode panel: ${boxelContext.codeMode.currentPanel}`;
-  }
-
-  if (boxelContext?.codeMode?.playgroundPanelCardId) {
-    systemMessage += `\n- viewing this card instance in the UI: ${boxelContext.codeMode.playgroundPanelCardId}`;
-    if (boxelContext?.codeMode.playgroundPanelFormat) {
-      systemMessage += `, in this format: ${boxelContext.codeMode.playgroundPanelFormat}`;
-    }
-  }
+Attached files: ${attachedFiles.length ? '\n' + attachedFilesToPrompt(attachedFiles) : 'no attached files'}`;
 
   if (skillCards.length) {
     systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
