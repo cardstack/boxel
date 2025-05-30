@@ -15,7 +15,6 @@ import NumberField from 'https://cardstack.com/base/number';
 import { Skill } from 'https://cardstack.com/base/skill';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
-import { fn } from '@ember/helper';
 
 // Import commands for AI interaction
 import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
