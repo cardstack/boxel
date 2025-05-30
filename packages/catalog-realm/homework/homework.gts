@@ -70,8 +70,7 @@ class GradeField extends FieldDef {
           {{#if @model.overallGrade}}
             <div class='grade-column'>
               <span
-                class='grade-value'
-                style='color: {{this.gradeColor}}'
+                class='grade-value grade-{{@model.overallGrade}}'
               >{{@model.overallGrade}}</span>
             </div>
           {{/if}}
@@ -153,7 +152,33 @@ class GradeField extends FieldDef {
         .grade-value {
           font-size: 1.75rem;
           font-weight: bold;
-          /* Color is set dynamically via style attribute */
+        }
+
+        .grade-A-plus,
+        .grade-A {
+          color: #059669;
+        }
+
+        .grade-A-minus,
+        .grade-B-plus,
+        .grade-B {
+          color: #0891b2;
+        }
+
+        .grade-B-minus,
+        .grade-C-plus,
+        .grade-C {
+          color: #d97706;
+        }
+
+        .grade-C-minus,
+        .grade-D-plus,
+        .grade-D {
+          color: #dc2626;
+        }
+
+        .grade-F {
+          color: #991b1b;
         }
 
         .points-value {
@@ -377,7 +402,7 @@ class HomeworkIsolated extends Component<typeof Homework> {
         {{#if @model.gradingSkill}}
           <button
             type='button'
-            {{on 'click' (fn this.grade)}}
+            {{on 'click' this.grade}}
             disabled={{this.isGrading}}
             class='grade-button'
           >
@@ -420,9 +445,7 @@ class HomeworkIsolated extends Component<typeof Homework> {
       </section>
     {{/if}}
 
-    <!-- ⁽²⁾ Enhanced questions layout -->
     <section class='questions-section'>
-      <!-- ⁽³⁴⁾ Wrapped questions section -->
       <div class='questions-container'>
         {{#each @fields.questions as |Question index|}}
           <div class='question-wrapper'>
@@ -437,7 +460,6 @@ class HomeworkIsolated extends Component<typeof Homework> {
                     {{#if points.showEarned}}{{points.earned}}
                       /
                     {{/if}}{{points.max}}
-                    <!-- ⁽²⁾ Show earned only when graded -->
                   </span>
                   <span class='points-label'>pts</span>
                 </div>
@@ -703,7 +725,6 @@ export class Homework extends CardDef {
 
     <template>
       <div class='fitted-homework'>
-        <!-- ⁽¹⁾ Header with title and grade badge -->
         <header class='homework-header'>
           <h3 class='homework-title'>{{if
               @model.title
@@ -719,7 +740,6 @@ export class Homework extends CardDef {
           {{/if}}
         </header>
 
-        <!-- ⁽²⁾ Homework stats -->
         <div class='homework-stats'>
           <div class='stat-item'>
             <span class='stat-label'>Questions:</span>
@@ -741,7 +761,6 @@ export class Homework extends CardDef {
           {{/if}}
         </div>
 
-        <!-- ⁽³⁾ Simple status info -->
         <div class='status-section'>
           {{#if this.hasGrade}}
             <div class='status-item graded'>
