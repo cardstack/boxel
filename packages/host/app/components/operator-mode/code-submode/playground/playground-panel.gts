@@ -715,7 +715,6 @@ export default class PlaygroundPanel extends Component<Signature> {
                   @displayBoundaries={{true}}
                   data-test-error-container
                 >
-                  {{! FIXME this is hideous, but fixes a test? }}
                   <CardError
                     @error={{this.cardError}}
                     @cardCreationError={{this.cardError.meta.isCreationError}}
