@@ -11,6 +11,7 @@ module.exports = {
     divide: ['divide', '@cardstack/boxel-ui/helpers'],
     eq: ['eq', '@cardstack/boxel-ui/helpers'],
     fn: ['fn', '@ember/helper'],
+    formatDateTime: ['formatDateTime', '@cardstack/boxel-ui/helpers'],
     get: ['get', '@ember/helper'],
     gt: ['gt', '@cardstack/boxel-ui/helpers'],
     hash: ['hash', '@ember/helper'],

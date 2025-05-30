@@ -2,7 +2,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import dayjs from 'dayjs';
 
 import cn from '../../helpers/cn.ts';
-import { formatDateTime } from '../../helpers/dayjs-format.ts';
+import { formatDateTime } from '../../helpers/format-date-time.ts';
 import Profile from '../../icons/profile.gts';
 
 interface Signature {
