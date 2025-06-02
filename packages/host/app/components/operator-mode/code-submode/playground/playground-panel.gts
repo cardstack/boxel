@@ -812,6 +812,11 @@ export default class PlaygroundPanel extends Component<Signature> {
         border-top-right-radius: var(--boxel-border-radius);
       }
 
+      .instance-chooser-container.with-error :deep(.instance-chooser) {
+        border-radius: var(--boxel-border-radius);
+        box-shadow: var(--boxel-deep-box-shadow);
+      }
+
       .playground-panel-content {
         display: flex;
         flex-direction: column;
