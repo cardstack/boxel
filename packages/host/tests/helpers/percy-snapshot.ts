@@ -4,8 +4,10 @@ import originalPercySnapshot from '@percy/ember';
 
 import QUnit from 'qunit';
 
+const PERCY_PAUSE_PARAMETER = 'percypause';
+
 QUnit.config.urlConfig.push({
-  id: 'percypause',
+  id: PERCY_PAUSE_PARAMETER,
   label: 'Pause on Percy snapshot',
 });
 
@@ -31,7 +33,7 @@ export default async function percySnapshot(
     }
   });
 
-  if (window.location.search.includes('percypause')) {
+  if (window.location.search.includes(PERCY_PAUSE_PARAMETER)) {
     await pauseTest();
   }
 
