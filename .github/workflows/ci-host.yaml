@@ -4,6 +4,17 @@ on:
   push:
     branches: [main]
   pull_request:
+    paths:
+      - "packages/host/**"
+      - "packages/base/**"
+      - "packages/boxel-icons/**"
+      - "packages/boxel-ui/**"
+      - "packages/eslint-plugin-boxel/**"
+      - "packages/realm-server/**"
+      - "packages/runtime-common/**"
+      - ".github/workflows/ci-host.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
   workflow_dispatch:
 
 permissions:

@@ -16,7 +16,7 @@ interface SearchReplaceResult {
  * The format is:
  * ╔═══ SEARCH ════╗
  * code to search
- * ╠══════════════╣
+ * ╠═══════════════╣
  * code to replace
  * ╚═══ REPLACE ═══╝
  *
