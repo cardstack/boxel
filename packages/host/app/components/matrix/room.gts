@@ -24,7 +24,7 @@ import { MatrixEvent } from 'matrix-js-sdk';
 
 import pluralize from 'pluralize';
 
-import { TrackedObject, TrackedSet, TrackedArray } from 'tracked-built-ins';
+import { TrackedObject, TrackedArray } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
@@ -254,6 +254,9 @@ export default class Room extends Component<Signature> {
   @service private declare playgroundPanelService: PlaygroundPanelService;
 
   private autoAttachmentResource = getAutoAttachment(this, {
+    submode: () => this.operatorModeStateService.state.submode,
+    autoAttachedFileUrl: () => this.autoAttachedFileUrl,
+    playgroundPanelCardId: () => this.playgroundPanelCardId,
     topMostStackItems: () => this.topMostStackItems,
     attachedCardIds: () => this.cardIdsToAttach,
     removedCardIds: () => this.removedAttachedCardIds,
@@ -688,7 +691,7 @@ export default class Room extends Component<Signature> {
   private removeCard(id: string) {
     if (this.playgroundPanelCardId === id) {
       this.removePlaygroundPanelCard();
-    } else if (this.autoAttachmentResource.cardIds.has(id)) {
+    } else if (this.autoAttachedCardIds.has(id)) {
       this.removedAttachedCardIds.push(id);
     } else {
       const cardIndex = this.cardIdsToAttach?.findIndex((url) => url === id);
@@ -762,6 +765,7 @@ export default class Room extends Component<Signature> {
       ]);
       let context = {
         submode: this.operatorModeStateService.state.submode,
+        debug: this.operatorModeStateService.operatorModeController.debug,
         openCardIds: this.makeRemoteIdsList([...openCardIds]),
         realmUrl: this.operatorModeStateService.realmURL.href,
       };
@@ -833,20 +837,6 @@ export default class Room extends Component<Signature> {
   }
 
   private get autoAttachedCardIds() {
-    if (this.operatorModeStateService.state.submode === Submodes.Code) {
-      // also get the card ids of the cards that are open in code mode
-      let cardIds = new TrackedSet<string>();
-      if (this.autoAttachedFileUrl?.endsWith('.json')) {
-        // remove the json extension. TODO: is there a way of getting the actual card id
-        let cardId = this.autoAttachedFileUrl.replace(/\.json$/, '');
-        cardIds.add(cardId);
-      }
-      if (this.playgroundPanelCardId) {
-        cardIds.add(this.playgroundPanelCardId);
-      }
-      return cardIds;
-    }
-
     return this.autoAttachmentResource.cardIds;
   }
 
