@@ -37,7 +37,7 @@ interface Signature {
   };
   Blocks: {
     default: [
-      WithBoundArgs<typeof SchemaEditorTitle, 'totalFields' | 'hasModuleError'>,
+      WithBoundArgs<typeof SchemaEditorBadge, 'totalFields'>,
       WithBoundArgs<
         typeof CardAdoptionChain,
         | 'file'
@@ -59,31 +59,29 @@ export type CardInheritance = {
 interface TitleSignature {
   Args: {
     totalFields?: number;
-    hasModuleError?: boolean;
   };
 }
 
-const SchemaEditorTitle: TemplateOnlyComponent<TitleSignature> = <template>
-  Schema Editor
-
-  {{#if @hasModuleError}}
-    <span class='syntax-error'>Fail to parse</span>
-  {{else}}
-    <span class='total-fields' data-test-total-fields>
-      {{@totalFields}}
-      {{getPlural 'Field' @totalFields}}
-    </span>
-  {{/if}}
+const SchemaEditorBadge: TemplateOnlyComponent<TitleSignature> = <template>
+  <span
+    class='total-fields'
+    title='{{@totalFields}} {{getPlural "field" @totalFields}}'
+    data-test-total-fields
+  >
+    {{@totalFields}}
+  </span>
 
   <style scoped>
     .syntax-error,
     .total-fields {
-      margin-left: auto;
       color: var(--boxel-450);
       font: 500 var(--boxel-font-xs);
-      letter-spacing: var(--boxel-lsp-xl);
-      text-transform: uppercase;
     }
+
+    .total-fields {
+      margin-right: var(--boxel-sp-xxxs);
+    }
+
     .loading-icon {
       display: inline-block;
       margin-right: var(--boxel-sp-xxxs);
@@ -92,7 +90,7 @@ const SchemaEditorTitle: TemplateOnlyComponent<TitleSignature> = <template>
   </style>
 </template>;
 
-export { SchemaEditorTitle };
+export { SchemaEditorBadge };
 
 export default class SchemaEditor extends Component<Signature> {
   @service declare loaderService: LoaderService;
@@ -121,10 +119,6 @@ export default class SchemaEditor extends Component<Signature> {
     );
   }
 
-  get hasModuleError() {
-    return !!this.args?.moduleContentsResource?.moduleError?.message;
-  }
-
   get isLoading() {
     return (
       this.args.moduleContentsResource.isLoadingNewModule ||
@@ -134,11 +128,7 @@ export default class SchemaEditor extends Component<Signature> {
 
   <template>
     {{yield
-      (component
-        SchemaEditorTitle
-        totalFields=this.totalFields
-        hasModuleError=this.hasModuleError
-      )
+      (component SchemaEditorBadge totalFields=this.totalFields)
       (component
         CardAdoptionChain
         file=@file

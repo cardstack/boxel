@@ -425,10 +425,10 @@ module('Acceptance | catalog app tests', function (hooks) {
       listing,
     });
 
-    await waitFor('[data-test-accordion-item="playground"]', {
+    await waitFor('[data-test-module-inspector-view="preview"]', {
       timeout: 5_000,
     });
-    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-module-inspector-view="preview"]');
     assert
       .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
       .hasText('Author');
