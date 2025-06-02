@@ -2,7 +2,7 @@ import { pauseTest, settled } from '@ember/test-helpers';
 
 import originalPercySnapshot from '@percy/ember';
 
-import * as QUnit from 'qunit';
+import QUnit from 'qunit';
 
 QUnit.config.urlConfig.push({
   id: 'percypause',
