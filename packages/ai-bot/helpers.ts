@@ -578,7 +578,7 @@ export async function getModifyPrompt(
     if (body && event.sender !== aiBotUserId) {
       if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
         body = `User message: ${body}
-\n User UI context: ${buildUserContext(event as CardMessageEvent)}`;
+\n User UI context:${buildUserContext(event as CardMessageEvent)}`;
       }
       historicalMessages.push({
         role: 'user',

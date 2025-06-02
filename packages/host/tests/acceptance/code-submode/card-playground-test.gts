@@ -13,10 +13,6 @@ import { module, test } from 'qunit';
 
 import { trimJsonExtension, type Realm } from '@cardstack/runtime-common';
 
-import type ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
-import type RealmServerService from '@cardstack/host/services/realm-server';
-import type RecentFilesService from '@cardstack/host/services/recent-files-service';
-
 import {
   percySnapshot,
   setupAcceptanceTestRealm,
@@ -402,9 +398,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .hasText('City Design', 'most recent category card is pre-selected');
       assertCardExists(assert, `${testRealmURL}Category/city-design`);
 
-      let contextForAiAssistantService = this.owner.lookup(
-        'service:context-for-ai-assistant-service',
-      ) as ContextForAiAssistantService;
+      let contextForAiAssistantService = getService(
+        'context-for-ai-assistant-service',
+      );
 
       assert.deepEqual(contextForAiAssistantService.getContext(), {
         submode: 'code',

@@ -44,3 +44,9 @@ export default class ContextForAiAssistantService extends Service {
     return context;
   };
 }
+
+declare module '@ember/service' {
+  interface Registry {
+    'context-for-ai-assistant-service': ContextForAiAssistantService;
+  }
+}

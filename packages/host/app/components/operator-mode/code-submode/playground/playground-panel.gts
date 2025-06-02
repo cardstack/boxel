@@ -147,8 +147,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get card(): CardDef | undefined {
-    let card = this.cardResource?.card;
-    return card;
+    return this.cardResource?.card;
   }
 
   private get cardError(): CardErrorJSONAPI | undefined {
@@ -280,7 +279,6 @@ export default class PlaygroundPanel extends Component<Signature> {
     if (!this.card) {
       return undefined;
     }
-
     return {
       card: this.card,
       fieldIndex: this.args.isFieldDef ? this.fieldIndex : undefined,
