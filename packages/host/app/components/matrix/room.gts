@@ -763,12 +763,8 @@ export default class Room extends Component<Signature> {
         ) || []),
         ...this.autoAttachedCardIds,
       ]);
-      let context = {
-        submode: this.operatorModeStateService.state.submode,
-        debug: this.operatorModeStateService.operatorModeController.debug,
-        openCardIds: this.makeRemoteIdsList([...openCardIds]),
-        realmUrl: this.operatorModeStateService.realmURL.href,
-      };
+      let context =
+        this.operatorModeStateService.getSummaryForAIBot(openCardIds);
       try {
         let cards: CardDef[] | undefined;
         if (typeof cardsOrIds?.[0] === 'string') {
@@ -812,29 +808,6 @@ export default class Room extends Component<Signature> {
     await Promise.resolve();
     this.removedAttachedCardIds.splice(0);
   });
-
-  private makeRemoteIdsList(ids: (string | undefined)[]) {
-    return ids
-      .map((id) => {
-        if (!id) {
-          return undefined;
-        }
-        if (isLocalId(id)) {
-          let maybeInstance = this.store.peek(id);
-          if (
-            maybeInstance &&
-            isCardInstance(maybeInstance) &&
-            maybeInstance.id
-          ) {
-            return maybeInstance.id;
-          } else {
-            return undefined;
-          }
-        }
-        return id;
-      })
-      .filter(Boolean) as string[];
-  }
 
   private get autoAttachedCardIds() {
     return this.autoAttachmentResource.cardIds;

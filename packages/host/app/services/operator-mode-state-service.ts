@@ -793,6 +793,40 @@ export default class OperatorModeStateService extends Service {
 
     return controller;
   }
+
+  getSummaryForAIBot(
+    openCardIds: Set<string> = new Set([...this.getOpenCardIds()]),
+  ) {
+    return {
+      submode: this.state.submode,
+      debug: this.operatorModeController.debug,
+      openCardIds: this.makeRemoteIdsList([...openCardIds]),
+      realmUrl: this.realmURL.href,
+    };
+  }
+
+  private makeRemoteIdsList(ids: (string | undefined)[]) {
+    return ids
+      .map((id) => {
+        if (!id) {
+          return undefined;
+        }
+        if (isLocalId(id)) {
+          let maybeInstance = this.store.peek(id);
+          if (
+            maybeInstance &&
+            isCardInstance(maybeInstance) &&
+            maybeInstance.id
+          ) {
+            return maybeInstance.id;
+          } else {
+            return undefined;
+          }
+        }
+        return id;
+      })
+      .filter(Boolean) as string[];
+  }
 }
 
 declare module '@ember/service' {
