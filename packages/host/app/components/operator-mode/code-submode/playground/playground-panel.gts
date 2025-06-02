@@ -862,6 +862,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         display: grid;
         grid-template-rows: max-content;
         margin-left: calc(-1 * var(--boxel-sp));
+        padding-bottom: var(--boxel-sp-xxl);
         width: calc(100% + calc(2 * var(--boxel-sp)));
       }
     </style>
