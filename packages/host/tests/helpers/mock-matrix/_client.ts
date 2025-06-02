@@ -242,6 +242,13 @@ export class MockClient implements ExtendedClient {
     throw new Error('Method not implemented.');
   }
 
+  paginateEventTimeline(
+    _timeline: MatrixSDK.EventTimeline,
+    _opts?: MatrixSDK.IPaginateOpts | undefined,
+  ): Promise<boolean> {
+    throw new Error('Method not implemented.');
+  }
+
   async sendReadReceipt(
     event: MatrixSDK.MatrixEvent | null,
     receiptType?: MatrixSDK.ReceiptType | undefined,

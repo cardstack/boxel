@@ -13,6 +13,7 @@ import {
   type RoomMember,
   type EmittedEvents,
 } from 'matrix-js-sdk';
+import { Filter } from 'matrix-js-sdk';
 import {
   type SlidingSync,
   type MSC3575List,
@@ -58,6 +59,7 @@ import {
   DEFAULT_LLM_LIST,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -114,7 +116,6 @@ import type ResetService from './reset';
 import type StoreService from './store';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
-import { Filter } from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
@@ -1268,6 +1269,7 @@ export default class MatrixService extends Service {
         room: {
           timeline: {
             limit: 30,
+            not_types: [APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE],
           },
         },
       });
@@ -1279,14 +1281,16 @@ export default class MatrixService extends Service {
       });
 
       let timeline = timelineSet.getLiveTimeline();
-      while (timeline.getPaginationToken('b') != null) {
+      if (timeline.getPaginationToken('b' as MatrixSDK.Direction) == null) {
+        return;
+      }
+
+      while (timeline.getPaginationToken('b' as MatrixSDK.Direction) != null) {
         await this.client.paginateEventTimeline(timeline, {
           backwards: true,
-          limit: 30,
         });
       }
 
-      // Get the state from the paginated timeline
       let rs = room.getLiveTimeline().getState('f' as MatrixSDK.Direction);
       if (rs) {
         roomData.notifyRoomStateUpdated(rs);

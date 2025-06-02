@@ -17,6 +17,7 @@ import {
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
@@ -109,7 +110,7 @@ export interface LeaveEvent extends RoomStateEvent {
 }
 
 export interface MessageEvent extends BaseMatrixEvent {
-  type: 'm.room.message';
+  type: 'm.room.message' | typeof APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE;
   content: {
     'm.relates_to'?: {
       rel_type: string;
