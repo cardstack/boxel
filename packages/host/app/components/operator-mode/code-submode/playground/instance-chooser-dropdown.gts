@@ -1,4 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -6,6 +7,7 @@ import Component from '@glimmer/component';
 import Folder from '@cardstack/boxel-icons/folder';
 
 import {
+  Button,
   LoadingIndicator,
   BoxelSelect,
   CardContainer,
@@ -22,6 +24,8 @@ import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import type { FieldOption, SelectedInstance } from './playground-panel';
 
@@ -80,6 +84,8 @@ interface AfterOptionsSignature {
     chooseCard: () => void;
     createNew?: () => void;
     createNewIsRunning?: boolean;
+    generateSampleData?: (card?: CardDef) => void;
+    selectedCard?: CardDef;
   };
 }
 const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
@@ -88,7 +94,8 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
       Action
     </span>
     {{#if @createNew}}
-      <button
+      <Button
+        @kind='text-only'
         class='action'
         {{on 'click' @createNew}}
         data-test-create-instance
@@ -99,16 +106,28 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
           <IconPlusThin width='16px' height='16px' />
         {{/if}}
         <span>Create new instance</span>
-      </button>
+      </Button>
     {{/if}}
-    <button
+    {{#if @generateSampleData}}
+      <Button
+        @kind='text-only'
+        class='action'
+        {{on 'click' (fn @generateSampleData @selectedCard)}}
+        data-test-generate-sample-data
+      >
+        <span class='ai-icon' />
+        <span>Generate sample with AI</span>
+      </Button>
+    {{/if}}
+    <Button
+      @kind='text-only'
       class='action'
       {{on 'click' @chooseCard}}
       data-test-choose-another-instance
     >
       <Folder width='16px' height='16px' />
       <span>Choose another instance</span>
-    </button>
+    </Button>
   </div>
   <style scoped>
     .after-options {
@@ -127,8 +146,6 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
       display: inline-block;
       font: 500 var(--boxel-font-sm);
       border: none;
-      background-color: transparent;
-      gap: var(--boxel-sp-xs);
       height: var(--boxel-form-control-height);
       padding: var(--boxel-sp-xs) var(--boxel-sp);
       border-radius: var(--boxel-border-radius);
@@ -141,14 +158,27 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
     .action:hover {
       background-color: var(--boxel-100);
     }
-    .action > span {
+    .action > span:not(.ai-icon) {
       margin-left: var(--boxel-sp-xxs);
     }
     .action > * {
       vertical-align: middle;
     }
     .action-running {
-      --boxel-loading-indicator-size: 16px;
+      --boxel-loading-indicator-size: var(var(--boxel-icon-xs));
+    }
+    .ai-icon {
+      display: inline-block;
+      width: var(--boxel-icon-xs);
+      height: var(--boxel-icon-xs);
+      background-image: image-set(
+        url('../../../ai-assistant/ai-assist-icon-bw.png') 1x,
+        url('../../../ai-assistant/ai-assist-icon-bw@2x.png') 2x,
+        url('../../../ai-assistant/ai-assist-icon-bw@3x.png')
+      );
+      background-position: left center;
+      background-repeat: no-repeat;
+      background-size: contain;
     }
   </style>
 </template>;
@@ -165,6 +195,7 @@ interface Signature {
     chooseCard: () => void;
     createNew?: () => void;
     createNewIsRunning?: boolean;
+    generateSampleData?: (card?: CardDef) => void;
     moduleId: string;
     persistSelections?: (cardId: string, format: Format) => void;
     recentCardIds: string[];
@@ -181,6 +212,7 @@ interface OptionsDropdownSignature {
     chooseCard: () => void;
     createNew?: () => void;
     createNewIsRunning?: boolean;
+    generateSampleData?: (card?: CardDef) => void;
   };
 }
 
@@ -204,6 +236,8 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
         chooseCard=@chooseCard
         createNew=@createNew
         createNewIsRunning=@createNewIsRunning
+        generateSampleData=@generateSampleData
+        selectedCard=@selection.card
       }}
       @verticalPosition='above'
       data-playground-instance-chooser
@@ -291,6 +325,7 @@ export default class InstanceSelectDropdown extends Component<Signature> {
         @chooseCard={{@chooseCard}}
         @createNew={{@createNew}}
         @createNewIsRunning={{@createNewIsRunning}}
+        @generateSampleData={{@generateSampleData}}
       />
     {{else}}
       <OptionsDropdown
@@ -302,6 +337,7 @@ export default class InstanceSelectDropdown extends Component<Signature> {
         @chooseCard={{@chooseCard}}
         @createNew={{@createNew}}
         @createNewIsRunning={{@createNewIsRunning}}
+        @generateSampleData={{@generateSampleData}}
       />
     {{/if}}
 

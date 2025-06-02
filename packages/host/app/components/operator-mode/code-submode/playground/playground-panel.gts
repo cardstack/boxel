@@ -40,11 +40,14 @@ import {
   type PrerenderedCardLike,
 } from '@cardstack/runtime-common';
 
+import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
-import type LoaderService from '@cardstack/host/services/loader-service';
 
+import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
+import type CommandService from '@cardstack/host/services/command-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
@@ -60,6 +63,7 @@ import type {
   FieldDef,
   Format,
 } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { Spec } from 'https://cardstack.com/base/spec';
 
 import PrerenderedCardSearch from '../../../prerendered-card-search';
@@ -94,6 +98,8 @@ interface Signature {
 
 export default class PlaygroundPanel extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
+  @service private declare aiAssistantPanelService: AiAssistantPanelService;
+  @service private declare commandService: CommandService;
   @service private declare loaderService: LoaderService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -581,9 +587,11 @@ export default class PlaygroundPanel extends Component<Signature> {
     return false;
   }
 
-  private get fileToFixWithAi() {
+  private get currentFileDef(): FileDef | undefined {
     let codePath = this.operatorModeStateService.state.codePath?.href;
-    if (!codePath) return undefined;
+    if (!codePath) {
+      return undefined;
+    }
 
     return this.matrixService.fileAPI.createFileDef({
       sourceUrl: codePath,
@@ -678,6 +686,35 @@ export default class PlaygroundPanel extends Component<Signature> {
     }
   };
 
+  private generateSampleData = restartableTask(async (card?: CardDef) => {
+    if (!this.operatorModeStateService.openFileURL) {
+      throw new Error('Please open a file');
+    }
+    let { commandContext } = this.commandService;
+    let sendMessageCommand = new SendAiAssistantMessageCommand(commandContext);
+
+    let prompt = `Generate sample data`;
+
+    // TODO: handle sample data generation for FieldDefs
+
+    if (!card) {
+      // on error preview screen, we may not have a selected card instance.
+      // in this case, the below prompt helps AI not complain about open card.
+      prompt += ` for the selected module ${this.moduleId} in the attached file.`;
+    }
+
+    await this.aiAssistantPanelService.openPanel();
+    await sendMessageCommand.execute({
+      roomId: this.matrixService.currentRoomId,
+      prompt,
+      openCardIds: card?.id ? [card.id] : undefined,
+      attachedCards: card ? [card] : undefined,
+      attachedFileURLs: [this.operatorModeStateService.openFileURL],
+      realmUrl: this.operatorModeStateService.realmURL.href,
+    });
+    this.closeInstanceChooser();
+  });
+
   <template>
     {{consumeContext this.makeCardResource}}
 
@@ -749,6 +786,9 @@ export default class PlaygroundPanel extends Component<Signature> {
                 moduleId=this.moduleId
                 persistSelections=this.persistSelections
                 recentCardIds=this.recentCardIds
+                generateSampleData=(if
+                  this.canWriteRealm this.generateSampleData.perform
+                )
               )
               as |InstanceChooser|
             }}
@@ -763,7 +803,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                     <CardError
                       @error={{this.cardError}}
                       @cardCreationError={{this.cardError.meta.isCreationError}}
-                      @fileToFixWithAi={{this.fileToFixWithAi}}
+                      @fileToFixWithAi={{this.currentFileDef}}
                     >
                       <:error>
                         <button
