@@ -1,6 +1,5 @@
+import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
-
-import Component from '@glimmer/component';
 
 import Check from '@cardstack/boxel-icons/check';
 
@@ -19,7 +18,7 @@ interface SpecPreviewBadgeSignature {
   };
 }
 
-export default class SpecPreviewBadge extends Component<SpecPreviewBadgeSignature> {
+const SpecPreviewBadge: TemplateOnlyComponent<SpecPreviewBadgeSignature> =
   <template>
     <span class='spec-indicator'>
       {{#if @showCreateSpec}}
@@ -67,5 +66,6 @@ export default class SpecPreviewBadge extends Component<SpecPreviewBadgeSignatur
         width: var(--boxel-sp);
       }
     </style>
-  </template>
-}
+  </template>;
+
+export default SpecPreviewBadge;
