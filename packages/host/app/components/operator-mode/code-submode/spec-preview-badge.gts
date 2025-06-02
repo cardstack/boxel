@@ -35,8 +35,8 @@ const SpecPreviewBadge: TemplateOnlyComponent<SpecPreviewBadgeSignature> =
             <IconPlus width='10px' height='10px' />
           {{/unless}}
         </BoxelButton>
-      {{else}}
-        <Check class='spec-checkmark' />
+      {{else if @spec}}
+        <Check class='spec-checkmark' data-test-spec-exists />
       {{/if}}
     </span>
 

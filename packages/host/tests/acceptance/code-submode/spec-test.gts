@@ -711,6 +711,7 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-module-inspector-view="spec"]').exists();
     assert.dom('[data-test-create-spec-button]').doesNotExist();
     assert.dom('[data-test-create-spec-intent-message]').doesNotExist();
+    assert.dom('[data-test-spec-exists]').doesNotExist();
     assert.dom('[data-test-cannot-write-intent-message]').exists();
     await percySnapshot(assert);
   });
