@@ -20,14 +20,6 @@ interface SpecPreviewBadgeSignature {
 }
 
 export default class SpecPreviewBadge extends Component<SpecPreviewBadgeSignature> {
-  private get moreThanOneInstance() {
-    return this.args.numberOfInstances && this.args.numberOfInstances > 1;
-  }
-
-  private get specType() {
-    return this.args.spec?.specType as SpecType | undefined;
-  }
-
   <template>
     <span class='spec-indicator'>
       {{#if @showCreateSpec}}
@@ -44,20 +36,8 @@ export default class SpecPreviewBadge extends Component<SpecPreviewBadgeSignatur
             <IconPlus width='10px' height='10px' />
           {{/unless}}
         </BoxelButton>
-      {{else if this.moreThanOneInstance}}
-        <Check
-          class='spec-checkmark'
-          data-test-number-of-instance={{@numberOfInstances}}
-          title='{{@numberOfInstances}} instances'
-        />
       {{else}}
-        {{#if this.specType}}
-          <Check
-            class='spec-checkmark'
-            data-test-spec-tag={{this.specType}}
-            title='Spec type: {{this.specType}}'
-          />
-        {{/if}}
+        <Check class='spec-checkmark' />
       {{/if}}
     </span>
 
@@ -76,18 +56,6 @@ export default class SpecPreviewBadge extends Component<SpecPreviewBadgeSignatur
       .create-spec-button :deep(.boxel-loading-indicator) {
         --loading-indicator-size: 12px;
         margin-right: 0;
-      }
-
-      .number-of-instance {
-        margin-left: auto;
-        display: inline-flex;
-        align-items: center;
-      }
-
-      .dot-icon {
-        flex-shrink: 0;
-        width: 18px;
-        height: 18px;
       }
 
       .boxel-button:not(.active) .spec-checkmark {
