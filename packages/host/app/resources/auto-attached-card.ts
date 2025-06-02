@@ -12,14 +12,16 @@ import {
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
-import { Submodes } from '../components/submode-switcher';
+import { Submode, Submodes } from '../components/submode-switcher';
 
 import type CardService from '../services/card-service';
-import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type StoreService from '../services/store';
 
 interface Args {
   named: {
+    submode: Submode;
+    autoAttachedFileUrl: string | undefined;
+    playgroundPanelCardId: string | undefined;
     topMostStackItems: StackItem[];
     attachedCardIds: string[] | undefined; // cards manually attached in ai panel
     removedCardIds: string[] | undefined;
@@ -32,17 +34,22 @@ interface Args {
  */
 export class AutoAttachment extends Resource<Args> {
   cardIds: TrackedSet<string> = new TrackedSet(); // auto-attached cards
-  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private cardService: CardService;
   @service declare private store: StoreService;
 
   modify(_positional: never[], named: Args['named']) {
-    const { topMostStackItems, attachedCardIds, removedCardIds } = named;
-    if (this.operatorModeStateService.state.submode === Submodes.Code) {
-      return; // Don't auto-attach cards in code mode
-    }
-
+    const {
+      submode,
+      autoAttachedFileUrl,
+      playgroundPanelCardId,
+      topMostStackItems,
+      attachedCardIds,
+      removedCardIds,
+    } = named;
     this.calculateAutoAttachments.perform(
+      submode,
+      autoAttachedFileUrl,
+      playgroundPanelCardId,
       topMostStackItems,
       attachedCardIds,
       removedCardIds,
@@ -51,29 +58,52 @@ export class AutoAttachment extends Resource<Args> {
 
   private calculateAutoAttachments = restartableTask(
     async (
+      submode: Submode,
+      autoAttachedFileUrl: string | undefined,
+      playgroundPanelCardId: string | undefined,
       topMostStackItems: StackItem[],
       attachedCardIds: string[] | undefined,
       removedCardIds: string[] | undefined,
     ) => {
       this.cardIds.clear();
-      for (let item of topMostStackItems) {
-        if (!item.id) {
-          continue;
-        }
-        if (removedCardIds?.includes(item.id)) {
-          continue;
-        }
-        if (attachedCardIds?.includes(item.id)) {
-          continue;
-        }
-        let card = await this.store.get(item.id);
-        if (card && isCardInstance(card)) {
-          let realmURL = card[realmURLSymbol];
-          if (realmURL && item.id === `${realmURL.href}index`) {
+      if (submode === Submodes.Interact) {
+        for (let item of topMostStackItems) {
+          if (!item.id) {
             continue;
           }
+          if (removedCardIds?.includes(item.id)) {
+            continue;
+          }
+          if (attachedCardIds?.includes(item.id)) {
+            continue;
+          }
+          let card = await this.store.get(item.id);
+          if (card && isCardInstance(card)) {
+            let realmURL = card[realmURLSymbol];
+            if (realmURL && item.id === `${realmURL.href}index`) {
+              continue;
+            }
+          }
+          this.cardIds.add(item.id);
         }
-        this.cardIds.add(item.id);
+      } else if (submode === Submodes.Code) {
+        let cardId = autoAttachedFileUrl?.endsWith('.json')
+          ? autoAttachedFileUrl?.replace(/\.json$/, '')
+          : undefined;
+        if (
+          cardId &&
+          !removedCardIds?.includes(cardId) &&
+          !attachedCardIds?.includes(cardId)
+        ) {
+          this.cardIds.add(cardId);
+        }
+        if (
+          playgroundPanelCardId &&
+          !removedCardIds?.includes(playgroundPanelCardId) &&
+          !attachedCardIds?.includes(playgroundPanelCardId)
+        ) {
+          this.cardIds.add(playgroundPanelCardId);
+        }
       }
     },
   );
@@ -82,6 +112,9 @@ export class AutoAttachment extends Resource<Args> {
 export function getAutoAttachment(
   parent: object,
   args: {
+    submode: () => Submode;
+    autoAttachedFileUrl: () => string | undefined;
+    playgroundPanelCardId: () => string | undefined;
     topMostStackItems: () => StackItem[];
     attachedCardIds: () => string[] | undefined;
     removedCardIds: () => string[] | undefined;
@@ -89,6 +122,9 @@ export function getAutoAttachment(
 ) {
   return AutoAttachment.from(parent, () => ({
     named: {
+      submode: args.submode(),
+      autoAttachedFileUrl: args.autoAttachedFileUrl(),
+      playgroundPanelCardId: args.playgroundPanelCardId(),
       topMostStackItems: args.topMostStackItems(),
       attachedCardIds: args.attachedCardIds(),
       removedCardIds: args.removedCardIds(),
