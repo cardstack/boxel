@@ -151,7 +151,13 @@ class RealmResource {
       return;
     }
 
-    await this.fetchInfo();
+    // Avoid deadlocks during reauthentication triggered by a 401 when fetching realm info.
+    // If the info is already being fetched, we don't need to call fetchInfo again,
+    // since the purpose of await this.fetchInfo() here is only to ensure that the realm has the info loaded.
+    if (!this.fetchingInfo) {
+      await this.fetchInfo();
+    }
+
     this.subscription = {
       unsubscribe: this.messageService.subscribe(
         this.realmURL,
@@ -567,7 +573,7 @@ export default class RealmService extends Service {
   }
 
   token = (url: string): string | undefined => {
-    return this.knownRealm(url)?.token;
+    return this.knownRealm(url, false)?.token;
   };
 
   logout() {
@@ -592,9 +598,6 @@ export default class RealmService extends Service {
   }
 
   async reauthenticate(realmURL: string): Promise<string | undefined> {
-    if (this.reauthentications.has(realmURL)) {
-      return;
-    }
     let inProgressAuthentication = this.reauthentications.get(realmURL);
     if (inProgressAuthentication) {
       return inProgressAuthentication;
@@ -641,7 +644,7 @@ export default class RealmService extends Service {
   private identifyRealm = task(
     { maxConcurrency: 1, enqueue: true },
     async (url: string): Promise<void> => {
-      if (this.knownRealm(url)) {
+      if (this.knownRealm(url, false)) {
         // could have already been discovered while we were queued
         return;
       }
