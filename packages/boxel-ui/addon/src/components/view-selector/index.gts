@@ -26,19 +26,19 @@ interface Signature {
   Element: HTMLDivElement;
 }
 
-export default class ViewSelector extends Component<Signature> {
-  standardViewOptions: ViewItem[] = [
-    { id: 'card', icon: CardIcon },
-    { id: 'strip', icon: StripIcon },
-    { id: 'grid', icon: GridIcon },
-  ];
+export const VIEW_OPTIONS: ViewItem[] = [
+  { id: 'card', icon: CardIcon },
+  { id: 'strip', icon: StripIcon },
+  { id: 'grid', icon: GridIcon },
+];
 
-  get viewOptions() {
-    return this.args.items ?? this.standardViewOptions;
+export default class ViewSelector extends Component<Signature> {
+  private get viewOptions() {
+    return this.args.items ?? VIEW_OPTIONS;
   }
 
-  get selectedId() {
-    return this.args.selectedId ?? (this.viewOptions[0] as ViewItem).id;
+  private get selectedId() {
+    return this.args.selectedId ?? this.viewOptions[0]?.id;
   }
 
   <template>
@@ -68,30 +68,33 @@ export default class ViewSelector extends Component<Signature> {
       </RadioInput>
     </div>
     <style scoped>
-      .view-options-group {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 0 var(--boxel-sp-sm);
-        text-wrap: nowrap;
-      }
-      .view-options {
-        display: flex;
-        gap: 0 var(--boxel-sp-4xs);
-      }
-      .view-option {
-        display: flex;
-        color: var(--boxel-450);
-        box-shadow: none;
-        transition: none;
-      }
-      .view-options > :deep(div),
-      .view-option > :deep(div) {
-        display: contents;
-      }
-      .view-option:hover,
-      .view-option.is-selected {
-        color: var(--boxel-dark);
+      @layer {
+        .view-options-group {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          column-gap: var(--boxel-sp-sm);
+          text-wrap: nowrap;
+        }
+        .view-options {
+          display: flex;
+          column-gap: var(--boxel-sp-6xs);
+        }
+        .view-option {
+          display: flex;
+          color: var(--boxel-450);
+          box-shadow: none;
+          transition: none;
+          flex-shrink: 0;
+        }
+        .view-options > :deep(div),
+        .view-option > :deep(div) {
+          display: contents;
+        }
+        .view-option:hover,
+        .view-option.is-selected {
+          color: var(--boxel-dark);
+        }
       }
     </style>
   </template>
