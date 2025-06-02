@@ -7,7 +7,7 @@ import Check from '@cardstack/boxel-icons/check';
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
-import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
+import { Spec } from 'https://cardstack.com/base/spec';
 
 interface SpecPreviewBadgeSignature {
   Args: {
