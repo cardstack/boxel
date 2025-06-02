@@ -440,6 +440,10 @@ export class MockClient implements ExtendedClient {
     let hit = this.serverState.rooms.find((r) => r.id === roomId);
     if (hit) {
       return {
+        roomId,
+        client: this,
+        myUserId: this.loggedInAs!,
+        opts: {},
         getMember(_userId: string) {
           return {
             membership: 'join',
@@ -458,7 +462,34 @@ export class MockClient implements ExtendedClient {
                 .map((e) => new MatrixEvent(e)),
           };
         },
-      } as MatrixSDK.Room;
+        getOrCreateFilteredTimelineSet: (
+          filter: MatrixSDK.Filter,
+          _opts = {},
+        ) => {
+          return {
+            getLiveTimeline: () => ({
+              getEvents: () => [],
+              getPaginationToken: () => null,
+              setPaginationToken: () => {},
+              getNeighbouringTimeline: () => null,
+            }),
+            addLiveEvent: () => {},
+            getTimelines: () => [],
+            getFilter: () => filter,
+            setFilter: () => {},
+            getTimelineForEvent: () => null,
+            addTimeline: () => ({
+              getEvents: () => [],
+              getPaginationToken: () => null,
+              setPaginationToken: () => {},
+              getNeighbouringTimeline: () => null,
+            }),
+            addEventsToTimeline: () => {},
+            handleRemoteEcho: () => {},
+            canContain: () => true,
+          };
+        },
+      } as unknown as MatrixSDK.Room;
     }
     return null;
   }
