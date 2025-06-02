@@ -172,6 +172,10 @@ function isPresent(val: SafeString | string | null | undefined) {
   return val ? val !== '' : false;
 }
 
+function collectionResourceError(id: string | null | undefined) {
+  return 'Cannot render ' + id;
+}
+
 export default class AiAssistantMessage extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare matrixService: MatrixService;
@@ -199,10 +203,6 @@ export default class AiAssistantMessage extends Component<Signature> {
 
   get hasMessageHTMLParts() {
     return !!this.args.messageHTMLParts;
-  }
-
-  collectionResourceError(id: string) {
-    return 'Cannot render ' + id;
   }
 
   <template>
@@ -288,7 +288,7 @@ export default class AiAssistantMessage extends Component<Signature> {
             {{#if @collectionResource.cardErrors.length}}
               {{#each @collectionResource.cardErrors as |error|}}
                 <ErrorMessage
-                  @errorMessage={{(this.collectionResourceError error.id)}}
+                  @errorMessage={{(collectionResourceError error.id)}}
                   @retryAction={{@retryAction}}
                 />
               {{/each}}
