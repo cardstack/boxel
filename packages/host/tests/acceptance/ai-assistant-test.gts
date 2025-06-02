@@ -798,7 +798,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .exists();
 
     await click('[data-test-file="country.gts"]');
-    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-module-inspector-view="preview"] button');
     assert.dom('[data-test-attached-card]').exists({ count: 2 });
     assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
     assert.dom('[data-test-autoattached-file]').exists({ count: 1 });
