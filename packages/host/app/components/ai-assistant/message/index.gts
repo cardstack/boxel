@@ -10,9 +10,7 @@ import { format as formatDate, formatISO } from 'date-fns';
 import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
-import { Button } from '@cardstack/boxel-ui/components';
 import { and, cn, eq } from '@cardstack/boxel-ui/helpers';
-import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 import {
   type getCardCollection,
@@ -30,6 +28,7 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
+import ErrorMessage from '../error-message';
 import FormattedAiBotMessage from '../formatted-aibot-message';
 import FormattedUserMessage from '../formatted-user-message';
 
@@ -202,13 +201,16 @@ export default class AiAssistantMessage extends Component<Signature> {
     return !!this.args.messageHTMLParts;
   }
 
+  collectionResourceError(id: string) {
+    return 'Cannot render ' + id;
+  }
+
   <template>
     <div
       class={{cn
         'ai-assistant-message'
         is-from-assistant=@isFromAssistant
         is-pending=@isPending
-        is-error=@errorMessage
       }}
       {{MessageScroller index=@index registerScroller=@registerScroller}}
       data-test-ai-assistant-message
@@ -228,27 +230,6 @@ export default class AiAssistantMessage extends Component<Signature> {
         </time>
       </div>
       <div class='content-container'>
-        {{#if @errorMessage}}
-          <div class='error-container'>
-            <FailureBordered class='error-icon' />
-            <div class='error-message' data-test-card-error>
-              {{@errorMessage}}
-            </div>
-
-            {{#if @retryAction}}
-              <Button
-                {{on 'click' @retryAction}}
-                class='retry-button'
-                @size='small'
-                @kind='secondary-dark'
-                data-test-ai-bot-retry-button
-              >
-                Retry
-              </Button>
-            {{/if}}
-          </div>
-        {{/if}}
-
         <div class='content' data-test-ai-message-content>
           {{#if @reasoningContent}}
             <div class='reasoning-content'>
@@ -297,16 +278,22 @@ export default class AiAssistantMessage extends Component<Signature> {
             </div>
           {{/if}}
 
-          {{#if @collectionResource.cardErrors.length}}
-            <div class='error-container error-footer'>
+          <div class='error-footer'>
+            {{#if @errorMessage}}
+              <ErrorMessage
+                @errorMessage={{@errorMessage}}
+                @retryAction={{@retryAction}}
+              />
+            {{/if}}
+            {{#if @collectionResource.cardErrors.length}}
               {{#each @collectionResource.cardErrors as |error|}}
-                <FailureBordered class='error-icon' />
-                <div class='error-message' data-test-card-error>
-                  <div>Cannot render {{error.id}}</div>
-                </div>
+                <ErrorMessage
+                  @errorMessage={{(this.collectionResourceError error.id)}}
+                  @retryAction={{@retryAction}}
+                />
               {{/each}}
-            </div>
-          {{/if}}
+            {{/if}}
+          </div>
         </div>
       </div>
     </div>
@@ -409,15 +396,6 @@ export default class AiAssistantMessage extends Component<Signature> {
         color: var(--boxel-500);
       }
 
-      .is-error .content,
-      .is-error .content .items > :deep(.card-pill),
-      .is-error .content .items > :deep(.card-pill .boxel-card-container) {
-        background: var(--boxel-200);
-        color: var(--boxel-500);
-        max-height: 300px;
-        overflow: auto;
-      }
-
       .content :deep(span.streaming-text:after) {
         content: '';
         width: 8px;
@@ -452,23 +430,13 @@ export default class AiAssistantMessage extends Component<Signature> {
       .reasoning-content summary {
         cursor: pointer;
       }
-
-      .error-container {
-        display: grid;
-        grid-template-columns: auto 1fr auto;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        background-color: var(--boxel-danger);
-        color: var(--boxel-light);
-        font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp);
-      }
       .error-footer {
         --fill-container-spacing: calc(
           -1 * var(--ai-assistant-message-padding)
         );
         margin-inline: var(--fill-container-spacing);
         margin-bottom: var(--fill-container-spacing);
+        padding: var(--boxel-sp-xs);
       }
       .error-icon {
         --icon-background-color: var(--boxel-light);
