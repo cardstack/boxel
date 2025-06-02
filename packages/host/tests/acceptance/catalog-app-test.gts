@@ -8,8 +8,6 @@ import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-cons
 import ListingInstallCommand from '@cardstack/host/commands/listing-install';
 import ListingRemixCommand from '@cardstack/host/commands/listing-remix';
 import ListingUseCommand from '@cardstack/host/commands/listing-use';
-import type CommandService from '@cardstack/host/services/command-service';
-import type StoreService from '@cardstack/host/services/store';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
