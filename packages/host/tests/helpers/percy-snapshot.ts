@@ -1,6 +1,13 @@
-import { settled } from '@ember/test-helpers';
+import { pauseTest, settled } from '@ember/test-helpers';
 
 import originalPercySnapshot from '@percy/ember';
+
+import * as QUnit from 'qunit';
+
+QUnit.config.urlConfig.push({
+  id: 'percypause',
+  label: 'Pause on Percy snapshot',
+});
 
 export default async function percySnapshot(
   ...args: Parameters<typeof originalPercySnapshot>
@@ -23,6 +30,10 @@ export default async function percySnapshot(
       throw new Error('Not ready: Poppins font could not be loaded');
     }
   });
+
+  if (window.location.search.includes('percypause')) {
+    await pauseTest();
+  }
 
   await originalPercySnapshot(...args);
 }
