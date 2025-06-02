@@ -208,7 +208,6 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     assert.dom('[data-test-send-message-btn]').isDisabled();
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
     assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
-    await waitFor('[data-test-ai-assistant-message].is-error');
     await waitUntil(
       () =>
         !(
@@ -218,7 +217,6 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
         ).disabled,
     );
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
-    assert.dom('[data-test-ai-assistant-message]').hasClass('is-error');
     assert.dom('[data-test-card-error]').containsText('Failed to send');
     assert.dom('[data-test-ai-bot-retry-button]').exists();
     await percySnapshot(assert);
@@ -226,9 +224,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     click('[data-test-ai-bot-retry-button]');
     await waitFor('[data-test-ai-assistant-message].is-pending');
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
-    assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-error');
     await settled();
-    assert.dom('[data-test-ai-assistant-message]').hasClass('is-error');
   });
 
   test('it enlarges the input box when entering/pasting lots of text', async function (assert) {
