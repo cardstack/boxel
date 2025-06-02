@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { Credentials, registerUser } from '../docker/synapse';
+import { Credentials, putEvent, registerUser } from '../docker/synapse';
 import {
   login,
   logout,
@@ -28,7 +28,10 @@ import {
   startServer as startRealmServer,
   type IsolatedRealmServer,
 } from '../helpers/isolated-realm-server';
-import { APP_BOXEL_MESSAGE_MSGTYPE } from '../helpers/matrix-constants';
+import {
+  APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE,
+} from '../helpers/matrix-constants';
 
 test.describe('Room messages', () => {
   let synapse: SynapseInstance;
@@ -1047,5 +1050,55 @@ test.describe('Room messages', () => {
     await expect(page.locator('[data-test-ai-bot-retry-button]')).toHaveCount(
       0,
     );
+  });
+
+  // This test verifies the dual behavior of streaming messages:
+  // 1. Streaming messages are visible in real-time when received via sync
+  // 2. Streaming messages are excluded when loading historical room messages (i.e. when loading the message history)
+  test('filters out streaming messages when loading room history', async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass', { url: appURL });
+    let room1 = await getRoomId(page);
+
+    await putEvent(
+      userCred.accessToken,
+      room1,
+      APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE,
+      '1',
+      {
+        msgtype: 'm.text',
+        format: 'org.matrix.custom.html',
+        body: 'This message should not be displayed after reload',
+        isStreamingFinished: false,
+      },
+    );
+
+    await putEvent(userCred.accessToken, room1, 'm.room.message', '2', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      body: 'This message should be displayed after reload',
+      isStreamingFinished: true,
+    });
+
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        message: 'This message should not be displayed after reload',
+      },
+      {
+        from: 'user1',
+        message: 'This message should be displayed after reload',
+      },
+    ]);
+
+    await page.reload();
+
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        message: 'This message should be displayed after reload',
+      },
+    ]);
   });
 });
