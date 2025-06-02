@@ -1,4 +1,4 @@
-import { fn } from '@ember/helper';
+import { fn, hash } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
@@ -51,6 +51,8 @@ import {
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 
+import ContextForAiAssistantService from '@cardstack/host/services/context-for-ai-assistant-service';
+
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -61,6 +63,8 @@ import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import { Spec } from 'https://cardstack.com/base/spec';
+
+import ReportUserContextForAiAssistant from '../report-user-context-for-ai-assistant';
 
 export type SelectedAccordionItem =
   | 'schema-editor'
@@ -102,6 +106,8 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   @service private declare playgroundPanelService: PlaygroundPanelService;
   @service private declare realmServer: RealmServerService;
   @service private declare specPanelService: SpecPanelService;
+  @service
+  private declare contextForAiAssistantService: ContextForAiAssistantService;
 
   @consume(GetCardsContextName) private declare getCards: getCards;
   @consume(GetCardContextName) private declare getCard: getCard;
@@ -195,8 +201,10 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   private get selectedAccordionItem(): SelectedAccordionItem {
-    let selection = this.panelSelections[this.args.readyFile.url];
-    return selection ?? 'schema-editor';
+    let selection =
+      this.panelSelections[this.args.readyFile.url] ?? 'schema-editor';
+
+    return selection;
   }
 
   @action private toggleAccordionItem(item: SelectedAccordionItem) {
@@ -489,6 +497,10 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         data-test-card-resource-loaded
       />
     {{/if}}
+
+    <ReportUserContextForAiAssistant
+      @values={{hash currentCodeModePanel=this.selectedAccordionItem}}
+    />
 
     <style scoped>
       .file-incompatible-message {
