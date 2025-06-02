@@ -230,7 +230,7 @@ export default class CommandService extends Service {
       await this.matrixService.updateSkillsAndCommandsIfNeeded(
         command.message.roomId,
       );
-      await this.matrixService.sendToolCallCommandResultEvent(
+      await this.matrixService.sendCommandResultEvent(
         command.message.roomId,
         eventId,
         commandRequestId!,

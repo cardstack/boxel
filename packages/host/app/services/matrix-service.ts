@@ -776,7 +776,7 @@ export default class MatrixService extends Service {
     await this.client.cacheContentHashIfNeeded(event);
   }
 
-  async sendToolCallCommandResultEvent(
+  async sendCommandResultEvent(
     roomId: string,
     invokedToolFromEventId: string,
     toolCallId: string,
