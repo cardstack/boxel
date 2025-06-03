@@ -139,7 +139,6 @@ export type ExtendedClient = Pick<
   | 'getDevice'
   | 'uploadContent'
   | 'mxcUrlToHttp'
-  | 'paginateEventTimeline'
 > &
   FileDefManager & {
     requestEmailToken(

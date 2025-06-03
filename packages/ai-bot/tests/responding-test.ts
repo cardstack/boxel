@@ -10,7 +10,6 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
-  APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import type OpenAI from 'openai';
 import { FakeMatrixClient } from './helpers/fake-matrix-client';
@@ -115,8 +114,8 @@ module('Responding', (hooks) => {
     assert.equal(sentEvents.length, 1, 'One event should be sent');
     assert.equal(
       sentEvents[0].eventType,
-      APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE,
-      `Event type should be ${APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE}`,
+      'm.room.message',
+      'Event type should be m.room.message',
     );
     assert.equal(
       sentEvents[0].content.msgtype,
