@@ -167,8 +167,7 @@ export default class CardRendererPanel extends Component<Signature> {
         {{/if}}
       </div>
     </div>
-    <div class='card-renderer-footer' data-test-code-mode-card-renderer-footer>
-      <div class='card-renderer-footer-title'>Preview as</div>
+    <div class='card-renderer-format-chooser'>
       <FormatChooser @format={{this.format}} @setFormat={{@setFormat}} />
     </div>
 
@@ -204,36 +203,21 @@ export default class CardRendererPanel extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
       }
 
-      .card-renderer-footer {
-        background-color: var(--boxel-200);
-        border-bottom-left-radius: var(--boxel-border-radius);
-        border-bottom-right-radius: var(--boxel-border-radius);
-        padding-bottom: calc(
-          var(--search-sheet-closed-height) + var(--operator-mode-spacing)
-        );
+      .card-renderer-format-chooser {
+        background-color: var(--boxel-dark);
+        position: sticky;
+        bottom: 100px;
+        width: 380px;
+        margin: 0 auto;
+        border-radius: var(--boxel-border-radius);
       }
 
-      .card-renderer-footer-title {
-        text-align: center;
-        padding: var(--boxel-sp-xs) 0;
-        text-transform: uppercase;
-        font-weight: 600;
-        color: var(--boxel-400);
-        letter-spacing: 0.6px;
-      }
-
-      :deep(.format-chooser__buttons) {
+      :deep(.format-chooser) {
         --boxel-format-chooser-border-color: var(--boxel-400);
-        margin: auto var(--boxel-sp-sm);
+        margin: 0;
         width: 100%;
         box-shadow: none;
-      }
-
-      :deep(.format-chooser__button) {
-        padding: var(--boxel-sp-xxxs) 0;
-        flex-grow: 1;
-        flex-basis: 0;
-        font: 600 var(--boxel-font-sm);
+        border-radius: var(--boxel-border-radius);
       }
 
       .icon-button {

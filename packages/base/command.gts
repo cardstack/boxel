@@ -14,6 +14,7 @@ import NumberField from './number';
 import { Skill } from './skill';
 import {
   JsonField,
+  QueryField,
   SearchCardsByQueryInput,
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
@@ -221,6 +222,15 @@ export class ListingActionInput extends CardDef {
 export class ListingInput extends CardDef {
   @field realm = contains(StringField);
   @field listing = linksTo(CardDef);
+}
+
+export class VisitCardsInput extends CardDef {
+  @field query = contains(QueryField);
+  @field commandRef = contains(CodeRefField);
+}
+
+export class JsonCard extends CardDef {
+  @field json = contains(JsonField);
 }
 
 export {
