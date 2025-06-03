@@ -3,11 +3,12 @@
     "type": "card",
     "attributes": {
       "title": "Ocean Cleanup Project Removes 10 Million Pounds of Plastic in Record Month",
-      "url": "https://oceanwatch.news/cleanup-milestone-december-2024",
+      "url": null,
       "description": "The Ocean Cleanup's latest fleet of autonomous vessels has achieved an unprecedented milestone, collecting over 10 million pounds of plastic waste from the Pacific Garbage Patch in just 30 days. The breakthrough comes from new AI-powered navigation systems that can predict plastic concentrations with 94% accuracy.",
       "author": "Kai Nakamura",
       "upvotes": 93,
-      "downvotes": 4,
+      "downvotes": 6,
+      "commentUrl": "https://oceanwatch.news/cleanup-milestone-december-2024/comments",
       "commentCount": 156,
       "submittedAt": "2024-12-19T09:15:00.000Z",
       "thumbnailURL": null

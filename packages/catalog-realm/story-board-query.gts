@@ -140,12 +140,7 @@ class StoryCard extends GlimmerComponent<StoryCardComponentArgs> {
       <div class='story-content'>
         <h3 class='story-title'>
           {{#if @story.url}}
-            <a
-              href={{@story.url}}
-              target='_blank'
-              rel='noopener noreferrer'
-              class='external-link'
-            >
+            <a href={{@story.url}} target='_blank' rel='noopener noreferrer'>
               {{if @story.title @story.title 'Untitled Story'}}
               <ExternalLinkIcon width='12' height='12' class='external-icon' />
             </a>
@@ -173,7 +168,20 @@ class StoryCard extends GlimmerComponent<StoryCardComponentArgs> {
           <span class='author'>by
             {{if @story.author @story.author 'anonymous'}}</span>
           <span class='time'>{{this.timeAgo}}</span>
-          <span class='comments'>{{@story.commentCount}} comments</span>
+
+          {{#if @story.commentUrl}}
+            <a
+              href={{@story.commentUrl}}
+              target='_blank'
+              rel='noopener noreferrer'
+              class='comments'
+            >
+              {{@story.commentCount}}
+              comments
+            </a>
+          {{else}}
+            <span class='comments'>{{@story.commentCount}} comments</span>
+          {{/if}}
         </div>
       </div>
     </article>
@@ -373,10 +381,13 @@ class StoryCard extends GlimmerComponent<StoryCardComponentArgs> {
         font-size: 11px;
       }
 
-      .external-link {
-        /* Prevents CardContainer click when clicking external links */
-        z-index: 1;
-        position: relative;
+      a.comments {
+        color: #135cae;
+      }
+
+      a.comments:hover {
+        color: #ff6600;
+        text-decoration: underline;
       }
 
       .story-title-text {
@@ -416,6 +427,7 @@ export class Story extends CardDef {
   @field author = contains(StringField);
   @field upvotes = contains(NumberField);
   @field downvotes = contains(NumberField);
+  @field commentUrl = contains(UrlField);
   @field commentCount = contains(NumberField);
   @field submittedAt = contains(DatetimeField);
 
