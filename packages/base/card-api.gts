@@ -41,6 +41,7 @@ import {
   formats,
   meta,
   baseRef,
+  getAncestor,
   type Format,
   type Meta,
   type CardFields,
@@ -243,9 +244,7 @@ export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
     if (isEqual(codeRefInstance, codeRefClazz)) {
       return true;
     }
-    instanceClazz = instanceClazz
-      ? (Reflect.getPrototypeOf(instanceClazz) as typeof BaseDef | null)
-      : null;
+    instanceClazz = instanceClazz ? getAncestor(instanceClazz) : null;
   } while (codeRefInstance && !isEqual(codeRefInstance, baseRef));
   return false;
 }
