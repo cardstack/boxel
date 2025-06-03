@@ -488,7 +488,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       .exists({ count: 2 });
   });
 
-  test('after command is issued, a reaction event will be dispatched', async function (assert) {
+  test('after command is executed, a command result event will be dispatched', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -558,10 +558,31 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       commandResultEvents.length,
       1,
       'command result event is dispatched',
+    );
+    assert.deepEqual(
+      JSON.parse(commandResultEvents[0].content.data).context,
+      {
+        submode: 'interact',
+        debug: false,
+        openCardIds: ['http://test-realm/test/Person/fadhlan'],
+        realmUrl: 'http://test-realm/test/',
+      },
+      'command result event contains the context',
+    );
+    assert.deepEqual(
+      JSON.parse(commandResultEvents[0].content.data).attachedCards[0].name,
+      'Evie',
+      'command result event contains cards whose ID was reference in the input of the command as attached cards 1',
+    );
+    assert.deepEqual(
+      JSON.parse(commandResultEvents[0].content.data).attachedCards[0]
+        .sourceUrl,
+      'http://test-realm/test/Person/fadhlan',
+      'command result event contains cards whose ID was reference in the input of the command as attached cards 2',
     );
   });
 
-  test('after search command is issued, a command result event is dispatched', async function (assert) {
+  test('after search command is executed, a command result event is dispatched', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -621,6 +642,16 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       commandResultEvents.length,
       1,
       'command result event is dispatched',
+    );
+    assert.deepEqual(
+      JSON.parse(commandResultEvents[0].content.data).context,
+      {
+        submode: 'interact',
+        debug: false,
+        openCardIds: ['http://test-realm/test/Person/fadhlan'],
+        realmUrl: 'http://test-realm/test/',
+      },
+      'command result event contains the context',
     );
   });
 

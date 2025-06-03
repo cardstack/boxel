@@ -111,6 +111,28 @@ ${REPLACE_MARKER}\n\`\`\``;
       1,
       'code patch result event is dispatched',
     );
+    assert.deepEqual(
+      JSON.parse(codePatchResultEvents[0].content?.data ?? '{}').context,
+      {
+        submode: 'code',
+        debug: false,
+        openCardIds: [],
+        realmUrl: 'http://test-realm/test/',
+      },
+      'patch code result event contains the context',
+    );
+    assert.deepEqual(
+      JSON.parse(codePatchResultEvents[0].content?.data ?? '{}')
+        .attachedFiles?.[0]?.name,
+      'hello.txt',
+      'updated file should be attached 1',
+    );
+    assert.deepEqual(
+      JSON.parse(codePatchResultEvents[0].content?.data ?? '{}')
+        .attachedFiles?.[0]?.sourceUrl,
+      'http://test-realm/test/hello.txt',
+      'updated file should be attached 2',
+    );
   });
 
   test('can patch code when there are multiple patches using "Accept All" button', async function (assert) {
