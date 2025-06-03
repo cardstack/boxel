@@ -21,6 +21,8 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE,
+  APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -34,6 +36,7 @@ import type {
   JoinEvent,
   LeaveEvent,
   CardMessageEvent,
+  DebugMessageEvent,
   MessageEvent,
   CommandResultEvent,
   RealmServerEvent,
@@ -54,6 +57,7 @@ import type Room from '../lib/matrix-classes/room';
 
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
@@ -89,6 +93,7 @@ export class RoomResource extends Resource<Args> {
   // that updates immediately after the user selects the LLM.
   @tracked private llmBeingActivated: string | undefined;
   @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private commandService: CommandService;
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
@@ -140,6 +145,7 @@ export class RoomResource extends Resource<Args> {
             await this.loadRoomMemberEvent(roomId, event);
             break;
           case 'm.room.message':
+          case APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE:
             if (this.isRealmServerEvent(event)) {
               break;
             } else {
@@ -149,6 +155,9 @@ export class RoomResource extends Resource<Args> {
                 index,
               });
             }
+            break;
+          case APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE:
+            await this.loadRoomMessage({ roomId, event, index });
             break;
           case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
             await this.updateMessageCommandResult({ roomId, event, index });
@@ -412,7 +421,7 @@ export class RoomResource extends Resource<Args> {
     index,
   }: {
     roomId: string;
-    event: MessageEvent | CardMessageEvent;
+    event: MessageEvent | CardMessageEvent | DebugMessageEvent;
     index: number;
   }) {
     let effectiveEventId = this.getEffectiveEventId(event);
@@ -531,7 +540,8 @@ export class RoomResource extends Resource<Args> {
       | MessageEvent
       | CardMessageEvent
       | CommandResultEvent
-      | CodePatchResultEvent,
+      | CodePatchResultEvent
+      | DebugMessageEvent,
   ) {
     if (!('m.relates_to' in event.content)) {
       return event.event_id;

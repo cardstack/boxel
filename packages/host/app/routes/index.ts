@@ -72,6 +72,10 @@ export default class Index extends Route<void> {
       // we need to fetch the subscription data right after login
       await this.billingService.initializeSubscriptionData();
     }
+    // Do not need to wait for these to complete,
+    // in the workspace chooser we'll retrigger login and wait for them to complete
+    // and when fetching cards or files we have reauthentication mechanism.
+    this.matrixService.loginToRealms();
 
     let cardUrl: string | undefined = cardPath
       ? await this.getCardUrl(cardPath)
