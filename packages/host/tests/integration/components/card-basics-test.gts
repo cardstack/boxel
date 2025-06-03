@@ -2145,6 +2145,7 @@ module('Integration | card-basics', function (hooks) {
       }
       loader.shimModule(`${testRealmURL}test-cards`, {
         TestCard,
+        TestField,
         SubTestField,
       });
 
@@ -2221,6 +2222,7 @@ module('Integration | card-basics', function (hooks) {
 
       loader.shimModule(`${testRealmURL}test-cards`, {
         TestCardWithField,
+        TestField,
         TestCard,
         SubTestField,
       });

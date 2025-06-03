@@ -244,7 +244,7 @@ export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
     if (isEqual(codeRefInstance, codeRefClazz)) {
       return true;
     }
-    instanceClazz = instanceClazz ? getAncestor(instanceClazz) : null;
+    instanceClazz = instanceClazz ? getAncestor(instanceClazz) ?? null : null;
   } while (codeRefInstance && !isEqual(codeRefInstance, baseRef));
   return false;
 }
