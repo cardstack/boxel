@@ -114,6 +114,9 @@ ${REPLACE_MARKER}\n\`\`\``;
     assert.deepEqual(
       JSON.parse(codePatchResultEvents[0].content?.data ?? '{}').context,
       {
+        codeMode: {
+          currentFile: 'http://test-realm/test/hello.txt',
+        },
         submode: 'code',
         debug: false,
         openCardIds: [],

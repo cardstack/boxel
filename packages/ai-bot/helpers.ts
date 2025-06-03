@@ -680,6 +680,9 @@ export const buildContextMessage = async (
     } else {
       result += `The user has no open cards.\n`;
     }
+    if (context?.codeMode?.currentFile) {
+      result += `File open in code editor: ${context.codeMode.currentFile}\n`;
+    }
   } else {
     result += `The user has no open cards.\n`;
   }

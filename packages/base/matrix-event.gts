@@ -166,12 +166,15 @@ export type EncodedCommandRequest = Omit<CommandRequest, 'arguments'> & {
   arguments: string;
 };
 
-interface BoxelContext {
+export interface BoxelContext {
   openCardIds?: string[];
   realmUrl?: string;
   tools?: Tool[];
   toolChoice?: ToolChoice;
   submode?: string;
+  codeMode?: {
+    currentFile?: string;
+  };
   debug?: boolean;
   requireToolCall?: boolean;
   functions?: Tool['function'][];
