@@ -812,6 +812,11 @@ export default class PlaygroundPanel extends Component<Signature> {
         border-top-right-radius: var(--boxel-border-radius);
       }
 
+      .instance-chooser-container.with-error :deep(.instance-chooser) {
+        border-radius: var(--boxel-border-radius);
+        box-shadow: var(--boxel-deep-box-shadow);
+      }
+
       .playground-panel-content {
         display: flex;
         flex-direction: column;
@@ -862,6 +867,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         display: grid;
         grid-template-rows: max-content;
         margin-left: calc(-1 * var(--boxel-sp));
+        padding-bottom: var(--boxel-sp-xxl);
         width: calc(100% + calc(2 * var(--boxel-sp)));
       }
     </style>

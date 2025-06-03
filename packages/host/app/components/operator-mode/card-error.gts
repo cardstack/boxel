@@ -69,7 +69,6 @@ export default class CardErrorComponent extends Component<Signature> {
     </div>
 
     <CardErrorDetail
-      class={{if (has-block 'error') 'has-error-block'}}
       @error={{@error}}
       @title={{this.errorTitle}}
       @viewInCodeMode={{@viewInCodeMode}}
@@ -111,10 +110,6 @@ export default class CardErrorComponent extends Component<Signature> {
         min-height: var(--boxel-form-control-height);
         background-color: var(--boxel-100);
         box-shadow: 0 1px 0 0 rgba(0 0 0 / 15%);
-      }
-      .has-error-block :deep(.error-display) {
-        border-top-left-radius: 0;
-        border-top-right-radius: 0;
       }
     </style>
   </template>
