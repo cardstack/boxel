@@ -397,9 +397,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         if (this.isApp(selectedDeclaration)) {
           return 'app';
         }
-        if (await this.isSkill(selectedDeclaration)) {
-          return 'skill';
-        }
         return 'card';
       }
       if (isFieldDef(selectedDeclaration.cardOrField)) {
