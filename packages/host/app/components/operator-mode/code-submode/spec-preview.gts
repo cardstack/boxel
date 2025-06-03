@@ -29,13 +29,13 @@ import {
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
-import type { ModuleInspectorView } from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import { type ModuleDeclaration } from '@cardstack/host/resources/module-contents';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type { ModuleInspectorView } from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';

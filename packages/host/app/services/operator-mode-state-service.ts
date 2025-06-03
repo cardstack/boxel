@@ -94,6 +94,8 @@ interface OpenFileSubscriber {
   onStateChange: (state: FileResource['state']) => void;
 }
 
+export type ModuleInspectorView = 'schema' | 'spec' | 'preview';
+
 export default class OperatorModeStateService extends Service {
   @tracked state: OperatorModeState = new TrackedObject({
     stacks: new TrackedArray<Stack>([]),

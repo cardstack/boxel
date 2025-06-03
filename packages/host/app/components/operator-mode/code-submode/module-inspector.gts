@@ -63,6 +63,7 @@ import {
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type { ModuleInspectorView } from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -74,8 +75,6 @@ import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
-
-export type ModuleInspectorView = 'schema' | 'spec' | 'preview';
 
 const moduleInspectorPanels: ModuleInspectorView[] = [
   'schema',
