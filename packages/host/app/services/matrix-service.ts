@@ -75,6 +75,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as FileAPI from 'https://cardstack.com/base/file-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 import type {
+  BoxelContext,
   CardMessageContent,
   MatrixEvent as DiscreteMatrixEvent,
   CodePatchResultContent,
@@ -123,13 +124,6 @@ const SLIDING_SYNC_LIST_RANGE_END = 9;
 const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
 
 const realmEventsLogger = logger('realm:events');
-
-export type OperatorModeContext = {
-  submode: Submode;
-  openCardIds: string[];
-  debug?: boolean;
-  realmUrl: string;
-};
 
 export default class MatrixService extends Service {
   @service declare private loaderService: LoaderService;
@@ -778,7 +772,7 @@ export default class MatrixService extends Service {
     resultCard?: CardDef,
     attachedCards: CardDef[] = [],
     attachedFiles: FileDef[] = [],
-    context?: OperatorModeContext,
+    context?: BoxelContext,
   ) {
     let resultCardFileDef: FileDef | undefined;
     if (resultCard) {
@@ -840,7 +834,7 @@ export default class MatrixService extends Service {
     resultKey: CodePatchStatus,
     attachedCards: CardDef[] = [],
     attachedFiles: FileDef[] = [],
-    context: OperatorModeContext,
+    context: BoxelContext,
   ) {
     let contentData = await this.withContextAndAttachments(
       context,
@@ -882,7 +876,7 @@ export default class MatrixService extends Service {
     attachedCards: CardDef[] = [],
     attachedFiles: FileDef[] = [],
     clientGeneratedId = uuidv4(),
-    context?: OperatorModeContext,
+    context?: BoxelContext,
   ): Promise<void> {
     let tools: Tool[] = [];
     let attachedOpenCards: CardDef[] = [];
@@ -932,11 +926,11 @@ export default class MatrixService extends Service {
   }
 
   private async withContextAndAttachments(
-    context?: OperatorModeContext,
+    context?: BoxelContext,
     attachedCards: CardDef[] = [],
     attachedFiles: FileDef[] = [],
   ): Promise<{
-    context: OperatorModeContext | undefined;
+    context: BoxelContext | undefined;
     attachedCards: ReturnType<FileDef['serialize']>[];
     attachedFiles: ReturnType<FileDef['serialize']>[];
   }> {

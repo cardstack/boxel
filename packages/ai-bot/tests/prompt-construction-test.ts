@@ -493,7 +493,11 @@ module('getModifyPrompt', (hooks) => {
           data: {
             context: {
               tools: [],
-              submode: undefined,
+              submode: 'code',
+              codeMode: {
+                currentFile:
+                  'http://test-realm-server/my-realm/spaghetti-recipe.gts',
+              },
               functions: [],
             },
             attachedFiles: [
@@ -550,7 +554,11 @@ module('getModifyPrompt', (hooks) => {
           data: {
             context: {
               tools: [],
-              submode: undefined,
+              submode: 'code',
+              codeMode: {
+                currentFile:
+                  'http://test-realm-server/my-realm/spaghetti-recipe.gts',
+              },
               functions: [],
             },
             attachedFiles: [
@@ -627,6 +635,13 @@ Attached files:
 [example.pdf](http://test.com/my-realm/example.pdf): Error loading attached file: Unsupported file type: application/pdf. For now, only text files are supported.
       `.trim(),
       ),
+    );
+
+    assert.ok(
+      prompt[prompt.length - 2].content?.includes(
+        'File open in code editor: http://test-realm-server/my-realm/spaghetti-recipe.gts',
+      ),
+      'Context should include the URL of the file open in the code editor',
     );
   });
 
