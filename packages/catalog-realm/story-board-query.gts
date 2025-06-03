@@ -13,7 +13,7 @@ import MarkdownField from 'https://cardstack.com/base/markdown';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
-import { concat } from '@ember/helper';
+import { concat, fn } from '@ember/helper';
 import { eq, gt } from '@cardstack/boxel-ui/helpers';
 import { Query } from '@cardstack/runtime-common';
 import { realmURL } from '@cardstack/runtime-common';
@@ -432,18 +432,51 @@ export class Story extends CardDef {
 
 // Isolated story board definition
 class IsolatedStoryBoard extends Component<typeof StoryBoard> {
+  @tracked sortBy: 'hot' | 'new' | 'top' = 'hot';
   @tracked userVote: 'up' | 'down' | null = null;
   @tracked isDiggAnimating = false;
   @tracked isBuryAnimating = false;
 
   private get storyQuery(): Query {
+    // Define how stories should be sorted for each view type
+    const sortConfig = {
+      hot: {
+        by: 'points', // Sort by total points (upvotes - downvotes)
+        direction: 'desc', // Show highest points first
+      },
+      new: {
+        by: 'submittedAt', // Sort by submission date
+        direction: 'desc', // Show newest first
+      },
+      top: {
+        by: 'points', // Sort by total points
+        direction: 'desc', // Show highest points first
+      },
+    };
+
+    // Get the current module URL for filtering and sorting
+    const moduleUrl = new URL('./story-board-query', import.meta.url).href;
+
+    // Build and return the query object
     return {
+      // Filter to only show Story type cards
       filter: {
         type: {
-          module: new URL('./story-board-query', import.meta.url).href,
+          module: moduleUrl,
           name: 'Story',
         },
       },
+      // Sort based on the selected view type, defaulting to 'hot'
+      sort: [
+        {
+          by: sortConfig[this.sortBy].by,
+          on: {
+            module: moduleUrl,
+            name: 'Story',
+          },
+          direction: sortConfig[this.sortBy].direction as 'asc' | 'desc',
+        },
+      ],
     };
   }
 
@@ -451,7 +484,7 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
     return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
   }
 
-  // ⁽⁸⁸⁾ Load stories using getCards API
+  // Load stories using getCards API
   storiesSearch = this.args.context?.getCards(
     this,
     () => this.storyQuery,
@@ -461,6 +494,21 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
     },
   );
 
+  @action toggleSort(sortType: 'hot' | 'new' | 'top') {
+    this.startViewTransition(() => {
+      this.sortBy = sortType;
+    });
+  }
+
+  // View transition support for smooth reordering
+  startViewTransition(callback: () => void) {
+    if (typeof document !== 'undefined' && 'startViewTransition' in document) {
+      (document as any).startViewTransition(callback);
+    } else {
+      callback(); // Fallback for browsers without support
+    }
+  }
+
   <template>
     <div class='stage'>
       <div class='board-mat'>
@@ -469,6 +517,30 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
             <h1 class='board-title'>
               {{if @model.boardName @model.boardName 'Story Central'}}
             </h1>
+
+            <div class='board-nav'>
+              <button
+                type='button'
+                class='nav-btn {{if (eq this.sortBy "hot") "active" ""}}'
+                {{on 'click' (fn this.toggleSort 'hot')}}
+              >
+                Hot
+              </button>
+              <button
+                type='button'
+                class='nav-btn {{if (eq this.sortBy "new") "active" ""}}'
+                {{on 'click' (fn this.toggleSort 'new')}}
+              >
+                New
+              </button>
+              <button
+                type='button'
+                class='nav-btn {{if (eq this.sortBy "top") "active" ""}}'
+                {{on 'click' (fn this.toggleSort 'top')}}
+              >
+                Top
+              </button>
+            </div>
           </div>
         </header>
 
@@ -540,6 +612,31 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
         font-weight: 600;
         margin: 0;
         color: hsl(0 0% 9%);
+      }
+
+      .board-nav {
+        display: flex;
+        gap: 8px;
+      }
+      .nav-btn {
+        background: hsl(0 0% 100%);
+        border: 1px solid hsl(0 0% 89.8%);
+        color: hsl(0 0% 45.1%);
+        padding: 8px 12px;
+        cursor: pointer;
+        font-weight: 500;
+        border-radius: 6px;
+        font-size: 13px;
+        transition: all 0.15s ease;
+      }
+      .nav-btn:hover {
+        background: hsl(0 0% 96.1%);
+        color: hsl(0 0% 9%);
+      }
+      .nav-btn.active {
+        background: hsl(0 0% 9%);
+        color: hsl(0 0% 98%);
+        border-color: hsl(0 0% 9%);
       }
 
       .stories-container {
