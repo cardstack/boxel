@@ -26,87 +26,6 @@ import { setupApplicationTest } from '../helpers/setup';
 const catalogRealmURL = 'http://localhost:4201/catalog/';
 const testRealm2URL = `http://test-realm/test2/`;
 
-const listingCardSource = `
-  import {
-    field,
-    contains,
-    linksTo,
-    linksToMany,
-    containsMany,
-    CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import { Spec } from 'https://cardstack.com/base/spec';
-  import StringField from 'https://cardstack.com/base/string';
-  import TextAreaField from 'https://cardstack.com/base/text-area';
-  import MarkdownField from 'https://cardstack.com/base/markdown';
-  import ColorField from 'https://cardstack.com/base/color';
-
-  export class Listing extends CardDef {
-    static displayName = 'Listing';
-    static headerColor = '#6638ff';
-    @field name = contains(StringField);
-    @field summary = contains(MarkdownField);
-    @field specs = linksToMany(() => Spec);
-    @field publisher = linksTo(() => Publisher);
-    @field categories = linksToMany(() => Category);
-    @field tags = linksToMany(() => Tag);
-    @field license = linksTo(() => License);
-    @field images = containsMany(StringField);
-    @field examples = linksToMany(CardDef);
-
-    @field title = contains(StringField, {
-      computeVia(this: Listing) {
-        return this.name;
-      },
-    });
-  }
-
-  export class Publisher extends CardDef {
-    static displayName = 'Publisher';
-    static headerColor = '#00ebac';
-    @field name = contains(StringField);
-    @field title = contains(StringField, {
-      computeVia(this: Publisher) {
-        return this.name;
-      },
-    });
-  }
-
-  export class Category extends CardDef {
-    static displayName = 'Category';
-    static headerColor = '#00ebac';
-    @field name = contains(StringField);
-    @field title = contains(StringField, {
-      computeVia: function (this: Category) {
-        return this.name;
-      },
-    });
-  }
-
-  export class License extends CardDef {
-    static displayName = 'License';
-    static headerColor = '#00ebac';
-    @field name = contains(StringField);
-    @field content = contains(TextAreaField);
-    @field title = contains(StringField, {
-      computeVia: function (this: License) {
-        return this.name;
-      },
-    });
-  }
-
-  export class Tag extends CardDef {
-    static displayName = 'Tag';
-    @field name = contains(StringField);
-    @field title = contains(StringField, {
-      computeVia: function (this: Tag) {
-        return this.name;
-      },
-    });
-    @field color = contains(ColorField);
-  }
-`;
-
 const authorCardSource = `
   import { field, contains, CardDef } from 'https://cardstack.com/base/card-api';
   import StringField from 'https://cardstack.com/base/string';
@@ -145,7 +64,6 @@ module('Acceptance | catalog app tests', function (hooks) {
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
-        'listing.gts': listingCardSource,
         'author/author.gts': authorCardSource,
         'author/Author/example.json': {
           data: {
@@ -229,7 +147,7 @@ module('Acceptance | catalog app tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: '../listing',
+                module: `${catalogRealmURL}catalog-app/listing/listing`,
                 name: 'Listing',
               },
             },
@@ -293,6 +211,46 @@ module('Acceptance | catalog app tests', function (hooks) {
 
     assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
     assert.strictEqual(message.content.body, expectedMessage);
+  }
+
+  async function verifyInstanceExists(
+    targetRealm: string,
+    targetDirPrefix: string,
+    dirName: string,
+    assert: Assert,
+  ) {
+    await visitOperatorMode({
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${targetRealm}index`,
+    });
+    await waitForCodeEditor();
+
+    await waitFor(`[data-test-directory^="${targetDirPrefix}"]`);
+    const element = document.querySelector(
+      `[data-test-directory^="${targetDirPrefix}"]`,
+    );
+    const fullPath = element?.getAttribute('data-test-directory');
+    await click(`[data-test-directory="${fullPath}"]`);
+
+    assert.dom(`[data-test-directory="${fullPath}"] .icon`).hasClass('open');
+
+    const instancePath = `${fullPath}${dirName}/`;
+    await waitFor(`[data-test-directory="${instancePath}"]`);
+    await click(`[data-test-directory="${instancePath}"]`);
+
+    assert
+      .dom(`[data-test-directory="${instancePath}"] .icon`)
+      .hasClass('open');
+
+    await waitFor(
+      `[data-test-file^="${instancePath}"][data-test-file$=".json"]`,
+    );
+    await click(`[data-test-file^="${instancePath}"][data-test-file$=".json"]`);
+    assert
+      .dom(`[data-test-file^="${instancePath}"][data-test-file$=".json"]`)
+      .exists()
+      .hasClass('selected');
   }
 
   async function executeCommand(
@@ -438,6 +396,26 @@ module('Acceptance | catalog app tests', function (hooks) {
         .dom(`[data-test-file^="${examplePath}"][data-test-file$=".json"]`)
         .exists('Author Example with uuid instance exists')
         .hasClass('selected', 'Author Example with uuid instance is selected');
+    });
+
+    test('use command copy skills from skill listing to the workspace successfully', async function (assert) {
+      let listingName = 'talk-like-a-pirate';
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${catalogRealmURL}SkillListing/${listingName}`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+      await executeCommand(
+        ListingUseCommand,
+        `${catalogRealmURL}SkillListing/${listingName}`,
+        testRealm2URL,
+      );
+      await verifyInstanceExists(testRealm2URL, listingName, 'Skill', assert);
     });
 
     test('install command installs the card and example successfully', async function (assert) {
