@@ -14,6 +14,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -149,10 +150,32 @@ export interface Tool {
   };
 }
 
+export interface DebugMessageEvent extends BaseMatrixEvent {
+  type: typeof APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE;
+  content: CardMessageContent;
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
 // Synapse JSON does not support decimals, so we encode all arguments as stringified JSON
 export type EncodedCommandRequest = Omit<CommandRequest, 'arguments'> & {
   arguments: string;
 };
+
+interface BoxelContext {
+  openCardIds?: string[];
+  realmUrl?: string;
+  tools?: Tool[];
+  toolChoice?: ToolChoice;
+  submode?: string;
+  debug?: boolean;
+  requireToolCall?: boolean;
+  functions?: Tool['function'][];
+}
 
 export interface CardMessageContent {
   'm.relates_to'?: {
@@ -175,15 +198,7 @@ export interface CardMessageContent {
     // we retrieve the content on the server side by downloading the file
     attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
     attachedCards?: (SerializedFile & { content?: string; error?: string })[];
-    context?: {
-      openCardIds?: string[];
-      realmUrl?: string;
-      tools?: Tool[];
-      toolChoice?: ToolChoice;
-      submode?: string;
-      requireToolCall?: boolean;
-      functions?: Tool['function'][];
-    };
+    context?: BoxelContext;
   };
 }
 
@@ -243,6 +258,9 @@ export interface CommandResultWithOutputContent {
   data: {
     // we retrieve the content on the server side by downloading the file
     card?: SerializedFile & { content?: string; error?: string };
+    context?: BoxelContext;
+    attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
+    attachedCards?: (SerializedFile & { content?: string; error?: string })[];
   };
   msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE;
 }
@@ -255,6 +273,11 @@ export interface CommandResultWithNoOutputContent {
   };
   msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE;
   commandRequestId: string;
+  data: {
+    context?: BoxelContext;
+    attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
+    attachedCards?: (SerializedFile & { content?: string; error?: string })[];
+  };
 }
 
 export type CodePatchStatus = 'applied' | 'failed'; // possibly add 'rejected' in the future
@@ -267,6 +290,11 @@ export interface CodePatchResultContent {
   };
   msgtype: typeof APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE;
   codeBlockIndex: number;
+  data: {
+    context?: BoxelContext;
+    attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
+    attachedCards?: (SerializedFile & { content?: string; error?: string })[];
+  };
 }
 
 export interface RealmServerEvent extends BaseMatrixEvent {
@@ -343,6 +371,7 @@ export type MatrixEvent =
   | CardMessageEvent
   | CodePatchResultEvent
   | CommandResultEvent
+  | DebugMessageEvent
   | InviteEvent
   | JoinEvent
   | LeaveEvent

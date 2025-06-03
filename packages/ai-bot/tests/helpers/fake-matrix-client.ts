@@ -11,7 +11,19 @@ export class FakeMatrixClient implements MatrixClient {
     content: IContent;
   }[] = [];
 
-  // Add http property for testing
+  baseUrl = 'https://example.com';
+
+  async uploadContent(
+    _content: string,
+    _opts?: {
+      type: string;
+    },
+  ): Promise<{ content_uri: string }> {
+    return {
+      content_uri: 'https://example.com/content',
+    };
+  }
+
   http: {
     authedRequest: (
       method: Method,

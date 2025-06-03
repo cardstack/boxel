@@ -1,5 +1,7 @@
 import Owner from '@ember/owner';
 
+import { getService } from '@universal-ember/test-support';
+
 import { MatrixEvent } from 'matrix-js-sdk';
 
 import * as MatrixSDK from 'matrix-js-sdk';
@@ -18,6 +20,7 @@ import {
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
@@ -28,7 +31,6 @@ import type { FileDefManager } from '@cardstack/host/lib/file-def-manager';
 import FileDefManagerImpl from '@cardstack/host/lib/file-def-manager';
 import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader';
 
-import MatrixService from '@cardstack/host/services/matrix-service';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -66,12 +68,10 @@ export class MockClient implements ExtendedClient {
     private clientOpts: MatrixSDK.ICreateClientOpts,
     private sdkOpts: Config,
   ) {
-    let matrixService = this.owner.lookup(
-      'service:matrix-service',
-    ) as MatrixService;
+    let matrixService = getService('matrix-service');
     this.fileDefManager = new FileDefManagerImpl({
       client: this as unknown as MatrixSDK.MatrixClient,
-      owner,
+      owner: this.owner,
       getCardAPI: () => matrixService.cardAPI,
       getFileAPI: () => matrixService.fileAPI,
     });
@@ -153,6 +153,10 @@ export class MockClient implements ExtendedClient {
 
   get baseUrl(): string {
     return this.clientOpts.baseUrl;
+  }
+
+  downloadContentAsBlob(_file: FileDef): Promise<Blob> {
+    throw new Error('Method not implemented.');
   }
 
   hashMessageWithSecret(_message: string): Promise<string> {
@@ -477,6 +481,7 @@ export class MockClient implements ExtendedClient {
       case APP_BOXEL_ROOM_SKILLS_EVENT_TYPE:
       case APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE:
       case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
+      case APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE:
       case APP_BOXEL_ACTIVE_LLM:
       case APP_BOXEL_REALM_EVENT_TYPE:
       case 'm.room.create':
@@ -693,6 +698,12 @@ export class MockClient implements ExtendedClient {
       throw new Error(`content not found for ${serializedFile.url}`);
     }
     return JSON.parse(content.toString()) as LooseSingleCardDocument;
+  }
+
+  async downloadAsFileInBrowser(
+    _serializedFile: SerializedFile,
+  ): Promise<void> {
+    throw new Error('Method not implemented: downloadAsFileInBrowser');
   }
 
   mxcUrlToHttp(mxcUrl: string): string {

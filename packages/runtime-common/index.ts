@@ -1,4 +1,4 @@
-import { CardResource } from './card-document';
+import { CardResource, Meta } from './card-document';
 import type { ResolvedCodeRef } from './code-ref';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
@@ -17,6 +17,9 @@ export interface LooseSingleCardDocument {
 export type PatchData = {
   attributes?: CardResource['attributes'];
   relationships?: CardResource['relationships'];
+  meta?: {
+    fields: Meta['fields'];
+  };
 };
 
 export { Deferred } from './deferred';
@@ -73,6 +76,7 @@ import { RealmPaths, type LocalPath } from './paths';
 import { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './cached-fetch';
+export * from './catalog';
 export * from './commands';
 export * from './constants';
 export * from './matrix-constants';
@@ -99,12 +103,7 @@ export {
   cardTypeDisplayName,
   cardTypeIcon,
 } from './helpers/card-type-display-name';
-export {
-  maybeRelativeURL,
-  maybeURL,
-  relativeURL,
-  trimJsonExtension,
-} from './url';
+export * from './url';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
@@ -172,7 +171,6 @@ import type {
   Format,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { type Spec } from 'https://cardstack.com/base/spec';
 import { RealmInfo } from './realm';
 import { PrerenderedCard } from './index-query-engine';
 
@@ -446,21 +444,7 @@ export interface CopyCardsWithCodeRef {
 }
 
 export interface CatalogActions {
-  createFromSpec: (spec: Spec, realm: string, localDir?: LocalPath) => void;
-  copyCard: (
-    card: CardDef,
-    realm: string,
-    codeRef?: ResolvedCodeRef,
-    localDir?: LocalPath,
-  ) => Promise<CardDef>;
-  copyCards: (
-    cards: CopyCardsWithCodeRef[],
-    realm: string,
-    localDir?: LocalPath,
-  ) => Promise<CardDef[]>;
-  copySource: (fromUrl: string, toUrl: string) => Promise<void>;
   allRealmsInfo: () => Record<string, { canWrite: boolean; info: RealmInfo }>;
-  fetchCard: (url: string) => Promise<CardDef | CardErrorJSONAPI | undefined>;
 }
 
 export type Actions = CardActions & CatalogActions;
@@ -571,3 +555,5 @@ export function unixTime(epochTimeMs: number) {
 export function isLocalId(id: string) {
   return !id.startsWith('http');
 }
+
+export * from './prerendered-card-search';

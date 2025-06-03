@@ -2,10 +2,10 @@
   {
     "type": "m.room.create",
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@admin:localhost",
+    "sender": "@user:localhost",
     "content": {
       "room_version": "10",
-      "creator": "@admin:localhost"
+      "creator": "@user:localhost"
     },
     "state_key": "",
     "origin_server_ts": 1736864362728,
@@ -13,33 +13,33 @@
       "age": 71431
     },
     "event_id": "$BbFv3bQk_6IXS845CttWkNqprc00PaW7egknDPzAb3U",
-    "user_id": "@admin:localhost",
+    "user_id": "@user:localhost",
     "age": 71431
   },
   {
     "type": "m.room.member",
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@admin:localhost",
+    "sender": "@user:localhost",
     "content": {
       "membership": "join",
       "displayname": "admin"
     },
-    "state_key": "@admin:localhost",
+    "state_key": "@user:localhost",
     "origin_server_ts": 1736864362765,
     "unsigned": {
       "age": 71394
     },
     "event_id": "$auoMF6x0EHAGAIVbeHjsLdrepN5NWaoXVkWPa_QNZ1o",
-    "user_id": "@admin:localhost",
+    "user_id": "@user:localhost",
     "age": 71394
   },
   {
     "type": "m.room.power_levels",
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@admin:localhost",
+    "sender": "@user:localhost",
     "content": {
       "users": {
-        "@admin:localhost": 100
+        "@user:localhost": 100
       },
       "users_default": 0,
       "events": {
@@ -66,13 +66,13 @@
       "age": 71366
     },
     "event_id": "$XPa4Nfoi-LpJRvCCHMPd088dnrzt-Uc8R0lb-56MCUQ",
-    "user_id": "@admin:localhost",
+    "user_id": "@user:localhost",
     "age": 71366
   },
   {
     "type": "m.room.canonical_alias",
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@admin:localhost",
+    "sender": "@user:localhost",
     "content": {
       "alias": "#Weather%20Travel%20Advice%20-%202025-01-14T14%3A19%3A22.706%2B00%3A00%20-%20%40admin%3Alocalhost:localhost"
     },
@@ -82,13 +82,13 @@
       "age": 71352
     },
     "event_id": "$C7j2gqIzpWOjWp5yabZ2JLVGc5sh_KjuOdrtv7TavNE",
-    "user_id": "@admin:localhost",
+    "user_id": "@user:localhost",
     "age": 71352
   },
   {
     "type": "m.room.join_rules",
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@admin:localhost",
+    "sender": "@user:localhost",
     "content": {
       "join_rule": "invite"
     },
@@ -98,13 +98,13 @@
       "age": 71351
     },
     "event_id": "$8FT4iaFSox71dX5-Z0xgbiY2isoPL6ybLM37wXSKJOs",
-    "user_id": "@admin:localhost",
+    "user_id": "@user:localhost",
     "age": 71351
   },
   {
     "type": "m.room.history_visibility",
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@admin:localhost",
+    "sender": "@user:localhost",
     "content": {
       "history_visibility": "shared"
     },
@@ -114,13 +114,13 @@
       "age": 71350
     },
     "event_id": "$cxBIW2re3D1puIfhAyg067GLdW24FXctOqQ8Juma-Hs",
-    "user_id": "@admin:localhost",
+    "user_id": "@user:localhost",
     "age": 71350
   },
   {
     "type": "m.room.guest_access",
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@admin:localhost",
+    "sender": "@user:localhost",
     "content": {
       "guest_access": "can_join"
     },
@@ -130,13 +130,13 @@
       "age": 71350
     },
     "event_id": "$hSlWgIKf_y_uycz1Ae4USMOa4K17dq7f6VHSrN2nhcU",
-    "user_id": "@admin:localhost",
+    "user_id": "@user:localhost",
     "age": 71350
   },
   {
     "type": "m.room.name",
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@admin:localhost",
+    "sender": "@user:localhost",
     "content": {
       "name": "Writing Some Code"
     },
@@ -146,13 +146,13 @@
       "age": 71349
     },
     "event_id": "$isUAMN-pIaBk9gFFTn6UyyTk9QcG59QwOuWhXbfCEkw",
-    "user_id": "@admin:localhost",
+    "user_id": "@user:localhost",
     "age": 71349
   },
   {
     "type": "m.room.member",
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@admin:localhost",
+    "sender": "@user:localhost",
     "content": {
       "membership": "invite",
       "displayname": "aibot"
@@ -163,16 +163,16 @@
       "age": 71243
     },
     "event_id": "$Odud1s75LuD0WjceV_Y_Ek-OVoH5unWa_-g_NI_D1rc",
-    "user_id": "@admin:localhost",
+    "user_id": "@user:localhost",
     "age": 71243
   },
   {
     "type": "m.room.power_levels",
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@admin:localhost",
+    "sender": "@user:localhost",
     "content": {
       "users": {
-        "@admin:localhost": 100,
+        "@user:localhost": 100,
         "@aibot:localhost": 50
       },
       "users_default": 0,
@@ -200,7 +200,7 @@
       "replaces_state": "$XPa4Nfoi-LpJRvCCHMPd088dnrzt-Uc8R0lb-56MCUQ",
       "prev_content": {
         "users": {
-          "@admin:localhost": 100
+          "@user:localhost": 100
         },
         "users_default": 0,
         "events": {
@@ -221,16 +221,16 @@
         "invite": 0,
         "historical": 100
       },
-      "prev_sender": "@admin:localhost",
+      "prev_sender": "@user:localhost",
       "age": 71141
     },
     "event_id": "$TM9oHBXj1Iaa56XU4WF-yxjREXQNQJE1cWaqOqaWqrQ",
-    "user_id": "@admin:localhost",
+    "user_id": "@user:localhost",
     "age": 71141,
     "replaces_state": "$XPa4Nfoi-LpJRvCCHMPd088dnrzt-Uc8R0lb-56MCUQ",
     "prev_content": {
       "users": {
-        "@admin:localhost": 100
+        "@user:localhost": 100
       },
       "users_default": 0,
       "events": {
@@ -268,7 +268,7 @@
         "membership": "invite",
         "displayname": "aibot"
       },
-      "prev_sender": "@admin:localhost",
+      "prev_sender": "@user:localhost",
       "age": 71105
     },
     "event_id": "$Mp2uUXS9lIbgx8qKF43zBiqU-B0EXsdWv-IsAs8kz1I",
@@ -299,20 +299,20 @@
   {
     "type": "m.room.message",
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@admin:localhost",
+    "sender": "@user:localhost",
     "content": {
       "msgtype": "app.boxel.message",
       "body": "Write me some code to play tic tac toe",
       "format": "org.matrix.custom.html",
       "clientGeneratedId": "4a3d6e7f-f492-48de-b3e5-7ef8c5bda696",
-      "data": "{\"attachedCards\":[{\"sourceUrl\":\"http://test-realm-server/my-realm/tic-tac.gts\",\"url\":\"http://test.com/tic-tac.gts\",\"name\":\"tic-tac.gts\",\"contentType\":\"text/plain\"}],\"context\":{\"tools\":[],\"requireToolCall\":false}}"
+      "data": "{\"attachedCards\":[{\"sourceUrl\":\"http://test-realm-server/my-realm/tic-tac.gts\",\"url\":\"http://test.com/tic-tac.gts\",\"name\":\"tic-tac.gts\",\"contentType\":\"text/plain\"}],\"context\":{\"tools\":[],\"submode\":\"code\",\"requireToolCall\":false}}"
     },
     "origin_server_ts": 1736864363324,
     "unsigned": {
       "age": 70835
     },
     "event_id": "$FKof2RxEh_MEfR5iSCwXPOyfcC-t961Nnmvn2Hid6_I",
-    "user_id": "@admin:localhost",
+    "user_id": "@user:localhost",
     "age": 70835
   },
   {
@@ -337,7 +337,7 @@
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "Right, let us make a tic tac toe game.\n\nhttps://test.com/tic-tac.gts\n<<<<<<< SEARCH\nlet a = 1;\n=======\nlet a = 2;\n>>>>>>> REPLACE\n\nhttps://test.com/tac-toe.gts\n<<<<<<< SEARCH\nlet b = 2;\n=======\nlet b = 3;\n>>>>>>> REPLACE\n\nI can add some more whiz bang if you want. Let me know!",
+      "body": "Right, let us make a tic tac toe game.\n\nhttps://test.com/tic-tac.gts\n╔═══ SEARCH ════╗\nlet a = 1;\n╠═══════════════╣\nlet a = 2;\n╚═══ REPLACE ═══╝\n\nhttps://test.com/tac-toe.gts\n╔═══ SEARCH ════╗\nlet b = 2;\n╠═══════════════╣\nlet b = 3;\n╚═══ REPLACE ═══╝\n\nI can add some more whiz bang if you want. Let me know!",
       "msgtype": "app.boxel.message",
       "format": "org.matrix.custom.html",
       "data": "{}",

@@ -235,7 +235,7 @@ export class Realm {
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
-  readonly loaderTemplate: Loader;
+  #loaderTemplate: Loader;
   readonly paths: RealmPaths;
 
   private visibilityPromise?: Promise<RealmVisibility>;
@@ -292,7 +292,7 @@ export class Realm {
     let loader = new Loader(fetch, virtualNetwork.resolveImport);
     adapter.setLoader?.(loader);
 
-    this.loaderTemplate = loader;
+    this.#loaderTemplate = loader;
 
     this.#adapter = adapter;
     this.#queue = queue;
@@ -413,6 +413,10 @@ export class Realm {
       },
       requestContext,
     });
+  }
+
+  get loaderTemplate() {
+    return this.#loaderTemplate;
   }
 
   async indexing() {
@@ -573,6 +577,10 @@ export class Realm {
     }
   }
 
+  __resetLoaderForTest() {
+    this.#loaderTemplate = Loader.cloneLoader(this.#loaderTemplate);
+  }
+
   get realmIndexUpdater() {
     return this.#realmIndexUpdater;
   }
@@ -642,7 +650,7 @@ export class Realm {
       this.#realmSecretSeed,
       {
         badRequest: function (message: string) {
-          return badRequest(message, requestContext);
+          return badRequest({ message, requestContext });
         },
         createResponse: function (
           body: BodyInit | null,
@@ -748,11 +756,15 @@ export class Realm {
       }
     } catch (e) {
       if (e instanceof AuthenticationError) {
-        return new Response(`${e.message}`, {
-          status: 401,
-          headers: {
-            'X-Boxel-Realm-Url': requestContext.realm.url,
+        return createResponse({
+          body: e.message,
+          init: {
+            status: 401,
+            headers: {
+              'X-Boxel-Realm-Url': requestContext.realm.url,
+            },
           },
+          requestContext,
         });
       }
 
@@ -1218,31 +1230,31 @@ export class Realm {
     try {
       json = JSON.parse(body);
     } catch (e) {
-      return badRequest(
-        `Request body is not valid card JSON-API`,
+      return badRequest({
+        message: `Request body is not valid card JSON-API`,
         requestContext,
-      );
+      });
     }
     let { data: primaryResource, included: maybeIncluded } = json;
     if (!isCardResource(primaryResource)) {
-      return badRequest(
-        `Request body is not valid card JSON-API`,
+      return badRequest({
+        message: `Request body is not valid card JSON-API`,
         requestContext,
-      );
+      });
     }
     if (maybeIncluded) {
       if (!Array.isArray(maybeIncluded)) {
-        return badRequest(
-          `Request body is not valid card JSON-API: included is not array`,
+        return badRequest({
+          message: `Request body is not valid card JSON-API: included is not array`,
           requestContext,
-        );
+        });
       }
       for (let sideLoadedResource of maybeIncluded) {
         if (!isCardResource(sideLoadedResource)) {
-          return badRequest(
-            `Request body is not valid card JSON-API: side-loaded data is not a valid card resource`,
+          return badRequest({
+            message: `Request body is not valid card JSON-API: side-loaded data is not a valid card resource`,
             requestContext,
-          );
+          });
         }
       }
     }
@@ -1282,12 +1294,17 @@ export class Realm {
         );
       } catch (err: any) {
         if (err.message.startsWith('field validation error')) {
-          return badRequest(err.message, requestContext);
+          return badRequest({
+            message: err.message,
+            requestContext,
+            lid: resource.lid,
+          });
         } else {
           return systemError({
             requestContext,
             message: err.message,
             additionalError: err,
+            lid: resource.lid,
           });
         }
       }
@@ -1298,6 +1315,7 @@ export class Realm {
       return systemError({
         requestContext,
         message: `unable to determine URL of the primary resource from request payload`,
+        lid: primaryResource.lid,
       });
     }
     let [{ lastModified }] = await this.write(
@@ -1352,6 +1370,7 @@ export class Realm {
     }
 
     let url = this.paths.fileURL(localPath);
+    let instanceURL = url.href.replace(/\.json$/, '');
     let originalMaybeError =
       await this.#realmIndexQueryEngine.cardDocument(url);
     if (!originalMaybeError) {
@@ -1364,7 +1383,7 @@ export class Realm {
         additionalError: CardError.fromSerializableError(
           originalMaybeError.error,
         ),
-        id: request.url,
+        id: instanceURL,
       });
     }
     let { doc: original } = originalMaybeError;
@@ -1373,24 +1392,24 @@ export class Realm {
 
     let { data: patch, included: maybeIncluded } = await request.json();
     if (!isCardResource(patch)) {
-      return badRequest(
-        `The request body was not a card document`,
+      return badRequest({
+        message: `The request body was not a card document`,
         requestContext,
-      );
+      });
     }
     if (maybeIncluded) {
       if (!Array.isArray(maybeIncluded)) {
-        return badRequest(
-          `Request body is not valid card JSON-API: included is not array`,
+        return badRequest({
+          message: `Request body is not valid card JSON-API: included is not array`,
           requestContext,
-        );
+        });
       }
       for (let sideLoadedResource of maybeIncluded) {
         if (!isCardResource(sideLoadedResource)) {
-          return badRequest(
-            `Request body is not valid card JSON-API: side-loaded data is not a valid card resource`,
+          return badRequest({
+            message: `Request body is not valid card JSON-API: side-loaded data is not a valid card resource`,
             requestContext,
-          );
+          });
         }
       }
     }
@@ -1398,12 +1417,13 @@ export class Realm {
       internalKeyFor(patch.meta.adoptsFrom, url) !==
       internalKeyFor(originalClone.meta.adoptsFrom, url)
     ) {
-      return badRequest(
-        `Cannot change card instance type to ${JSON.stringify(
+      return badRequest({
+        message: `Cannot change card instance type to ${JSON.stringify(
           patch.meta.adoptsFrom,
         )}`,
         requestContext,
-      );
+        id: instanceURL,
+      });
     }
     let included = (maybeIncluded ?? []) as CardResource[];
 
@@ -1477,12 +1497,17 @@ export class Realm {
         );
       } catch (err: any) {
         if (err.message.startsWith('field validation error')) {
-          return badRequest(err.message, requestContext);
+          return badRequest({
+            message: err.message,
+            requestContext,
+            id: instanceURL,
+          });
         } else {
           return systemError({
             requestContext,
             message: err.message,
             additionalError: err,
+            id: instanceURL,
           });
         }
       }
@@ -1493,7 +1518,6 @@ export class Realm {
       files,
       request.headers.get('X-Boxel-Client-Request-Id'),
     );
-    let instanceURL = url.href.replace(/\.json$/, '');
     let entry = await this.#realmIndexQueryEngine.cardDocument(
       new URL(instanceURL),
       {
@@ -2010,25 +2034,25 @@ export class Realm {
     try {
       json = await request.json();
     } catch (e: any) {
-      return badRequest(
-        `The request body was not json: ${e.message}`,
+      return badRequest({
+        message: `The request body was not json: ${e.message}`,
         requestContext,
-      );
+      });
     }
     let patch = json.data?.attributes?.permissions;
     if (!patch) {
-      return badRequest(
-        `The request body was missing permissions`,
+      return badRequest({
+        message: `The request body was missing permissions`,
         requestContext,
-      );
+      });
     }
     try {
       assertRealmPermissions(patch);
     } catch (e: any) {
-      return badRequest(
-        `The request body does not specify realm permissions correctly: ${e.message}`,
+      return badRequest({
+        message: `The request body does not specify realm permissions correctly: ${e.message}`,
         requestContext,
-      );
+      });
     }
 
     let currentPermissions = await fetchUserPermissions(
@@ -2037,16 +2061,16 @@ export class Realm {
     );
     for (let [user, permissions] of Object.entries(patch)) {
       if (currentPermissions[user]?.includes('realm-owner')) {
-        return badRequest(
-          `cannot modify permissions of the realm owner ${user}`,
+        return badRequest({
+          message: `cannot modify permissions of the realm owner ${user}`,
           requestContext,
-        );
+        });
       }
       if (permissions?.includes('realm-owner')) {
-        return badRequest(
-          `cannot create new realm owner ${user}`,
+        return badRequest({
+          message: `cannot create new realm owner ${user}`,
           requestContext,
-        );
+        });
       }
     }
 

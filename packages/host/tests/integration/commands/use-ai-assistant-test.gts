@@ -1,6 +1,7 @@
 import { getOwner } from '@ember/owner';
 import { RenderingTestContext } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { skillCardRef } from '@cardstack/runtime-common';
@@ -14,7 +15,6 @@ import UseAiAssistantCommand from '@cardstack/host/commands/ai-assistant';
 import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
 import type CommandService from '@cardstack/host/services/command-service';
 import RealmService from '@cardstack/host/services/realm';
-import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -23,7 +23,6 @@ import type { Skill } from 'https://cardstack.com/base/skill';
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  lookupService,
   testRealmURL,
   testRealmInfo,
 } from '../../helpers';
@@ -125,7 +124,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
         },
       },
     });
-    commandService = lookupService<CommandService>('command-service');
+    commandService = getService('command-service');
   });
 
   test('creates a new room when no roomId is provided', async function (assert) {
@@ -205,7 +204,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
       name: 'room-with-attached-cards',
     });
 
-    let store = lookupService<StoreService>('store');
+    let store = getService('store');
 
     // Attach simple cards
     const card1 = (await store.get(`${testRealmURL}empty1.json`)) as CardDef;
@@ -347,7 +346,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
       name: 'room-with-skills',
     });
 
-    let store = lookupService<StoreService>('store');
+    let store = getService('store');
 
     // Load skill cards
     const skillCard1 = (await store.get(`${testRealmURL}skill1.json`)) as Skill;
@@ -509,7 +508,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
 
     const openCardIds = [`${testRealmURL}empty1`, `${testRealmURL}empty2`];
 
-    let store = lookupService<StoreService>('store');
+    let store = getService('store');
 
     // Attach simple cards
     const card1 = (await store.get(`${testRealmURL}empty1.json`)) as CardDef;

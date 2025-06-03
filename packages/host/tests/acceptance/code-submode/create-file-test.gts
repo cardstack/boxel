@@ -1,5 +1,6 @@
 import { click, fillIn, waitFor } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
@@ -14,7 +15,6 @@ import {
   getMonacoContent,
   visitOperatorMode as _visitOperatorMode,
   type TestContextWithSave,
-  lookupNetworkService,
   setupUserSubscription,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
@@ -224,7 +224,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     });
     setupUserSubscription(matrixRoomId);
 
-    lookupNetworkService().mount(
+    getService('network').mount(
       async (req: Request) => {
         // Some tests need a simulated creation failure
         if (req.url.includes('fetch-failure')) {
@@ -579,7 +579,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     });
 
     test<TestContextWithSave>('can create a new card definition in different realm than inherited definition', async function (assert) {
-      assert.expect(11);
+      assert.expect(12);
       let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
@@ -632,7 +632,10 @@ export class TrèsTestCard extends CardDef {
           { count: 3 },
           'the card hierarchy is displayed in schema editor',
         );
-      assert.dom('[data-test-total-fields]').containsText('3 Fields');
+      assert
+        .dom('[data-test-total-fields]')
+        .containsText('3')
+        .hasAttribute('title', '3 fields');
     });
 
     test<TestContextWithSave>('can create a new card definition in same realm as inherited definition', async function (assert) {

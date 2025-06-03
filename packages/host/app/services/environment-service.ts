@@ -14,3 +14,9 @@ export default class EnvironmentService extends Service {
     this.autoSaveDelayMs = autoSaveDelayMs;
   }
 }
+
+declare module '@ember/service' {
+  interface Registry {
+    'environment-service': EnvironmentService;
+  }
+}

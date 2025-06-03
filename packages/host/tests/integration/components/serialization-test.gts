@@ -1,5 +1,6 @@
 import { fillIn, RenderingTestContext } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import formatISO from 'date-fns/formatISO';
 import parseISO from 'date-fns/parseISO';
 
@@ -16,8 +17,6 @@ import {
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import type StoreService from '@cardstack/host/services/store';
-
 import { type CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
 import {
@@ -29,7 +28,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
-  lookupLoaderService,
 } from '../../helpers';
 
 import {
@@ -77,7 +75,7 @@ module('Integration | serialization', function (hooks) {
     };
     provideConsumeContext(PermissionsContextName, permissions);
 
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
   setupLocalIndexing(hooks);
 
@@ -226,6 +224,43 @@ module('Integration | serialization', function (hooks) {
       isSaved(unsavedCard),
       false,
       'API recognizes card as unsaved',
+    );
+  });
+
+  test('can deserialize a card with a local id', async function (assert) {
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person },
+      },
+    });
+
+    let resource = {
+      lid: 'mango-local-id',
+      attributes: {
+        firstName: 'Mango',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${testRealmURL}test-cards`,
+          name: 'Person',
+        },
+      },
+    };
+    let instance = (await createFromSerialized(
+      resource,
+      { data: resource },
+      undefined,
+    )) as CardDefType;
+
+    assert.strictEqual(
+      instance[localId],
+      'mango-local-id',
+      'instance local id is set',
     );
   });
 
@@ -4303,7 +4338,7 @@ module('Integration | serialization', function (hooks) {
       },
     });
 
-    let store = this.owner.lookup('service:store') as StoreService;
+    let store = getService('store');
     let captainMango = await store.get(`${testRealmURL}Captain/mango`);
     let mangoTheBoat = (captainMango as Captain).createEponymousBoat();
 

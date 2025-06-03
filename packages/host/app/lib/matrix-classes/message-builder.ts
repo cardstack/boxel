@@ -6,7 +6,11 @@ import { inject as service } from '@ember/service';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import { ResolvedCodeRef, getClass } from '@cardstack/runtime-common';
+import {
+  type ResolvedCodeRef,
+  getClass,
+  isCardInstance,
+} from '@cardstack/runtime-common';
 
 import {
   CommandRequest,
@@ -22,15 +26,17 @@ import {
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
+  APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { RoomSkill } from '@cardstack/host/resources/room';
-import type CommandService from '@cardstack/host/services/command-service';
 
-import LoaderService from '@cardstack/host/services/loader-service';
-import MatrixService from '@cardstack/host/services/matrix-service';
+import type CommandService from '@cardstack/host/services/command-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import type { CommandStatus } from 'https://cardstack.com/base/command';
 import { SerializedFile } from 'https://cardstack.com/base/file-api';
@@ -38,6 +44,7 @@ import type {
   CardMessageContent,
   CardMessageEvent,
   CodePatchResultEvent,
+  DebugMessageEvent,
   CommandResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
@@ -55,7 +62,7 @@ const ErrorMessage: Record<string, string> = {
 
 export default class MessageBuilder {
   constructor(
-    private event: MessageEvent | CardMessageEvent,
+    private event: MessageEvent | CardMessageEvent | DebugMessageEvent,
     owner: Owner,
     private builderContext: {
       roomId: string;
@@ -66,7 +73,6 @@ export default class MessageBuilder {
       events: DiscreteMatrixEvent[];
       codePatchResultEvent?: CodePatchResultEvent;
       commandResultEvent?: CommandResultEvent;
-      skillCardsCache: Map<string, Skill>;
     },
   ) {
     setOwner(this, owner);
@@ -75,6 +81,7 @@ export default class MessageBuilder {
   @service declare private commandService: CommandService;
   @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
+  @service declare private store: StoreService;
 
   private get coreMessageArgs() {
     return new Message({
@@ -156,6 +163,10 @@ export default class MessageBuilder {
     } else if (event.content.msgtype === 'm.text') {
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
     }
+    if (event.type === APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE) {
+      message.isDebugMessage = true;
+    }
+
     return message;
   }
 
@@ -277,8 +288,8 @@ export default class MessageBuilder {
       | { codeRef: ResolvedCodeRef; requiresApproval: boolean }
       | undefined;
     findCommand: for (let skill of this.builderContext.skills) {
-      let skillCard = this.builderContext.skillCardsCache.get(skill.cardId);
-      if (!skillCard) {
+      let skillCard = await this.store.get<Skill>(skill.cardId);
+      if (!skillCard || !isCardInstance(skillCard)) {
         continue;
       }
       for (let candidateSkillCommand of skillCard.commands) {
@@ -350,6 +361,9 @@ export default class MessageBuilder {
 export function isCardMessageEvent(
   matrixEvent: DiscreteMatrixEvent,
 ): matrixEvent is CardMessageEvent {
+  if (matrixEvent.type === APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE) {
+    return true;
+  }
   if (matrixEvent.type !== 'm.room.message') {
     return false;
   }

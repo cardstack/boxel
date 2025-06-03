@@ -2,10 +2,15 @@ import { waitFor, waitUntil, click } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
+
 import { module, test } from 'qunit';
 
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
   baseRealm,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
@@ -13,7 +18,6 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
@@ -24,7 +28,6 @@ import {
   setupLocalIndexing,
   setupOnSave,
   getMonacoContent,
-  lookupLoaderService,
 } from '../../../helpers';
 import {
   CardDef,
@@ -48,7 +51,7 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   setupLocalIndexing(hooks);
@@ -75,12 +78,10 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
   let noop = () => {};
 
   hooks.beforeEach(async function () {
-    operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
+    operatorModeStateService = getService('operator-mode-state-service');
 
     // Add cardService mock for example.com/component.gts
-    let cardService = this.owner.lookup('service:card-service') as CardService;
+    let cardService = getService('card-service');
     cardService.getSource = async (url: URL) => {
       if (url.toString() === 'https://example.com/component.gts') {
         return {
@@ -349,10 +350,10 @@ const data = {
 \`\`\`
 
 \`\`\`typescript
-  <<<<<<< SEARCH
+  ${SEARCH_MARKER}
     let a = 1;
     let c = 3;
-  =======
+  ${SEPARATOR_MARKER}
     let a = 2;
 \`\`\`
 
@@ -584,7 +585,7 @@ And some regular text with <b>HTML tags</b> that should be displayed as actual H
 
 \`\`\`gts
 https://example.com/component.gts
-<<<<<<< SEARCH
+${SEARCH_MARKER}
 import Component from '@glimmer/component';
 
 export default class MyComponent extends Component {
@@ -598,7 +599,7 @@ export default class MyComponent extends Component {
     </div>
   </template>
 }
-=======
+${SEPARATOR_MARKER}
 import Component from '@glimmer/component';
 
 export default class MyComponent extends Component {
@@ -613,7 +614,7 @@ export default class MyComponent extends Component {
     </div>
   </template>
 }
->>>>>>> REPLACE
+${REPLACE_MARKER}
 \`\`\`
 
 Above code blocks are now complete`;
@@ -652,10 +653,10 @@ Above code blocks are now complete`;
 
 \`\`\`txt
 https://example.com/blank.txt
-<<<<<<< SEARCH
-=======
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
 hello
->>>>>>> REPLACE
+${REPLACE_MARKER}
 \`\`\`
 
 Above code blocks are now complete`;

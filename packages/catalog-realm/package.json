@@ -8,6 +8,7 @@
     "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@types/lodash": "catalog:",
+    "@types/uuid": "catalog:",
     "chess.js": "catalog:",
     "concurrently": "catalog:",
     "ember-concurrency": "catalog:",

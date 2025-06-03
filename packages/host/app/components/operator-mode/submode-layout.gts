@@ -218,6 +218,7 @@ export default class SubmodeLayout extends Component<Signature> {
   @action
   private storeSearchElement(element: HTMLElement) {
     this.searchElement = element;
+    this.searchElement.focus();
   }
   @action
   private openSearchAndShowResults(term: string) {
