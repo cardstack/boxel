@@ -416,6 +416,11 @@ module('Acceptance | catalog app tests', function (hooks) {
         '[data-test-directory^="author-"]',
       );
       const fullPath = element?.getAttribute('data-test-directory');
+
+      // installed folder should be tailing with uuid
+      const uuid = fullPath?.replace('author-', '').replace('/', '') || '';
+      assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
+
       await click(`[data-test-directory="${fullPath}"]`);
 
       assert.dom(`[data-test-directory="${fullPath}"] .icon`).hasClass('open');
@@ -467,6 +472,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         '[data-test-directory^="author-"]',
       );
       const fullPath = element?.getAttribute('data-test-directory');
+
       await click(`[data-test-directory="${fullPath}"]`);
 
       assert.dom(`[data-test-directory="${fullPath}"] .icon`).hasClass('open');
