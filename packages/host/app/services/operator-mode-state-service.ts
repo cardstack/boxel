@@ -795,7 +795,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   getSummaryForAIBot(
-    openCardIds: Set<string> = new Set([...this.getOpenCardIds()]),
+    openCardIds: Set<string> = new Set([...(this.getOpenCardIds() ?? [])]),
   ) {
     return {
       submode: this.state.submode,

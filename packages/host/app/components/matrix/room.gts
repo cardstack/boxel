@@ -37,7 +37,6 @@ import {
   ResolvedCodeRef,
   internalKeyFor,
   isCardInstance,
-  isLocalId,
 } from '@cardstack/runtime-common';
 import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
 
