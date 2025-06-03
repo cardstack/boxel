@@ -511,14 +511,14 @@ module('Acceptance | catalog app tests', function (hooks) {
       'install command installs the listing with expected folder and file structure',
       async function () {
         test('card listing ', async function (assert) {
-          // Given a listing
+          // Given a listing:
           /*
            * mortgage-calculator/
            * mortgage-calculator/mortgage-calculator.gts
            * mortgage-calculator/MortgageCalculator/example.json
            */
 
-          // When I install the listing into my selected realm
+          // When I install the listing into my selected realm, it should be:
           /*
            *  mortgage-calculator-[uuid]/
            *  mortgage-calculator-[uuid]/mortgage-calculator.gts
@@ -569,7 +569,6 @@ module('Acceptance | catalog app tests', function (hooks) {
             .exists('mortgage-calculator.gts file exists')
             .hasClass('selected', 'mortgage-calculator.gts file is selected');
 
-          // able to see example install successfully
           const examplePath = `${fullPath}MortgageCalculator/`;
           await waitFor(`[data-test-directory="${examplePath}"]`);
           await click(`[data-test-directory="${examplePath}"]`);
@@ -595,12 +594,12 @@ module('Acceptance | catalog app tests', function (hooks) {
         });
 
         test('field listing', async function (assert) {
-          // Given a listing
+          // Given a listing:
           /*
            * fields/contact-link.gts
            */
 
-          // When I install the listing into my selected realm
+          // When I install the listing into my selected realm, it should be:
           /*
            * contact-link-[uuid]/contact-link.gts
            */
@@ -630,6 +629,11 @@ module('Acceptance | catalog app tests', function (hooks) {
             '[data-test-directory^="contact-link-"]',
           );
           const fullPath = element?.getAttribute('data-test-directory');
+
+          // installed field should be tailing with uuid
+          const uuid =
+            fullPath?.replace('contact-link-', '').replace('/', '') || '';
+          assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
 
           await click(`[data-test-directory="${fullPath}"]`);
 
