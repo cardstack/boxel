@@ -29,7 +29,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
-import type { ActiveModuleInspectorView } from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
+import type { ModuleInspectorView } from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import { type ModuleDeclaration } from '@cardstack/host/resources/module-contents';
@@ -62,7 +62,7 @@ interface Signature {
     selectedDeclarationAsCodeRef: ResolvedCodeRef;
     showCreateSpec: boolean;
     specsForSelectedDefinition: Spec[];
-    setActiveModuleInspectorPanel: (item: ActiveModuleInspectorView) => void;
+    setActiveModuleInspectorPanel: (item: ModuleInspectorView) => void;
     updatePlaygroundSelections(id: string, fieldDefOnly?: boolean): void;
   };
   Blocks: {

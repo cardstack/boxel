@@ -75,9 +75,9 @@ import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
-export type ActiveModuleInspectorView = 'schema' | 'spec' | 'preview';
+export type ModuleInspectorView = 'schema' | 'spec' | 'preview';
 
-const moduleInspectorPanels: ActiveModuleInspectorView[] = [
+const moduleInspectorPanels: ModuleInspectorView[] = [
   'schema',
   'preview',
   'spec',
@@ -122,7 +122,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   @tracked private specSearch: ReturnType<getCards<Spec>> | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
-  private panelSelections: Record<string, ActiveModuleInspectorView>;
+  private panelSelections: Record<string, ModuleInspectorView>;
 
   constructor(owner: Owner, args: ModuleInspectorSignature['Args']) {
     super(owner, args);
@@ -207,12 +207,12 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     return null;
   }
 
-  private get activePanel(): ActiveModuleInspectorView {
+  private get activePanel(): ModuleInspectorView {
     let selection = this.panelSelections[this.args.readyFile.url];
     return selection ?? 'schema';
   }
 
-  @action private setActivePanel(item: ActiveModuleInspectorView) {
+  @action private setActivePanel(item: ModuleInspectorView) {
     this.panelSelections[this.args.readyFile.url] = item;
     // persist in local storage
     window.localStorage.setItem(
@@ -341,7 +341,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     return this.cardResource?.card as Spec;
   }
 
-  private get selectedView(): ActiveModuleInspectorView {
+  private get selectedView(): ModuleInspectorView {
     let selection = this.panelSelections[this.args.readyFile.url];
     return selection ?? 'schema';
   }
