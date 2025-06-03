@@ -5,18 +5,10 @@ import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
 
-import AppsIcon from '@cardstack/boxel-icons/apps';
-import Brain from '@cardstack/boxel-icons/brain';
-import DotIcon from '@cardstack/boxel-icons/dot';
-import LayoutList from '@cardstack/boxel-icons/layout-list';
-import StackIcon from '@cardstack/boxel-icons/stack';
-
-import { task } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
 
 import {
   BoxelButton,
-  Pill,
   BoxelSelect,
   RealmIcon,
   LoadingIndicator,
@@ -31,29 +23,16 @@ import {
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
-  specRef,
-  isCardDef,
-  isFieldDef,
-  loadCardDef,
   realmURL as realmURLSymbol,
   localId,
   isLocalId,
-  skillCardRef,
 } from '@cardstack/runtime-common';
-import {
-  codeRefWithAbsoluteURL,
-  isResolvedCodeRef,
-} from '@cardstack/runtime-common/code-ref';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
-import type { SelectedAccordionItem } from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
+import type { ActiveModuleInspectorView } from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
-import {
-  CardOrFieldDeclaration,
-  isCardOrFieldDeclaration,
-  type ModuleDeclaration,
-} from '@cardstack/host/resources/module-contents';
+import { type ModuleDeclaration } from '@cardstack/host/resources/module-contents';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -63,7 +42,7 @@ import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import { CardContext } from 'https://cardstack.com/base/card-api';
-import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
+import { Spec } from 'https://cardstack.com/base/spec';
 
 import ElementTracker, {
   type RenderedCardForOverlayActions,
@@ -79,121 +58,28 @@ interface Signature {
     activeSpec: Spec | undefined;
     isLoadingNewModule: boolean;
     isPanelOpen: boolean;
-    searchIsLoading: boolean | undefined;
     selectedDeclaration?: ModuleDeclaration;
     selectedDeclarationAsCodeRef: ResolvedCodeRef;
+    showCreateSpec: boolean;
     specsForSelectedDefinition: Spec[];
-    toggleAccordionItem: (item: SelectedAccordionItem) => void;
+    setActiveModuleInspectorPanel: (item: ActiveModuleInspectorView) => void;
     updatePlaygroundSelections(id: string, fieldDefOnly?: boolean): void;
   };
   Blocks: {
     default: [
-      WithBoundArgs<
-        typeof SpecPreviewTitle,
-        | 'showCreateSpec'
-        | 'createSpec'
-        | 'isCreateSpecInstanceRunning'
-        | 'spec'
-        | 'numberOfInstances'
-      >,
-      (
-        | WithBoundArgs<
-            typeof SpecPreviewContent,
-            | 'showCreateSpec'
-            | 'canWrite'
-            | 'onSelectSpec'
-            | 'activeSpec'
-            | 'isLoading'
-            | 'allSpecs'
-            | 'viewSpecInPlayground'
-          >
-        | WithBoundArgs<typeof SpecPreviewLoading, never>
-      ),
+      | WithBoundArgs<
+          typeof SpecPreviewContent,
+          | 'showCreateSpec'
+          | 'canWrite'
+          | 'onSelectSpec'
+          | 'activeSpec'
+          | 'isLoading'
+          | 'allSpecs'
+          | 'viewSpecInPlayground'
+        >
+      | WithBoundArgs<typeof SpecPreviewLoading, never>,
     ];
   };
-}
-
-interface TitleSignature {
-  Args: {
-    spec?: Spec;
-    numberOfInstances?: number;
-    showCreateSpec: boolean;
-    createSpec: (event: MouseEvent) => void;
-    isCreateSpecInstanceRunning: boolean;
-  };
-}
-
-class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
-  private get moreThanOneInstance() {
-    return this.args.numberOfInstances && this.args.numberOfInstances > 1;
-  }
-
-  private get specType() {
-    return this.args.spec?.specType as SpecType | undefined;
-  }
-
-  <template>
-    Boxel Spec
-
-    <span class='has-spec' data-test-has-spec>
-      {{#if @showCreateSpec}}
-        <BoxelButton
-          class='create-spec-button'
-          @kind='primary'
-          @size='extra-small'
-          @loading={{@isCreateSpecInstanceRunning}}
-          {{on 'click' @createSpec}}
-          data-test-create-spec-button
-        >
-          Create
-        </BoxelButton>
-      {{else if this.moreThanOneInstance}}
-        <div
-          data-test-number-of-instance={{@numberOfInstances}}
-          class='number-of-instance'
-        >
-          <DotIcon class='dot-icon' />
-          <div class='number-of-instance-text'>
-            {{@numberOfInstances}}
-            instances
-          </div>
-        </div>
-      {{else}}
-        {{#if this.specType}}
-          <SpecTag @specType={{this.specType}} />
-        {{/if}}
-      {{/if}}
-    </span>
-
-    <style scoped>
-      .has-spec {
-        display: flex;
-        color: var(--boxel-450);
-        font: 500 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-xl);
-        text-transform: uppercase;
-      }
-      .create-spec-button {
-        --boxel-button-min-height: auto;
-        --boxel-button-min-width: auto;
-        font-weight: 500;
-      }
-      .number-of-instance {
-        margin-left: auto;
-        display: inline-flex;
-        align-items: center;
-      }
-      .number-of-instance-text {
-        font: 500 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-xl);
-      }
-      .dot-icon {
-        flex-shrink: 0;
-        width: 18px;
-        height: 18px;
-      }
-    </style>
-  </template>
 }
 
 interface ContentSignature {
@@ -467,120 +353,12 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare specPanelService: SpecPanelService;
   @service private declare store: StoreService;
 
-  private createSpecTask = task(
-    async (ref: ResolvedCodeRef, specType: SpecType) => {
-      let relativeTo = new URL(ref.module);
-      let maybeAbsoluteRef = codeRefWithAbsoluteURL(ref, relativeTo);
-      if (isResolvedCodeRef(maybeAbsoluteRef)) {
-        ref = maybeAbsoluteRef;
-      }
-      try {
-        let SpecKlass = await loadCardDef(specRef, {
-          loader: this.loaderService.loader,
-        });
-        let spec = new SpecKlass({
-          specType,
-          ref,
-          title: ref.name,
-        }) as Spec;
-        let currentRealm = this.operatorModeStateService.realmURL;
-        await this.store.add(spec, {
-          realm: currentRealm.href,
-          doNotWaitForPersist: true,
-        });
-        this.specPanelService.setSelection(spec[localId]);
-        if (!this.args.isPanelOpen) {
-          this.args.toggleAccordionItem('spec-preview');
-        }
-      } catch (e: any) {
-        console.log('Error saving', e);
-      }
-    },
-  );
-
-  //TODO: Improve identification of isApp and isSkill
-  // isApp and isSkill are far from perfect functions
-  //We have good primitives to identify card and field but not for app and skill
-  //Here we are trying our best based upon schema analyses what is an app and a skill
-  //We don't try to capture deep ancestry of app and skill
-  private isApp(selectedDeclaration: CardOrFieldDeclaration) {
-    if (selectedDeclaration.exportName === 'AppCard') {
-      return true;
-    }
-    if (
-      selectedDeclaration.super &&
-      selectedDeclaration.super.type === 'external' &&
-      selectedDeclaration.super.name === 'AppCard'
-    ) {
-      return true;
-    }
-    return false;
-  }
-
-  private async isSkill(selectedDeclaration: CardOrFieldDeclaration) {
-    const isInClassChain = await selectedDeclaration.cardType.isClassInChain(
-      selectedDeclaration.cardOrField,
-      skillCardRef,
-    );
-
-    if (isInClassChain) {
-      return true;
-    }
-
-    return false;
-  }
-
-  private async guessSpecType(
-    selectedDeclaration: ModuleDeclaration,
-  ): Promise<SpecType> {
-    if (isCardOrFieldDeclaration(selectedDeclaration)) {
-      if (isCardDef(selectedDeclaration.cardOrField)) {
-        if (this.isApp(selectedDeclaration)) {
-          return 'app';
-        }
-        if (await this.isSkill(selectedDeclaration)) {
-          return 'skill';
-        }
-        return 'card';
-      }
-      if (isFieldDef(selectedDeclaration.cardOrField)) {
-        return 'field';
-      }
-    }
-    throw new Error('Unidentified spec');
-  }
-
-  @action private async createSpec(event: MouseEvent) {
-    event.stopPropagation();
-    if (!this.args.selectedDeclaration) {
-      throw new Error('bug: no selected declaration');
-    }
-    if (!this.args.selectedDeclarationAsCodeRef) {
-      throw new Error('bug: no code ref');
-    }
-    let specType = await this.guessSpecType(this.args.selectedDeclaration);
-    this.createSpecTask.perform(
-      this.args.selectedDeclarationAsCodeRef,
-      specType,
-    );
-  }
-
   @action private onSelectSpec(spec: Spec): void {
     this.specPanelService.setSelection(spec.id);
   }
 
   private get canWrite() {
     return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
-  }
-
-  get showCreateSpec() {
-    return (
-      Boolean(this.args.selectedDeclaration?.exportName) &&
-      !this.args.searchIsLoading &&
-      this.args.specsForSelectedDefinition.length === 0 &&
-      !this.args.activeSpec &&
-      this.canWrite
-    );
   }
 
   get isLoading() {
@@ -592,34 +370,17 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     const fileUrl = id.endsWith('.json') ? id : `${id}.json`;
     this.recentFilesService.addRecentFileUrl(fileUrl);
     this.args.updatePlaygroundSelections(id);
-    this.args.toggleAccordionItem('playground');
+    this.args.setActiveModuleInspectorPanel('preview');
   };
 
   <template>
     {{#if this.isLoading}}
-      {{yield
-        (component
-          SpecPreviewTitle
-          showCreateSpec=false
-          createSpec=this.createSpec
-          isCreateSpecInstanceRunning=this.createSpecTask.isRunning
-          spec=@activeSpec
-        )
-        (component SpecPreviewLoading)
-      }}
+      {{yield (component SpecPreviewLoading)}}
     {{else}}
       {{yield
         (component
-          SpecPreviewTitle
-          showCreateSpec=this.showCreateSpec
-          createSpec=this.createSpec
-          isCreateSpecInstanceRunning=this.createSpecTask.isRunning
-          spec=@activeSpec
-          numberOfInstances=@specsForSelectedDefinition.length
-        )
-        (component
           SpecPreviewContent
-          showCreateSpec=this.showCreateSpec
+          showCreateSpec=@showCreateSpec
           canWrite=this.canWrite
           onSelectSpec=this.onSelectSpec
           activeSpec=@activeSpec
@@ -630,58 +391,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       }}
     {{/if}}
   </template>
-}
-
-interface SpecTagSignature {
-  Element: HTMLDivElement;
-  Args: {
-    specType: SpecType;
-  };
-}
-
-export class SpecTag extends GlimmerComponent<SpecTagSignature> {
-  get icon() {
-    return getIcon(this.args.specType);
-  }
-  <template>
-    {{#if this.icon}}
-      <Pill
-        data-test-spec-tag={{@specType}}
-        class='spec-tag-pill'
-        ...attributes
-      >
-        <:iconLeft>
-          {{this.icon}}
-        </:iconLeft>
-        <:default>
-          {{@specType}}
-        </:default>
-      </Pill>
-
-    {{/if}}
-    <style scoped>
-      .spec-tag-pill {
-        --pill-font: 500 var(--boxel-font-xs);
-        --pill-background-color: var(--boxel-200);
-        word-break: initial;
-      }
-    </style>
-  </template>
-}
-
-function getIcon(specType: SpecType) {
-  switch (specType) {
-    case 'card':
-      return StackIcon;
-    case 'app':
-      return AppsIcon;
-    case 'field':
-      return LayoutList;
-    case 'skill':
-      return Brain;
-    default:
-      return;
-  }
 }
 
 function getRelativePath(baseUrl: string, targetUrl: string) {

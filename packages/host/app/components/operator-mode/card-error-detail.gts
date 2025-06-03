@@ -15,6 +15,9 @@ interface Signature {
     fileToFixWithAi?: FileDef;
   };
   Element: HTMLElement;
+  Blocks: {
+    error: [];
+  };
 }
 
 export default class CardErrorDetail extends Component<Signature> {
@@ -28,6 +31,7 @@ export default class CardErrorDetail extends Component<Signature> {
 
   <template>
     <div class='error-detail' ...attributes>
+      {{yield to='error'}}
       <ErrorDisplay
         @type='runtime'
         @headerText={{@headerText}}
