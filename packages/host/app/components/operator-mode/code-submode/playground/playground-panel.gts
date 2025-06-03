@@ -1,14 +1,30 @@
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { schedule } from '@ember/runloop';
+
 import { service } from '@ember/service';
+import { htmlSafe, type SafeString } from '@ember/template';
+
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
 import { restartableTask, task } from 'ember-concurrency';
+import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 import { consume } from 'ember-provide-consume-context';
 
-import { BoxelSelect, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import {
+  BoxelSelect,
+  CardContainer,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
+import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
+
+import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import {
+  baseCardRef,
   internalKeyFor,
   type ResolvedCodeRef,
   GetCardContextName,
@@ -24,13 +40,18 @@ import {
   type PrerenderedCardLike,
 } from '@cardstack/runtime-common';
 
+import consumeContext from '@cardstack/host/helpers/consume-context';
+
+import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type LoaderService from '@cardstack/host/services/loader-service';
+
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
-import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type { RecentCard } from '@cardstack/host/services/recent-cards-service';
+import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type StoreService from '@cardstack/host/services/store';
 
@@ -41,10 +62,15 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type { Spec } from 'https://cardstack.com/base/spec';
 
-import PlaygroundContent from './playground-content';
-import PlaygroundTitle from './playground-title';
+import PrerenderedCardSearch from '../../../prerendered-card-search';
+import CardError from '../../card-error';
+import FormatChooser from '../format-chooser';
 
-import type { WithBoundArgs } from '@glint/template';
+import FieldPickerModal from './field-chooser-modal';
+
+import InstanceSelectDropdown from './instance-chooser-dropdown';
+import PlaygroundPreview from './playground-preview';
+import SpecSearch from './spec-search';
 
 export type SelectedInstance = {
   card: CardDef;
@@ -64,51 +90,12 @@ interface Signature {
     isUpdating?: boolean;
   };
   Element: HTMLElement;
-  Blocks: {
-    default: [
-      WithBoundArgs<
-        typeof PlaygroundTitle,
-        | 'makeCardResource'
-        | 'query'
-        | 'recentRealms'
-        | 'availableRealmURLs'
-        | 'fieldOptions'
-        | 'selection'
-        | 'onSelect'
-        | 'chooseCard'
-        | 'createNew'
-        | 'createNewIsRunning'
-        | 'canWriteRealm'
-        | 'field'
-        | 'onFieldSelect'
-        | 'closeFieldChooser'
-        | 'fieldChooserIsOpen'
-        | 'chooseField'
-        | 'moduleId'
-        | 'recentCardIds'
-      >,
-      (
-        | WithBoundArgs<
-            typeof PlaygroundContent,
-            | 'makeCardResource'
-            | 'card'
-            | 'field'
-            | 'moduleId'
-            | 'codeRef'
-            | 'createNew'
-            | 'createNewIsRunning'
-            | 'isFieldDef'
-            | 'availableRealmURLs'
-          >
-        | WithBoundArgs<typeof LoadingIndicator, never>
-      ),
-    ];
-  };
 }
 
 export default class PlaygroundPanel extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @service private declare loaderService: LoaderService;
+  @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
@@ -121,6 +108,113 @@ export default class PlaygroundPanel extends Component<Signature> {
   @tracked private fieldChooserIsOpen = false;
   @tracked private newCardNonce = 0;
 
+  @tracked private cardOptions: PrerenderedCardLike[] = [];
+
+  private fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
+  #creationError = false;
+
+  private get specQuery(): Query {
+    return {
+      filter: {
+        on: specRef,
+        eq: { ref: this.args.codeRef },
+      },
+      sort: [
+        {
+          by: 'lastModified',
+          direction: 'desc',
+        },
+      ],
+    };
+  }
+
+  private get maybeGenerateFieldSpec() {
+    return this.args.isFieldDef && !this.card;
+  }
+
+  private copyToClipboard = task(async (id: string) => {
+    await navigator.clipboard.writeText(id);
+  });
+
+  private openInInteractMode = (id: string) => {
+    this.operatorModeStateService.openCardInInteractMode(
+      id,
+      this.format === 'edit' ? 'edit' : 'isolated',
+    );
+  };
+
+  private get showError() {
+    // in edit format, prefer showing the stale card if possible so user can
+    // attempt to fix the card error
+    if (this.cardError && this.format === 'edit' && this.card) {
+      return false;
+    }
+    return Boolean(this.cardError);
+  }
+
+  private get contextMenuItems() {
+    if (!this.card?.id) {
+      return undefined;
+    }
+    let cardId = this.card.id;
+    let menuItems: MenuItem[] = [
+      new MenuItem('Copy Card URL', 'action', {
+        action: () => this.copyToClipboard.perform(cardId),
+        icon: IconLink,
+      }),
+      new MenuItem('Open in Code Mode', 'action', {
+        action: () =>
+          this.operatorModeStateService.updateCodePath(new URL(cardId)),
+        icon: IconCode,
+      }),
+      new MenuItem('Open in Interact Mode', 'action', {
+        action: () => this.openInInteractMode(cardId),
+        icon: Eye,
+      }),
+    ];
+    return menuItems;
+  }
+
+  @action private setFormat(format: Format) {
+    if (!this.card?.id) {
+      return;
+    }
+    this.persistToLocalStorage(this.card.id, format);
+  }
+
+  private get realmInfo() {
+    let url = this.card ? urlForRealmLookup(this.card) : undefined;
+    if (!url) {
+      return undefined;
+    }
+    return this.realm.info(url);
+  }
+
+  private get canEditCard() {
+    return Boolean(
+      this.format !== 'edit' &&
+        this.card?.id &&
+        this.realm.canWrite(this.card.id),
+    );
+  }
+
+  private get isWideFormat() {
+    if (!this.card) {
+      return false;
+    }
+    let { constructor } = this.card;
+    return Boolean(
+      constructor &&
+        'prefersWideFormat' in constructor &&
+        constructor.prefersWideFormat,
+    );
+  }
+
+  private get styleForPlaygroundContent(): SafeString {
+    const maxWidth =
+      this.format !== 'isolated' || this.isWideFormat ? '100%' : '50rem';
+    return htmlSafe(`max-width: ${maxWidth};`);
+  }
   private get moduleId() {
     return internalKeyFor(this.args.codeRef, undefined);
   }
@@ -295,14 +389,6 @@ export default class PlaygroundPanel extends Component<Signature> {
     return this.realm.canWrite(this.currentRealm);
   }
 
-  @action
-  private onFieldSelect(index: number) {
-    if (!this.card?.id) {
-      return;
-    }
-    this.persistSelections(this.card.id, this.format, index);
-  }
-
   private get defaultFormat() {
     return this.args.isFieldDef ? 'embedded' : 'isolated';
   }
@@ -377,10 +463,20 @@ export default class PlaygroundPanel extends Component<Signature> {
     }
   });
 
-  @action private createNew(onCreate?: (id: string | undefined) => void) {
+  private autoGenerateInstance = restartableTask(async () => {
+    this.#creationError = false;
+    if (this.args.isFieldDef && this.specCard) {
+      await this.createNewField.perform(this.specCard);
+    } else {
+      let maybeId = await this.createNewCard.perform();
+      this.#creationError = typeof maybeId !== 'string';
+    }
+  });
+
+  @action private createNew() {
     this.args.isFieldDef && this.specCard
       ? this.createNewField.perform(this.specCard)
-      : this.createNewCard.perform(onCreate);
+      : this.createNewCard.perform();
   }
 
   private get createNewIsRunning() {
@@ -396,82 +492,74 @@ export default class PlaygroundPanel extends Component<Signature> {
     return uuidv4();
   }
 
-  private createNewCard = restartableTask(
-    async (onCreate?: (id: string | undefined) => void) => {
-      let newCardJSON: LooseSingleCardDocument;
-      if (this.args.isFieldDef) {
-        let fieldCard = await loadCardDef(this.args.codeRef, {
-          loader: this.loaderService.loader,
-        });
-        // for field def, create a new spec card instance
-        newCardJSON = {
-          data: {
-            lid: this.newCardLocalId,
-            attributes: {
-              specType: 'field',
-              ref: this.args.codeRef,
-              title: this.args.codeRef.name,
-              containedExamples: [new fieldCard()],
-            },
-            meta: {
-              fields: {
-                containedExamples: [
-                  {
-                    adoptsFrom: this.args.codeRef,
-                  },
-                ],
-              },
-              adoptsFrom: specRef,
-              realmURL: this.currentRealm,
-            },
+  private createNewCard = restartableTask(async () => {
+    let newCardJSON: LooseSingleCardDocument;
+    if (this.args.isFieldDef) {
+      let fieldCard = await loadCardDef(this.args.codeRef, {
+        loader: this.loaderService.loader,
+      });
+      // for field def, create a new spec card instance
+      newCardJSON = {
+        data: {
+          lid: this.newCardLocalId,
+          attributes: {
+            specType: 'field',
+            ref: this.args.codeRef,
+            title: this.args.codeRef.name,
+            containedExamples: [new fieldCard()],
           },
-        };
-      } else {
-        newCardJSON = {
-          data: {
-            lid: this.newCardLocalId,
-            meta: {
-              adoptsFrom: this.args.codeRef,
-              realmURL: this.currentRealm,
+          meta: {
+            fields: {
+              containedExamples: [
+                {
+                  adoptsFrom: this.args.codeRef,
+                },
+              ],
             },
+            adoptsFrom: specRef,
+            realmURL: this.currentRealm,
           },
-        };
-      }
-      let maybeId: string | CardErrorJSONAPI = await this.store.create(
-        newCardJSON,
-        {
-          realm: this.currentRealm,
         },
-      );
-      this.persistSelections(
-        // in the case of an error we still need to persist it in
-        // order render the error doc
-        typeof maybeId === 'string' ? maybeId : this.newCardLocalId,
-        // open new instance in playground in edit format
-        'edit',
-        this.args.isFieldDef ? 0 : undefined,
-      );
-      if (typeof maybeId === 'string') {
-        // reset the local ID for making new cards after each successful attempt
-        // such that failed attempts will use the same local ID. that way when we
-        // get an error doc in the store for a particular local id based on the
-        // server error response, when a new card is successfully created that
-        // uses a correlating local ID we will automatically clear the error in
-        // the store.
-        this.newCardNonce++;
-        let cardId = maybeId;
-        this.recentFilesService.addRecentFileUrl(`${cardId}.json`);
-        if (typeof onCreate === 'function') {
-          onCreate(cardId);
-        }
-      } else {
-        if (typeof onCreate === 'function') {
-          onCreate(undefined);
-        }
-      }
-      this.closeInstanceChooser();
-    },
-  );
+      };
+    } else {
+      newCardJSON = {
+        data: {
+          lid: this.newCardLocalId,
+          meta: {
+            adoptsFrom: this.args.codeRef,
+            realmURL: this.currentRealm,
+          },
+        },
+      };
+    }
+    let maybeId: string | CardErrorJSONAPI = await this.store.create(
+      newCardJSON,
+      {
+        realm: this.currentRealm,
+      },
+    );
+    this.persistSelections(
+      // in the case of an error we still need to persist it in
+      // order render the error doc
+      typeof maybeId === 'string' ? maybeId : this.newCardLocalId,
+      // open new instance in playground in edit format
+      'edit',
+      this.args.isFieldDef ? 0 : undefined,
+    );
+    if (typeof maybeId === 'string') {
+      // reset the local ID for making new cards after each successful attempt
+      // such that failed attempts will use the same local ID. that way when we
+      // get an error doc in the store for a particular local id based on the
+      // server error response, when a new card is successfully created that
+      // uses a correlating local ID we will automatically clear the error in
+      // the store.
+      this.newCardNonce++;
+      let cardId = maybeId;
+      this.recentFilesService.addRecentFileUrl(`${cardId}.json`);
+    }
+    this.closeInstanceChooser();
+    return maybeId;
+  });
 
   private createNewField = restartableTask(async (specCard: Spec) => {
     let fieldCard = await loadCardDef(this.args.codeRef, {
@@ -491,52 +579,333 @@ export default class PlaygroundPanel extends Component<Signature> {
       ) as BoxelSelect | null
     )?.click();
 
+  @action
+  handleClick(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    return false;
+  }
+
+  private get fileToFixWithAi() {
+    let codePath = this.operatorModeStateService.state.codePath?.href;
+    if (!codePath) return undefined;
+
+    return this.matrixService.fileAPI.createFileDef({
+      sourceUrl: codePath,
+      name: codePath.split('/').pop(),
+    });
+  }
+
+  private processSearchResults = (prerenderedCards?: PrerenderedCardLike[]) => {
+    this.cardOptions = prerenderedCards ?? [];
+    this.findSelectedCard(prerenderedCards);
+  };
+
+  private showResults = (cards: PrerenderedCardLike[] | undefined) => {
+    return (
+      !this.args.isFieldDef &&
+      (cards?.length ||
+        this.persistedCardId ||
+        this.createNewIsRunning ||
+        this.isBaseCardModule) // means we do not conduct the expanded search for baseCardModule
+    );
+  };
+
+  private findSelectedCard = (prerenderedCards?: PrerenderedCardLike[]) => {
+    if (!prerenderedCards?.length) {
+      // it is possible that there's a persisted cardId in playground-selections local storage
+      // but that the card is no longer in recent-files local storage
+      // if that is the case, the card title will appear in dropdown menu but
+      // the card will not appear in dropdown options because the card is not in recent-files
+      // there are timing issues with trying to add it to recent-files service,
+      // see CS-8601 for suggested resolution for similar problems
+      return this.dropdownSelection;
+    }
+
+    if (!this.dropdownSelection?.card) {
+      if (this.persistedCardId || this.isBaseCardModule) {
+        // not displaying card preview for base card module unless user selects it specifically
+        return;
+      }
+      let recentCard = prerenderedCards[0];
+      // if there's no selected card, choose the most recent card as selected
+      this.persistToLocalStorage(recentCard.url, 'isolated');
+      return recentCard;
+    }
+
+    let selectedCardId = this.dropdownSelection.card.id;
+    let card = prerenderedCards.find(
+      (c) => trimJsonExtension(c.url) === selectedCardId,
+    );
+    return card;
+  };
+
+  // sort prerendered-search card results by most recently viewed
+  private getSortedCards = (cards: PrerenderedCardLike[]) => {
+    if (!this.recentCardIds?.length) {
+      return;
+    }
+    let sortedCards: PrerenderedCardLike[] = [];
+    for (let id of this.recentCardIds) {
+      let card = cards.find((c) => trimJsonExtension(c.url) === id);
+      if (card) {
+        sortedCards.push(card);
+      }
+    }
+    return sortedCards;
+  };
+
+  private get persistedCardId() {
+    return this.playgroundPanelService.peekSelection(this.moduleId)?.cardId;
+  }
+
+  private get isBaseCardModule() {
+    return this.moduleId === `${baseCardRef.module}/${baseCardRef.name}`;
+  }
+
+  private firstResult = (results?: PrerenderedCardLike[]) => {
+    let card = results?.[0];
+    return [card].filter(Boolean) as PrerenderedCardLike[];
+  };
+
+  private createNewWhenNoCards = (results?: PrerenderedCardLike[]) => {
+    if (!results?.length) {
+      if (this.#creationError) {
+        // if we have a creation error then don't auto generate a new instance,
+        // otherwise we'll trap ourselves in a loop
+        this.#creationError = false;
+        return;
+      }
+
+      // if expanded search returns no instances, create new instance
+      afterRender(this.autoGenerateInstance.perform);
+      return;
+    }
+  };
+
   <template>
-    {{yield
-      (component
-        PlaygroundTitle
-        makeCardResource=this.makeCardResource
-        query=this.query
-        expandedQuery=this.expandedQuery
-        recentRealms=this.recentRealms
-        availableRealmURLs=this.realmServer.availableRealmURLs
-        fieldOptions=this.fieldInstances
-        selection=this.dropdownSelection
-        onSelect=this.onSelect
-        chooseCard=this.chooseInstance
-        createNew=this.createNew
-        createNewIsRunning=this.createNewIsRunning
-        canWriteRealm=this.canWriteRealm
-        field=this.field
-        fieldChooserIsOpen=this.fieldChooserIsOpen
-        onFieldSelect=this.onFieldSelect
-        closeFieldChooser=this.closeFieldChooser
-        chooseField=this.chooseField
-        moduleId=this.moduleId
-        persistSelections=this.persistToLocalStorage
-        recentCardIds=this.recentCardIds
-      )
-      (if
-        this.isLoading
-        (component LoadingIndicator color='var(--boxel-light)')
-        (component
-          PlaygroundContent
-          makeCardResource=this.makeCardResource
-          card=this.card
-          field=this.field
-          moduleId=this.moduleId
-          codeRef=@codeRef
-          createNew=this.createNew
-          createNewIsRunning=this.createNewIsRunning
-          isFieldDef=@isFieldDef
-          cardError=this.cardError
-          persistSelections=this.persistSelections
-          canWriteRealm=this.canWriteRealm
-          format=this.format
-          defaultFormat=this.defaultFormat
-          availableRealmURLs=this.realmServer.availableRealmURLs
-        )
-      )
-    }}
+    {{consumeContext this.makeCardResource}}
+
+    {{#if this.query}}
+      <PrerenderedCardSearch
+        @query={{this.query}}
+        @format='fitted'
+        @realms={{this.recentRealms}}
+        @isLive={{true}}
+      >
+        <:response as |cards|>
+          {{#if (this.showResults cards)}}
+            {{#let (this.getSortedCards cards) as |sortedCards|}}
+              {{afterRender (fn this.processSearchResults sortedCards)}}
+            {{/let}}
+          {{else if this.expandedQuery}}
+            <PrerenderedCardSearch
+              @query={{this.expandedQuery}}
+              @format='fitted'
+              @realms={{this.realmServer.availableRealmURLs}}
+            >
+              <:response as |maybeCards|>
+                {{! TODO: remove side-effects for instance chooser in CS-8746 }}
+                {{this.createNewWhenNoCards maybeCards}}
+                {{#let (this.firstResult maybeCards) as |cards|}}
+                  {{afterRender (fn this.processSearchResults cards)}}
+                {{/let}}
+              </:response>
+            </PrerenderedCardSearch>
+          {{/if}}
+        </:response>
+      </PrerenderedCardSearch>
+    {{/if}}
+
+    {{#if this.fieldChooserIsOpen}}
+      <ToElsewhere
+        @named='playground-field-picker'
+        @send={{component
+          FieldPickerModal
+          instances=this.fieldInstances
+          selectedIndex=this.dropdownSelection.fieldIndex
+          onSelect=this.chooseField
+          onClose=this.closeFieldChooser
+          name=(if this.field (cardTypeDisplayName this.field))
+        }}
+      />
+    {{/if}}
+
+    {{#if this.isLoading}}
+      <LoadingIndicator @color='var(--boxel-light)' />
+    {{else}}
+      <section class='playground-panel' data-test-playground-panel>
+        <div
+          class='playground-panel-content'
+          style={{this.styleForPlaygroundContent}}
+        >
+          {{#let (if @isFieldDef this.field this.card) as |card|}}
+            {{#let
+              (component
+                InstanceSelectDropdown
+                cardOptions=(if @isFieldDef undefined this.cardOptions)
+                fieldOptions=this.fieldInstances
+                findSelectedCard=this.findSelectedCard
+                selection=this.dropdownSelection
+                onSelect=this.onSelect
+                chooseCard=this.chooseInstance
+                createNew=(if this.canWriteRealm this.createNew)
+                createNewIsRunning=this.createNewIsRunning
+                moduleId=this.moduleId
+                persistSelections=this.persistToLocalStorage
+                recentCardIds=this.recentCardIds
+              )
+              as |InstanceChooser|
+            }}
+              {{#if this.showError}}
+                {{! this is for types--cardError is always true in this case !}}
+                {{#if this.cardError}}
+                  <CardContainer
+                    class='error-container'
+                    @displayBoundaries={{true}}
+                    data-test-error-container
+                  >
+                    <CardError
+                      @error={{this.cardError}}
+                      @cardCreationError={{this.cardError.meta.isCreationError}}
+                      @fileToFixWithAi={{this.fileToFixWithAi}}
+                    >
+                      <:error>
+                        <button
+                          class='instance-chooser-container with-error'
+                          {{on 'click' this.handleClick}}
+                          {{on 'mouseup' this.handleClick}}
+                        >
+                          <InstanceChooser />
+                        </button>
+                      </:error>
+                    </CardError>
+                  </CardContainer>
+                {{/if}}
+              {{else if card}}
+                <div
+                  class='preview-area'
+                  data-test-field-preview-card={{@isFieldDef}}
+                >
+                  <PlaygroundPreview
+                    @card={{card}}
+                    @format={{this.format}}
+                    @realmInfo={{this.realmInfo}}
+                    @contextMenuItems={{this.contextMenuItems}}
+                    @onEdit={{if this.canEditCard (fn this.setFormat 'edit')}}
+                    @onFinishEditing={{if
+                      (eq this.format 'edit')
+                      (fn this.setFormat this.defaultFormat)
+                    }}
+                    @isFieldDef={{@isFieldDef}}
+                  />
+                </div>
+                <section class='instance-and-format'>
+                  <button
+                    class='instance-chooser-container'
+                    {{on 'click' this.handleClick}}
+                    {{on 'mouseup' this.handleClick}}
+                  >
+                    <InstanceChooser />
+                  </button>
+                  <FormatChooser
+                    class='format-chooser'
+                    @formats={{if @isFieldDef this.fieldFormats}}
+                    @format={{this.format}}
+                    @setFormat={{this.setFormat}}
+                    data-test-playground-format-chooser
+                  />
+                </section>
+              {{else if this.createNewIsRunning}}
+                <LoadingIndicator @color='var(--boxel-light)' />
+              {{else if this.maybeGenerateFieldSpec}}
+                <SpecSearch
+                  @query={{this.specQuery}}
+                  @realms={{this.realmServer.availableRealmURLs}}
+                  @canWriteRealm={{this.canWriteRealm}}
+                  @createNewCard={{this.createNew}}
+                />
+              {{/if}}
+            {{/let}}
+          {{/let}}
+        </div>
+      </section>
+    {{/if}}
+
+    <style scoped>
+      .instance-chooser-container {
+        background: none;
+        border: none;
+        cursor: auto;
+        width: 100%;
+        padding: 0;
+        margin-left: auto;
+      }
+
+      .instance-chooser-container :deep(.instance-chooser) {
+        height: auto;
+
+        border-radius: 0;
+        border-top-left-radius: var(--boxel-border-radius);
+        border-top-right-radius: var(--boxel-border-radius);
+      }
+
+      .playground-panel-content {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+        min-height: 100%;
+        margin-inline: auto;
+        padding: var(--boxel-sp);
+      }
+      .preview-area {
+        flex-grow: 1;
+        z-index: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .instance-and-format {
+        position: sticky;
+        bottom: 100px;
+        border: 1px solid var(--boxel-450);
+        margin: 0 auto;
+        width: 380px;
+        justify-content: space-between;
+
+        /* It’s meant to have two rounded borders, this removes a gap */
+        border-radius: calc(var(--boxel-border-radius) + 1px);
+      }
+
+      .format-chooser {
+        border-bottom-left-radius: var(--boxel-border-radius);
+        border-bottom-right-radius: var(--boxel-border-radius);
+      }
+
+      .playground-panel {
+        position: relative;
+        background-image: url('./playground-background.png');
+        background-position: left top;
+        background-repeat: repeat;
+        background-size: 22.5px;
+        height: 100%;
+        width: 100%;
+        background-color: var(--boxel-dark);
+        font: var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+        overflow: auto;
+      }
+      .error-container {
+        flex-grow: 1;
+        display: grid;
+        grid-template-rows: max-content;
+        margin-left: calc(-1 * var(--boxel-sp));
+        width: calc(100% + calc(2 * var(--boxel-sp)));
+      }
+    </style>
   </template>
+}
+
+function afterRender(callback: () => void) {
+  schedule('afterRender', callback);
 }

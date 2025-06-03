@@ -127,6 +127,7 @@ const realmEventsLogger = logger('realm:events');
 export type OperatorModeContext = {
   submode: Submode;
   openCardIds: string[];
+  debug?: boolean;
   realmUrl: string;
 };
 
@@ -523,11 +524,6 @@ export default class MatrixService extends Service {
         await this.initSlidingSync(accountDataContent);
         await this.client.startClient({ slidingSync: this.slidingSync });
 
-        // Do not need to wait for these to complete,
-        // in the workspace chooser we'll retrigger login and wait for them to complete
-        // and when fetching cards or files we have reautentication mechanism.
-        this.loginToRealms();
-
         this.postLoginCompleted = true;
       } catch (e) {
         console.log('Error starting Matrix client', e);
@@ -589,7 +585,7 @@ export default class MatrixService extends Service {
     return this.slidingSync;
   }
 
-  private async loginToRealms() {
+  async loginToRealms() {
     // This is where we would actually load user-specific choices out of the
     // user's profile based on this.client.getUserId();
     let activeRealms = this.realmServer.availableRealmURLs;
@@ -754,6 +750,10 @@ export default class MatrixService extends Service {
     );
   }
 
+  async downloadAsFileInBrowser(serializedFile: FileAPI.SerializedFile) {
+    return await this.client.downloadAsFileInBrowser(serializedFile);
+  }
+
   async uploadCards(cards: CardDef[]) {
     let cardFileDefs = await this.client.uploadCards(cards);
     return cardFileDefs;
@@ -905,6 +905,7 @@ export default class MatrixService extends Service {
           openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
           submode,
+          debug: context?.debug,
           realmUrl,
           functions: [],
         },
