@@ -14,6 +14,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -150,6 +151,17 @@ export interface Tool {
   };
 }
 
+export interface DebugMessageEvent extends BaseMatrixEvent {
+  type: typeof APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE;
+  content: CardMessageContent;
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
 // Synapse JSON does not support decimals, so we encode all arguments as stringified JSON
 export type EncodedCommandRequest = Omit<CommandRequest, 'arguments'> & {
   arguments: string;
@@ -182,6 +194,7 @@ export interface CardMessageContent {
       tools?: Tool[];
       toolChoice?: ToolChoice;
       submode?: string;
+      debug?: boolean;
       requireToolCall?: boolean;
       functions?: Tool['function'][];
     };
@@ -344,6 +357,7 @@ export type MatrixEvent =
   | CardMessageEvent
   | CodePatchResultEvent
   | CommandResultEvent
+  | DebugMessageEvent
   | InviteEvent
   | JoinEvent
   | LeaveEvent
