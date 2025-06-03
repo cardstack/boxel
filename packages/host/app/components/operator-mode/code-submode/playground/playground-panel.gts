@@ -1,12 +1,13 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { schedule } from '@ember/runloop';
 
 import { service } from '@ember/service';
 import { htmlSafe, type SafeString } from '@ember/template';
 
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import { restartableTask, task } from 'ember-concurrency';
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
@@ -32,6 +33,7 @@ import {
   loadCardDef,
   specRef,
   trimJsonExtension,
+  uuidv4,
   type LooseSingleCardDocument,
   type Query,
   type CardErrorJSONAPI,
@@ -104,11 +106,12 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   @tracked private cardResource: ReturnType<getCard> | undefined;
   @tracked private fieldChooserIsOpen = false;
-  @tracked private cardCreationError: CardErrorJSONAPI | undefined = undefined;
+  @tracked private newCardNonce = 0;
 
   @tracked private cardOptions: PrerenderedCardLike[] = [];
 
   private fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
+  #creationError = false;
 
   private get specQuery(): Query {
     return {
@@ -217,7 +220,6 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get isLoading() {
-    this.clearCardCreationError();
     return this.args.isFieldDef && this.args.isUpdating;
   }
 
@@ -237,12 +239,8 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get cardError(): CardErrorJSONAPI | undefined {
-    return this.cardCreationError ?? this.cardResource?.cardError;
+    return this.cardResource?.cardError;
   }
-
-  private clearCardCreationError = () => {
-    this.cardCreationError = undefined;
-  };
 
   private get specCard(): Spec | undefined {
     let card = this.card;
@@ -465,6 +463,16 @@ export default class PlaygroundPanel extends Component<Signature> {
     }
   });
 
+  private autoGenerateInstance = restartableTask(async () => {
+    this.#creationError = false;
+    if (this.args.isFieldDef && this.specCard) {
+      await this.createNewField.perform(this.specCard);
+    } else {
+      let maybeId = await this.createNewCard.perform();
+      this.#creationError = typeof maybeId !== 'string';
+    }
+  });
+
   @action private createNew() {
     this.args.isFieldDef && this.specCard
       ? this.createNewField.perform(this.specCard)
@@ -475,8 +483,16 @@ export default class PlaygroundPanel extends Component<Signature> {
     return this.createNewCard.isRunning || this.createNewField.isRunning;
   }
 
+  @cached
+  private get newCardLocalId() {
+    // we want our local id's to cycle after each successful
+    // new card creation and when the module id changes
+    this.newCardNonce;
+    this.moduleId;
+    return uuidv4();
+  }
+
   private createNewCard = restartableTask(async () => {
-    this.clearCardCreationError();
     let newCardJSON: LooseSingleCardDocument;
     if (this.args.isFieldDef) {
       let fieldCard = await loadCardDef(this.args.codeRef, {
@@ -485,6 +501,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       // for field def, create a new spec card instance
       newCardJSON = {
         data: {
+          lid: this.newCardLocalId,
           attributes: {
             specType: 'field',
             ref: this.args.codeRef,
@@ -507,6 +524,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     } else {
       newCardJSON = {
         data: {
+          lid: this.newCardLocalId,
           meta: {
             adoptsFrom: this.args.codeRef,
             realmURL: this.currentRealm,
@@ -520,18 +538,27 @@ export default class PlaygroundPanel extends Component<Signature> {
         realm: this.currentRealm,
       },
     );
-    if (typeof maybeId !== 'string') {
-      this.cardCreationError = maybeId;
-    } else {
+    this.persistSelections(
+      // in the case of an error we still need to persist it in
+      // order render the error doc
+      typeof maybeId === 'string' ? maybeId : this.newCardLocalId,
+      // open new instance in playground in edit format
+      'edit',
+      this.args.isFieldDef ? 0 : undefined,
+    );
+    if (typeof maybeId === 'string') {
+      // reset the local ID for making new cards after each successful attempt
+      // such that failed attempts will use the same local ID. that way when we
+      // get an error doc in the store for a particular local id based on the
+      // server error response, when a new card is successfully created that
+      // uses a correlating local ID we will automatically clear the error in
+      // the store.
+      this.newCardNonce++;
       let cardId = maybeId;
       this.recentFilesService.addRecentFileUrl(`${cardId}.json`);
-      this.persistSelections(
-        cardId,
-        'edit',
-        this.args.isFieldDef ? 0 : undefined,
-      ); // open new instance in playground in edit format
     }
     this.closeInstanceChooser();
+    return maybeId;
   });
 
   private createNewField = restartableTask(async (specCard: Spec) => {
@@ -636,20 +663,29 @@ export default class PlaygroundPanel extends Component<Signature> {
     return this.moduleId === `${baseCardRef.module}/${baseCardRef.name}`;
   }
 
+  private firstResult = (results?: PrerenderedCardLike[]) => {
+    let card = results?.[0];
+    return [card].filter(Boolean) as PrerenderedCardLike[];
+  };
+
   private createNewWhenNoCards = (results?: PrerenderedCardLike[]) => {
     if (!results?.length) {
+      if (this.#creationError) {
+        // if we have a creation error then don't auto generate a new instance,
+        // otherwise we'll trap ourselves in a loop
+        this.#creationError = false;
+        return;
+      }
+
       // if expanded search returns no instances, create new instance
-      this.createNew();
+      afterRender(this.autoGenerateInstance.perform);
       return;
     }
-    let card = results[0];
-    return [card];
   };
 
   <template>
     {{consumeContext this.makeCardResource}}
 
-    {{! TODO: remove side-effects for instance chooser in CS-8746 }}
     {{#if this.query}}
       <PrerenderedCardSearch
         @query={{this.query}}
@@ -660,7 +696,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         <:response as |cards|>
           {{#if (this.showResults cards)}}
             {{#let (this.getSortedCards cards) as |sortedCards|}}
-              {{consumeContext (fn this.processSearchResults sortedCards)}}
+              {{afterRender (fn this.processSearchResults sortedCards)}}
             {{/let}}
           {{else if this.expandedQuery}}
             <PrerenderedCardSearch
@@ -669,8 +705,10 @@ export default class PlaygroundPanel extends Component<Signature> {
               @realms={{this.realmServer.availableRealmURLs}}
             >
               <:response as |maybeCards|>
-                {{#let (this.createNewWhenNoCards maybeCards) as |cards|}}
-                  {{consumeContext (fn this.processSearchResults cards)}}
+                {{! TODO: remove side-effects for instance chooser in CS-8746 }}
+                {{this.createNewWhenNoCards maybeCards}}
+                {{#let (this.firstResult maybeCards) as |cards|}}
+                  {{afterRender (fn this.processSearchResults cards)}}
                 {{/let}}
               </:response>
             </PrerenderedCardSearch>
@@ -872,4 +910,8 @@ export default class PlaygroundPanel extends Component<Signature> {
       }
     </style>
   </template>
+}
+
+function afterRender(callback: () => void) {
+  schedule('afterRender', callback);
 }

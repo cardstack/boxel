@@ -24,6 +24,7 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 import {
   baseRealm,
   primitive,
+  localId,
   PermissionsContextName,
 } from '@cardstack/runtime-common';
 
@@ -661,6 +662,19 @@ module('Integration | card-basics', function (hooks) {
 
       let vanGogh = new Person({ id: `${testRealmURL}Person/vanGogh` });
       assert.strictEqual(vanGogh.id, `${testRealmURL}Person/vanGogh`);
+    });
+
+    test('can initialize card with local id', async function (assert) {
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+      }
+
+      let mango = new Person({ [localId]: 'test-local-id' });
+      assert.strictEqual(
+        mango[localId],
+        'test-local-id',
+        'the local id is correct',
+      );
     });
 
     test('throws when setting the ID for a saved card', async function (assert) {
