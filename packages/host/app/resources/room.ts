@@ -21,6 +21,7 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   DEFAULT_LLM,
@@ -144,6 +145,7 @@ export class RoomResource extends Resource<Args> {
             await this.loadRoomMemberEvent(roomId, event);
             break;
           case 'm.room.message':
+          case APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE:
             if (this.isRealmServerEvent(event)) {
               break;
             } else {

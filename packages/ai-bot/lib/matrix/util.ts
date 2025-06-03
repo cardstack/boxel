@@ -10,6 +10,7 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
@@ -98,7 +99,9 @@ export async function sendMessageEvent(
   return await sendMatrixEvent(
     client,
     roomId,
-    'm.room.message',
+    data.isStreamingFinished
+      ? 'm.room.message'
+      : APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE,
     contentObject,
     eventIdToReplace,
   );
