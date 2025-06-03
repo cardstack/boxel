@@ -101,6 +101,13 @@ export default class RoomMessage extends Component<Signature> {
     return this.message.author.userId === aiBotUserId;
   }
 
+  private get isLastAssistantMessage() {
+    return (
+      this.isFromAssistant &&
+      this.args.index === this.args.roomResource.messages.length - 1
+    );
+  }
+
   private run = task(async (command: MessageCommand) => {
     return this.commandService.run.unlinked().perform(command);
   });
@@ -125,6 +132,7 @@ export default class RoomMessage extends Component<Signature> {
         @roomId={{this.message.roomId}}
         @eventId={{this.message.eventId}}
         @index={{@index}}
+        @isLastAssistantMessage={{this.isLastAssistantMessage}}
         @registerScroller={{@registerScroller}}
         @isFromAssistant={{this.isFromAssistant}}
         @profileAvatar={{component

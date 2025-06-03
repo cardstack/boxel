@@ -15,6 +15,9 @@ interface Signature {
     fileToFixWithAi?: FileDef;
   };
   Element: HTMLElement;
+  Blocks: {
+    error: [];
+  };
 }
 
 export default class CardErrorDetail extends Component<Signature> {
@@ -37,10 +40,15 @@ export default class CardErrorDetail extends Component<Signature> {
         @viewInCodeMode={{@viewInCodeMode}}
         @cardId={{@error.id}}
       />
+
+      {{yield to='error'}}
     </div>
 
     <style scoped>
       .error-detail {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
         flex: 1.5;
         overflow: visible;
         max-height: fit-content;

@@ -70,6 +70,7 @@ export default class AiAssistantMessageUsage extends Component {
               @errorMessage={{this.errorMessage}}
               @retryAction={{this.retryAction}}
               @isStreaming={{this.isStreaming}}
+              @isLastAssistantMessage={{true}}
             >
               <em>Optional embedded content</em>
             </AiAssistantMessage>
@@ -150,6 +151,7 @@ export default class AiAssistantMessageUsage extends Component {
                 isReady=true
               }}
               @isStreaming={{false}}
+              @isLastAssistantMessage={{false}}
             />
             <AiAssistantMessage
               @messageHTML='Culpa fugiat ex ipsum commodo anim. Cillum reprehenderit eu consectetur laboris dolore in cupidatat. Deserunt ipsum voluptate sit velit aute ad velit exercitation sint. Velit esse velit est et amet labore velit nisi magna ea elit nostrud quis anim..'
@@ -161,6 +163,7 @@ export default class AiAssistantMessageUsage extends Component {
               @datetime={{this.oneMinutesAgo}}
               @isFromAssistant={{true}}
               @isStreaming={{false}}
+              @isLastAssistantMessage={{true}}
             />
           </AiAssistantConversation>
         </div>
