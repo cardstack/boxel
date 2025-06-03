@@ -67,6 +67,7 @@ export interface OperatorModeState {
   openDirs: Map<string, string[]>;
   codeSelection?: string;
   fieldSelection?: string;
+  moduleInspector?: ModuleInspectorView;
 }
 
 interface CardItem {
@@ -88,6 +89,7 @@ export type SerializedState = {
   codeSelection?: string;
   fieldSelection?: string;
   aiAssistantOpen?: boolean;
+  moduleInspector?: ModuleInspectorView;
 };
 
 interface OpenFileSubscriber {
@@ -148,6 +150,7 @@ export default class OperatorModeStateService extends Service {
       codePath: null,
       openDirs: new TrackedMap<string, string[]>(),
       aiAssistantOpen: false,
+      moduleInspector: 'schema' as ModuleInspectorView, // FIXME duplicate?
     });
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
@@ -372,6 +375,11 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
+  async updateModuleInspectorView(view: ModuleInspectorView) {
+    this.state.moduleInspector = view;
+    this.schedulePersist();
+  }
+
   updateCodePathWithSelection({
     codeRef,
     localName,
@@ -561,6 +569,7 @@ export default class OperatorModeStateService extends Service {
       codeSelection: this.state.codeSelection,
       fieldSelection: this.state.fieldSelection,
       aiAssistantOpen: this.state.aiAssistantOpen,
+      moduleInspector: this.state.moduleInspector,
     };
 
     for (let stack of this.state.stacks) {
@@ -622,6 +631,7 @@ export default class OperatorModeStateService extends Service {
       codeSelection: rawState.codeSelection,
       fieldSelection: rawState.fieldSelection,
       aiAssistantOpen: rawState.aiAssistantOpen ?? false,
+      moduleInspector: rawState.moduleInspector ?? 'schema', // FIXME this is defined elsewhere?
     });
 
     let stackIndex = 0;

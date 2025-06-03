@@ -1,5 +1,6 @@
 import {
   click,
+  currentURL,
   waitFor,
   fillIn,
   triggerKeyEvent,
@@ -1804,6 +1805,17 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom(createFileModalOverlay).exists();
       await click(createFileModalOverlay!);
       assert.dom('[data-test-create-file-modal]').doesNotExist();
+    });
+
+    test('restores module inspector view from operator mode state', async function (assert) {
+      await visitOperatorMode({
+        stacks: [],
+        submode: 'code',
+        codePath: `${testRealmURL}pet.gts`,
+        moduleInspector: 'preview',
+      });
+
+      assert.dom('[data-test-active-module-inspector-view="preview"]').exists();
     });
 
     test('remembers open module inspector panel via local storage', async function (assert) {

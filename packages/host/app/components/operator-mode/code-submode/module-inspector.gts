@@ -2,6 +2,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
+import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
@@ -130,6 +131,18 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     this.panelSelections = new TrackedObject(
       panelSelections ? JSON.parse(panelSelections) : {},
     );
+
+    // FIMXE surely there’s a better way
+    if (!this.panelSelections[this.args.readyFile.url]) {
+      let moduleInspectorStateArgument =
+        this.operatorModeStateService.state.moduleInspector;
+
+      if (moduleInspectorStateArgument) {
+        scheduleOnce('afterRender', this, () => {
+          this.setActivePanel(moduleInspectorStateArgument!);
+        });
+      }
+    }
   }
 
   private get declarations() {
@@ -213,6 +226,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
   @action private setActivePanel(item: ModuleInspectorView) {
     this.panelSelections[this.args.readyFile.url] = item;
+    this.operatorModeStateService.updateModuleInspectorView(item);
     // persist in local storage
     window.localStorage.setItem(
       CodeModePanelSelections,
