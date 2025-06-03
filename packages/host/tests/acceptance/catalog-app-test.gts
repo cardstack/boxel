@@ -3,6 +3,8 @@ import { click, waitFor, waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { validate as uuidValidate } from 'uuid';
+
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import ListingInstallCommand from '@cardstack/host/commands/listing-install';
@@ -25,6 +27,7 @@ import { setupApplicationTest } from '../helpers/setup';
 
 const catalogRealmURL = 'http://localhost:4201/catalog/';
 const testRealm2URL = `http://test-realm/test2/`;
+const mortgageCalculatorCardId = `${catalogRealmURL}CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`;
 
 const listingCardSource = `
   import {
@@ -321,7 +324,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         stacks: [
           [
             {
-              id: `${catalogRealmURL}CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`,
+              id: mortgageCalculatorCardId,
               format: 'isolated',
             },
           ],
@@ -340,7 +343,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         stacks: [
           [
             {
-              id: `${catalogRealmURL}CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`,
+              id: mortgageCalculatorCardId,
               format: 'isolated',
             },
           ],
@@ -366,7 +369,6 @@ module('Acceptance | catalog app tests', function (hooks) {
         ],
       });
 
-      const mortgageCalculatorCardId = `${catalogRealmURL}CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`;
       await waitFor('.catalog-content');
       await waitFor('.showcase-center-div');
       await waitFor(
@@ -498,6 +500,147 @@ module('Acceptance | catalog app tests', function (hooks) {
         .exists('Author Example with uuid instance exists')
         .hasClass('selected', 'Author Example with uuid instance is selected');
     });
+
+    module(
+      'install command installs the listing with expected folder and file structure',
+      async function () {
+        test('card listing ', async function (assert) {
+          // Given a listing
+          /*
+           * mortgage-calculator/
+           * mortgage-calculator/mortgage-calculator.gts
+           * mortgage-calculator/MortgageCalculator/example.json
+           */
+
+          // When I install the listing into my selected realm
+          /*
+           *  mortgage-calculator-[uuid]/
+           *  mortgage-calculator-[uuid]/mortgage-calculator.gts
+           *  mortgage-calculator-[uuid]/MortgageCalculator/example.json
+           */
+
+          await visitOperatorMode({
+            stacks: [[]],
+          });
+
+          await executeCommand(
+            ListingInstallCommand,
+            mortgageCalculatorCardId,
+            testRealm2URL,
+          );
+
+          await visitOperatorMode({
+            submode: 'code',
+            fileView: 'browser',
+            codePath: `${testRealm2URL}index`,
+          });
+
+          await waitForCodeEditor();
+
+          await waitFor('[data-test-directory^="mortgage-calculator-"]');
+          const element = document.querySelector(
+            '[data-test-directory^="mortgage-calculator-"]',
+          );
+          const fullPath = element?.getAttribute('data-test-directory');
+
+          // installed folder should be tailing with uuid
+          const uuid =
+            fullPath?.replace('mortgage-calculator-', '').replace('/', '') ||
+            '';
+          assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
+
+          await click(`[data-test-directory="${fullPath}"]`);
+
+          assert
+            .dom(`[data-test-directory="${fullPath}"] .icon`)
+            .hasClass('open');
+
+          const filePath = `${fullPath}mortgage-calculator.gts`;
+          await waitFor(`[data-test-file="${filePath}"]`);
+          await click(`[data-test-file="${filePath}"]`);
+          assert
+            .dom(`[data-test-file="${filePath}"]`)
+            .exists('mortgage-calculator.gts file exists')
+            .hasClass('selected', 'mortgage-calculator.gts file is selected');
+
+          // able to see example install successfully
+          const examplePath = `${fullPath}MortgageCalculator/`;
+          await waitFor(`[data-test-directory="${examplePath}"]`);
+          await click(`[data-test-directory="${examplePath}"]`);
+
+          assert
+            .dom(`[data-test-directory="${examplePath}"] .icon`)
+            .hasClass('open');
+
+          await waitFor(
+            `[data-test-file^="${examplePath}"][data-test-file$=".json"]`,
+          );
+          await click(
+            `[data-test-file^="${examplePath}"][data-test-file$=".json"]`,
+          );
+
+          assert
+            .dom(`[data-test-file^="${examplePath}"][data-test-file$=".json"]`)
+            .exists('Mortgage Calculator Example with uuid instance exists')
+            .hasClass(
+              'selected',
+              'Mortgage Calculator Example with uuid instance is selected',
+            );
+        });
+
+        test('field listing', async function (assert) {
+          // Given a listing
+          /*
+           * fields/contact-link.gts
+           */
+
+          // When I install the listing into my selected realm
+          /*
+           * contact-link-[uuid]/contact-link.gts
+           */
+
+          const contactLinkFieldListingCardId = `${catalogRealmURL}FieldListing/fb9494c4-0d61-4d2d-a6c0-7b16ca40b42b`;
+
+          await visitOperatorMode({
+            stacks: [[]],
+          });
+
+          await executeCommand(
+            ListingInstallCommand,
+            contactLinkFieldListingCardId,
+            testRealm2URL,
+          );
+
+          await visitOperatorMode({
+            submode: 'code',
+            fileView: 'browser',
+            codePath: `${testRealm2URL}index`,
+          });
+
+          await waitForCodeEditor();
+
+          await waitFor('[data-test-directory^="contact-link-"]');
+          const element = document.querySelector(
+            '[data-test-directory^="contact-link-"]',
+          );
+          const fullPath = element?.getAttribute('data-test-directory');
+
+          await click(`[data-test-directory="${fullPath}"]`);
+
+          assert
+            .dom(`[data-test-directory="${fullPath}"] .icon`)
+            .hasClass('open');
+
+          const filePath = `${fullPath}contact-link.gts`;
+          await waitFor(`[data-test-file="${filePath}"]`);
+          await click(`[data-test-file="${filePath}"]`);
+          assert
+            .dom(`[data-test-file="${filePath}"]`)
+            .exists('contact-link.gts file exists')
+            .hasClass('selected', 'contact-link.gts file is selected');
+        });
+      },
+    );
 
     test('remix command installs the card and redirects to code mode with persisted playground selection for first example successfully', async function (assert) {
       await visitOperatorMode({
