@@ -45,6 +45,7 @@ interface Signature {
     datetime: Date;
     isFromAssistant: boolean;
     isStreaming: boolean;
+    isLastAssistantMessage: boolean;
     profileAvatar?: ComponentLike;
     collectionResource?: ReturnType<getCardCollection>;
     files?: FileDef[] | undefined;
@@ -285,6 +286,7 @@ export default class AiAssistantMessage extends Component<Signature> {
               @roomId={{@roomId}}
               @eventId={{@eventId}}
               @isStreaming={{@isStreaming}}
+              @isLastAssistantMessage={{@isLastAssistantMessage}}
             />
           {{else}}
             <FormattedUserMessage @html={{@messageHTML}} />
