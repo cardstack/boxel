@@ -228,41 +228,31 @@ function setRelevantCards(
   return cardMap;
 }
 
-interface RelevantCards {
-  mostRecentlyAttachedCard: LooseCardResource | undefined;
-  attachedCards: LooseCardResource[];
-}
-
-function getMostRecentlyAttachedCard(attachedCards: LooseSingleCardDocument[]) {
-  let cardResources = attachedCards.filter((c) => c.data.id).map((c) => c.data);
-  return cardResources.length
-    ? cardResources[cardResources.length - 1]
-    : undefined;
-}
-
-export function getRelevantCards(
+export function getAttachedCards(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-): RelevantCards {
-  let mostRecentlyAttachedCard: LooseCardResource | undefined;
+): CardResource[] {
   let attachedCardMap = new Map<string, CardResource>();
   for (let event of history) {
-    if (event.type !== 'm.room.message') {
+    if (event.type !== 'm.room.message' || event.sender == aiBotUserId) {
       continue;
     }
 
-    if (event.sender !== aiBotUserId) {
-      let { content } = event;
-      let attachedCards = (content as CardMessageContent).data?.attachedCards
-        ?.map((attachedCard: SerializedFileDef) =>
-          attachedCard.content
-            ? (JSON.parse(attachedCard.content) as LooseSingleCardDocument)
-            : undefined,
-        )
-        .filter((card) => card !== undefined);
-      if (content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE && attachedCards) {
-        setRelevantCards(attachedCardMap, attachedCards);
-        mostRecentlyAttachedCard = getMostRecentlyAttachedCard(attachedCards);
+    let { content } = event;
+    let attachedCards = (content as CardMessageContent).data?.attachedCards
+      ?.map((attachedCard: SerializedFileDef) =>
+        attachedCard.content
+          ? (JSON.parse(attachedCard.content) as LooseSingleCardDocument)
+          : undefined,
+      )
+      .filter((card) => card !== undefined);
+    if (content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE && attachedCards) {
+      for (let card of attachedCards) {
+        if (card.data.id) {
+          attachedCardMap.set(card.data.id, card.data as CardResource);
+        } else {
+          throw new Error(`bug: don't know how to handle card without ID`);
+        }
       }
     }
   }
@@ -271,10 +261,7 @@ export function getRelevantCards(
     .filter((card) => card.id) // Only include cards with valid IDs
     .sort((a, b) => String(a.id!).localeCompare(String(b.id!)));
 
-  return {
-    mostRecentlyAttachedCard: mostRecentlyAttachedCard,
-    attachedCards: sortedCards,
-  };
+  return sortedCards;
 }
 
 export async function loadCurrentlySerializedFileDefs(
@@ -613,10 +600,7 @@ export async function getModifyPrompt(
     }
   }
 
-  let { mostRecentlyAttachedCard, attachedCards } = getRelevantCards(
-    history,
-    aiBotUserId,
-  );
+  let attachedCards = getAttachedCards(history, aiBotUserId);
 
   let attachedFiles = await loadCurrentlySerializedFileDefs(
     client,
@@ -641,10 +625,7 @@ export async function getModifyPrompt(
   let systemMessage = `${MODIFY_SYSTEM_MESSAGE}
 The user currently has given you the following data to work with:
 
-Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}
-
-Attached files:
-${attachedFilesToPrompt(attachedFiles)}
+Cards: ${attachedCardsToMessage(attachedCards)}
 
 The user is operating in a realm with this URL: ${realmUrl}
 `;
@@ -672,24 +653,21 @@ The user is operating in a realm with this URL: ${realmUrl}
   ];
 
   messages = messages.concat(historicalMessages);
+  // Files should be close to the latest user message, so insert them as the second to last message.
+  messages.splice(messages.length - 1, 0, {
+    role: 'user',
+    content:
+      'EPHEMERAL MESSAGE (this will be removed from our conversation after your response)\n\n' +
+      'Here is the current state of the files attached to the conversation:\n' +
+      attachedFilesToPrompt(attachedFiles),
+  });
   return messages;
 }
 
-export const attachedCardsToMessage = (
-  mostRecentlyAttachedCard: LooseCardResource | undefined,
-  attachedCards: LooseCardResource[],
-) => {
-  let a =
-    mostRecentlyAttachedCard !== undefined
-      ? `Most recently shared card: ${JSON.stringify(
-          mostRecentlyAttachedCard,
-        )}.\n`
-      : ``;
-  let b =
-    attachedCards.length > 0
-      ? `All previously shared cards: ${JSON.stringify(attachedCards)}.\n`
-      : ``;
-  return a + b;
+export const attachedCardsToMessage = (attachedCards: LooseCardResource[]) => {
+  return attachedCards.length > 0
+    ? `Shared cards: ${JSON.stringify(attachedCards)}.\n`
+    : ``;
 };
 
 export const skillCardsToMessage = (cards: LooseCardResource[]) => {
