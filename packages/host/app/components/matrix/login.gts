@@ -34,58 +34,64 @@ interface Signature {
 export default class Login extends Component<Signature> {
   <template>
     <span class='title'>Sign in to your Boxel Account</span>
-    <FieldContainer
-      @label='Email Address or Username'
-      @tag='label'
-      @vertical={{true}}
-      class='field'
-    >
-      <BoxelInput
-        data-test-username-field
-        type='text'
-        @value={{this.username}}
-        @onInput={{this.setUsername}}
-        @onKeyPress={{this.handleEnter}}
-      />
-    </FieldContainer>
-    <FieldContainer
-      @label='Password'
-      @tag='label'
-      @vertical={{true}}
-      class='field'
-    >
-      <BoxelInput
-        data-test-password-field
-        type='password'
-        @value={{this.password}}
-        @onInput={{this.setPassword}}
-        @onKeyPress={{this.handleEnter}}
-      />
-    </FieldContainer>
-    <Button
-      @kind='text-only'
-      class='forgot-password'
-      data-test-forgot-password
-      {{on 'click' (fn @setMode 'forgot-password')}}
-    >Forgot password?</Button>
-    <Button
-      class='button'
-      data-test-login-btn
-      @kind='primary'
-      @disabled={{this.isLoginButtonDisabled}}
-      @loading={{this.doLogin.isRunning}}
-      {{on 'click' this.login}}
-    >
-      Sign in</Button>
-    {{#if this.error}}
-      <div class='error' data-test-login-error>{{this.error}}</div>
-    {{/if}}
-    <span class='or'>or</span>
-    <Button
-      class='button'
-      data-test-register-user
-      {{on 'click' (fn @setMode 'register')}}
-    >Create a new Boxel account</Button>
+    <form data-test-login-form {{on 'submit' this.login}}>
+      <FieldContainer
+        @label='Email Address or Username'
+        @tag='label'
+        @vertical={{true}}
+        class='field'
+      >
+        <BoxelInput
+          data-test-username-field
+          type='text'
+          id='boxel-login-username'
+          autocomplete='username'
+          @value={{this.username}}
+          @onInput={{this.setUsername}}
+          @onKeyPress={{this.handleEnter}}
+        />
+      </FieldContainer>
+      <FieldContainer
+        @label='Password'
+        @tag='label'
+        @vertical={{true}}
+        class='field'
+      >
+        <BoxelInput
+          data-test-password-field
+          type='password'
+          id='boxel-login-password'
+          autocomplete='current-password'
+          @value={{this.password}}
+          @onInput={{this.setPassword}}
+          @onKeyPress={{this.handleEnter}}
+        />
+      </FieldContainer>
+      <Button
+        @kind='text-only'
+        class='forgot-password'
+        data-test-forgot-password
+        {{on 'click' (fn @setMode 'forgot-password')}}
+      >Forgot password?</Button>
+      <Button
+        class='button'
+        data-test-login-btn
+        @kind='primary'
+        @disabled={{this.isLoginButtonDisabled}}
+        @loading={{this.doLogin.isRunning}}
+        {{on 'click' this.login}}
+      >
+        Sign in</Button>
+      {{#if this.error}}
+        <div class='error' data-test-login-error>{{this.error}}</div>
+      {{/if}}
+      <span class='or'>or</span>
+      <Button
+        class='button'
+        data-test-register-user
+        {{on 'click' (fn @setMode 'register')}}
+      >Create a new Boxel account</Button>
+    </form>
 
     <style scoped>
       form {
@@ -153,7 +159,8 @@ export default class Login extends Component<Signature> {
 
   @action handleEnter(event: KeyboardEvent) {
     if (event.key === 'Enter') {
-      !this.isLoginButtonDisabled && this.login();
+      event.preventDefault();
+      !this.isLoginButtonDisabled && this.login(event);
     }
   }
 
@@ -170,7 +177,8 @@ export default class Login extends Component<Signature> {
   }
 
   @action
-  private login() {
+  private login(ev: Event) {
+    ev.preventDefault();
     this.doLogin.perform();
   }
 
