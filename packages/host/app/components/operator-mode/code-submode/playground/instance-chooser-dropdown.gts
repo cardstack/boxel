@@ -158,14 +158,14 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
     .action:hover {
       background-color: var(--boxel-100);
     }
-    .action > span:not(.ai-icon) {
+    .action > * + * {
       margin-left: var(--boxel-sp-xxs);
     }
     .action > * {
       vertical-align: middle;
     }
     .action-running {
-      --boxel-loading-indicator-size: var(var(--boxel-icon-xs));
+      --boxel-loading-indicator-size: var(--boxel-icon-xs);
     }
     .ai-icon {
       display: inline-block;
