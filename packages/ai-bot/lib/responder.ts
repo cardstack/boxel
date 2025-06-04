@@ -1,5 +1,5 @@
 import { logger } from '@cardstack/runtime-common';
-import type { MatrixClient } from './matrix/util';
+import { isCommandOrCodePatchResult, type MatrixClient } from './matrix/util';
 
 import * as Sentry from '@sentry/node';
 import { OpenAIError } from 'openai/error';
@@ -9,7 +9,6 @@ import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions
 import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import type OpenAI from 'openai';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
-import { APP_BOXEL_COMMAND_RESULT_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
 import MatrixResponsePublisher from './matrix/response-publisher';
 import ResponseState from './response-state';
@@ -25,8 +24,8 @@ export class Responder {
       return true;
     }
 
-    // If it's a command result, we might respond
-    if (event.getType() === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE) {
+    // If it's a command result or a code patch result, we might respond
+    if (isCommandOrCodePatchResult(event)) {
       return true;
     }
 
@@ -36,8 +35,7 @@ export class Responder {
 
   static eventWillDefinitelyTriggerResponse(event: DiscreteMatrixEvent) {
     return (
-      this.eventMayTriggerResponse(event) &&
-      event.getType() !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE
+      this.eventMayTriggerResponse(event) && !isCommandOrCodePatchResult(event)
     );
   }
 
