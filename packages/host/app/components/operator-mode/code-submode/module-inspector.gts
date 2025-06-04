@@ -30,7 +30,6 @@ import {
   GetCardsContextName,
   GetCardContextName,
   ResolvedCodeRef,
-  skillCardRef,
   specRef,
   localId,
 } from '@cardstack/runtime-common';
