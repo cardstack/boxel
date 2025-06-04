@@ -440,7 +440,7 @@ export class TaskPlanner extends GlimmerComponent<TaskPlannerArgs> {
               @selected={{this.selectedFilter}}
               @options={{this.filterTypes}}
               @onChange={{this.onSelectFilter}}
-              @placeholder={{'Choose a Filter'}}
+              @placeholder='Choose a Filter'
               @matchTriggerWidth={{false}}
               @triggerComponent={{FilterTrigger}}
               as |item|
@@ -462,7 +462,7 @@ export class TaskPlanner extends GlimmerComponent<TaskPlannerArgs> {
               <FilterDisplay
                 @key={{filterType}}
                 @items={{items}}
-                @removeItem={{(fn this.removeFilter filterType)}}
+                @removeItem={{fn this.removeFilter filterType}}
                 @icon={{this.getFilterIcon filterType}}
                 as |item|
               >

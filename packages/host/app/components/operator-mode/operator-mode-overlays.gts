@@ -76,7 +76,7 @@ export default class OperatorModeOverlays extends Overlays {
                     @height='100%'
                     @icon={{if isSelected IconCircleSelected IconCircle}}
                     aria-label='select card'
-                    data-test-overlay-select={{(removeFileExtension cardId)}}
+                    data-test-overlay-select={{removeFileExtension cardId}}
                   />
                 </div>
               {{/if}}
@@ -110,7 +110,7 @@ export default class OperatorModeOverlays extends Overlays {
                   {{#if (this.isButtonDisplayed 'more-options' renderedCard)}}
                     <div>
                       <BoxelDropdown
-                        @registerAPI={{(this.registerDropdownAPI renderedCard)}}
+                        @registerAPI={{this.registerDropdownAPI renderedCard}}
                       >
                         <:trigger as |bindings|>
                           <Tooltip @placement='top'>

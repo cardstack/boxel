@@ -156,7 +156,7 @@ export default class AiAssistantMessageUsage extends Component {
             <AiAssistantMessage
               @messageHTML='Culpa fugiat ex ipsum commodo anim. Cillum reprehenderit eu consectetur laboris dolore in cupidatat. Deserunt ipsum voluptate sit velit aute ad velit exercitation sint. Velit esse velit est et amet labore velit nisi magna ea elit nostrud quis anim..'
               @index={{1}}
-              @eventId={{'125'}}
+              @eventId='125'
               @roomId='!abcd'
               @monacoSDK={{this.noopMonacoSDK}}
               @registerScroller={{this.noop}}

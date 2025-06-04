@@ -66,7 +66,7 @@ class CurrencyFieldEdit extends Component<typeof CurrencyField> {
       Loading currencies...
     {{else}}
       <BoxelSelect
-        @placeholder={{'Choose a currency'}}
+        @placeholder='Choose a currency'
         @options={{this.currencies}}
         @selected={{this.currency}}
         @onChange={{this.onSelectCurrency}}
