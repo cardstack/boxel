@@ -133,6 +133,10 @@ export class RoomResource extends Resource<Args> {
       if (!memberIds || !memberIds.includes(this.matrixService.aiBotUserId)) {
         return;
       }
+      // TODO: enabledSkillCards can have references to skills whose URL
+      // does not exist anymore (i.e. skill has been deleted or renamed). In
+      // this case we should probably remove/update the reference from the skillConfig.
+      // CS-8776
       await this.loadSkills(this.matrixRoom.skillsConfig.enabledSkillCards);
 
       let index = this._messageCache.size;
@@ -396,7 +400,8 @@ export class RoomResource extends Resource<Args> {
     if (isCardInstance(skillCard)) {
       return skillCard;
     } else {
-      throw new Error(`Cannot find skill ${cardId}`);
+      // A known reason for this is that the skill has been renamed
+      return undefined;
     }
   }
 
