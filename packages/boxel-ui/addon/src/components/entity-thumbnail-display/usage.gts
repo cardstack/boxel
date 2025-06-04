@@ -21,9 +21,9 @@ export default class EntityThumbnailDisplayUsage extends Component {
         <EntityDisplayWithThumbnail @title={{this.title}}>
           <:thumbnail>
             <Avatar
-              @userId={{'user123'}}
+              @userId='user123'
               @displayName={{this.title}}
-              @thumbnailURL={{'https://images.pexels.com/photos/4571943/pexels-photo-4571943.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=1'}}
+              @thumbnailURL='https://images.pexels.com/photos/4571943/pexels-photo-4571943.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=1'
               @isReady={{true}}
               class='avatar'
             />

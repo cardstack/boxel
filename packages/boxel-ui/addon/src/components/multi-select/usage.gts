@@ -358,7 +358,7 @@ export default class BoxelMultiSelectUsage extends Component {
             @searchEnabled={{true}}
             @closeOnSelect={{false}}
             @ariaLabel='Select countries'
-            @selectedItemComponent={{(component SelectedCountry)}}
+            @selectedItemComponent={{component SelectedCountry}}
             as |option|
           >
             {{option.name}}
