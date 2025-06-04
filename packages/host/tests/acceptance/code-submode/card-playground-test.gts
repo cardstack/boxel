@@ -1224,6 +1224,43 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0].id, cardId);
     });
+
+    test('can request AI assistant to fill in sample data', async function (assert) {
+      const prompt = `Fill in sample data for the attached card instance.`;
+
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'BlogPost',
+      });
+      assertCardExists(assert, `${testRealmURL}BlogPost/mad-hatter`);
+
+      await click('[data-test-instance-chooser]');
+      assert
+        .dom('[data-test-instance-chooser]')
+        .hasAttribute('aria-expanded', 'true');
+
+      await click('[data-test-generate-sample-data]');
+
+      assertMessages(assert, [
+        {
+          from: 'testuser',
+          message: prompt,
+          cards: [
+            {
+              id: `${testRealmURL}BlogPost/mad-hatter`,
+            },
+          ],
+          files: [
+            {
+              name: 'blog-post.gts',
+              sourceUrl: `${testRealmURL}blog-post.gts`,
+            },
+          ],
+        },
+      ]);
+      assert
+        .dom('[data-test-instance-chooser]')
+        .hasAttribute('aria-expanded', 'false');
+    });
   });
 
   module('multiple realms', function (hooks) {

@@ -7,6 +7,7 @@ import { specRef, type Realm } from '@cardstack/runtime-common';
 import ENV from '@cardstack/host/config/environment';
 
 import {
+  assertMessages,
   percySnapshot,
   setupAcceptanceTestRealm,
   setupLocalIndexing,
@@ -998,6 +999,46 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       await settled();
       assertFieldExists(assert, 'embedded');
       assert.dom('[data-test-embedded-comment-title]').doesNotExist();
+    });
+
+    test('can request AI assistant to fill in sample data', async function (assert) {
+      const prompt = `Fill in sample data for the attached spec's containedExamples field at index 0.`;
+
+      await openFileInPlayground('pet.gts', testRealmURL, {
+        declaration: 'ToyField',
+      });
+      assert
+        .dom('[data-test-instance-chooser]')
+        .containsText('Toy - Example 1');
+      assertFieldExists(assert, 'embedded');
+
+      await click('[data-test-instance-chooser]');
+      assert
+        .dom('[data-test-instance-chooser]')
+        .hasAttribute('aria-expanded', 'true');
+
+      await click('[data-test-generate-sample-data]');
+
+      assertMessages(assert, [
+        {
+          from: 'testuser',
+          message: prompt,
+          cards: [
+            {
+              id: `${testRealmURL}Spec/toy`,
+            },
+          ],
+          files: [
+            {
+              name: 'pet.gts',
+              sourceUrl: `${testRealmURL}pet.gts`,
+            },
+          ],
+        },
+      ]);
+      assert
+        .dom('[data-test-instance-chooser]')
+        .hasAttribute('aria-expanded', 'false');
     });
   });
 

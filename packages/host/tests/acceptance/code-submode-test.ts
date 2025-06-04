@@ -945,40 +945,6 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-send-error-to-ai-assistant]').exists();
     });
 
-    test('can fill in sample data with AI', async function (assert) {
-      await visitOperatorMode({
-        submode: 'code',
-        codePath: `${testRealmURL}person.gts`,
-      });
-      await click('[data-test-module-inspector-view="preview"]');
-      assert
-        .dom(
-          `[data-test-playground-panel] [data-test-card="${testRealmURL}Person/1"]`,
-        )
-        .exists();
-
-      await click('[data-test-instance-chooser]');
-      await click('[data-test-generate-sample-data]');
-      assert.dom('[data-test-ai-assistant-panel]').exists();
-      assertMessages(assert, [
-        {
-          from: 'testuser',
-          message: `Generate sample data`,
-          cards: [
-            {
-              id: `${testRealmURL}Person/1`,
-            },
-          ],
-          files: [
-            {
-              name: 'person.gts',
-              sourceUrl: `${testRealmURL}person.gts`,
-            },
-          ],
-        },
-      ]);
-    });
-
     test('empty state displays default realm info', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
