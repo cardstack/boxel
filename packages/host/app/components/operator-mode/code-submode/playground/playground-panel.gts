@@ -690,20 +690,33 @@ export default class PlaygroundPanel extends Component<Signature> {
     if (!this.operatorModeStateService.openFileURL) {
       throw new Error('Please open a file');
     }
+
+    await this.aiAssistantPanelService.openPanel();
+
     let { commandContext } = this.commandService;
     let sendMessageCommand = new SendAiAssistantMessageCommand(commandContext);
 
-    let prompt = `Generate sample data`;
+    let prompt = `Fill in sample data`;
 
-    // TODO: handle sample data generation for FieldDefs
-
-    if (!card) {
-      // on error preview screen, we may not have a selected card instance.
-      // in this case, the below prompt helps AI not complain about open card.
-      prompt += ` for the selected module ${this.moduleId} in the attached file.`;
+    if (this.args.isFieldDef) {
+      if (card) {
+        prompt += ` for the attached spec's containedExamples field at index ${
+          this.fieldIndex ?? '0'
+        }.`;
+      }
+      // TODO: determine how to handle error case
+    } else {
+      if (card) {
+        prompt += ` for the attached card instance.`;
+      } else {
+        // if there is no selected card for some reason (maybe an error case),
+        // AI can generate sample card instances using the specified moduleId
+        // otherwise it complains about not having an open card or
+        // generates instances for all card definitions on the file
+        prompt += ` for the selected module ${this.moduleId} in the attached file.`;
+      }
     }
 
-    await this.aiAssistantPanelService.openPanel();
     await sendMessageCommand.execute({
       roomId: this.matrixService.currentRoomId,
       prompt,
