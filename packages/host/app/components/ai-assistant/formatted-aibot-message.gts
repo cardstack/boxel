@@ -207,10 +207,6 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
         margin-top: 0;
       }
 
-      .message > :deep(.code-block + :not(.code-block)) {
-        margin-top: 25px;
-      }
-
       .ai-assistant-code-block-actions {
         position: absolute;
         width: calc(100% + 2 * var(--ai-assistant-message-padding));
@@ -346,6 +342,17 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
             </div>
           {{/if}}
           {{#if this.codeDiffResource.isDataLoaded}}
+            <codeBlock.diffEditorHeader
+              @mode='edit'
+              @fileUrl={{this.codeDiffResource.fileUrl}}
+              @linesRemoved={{1}}
+              @linesAdded={{2}}
+            />
+            <codeBlock.diffEditor
+              @originalCode={{this.codeDiffResource.originalCode}}
+              @modifiedCode={{this.codeDiffResource.modifiedCode}}
+              @language={{@codeData.language}}
+            />
             <codeBlock.actions as |actions|>
               <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
               <actions.applyCodePatch
@@ -356,11 +363,6 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
                 @modifiedCode={{this.codeDiffResource.modifiedCode}}
               />
             </codeBlock.actions>
-            <codeBlock.diffEditor
-              @originalCode={{this.codeDiffResource.originalCode}}
-              @modifiedCode={{this.codeDiffResource.modifiedCode}}
-              @language={{@codeData.language}}
-            />
           {{/if}}
         {{/if}}
       {{else}}

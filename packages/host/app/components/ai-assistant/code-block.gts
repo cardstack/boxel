@@ -76,6 +76,15 @@ interface CodeBlockDiffEditorSignature {
   };
 }
 
+interface CodeBlockDiffEditorHeaderSignature {
+  Args: {
+    mode: 'edit' | 'create';
+    fileUrl: string;
+    linesRemoved: number;
+    linesAdded: number;
+  };
+}
+
 interface Signature {
   Args: {
     monacoSDK: MonacoSDK;
@@ -85,11 +94,16 @@ interface Signature {
     language?: string | null;
     code?: string | null;
     dimmed?: boolean;
+    mode?: 'edit' | 'create';
+    fileUrl?: string;
+    linesRemoved?: number;
+    linesAdded?: number;
   };
   Blocks: {
     default: [
       {
         editor: ComponentLike<CodeBlockEditorSignature>;
+        diffEditorHeader: ComponentLike<CodeBlockDiffEditorHeaderSignature>;
         diffEditor: ComponentLike<CodeBlockDiffEditorSignature>;
         actions: ComponentLike<CodeBlockActionsSignature>;
       },
@@ -108,6 +122,13 @@ let CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
         originalCode=@originalCode
         modifiedCode=@modifiedCode
         language=@language
+      )
+      diffEditorHeader=(component
+        CodeBlockDiffEditorHeader
+        mode=@mode
+        fileUrl=@fileUrl
+        linesRemoved=@linesRemoved
+        linesAdded=@linesAdded
       )
       actions=(component CodeBlockActionsComponent codeData=@codeData)
     )
@@ -366,7 +387,6 @@ class CodeBlockEditor extends Component<Signature> {
   <template>
     <style scoped>
       .code-block {
-        margin-bottom: 15px;
         width: calc(100% + 2 * var(--boxel-sp));
         margin-left: calc(-1 * var(--boxel-sp));
         max-height: 250px;
@@ -418,7 +438,6 @@ class CodeBlockDiffEditor extends Component<Signature> {
   <template>
     <style scoped>
       .code-block {
-        margin-bottom: 15px;
         width: calc(100% + 2 * var(--boxel-sp));
         margin-left: calc(-1 * var(--boxel-sp));
         max-height: 250px;
@@ -426,6 +445,12 @@ class CodeBlockDiffEditor extends Component<Signature> {
 
       :deep(.line-insert) {
         background-color: rgb(19 255 32 / 66%) !important;
+      }
+
+      .code-block-diff {
+        /* border: gray;
+        border-radius: 10px;
+        background: #3b394A';*/
       }
     </style>
     <div
@@ -440,6 +465,69 @@ class CodeBlockDiffEditor extends Component<Signature> {
       data-test-code-diff-editor
     >
       {{! Don't put anything here in this div as monaco modifier will override this element }}
+    </div>
+  </template>
+}
+
+class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEditorHeaderSignature> {
+  <template>
+    <style scoped>
+      .code-block-diff-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background-color: #2c2c3c;
+        color: #ffffff;
+        padding: 8px 12px;
+        border-top-left-radius: 12px;
+        border-top-right-radius: 12px;
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 14px;
+      }
+
+      .code-block-diff-header .file-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .code-block-diff-header .file-info .edit-icon {
+        background-color: #f44a1c;
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-weight: bold;
+        color: #ffffff;
+      }
+
+      .code-block-diff-header .file-info .filename {
+        font-weight: 600;
+      }
+
+      .code-block-diff-header .changes {
+        display: flex;
+        gap: 6px;
+        font-weight: 600;
+      }
+
+      .code-block-diff-header .changes .removed {
+        color: #ff5f5f;
+      }
+
+      .code-block-diff-header .changes .added {
+        color: #66ff99;
+      }
+    </style>
+    <div class='code-block-diff-header'>
+      {{@mode}}
+
+      <div class='file-info'>
+        <span class='edit-icon'>B</span>
+        <span class='filename'>{{@fileUrl}}</span>
+      </div>
+      <div class='changes'>
+        <span class='removed'>-{{@linesRemoved}}</span>
+        <span class='added'>+{{@linesAdded}}</span>
+      </div>
     </div>
   </template>
 }
