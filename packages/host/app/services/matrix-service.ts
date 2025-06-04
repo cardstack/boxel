@@ -59,7 +59,6 @@ import {
   DEFAULT_LLM_LIST,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -1265,7 +1264,7 @@ export default class MatrixService extends Service {
         room: {
           timeline: {
             limit: 30,
-            not_types: [APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE],
+            'org.matrix.msc3874.not_rel_types': ['m.replace'],
           },
         },
       });

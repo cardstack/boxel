@@ -28,10 +28,7 @@ import {
   startServer as startRealmServer,
   type IsolatedRealmServer,
 } from '../helpers/isolated-realm-server';
-import {
-  APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE,
-} from '../helpers/matrix-constants';
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '../helpers/matrix-constants';
 
 test.describe('Room messages', () => {
   let synapse: SynapseInstance;

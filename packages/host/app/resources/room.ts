@@ -21,7 +21,6 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
-  APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   DEFAULT_LLM,
@@ -145,7 +144,6 @@ export class RoomResource extends Resource<Args> {
             await this.loadRoomMemberEvent(roomId, event);
             break;
           case 'm.room.message':
-          case APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE:
             if (this.isRealmServerEvent(event)) {
               break;
             } else {
@@ -415,6 +413,20 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
+  private getAggregatedReplacement(event: IRoomEvent) {
+    let finalRawEvent: IRoomEvent;
+    const originalEventId = event.event_id;
+    let replacedRawEvent: IRoomEvent =
+      event.unsigned?.['m.relations']?.['m.replace'];
+    if (!event['m.relations']?.['m.relations'] && replacedRawEvent) {
+      finalRawEvent = replacedRawEvent;
+      finalRawEvent.event_id = originalEventId;
+    } else {
+      finalRawEvent = event;
+    }
+    return finalRawEvent;
+  }
+
   private async loadRoomMessage({
     roomId,
     event,
@@ -425,6 +437,8 @@ export class RoomResource extends Resource<Args> {
     index: number;
   }) {
     let effectiveEventId = this.getEffectiveEventId(event);
+    event = this.getAggregatedReplacement(event);
+
     let message = this._messageCache.get(effectiveEventId);
     if (!message?.isStreamingOfEventFinished) {
       let author = this.upsertRoomMember({

@@ -1,5 +1,3 @@
-export const APP_BOXEL_MESSAGE_STREAMING_EVENT_TYPE =
-  'app.boxel.message.streaming';
 export const APP_BOXEL_MESSAGE_MSGTYPE = 'app.boxel.message';
 export const APP_BOXEL_COMMAND_MSGTYPE = 'app.boxel.command';
 export const APP_BOXEL_COMMAND_REQUESTS_KEY = 'app.boxel.commandRequests';
