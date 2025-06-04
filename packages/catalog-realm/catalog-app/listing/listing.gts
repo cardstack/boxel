@@ -531,6 +531,7 @@ export class AppListing extends Listing {
 
 export class CardListing extends Listing {
   static displayName = 'CardListing';
+  @field skills = linksToMany(() => Skill);
 }
 
 export class FieldListing extends Listing {

@@ -8,7 +8,7 @@
     "relationships": {
       "startHere.0": {
         "links": {
-          "self": "./Listing/blog-listing"
+          "self": "./AppListing/95cbe2c7-9b60-4afd-8a3c-1382b610e316"
         }
       },
       "startHere.1": {
