@@ -3738,7 +3738,6 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/apps.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/book-open-text.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/box-model.js',
-        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/brain.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/captions.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/code.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/git-branch.js',
