@@ -876,6 +876,19 @@ module('Acceptance | code submode tests', function (_hooks) {
         },
       ]);
       assert.dom('[data-test-send-error-to-ai-assistant]').exists();
+
+      let originalWriteText = navigator.clipboard.writeText;
+      let copiedText;
+      navigator.clipboard.writeText = async (text: string) => {
+        copiedText = text;
+        return Promise.resolve();
+      };
+      await click('[data-test-boxel-copy-button]');
+      assert.strictEqual(
+        copiedText,
+        '{"message":"","stack":"Parse Error at broken.gts:1:6: 1:10"}',
+      );
+      navigator.clipboard.writeText = originalWriteText;
     });
 
     test('it shows card preview errors', async function (assert) {

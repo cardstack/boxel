@@ -31,7 +31,6 @@ import {
   GetCardsContextName,
   GetCardContextName,
   ResolvedCodeRef,
-  skillCardRef,
   specRef,
   localId,
 } from '@cardstack/runtime-common';
@@ -410,9 +409,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         if (this.isApp(selectedDeclaration)) {
           return 'app';
         }
-        if (await this.isSkill(selectedDeclaration)) {
-          return 'skill';
-        }
         return 'card';
       }
       if (isFieldDef(selectedDeclaration.cardOrField)) {
@@ -422,11 +418,10 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     throw new Error('Unidentified spec');
   }
 
-  //TODO: Improve identification of isApp and isSkill
-  // isApp and isSkill are far from perfect functions
-  //We have good primitives to identify card and field but not for app and skill
-  //Here we are trying our best based upon schema analyses what is an app and a skill
-  //We don't try to capture deep ancestry of app and skill
+  //TODO: Improve identification of isApp
+  //We have good primitives to identify card and field but not for app
+  //Here we are trying our best based upon schema analyses what is an app
+  //We don't try to capture deep ancestry of app
   private isApp(selectedDeclaration: CardOrFieldDeclaration) {
     if (selectedDeclaration.exportName === 'AppCard') {
       return true;
@@ -438,19 +433,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     ) {
       return true;
     }
-    return false;
-  }
-
-  private async isSkill(selectedDeclaration: CardOrFieldDeclaration) {
-    const isInClassChain = await selectedDeclaration.cardType.isClassInChain(
-      selectedDeclaration.cardOrField,
-      skillCardRef,
-    );
-
-    if (isInClassChain) {
-      return true;
-    }
-
     return false;
   }
 

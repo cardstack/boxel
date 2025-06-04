@@ -72,7 +72,7 @@
     "concurrently": "catalog:",
     "ember-source": "~5.4.0",
     "ember-template-imports": "^4.1.1",
-    "ember-template-lint": "^5.11.2",
+    "ember-template-lint": "catalog:",
     "ember-template-lint-plugin-prettier": "^5.0.0",
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",

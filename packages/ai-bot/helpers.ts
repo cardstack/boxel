@@ -550,7 +550,7 @@ export async function getModifyPrompt(
     aiBotUserId.indexOf(':') === -1 ||
     aiBotUserId.startsWith('@') === false
   ) {
-    throw new Error("Username must be a full id, e.g. '@ai-bot:localhost'");
+    throw new Error("Username must be a full id, e.g. '@aibot:localhost'");
   }
   let historicalMessages: OpenAIPromptMessage[] = [];
   for (let event of history) {
@@ -594,74 +594,17 @@ export async function getModifyPrompt(
       }
     }
     if (body && event.sender !== aiBotUserId) {
-      if (
-        event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
-        event.content.data?.context?.openCardIds
-      ) {
-        body = `User message: ${body}
-          Context: the user has the following cards open: ${JSON.stringify(
-            event.content.data.context.openCardIds,
-          )}`;
-      } else {
-        body = `User message: ${body}
-          Context: the user has no open cards.`;
-      }
       historicalMessages.push({
         role: 'user',
         content: body,
       });
     }
   }
-
-  let { mostRecentlyAttachedCard, attachedCards } = getRelevantCards(
-    history,
-    aiBotUserId,
-  );
-
-  let attachedFiles = await loadCurrentlySerializedFileDefs(
-    client,
-    history,
-    aiBotUserId,
-  );
-
-  let lastMessageEventByUser = history.findLast(
-    (event) => event.sender !== aiBotUserId,
-  );
-
-  let realmUrl;
-  if (
-    lastMessageEventByUser &&
-    lastMessageEventByUser.type === 'm.room.message' &&
-    lastMessageEventByUser.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
-  ) {
-    realmUrl = (lastMessageEventByUser.content as CardMessageContent).data
-      ?.context?.realmUrl;
-  }
-
-  let systemMessage = `${MODIFY_SYSTEM_MESSAGE}
-The user currently has given you the following data to work with:
-
-Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}
-
-Attached files:
-${attachedFilesToPrompt(attachedFiles)}
-
-The user is operating in a realm with this URL: ${realmUrl}
-`;
-
+  let systemMessage = `${MODIFY_SYSTEM_MESSAGE}\n`;
   if (skillCards.length) {
     systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
     systemMessage += skillCardsToMessage(skillCards);
     systemMessage += '\n';
-  }
-
-  let cardPatchTool = tools.find(
-    (tool) => tool.function.name === 'patchCardInstance',
-  );
-
-  if (attachedFiles.length == 0 && attachedCards.length > 0 && !cardPatchTool) {
-    systemMessage +=
-      'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
   }
 
   let messages: OpenAIPromptMessage[] = [
@@ -672,8 +615,98 @@ The user is operating in a realm with this URL: ${realmUrl}
   ];
 
   messages = messages.concat(historicalMessages);
+  let contextContent = await buildContextMessage(
+    client,
+    history,
+    aiBotUserId,
+    tools,
+  );
+  let contextMessagePosition = messages.findLastIndex(
+    (m) => m.role === 'user' || m.role === 'tool',
+  );
+  messages.splice(contextMessagePosition, 0, {
+    role: 'system',
+    content: contextContent,
+  });
+
   return messages;
 }
+
+export const buildContextMessage = async (
+  client: MatrixClient,
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+  tools: Tool[],
+): Promise<string> => {
+  let { mostRecentlyAttachedCard, attachedCards } = getRelevantCards(
+    history,
+    aiBotUserId,
+  );
+  let result = '';
+
+  let attachedFiles = await loadCurrentlySerializedFileDefs(
+    client,
+    history,
+    aiBotUserId,
+  );
+
+  let lastEventWithContext = history.findLast((ev) => {
+    if (ev.sender === aiBotUserId) {
+      return false;
+    }
+    return (
+      (ev.type === 'm.room.message' &&
+        ev.content.msgtype == APP_BOXEL_MESSAGE_MSGTYPE) ||
+      ev.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE ||
+      ev.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE
+    );
+  }) as
+    | CardMessageEvent
+    | CommandResultEvent
+    | CodePatchResultEvent
+    | undefined;
+  let context = lastEventWithContext?.content.data?.context;
+
+  if (context) {
+    result += `The user is currently viewing the following user interface:\n`;
+    if (context?.submode) {
+      result += `Submode: ${context.submode}\n`;
+    }
+    if (context?.realmUrl) {
+      result += `Workspace: ${context.realmUrl}\n`;
+    }
+    if (context?.openCardIds && context.openCardIds.length > 0) {
+      result += `Open cards:\n${context.openCardIds.map((id) => ` - ${id}\n`)}`;
+    } else {
+      result += `The user has no open cards.\n`;
+    }
+    if (context?.codeMode?.currentFile) {
+      result += `File open in code editor: ${context.codeMode.currentFile}\n`;
+    }
+  } else {
+    result += `The user has no open cards.\n`;
+  }
+  if (attachedCards.length > 0 || attachedFiles.length > 0) {
+    result += `The user currently has given you the following data to work with:\n\n`;
+    if (attachedCards.length > 0) {
+      result += `Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}\n\n`;
+    }
+    if (attachedFiles.length > 0) {
+      result += `\n\nAttached files:\n${attachedFilesToPrompt(attachedFiles)}`;
+    }
+  }
+
+  let cardPatchTool = tools.find(
+    (tool) => tool.function.name === 'patchCardInstance',
+  );
+
+  if (attachedFiles.length == 0 && attachedCards.length > 0 && !cardPatchTool) {
+    result +=
+      'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
+  }
+
+  return result;
+};
 
 export const attachedCardsToMessage = (
   mostRecentlyAttachedCard: LooseCardResource | undefined,

@@ -191,7 +191,7 @@ export default class CardCatalog extends Component<Signature> {
                 as |isSelected|
               }}
                 <ItemButton
-                  @newCard={{(this.newCardArgs realmUrl)}}
+                  @newCard={{this.newCardArgs realmUrl}}
                   @isSelected={{isSelected}}
                   @select={{@select}}
                   @handleEnterKey={{this.handleEnterKey}}
@@ -274,7 +274,7 @@ export default class CardCatalog extends Component<Signature> {
                 as |isSelected|
               }}
                 <ItemButton
-                  @newCard={{(this.newCardArgs realmUrl)}}
+                  @newCard={{this.newCardArgs realmUrl}}
                   @isSelected={{isSelected}}
                   @select={{@select}}
                   @handleEnterKey={{this.handleEnterKey}}

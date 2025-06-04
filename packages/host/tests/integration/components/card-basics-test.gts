@@ -197,6 +197,19 @@ module('Integration | card-basics', function (hooks) {
       );
     });
 
+    test('instanceOf works thru an interior field', async function (assert) {
+      class InteriorField extends FieldDef {
+        @field a = contains(StringField);
+      }
+
+      class ExteriorField extends InteriorField {
+        @field b = contains(StringField);
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, { ExteriorField });
+      assert.true(instanceOf(new ExteriorField(), FieldDef));
+    });
+
     test('primitive field type checking', async function (assert) {
       class Person extends CardDef {
         @field firstName = contains(StringField);
@@ -2132,6 +2145,7 @@ module('Integration | card-basics', function (hooks) {
       }
       loader.shimModule(`${testRealmURL}test-cards`, {
         TestCard,
+        TestField,
         SubTestField,
       });
 
@@ -2208,6 +2222,7 @@ module('Integration | card-basics', function (hooks) {
 
       loader.shimModule(`${testRealmURL}test-cards`, {
         TestCardWithField,
+        TestField,
         TestCard,
         SubTestField,
       });

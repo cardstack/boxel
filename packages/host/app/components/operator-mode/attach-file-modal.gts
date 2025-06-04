@@ -186,7 +186,7 @@ export default class AttachFileModal extends Component<Signature> {
     {{#if this.deferred}}
       <ModalContainer
         @title='Attach File'
-        @onClose={{(fn this.pick undefined)}}
+        @onClose={{fn this.pick undefined}}
         @size='medium'
         @centered={{true}}
         {{on 'keydown' this.handleKeydown}}

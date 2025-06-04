@@ -63,7 +63,7 @@ export default class AiAssistantCardPickerUsage extends Component {
           @maxNumberOfItemsToAttach={{this.maxNumberOfCards}}
           @autoAttachedFile={{this.autoAttachedFile}}
           @filesToAttach={{this.filesToAttach}}
-          @submode={{'interact'}}
+          @submode='interact'
         />
         <CardCatalogModal />
       </:example>

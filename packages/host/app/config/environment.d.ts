@@ -29,5 +29,7 @@ declare const config: {
   sqlSchema: string;
   assetsURL: string;
   stripePaymentLink: string;
-  featureFlags?: {};
+  featureFlags?: {
+    SHOW_ASK_AI?: boolean;
+  };
 };
