@@ -39,7 +39,6 @@ import { DiagonalArrowLeftUp as ExportArrow } from '@cardstack/boxel-ui/icons';
 import StackIcon from '@cardstack/boxel-icons/stack';
 import AppsIcon from '@cardstack/boxel-icons/apps';
 import LayoutList from '@cardstack/boxel-icons/layout-list';
-import Brain from '@cardstack/boxel-icons/brain';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 
