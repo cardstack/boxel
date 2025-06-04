@@ -1360,7 +1360,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         @field boom = contains(BoomField);
       }
     `;
-    const boomPerson = `import { field, contains, CardDef, Component, StringField } from 'https://cardstack.com/base/card-api';
+    const boomPerson = `import { field, contains, CardDef, FieldDef, Component, StringField } from 'https://cardstack.com/base/card-api';
       export class BoomPerson extends CardDef {
         static displayName = 'Boom Person';
         @field firstName = contains(StringField);
@@ -1370,6 +1370,19 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           </template>
           boom = () => fn();
         }
+      }
+
+      export class FailingField extends FieldDef {
+        static displayName = 'Failing Field';
+        @field title = contains(StringField);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <p>This will fail.</p> {{this.boom}}
+          </template>
+          boom = () => {
+            throw new Error('boom!');
+          };
+        };
       }
 
       export class WorkingCard extends CardDef {
@@ -1512,6 +1525,52 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-error-container]').doesNotExist();
     });
 
+    test('it can clear card-creation error that did not result in new file in the realm', async function (assert) {
+      await openFileInPlayground('boom-pet.gts', testRealmURL, {
+        declaration: 'BoomPet',
+      });
+
+      assert
+        .dom('[data-test-card-error]')
+        .exists('auto-generated card has error in it');
+
+      await createNewInstance();
+
+      assert
+        .dom('[data-test-playground-panel] [data-test-card]')
+        .doesNotExist();
+      assert
+        .dom('[data-test-card-error]')
+        .hasText('This card contains an error.');
+      assert.dom('[data-test-error-message]').hasText('Boom!');
+
+      await withoutLoaderMonitoring(async () => {
+        // The loader service is shared between the realm server and the host.
+        // need to reset the loader to pick up the changed module in the indexer
+        getService('loader-service').resetLoader();
+        // the error was introduced in a part of the card that is run directly
+        // in the realm server so we also need to make sure to reset the realm's loader
+        // (not just the loader for the index). This is a test env idiosyncrasy
+        // that doesn't exist in real life.
+        realm.__resetLoaderForTest();
+        // fix error
+        await realm.write(
+          'boom-pet.gts',
+          `import { contains, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
+            export class BoomPet extends CardDef {
+              static displayName = 'Boom Pet';
+              @field boom = contains(StringField);
+            }
+          `,
+        );
+      });
+      await waitFor(`[data-test-error-container]`, {
+        count: 0,
+        timeout: 5_000,
+      });
+      assert.dom('[data-test-error-container]').doesNotExist();
+    });
+
     test('it can clear card-creation error (that resulted in new file in the realm) when different card-def is selected', async function (assert) {
       await openFileInPlayground('boom-person.gts', testRealmURL, {
         declaration: 'BoomPerson',
@@ -1532,6 +1591,54 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert
         .dom('[data-test-error-container]')
         .exists('can navigate back to the error card def');
+    });
+
+    test('it can clear card-creation error for a failing field', async function (assert) {
+      await openFileInPlayground('boom-person.gts', testRealmURL, {
+        declaration: 'FailingField',
+      });
+
+      assert
+        .dom('[data-test-card-error]')
+        .exists('auto-generated card has error in it');
+
+      await createNewInstance();
+
+      assert
+        .dom('[data-test-playground-panel] [data-test-card]')
+        .doesNotExist();
+      assert
+        .dom('[data-test-card-error]')
+        .hasText('This card contains an error.');
+      assert
+        .dom('[data-test-error-message]')
+        .hasText('Encountered error rendering HTML for card: boom!');
+
+      await withoutLoaderMonitoring(async () => {
+        // The loader service is shared between the realm server and the host.
+        // need to reset the loader to pick up the changed module in the indexer
+        getService('loader-service').resetLoader();
+        // fix error
+        await realm.write(
+          'boom-person.gts',
+          `import { contains, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
+           export class FailingField extends FieldDef {
+             static displayName = 'Failing Field';
+             @field title = contains(StringField);
+             static embedded = class Embedded extends Component<typeof this> {
+               <template>
+                 <p>This will not fail.</p>
+               </template>
+             };
+           }
+          `,
+        );
+      });
+      await waitFor(`[data-test-error-container]`, {
+        count: 0,
+        timeout: 5_000,
+      });
+      assert.dom('[data-test-error-container]').doesNotExist();
     });
 
     test('it can render stale card in edit format when the server is in an error state for the card', async function (assert) {

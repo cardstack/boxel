@@ -104,7 +104,7 @@ export default class RoomMessage extends Component<Signature> {
   private get isLastAssistantMessage() {
     return (
       this.isFromAssistant &&
-      this.args.index === this.args.roomResource.messages.length - 1
+      this.args.index === this.args.roomResource.indexOfLastNonDebugMessage
     );
   }
 

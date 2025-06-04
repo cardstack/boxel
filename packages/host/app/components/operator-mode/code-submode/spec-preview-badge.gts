@@ -1,13 +1,12 @@
+import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
-
-import Component from '@glimmer/component';
 
 import Check from '@cardstack/boxel-icons/check';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
-import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
+import { Spec } from 'https://cardstack.com/base/spec';
 
 interface SpecPreviewBadgeSignature {
   Args: {
@@ -19,15 +18,7 @@ interface SpecPreviewBadgeSignature {
   };
 }
 
-export default class SpecPreviewBadge extends Component<SpecPreviewBadgeSignature> {
-  private get moreThanOneInstance() {
-    return this.args.numberOfInstances && this.args.numberOfInstances > 1;
-  }
-
-  private get specType() {
-    return this.args.spec?.specType as SpecType | undefined;
-  }
-
+const SpecPreviewBadge: TemplateOnlyComponent<SpecPreviewBadgeSignature> =
   <template>
     <span class='spec-indicator'>
       {{#if @showCreateSpec}}
@@ -44,20 +35,8 @@ export default class SpecPreviewBadge extends Component<SpecPreviewBadgeSignatur
             <IconPlus width='10px' height='10px' />
           {{/unless}}
         </BoxelButton>
-      {{else if this.moreThanOneInstance}}
-        <Check
-          class='spec-checkmark'
-          data-test-number-of-instance={{@numberOfInstances}}
-          title='{{@numberOfInstances}} instances'
-        />
-      {{else}}
-        {{#if this.specType}}
-          <Check
-            class='spec-checkmark'
-            data-test-spec-tag={{this.specType}}
-            title='Spec type: {{this.specType}}'
-          />
-        {{/if}}
+      {{else if @spec}}
+        <Check class='spec-checkmark' data-test-spec-exists />
       {{/if}}
     </span>
 
@@ -78,18 +57,6 @@ export default class SpecPreviewBadge extends Component<SpecPreviewBadgeSignatur
         margin-right: 0;
       }
 
-      .number-of-instance {
-        margin-left: auto;
-        display: inline-flex;
-        align-items: center;
-      }
-
-      .dot-icon {
-        flex-shrink: 0;
-        width: 18px;
-        height: 18px;
-      }
-
       .boxel-button:not(.active) .spec-checkmark {
         color: var(--boxel-400);
       }
@@ -99,5 +66,6 @@ export default class SpecPreviewBadge extends Component<SpecPreviewBadgeSignatur
         width: var(--boxel-sp);
       }
     </style>
-  </template>
-}
+  </template>;
+
+export default SpecPreviewBadge;

@@ -41,6 +41,7 @@ import {
   formats,
   meta,
   baseRef,
+  getAncestor,
   type Format,
   type Meta,
   type CardFields,
@@ -243,9 +244,7 @@ export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
     if (isEqual(codeRefInstance, codeRefClazz)) {
       return true;
     }
-    instanceClazz = instanceClazz
-      ? (Reflect.getPrototypeOf(instanceClazz) as typeof BaseDef | null)
-      : null;
+    instanceClazz = instanceClazz ? getAncestor(instanceClazz) ?? null : null;
   } while (codeRefInstance && !isEqual(codeRefInstance, baseRef));
   return false;
 }
@@ -2089,6 +2088,13 @@ export class CardDef extends BaseDef {
   static prefersWideFormat = false; // whether the card is full-width in the stack
   static headerColor: string | null = null; // set string color value if the stack-item header has a background color
 
+  constructor(data?: Record<string, any>) {
+    super(data);
+    if (data && localId in data && typeof data[localId] === 'string') {
+      this[localId] = data[localId];
+    }
+  }
+
   get [realmInfo]() {
     return getCardMeta(this, 'realmInfo');
   }
@@ -2671,13 +2677,16 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
     doc = { data: resource };
   }
   let instance: BaseInstanceType<T> | undefined;
-  if (resource.id != null) {
-    instance = identityContext.get(resource.id) as
+  if (resource.id != null || resource.lid != null) {
+    instance = identityContext.get((resource.id ?? resource.lid)!) as
       | BaseInstanceType<T>
       | undefined;
   }
   if (!instance) {
-    instance = new card({ id: resource.id }) as BaseInstanceType<T>;
+    instance = new card({
+      id: resource.id,
+      [localId]: resource.lid,
+    }) as BaseInstanceType<T>;
     instance[relativeTo] = _relativeTo;
   }
   identityContexts.set(instance, identityContext);

@@ -229,6 +229,16 @@ export class RoomResource extends Resource<Args> {
     );
   }
 
+  get indexOfLastNonDebugMessage() {
+    // We want to find the last message that is not a debug message
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i].isDebugMessage !== true) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
   private get events() {
     return this.matrixRoom?.events ?? [];
   }
