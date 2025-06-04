@@ -88,14 +88,14 @@ export default class Room extends Component<Signature> {
     {{#if (not this.doMatrixEventFlush.isRunning)}}
       <section
         class='room'
-        data-room-settled={{(and
+        data-room-settled={{and
           this.doWhenRoomChanges.isIdle
           (not this.matrixService.isLoadingTimeline)
-        )}}
-        data-test-room-settled={{(and
+        }}
+        data-test-room-settled={{and
           this.doWhenRoomChanges.isIdle
           (not this.matrixService.isLoadingTimeline)
-        )}}
+        }}
         data-test-room-name={{@roomResource.name}}
         data-test-room={{@roomId}}
         data-room-id={{@roomId}}
