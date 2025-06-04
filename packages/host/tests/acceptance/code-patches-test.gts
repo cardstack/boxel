@@ -14,6 +14,7 @@ import {
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -110,6 +111,31 @@ ${REPLACE_MARKER}\n\`\`\``;
       codePatchResultEvents.length,
       1,
       'code patch result event is dispatched',
+    );
+    assert.deepEqual(
+      JSON.parse(codePatchResultEvents[0].content?.data ?? '{}').context,
+      {
+        codeMode: {
+          currentFile: 'http://test-realm/test/hello.txt',
+        },
+        submode: 'code',
+        debug: false,
+        openCardIds: [],
+        realmUrl: 'http://test-realm/test/',
+      },
+      'patch code result event contains the context',
+    );
+    assert.deepEqual(
+      JSON.parse(codePatchResultEvents[0].content?.data ?? '{}')
+        .attachedFiles?.[0]?.name,
+      'hello.txt',
+      'updated file should be attached 1',
+    );
+    assert.deepEqual(
+      JSON.parse(codePatchResultEvents[0].content?.data ?? '{}')
+        .attachedFiles?.[0]?.sourceUrl,
+      'http://test-realm/test/hello.txt',
+      'updated file should be attached 2',
     );
   });
 
@@ -434,6 +460,36 @@ ${REPLACE_MARKER}
     // First one is the one that was applied, second one is the one that was ignored, third one is the current one
     assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
     assert.dom('[data-test-editor]').exists({ count: 2 });
+    assert.dom('[data-test-code-diff-editor]').exists({ count: 1 });
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        body: 'Debug: this event should be ignored for the purposes of deciding whether to show the code diff editor or not',
+        isStreamingFinished: true,
+      },
+      {
+        type: APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
+      },
+    );
+
+    // There should now be 4 bot messages offering code patches.
+    // First one is the one that was applied, second and third that are ignored, fourth one is the current one even though debug message follows it
+    await waitUntil(() => findAll('[data-test-editor]').length === 4); // 3 non-diff blcoks plus the main code editor
+    await waitUntil(() => findAll('[data-test-code-diff-editor]').length === 1);
+
+    assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
+    assert.dom('[data-test-editor]').exists({ count: 4 });
     assert.dom('[data-test-code-diff-editor]').exists({ count: 1 });
   });
 });

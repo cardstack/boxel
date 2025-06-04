@@ -31,7 +31,6 @@ export default class CardErrorDetail extends Component<Signature> {
 
   <template>
     <div class='error-detail' ...attributes>
-      {{yield to='error'}}
       <ErrorDisplay
         @type='runtime'
         @headerText={{@headerText}}
@@ -41,10 +40,15 @@ export default class CardErrorDetail extends Component<Signature> {
         @viewInCodeMode={{@viewInCodeMode}}
         @cardId={{@error.id}}
       />
+
+      {{yield to='error'}}
     </div>
 
     <style scoped>
       .error-detail {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
         flex: 1.5;
         overflow: visible;
         max-height: fit-content;
