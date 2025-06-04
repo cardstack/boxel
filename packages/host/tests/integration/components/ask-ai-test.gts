@@ -1,4 +1,4 @@
-import { click, fillIn, triggerEvent } from '@ember/test-helpers';
+import { click, fillIn, triggerEvent, waitUntil } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
@@ -100,6 +100,12 @@ module('Integration | ask-ai', function (hooks) {
   const sendAskAiMessage = async (message: string, assert: Assert) => {
     assert.dom('[data-test-ask-ai-input]').hasStyle({ width: '140px' });
     await fillIn('[data-test-ask-ai-input]', message);
+    await waitUntil(() => {
+      let el = document.querySelector(
+        '[data-test-ask-ai-input]',
+      ) as HTMLElement | null;
+      return el && getComputedStyle(el).width === '310px';
+    });
     assert.dom('[data-test-ask-ai-input]').hasStyle({ width: '310px' });
     await triggerEvent('[data-test-ask-ai-input]', 'keydown', {
       key: 'Enter',
