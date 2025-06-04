@@ -182,6 +182,13 @@ export default class CommandService extends Service {
   run = task(async (command: MessageCommand) => {
     let { arguments: payload, eventId, id: commandRequestId } = command;
     let resultCard: CardDef | undefined;
+    // There may be some race conditions where the command is already being executed when this task starts
+    if (
+      this.currentlyExecutingCommandRequestIds.has(commandRequestId!) ||
+      this.executedCommandRequestIds.has(commandRequestId!)
+    ) {
+      return; // already executing this command
+    }
     try {
       this.matrixService.failedCommandState.delete(commandRequestId!);
       this.currentlyExecutingCommandRequestIds.add(commandRequestId!);
