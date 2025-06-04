@@ -346,10 +346,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     return this.cardResource?.card as Spec;
   }
 
-  private get selectedView(): ModuleInspectorView {
-    return this.activePanel;
-  }
-
   private createSpecTask = task(
     async (ref: ResolvedCodeRef, specType: SpecType) => {
       let relativeTo = new URL(ref.module);
@@ -372,7 +368,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           doNotWaitForPersist: true,
         });
         this.specPanelService.setSelection(spec[localId]);
-        if (this.selectedView !== 'spec') {
+        if (this.activePanel !== 'spec') {
           this.setActivePanel('spec');
         }
       } catch (e: any) {
@@ -483,7 +479,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           {{#each moduleInspectorPanels as |moduleInspectorView|}}
             <ToggleButton
               class='toggle-button'
-              @isActive={{eq this.selectedView moduleInspectorView}}
+              @isActive={{eq this.activePanel moduleInspectorView}}
               {{on 'click' (fn this.setActivePanel moduleInspectorView)}}
               data-test-module-inspector-view={{moduleInspectorView}}
             >
@@ -506,18 +502,18 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         <section
           class='module-inspector-content'
           data-test-module-inspector='card-or-field'
-          data-test-active-module-inspector-view={{this.selectedView}}
+          data-test-active-module-inspector-view={{this.activePanel}}
         >
-          {{#if (eq this.selectedView 'schema')}}
+          {{#if (eq this.activePanel 'schema')}}
             <SchemaEditorPanel class='non-preview-panel-content' />
-          {{else if (eq this.selectedView 'preview')}}
+          {{else if (eq this.activePanel 'preview')}}
             <Playground
               @isOpen={{eq this.activePanel 'preview'}}
               @codeRef={{@selectedCodeRef}}
               @isUpdating={{@moduleContentsResource.isLoading}}
               @cardOrField={{@selectedCardOrField.cardOrField}}
             />
-          {{else if (eq this.selectedView 'spec')}}
+          {{else if (eq this.activePanel 'spec')}}
             <SpecPreview
               @selectedDeclaration={{@selectedDeclaration}}
               @isLoadingNewModule={{@moduleContentsResource.isLoadingNewModule}}
