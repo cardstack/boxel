@@ -130,18 +130,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     this.panelSelections = new TrackedObject(
       panelSelections ? JSON.parse(panelSelections) : {},
     );
-
-    // FIMXE surely there’s a better way
-    if (!this.panelSelections[this.args.readyFile.url]) {
-      let moduleInspectorStateArgument =
-        this.operatorModeStateService.state.moduleInspector;
-
-      if (moduleInspectorStateArgument) {
-        scheduleOnce('afterRender', this, () => {
-          this.setActivePanel(moduleInspectorStateArgument!);
-        });
-      }
-    }
   }
 
   private get declarations() {
@@ -220,7 +208,12 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
   private get activePanel(): ModuleInspectorView {
     let selection = this.panelSelections[this.args.readyFile.url];
-    return selection ?? 'schema';
+    let activePanel = this.operatorModeStateService.moduleInspectorForCodePath;
+    console.log('activePanel:');
+    console.log('selection:', selection);
+    console.log('activePanel:', activePanel);
+    console.log('result:', selection ?? activePanel ?? 'schema');
+    return selection ?? activePanel ?? 'schema';
   }
 
   @action private setActivePanel(item: ModuleInspectorView) {
@@ -354,8 +347,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   private get selectedView(): ModuleInspectorView {
-    let selection = this.panelSelections[this.args.readyFile.url];
-    return selection ?? 'schema';
+    return this.activePanel;
   }
 
   private createSpecTask = task(

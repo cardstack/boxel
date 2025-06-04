@@ -112,6 +112,8 @@ export default class OperatorModeStateService extends Service {
   private openFileSubscribers: OpenFileSubscriber[] = [];
   private cardTitles = new TrackedMap<string, string>();
 
+  private moduleInspectorStateForFile: URL | null = null;
+
   @service declare private cardService: CardService;
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
@@ -378,7 +380,22 @@ export default class OperatorModeStateService extends Service {
 
   async updateModuleInspectorView(view: ModuleInspectorView) {
     this.state.moduleInspector = view;
+    this.moduleInspectorStateForFile = this.state.codePath;
     this.schedulePersist();
+  }
+
+  get moduleInspectorForCodePath() {
+    console.log(
+      'moduleInspectorForCodePath',
+      this.moduleInspectorStateForFile?.href,
+      this.state.codePath?.href,
+      `equal? ${this.moduleInspectorStateForFile?.href === this.state.codePath?.href}`,
+    );
+    if (this.moduleInspectorStateForFile?.href === this.state.codePath?.href) {
+      return this.state.moduleInspector;
+    } else {
+      return undefined;
+    }
   }
 
   updateCodePathWithSelection({
@@ -622,6 +639,11 @@ export default class OperatorModeStateService extends Service {
         new TrackedArray(dirs),
       ]),
     );
+
+    console.log('in deserialise', rawState.codePath, rawState.moduleInspector);
+    if (rawState.codePath && rawState.moduleInspector) {
+      this.moduleInspectorStateForFile = new URL(rawState.codePath);
+    }
 
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
