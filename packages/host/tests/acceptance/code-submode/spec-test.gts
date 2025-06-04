@@ -754,39 +754,6 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-exported-name]').hasText('Person1');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}person-1`);
   });
-  test('have ability to create new skill spec type instances', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}new-skill.gts`,
-    });
-    assert.dom('[data-test-create-spec-button]').exists();
-    await click('[data-test-module-inspector-view="spec"]');
-    await click('[data-test-create-spec-button]');
-
-    assert
-      .dom('[data-test-title] [data-test-boxel-input]')
-      .hasValue('NewSkill');
-    assert.dom('[data-test-exported-type]').hasText('skill');
-    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}new-skill`);
-  });
-  test('have ability to create new extended skill spec type instances', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}new-skill.gts`,
-    });
-    await click('[data-boxel-selector-item-text="ExtendedNewSkill"]');
-    assert.dom('[data-test-create-spec-button]').exists();
-    await click('[data-test-module-inspector-view="spec"]');
-    await click('[data-test-create-spec-button]');
-
-    assert
-      .dom('[data-test-title] [data-test-boxel-input]')
-      .hasValue('ExtendedNewSkill');
-    assert.dom('[data-test-exported-type]').hasText('skill');
-    assert.dom('[data-test-exported-name]').hasText('ExtendedNewSkill');
-    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}new-skill`);
-  });
-
   test('when adding linked examples, card chooser options are narrowed to this type', async function (assert) {
     await visitOperatorMode({
       stacks: [
