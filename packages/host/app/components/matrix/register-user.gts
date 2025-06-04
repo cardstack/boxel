@@ -96,113 +96,121 @@ export default class RegisterUser extends Component<Signature> {
       </div>
     {{else if (eq this.currentPage 'registration-form')}}
       <span class='title'>Create a Boxel Account</span>
-      <FieldContainer
-        @label='Your Name'
-        @tag='label'
-        @vertical={{true}}
-        class='registration-field'
-      >
-        <BoxelInput
-          data-test-name-field
-          @state={{this.nameInputState}}
-          @value={{this.name}}
-          @errorMessage={{this.nameError}}
-          @onInput={{this.setName}}
-          @onBlur={{this.checkName}}
-        />
-      </FieldContainer>
-      <FieldContainer
-        @label='Email'
-        @tag='label'
-        @vertical={{true}}
-        class='registration-field'
-      >
-        <BoxelInput
-          data-test-email-field
-          @state={{this.emailInputState}}
-          @value={{this.email}}
-          @errorMessage={{this.emailError}}
-          @onInput={{this.setEmail}}
-          @onBlur={{this.checkEmail}}
-        />
-      </FieldContainer>
-      <FieldContainer
-        @label='Username'
-        @tag='label'
-        @vertical={{true}}
-        class='registration-field'
-      >
-        <BoxelInputGroup
-          data-test-username-field
-          @state={{this.usernameInputState}}
-          @value={{this.username}}
-          @errorMessage={{this.usernameError}}
-          @onInput={{this.setUsername}}
-          @onBlur={{this.checkUsername}}
-          @validIcon={{CheckMark}}
+      <form data-test-register-form {{on 'submit' this.register}}>
+        <FieldContainer
+          @label='Your Name'
+          @tag='label'
+          @vertical={{true}}
+          class='registration-field'
         >
-          <:before as |Accessories|>
-            <Accessories.Text class='username-prefix'>@</Accessories.Text>
-          </:before>
-          <:after as |Accessories|>
-            <Accessories.Text>{{matrixServerName}}</Accessories.Text>
-          </:after>
-        </BoxelInputGroup>
-      </FieldContainer>
-      <FieldContainer
-        @label='Password'
-        @tag='label'
-        @vertical={{true}}
-        class='registration-field'
-      >
-        <BoxelInput
-          data-test-password-field
-          @type='password'
-          @value={{this.password}}
-          @state={{this.passwordInputState}}
-          @errorMessage={{this.passwordError}}
-          @onInput={{this.setPassword}}
-          @onBlur={{this.checkPassword}}
-        />
-      </FieldContainer>
-      <FieldContainer
-        @label='Confirm Password'
-        @tag='label'
-        @vertical={{true}}
-        class='registration-field'
-      >
-        <BoxelInput
-          data-test-confirm-password-field
-          @type='password'
-          @value={{this.confirmPassword}}
-          @state={{this.confirmPasswordInputState}}
-          @errorMessage={{this.confirmPasswordError}}
-          @onInput={{this.setConfirmPassword}}
-          @onBlur={{this.checkConfirmPassword}}
-        />
-      </FieldContainer>
-      {{#if this.formError}}
-        <div
-          class='error-message'
-          data-test-register-user-error
-        >{{this.formError}}</div>
-      {{/if}}
-      <div class='button-wrapper'>
-        <Button
-          data-test-register-btn
-          class='button'
-          @kind='primary'
-          @disabled={{this.isRegisterButtonDisabled}}
-          @loading={{this.doRegistrationFlow.isRunning}}
-          {{on 'click' this.register}}
-        >Create Account</Button>
-        <span class='or'>or</span>
-        <Button
-          data-test-cancel-btn
-          class='button'
-          {{on 'click' (fn @setMode 'login')}}
-        >Login with an existing account</Button>
-      </div>
+          <BoxelInput
+            data-test-name-field
+            @state={{this.nameInputState}}
+            @value={{this.name}}
+            @errorMessage={{this.nameError}}
+            @onInput={{this.setName}}
+            @onBlur={{this.checkName}}
+          />
+        </FieldContainer>
+        <FieldContainer
+          @label='Email'
+          @tag='label'
+          @vertical={{true}}
+          class='registration-field'
+        >
+          <BoxelInput
+            data-test-email-field
+            @state={{this.emailInputState}}
+            @value={{this.email}}
+            @errorMessage={{this.emailError}}
+            @onInput={{this.setEmail}}
+            @onBlur={{this.checkEmail}}
+          />
+        </FieldContainer>
+        <FieldContainer
+          @label='Username'
+          @tag='label'
+          @vertical={{true}}
+          class='registration-field'
+        >
+          <BoxelInputGroup
+            data-test-username-field
+            id='boxel-register-username'
+            autocomplete='username'
+            @state={{this.usernameInputState}}
+            @value={{this.username}}
+            @errorMessage={{this.usernameError}}
+            @onInput={{this.setUsername}}
+            @onBlur={{this.checkUsername}}
+            @validIcon={{CheckMark}}
+          >
+            <:before as |Accessories|>
+              <Accessories.Text class='username-prefix'>@</Accessories.Text>
+            </:before>
+            <:after as |Accessories|>
+              <Accessories.Text>{{matrixServerName}}</Accessories.Text>
+            </:after>
+          </BoxelInputGroup>
+        </FieldContainer>
+        <FieldContainer
+          @label='Password'
+          @tag='label'
+          @vertical={{true}}
+          class='registration-field'
+        >
+          <BoxelInput
+            data-test-password-field
+            id='boxel-register-password'
+            autocomplete='new-password'
+            @type='password'
+            @value={{this.password}}
+            @state={{this.passwordInputState}}
+            @errorMessage={{this.passwordError}}
+            @onInput={{this.setPassword}}
+            @onBlur={{this.checkPassword}}
+          />
+        </FieldContainer>
+        <FieldContainer
+          @label='Confirm Password'
+          @tag='label'
+          @vertical={{true}}
+          class='registration-field'
+        >
+          <BoxelInput
+            data-test-confirm-password-field
+            id='boxel-register-confirm-password'
+            autocomplete='new-password'
+            @type='password'
+            @value={{this.confirmPassword}}
+            @state={{this.confirmPasswordInputState}}
+            @errorMessage={{this.confirmPasswordError}}
+            @onInput={{this.setConfirmPassword}}
+            @onBlur={{this.checkConfirmPassword}}
+          />
+        </FieldContainer>
+        {{#if this.formError}}
+          <div
+            class='error-message'
+            data-test-register-user-error
+          >{{this.formError}}</div>
+        {{/if}}
+        <div class='button-wrapper'>
+          <Button
+            data-test-register-btn
+            class='button'
+            @kind='primary'
+            @disabled={{this.isRegisterButtonDisabled}}
+            @loading={{this.doRegistrationFlow.isRunning}}
+            {{on 'click' this.register}}
+          >Create Account</Button>
+          <span class='or'>or</span>
+          <Button
+            data-test-cancel-btn
+            class='button'
+            {{on 'click' (fn @setMode 'login')}}
+          >Login with an existing account</Button>
+        </div>
+      </form>
     {{/if}}
     <style scoped>
       .title {
@@ -538,7 +546,8 @@ export default class RegisterUser extends Component<Signature> {
   }
 
   @action
-  private register() {
+  private register(ev: Event) {
+    ev.preventDefault();
     if (this.state.type !== 'initial') {
       throw new Error(
         `invalid state: cannot register() in state ${this.state.type}`,
