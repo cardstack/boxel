@@ -379,30 +379,7 @@ module('Acceptance | catalog app tests', function (hooks) {
       const uuid = fullPath?.replace('author-', '').replace('/', '') || '';
       assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
 
-      await click(`[data-test-directory="${fullPath}"]`);
-
-      assert.dom(`[data-test-directory="${fullPath}"] .icon`).hasClass('open');
-
-      // able to see example install successfully
-      const examplePath = `${fullPath}Author/`;
-      await waitFor(`[data-test-directory="${examplePath}"]`);
-      await click(`[data-test-directory="${examplePath}"]`);
-
-      assert
-        .dom(`[data-test-directory="${examplePath}"] .icon`)
-        .hasClass('open');
-
-      await waitFor(
-        `[data-test-file^="${examplePath}"][data-test-file$=".json"]`,
-      );
-      await click(
-        `[data-test-file^="${examplePath}"][data-test-file$=".json"]`,
-      );
-
-      assert
-        .dom(`[data-test-file^="${examplePath}"][data-test-file$=".json"]`)
-        .exists('Author Example with uuid instance exists')
-        .hasClass('selected', 'Author Example with uuid instance is selected');
+      await verifyInstanceExists(testRealm2URL, 'author', 'Author', assert);
     });
 
     test('use command copy skills from skill listing to the workspace successfully', async function (assert) {
@@ -436,53 +413,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         testRealm2URL,
       );
 
-      // Check gts file is installed/copied successfully
-      await visitOperatorMode({
-        submode: 'code',
-        fileView: 'browser',
-        codePath: `${testRealm2URL}index`,
-      });
-
-      await waitForCodeEditor();
-
-      await waitFor('[data-test-directory^="author-"]');
-      const element = document.querySelector(
-        '[data-test-directory^="author-"]',
-      );
-      const fullPath = element?.getAttribute('data-test-directory');
-
-      await click(`[data-test-directory="${fullPath}"]`);
-
-      assert.dom(`[data-test-directory="${fullPath}"] .icon`).hasClass('open');
-
-      const filePath = `${fullPath}author.gts`;
-      await waitFor(`[data-test-file="${filePath}"]`);
-      await click(`[data-test-file="${filePath}"]`);
-      assert
-        .dom(`[data-test-file="${filePath}"]`)
-        .exists('author.gts file exists')
-        .hasClass('selected', 'author.gts file is selected');
-
-      // able to see example install successfully
-      const examplePath = `${fullPath}Author/`;
-      await waitFor(`[data-test-directory="${examplePath}"]`);
-      await click(`[data-test-directory="${examplePath}"]`);
-
-      assert
-        .dom(`[data-test-directory="${examplePath}"] .icon`)
-        .hasClass('open');
-
-      await waitFor(
-        `[data-test-file^="${examplePath}"][data-test-file$=".json"]`,
-      );
-      await click(
-        `[data-test-file^="${examplePath}"][data-test-file$=".json"]`,
-      );
-
-      assert
-        .dom(`[data-test-file^="${examplePath}"][data-test-file$=".json"]`)
-        .exists('Author Example with uuid instance exists')
-        .hasClass('selected', 'Author Example with uuid instance is selected');
+      await verifyInstanceExists(testRealm2URL, 'author', 'Author', assert);
     });
 
     module(
@@ -547,28 +478,12 @@ module('Acceptance | catalog app tests', function (hooks) {
             .exists('mortgage-calculator.gts file exists')
             .hasClass('selected', 'mortgage-calculator.gts file is selected');
 
-          const examplePath = `${fullPath}MortgageCalculator/`;
-          await waitFor(`[data-test-directory="${examplePath}"]`);
-          await click(`[data-test-directory="${examplePath}"]`);
-
-          assert
-            .dom(`[data-test-directory="${examplePath}"] .icon`)
-            .hasClass('open');
-
-          await waitFor(
-            `[data-test-file^="${examplePath}"][data-test-file$=".json"]`,
+          await verifyInstanceExists(
+            testRealm2URL,
+            'mortgage-calculator',
+            'MortgageCalculator',
+            assert,
           );
-          await click(
-            `[data-test-file^="${examplePath}"][data-test-file$=".json"]`,
-          );
-
-          assert
-            .dom(`[data-test-file^="${examplePath}"][data-test-file$=".json"]`)
-            .exists('Mortgage Calculator Example with uuid instance exists')
-            .hasClass(
-              'selected',
-              'Mortgage Calculator Example with uuid instance is selected',
-            );
         });
 
         test('field listing', async function (assert) {
