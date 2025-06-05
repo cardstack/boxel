@@ -123,6 +123,12 @@ export async function basicMappings(loader: Loader) {
     await loader.import('https://cardstack.com/base/datetime');
   let boolean: typeof import('https://cardstack.com/base/boolean') =
     await loader.import('https://cardstack.com/base/boolean');
+  let codeRef: typeof import('https://cardstack.com/base/code-ref') =
+    await loader.import('https://cardstack.com/base/code-ref');
+  let query: typeof import('https://cardstack.com/base/commands/search-card-result') =
+    await loader.import(
+      'https://cardstack.com/base/commands/search-card-result',
+    );
 
   const { default: StringField } = string;
   const { default: NumberField } = number;
@@ -130,6 +136,8 @@ export async function basicMappings(loader: Loader) {
   const { default: DateField } = date;
   const { default: DateTimeField } = datetime;
   const { default: BooleanField } = boolean;
+  const { default: CodeRef } = codeRef;
+  const { QueryField } = query;
   mappings.set(StringField, {
     type: 'string',
   });
@@ -150,6 +158,137 @@ export async function basicMappings(loader: Loader) {
   });
   mappings.set(BooleanField, {
     type: 'boolean',
+  });
+  mappings.set(CodeRef, {
+    type: 'object',
+    properties: {
+      module: { type: 'string' },
+      name: { type: 'string' },
+    },
+  });
+  mappings.set(QueryField, {
+    type: 'object',
+    description:
+      'Represents a query with filter, sort, and pagination options, based on the Query interface from @cardstack/runtime-common/query.',
+    properties: {
+      filter: {
+        type: 'object',
+        description:
+          "Filter criteria for the query. This object conforms to one of several structures (e.g., CardTypeFilter, EqFilter, AnyFilter). All properties within are optional and depend on the specific filter type. 'on' (a CodeRef) can specify context for field paths. Example properties: 'type' (CodeRef for CardTypeFilter), 'any'/'every' (array of filters), 'not' (a filter to negate), 'eq'/'contains' (object mapping field paths to values), 'range' (object mapping field paths to range constraints like {gt: 5}). Refer to the Query.Filter documentation for complete details.",
+        properties: {
+          type: {
+            type: 'object',
+            properties: {
+              module: { type: 'string' },
+              name: { type: 'string' },
+            },
+            required: ['module', 'name'],
+            description:
+              'A CodeRef (module and name) identifying a card type. Used for CardTypeFilter.',
+          },
+          on: {
+            type: 'object',
+            properties: {
+              module: { type: 'string' },
+              name: { type: 'string' },
+            },
+            required: ['module', 'name'],
+            description:
+              "A CodeRef (module and name) identifying a card type. Used as context for filters like 'eq', 'contains', 'range', 'any', 'every', 'not'.",
+          },
+          any: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {},
+              description:
+                'A nested filter object. Refer to Query.Filter documentation.',
+            },
+            description:
+              'An array of filter objects. The condition is true if any filter in the array is true.',
+          },
+          every: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {},
+              description:
+                'A nested filter object. Refer to Query.Filter documentation.',
+            },
+            description:
+              'An array of filter objects. The condition is true if all filters in the array are true.',
+          },
+          not: {
+            type: 'object',
+            properties: {},
+            description:
+              'A filter object to be negated. Refer to Query.Filter documentation.',
+          },
+          eq: {
+            type: 'object',
+            properties: {},
+            description:
+              "An object where keys are field paths (e.g., 'firstName', 'address.street') and values are the exact criteria to match.",
+          },
+          contains: {
+            type: 'object',
+            properties: {},
+            description:
+              'An object where keys are field paths and values are the criteria to be contained (e.g., for string contains, or array contains element).',
+          },
+          range: {
+            type: 'object',
+            properties: {},
+            description:
+              'An object where keys are field paths. Values are objects specifying range constraints (e.g., { gt: 10, lte: 20 }).',
+          },
+        },
+      },
+      sort: {
+        type: 'array',
+        description:
+          'An array of sort expressions. Each expression defines a field to sort by and direction.',
+        items: {
+          type: 'object',
+          properties: {
+            by: {
+              type: 'string',
+              description:
+                "Field path to sort by (e.g., 'createdAt', 'author.name').",
+            },
+            on: {
+              type: 'object',
+              properties: {
+                module: { type: 'string' },
+                name: { type: 'string' },
+              },
+              required: ['module', 'name'],
+              description:
+                "Optional. A CodeRef (module and name) specifying the card type if 'by' is a field of that card. Required if 'by' is not a general sort field.",
+            },
+            direction: {
+              enum: ['asc', 'desc'],
+              description:
+                "Sort direction: 'asc' for ascending, 'desc' for descending.",
+            },
+          },
+          required: ['by'],
+        },
+      },
+      page: {
+        type: 'object',
+        properties: {
+          number: { type: 'integer', description: '0-based page number.' },
+          size: { type: 'integer', description: 'Number of items per page.' },
+          realmVersion: {
+            type: 'integer',
+            description:
+              'Optional. Specifies the realm version for consistent pagination if data can change.',
+          },
+        },
+        required: ['number', 'size'],
+      },
+    },
   });
   for (const value of mappings.values()) {
     Object.freeze(value);
