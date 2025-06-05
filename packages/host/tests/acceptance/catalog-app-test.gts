@@ -256,6 +256,58 @@ module('Acceptance | catalog app tests', function (hooks) {
       .hasClass('selected');
   }
 
+  async function verifyFileExists(
+    targetRealm: string,
+    targetDirPrefix: string,
+    dirName: string,
+    assert: Assert,
+  ) {
+    await visitOperatorMode({
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${targetRealm}index`,
+    });
+    await waitForCodeEditor();
+
+    await waitFor(`[data-test-directory^="${targetDirPrefix}"]`);
+    const element = document.querySelector(
+      `[data-test-directory^="${targetDirPrefix}"]`,
+    );
+    const fullPath = element?.getAttribute('data-test-directory');
+    await click(`[data-test-directory="${fullPath}"]`);
+
+    const filePath = `${fullPath}${dirName}`;
+    await waitFor(`[data-test-file="${filePath}"]`);
+    await click(`[data-test-file="${filePath}"]`);
+    assert
+      .dom(`[data-test-file="${filePath}"]`)
+      .exists('file exists')
+      .hasClass('selected', 'file is selected');
+  }
+
+  async function verifyFolderWithUUID(
+    targetRealm: string,
+    targetDirPrefix: string,
+    assert: Assert,
+  ) {
+    await visitOperatorMode({
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${targetRealm}index`,
+    });
+    await waitForCodeEditor();
+    await waitFor(`[data-test-directory^="${targetDirPrefix}-"]`);
+    const element = document.querySelector(
+      `[data-test-directory^="${targetDirPrefix}-"]`,
+    );
+    const fullPath = element?.getAttribute('data-test-directory');
+
+    // installed folder should be tailing with uuid
+    const uuid =
+      fullPath?.replace(`${targetDirPrefix}-`, '').replace('/', '') || '';
+    assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
+  }
+
   async function executeCommand(
     commandClass:
       | typeof ListingUseCommand
@@ -360,24 +412,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         testRealm2URL,
       );
 
-      // Check example is copied successfully
-      await visitOperatorMode({
-        submode: 'code',
-        fileView: 'browser',
-        codePath: `${testRealm2URL}index`,
-      });
-
-      await waitForCodeEditor();
-
-      await waitFor('[data-test-directory^="author-"]');
-      const element = document.querySelector(
-        '[data-test-directory^="author-"]',
-      );
-      const fullPath = element?.getAttribute('data-test-directory');
-
-      // installed folder should be tailing with uuid
-      const uuid = fullPath?.replace('author-', '').replace('/', '') || '';
-      assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
+      await verifyFolderWithUUID(testRealm2URL, 'author', assert);
 
       await verifyInstanceExists(testRealm2URL, 'author', 'Author', assert);
     });
@@ -444,39 +479,18 @@ module('Acceptance | catalog app tests', function (hooks) {
             testRealm2URL,
           );
 
-          await visitOperatorMode({
-            submode: 'code',
-            fileView: 'browser',
-            codePath: `${testRealm2URL}index`,
-          });
-
-          await waitForCodeEditor();
-
-          await waitFor('[data-test-directory^="mortgage-calculator-"]');
-          const element = document.querySelector(
-            '[data-test-directory^="mortgage-calculator-"]',
+          await verifyFolderWithUUID(
+            testRealm2URL,
+            'mortgage-calculator',
+            assert,
           );
-          const fullPath = element?.getAttribute('data-test-directory');
 
-          // installed folder should be tailing with uuid
-          const uuid =
-            fullPath?.replace('mortgage-calculator-', '').replace('/', '') ||
-            '';
-          assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
-
-          await click(`[data-test-directory="${fullPath}"]`);
-
-          assert
-            .dom(`[data-test-directory="${fullPath}"] .icon`)
-            .hasClass('open');
-
-          const filePath = `${fullPath}mortgage-calculator.gts`;
-          await waitFor(`[data-test-file="${filePath}"]`);
-          await click(`[data-test-file="${filePath}"]`);
-          assert
-            .dom(`[data-test-file="${filePath}"]`)
-            .exists('mortgage-calculator.gts file exists')
-            .hasClass('selected', 'mortgage-calculator.gts file is selected');
+          await verifyFileExists(
+            testRealm2URL,
+            'mortgage-calculator',
+            'mortgage-calculator.gts',
+            assert,
+          );
 
           await verifyInstanceExists(
             testRealm2URL,
@@ -528,19 +542,12 @@ module('Acceptance | catalog app tests', function (hooks) {
             fullPath?.replace('contact-link-', '').replace('/', '') || '';
           assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
 
-          await click(`[data-test-directory="${fullPath}"]`);
-
-          assert
-            .dom(`[data-test-directory="${fullPath}"] .icon`)
-            .hasClass('open');
-
-          const filePath = `${fullPath}contact-link.gts`;
-          await waitFor(`[data-test-file="${filePath}"]`);
-          await click(`[data-test-file="${filePath}"]`);
-          assert
-            .dom(`[data-test-file="${filePath}"]`)
-            .exists('contact-link.gts file exists')
-            .hasClass('selected', 'contact-link.gts file is selected');
+          await verifyFileExists(
+            testRealm2URL,
+            'contact-link',
+            'contact-link.gts',
+            assert,
+          );
         });
       },
     );
