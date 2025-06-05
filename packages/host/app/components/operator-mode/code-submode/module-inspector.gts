@@ -120,19 +120,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   @tracked private specSearch: ReturnType<getCards<Spec>> | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
-  private panelSelections: Record<string, ModuleInspectorView>;
-
-  constructor(owner: Owner, args: ModuleInspectorSignature['Args']) {
-    super(owner, args);
-
-    let panelSelections = window.localStorage.getItem(
-      ModuleInspectorSelections,
-    );
-    this.panelSelections = new TrackedObject(
-      panelSelections ? JSON.parse(panelSelections) : {},
-    );
-  }
-
   private get declarations() {
     return this.args.moduleContentsResource?.declarations;
   }
