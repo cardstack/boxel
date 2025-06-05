@@ -621,13 +621,32 @@ export async function getModifyPrompt(
     aiBotUserId,
     tools,
   );
-  let contextMessagePosition = messages.findLastIndex(
-    (m) => m.role === 'user' || m.role === 'tool',
-  );
-  messages.splice(contextMessagePosition, 0, {
+  // The context should be placed where it explains the state of the host.
+  // This is either:
+  // * Before the last assitant message, if the last message was a tool call
+  // * Before the last user message otherwise
+  // OpenAI will error if you put the system message between the
+  // assistant and tool messages.
+  let contextMessage: OpenAIPromptMessage = {
     role: 'system',
     content: contextContent,
-  });
+  };
+  let lastMessage = messages[messages.length - 1];
+  if (lastMessage.role === 'tool') {
+    // Find the last assistant message and insert context before it
+    let lastAssistantIndex = messages.findLastIndex(
+      (msg) => msg.role === 'assistant',
+    );
+    if (lastAssistantIndex !== -1) {
+      messages.splice(lastAssistantIndex, 0, contextMessage);
+    }
+  } else {
+    // Find the last user message and insert context before it
+    let lastUserIndex = messages.findLastIndex((msg) => msg.role === 'user');
+    if (lastUserIndex !== -1) {
+      messages.splice(lastUserIndex, 0, contextMessage);
+    }
+  }
 
   return messages;
 }

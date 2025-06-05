@@ -3054,7 +3054,7 @@ Attached files:
       'patchCardInstance',
       'Should have patchCardInstance tool call',
     );
-    assert.true(messages![8].content!.includes('Business Card V2'));
+    assert.true(messages![7].content!.includes('Business Card V2'));
   });
 });
 
