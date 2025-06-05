@@ -1,7 +1,6 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
@@ -11,8 +10,6 @@ import { task } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
-
-import { TrackedObject } from 'tracked-built-ins';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
@@ -69,7 +66,6 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import { ModuleInspectorSelections } from '@cardstack/host/utils/local-storage-keys';
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
