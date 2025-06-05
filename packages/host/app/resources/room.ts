@@ -8,6 +8,7 @@ import { Resource } from 'ember-resources';
 
 import difference from 'lodash/difference';
 
+import { IRoomEvent } from 'matrix-js-sdk';
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -428,6 +429,19 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
+  private getAggregatedReplacement(event: IRoomEvent) {
+    let finalRawEvent;
+    const originalEventId = event.event_id;
+    let replacedRawEvent = event.unsigned?.['m.relations']?.['m.replace'];
+    if (!event.content['m.relates_to']?.rel_type && replacedRawEvent) {
+      finalRawEvent = replacedRawEvent;
+      finalRawEvent.event_id = originalEventId;
+    } else {
+      finalRawEvent = event;
+    }
+    return finalRawEvent;
+  }
+
   private async loadRoomMessage({
     roomId,
     event,
@@ -438,6 +452,8 @@ export class RoomResource extends Resource<Args> {
     index: number;
   }) {
     let effectiveEventId = this.getEffectiveEventId(event);
+    event = this.getAggregatedReplacement(event);
+
     let message = this._messageCache.get(effectiveEventId);
     if (!message?.isStreamingOfEventFinished) {
       let author = this.upsertRoomMember({
