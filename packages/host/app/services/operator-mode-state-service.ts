@@ -661,10 +661,6 @@ export default class OperatorModeStateService extends Service {
 
     console.log('in deserialise', rawState.codePath, rawState.moduleInspector);
 
-    let rawStateHasModuleInspector = Boolean(
-      rawState.codePath && rawState.moduleInspector,
-    );
-
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submodes.Interact,
@@ -677,7 +673,7 @@ export default class OperatorModeStateService extends Service {
       moduleInspector: rawState.moduleInspector ?? 'schema', // FIXME this is defined elsewhere?
     });
 
-    if (rawStateHasModuleInspector) {
+    if (rawState.codePath && rawState.moduleInspector) {
       this.persistModuleInspectorView(
         rawState.codePath,
         rawState.moduleInspector,
