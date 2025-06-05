@@ -269,7 +269,8 @@ export default class AiAssistantMessage extends Component<Signature> {
                 Thinking...
               {{else}}
                 <details open={{this.isReasoningExpanded}} data-test-reasoning>
-                  {{! template-lint-disable no-invalid-interactive}}
+                  {{! template-lint-disable no-invalid-interactive }}
+                  {{! template-lint-disable no-nested-interactive }}
                   <summary
                     {{on 'click' this.updateReasoningExpanded}}
                   >Thinking...</summary>

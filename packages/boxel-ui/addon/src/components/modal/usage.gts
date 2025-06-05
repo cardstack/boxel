@@ -116,7 +116,7 @@ export default class ModalUsage extends Component {
           @name='layer'
           @description="Which of Boxel's z-index layers should be used for this modal"
           @value={{this.layer}}
-          @defaultValue={{'default'}}
+          @defaultValue='default'
           @options={{array 'default' 'urgent'}}
           @onInput={{fn (mut this.layer)}}
           @optional={{true}}

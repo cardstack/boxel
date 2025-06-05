@@ -179,7 +179,7 @@ class EditTemplate extends Component<typeof DealEvent> {
       </FieldContainer>
       <FieldContainer @label='Event type'>
         <BoxelSelect
-          @placeholder={{'Select Item'}}
+          @placeholder='Select Item'
           @selected={{this.selectedEventType}}
           @onChange={{this.updateEventType}}
           @options={{this.eventTypeItems}}

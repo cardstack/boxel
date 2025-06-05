@@ -25,7 +25,7 @@ export class FilterDropdown extends GlimmerComponent<FilterDropdownSignature> {
       @options={{@options}}
       @selected={{@selected}}
       @onChange={{@onChange}}
-      @triggerComponent={{(component FilterTrigger isLoading=@isLoading)}}
+      @triggerComponent={{component FilterTrigger isLoading=@isLoading}}
       @initiallyOpened={{true}}
       @searchEnabled={{true}}
       @searchField={{@searchField}}
