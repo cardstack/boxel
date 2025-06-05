@@ -9,7 +9,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask, timeout } from 'ember-concurrency';
+import { restartableTask, task, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 
@@ -28,6 +28,35 @@ import ApplyButton from '../ai-assistant/apply-button';
 
 import type { ComponentLike } from '@glint/template';
 import type * as _MonacoSDK from 'monaco-editor';
+import { hasEmptySearchPortion } from '@cardstack/host/commands/patch-code';
+import Owner from '@ember/owner';
+
+function countDiffLines(lineChanges) {
+  if (!lineChanges || !Array.isArray(lineChanges)) {
+    return { added: 0, removed: 0 };
+  }
+
+  let added = 0;
+  let removed = 0;
+
+  lineChanges.forEach((change) => {
+    const originalLines =
+      change.originalEndLineNumber - change.originalStartLineNumber + 1;
+    const modifiedLines =
+      change.modifiedEndLineNumber - change.modifiedStartLineNumber + 1;
+
+    if (change.originalStartLineNumber === 0) {
+      added += modifiedLines;
+    } else if (change.modifiedStartLineNumber === 0) {
+      removed += originalLines;
+    } else {
+      removed += originalLines;
+      added += modifiedLines;
+    }
+  });
+
+  return { added, removed };
+}
 
 interface CopyCodeButtonSignature {
   Args: {
@@ -78,10 +107,7 @@ interface CodeBlockDiffEditorSignature {
 
 interface CodeBlockDiffEditorHeaderSignature {
   Args: {
-    mode: 'edit' | 'create';
-    fileUrl: string;
-    linesRemoved: number;
-    linesAdded: number;
+    codeData: CodeData;
   };
 }
 
@@ -163,6 +189,7 @@ interface MonacoDiffEditorSignature {
 class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
   private monacoState: {
     editor: _MonacoSDK.editor.IStandaloneDiffEditor;
+    lineChangeStats: { added: number; removed: number };
   } | null = null;
 
   modify(
@@ -225,7 +252,12 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
 
       this.monacoState = {
         editor,
+        lineChangeStats: countDiffLines(editor.getLineChanges()),
       };
+
+      // let monacoStateId = 'monaco_state_' + Date.now();
+      // console.log('monacoStateId', monacoStateId);
+      // window[monacoStateId] = this.monacoState;
     }
 
     registerDestructor(this, () => {
@@ -387,8 +419,8 @@ class CodeBlockEditor extends Component<Signature> {
   <template>
     <style scoped>
       .code-block {
-        width: calc(100% + 2 * var(--boxel-sp));
-        margin-left: calc(-1 * var(--boxel-sp));
+        /* width: calc(100% + 2 * var(--boxel-sp));
+        margin-left: calc(-1 * var(--boxel-sp)); */
         max-height: 250px;
       }
 
@@ -431,20 +463,31 @@ class CodeBlockDiffEditor extends Component<Signature> {
     scrollBeyondLastLine: false,
     padding: {
       bottom: 8,
+      left: 8,
+      right: 8,
+      top: 8,
     },
     theme: 'vs-dark',
+    lineNumbers: 'off',
+    // guides: {
+    //   indentation: false,
+    // },
   };
 
   <template>
     <style scoped>
       .code-block {
-        width: calc(100% + 2 * var(--boxel-sp));
-        margin-left: calc(-1 * var(--boxel-sp));
+        /* width: calc(100% + 2 * var(--boxel-sp));
+        margin-left: calc(-1 * var(--boxel-sp)); */
         max-height: 250px;
       }
 
       :deep(.line-insert) {
         background-color: rgb(19 255 32 / 66%) !important;
+      }
+
+      :deep(.diff-hidden-lines) {
+        margin-left: 9px;
       }
 
       .code-block-diff {
@@ -470,6 +513,15 @@ class CodeBlockDiffEditor extends Component<Signature> {
 }
 
 class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEditorHeaderSignature> {
+  @tracked isNewFile: boolean = false;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  get fileName() {
+    let realmUrl = this.operatorModeStateService.realmURL.href;
+    let fileUrl = this.args.codeData.fileUrl;
+
+    return fileUrl?.replace(realmUrl, '');
+  }
+
   <template>
     <style scoped>
       .code-block-diff-header {
@@ -483,6 +535,15 @@ class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEditorHeaderSigna
         border-top-right-radius: 12px;
         font-family: 'Segoe UI', sans-serif;
         font-size: 14px;
+      }
+
+      .code-block-diff-header .left-section {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .code-block-diff-header .mode {
       }
 
       .code-block-diff-header .file-info {
@@ -503,6 +564,11 @@ class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEditorHeaderSigna
         font-weight: 600;
       }
 
+      .code-block-diff-header .right-section {
+        display: flex;
+        align-items: center;
+      }
+
       .code-block-diff-header .changes {
         display: flex;
         gap: 6px;
@@ -518,15 +584,20 @@ class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEditorHeaderSigna
       }
     </style>
     <div class='code-block-diff-header'>
-      {{@mode}}
-
-      <div class='file-info'>
-        <span class='edit-icon'>B</span>
-        <span class='filename'>{{@fileUrl}}</span>
+      <div class='left-section'>
+        <div class='mode'>
+          {{if this.isNewFile 'Create' 'Edit'}}
+        </div>
+        <div class='file-info'>
+          {{! <span class='edit-icon'>B</span> }}
+          <span class='filename'>{{this.fileName}}</span>
+        </div>
       </div>
-      <div class='changes'>
-        <span class='removed'>-{{@linesRemoved}}</span>
-        <span class='added'>+{{@linesAdded}}</span>
+      <div class='right-section'>
+        <div class='changes'>
+          <span class='removed'>-{{@linesRemoved}}</span>
+          <span class='added'>+{{@linesAdded}}</span>
+        </div>
       </div>
     </div>
   </template>
@@ -542,8 +613,8 @@ let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> 
         padding-right: var(--boxel-sp);
         display: flex;
         justify-content: flex-start;
-        width: calc(100% + 2 * var(--boxel-sp));
-        margin-left: calc(-1 * var(--boxel-sp));
+        /* width: calc(100% + 2 * var(--boxel-sp));
+        margin-left: calc(-1 * var(--boxel-sp)); */
       }
     </style>
     <div class='code-block-actions'>

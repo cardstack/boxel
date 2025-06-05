@@ -342,12 +342,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
             </div>
           {{/if}}
           {{#if this.codeDiffResource.isDataLoaded}}
-            <codeBlock.diffEditorHeader
-              @mode='edit'
-              @fileUrl={{this.codeDiffResource.fileUrl}}
-              @linesRemoved={{1}}
-              @linesAdded={{2}}
-            />
+            <codeBlock.diffEditorHeader @codeData={{@codeData}} />
             <codeBlock.diffEditor
               @originalCode={{this.codeDiffResource.originalCode}}
               @modifiedCode={{this.codeDiffResource.modifiedCode}}
