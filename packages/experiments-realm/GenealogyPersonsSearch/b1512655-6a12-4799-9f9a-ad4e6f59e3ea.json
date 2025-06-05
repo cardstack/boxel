@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "searchCriteria": "{\n  \"filter\": {\n    \"on\": {\n      \"module\": \"http://localhost:4201/experiments/genealogy-person\",\n      \"name\": \"GenealogyPerson\"\n    },\n    \"any\": [\n      { \"contains\": { \"children.id\": \"http://localhost:4201/experiments/GenealogyPerson/029ecfd2-7588-4933-b186-baf0363dfaaa\" } }\n    ]\n  }\n}",
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../genealogy-person",
+        "name": "GenealogyPersonsSearch"
+      }
+    }
+  }
+}

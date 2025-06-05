@@ -1,0 +1,44 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": {
+        "firstName": "Margaret",
+        "middleName": "Rose",
+        "lastName": "Thompson",
+        "maidenName": "Wilson",
+        "nickname": "Maggie"
+      },
+      "birthDate": "1952-03-15",
+      "birthPlace": {
+        "city": "Boston",
+        "state": "Massachusetts",
+        "country": "United States"
+      },
+      "deathDate": null,
+      "deathPlace": {
+        "city": null,
+        "state": null,
+        "country": null
+      },
+      "occupation": "Elementary School Teacher",
+      "biography": "Margaret Rose Wilson Thompson was born in Boston to Irish immigrant parents. She dedicated her life to education, teaching second grade for over 35 years at Lincoln Elementary School. Known for her warm smile and patient nature, she touched the lives of hundreds of children throughout her career. Margaret married Robert Thompson in 1975, and they raised three children together. She was active in her local church community and volunteered at the local food bank for many years. In her retirement, she enjoys gardening, reading mystery novels, and spending time with her grandchildren.",
+      "notes": "Research needed: Birth certificate location, parents' immigration records from Ireland (County Cork suspected), marriage certificate details. Family stories mention a brother who moved to California in the 1940s - need to investigate. Photo collection includes several unidentified relatives from the 1920s-1930s.",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "children.0": {
+        "links": {
+          "self": "./029ecfd2-7588-4933-b186-baf0363dfaaa"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../genealogy-person",
+        "name": "GenealogyPerson"
+      }
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": {
+        "firstName": "Sarah",
+        "middleName": "Elizabeth",
+        "lastName": "Thompson",
+        "maidenName": null,
+        "nickname": "Sadie"
+      },
+      "birthDate": "1978-09-22",
+      "birthPlace": {
+        "city": "Springfield",
+        "state": "Massachusetts",
+        "country": "United States"
+      },
+      "deathDate": null,
+      "deathPlace": {
+        "city": null,
+        "state": null,
+        "country": null
+      },
+      "occupation": "Software Engineer",
+      "biography": "Sarah Elizabeth Thompson is the eldest daughter of Margaret and Robert Thompson. Born and raised in Springfield, Massachusetts, she showed an early aptitude for mathematics and computers. After graduating from the University of Massachusetts with a degree in Computer Science, she began her career at a tech startup in Boston. Sarah is passionate about coding and currently works as a Senior Software Engineer specializing in web applications. She enjoys hiking, photography, and volunteers as a coding instructor for underprivileged youth. Sarah is married to David Chen and they have two young children together.",
+      "notes": "Need to collect: college transcripts, marriage certificate to David Chen, birth certificates of her children. Family photos from college graduation available. Research David's family background for complete family tree.",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "children": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../genealogy-person",
+        "name": "GenealogyPerson"
+      }
+    }
+  }
+}
