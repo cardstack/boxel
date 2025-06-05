@@ -24,6 +24,7 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
+  percySnapshot,
   testRealmURL,
   setupCardLogs,
   setupIntegrationTestRealm,
@@ -985,6 +986,8 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert
       .dom('[data-test-ai-message-content] [data-test-editor]')
       .exists('View Code panel should remain open');
+
+    await percySnapshot(assert); // can preview code in ViewCode panel
   });
 
   test('when command in a message with continuations is done streaming, apply button is shown in ready state', async function (assert) {
