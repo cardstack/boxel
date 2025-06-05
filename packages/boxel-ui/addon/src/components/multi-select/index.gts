@@ -73,7 +73,7 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       @registerAPI={{@registerAPI}}
       @initiallyOpened={{@initiallyOpened}}
       @extra={{@extra}}
-      @dropdownClass={{'boxel-multi-select__dropdown'}}
+      @dropdownClass='boxel-multi-select__dropdown'
       {{! actions  }}
       @onOpen={{@onOpen}}
       @onClose={{@onClose}}
@@ -82,7 +82,7 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       @selectedItemComponent={{@selectedItemComponent}}
       @triggerComponent={{@triggerComponent}}
       @afterOptionsComponent={{@afterOptionsComponent}}
-      @beforeOptionsComponent={{(component BeforeOptions)}}
+      @beforeOptionsComponent={{component BeforeOptions}}
       ...attributes
       as |option|
     >

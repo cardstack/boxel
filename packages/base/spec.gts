@@ -39,11 +39,10 @@ import { DiagonalArrowLeftUp as ExportArrow } from '@cardstack/boxel-ui/icons';
 import StackIcon from '@cardstack/boxel-icons/stack';
 import AppsIcon from '@cardstack/boxel-icons/apps';
 import LayoutList from '@cardstack/boxel-icons/layout-list';
-import Brain from '@cardstack/boxel-icons/brain';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 
-export type SpecType = 'card' | 'field' | 'component' | 'app' | 'skill';
+export type SpecType = 'card' | 'field' | 'component' | 'app';
 
 class SpecTypeField extends StringField {
   static displayName = 'Spec Type';
@@ -905,11 +904,7 @@ export class Spec extends CardDef {
 
   @field isCard = contains(BooleanField, {
     computeVia: function (this: Spec) {
-      return (
-        this.specType === 'card' ||
-        this.specType === 'app' ||
-        this.specType === 'skill'
-      );
+      return this.specType === 'card' || this.specType === 'app';
     },
   });
 
@@ -1035,8 +1030,6 @@ function getIcon(specType: string) {
       return AppsIcon;
     case 'field':
       return LayoutList;
-    case 'skill':
-      return Brain;
     case 'component':
       return LayoutList;
     default:

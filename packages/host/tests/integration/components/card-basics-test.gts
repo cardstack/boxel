@@ -24,6 +24,7 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 import {
   baseRealm,
   primitive,
+  localId,
   PermissionsContextName,
 } from '@cardstack/runtime-common';
 
@@ -194,6 +195,19 @@ module('Integration | card-basics', function (hooks) {
         instanceOf(new Baz(), Foo),
         'instance adopts from card class',
       );
+    });
+
+    test('instanceOf works thru an interior field', async function (assert) {
+      class InteriorField extends FieldDef {
+        @field a = contains(StringField);
+      }
+
+      class ExteriorField extends InteriorField {
+        @field b = contains(StringField);
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, { ExteriorField });
+      assert.true(instanceOf(new ExteriorField(), FieldDef));
     });
 
     test('primitive field type checking', async function (assert) {
@@ -661,6 +675,19 @@ module('Integration | card-basics', function (hooks) {
 
       let vanGogh = new Person({ id: `${testRealmURL}Person/vanGogh` });
       assert.strictEqual(vanGogh.id, `${testRealmURL}Person/vanGogh`);
+    });
+
+    test('can initialize card with local id', async function (assert) {
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+      }
+
+      let mango = new Person({ [localId]: 'test-local-id' });
+      assert.strictEqual(
+        mango[localId],
+        'test-local-id',
+        'the local id is correct',
+      );
     });
 
     test('throws when setting the ID for a saved card', async function (assert) {
@@ -2118,6 +2145,7 @@ module('Integration | card-basics', function (hooks) {
       }
       loader.shimModule(`${testRealmURL}test-cards`, {
         TestCard,
+        TestField,
         SubTestField,
       });
 
@@ -2194,6 +2222,7 @@ module('Integration | card-basics', function (hooks) {
 
       loader.shimModule(`${testRealmURL}test-cards`, {
         TestCardWithField,
+        TestField,
         TestCard,
         SubTestField,
       });

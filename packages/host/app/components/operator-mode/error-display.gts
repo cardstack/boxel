@@ -58,6 +58,10 @@ export default class ErrorDisplay extends Component<Signature> {
     };
   }
 
+  private get errorText() {
+    return JSON.stringify(this.errorObject);
+  }
+
   private get headerText() {
     return this.args.headerText ?? `${this.args.type} Error`;
   }
@@ -85,7 +89,11 @@ export default class ErrorDisplay extends Component<Signature> {
       {{/if}}
 
       <div class='error-actions'>
-        <CopyButton @textToCopy={{@message}} @width='16px' @heigth='16px' />
+        <CopyButton
+          @textToCopy={{this.errorText}}
+          @width='16px'
+          @heigth='16px'
+        />
         <Button
           class='toggle-details-button'
           @kind='text-only'
@@ -141,6 +149,7 @@ export default class ErrorDisplay extends Component<Signature> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
+        max-height: 100%;
       }
 
       .error-header {
@@ -203,6 +212,22 @@ export default class ErrorDisplay extends Component<Signature> {
         padding: var(--boxel-sp);
         width: 100%;
         margin-bottom: calc(-1 * var(--boxel-sp));
+        overflow: auto;
+        scrollbar-width: thin;
+        flex: 1;
+      }
+
+      .error-details::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .error-details::-webkit-scrollbar-track {
+        background: var(--boxel-light);
+      }
+
+      .error-details::-webkit-scrollbar-thumb {
+        background: var(--boxel-dark);
+        border-radius: 4px;
       }
 
       .detail-item {

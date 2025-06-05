@@ -306,6 +306,9 @@ catalogs:
     ember-qunit:
       specifier: ^8.0.1
       version: 8.0.2
+    ember-template-lint:
+      specifier: ^7.8.1
+      version: 7.8.1
     esbuild:
       specifier: ^0.24.0
       version: 0.24.0
@@ -829,8 +832,8 @@ importers:
         specifier: ^6.5.1
         version: 6.5.1(@ember/test-waiters@3.1.0)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glimmer/tracking@1.1.2)(@glint/template@1.3.0)(ember-concurrency@4.0.3(@babel/core@7.26.10)(@glimmer/tracking@1.1.2)(@glint/template@1.3.0)(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)))(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5))
       ember-template-lint:
-        specifier: ^5.11.2
-        version: 5.11.2
+        specifier: 'catalog:'
+        version: 7.8.1
       ethers:
         specifier: 'catalog:'
         version: 6.6.2
@@ -939,11 +942,11 @@ importers:
         specifier: ^4.1.1
         version: 4.1.1
       ember-template-lint:
-        specifier: ^5.11.2
-        version: 5.11.2
+        specifier: 'catalog:'
+        version: 7.8.1
       ember-template-lint-plugin-prettier:
         specifier: ^5.0.0
-        version: 5.0.0(ember-template-lint@5.11.2)(prettier@3.5.3)
+        version: 5.0.0(ember-template-lint@7.8.1)(prettier@3.5.3)
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
@@ -1096,11 +1099,11 @@ importers:
         specifier: ^4.1.1
         version: 4.1.1
       ember-template-lint:
-        specifier: ^5.11.2
-        version: 5.11.2
+        specifier: 'catalog:'
+        version: 7.8.1
       ember-template-lint-plugin-prettier:
         specifier: ^5.0.0
-        version: 5.0.0(ember-template-lint@5.11.2)(prettier@3.5.3)
+        version: 5.0.0(ember-template-lint@7.8.1)(prettier@3.5.3)
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
@@ -1306,8 +1309,8 @@ importers:
         specifier: ^4.1.1
         version: 4.1.1
       ember-template-lint:
-        specifier: ^5.11.2
-        version: 5.11.2
+        specifier: 'catalog:'
+        version: 7.8.1
       ember-try:
         specifier: ^2.0.0
         version: 2.0.0
@@ -1523,11 +1526,11 @@ importers:
         specifier: ^4.1.1
         version: 4.1.1
       ember-template-lint:
-        specifier: ^5.11.2
-        version: 5.11.2
+        specifier: 'catalog:'
+        version: 7.8.1
       ember-template-lint-plugin-prettier:
         specifier: ^5.0.0
-        version: 5.0.0(ember-template-lint@5.11.2)(prettier@3.5.3)
+        version: 5.0.0(ember-template-lint@7.8.1)(prettier@3.5.3)
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
@@ -1740,8 +1743,8 @@ importers:
         specifier: ^4.1.1
         version: 4.1.1
       ember-template-lint:
-        specifier: ^5.11.2
-        version: 5.11.2
+        specifier: 'catalog:'
+        version: 7.8.1
       ember-try:
         specifier: ^2.0.0
         version: 2.0.0
@@ -1818,8 +1821,8 @@ importers:
         specifier: ^4.1.0
         version: 4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))
       ember-template-lint:
-        specifier: ^5.11.2
-        version: 5.11.2
+        specifier: 'catalog:'
+        version: 7.8.1
       tracked-built-ins:
         specifier: ^3.3.0
         version: 3.3.0
@@ -1923,8 +1926,8 @@ importers:
         specifier: ^4.1.0
         version: 4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))
       ember-template-lint:
-        specifier: ^5.11.2
-        version: 5.11.2
+        specifier: 'catalog:'
+        version: 7.8.1
       tracked-built-ins:
         specifier: ^3.3.0
         version: 3.3.0
@@ -2235,8 +2238,8 @@ importers:
         specifier: ^4.1.1
         version: 4.1.1
       ember-template-lint:
-        specifier: ^5.11.2
-        version: 5.11.2
+        specifier: 'catalog:'
+        version: 7.8.1
       ember-test-selectors:
         specifier: ^6.0.0
         version: 6.0.0
@@ -2903,8 +2906,8 @@ importers:
         specifier: ^4.1.0
         version: 4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))
       ember-template-lint:
-        specifier: ^5.11.2
-        version: 5.11.2
+        specifier: 'catalog:'
+        version: 7.8.1
       tracked-built-ins:
         specifier: ^3.3.0
         version: 3.3.0
@@ -8142,6 +8145,11 @@ packages:
   ember-template-lint@5.11.2:
     resolution: {integrity: sha512-G8KXmFCYLKM9ifMb+rluL8CNIawUl45i4z4VrK+Nn5ciWSo+Vx2jUp+sS6wKCdBqGYoiqjUgn/hmGnCVOId+yQ==}
     engines: {node: ^14.18.0 || ^16.0.0 || >= 18.0.0}
+    hasBin: true
+
+  ember-template-lint@7.8.1:
+    resolution: {integrity: sha512-SFVTR6YdxvldbBL3ArphAbDhYOXyD8Tt9rTKEWKYpQTilq7Hl9mTrKP59q3GOcnDaR/rNk0cg4rJHYAg6/SCGw==}
+    engines: {node: ^18.18.0 || >= 20.9.0}
     hasBin: true
 
   ember-template-recast@6.1.5:
@@ -20336,10 +20344,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ember-template-lint-plugin-prettier@5.0.0(ember-template-lint@5.11.2)(prettier@3.5.3):
+  ember-template-lint-plugin-prettier@5.0.0(ember-template-lint@7.8.1)(prettier@3.5.3):
     dependencies:
       '@prettier/sync': 0.2.1(prettier@3.5.3)
-      ember-template-lint: 5.11.2
+      ember-template-lint: 7.8.1
       prettier: 3.5.3
       prettier-linter-helpers: 1.0.0
 
@@ -20365,6 +20373,11 @@ snapshots:
       yargs: 17.7.2
     transitivePeerDependencies:
       - supports-color
+
+  ember-template-lint@7.8.1:
+    dependencies:
+      '@lint-todo/utils': 13.1.1
+      content-tag: 3.1.2
 
   ember-template-recast@6.1.5:
     dependencies:

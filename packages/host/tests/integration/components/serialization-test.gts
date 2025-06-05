@@ -227,6 +227,43 @@ module('Integration | serialization', function (hooks) {
     );
   });
 
+  test('can deserialize a card with a local id', async function (assert) {
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person },
+      },
+    });
+
+    let resource = {
+      lid: 'mango-local-id',
+      attributes: {
+        firstName: 'Mango',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${testRealmURL}test-cards`,
+          name: 'Person',
+        },
+      },
+    };
+    let instance = (await createFromSerialized(
+      resource,
+      { data: resource },
+      undefined,
+    )) as CardDefType;
+
+    assert.strictEqual(
+      instance[localId],
+      'mango-local-id',
+      'instance local id is set',
+    );
+  });
+
   test('can serialize a card that has an ID', async function (assert) {
     class Person extends CardDef {
       @field firstName = contains(StringField);

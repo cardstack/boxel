@@ -14,6 +14,7 @@ import {
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -110,6 +111,31 @@ ${REPLACE_MARKER}\n\`\`\``;
       codePatchResultEvents.length,
       1,
       'code patch result event is dispatched',
+    );
+    assert.deepEqual(
+      JSON.parse(codePatchResultEvents[0].content?.data ?? '{}').context,
+      {
+        codeMode: {
+          currentFile: 'http://test-realm/test/hello.txt',
+        },
+        submode: 'code',
+        debug: false,
+        openCardIds: [],
+        realmUrl: 'http://test-realm/test/',
+      },
+      'patch code result event contains the context',
+    );
+    assert.deepEqual(
+      JSON.parse(codePatchResultEvents[0].content?.data ?? '{}')
+        .attachedFiles?.[0]?.name,
+      'hello.txt',
+      'updated file should be attached 1',
+    );
+    assert.deepEqual(
+      JSON.parse(codePatchResultEvents[0].content?.data ?? '{}')
+        .attachedFiles?.[0]?.sourceUrl,
+      'http://test-realm/test/hello.txt',
+      'updated file should be attached 2',
     );
   });
 
@@ -358,5 +384,112 @@ ${REPLACE_MARKER}
         .trim(),
       'This file will be created with a suffix because hi.txt already exists',
     );
+  });
+
+  test('when code patch is historic (user moved on to the next message), or it was applied, it will render the code (replace portion of the search/replace block) in a standard (non-diff) editor', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    let codeBlock = `\`\`\`
+http://test-realm/test/hello.txt
+${SEARCH_MARKER}
+Hello, world!
+${SEPARATOR_MARKER}
+Hi, world!
+${REPLACE_MARKER}
+\`\`\``;
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    // User applies the code patch
+    await waitFor('[data-test-apply-code-button]');
+    assert.dom('[data-test-code-diff-editor]').exists();
+    await click('[data-test-apply-code-button]');
+    await waitFor('[data-test-apply-state="applied"]');
+    assert.dom('[data-test-code-diff-editor]').doesNotExist();
+    assert.dom('[data-test-editor]').exists();
+
+    // User moves on to the next message
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
+      body: 'Send me another code patch',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    await waitFor('[data-test-code-diff-editor]');
+
+    assert.dom('[data-test-code-diff-editor]').exists();
+    assert.dom('[data-test-editor]').exists();
+
+    // User ignores the offered code patch, sends a new message
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
+      body: 'I do not like this code patch. Send me another one.',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    await waitFor('[data-test-apply-state="applied"]');
+
+    // There should be 3 bot messages offering code patches.
+    // First one is the one that was applied, second one is the one that was ignored, third one is the current one
+    assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
+    assert.dom('[data-test-editor]').exists({ count: 2 });
+    assert.dom('[data-test-code-diff-editor]').exists({ count: 1 });
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        body: 'Debug: this event should be ignored for the purposes of deciding whether to show the code diff editor or not',
+        isStreamingFinished: true,
+      },
+      {
+        type: APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
+      },
+    );
+
+    // There should now be 4 bot messages offering code patches.
+    // First one is the one that was applied, second and third that are ignored, fourth one is the current one even though debug message follows it
+    await waitUntil(() => findAll('[data-test-editor]').length === 4); // 3 non-diff blcoks plus the main code editor
+    await waitUntil(() => findAll('[data-test-code-diff-editor]').length === 1);
+
+    assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
+    assert.dom('[data-test-editor]').exists({ count: 4 });
+    assert.dom('[data-test-code-diff-editor]').exists({ count: 1 });
   });
 });

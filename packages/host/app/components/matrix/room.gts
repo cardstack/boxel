@@ -37,7 +37,6 @@ import {
   ResolvedCodeRef,
   internalKeyFor,
   isCardInstance,
-  isLocalId,
 } from '@cardstack/runtime-common';
 import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
 
@@ -89,14 +88,14 @@ export default class Room extends Component<Signature> {
     {{#if (not this.doMatrixEventFlush.isRunning)}}
       <section
         class='room'
-        data-room-settled={{(and
+        data-room-settled={{and
           this.doWhenRoomChanges.isIdle
           (not this.matrixService.isLoadingTimeline)
-        )}}
-        data-test-room-settled={{(and
+        }}
+        data-test-room-settled={{and
           this.doWhenRoomChanges.isIdle
           (not this.matrixService.isLoadingTimeline)
-        )}}
+        }}
         data-test-room-name={{@roomResource.name}}
         data-test-room={{@roomId}}
         data-room-id={{@roomId}}
@@ -763,12 +762,8 @@ export default class Room extends Component<Signature> {
         ) || []),
         ...this.autoAttachedCardIds,
       ]);
-      let context = {
-        submode: this.operatorModeStateService.state.submode,
-        debug: this.operatorModeStateService.operatorModeController.debug,
-        openCardIds: this.makeRemoteIdsList([...openCardIds]),
-        realmUrl: this.operatorModeStateService.realmURL.href,
-      };
+      let context =
+        this.operatorModeStateService.getSummaryForAIBot(openCardIds);
       try {
         let cards: CardDef[] | undefined;
         if (typeof cardsOrIds?.[0] === 'string') {
@@ -812,29 +807,6 @@ export default class Room extends Component<Signature> {
     await Promise.resolve();
     this.removedAttachedCardIds.splice(0);
   });
-
-  private makeRemoteIdsList(ids: (string | undefined)[]) {
-    return ids
-      .map((id) => {
-        if (!id) {
-          return undefined;
-        }
-        if (isLocalId(id)) {
-          let maybeInstance = this.store.peek(id);
-          if (
-            maybeInstance &&
-            isCardInstance(maybeInstance) &&
-            maybeInstance.id
-          ) {
-            return maybeInstance.id;
-          } else {
-            return undefined;
-          }
-        }
-        return id;
-      })
-      .filter(Boolean) as string[];
-  }
 
   private get autoAttachedCardIds() {
     return this.autoAttachmentResource.cardIds;

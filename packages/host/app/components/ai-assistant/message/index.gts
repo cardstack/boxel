@@ -45,6 +45,7 @@ interface Signature {
     datetime: Date;
     isFromAssistant: boolean;
     isStreaming: boolean;
+    isLastAssistantMessage: boolean;
     profileAvatar?: ComponentLike;
     collectionResource?: ReturnType<getCardCollection>;
     files?: FileDef[] | undefined;
@@ -268,7 +269,8 @@ export default class AiAssistantMessage extends Component<Signature> {
                 Thinking...
               {{else}}
                 <details open={{this.isReasoningExpanded}} data-test-reasoning>
-                  {{! template-lint-disable no-invalid-interactive}}
+                  {{! template-lint-disable no-invalid-interactive }}
+                  {{! template-lint-disable no-nested-interactive }}
                   <summary
                     {{on 'click' this.updateReasoningExpanded}}
                   >Thinking...</summary>
@@ -285,6 +287,7 @@ export default class AiAssistantMessage extends Component<Signature> {
               @roomId={{@roomId}}
               @eventId={{@eventId}}
               @isStreaming={{@isStreaming}}
+              @isLastAssistantMessage={{@isLastAssistantMessage}}
             />
           {{else}}
             <FormattedUserMessage @html={{@messageHTML}} />

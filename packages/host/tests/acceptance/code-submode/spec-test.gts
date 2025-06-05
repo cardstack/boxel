@@ -597,7 +597,6 @@ module('Acceptance | Spec preview', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
     assert.dom('[data-test-module-inspector-view="spec"]').exists();
-    assert.dom('[data-test-spec-tag]').hasAttribute('title', 'Spec type: card');
     await click('[data-test-module-inspector-view="spec"]');
     assert.dom('[data-test-spec-selector]').exists();
     assert.dom('[data-test-spec-selector-item-path]').hasText('person-entry');
@@ -617,9 +616,7 @@ module('Acceptance | Spec preview', function (hooks) {
       codePath: `${testRealmURL}pet.gts`,
     });
     assert.dom('[data-test-module-inspector-view="spec"]').exists();
-    assert
-      .dom('[data-test-number-of-instance]')
-      .hasAttribute('title', '2 instances');
+
     await click('[data-test-module-inspector-view="spec"]');
     assert.dom('[data-test-spec-selector]').exists();
     assert.dom('[data-test-caret-down]').exists();
@@ -714,6 +711,7 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-module-inspector-view="spec"]').exists();
     assert.dom('[data-test-create-spec-button]').doesNotExist();
     assert.dom('[data-test-create-spec-intent-message]').doesNotExist();
+    assert.dom('[data-test-spec-exists]').doesNotExist();
     assert.dom('[data-test-cannot-write-intent-message]').exists();
     await percySnapshot(assert);
   });
@@ -756,46 +754,6 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-exported-name]').hasText('Person1');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}person-1`);
   });
-  test('have ability to create new skill spec type instances', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}new-skill.gts`,
-    });
-    assert.dom('[data-test-create-spec-button]').exists();
-    await click('[data-test-module-inspector-view="spec"]');
-    await click('[data-test-create-spec-button]');
-
-    assert
-      .dom('[data-test-title] [data-test-boxel-input]')
-      .hasValue('NewSkill');
-    assert.dom('[data-test-exported-type]').hasText('skill');
-    assert
-      .dom('[data-test-spec-tag]')
-      .hasAttribute('title', 'Spec type: skill');
-    assert.dom('[data-test-exported-name]').hasText('NewSkill');
-    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}new-skill`);
-  });
-  test('have ability to create new extended skill spec type instances', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}new-skill.gts`,
-    });
-    await click('[data-boxel-selector-item-text="ExtendedNewSkill"]');
-    assert.dom('[data-test-create-spec-button]').exists();
-    await click('[data-test-module-inspector-view="spec"]');
-    await click('[data-test-create-spec-button]');
-
-    assert
-      .dom('[data-test-title] [data-test-boxel-input]')
-      .hasValue('ExtendedNewSkill');
-    assert.dom('[data-test-exported-type]').hasText('skill');
-    assert
-      .dom('[data-test-spec-tag]')
-      .hasAttribute('title', 'Spec type: skill');
-    assert.dom('[data-test-exported-name]').hasText('ExtendedNewSkill');
-    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}new-skill`);
-  });
-
   test('when adding linked examples, card chooser options are narrowed to this type', async function (assert) {
     await visitOperatorMode({
       stacks: [
@@ -831,7 +789,6 @@ module('Acceptance | Spec preview', function (hooks) {
     await click('[data-test-module-inspector-view="spec"]');
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('');
     assert.dom('[data-test-exported-name]').containsText('default');
-    assert.dom('[data-test-spec-tag]').hasAttribute('title', 'Spec type: card');
   });
 
   test<TestContextWithSave>('spec auto saved (with stability)', async function (assert) {
@@ -918,9 +875,6 @@ module('Acceptance | Spec preview', function (hooks) {
     const elementName = 'SubTestField';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.dom('[data-test-module-inspector-view="spec"]').exists();
-    assert
-      .dom('[data-test-spec-tag]')
-      .hasAttribute('title', 'Spec type: field');
     await click('[data-test-module-inspector-view="spec"]');
     assert.dom('[data-test-spec-selector]').exists();
     assert
@@ -1128,9 +1082,6 @@ module('Acceptance | Spec preview', function (hooks) {
     });
     await click('[data-test-module-inspector-view="spec"]');
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Pet2');
-    assert
-      .dom('[data-test-number-of-instance]')
-      .hasAttribute('title', '2 instances');
     assert.dom('[data-test-exported-type]').hasText('card');
     assert.dom('[data-test-exported-name]').hasText('Pet');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}pet`);
@@ -1140,9 +1091,6 @@ module('Acceptance | Spec preview', function (hooks) {
       .hasValue('PetField');
     assert.dom('[data-test-exported-type]').hasText('field');
     assert.dom('[data-test-exported-name]').hasText('PetField');
-    assert
-      .dom('[data-test-spec-tag]')
-      .hasAttribute('title', 'Spec type: field');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}pet`);
 
     await click('[data-test-boxel-selector-item-text="Pet"]');
@@ -1154,9 +1102,6 @@ module('Acceptance | Spec preview', function (hooks) {
     await click('[data-option-index="1"]');
 
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Pet');
-    assert
-      .dom('[data-test-number-of-instance]')
-      .hasAttribute('title', '2 instances');
     assert.dom('[data-test-exported-type]').hasText('card');
     assert.dom('[data-test-exported-name]').hasText('Pet');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}pet`);

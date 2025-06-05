@@ -107,7 +107,7 @@ export default class ButtonUsage extends Component {
           @name='kind'
           @optional={{true}}
           @description='Controls the colors of the button'
-          @defaultValue={{'secondary-light'}}
+          @defaultValue='secondary-light'
           @options={{this.kindVariants.all}}
           @onInput={{fn (mut this.kind)}}
           @value={{this.kind}}
@@ -116,7 +116,7 @@ export default class ButtonUsage extends Component {
           @name='size'
           @optional={{true}}
           @description='Controls the size of the button'
-          @defaultValue={{'base'}}
+          @defaultValue='base'
           @options={{this.sizeVariants}}
           @onInput={{fn (mut this.size)}}
           @value={{this.size}}
