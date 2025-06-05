@@ -466,8 +466,12 @@ export default class OperatorModeStateService extends Service {
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
 
-    let moduleInspectorView =
-      this.panelSelections[codePath?.href ?? ''] ?? 'schema';
+    let moduleInspectorView = this.panelSelections[codePath?.href ?? ''];
+
+    if (!moduleInspectorView && codePath && !codePath.href.endsWith('.gts')) {
+      moduleInspectorView =
+        this.panelSelections[`${codePath.href}.gts`] ?? 'schema';
+    }
 
     this.updateModuleInspectorView(moduleInspectorView);
 
