@@ -2218,11 +2218,11 @@ Attached files:
       [],
       fakeMatrixClient,
     );
-    assert.equal(result[6].role, 'tool');
-    assert.equal(result[6].tool_call_id, 'tool-call-id-1');
+    assert.equal(result[5].role, 'tool');
+    assert.equal(result[5].tool_call_id, 'tool-call-id-1');
     const expected = `Tool call executed, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"https://cardstack.com/base/search-results","name":"SearchResults"}}}}.`;
 
-    assert.equal(result[6].content!.trim(), expected.trim());
+    assert.equal(result[5].content!.trim(), expected.trim());
   });
 
   test('Tools remain available in prompt parts even when not in last message', async () => {
@@ -3019,7 +3019,7 @@ Attached files:
       'patchCardInstance',
       'Should have patchCardInstance tool call',
     );
-    assert.true(messages![8].content!.includes('Business Card V2'));
+    assert.true(messages![9].content!.includes('Business Card V2'));
   });
 
   test('Responds to completion of lone code patch', async function () {
@@ -3296,5 +3296,86 @@ module('set model in prompt', (hooks) => {
       fakeMatrixClient,
     );
     assert.strictEqual(model, 'google/gemini-pro-1.5');
+  });
+
+  test('context message is placed before last user message when just one user message', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/user-message-last-single.json'),
+        'utf-8',
+      ),
+    );
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.equal(messages![0].role, 'system');
+    assert.equal(messages![1].role, 'system');
+    assert.equal(messages![2].role, 'user');
+  });
+
+  test('context message is placed before last user message when multiple user messages', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/user-message-last-multiple.json'),
+        'utf-8',
+      ),
+    );
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.equal(messages![0].role, 'system');
+    assert.equal(messages![1].role, 'user');
+    assert.equal(messages![2].role, 'assistant');
+    assert.equal(messages![3].role, 'system');
+    assert.equal(messages![4].role, 'user');
+  });
+
+  test('context message is placed after the last tool call if the last message is a tool call', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/tool-call-last.json'),
+        'utf-8',
+      ),
+    );
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.equal(messages![0].role, 'system');
+    assert.equal(messages![1].role, 'user');
+    assert.equal(messages![2].role, 'assistant');
+    assert.equal(messages![3].role, 'user');
+    assert.equal(messages![4].role, 'assistant');
+    assert.equal(messages![5].role, 'user');
+    assert.equal(messages![6].role, 'assistant');
+    assert.equal(messages![7].role, 'tool');
+    assert.equal(messages![8].role, 'system');
+  });
+
+  test('context message is placed after the last user message if the last message is an assistant message', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/assistant-message-last.json'),
+        'utf-8',
+      ),
+    );
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.equal(messages![0].role, 'system');
+    assert.equal(messages![1].role, 'system');
+    assert.equal(messages![2].role, 'user');
+    assert.equal(messages![3].role, 'assistant');
   });
 });
