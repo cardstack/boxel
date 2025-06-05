@@ -15,14 +15,14 @@ import Modifier from 'ember-modifier';
 
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
-import { CodeData } from '@cardstack/host/lib/formatted-message/utils';
-import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
+import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
+import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 
-import { MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
+import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import ApplyButton from '../ai-assistant/apply-button';
 
@@ -47,7 +47,6 @@ interface ApplyCodePatchButtonSignature {
 
 interface CodeBlockActionsSignature {
   Args: {
-    code?: string | null;
     codeData?: Partial<CodeData>;
   };
   Blocks: {
@@ -83,7 +82,6 @@ interface Signature {
     originalCode?: string | null;
     modifiedCode?: string | null;
     language?: string | null;
-    code?: string | null;
     dimmed?: boolean;
   };
   Blocks: {
@@ -119,7 +117,6 @@ export default CodeBlockComponent;
 interface MonacoEditorSignature {
   Args: {
     Named: {
-      code?: string | null;
       codeData?: Partial<CodeData>;
       monacoSDK: MonacoSDK;
       editorDisplayOptions: MonacoEditorOptions;
@@ -224,7 +221,6 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
     element: HTMLElement,
     _positional: [],
     {
-      code,
       codeData,
       monacoSDK,
       editorDisplayOptions,
@@ -234,7 +230,7 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
       return;
     }
 
-    let { language } = codeData;
+    let { code, language } = codeData;
     if (!code || !language) {
       return;
     }
@@ -379,7 +375,6 @@ class CodeBlockEditor extends Component<Signature> {
 
     <div
       {{MonacoEditor
-        code=@code
         monacoSDK=@monacoSDK
         codeData=@codeData
         editorDisplayOptions=this.editorDisplayOptions
@@ -461,7 +456,7 @@ let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> 
     <div class='code-block-actions'>
       {{yield
         (hash
-          copyCode=(component CopyCodeButton code=@code)
+          copyCode=(component CopyCodeButton code=@codeData.code)
           applyCodePatch=(component
             ApplyCodePatchButton
             codePatch=@codeData.searchReplaceBlock
