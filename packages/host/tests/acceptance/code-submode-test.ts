@@ -1887,5 +1887,23 @@ module('Acceptance | code submode tests', function (_hooks) {
         }),
       );
     });
+
+    test('module inspector query parameter takes precendence over local storage when loading', async function (assert) {
+      window.localStorage.setItem(
+        CodeModePanelSelections,
+        JSON.stringify({
+          [`${testRealmURL}address.gts`]: 'spec',
+        }),
+      );
+
+      await visitOperatorMode({
+        stacks: [],
+        submode: 'code',
+        codePath: `${testRealmURL}address.gts`,
+        moduleInspector: 'preview',
+      });
+
+      assert.dom('[data-test-active-module-inspector-view="preview"]').exists();
+    });
   });
 });
