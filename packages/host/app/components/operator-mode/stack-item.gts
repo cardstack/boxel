@@ -494,9 +494,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private get canEdit() {
     return (
       this.card &&
+      this.card[realmURL] &&
       !this.isBuried &&
       !this.isEditing &&
-      this.realm.canWrite(this.card.id)
+      this.realm.canWrite(this.card[realmURL].href)
     );
   }
 
