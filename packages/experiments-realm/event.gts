@@ -47,7 +47,7 @@ class Edit extends Component<typeof Event> {
         </FieldContainer>
         <FieldContainer @label='Event type' @tag='label' class='field'>
           <BoxelSelect
-            @placeholder={{'Select Item'}}
+            @placeholder='Select Item'
             @selected={{this.selectedEventType}}
             @onChange={{this.updateEventType}}
             @options={{this.eventTypeItems}}

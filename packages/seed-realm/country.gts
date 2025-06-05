@@ -87,7 +87,7 @@ class CountryFieldEdit extends Component<typeof CountryField> {
       Loading countries...
     {{else}}
       <BoxelSelect
-        @placeholder={{'Choose a country'}}
+        @placeholder='Choose a country'
         @options={{this.countries}}
         @selected={{this.country}}
         @onChange={{this.onSelectCountry}}

@@ -440,7 +440,7 @@ export default class DetailPanel extends Component<Signature> {
             {{#if this.cardInstanceType.type}}
               {{#let (getCodeRef this.cardInstanceType.type) as |codeRef|}}
                 <ClickableModuleDefinitionContainer
-                  @title={{'Card Definition'}}
+                  @title='Card Definition'
                   @fileURL={{this.cardInstanceType.type.module}}
                   @name={{this.cardInstanceType.type.displayName}}
                   @fileExtension={{this.cardInstanceType.type.moduleInfo.extension}}

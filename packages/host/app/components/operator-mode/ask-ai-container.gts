@@ -86,7 +86,7 @@ export default class AskAiContainer extends Component<Signature> {
 
     <style scoped>
       .ask-ai-container {
-        width: 310px;
+        width: 140px;
         position: absolute;
         bottom: var(--operator-mode-spacing);
         right: calc(
@@ -95,6 +95,10 @@ export default class AskAiContainer extends Component<Signature> {
         border-radius: var(--boxel-border-radius-xxl);
         box-shadow: var(--boxel-deep-box-shadow);
         z-index: var(--host-ai-panel-button-z-index);
+        transition: width 0.3s ease-in-out;
+      }
+      .ask-ai-container:focus-within {
+        width: 310px;
       }
     </style>
   </template>
