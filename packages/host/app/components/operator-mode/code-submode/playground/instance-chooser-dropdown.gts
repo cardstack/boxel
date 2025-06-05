@@ -1,18 +1,12 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import Folder from '@cardstack/boxel-icons/folder';
-
 import {
-  Button,
-  LoadingIndicator,
   BoxelSelect,
   CardContainer,
+  Menu,
 } from '@cardstack/boxel-ui/components';
-import { IconPlusThin } from '@cardstack/boxel-ui/icons';
+import { MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import {
   cardTypeDisplayName,
@@ -22,12 +16,9 @@ import {
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
-import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
-import type RecentFilesService from '@cardstack/host/services/recent-files-service';
-
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import type { FieldOption, SelectedInstance } from './playground-panel';
+
+export const BULK_GENERATED_ITEM_COUNT = 3;
 
 const getItemTitle = (selection: SelectedInstance | undefined) => {
   if (!selection) {
@@ -81,11 +72,7 @@ const BeforeOptions: TemplateOnlyComponent = <template>
 
 interface AfterOptionsSignature {
   Args: {
-    chooseCard: () => void;
-    createNew?: () => void;
-    createNewIsRunning?: boolean;
-    generateSampleData?: (card?: CardDef) => void;
-    selectedCard?: CardDef;
+    menuItems: MenuItem[];
   };
 }
 const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
@@ -93,44 +80,11 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
     <span class='title'>
       Action
     </span>
-    {{#if @createNew}}
-      <Button
-        @kind='text-only'
-        class='action'
-        {{on 'click' @createNew}}
-        data-test-create-instance
-      >
-        {{#if @createNewIsRunning}}
-          <LoadingIndicator class='action-running' />
-        {{else}}
-          <IconPlusThin width='16px' height='16px' />
-        {{/if}}
-        <span>Create new instance</span>
-      </Button>
-    {{/if}}
-    {{#if @generateSampleData}}
-      <Button
-        @kind='text-only'
-        class='action'
-        {{on 'click' (fn @generateSampleData @selectedCard)}}
-        data-test-generate-sample-data
-      >
-        <span class='ai-icon' />
-        <span>Generate sample with AI</span>
-      </Button>
-    {{/if}}
-    <Button
-      @kind='text-only'
-      class='action'
-      {{on 'click' @chooseCard}}
-      data-test-choose-another-instance
-    >
-      <Folder width='16px' height='16px' />
-      <span>Choose another instance</span>
-    </Button>
+    <Menu @items={{@menuItems}} />
   </div>
   <style scoped>
     .after-options {
+      --boxel-loading-indicator-size: var(--boxel-icon-xs);
       display: flex;
       flex-direction: column;
       border-top: var(--boxel-border);
@@ -142,49 +96,22 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
       letter-spacing: var(--boxel-lsp-xs);
       text-align: left;
     }
-    .action {
-      display: inline-block;
-      font: 500 var(--boxel-font-sm);
-      border: none;
-      height: var(--boxel-form-control-height);
-      padding: var(--boxel-sp-xs) var(--boxel-sp);
-      border-radius: var(--boxel-border-radius);
-      text-align: left;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-      overflow: hidden;
-      transition: background-color var(--boxel-transition);
+    :deep(.boxel-menu__item .menu-item) {
+      width: 100%;
     }
-    .action:hover {
-      background-color: var(--boxel-100);
+    :deep(.boxel-menu__item .ai-icon) {
+      order: 1;
+      margin-left: auto;
     }
-    .action > * + * {
-      margin-left: var(--boxel-sp-xxs);
-    }
-    .action > * {
-      vertical-align: middle;
-    }
-    .action-running {
-      --boxel-loading-indicator-size: var(--boxel-icon-xs);
-    }
-    .ai-icon {
-      display: inline-block;
-      width: var(--boxel-icon-xs);
-      height: var(--boxel-icon-xs);
-      background-image: image-set(
-        url('../../../ai-assistant/ai-assist-icon-bw.png') 1x,
-        url('../../../ai-assistant/ai-assist-icon-bw@2x.png') 2x,
-        url('../../../ai-assistant/ai-assist-icon-bw@3x.png')
-      );
-      background-position: left center;
-      background-repeat: no-repeat;
-      background-size: contain;
+    :deep(.boxel-menu__item .check-icon) {
+      display: none;
     }
   </style>
 </template>;
 
 interface Signature {
   Args: {
+    isFieldDef: boolean;
     cardOptions: PrerenderedCardLike[] | undefined;
     fieldOptions?: FieldOption[];
     findSelectedCard: (
@@ -192,13 +119,10 @@ interface Signature {
     ) => PrerenderedCardLike | SelectedInstance | undefined;
     selection: SelectedInstance | undefined;
     onSelect: (item: PrerenderedCardLike | FieldOption) => void;
-    chooseCard: () => void;
-    createNew?: () => void;
-    createNewIsRunning?: boolean;
-    generateSampleData?: (card?: CardDef) => void;
     moduleId: string;
     persistSelections?: (cardId: string, format: Format) => void;
     recentCardIds: string[];
+    afterMenuOptions: MenuItem[];
   };
 }
 
@@ -209,10 +133,7 @@ interface OptionsDropdownSignature {
     selected?: PrerenderedCardLike | FieldOption | SelectedInstance;
     selection: SelectedInstance | undefined;
     onSelect: (item: PrerenderedCardLike | FieldOption) => void;
-    chooseCard: () => void;
-    createNew?: () => void;
-    createNewIsRunning?: boolean;
-    generateSampleData?: (card?: CardDef) => void;
+    afterMenuOptions: MenuItem[];
   };
 }
 
@@ -229,15 +150,11 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
       }}
       @renderInPlace={{true}}
       @onChange={{@onSelect}}
-      @placeholder='Please Select'
+      @placeholder='Select {{if @isField "field" "card"}} instance'
       @beforeOptionsComponent={{component BeforeOptions}}
       @afterOptionsComponent={{component
         AfterOptions
-        chooseCard=@chooseCard
-        createNew=@createNew
-        createNewIsRunning=@createNewIsRunning
-        generateSampleData=@generateSampleData
-        selectedCard=@selection.card
+        menuItems=@afterMenuOptions
       }}
       @verticalPosition='above'
       data-playground-instance-chooser
@@ -316,40 +233,25 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
 
 export default class InstanceSelectDropdown extends Component<Signature> {
   <template>
-    {{#if @cardOptions}}
-      <OptionsDropdown
-        @options={{@cardOptions}}
-        @selected={{@findSelectedCard @cardOptions}}
-        @selection={{@selection}}
-        @onSelect={{@onSelect}}
-        @chooseCard={{@chooseCard}}
-        @createNew={{@createNew}}
-        @createNewIsRunning={{@createNewIsRunning}}
-        @generateSampleData={{@generateSampleData}}
-      />
-    {{else}}
+    {{#if @isFieldDef}}
       <OptionsDropdown
         @isField={{true}}
         @options={{@fieldOptions}}
         @selected={{this.findSelectedField @fieldOptions}}
         @selection={{@selection}}
         @onSelect={{@onSelect}}
-        @chooseCard={{@chooseCard}}
-        @createNew={{@createNew}}
-        @createNewIsRunning={{@createNewIsRunning}}
-        @generateSampleData={{@generateSampleData}}
+        @afterMenuOptions={{@afterMenuOptions}}
+      />
+    {{else}}
+      <OptionsDropdown
+        @options={{@cardOptions}}
+        @selected={{@findSelectedCard @cardOptions}}
+        @selection={{@selection}}
+        @onSelect={{@onSelect}}
+        @afterMenuOptions={{@afterMenuOptions}}
       />
     {{/if}}
-
-    <style scoped>
-      .loading-icon {
-        height: var(--boxel-form-control-height);
-      }
-    </style>
   </template>
-
-  @service private declare playgroundPanelService: PlaygroundPanelService;
-  @service private declare recentFilesService: RecentFilesService;
 
   private findSelectedField = (fields?: FieldOption[]) => {
     if (!fields?.length || !this.args.selection) {

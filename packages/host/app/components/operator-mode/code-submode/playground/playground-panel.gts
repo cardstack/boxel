@@ -19,7 +19,13 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
-import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
+import {
+  Eye,
+  Folder,
+  IconCode,
+  IconLink,
+  IconPlusThin,
+} from '@cardstack/boxel-ui/icons';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
@@ -70,9 +76,12 @@ import PrerenderedCardSearch from '../../../prerendered-card-search';
 import CardError from '../../card-error';
 import FormatChooser from '../format-chooser';
 
+import AiAssistantIcon from './ai-assistant-icon-bw';
 import FieldPickerModal from './field-chooser-modal';
 
-import InstanceSelectDropdown from './instance-chooser-dropdown';
+import InstanceSelectDropdown, {
+  BULK_GENERATED_ITEM_COUNT,
+} from './instance-chooser-dropdown';
 import PlaygroundPreview from './playground-preview';
 import SpecSearch from './spec-search';
 
@@ -135,14 +144,20 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get maybeGenerateFieldSpec() {
-    return this.args.isFieldDef && !this.card;
+    return this.canWriteRealm && this.args.isFieldDef && !this.cardResource?.id;
   }
 
-  private copyToClipboard = task(async (id: string) => {
+  private copyToClipboard = task(async (id?: string) => {
+    if (!id) {
+      return;
+    }
     await navigator.clipboard.writeText(id);
   });
 
-  private openInInteractMode = (id: string) => {
+  private openInInteractMode = (id?: string) => {
+    if (!id) {
+      return;
+    }
     this.operatorModeStateService.openCardInInteractMode(
       id,
       this.format === 'edit' ? 'edit' : 'isolated',
@@ -159,24 +174,75 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get contextMenuItems() {
-    if (!this.card?.id) {
-      return undefined;
-    }
-    let cardId = this.card.id;
+    let cardId = this.cardResource?.id;
     let menuItems: MenuItem[] = [
       new MenuItem('Copy Card URL', 'action', {
         action: () => this.copyToClipboard.perform(cardId),
         icon: IconLink,
+        disabled: !cardId,
       }),
       new MenuItem('Open in Code Mode', 'action', {
         action: () =>
-          this.operatorModeStateService.updateCodePath(new URL(cardId)),
+          this.operatorModeStateService.updateCodePath(
+            cardId ? new URL(cardId) : null,
+          ),
         icon: IconCode,
+        disabled: !cardId,
       }),
       new MenuItem('Open in Interact Mode', 'action', {
         action: () => this.openInInteractMode(cardId),
         icon: Eye,
+        disabled: !cardId,
       }),
+      new MenuItem('Fill in sample data with AI', 'action', {
+        action: () => this.generateSampleData.perform(),
+        icon: AiAssistantIcon,
+        disabled: !this.canEditCard,
+      }),
+      new MenuItem(
+        `Generate ${BULK_GENERATED_ITEM_COUNT} examples with AI`,
+        'action',
+        {
+          action: () =>
+            this.generateSampleData.perform({
+              bulkGenerate: true,
+            }),
+          icon: AiAssistantIcon,
+          disabled: !this.canWriteRealm,
+        },
+      ),
+    ];
+    return menuItems;
+  }
+
+  private get afterMenuOptions(): MenuItem[] {
+    let menuItems: MenuItem[] = [
+      new MenuItem('Create new instance', 'action', {
+        action: () => this.createNew(),
+        icon: this.createNewIsRunning ? LoadingIndicator : IconPlusThin,
+        disabled: this.createNewIsRunning || !this.canWriteRealm,
+      }),
+      new MenuItem('Choose another instance', 'action', {
+        action: () => this.chooseInstance(),
+        icon: Folder,
+      }),
+      new MenuItem('Fill in sample data with AI', 'action', {
+        action: () => this.generateSampleData.perform(),
+        icon: AiAssistantIcon,
+        disabled: !this.canEditCard,
+      }),
+      new MenuItem(
+        `Generate ${BULK_GENERATED_ITEM_COUNT} examples with AI`,
+        'action',
+        {
+          action: () =>
+            this.generateSampleData.perform({
+              bulkGenerate: true,
+            }),
+          icon: AiAssistantIcon,
+          disabled: !this.canWriteRealm,
+        },
+      ),
     ];
     return menuItems;
   }
@@ -197,11 +263,13 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get canEditCard() {
-    return Boolean(
-      this.format !== 'edit' &&
-        this.card?.id &&
-        this.realm.canWrite(this.card.id),
-    );
+    // in error case, we may not have `this.card?.id`, but we can get the id from `this.cardResource?.id`
+    let cardId = this.cardResource?.id;
+    return cardId && this.realm.canWrite(cardId);
+  }
+
+  private get setEditMode() {
+    return this.format !== 'edit' && this.canEditCard;
   }
 
   private get isWideFormat() {
@@ -428,9 +496,9 @@ export default class PlaygroundPanel extends Component<Signature> {
       this.moduleId,
       trimJsonExtension(selectedCardId),
       selectedFormat,
-      index /* `undefined` means we are previewing a card instances. fields MUST have a corresponding index
-      based on their position on their spec's containedExamples field. otherwise, it means that we are previewing
-      a spec instance on playground instead of the field */,
+      index, // `undefined` means we are previewing a card instances. fields MUST have a corresponding index
+      // based on their position on their spec's containedExamples field. otherwise, it means that we are previewing
+      // a spec instance on playground instead of the field,
     );
   };
 
@@ -495,6 +563,7 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   private createNewCard = restartableTask(async () => {
     let newCardJSON: LooseSingleCardDocument;
+
     if (this.args.isFieldDef) {
       let fieldCard = await loadCardDef(this.args.codeRef, {
         loader: this.loaderService.loader,
@@ -686,47 +755,56 @@ export default class PlaygroundPanel extends Component<Signature> {
     }
   };
 
-  private generateSampleData = restartableTask(async (card?: CardDef) => {
-    if (!this.operatorModeStateService.openFileURL) {
-      throw new Error('Please open a file');
-    }
-
-    await this.aiAssistantPanelService.openPanel();
-
-    let { commandContext } = this.commandService;
-    let sendMessageCommand = new SendAiAssistantMessageCommand(commandContext);
-
-    let prompt = `Fill in sample data`;
-
-    if (this.args.isFieldDef) {
-      if (card) {
-        prompt += ` for the attached spec's containedExamples field at index ${
-          this.fieldIndex ?? '0'
-        }.`;
+  private generateSampleData = restartableTask(
+    async (opts?: { bulkGenerate: boolean }) => {
+      if (!this.operatorModeStateService.openFileURL) {
+        throw new Error('Please open a file');
       }
-      // TODO: determine how to handle error case
-    } else {
-      if (card) {
-        prompt += ` for the attached card instance.`;
+
+      let card = this.card;
+
+      await this.aiAssistantPanelService.openPanel();
+
+      let { commandContext } = this.commandService;
+      let sendMessageCommand = new SendAiAssistantMessageCommand(
+        commandContext,
+      );
+
+      let prompt: string;
+
+      if (opts?.bulkGenerate) {
+        prompt = `Generate ${BULK_GENERATED_ITEM_COUNT} additional examples`;
+        if (this.args.isFieldDef) {
+          prompt += ` on this card's spec.`;
+        } else {
+          prompt += ` of the attached card instance.`;
+        }
       } else {
-        // if there is no selected card for some reason (maybe an error case),
-        // AI can generate sample card instances using the specified moduleId
-        // otherwise it complains about not having an open card or
-        // generates instances for all card definitions on the file
-        prompt += ` for the selected module ${this.moduleId} in the attached file.`;
+        prompt = `Fill in sample data`;
+        if (this.args.isFieldDef) {
+          prompt += ` for this example on the card's spec.`;
+        } else if (card) {
+          prompt += ` for the attached card instance.`;
+        } else {
+          // if there is no selected card for some reason (maybe an error case),
+          // AI can generate sample card instances using the specified moduleId
+          // otherwise it complains about not having an open card or
+          // generates instances for all card definitions on the file
+          prompt += ` for the selected module ${this.moduleId} in the attached file.`;
+        }
       }
-    }
 
-    await sendMessageCommand.execute({
-      roomId: this.matrixService.currentRoomId,
-      prompt,
-      openCardIds: card?.id ? [card.id] : undefined,
-      attachedCards: card ? [card] : undefined,
-      attachedFileURLs: [this.operatorModeStateService.openFileURL],
-      realmUrl: this.operatorModeStateService.realmURL.href,
-    });
-    this.closeInstanceChooser();
-  });
+      await sendMessageCommand.execute({
+        roomId: this.matrixService.currentRoomId,
+        prompt,
+        openCardIds: card?.id ? [card.id] : undefined,
+        attachedCards: card ? [card] : undefined,
+        attachedFileURLs: [this.operatorModeStateService.openFileURL],
+        realmUrl: this.operatorModeStateService.realmURL.href,
+      });
+      this.closeInstanceChooser();
+    },
+  );
 
   <template>
     {{consumeContext this.makeCardResource}}
@@ -788,20 +866,16 @@ export default class PlaygroundPanel extends Component<Signature> {
             {{#let
               (component
                 InstanceSelectDropdown
-                cardOptions=(if @isFieldDef undefined this.cardOptions)
+                isFieldDef=@isFieldDef
+                cardOptions=this.cardOptions
                 fieldOptions=this.fieldInstances
                 findSelectedCard=this.findSelectedCard
                 selection=this.dropdownSelection
                 onSelect=this.onSelect
-                chooseCard=this.chooseInstance
-                createNew=(if this.canWriteRealm this.createNew)
-                createNewIsRunning=this.createNewIsRunning
                 moduleId=this.moduleId
                 persistSelections=this.persistSelections
                 recentCardIds=this.recentCardIds
-                generateSampleData=(if
-                  this.canWriteRealm this.generateSampleData.perform
-                )
+                afterMenuOptions=this.afterMenuOptions
               )
               as |InstanceChooser|
             }}
@@ -840,7 +914,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                     @format={{this.format}}
                     @realmInfo={{this.realmInfo}}
                     @contextMenuItems={{this.contextMenuItems}}
-                    @onEdit={{if this.canEditCard (fn this.setFormat 'edit')}}
+                    @onEdit={{if this.setEditMode (fn this.setFormat 'edit')}}
                     @onFinishEditing={{if
                       (eq this.format 'edit')
                       (fn this.setFormat this.defaultFormat)
@@ -870,7 +944,6 @@ export default class PlaygroundPanel extends Component<Signature> {
                 <SpecSearch
                   @query={{this.specQuery}}
                   @realms={{this.realmServer.availableRealmURLs}}
-                  @canWriteRealm={{this.canWriteRealm}}
                   @createNewCard={{this.createNew}}
                 />
               {{/if}}
