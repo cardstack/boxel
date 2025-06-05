@@ -169,7 +169,7 @@ export async function basicMappings(loader: Loader) {
   mappings.set(QueryField, {
     type: 'object',
     description:
-      'Represents a query with filter, sort, and pagination options, based on the Query interface from @cardstack/runtime-common/query.',
+      'A query to the card search API, supporting searching on fields and types, with pagination and sorting.',
     properties: {
       filter: {
         type: 'object',
