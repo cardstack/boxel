@@ -1819,7 +1819,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-create-file-modal]').doesNotExist();
     });
 
-    test('restores module inspector view from operator mode state', async function (assert) {
+    test('restores and remembers module inspector view from operator mode state', async function (assert) {
       await visitOperatorMode({
         stacks: [],
         submode: 'code',
@@ -1828,6 +1828,13 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
 
       assert.dom('[data-test-active-module-inspector-view="preview"]').exists();
+
+      assert.strictEqual(
+        window.localStorage.getItem(ModuleInspectorSelections),
+        JSON.stringify({
+          [`${testRealmURL}pet.gts`]: 'preview',
+        }),
+      );
     });
 
     test('remembers open module inspector panel via local storage', async function (assert) {
