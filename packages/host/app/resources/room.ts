@@ -8,6 +8,7 @@ import { Resource } from 'ember-resources';
 
 import difference from 'lodash/difference';
 
+import { IRoomEvent } from 'matrix-js-sdk';
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -59,7 +60,6 @@ import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
-import { IRoomEvent } from 'matrix-js-sdk';
 
 export type RoomSkill = {
   cardId: string;
