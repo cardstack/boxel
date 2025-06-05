@@ -7,6 +7,7 @@ import Service, { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
 
 import { task, restartableTask } from 'ember-concurrency';
+import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
@@ -36,6 +37,8 @@ import type PlaygroundPanelService from '@cardstack/host/services/playground-pan
 import type Realm from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+
+import { ModuleInspectorSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import { Format } from 'https://cardstack.com/base/card-api';
 
@@ -112,7 +115,7 @@ export default class OperatorModeStateService extends Service {
   private openFileSubscribers: OpenFileSubscriber[] = [];
   private cardTitles = new TrackedMap<string, string>();
 
-  private moduleInspectorStateForFile: URL | null = null;
+  private panelSelections: Record<string, ModuleInspectorView>;
 
   @service declare private cardService: CardService;
   @service declare private loaderService: LoaderService;
@@ -131,6 +134,13 @@ export default class OperatorModeStateService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.reset.register(this);
+
+    let panelSelections = window.localStorage.getItem(
+      ModuleInspectorSelections,
+    );
+    this.panelSelections = new TrackedObject(
+      panelSelections ? JSON.parse(panelSelections) : {},
+    );
   }
 
   get aiAssistantOpen() {
@@ -380,22 +390,12 @@ export default class OperatorModeStateService extends Service {
 
   async updateModuleInspectorView(view: ModuleInspectorView) {
     this.state.moduleInspector = view;
-    this.moduleInspectorStateForFile = this.state.codePath;
-    this.schedulePersist();
-  }
-
-  get moduleInspectorForCodePath() {
-    console.log(
-      'moduleInspectorForCodePath',
-      this.moduleInspectorStateForFile?.href,
-      this.state.codePath?.href,
-      `equal? ${this.moduleInspectorStateForFile?.href === this.state.codePath?.href}`,
+    this.panelSelections[this.state.codePath?.href ?? ''] = view;
+    window.localStorage.setItem(
+      ModuleInspectorSelections,
+      JSON.stringify(this.panelSelections),
     );
-    if (this.moduleInspectorStateForFile?.href === this.state.codePath?.href) {
-      return this.state.moduleInspector;
-    } else {
-      return undefined;
-    }
+    this.schedulePersist();
   }
 
   updateCodePathWithSelection({
@@ -465,7 +465,26 @@ export default class OperatorModeStateService extends Service {
     this.state.codePath = codePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
+
+    let moduleInspectorView =
+      this.panelSelections[codePath?.href ?? ''] ?? 'schema';
+
+    this.updateModuleInspectorView(moduleInspectorView);
+
     this.specPanelService.setSelection(null);
+  }
+
+  private persistModuleInspectorView(
+    codePath: string | null,
+    moduleInspector: ModuleInspectorView,
+  ) {
+    if (codePath) {
+      this.panelSelections[codePath] = moduleInspector;
+      window.localStorage.setItem(
+        ModuleInspectorSelections,
+        JSON.stringify(this.panelSelections),
+      );
+    }
   }
 
   replaceCodePath(codePath: URL | null) {
@@ -641,9 +660,10 @@ export default class OperatorModeStateService extends Service {
     );
 
     console.log('in deserialise', rawState.codePath, rawState.moduleInspector);
-    if (rawState.codePath && rawState.moduleInspector) {
-      this.moduleInspectorStateForFile = new URL(rawState.codePath);
-    }
+
+    let rawStateHasModuleInspector = Boolean(
+      rawState.codePath && rawState.moduleInspector,
+    );
 
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
@@ -656,6 +676,13 @@ export default class OperatorModeStateService extends Service {
       aiAssistantOpen: rawState.aiAssistantOpen ?? false,
       moduleInspector: rawState.moduleInspector ?? 'schema', // FIXME this is defined elsewhere?
     });
+
+    if (rawStateHasModuleInspector) {
+      this.persistModuleInspectorView(
+        rawState.codePath,
+        rawState.moduleInspector,
+      );
+    }
 
     let stackIndex = 0;
     for (let stack of rawState.stacks) {

@@ -1886,7 +1886,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         currentSelections,
         JSON.stringify({
           [`${testRealmURL}address.gts`]: 'spec',
-          [`${testRealmURL}country.gts`]: null,
+          [`${testRealmURL}country.gts`]: 'schema',
           [`${testRealmURL}person.gts`]: 'schema',
           [`${testRealmURL}pet-person.gts`]: 'spec',
           [`${testRealmURL}pet.gts`]: 'preview',

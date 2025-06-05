@@ -208,23 +208,24 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   private get activePanel(): ModuleInspectorView {
-    let selection = this.panelSelections[this.args.readyFile.url];
-    let activePanel = this.operatorModeStateService.moduleInspectorForCodePath;
-    console.log('activePanel:');
-    console.log('selection:', selection);
-    console.log('activePanel:', activePanel);
-    console.log('result:', selection ?? activePanel ?? 'schema');
-    return selection ?? activePanel ?? 'schema';
+    return this.operatorModeStateService.state.moduleInspector ?? 'schema';
+    // let selection = this.panelSelections[this.args.readyFile.url];
+    // let activePanel = this.operatorModeStateService.moduleInspectorForCodePath;
+    // console.log('activePanel:');
+    // console.log('selection:', selection);
+    // console.log('activePanel:', activePanel);
+    // console.log('result:', selection ?? activePanel ?? 'schema');
+    // return selection ?? activePanel ?? 'schema';
   }
 
   @action private setActivePanel(item: ModuleInspectorView) {
-    this.panelSelections[this.args.readyFile.url] = item;
+    // this.panelSelections[this.args.readyFile.url] = item;
     this.operatorModeStateService.updateModuleInspectorView(item);
     // persist in local storage
-    window.localStorage.setItem(
-      ModuleInspectorSelections,
-      JSON.stringify(this.panelSelections),
-    );
+    // window.localStorage.setItem(
+    //   ModuleInspectorSelections,
+    //   JSON.stringify(this.panelSelections),
+    // );
   }
 
   private updatePlaygroundSelectionsFromSpec = (spec: Spec) => {
