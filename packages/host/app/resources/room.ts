@@ -59,6 +59,7 @@ import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
+import { IRoomEvent } from 'matrix-js-sdk';
 
 export type RoomSkill = {
   cardId: string;
@@ -414,11 +415,10 @@ export class RoomResource extends Resource<Args> {
   }
 
   private getAggregatedReplacement(event: IRoomEvent) {
-    let finalRawEvent: IRoomEvent;
+    let finalRawEvent;
     const originalEventId = event.event_id;
-    let replacedRawEvent: IRoomEvent =
-      event.unsigned?.['m.relations']?.['m.replace'];
-    if (!event['m.relations']?.['m.relations'] && replacedRawEvent) {
+    let replacedRawEvent = event.unsigned?.['m.relations']?.['m.replace'];
+    if (!event.content['m.relates_to']?.rel_type && replacedRawEvent) {
       finalRawEvent = replacedRawEvent;
       finalRawEvent.event_id = originalEventId;
     } else {
