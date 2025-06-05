@@ -1,6 +1,5 @@
 import {
   click,
-  currentURL,
   waitFor,
   fillIn,
   triggerKeyEvent,
