@@ -26,7 +26,7 @@ import { Realm } from '@cardstack/runtime-common/realm';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
-import { CodeModePanelSelections } from '@cardstack/host/utils/local-storage-keys';
+import { ModuleInspectorSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import {
   getMonacoContent,
@@ -1839,7 +1839,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         [`${testRealmURL}pet-person.gts`]: 'preview',
       };
       window.localStorage.setItem(
-        CodeModePanelSelections,
+        ModuleInspectorSelections,
         JSON.stringify(accordionSelections),
       );
 
@@ -1874,7 +1874,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-active-module-inspector-view="spec"]').exists();
 
       let currentSelections = window.localStorage.getItem(
-        CodeModePanelSelections,
+        ModuleInspectorSelections,
       );
       assert.strictEqual(
         currentSelections,
@@ -1890,7 +1890,7 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     test('module inspector query parameter takes precendence over local storage when loading', async function (assert) {
       window.localStorage.setItem(
-        CodeModePanelSelections,
+        ModuleInspectorSelections,
         JSON.stringify({
           [`${testRealmURL}address.gts`]: 'spec',
         }),

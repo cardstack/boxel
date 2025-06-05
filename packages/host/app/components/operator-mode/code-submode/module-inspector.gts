@@ -69,7 +69,7 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import { CodeModePanelSelections } from '@cardstack/host/utils/local-storage-keys';
+import { ModuleInspectorSelections } from '@cardstack/host/utils/local-storage-keys';
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
@@ -125,7 +125,9 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   constructor(owner: Owner, args: ModuleInspectorSignature['Args']) {
     super(owner, args);
 
-    let panelSelections = window.localStorage.getItem(CodeModePanelSelections);
+    let panelSelections = window.localStorage.getItem(
+      ModuleInspectorSelections,
+    );
     this.panelSelections = new TrackedObject(
       panelSelections ? JSON.parse(panelSelections) : {},
     );
@@ -220,7 +222,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     this.operatorModeStateService.updateModuleInspectorView(item);
     // persist in local storage
     window.localStorage.setItem(
-      CodeModePanelSelections,
+      ModuleInspectorSelections,
       JSON.stringify(this.panelSelections),
     );
   }
