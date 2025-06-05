@@ -115,7 +115,7 @@ module('Responding', (hooks) => {
     assert.equal(
       sentEvents[0].eventType,
       'm.room.message',
-      'Event type should be m.room.message',
+      `Event type should be m.room.message`,
     );
     assert.equal(
       sentEvents[0].content.msgtype,

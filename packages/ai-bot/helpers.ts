@@ -40,6 +40,8 @@ import {
   SerializedFileDef,
   downloadFile,
   MatrixClient,
+  isCommandOrCodePatchResult,
+  extractCodePatchBlocks,
 } from './lib/matrix/util';
 import { constructHistory } from './lib/history';
 import { isRecognisedDebugCommand } from './lib/debug';
@@ -135,33 +137,37 @@ export async function getPromptParts(
 }
 
 function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
-  // If the aibot is awaiting command results, it should not respond yet.
-  let lastEventExcludingCommandResults = history.findLast(
-    (event) => event.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  // If the aibot is awaiting command or code patch results, it should not respond yet.
+  let lastEventExcludingResults = history.findLast(
+    (event) => !isCommandOrCodePatchResult(event),
   );
 
-  if (!lastEventExcludingCommandResults) {
+  if (!lastEventExcludingResults) {
     return false;
   }
 
   // if the last event is a debug command from the user, we should not respond
   if (
-    lastEventExcludingCommandResults.type == 'm.room.message' &&
-    isRecognisedDebugCommand(lastEventExcludingCommandResults.content.body)
+    lastEventExcludingResults.type == 'm.room.message' &&
+    isRecognisedDebugCommand(lastEventExcludingResults.content.body)
   ) {
     return false;
   }
 
-  let commandRequests = (
-    lastEventExcludingCommandResults.content as CardMessageContent
-  )[APP_BOXEL_COMMAND_REQUESTS_KEY];
-  if (!commandRequests || commandRequests.length === 0) {
-    return true;
-  }
-  let lastEventIndex = history.indexOf(lastEventExcludingCommandResults);
-  let allCommandsHaveResults = commandRequests.every(
-    (commandRequest: Partial<EncodedCommandRequest>) => {
-      return history.slice(lastEventIndex).some((event) => {
+  let commandRequests =
+    (lastEventExcludingResults.content as CardMessageContent)[
+      APP_BOXEL_COMMAND_REQUESTS_KEY
+    ] ?? [];
+  let codePatchBlocks = extractCodePatchBlocks(
+    (lastEventExcludingResults.content as CardMessageContent).body,
+  );
+  let lastEventIndex = history.indexOf(lastEventExcludingResults);
+  let recentEventsToCheck = history.slice(lastEventIndex + 1);
+
+  let allCommandsHaveResults =
+    commandRequests.length === 0 ||
+    commandRequests.every((commandRequest: Partial<EncodedCommandRequest>) => {
+      return recentEventsToCheck.some((event) => {
         return (
           event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
           (event.content.msgtype ===
@@ -171,9 +177,18 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
           event.content.commandRequestId === commandRequest.id
         );
       });
-    },
-  );
-  return allCommandsHaveResults;
+    });
+  let allCodePatchesHaveResults =
+    codePatchBlocks.length === 0 ||
+    codePatchBlocks.every((_codePatchBlock: string, codePatchIndex: number) => {
+      return recentEventsToCheck.some((event) => {
+        return (
+          isCodePatchResultEvent(event) &&
+          event.content.codeBlockIndex === codePatchIndex
+        );
+      });
+    });
+  return allCommandsHaveResults && allCodePatchesHaveResults;
 }
 
 async function getEnabledSkills(
@@ -498,44 +513,72 @@ function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
   );
 }
 
-function toPromptMessageWithToolResults(
+function toResultMessages(
   event: CardMessageEvent,
   commandResults: CommandResultEvent[] = [],
+  codePatchResults: CodePatchResultEvent[] = [],
 ): OpenAIPromptMessage[] {
   const messageContent = event.content as CardMessageContent;
-  return (messageContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
-    (commandRequest: Partial<EncodedCommandRequest>) => {
-      let content = 'pending';
-      let commandResult = commandResults.find(
-        (commandResult) =>
-          (commandResult.content.msgtype ===
-            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
-            commandResult.content.msgtype ===
-              APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
-          commandResult.content.commandRequestId === commandRequest.id,
-      );
-      if (commandResult) {
-        let status = commandResult.content['m.relates_to']?.key;
-        if (
+  let commandResultMessages = (
+    messageContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []
+  ).map((commandRequest: Partial<EncodedCommandRequest>) => {
+    let content = 'pending';
+    let commandResult = commandResults.find(
+      (commandResult) =>
+        (commandResult.content.msgtype ===
+          APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
           commandResult.content.msgtype ===
-            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE &&
-          commandResult.content.data.card
-        ) {
-          let cardContent =
-            commandResult.content.data.card.content ??
-            commandResult.content.data.card.error;
-          content = `Tool call ${status == 'applied' ? 'executed' : status}, with result card: ${cardContent}.\n`;
-        } else {
-          content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
-        }
+            APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
+        commandResult.content.commandRequestId === commandRequest.id,
+    );
+    if (commandResult) {
+      let status = commandResult.content['m.relates_to']?.key;
+      if (
+        commandResult.content.msgtype ===
+          APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE &&
+        commandResult.content.data.card
+      ) {
+        let cardContent =
+          commandResult.content.data.card.content ??
+          commandResult.content.data.card.error;
+        content = `Tool call ${status == 'applied' ? 'executed' : status}, with result card: ${cardContent}.\n`;
+      } else {
+        content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
       }
-      return {
-        role: 'tool',
-        tool_call_id: commandRequest.id,
-        content,
-      };
-    },
-  );
+    }
+    return {
+      role: 'tool',
+      tool_call_id: commandRequest.id,
+      content,
+    } as OpenAIPromptMessage;
+  });
+  let codePatchBlocks = extractCodePatchBlocks(messageContent.body);
+  let codePatchResultMessages: OpenAIPromptMessage[] = [];
+  if (codePatchBlocks.length) {
+    let codePatchResultsContent = codePatchBlocks
+      .map((_codePatchBlock, codeBlockIndex) => {
+        let codePatchResultEvent = codePatchResults.find(
+          (codePatchResultEvent) =>
+            codePatchResultEvent.content.codeBlockIndex === codeBlockIndex,
+        );
+        let content = `(The user has not applied code patch ${codeBlockIndex + 1}/.)`;
+        if (codePatchResultEvent) {
+          let status = codePatchResultEvent.content['m.relates_to']?.key;
+          if (status === 'applied') {
+            content = `(The user has successfully applied code patch ${codeBlockIndex + 1}.)`;
+          } else if (status === 'failed') {
+            content = `(The user tried to apply code patch ${codeBlockIndex + 1} but it failed to apply.)`;
+          }
+        }
+        return content;
+      })
+      .join('\n');
+    codePatchResultMessages.push({
+      role: 'user',
+      content: codePatchResultsContent,
+    });
+  }
+  return [...commandResultMessages, ...codePatchResultMessages];
 }
 
 export async function getModifyPrompt(
@@ -557,7 +600,7 @@ export async function getModifyPrompt(
     if (event.type !== 'm.room.message') {
       continue;
     }
-    if (isCommandResultEvent(event)) {
+    if (isCommandOrCodePatchResult(event)) {
       continue; // we'll include these with the tool calls
     }
     if (
@@ -569,29 +612,28 @@ export async function getModifyPrompt(
     let body = event.content.body;
 
     if (event.sender === aiBotUserId) {
-      let toolCalls = toToolCalls(event as CardMessageEvent);
-      let commandResults = getCommandResults(
-        event as CardMessageEvent,
-        history,
-      );
-      let codePatchReults = getCodePatchResults(
+      let codePatchResults = getCodePatchResults(
         event as CardMessageEvent,
         history,
       );
       let historicalMessage: OpenAIPromptMessage = {
         role: 'assistant',
-        content: elideCodeBlocks(body, codePatchReults),
+        content: elideCodeBlocks(body, codePatchResults),
       };
+      let toolCalls = toToolCalls(event as CardMessageEvent);
       if (toolCalls.length) {
         historicalMessage.tool_calls = toolCalls;
       }
       historicalMessages.push(historicalMessage);
-      if (toolCalls.length) {
-        toPromptMessageWithToolResults(
-          event as CardMessageEvent,
-          commandResults,
-        ).forEach((message) => historicalMessages.push(message));
-      }
+      let commandResults = getCommandResults(
+        event as CardMessageEvent,
+        history,
+      );
+      toResultMessages(
+        event as CardMessageEvent,
+        commandResults,
+        codePatchResults,
+      ).forEach((message) => historicalMessages.push(message));
     }
     if (body && event.sender !== aiBotUserId) {
       historicalMessages.push({
@@ -621,13 +663,26 @@ export async function getModifyPrompt(
     aiBotUserId,
     tools,
   );
-  let contextMessagePosition = messages.findLastIndex(
-    (m) => m.role === 'user' || m.role === 'tool',
-  );
-  messages.splice(contextMessagePosition, 0, {
+  // The context should be placed where it explains the state of the host.
+  // This is either:
+  // * After the last tool call message, if the last message was a tool call
+  // * Before the last user message otherwise
+  // OpenAI will error if you put the system message between the
+  // assistant and tool messages.
+  let contextMessage: OpenAIPromptMessage = {
     role: 'system',
     content: contextContent,
-  });
+  };
+  let lastMessage = messages[messages.length - 1];
+  if (lastMessage.role === 'tool') {
+    messages.push(contextMessage);
+  } else {
+    // Find the last user message and insert context before it
+    let lastUserIndex = messages.findLastIndex((msg) => msg.role === 'user');
+    if (lastUserIndex !== -1) {
+      messages.splice(lastUserIndex, 0, contextMessage);
+    }
+  }
 
   return messages;
 }
@@ -791,7 +846,6 @@ function elideCodeBlocks(
     '[Omitting previously suggested code change]';
   const PLACEHOLDERS = {
     applied: '[Omitting previously suggested and applied code change]',
-    rejected: '[Omitting previously suggested and rejected code change]',
     failed: '[Omitting previously suggested code change that failed to apply]',
   };
 
