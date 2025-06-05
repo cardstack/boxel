@@ -31,7 +31,10 @@ import type * as _MonacoSDK from 'monaco-editor';
 import { hasEmptySearchPortion } from '@cardstack/host/commands/patch-code';
 import Owner from '@ember/owner';
 
-function countDiffLines(lineChanges) {
+function countDiffLines(
+  lineChanges: LineChange[] | null | undefined,
+  options: CountDiffLinesOptions = {},
+): DiffStats {
   if (!lineChanges || !Array.isArray(lineChanges)) {
     return { added: 0, removed: 0 };
   }
@@ -39,21 +42,61 @@ function countDiffLines(lineChanges) {
   let added = 0;
   let removed = 0;
 
-  lineChanges.forEach((change) => {
-    const originalLines =
-      change.originalEndLineNumber - change.originalStartLineNumber + 1;
-    const modifiedLines =
-      change.modifiedEndLineNumber - change.modifiedStartLineNumber + 1;
+  options.debug = true;
 
-    if (change.originalStartLineNumber === 0) {
-      added += modifiedLines;
-    } else if (change.modifiedStartLineNumber === 0) {
-      removed += originalLines;
+  if (options.debug) {
+    console.log('Total changes:', lineChanges.length);
+    console.log('---');
+  }
+
+  lineChanges.forEach((change, index) => {
+    const originalStart = change.originalStartLineNumber;
+    const originalEnd = change.originalEndLineNumber;
+    const modifiedStart = change.modifiedStartLineNumber;
+    const modifiedEnd = change.modifiedEndLineNumber;
+
+    if (originalEnd < originalStart && originalStart !== 0) {
+      if (options.debug) {
+        console.error(
+          `❌ Invalid change #${index}: originalEnd (${originalEnd}) < originalStart (${originalStart})`,
+        );
+      }
+      return;
+    }
+
+    let changeType: 'ADD' | 'DELETE' | 'MODIFY';
+    let removedCount = 0;
+    let addedCount = 0;
+
+    if (originalStart === 0) {
+      changeType = 'ADD';
+      addedCount = modifiedEnd - modifiedStart + 1;
+      added += addedCount;
+    } else if (modifiedStart === 0) {
+      changeType = 'DELETE';
+      removedCount = originalEnd - originalStart + 1;
+      removed += removedCount;
     } else {
-      removed += originalLines;
-      added += modifiedLines;
+      changeType = 'MODIFY';
+      removedCount = originalEnd - originalStart + 1;
+      addedCount = modifiedEnd - modifiedStart + 1;
+      removed += removedCount;
+      added += addedCount;
+    }
+
+    if (options.debug) {
+      console.log(`Change #${index} [${changeType}]:`, {
+        original: `${originalStart}-${originalEnd} (${removedCount} lines)`,
+        modified: `${modifiedStart}-${modifiedEnd} (${addedCount} lines)`,
+        impact: `+${addedCount} -${removedCount}`,
+      });
     }
   });
+
+  if (options.debug) {
+    console.log('---');
+    console.log(`Total: +${added} -${removed}`);
+  }
 
   return { added, removed };
 }
@@ -102,12 +145,20 @@ interface CodeBlockDiffEditorSignature {
     originalCode?: string | null;
     modifiedCode?: string | null;
     language?: string | null;
+    updateDiffEditorStats?: (stats: {
+      linesAdded: number;
+      linesRemoved: number;
+    }) => void;
   };
 }
 
 interface CodeBlockDiffEditorHeaderSignature {
   Args: {
     codeData: CodeData;
+    diffEditorStats?: {
+      linesRemoved: number;
+      linesAdded: number;
+    } | null;
   };
 }
 
@@ -122,8 +173,14 @@ interface Signature {
     dimmed?: boolean;
     mode?: 'edit' | 'create';
     fileUrl?: string;
-    linesRemoved?: number;
-    linesAdded?: number;
+    diffEditorStats?: {
+      linesRemoved: number;
+      linesAdded: number;
+    } | null;
+    updateDiffEditorStats?: (stats: {
+      linesAdded: number;
+      linesRemoved: number;
+    }) => void;
   };
   Blocks: {
     default: [
@@ -151,10 +208,8 @@ let CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
       )
       diffEditorHeader=(component
         CodeBlockDiffEditorHeader
-        mode=@mode
-        fileUrl=@fileUrl
-        linesRemoved=@linesRemoved
-        linesAdded=@linesAdded
+        codeData=@codeData
+        diffEditorStats=@diffEditorStats
       )
       actions=(component CodeBlockActionsComponent codeData=@codeData)
     )
@@ -182,6 +237,10 @@ interface MonacoDiffEditorSignature {
       modifiedCode?: string | null;
       language?: string | null;
       editorDisplayOptions: MonacoEditorOptions;
+      updateDiffEditorStats?: (stats: {
+        linesAdded: number;
+        linesRemoved: number;
+      }) => void;
     };
   };
 }
@@ -201,6 +260,7 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
       originalCode,
       modifiedCode,
       language,
+      updateDiffEditorStats,
     }: MonacoDiffEditorSignature['Args']['Named'],
   ) {
     if (originalCode === undefined || modifiedCode === undefined) {
@@ -255,9 +315,20 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
         lineChangeStats: countDiffLines(editor.getLineChanges()),
       };
 
-      // let monacoStateId = 'monaco_state_' + Date.now();
-      // console.log('monacoStateId', monacoStateId);
-      // window[monacoStateId] = this.monacoState;
+      let monacoStateId = 'monaco_state_' + Date.now();
+      console.log('monacoStateId', monacoStateId);
+      window[monacoStateId] = this.monacoState;
+
+      editor.onDidUpdateDiff(() => {
+        const stats = countDiffLines(editor.getLineChanges());
+
+        if (updateDiffEditorStats) {
+          updateDiffEditorStats({
+            linesAdded: stats.added,
+            linesRemoved: stats.removed,
+          });
+        }
+      });
     }
 
     registerDestructor(this, () => {
@@ -468,10 +539,7 @@ class CodeBlockDiffEditor extends Component<Signature> {
       top: 8,
     },
     theme: 'vs-dark',
-    lineNumbers: 'off',
-    // guides: {
-    //   indentation: false,
-    // },
+    lineNumbers: 'off' as const,
   };
 
   <template>
@@ -491,9 +559,6 @@ class CodeBlockDiffEditor extends Component<Signature> {
       }
 
       .code-block-diff {
-        /* border: gray;
-        border-radius: 10px;
-        background: #3b394A';*/
       }
     </style>
     <div
@@ -503,6 +568,7 @@ class CodeBlockDiffEditor extends Component<Signature> {
         language=@language
         originalCode=@originalCode
         modifiedCode=@modifiedCode
+        updateDiffEditorStats=@updateDiffEditorStats
       }}
       class='code-block code-block-diff'
       data-test-code-diff-editor
@@ -535,6 +601,7 @@ class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEditorHeaderSigna
         border-top-right-radius: 12px;
         font-family: 'Segoe UI', sans-serif;
         font-size: 14px;
+        height: 45px;
       }
 
       .code-block-diff-header .left-section {
@@ -595,8 +662,8 @@ class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEditorHeaderSigna
       </div>
       <div class='right-section'>
         <div class='changes'>
-          <span class='removed'>-{{@linesRemoved}}</span>
-          <span class='added'>+{{@linesAdded}}</span>
+          <span class='removed'>-{{@diffEditorStats.linesRemoved}}</span>
+          <span class='added'>+{{@diffEditorStats.linesAdded}}</span>
         </div>
       </div>
     </div>

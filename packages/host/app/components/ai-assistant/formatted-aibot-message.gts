@@ -260,6 +260,10 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   _codeDiffResource: CodeDiffResource | undefined;
   _searchReplaceBlock: string | null | undefined = null;
   _fileUrl: string | null | undefined = null;
+  @tracked diffEditorStats: {
+    linesRemoved: number;
+    linesAdded: number;
+  } | null = null;
 
   get codeDiffResource() {
     if (this._codeDiffResource) {
@@ -309,6 +313,13 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
     );
   }
 
+  private updateDiffEditorStats = (stats: {
+    linesAdded: number;
+    linesRemoved: number;
+  }) => {
+    this.diffEditorStats = stats;
+  };
+
   <template>
     <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
       {{#if (bool @codeData.searchReplaceBlock)}}
@@ -342,11 +353,15 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
             </div>
           {{/if}}
           {{#if this.codeDiffResource.isDataLoaded}}
-            <codeBlock.diffEditorHeader @codeData={{@codeData}} />
+            <codeBlock.diffEditorHeader
+              @codeData={{@codeData}}
+              @diffEditorStats={{this.diffEditorStats}}
+            />
             <codeBlock.diffEditor
               @originalCode={{this.codeDiffResource.originalCode}}
               @modifiedCode={{this.codeDiffResource.modifiedCode}}
               @language={{@codeData.language}}
+              @updateDiffEditorStats={{fn this.updateDiffEditorStats}}
             />
             <codeBlock.actions as |actions|>
               <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
