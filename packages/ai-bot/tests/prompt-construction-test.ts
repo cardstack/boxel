@@ -2888,51 +2888,14 @@ Attached files:
     );
   });
 
-  test('Elides code blocks in prompt', async () => {
+  test('Elides code blocks in prompt and includes results', async () => {
     // sending older codeblocks back to the model just confuses it and wastes tokens
     // so we need to remove them from the prompt
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/code-blocks.json'),
-        'utf-8',
-      ),
-    );
-
-    const { messages } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.equal(messages!.length, 4);
-    assert.equal(messages![0].role, 'system');
-    assert.equal(messages![1].role, 'system');
-    assert.equal(messages![2].role, 'user');
-    assert.equal(messages![3].role, 'assistant');
-    assert.equal(
-      messages![3].content,
-      'Right, let us make a tic tac toe game.\n' +
-        '\n' +
-        'https://test.com/tic-tac.gts\n' +
-        '[Omitting previously suggested code change]' +
-        '\n\n' +
-        'https://test.com/tac-toe.gts\n' +
-        '[Omitting previously suggested code change]' +
-        '\n\n' +
-        'I can add some more whiz bang if you want. Let me know!',
-    );
-  });
-
-  test('Elided code blocks reflect their results', async () => {
-    // Set up mock responses for file downloads
-    mockResponses.set('http://test.com/spaghetti-recipe.gts', {
-      ok: true,
-      text: 'this is the riveting content of the spaghetti-recipe.gts file',
-    });
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
         path.join(
           __dirname,
-          'resources/chats/connect-code-blocks-to-results.json',
+          'resources/chats/two-code-blocks-two-results.json',
         ),
         'utf-8',
       ),
@@ -2943,10 +2906,12 @@ Attached files:
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    assert.equal(messages!.length, 4);
-    assert.equal(messages![3].role, 'assistant');
+    assert.deepEqual(
+      messages!.map((m) => m.role),
+      ['system', 'user', 'assistant', 'system', 'user'],
+    );
     assert.equal(
-      messages![3].content,
+      messages![2].content,
       'Updating the file...\n' +
         'http://test.com/spaghetti-recipe.gts\n' +
         '[Omitting previously suggested and applied code change]\n' +
@@ -2954,7 +2919,7 @@ Attached files:
         'I will also create a file for rigatoni:\n' +
         '\n' +
         'http://test.com/rigatoni-recipe.gts\n' +
-        '[Omitting previously suggested and rejected code change]\n',
+        '[Omitting previously suggested code change that failed to apply]\n',
     );
   });
 
@@ -3055,6 +3020,235 @@ Attached files:
       'Should have patchCardInstance tool call',
     );
     assert.true(messages![8].content!.includes('Business Card V2'));
+  });
+
+  test('Responds to completion of lone code patch', async function () {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/one-code-block-one-result.json'),
+        'utf-8',
+      ),
+    );
+    const { shouldRespond, messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
+    // patch code results should be included
+    const userMessages = messages!.filter((message) => message.role === 'user');
+    assert.strictEqual(userMessages.length, 2, 'Should have two user messages');
+    assert.strictEqual(
+      userMessages[1].content,
+      '(The user has successfully applied code patch 1.)',
+    );
+  });
+
+  test('Does not respond to first code patch result when two patches were proposed', async function () {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/two-code-blocks-one-result.json'),
+        'utf-8',
+      ),
+    );
+    const { shouldRespond } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      shouldRespond,
+      false,
+      'AiBot does not solicit a response before all tool calls are made',
+    );
+  });
+
+  test('Responds to second code patch result when two patches were proposed', async function () {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          __dirname,
+          'resources/chats/two-code-blocks-two-results.json',
+        ),
+        'utf-8',
+      ),
+    );
+
+    const { shouldRespond, messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
+    // patch code results should be deserialised
+    const userMessages = messages!.filter((message) => message.role === 'user');
+    assert.strictEqual(
+      userMessages.length,
+      2,
+      'Should have three two messages',
+    );
+    assert.strictEqual(
+      userMessages[1].content,
+      '(The user has successfully applied code patch 1.)\n(The user tried to apply code patch 2 but it failed to apply.)',
+    );
+  });
+
+  test('Does not respond to code patch result when a command is also proposed', async function () {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          __dirname,
+          'resources/chats/code-block-and-command-one-result.json',
+        ),
+        'utf-8',
+      ),
+    );
+    const { shouldRespond } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      shouldRespond,
+      false,
+      'AiBot does not solicit a response before all tool calls are made',
+    );
+  });
+
+  test('Responds to command result when patch and command proposed and patch already completed', async function () {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          __dirname,
+          'resources/chats/code-block-and-command-two-results-a.json',
+        ),
+        'utf-8',
+      ),
+    );
+
+    mockResponses.set('mxc://mock-server/weather-report-1', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            temperature: '22°C',
+            conditions: 'Cloudy',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/admin/onnx/commandexample',
+              name: 'WeatherReport',
+            },
+          },
+        },
+      }),
+    });
+
+    const { shouldRespond, messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
+    assert.deepEqual(
+      messages!.map((m) => m.role),
+      ['system', 'user', 'assistant', 'tool', 'system', 'user'],
+    );
+    // patch code results should be deserialised
+    const userMessages = messages!.filter((message) => message.role === 'user');
+    assert.strictEqual(
+      userMessages.length,
+      2,
+      'Should have three user messages',
+    );
+    assert.strictEqual(
+      userMessages[1].content,
+      '(The user has successfully applied code patch 1.)',
+    );
+    const toolResultMessages = messages!.filter(
+      (message) => message.role === 'tool',
+    );
+    assert.strictEqual(
+      toolResultMessages.length,
+      1,
+      'Should have one tool result message',
+    );
+    assert.ok(
+      toolResultMessages[0].content!.includes('Cloudy'),
+      'Tool call result should include "Cloudy"',
+    );
+  });
+
+  test('Responds to command result when patch and command proposed and patch already completed with command completing first', async function () {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          __dirname,
+          'resources/chats/code-block-and-command-two-results-b.json',
+        ),
+        'utf-8',
+      ),
+    );
+
+    mockResponses.set('mxc://mock-server/weather-report-1', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            temperature: '22°C',
+            conditions: 'Cloudy',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/admin/onnx/commandexample',
+              name: 'WeatherReport',
+            },
+          },
+        },
+      }),
+    });
+
+    const { shouldRespond, messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
+    assert.deepEqual(
+      messages!.map((m) => m.role),
+      ['system', 'user', 'assistant', 'tool', 'system', 'user'],
+    );
+    // patch code results should be messages
+    const userMessages = messages!.filter((message) => message.role === 'user');
+    assert.strictEqual(
+      userMessages.length,
+      2,
+      'Should have three user messages',
+    );
+    assert.strictEqual(
+      userMessages[1].content,
+      '(The user has successfully applied code patch 1.)',
+    );
+    const toolResultMessages = messages!.filter(
+      (message) => message.role === 'tool',
+    );
+    assert.strictEqual(
+      toolResultMessages.length,
+      1,
+      'Should have one tool result message',
+    );
+    assert.ok(
+      toolResultMessages[0].content!.includes('Cloudy'),
+      'Tool call result should include "Cloudy"',
+    );
   });
 });
 
