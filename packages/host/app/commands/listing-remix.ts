@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 
 import { timeout } from 'ember-concurrency';
 
-import { isResolvedCodeRef } from '@cardstack/runtime-common';
+import { isResolvedCodeRef, RealmPaths } from '@cardstack/runtime-common';
 
 import * as CardAPI from 'https://cardstack.com/base/card-api';
 import * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -48,7 +48,13 @@ export default class RemixCommand extends HostBaseCommand<
     input: BaseCommandModule.ListingInput,
   ): Promise<undefined> {
     let realmUrls = this.realmServer.availableRealmURLs;
-    let { realm: realmUrl, listing: listingInput } = input;
+    let { realm, listing: listingInput } = input;
+    let realmUrl = new RealmPaths(new URL(realm)).url;
+
+    // Make sure realm is valid
+    if (!realmUrls.includes(realmUrl)) {
+      throw new Error(`Invalid realm: ${realmUrl}`);
+    }
 
     // this is intentionally to type because base command cannot interpret Listing type from catalog
     const listing = listingInput as Listing;
@@ -59,7 +65,6 @@ export default class RemixCommand extends HostBaseCommand<
       shouldPersistPlaygroundSelection,
       firstExampleCardId,
     } = await installListing({
-      realmUrls,
       realmUrl,
       listing,
       commandContext: this.commandContext,

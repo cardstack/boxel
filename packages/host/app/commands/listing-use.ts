@@ -5,6 +5,7 @@ import {
   isResolvedCodeRef,
   loadCardDef,
   listingNameWithUuid,
+  RealmPaths,
 } from '@cardstack/runtime-common';
 
 import * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -37,9 +38,11 @@ export default class ListingUseCommand extends HostBaseCommand<
     input: BaseCommandModule.ListingInput,
   ): Promise<undefined> {
     let realmUrls = this.realmServer.availableRealmURLs;
-    let { realm: realmUrl, listing: listingInput } = input;
+    let { realm, listing: listingInput } = input;
 
     const listing = listingInput as Listing;
+
+    let realmUrl = new RealmPaths(new URL(realm)).url;
 
     // Make sure realm is valid
     if (!realmUrls.includes(realmUrl)) {
