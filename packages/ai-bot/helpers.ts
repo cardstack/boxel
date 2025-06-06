@@ -25,7 +25,6 @@ import { logger } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
@@ -45,7 +44,6 @@ import {
 } from './lib/matrix/util';
 import { constructHistory } from './lib/history';
 import { isRecognisedDebugCommand } from './lib/debug';
-import { type } from '../runtime-common/index';
 import { APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE } from '../runtime-common/matrix-constants';
 
 let log = logger('ai-bot');
