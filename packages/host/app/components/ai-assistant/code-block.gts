@@ -130,11 +130,11 @@ let CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
   <div ...attributes>
     {{yield
       (hash
-        editor=(component
-          CodeBlockEditor monacoSDK=@monacoSDK codeData=@codeData
-        )
         editorHeader=(component
           CodeBlockHeader codeData=@codeData diffEditorStats=@diffEditorStats
+        )
+        editor=(component
+          CodeBlockEditor monacoSDK=@monacoSDK codeData=@codeData
         )
         diffEditor=(component
           CodeBlockDiffEditor
