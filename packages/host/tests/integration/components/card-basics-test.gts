@@ -3367,6 +3367,42 @@ module('Integration | card-basics', function (hooks) {
         .isNotChecked();
     });
   });
+
+  module('delegated render', function () {
+    test('can delegate through a linksTo', async function (assert) {
+      class Inner extends FieldDef {
+        static atom = class Atom extends Component<typeof this> {
+          <template>
+            My Atom
+          </template>
+        };
+      }
+
+      class Intermediate extends CardDef {
+        @field inner = contains(Inner);
+
+        static embedded = class Atom extends Component<typeof this> {
+          <template>
+            My Embedded
+          </template>
+        };
+      }
+
+      class Outer extends CardDef {
+        @field intermediate = linksTo(Intermediate);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <div data-test><@fields.intermediate.inner @format='atom' /></div>
+          </template>
+        };
+      }
+
+      let outer = new Outer();
+      outer.intermediate = new Intermediate();
+      await renderCard(loader, outer, 'isolated');
+      assert.dom('[data-test]').containsText(`My Atom`);
+    });
+  });
 });
 
 async function testString(label: string) {
