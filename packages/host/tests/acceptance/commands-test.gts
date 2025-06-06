@@ -12,6 +12,8 @@ import {
 
 import { fillIn } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
+
 import { module, test } from 'qunit';
 
 import { GridContainer } from '@cardstack/boxel-ui/components';
@@ -71,7 +73,6 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 import { suspendGlobalErrorHook } from '../helpers/uncaught-exceptions';
-import { getService } from '@universal-ember/test-support';
 
 let matrixRoomId = '';
 let maybeBoomShouldBoom = true;
