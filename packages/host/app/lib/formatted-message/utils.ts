@@ -8,6 +8,7 @@ import {
   parseSearchReplace,
 } from '../search-replace-block-parsing';
 
+import type * as _MonacoSDK from 'monaco-editor';
 export function extractCodeData(
   preElementString: string,
   roomId: string,
@@ -26,6 +27,7 @@ export function extractCodeData(
     tempContainer.remove();
     return {
       fileUrl: null,
+      isNewFile: null,
       code: null,
       language: null,
       searchReplaceBlock: null,
@@ -74,8 +76,11 @@ export function extractCodeData(
   let isBeginningOfSearchReplaceBlock =
     lines.length > 1 && lines[1].startsWith(SEARCH_MARKER.slice(0, 3));
 
+  let isNewFile = false;
+
   if (isBeginningOfSearchReplaceBlock) {
-    fileUrl = lines[0];
+    isNewFile = lines[0].endsWith('(new)');
+    fileUrl = lines[0].replace(' (new)', '');
   }
 
   let firstLineIsUrl = lines.length == 1 && lines[0].startsWith('http');
@@ -99,6 +104,7 @@ export function extractCodeData(
     language: language ?? '',
     code: codeToDisplay,
     fileUrl: fileUrl ?? null,
+    isNewFile,
     searchReplaceBlock: isCompleteSearchReplaceBlock(contentWithoutFirstLine)
       ? contentWithoutFirstLine
       : null,
@@ -139,6 +145,7 @@ export function wrapLastTextNodeInStreamingTextSpan(
 
 export interface CodeData {
   fileUrl: string | null;
+  isNewFile: boolean | null;
   code: string | null;
   language: string | null;
   searchReplaceBlock?: string | null;
@@ -221,4 +228,42 @@ export function parseHtmlContent(
 
   doc.remove();
   return result;
+}
+
+export interface CodeDiffStats {
+  linesAdded: number;
+  linesRemoved: number;
+}
+
+// Takes output from editor.getLineChanges() and returns the number of lines added and removed.
+// This is used to display the diff stats in the code block header.
+export function makeCodeDiffStats(
+  lineChanges: _MonacoSDK.editor.ILineChange[] | null | undefined,
+) {
+  if (!lineChanges || !Array.isArray(lineChanges)) {
+    return { linesAdded: 0, linesRemoved: 0 };
+  }
+
+  let linesAdded = 0;
+  let linesRemoved = 0;
+
+  lineChanges.forEach((change) => {
+    const originalStart = change.originalStartLineNumber;
+    const originalEnd = change.originalEndLineNumber;
+    const modifiedStart = change.modifiedStartLineNumber;
+    const modifiedEnd = change.modifiedEndLineNumber;
+
+    if (originalStart === 0) {
+      linesAdded += modifiedEnd - modifiedStart + 1;
+    } else if (modifiedStart === 0) {
+      linesRemoved += originalEnd - originalStart + 1;
+    } else if (originalEnd === 0) {
+      linesAdded += modifiedEnd - modifiedStart + 1;
+    } else {
+      linesRemoved += originalEnd - originalStart + 1;
+      linesAdded += modifiedEnd - modifiedStart + 1;
+    }
+  });
+
+  return { linesAdded, linesRemoved };
 }
