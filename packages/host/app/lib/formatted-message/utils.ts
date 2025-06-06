@@ -26,6 +26,7 @@ export function extractCodeData(
     tempContainer.remove();
     return {
       fileUrl: null,
+      isNewFile: null,
       code: null,
       language: null,
       searchReplaceBlock: null,
@@ -74,8 +75,11 @@ export function extractCodeData(
   let isBeginningOfSearchReplaceBlock =
     lines.length > 1 && lines[1].startsWith(SEARCH_MARKER.slice(0, 3));
 
+  let isNewFile = false;
+
   if (isBeginningOfSearchReplaceBlock) {
-    fileUrl = lines[0];
+    isNewFile = lines[0].endsWith('(new)');
+    fileUrl = lines[0].replace(' (new)', '');
   }
 
   let firstLineIsUrl = lines.length == 1 && lines[0].startsWith('http');
@@ -99,6 +103,7 @@ export function extractCodeData(
     language: language ?? '',
     code: codeToDisplay,
     fileUrl: fileUrl ?? null,
+    isNewFile,
     searchReplaceBlock: isCompleteSearchReplaceBlock(contentWithoutFirstLine)
       ? contentWithoutFirstLine
       : null,
@@ -139,6 +144,7 @@ export function wrapLastTextNodeInStreamingTextSpan(
 
 export interface CodeData {
   fileUrl: string | null;
+  isNewFile: boolean | null;
   code: string | null;
   language: string | null;
   searchReplaceBlock?: string | null;
