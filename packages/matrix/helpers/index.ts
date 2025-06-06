@@ -790,8 +790,7 @@ export function getAgentId(
     };
   }[],
 ) {
-  console.log('roomEvents', roomEvents);
-  // Iterate backwards and get the last agentId on a message
+  // Iterate backwards and get the most recent agentId
   for (let i = roomEvents.length - 1; i >= 0; i--) {
     let event = roomEvents[i];
     let data = event.content?.data as any;

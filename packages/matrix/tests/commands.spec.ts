@@ -361,7 +361,6 @@ test.describe('Commands', () => {
     let roomEvents = await getRoomEvents('user1', 'pass', roomId);
     let numEventsBeforeResponse = roomEvents.length;
     let agentId = getAgentId(roomEvents);
-    console.log('agentId', agentId);
     // Note: this should really be posted by the aibot user but we can't do that easily
     // in this test, and this reproduces the bug
     await putEvent(userCred.accessToken, roomId, 'm.room.message', '1', {
