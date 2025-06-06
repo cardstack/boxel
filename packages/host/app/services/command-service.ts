@@ -37,6 +37,7 @@ import type RealmServerService from './realm-server';
 import type StoreService from './store';
 import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
 import type MessageCommand from '../lib/matrix-classes/message-command';
+import { FileDef } from 'https://cardstack.com/base/file-api';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
 
@@ -240,22 +241,38 @@ export default class CommandService extends Service {
       await this.matrixService.updateSkillsAndCommandsIfNeeded(
         command.message.roomId,
       );
+      let userContextForAiBot =
+        this.operatorModeStateService.getSummaryForAIBot();
       let cardIds = [
-        payload?.attributes?.cardId,
-        ...(payload?.attributes?.cardIds ?? []),
+        ...new Set([
+          ...(userContextForAiBot.openCardIds ?? []),
+          payload?.attributes?.cardId,
+          ...(payload?.attributes?.cardIds ?? []),
+        ]),
       ].filter(Boolean);
-      let cards = (await Promise.all(cardIds.map((id) => this.store.get(id))))
+      let cardsToAttach = (
+        await Promise.all(cardIds.map((id) => this.store.get(id)))
+      )
         .filter(Boolean)
         .filter(isCardInstance) as CardDef[];
 
+      let filesToAttach: FileDef[] = [];
+      if (userContextForAiBot.codeMode?.currentFile) {
+        filesToAttach.push(
+          this.matrixService.fileAPI.createFileDef({
+            sourceUrl: userContextForAiBot.codeMode.currentFile,
+            name: userContextForAiBot.codeMode.currentFile.split('/').pop(),
+          }),
+        );
+      }
       await this.matrixService.sendCommandResultEvent(
         command.message.roomId,
         eventId,
         commandRequestId!,
         resultCard,
-        cards,
-        [],
-        this.operatorModeStateService.getSummaryForAIBot(),
+        cardsToAttach,
+        filesToAttach,
+        userContextForAiBot,
       );
     } catch (e) {
       let error =
