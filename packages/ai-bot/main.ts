@@ -236,7 +236,12 @@ Common issues are:
           );
         }
 
-        const responder = new Responder(client, room.roomId);
+        let contentData =
+          typeof event.getContent().data === 'string'
+            ? JSON.parse(event.getContent().data)
+            : event.getContent().data;
+        const agentId = contentData.context?.agentId;
+        const responder = new Responder(client, room.roomId, agentId);
 
         if (Responder.eventWillDefinitelyTriggerResponse(event)) {
           await responder.ensureThinkingMessageSent();
