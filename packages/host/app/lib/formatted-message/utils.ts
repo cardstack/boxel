@@ -7,6 +7,7 @@ import {
   isCompleteSearchReplaceBlock,
   parseSearchReplace,
 } from '../search-replace-block-parsing';
+
 import type * as _MonacoSDK from 'monaco-editor';
 export function extractCodeData(
   preElementString: string,
@@ -234,6 +235,8 @@ export interface CodeDiffStats {
   linesRemoved: number;
 }
 
+// Takes output from editor.getLineChanges() and returns the number of lines added and removed.
+// This is used to display the diff stats in the code block header.
 export function makeCodeDiffStats(
   lineChanges: _MonacoSDK.editor.ILineChange[] | null | undefined,
 ) {

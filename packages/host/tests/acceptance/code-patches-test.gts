@@ -316,21 +316,21 @@ ${REPLACE_MARKER}
     // 3. hi.txt -> I am a newly created hi.txt file but I will get a number suffix because hi.txt already exists!
 
     let codeBlock = `\`\`\`
-http://test-realm/test/file1.gts
+http://test-realm/test/file1.gts (new)
 ${SEARCH_MARKER}
 ${SEPARATOR_MARKER}
 I am a newly created file1
 ${REPLACE_MARKER}
 \`\`\`
  \`\`\`
-http://test-realm/test/file2.gts
+http://test-realm/test/file2.gts (new)
 ${SEARCH_MARKER}
 ${SEPARATOR_MARKER}
 I am a newly created file2
 ${REPLACE_MARKER}
 \`\`\`
 \`\`\`
-http://test-realm/test/hi.txt
+http://test-realm/test/hi.txt (new)
 ${SEARCH_MARKER}
 ${SEPARATOR_MARKER}
 This file will be created with a suffix because hi.txt already exists
@@ -348,6 +348,17 @@ ${REPLACE_MARKER}
     });
 
     await waitFor('.code-block-diff');
+
+    assert
+      .dom('[data-test-code-block-index="0"] [data-test-file-mode]')
+      .hasText('Create');
+    assert
+      .dom('[data-test-code-block-index="1"] [data-test-file-mode]')
+      .hasText('Create');
+    assert
+      .dom('[data-test-code-block-index="2"] [data-test-file-mode]')
+      .hasText('Create');
+
     assert.dom('.code-block-diff').exists({ count: 3 });
     await click('[data-test-file-browser-toggle]'); // open file tree
     await waitFor('[data-test-apply-all-code-patches-button]');

@@ -137,6 +137,12 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
     }
   });
 
+  private preTagGroupIndex = (htmlPartIndex: number) => {
+    return this.args
+      .htmlParts!.slice(0, htmlPartIndex)
+      .filter(isHtmlPreTagGroup).length;
+  };
+
   <template>
     <div class='message'>
       {{! We are splitting the html into parts so that we can target the
@@ -169,6 +175,7 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
             }}
             @monacoSDK={{@monacoSDK}}
             @isLastAssistantMessage={{@isLastAssistantMessage}}
+            @index={{this.preTagGroupIndex index}}
           />
         {{else}}
           {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
@@ -250,6 +257,7 @@ interface HtmlGroupCodeBlockSignature {
     onPatchCode: (codeData: CodeData) => void;
     monacoSDK: MonacoSDK;
     isLastAssistantMessage: boolean;
+    index: number;
   };
 }
 
@@ -322,6 +330,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
       @monacoSDK={{@monacoSDK}}
       @codeData={{@codeData}}
       class='code-block'
+      data-test-code-block-index={{@index}}
       as |codeBlock|
     >
       {{#if (bool @codeData.searchReplaceBlock)}}
@@ -367,7 +376,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               @originalCode={{this.codeDiffResource.originalCode}}
               @modifiedCode={{this.codeDiffResource.modifiedCode}}
               @language={{@codeData.language}}
-              @updateDiffEditorStats={{fn this.updateDiffEditorStats}}
+              @updateDiffEditorStats={{this.updateDiffEditorStats}}
             />
             <codeBlock.actions as |actions|>
               <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
@@ -382,10 +391,16 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
           {{/if}}
         {{/if}}
       {{else}}
+        {{#if @codeData.fileUrl}}
+          <codeBlock.editorHeader
+            @codeData={{@codeData}}
+            @diffEditorStats={{null}}
+          />
+        {{/if}}
+        <codeBlock.editor @code={{this.codeForEditor}} />
         <codeBlock.actions as |actions|>
           <actions.copyCode @code={{@codeData.code}} />
         </codeBlock.actions>
-        <codeBlock.editor @code={{this.codeForEditor}} />
       {{/if}}
     </CodeBlock>
 

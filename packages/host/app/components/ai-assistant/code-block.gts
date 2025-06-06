@@ -411,9 +411,7 @@ class CodeBlockEditor extends Component<Signature> {
 
   <template>
     <style scoped>
-      .code-block {
-        /* width: calc(100% + 2 * var(--boxel-sp));
-        margin-left: calc(-1 * var(--boxel-sp)); */
+      .code-block-editor {
         max-height: 250px;
       }
 
@@ -429,7 +427,7 @@ class CodeBlockEditor extends Component<Signature> {
         codeData=@codeData
         editorDisplayOptions=this.editorDisplayOptions
       }}
-      class='code-block {{if @dimmed "dimmed"}}'
+      class='code-block-editor {{if @dimmed "dimmed"}}'
       data-test-editor
     >
       {{! Don't put anything here in this div as monaco modifier will override this element }}
@@ -455,7 +453,7 @@ class CodeBlockDiffEditor extends Component<Signature> {
     automaticLayout: true,
     scrollBeyondLastLine: false,
     padding: {
-      bottom: 8,
+      bottom: 0,
       left: 8,
       right: 8,
       top: 8,
@@ -471,7 +469,7 @@ class CodeBlockDiffEditor extends Component<Signature> {
 
   <template>
     <style scoped>
-      .code-block {
+      .code-block-editor {
         max-height: 250px;
       }
 
@@ -496,7 +494,7 @@ class CodeBlockDiffEditor extends Component<Signature> {
         modifiedCode=@modifiedCode
         updateDiffEditorStats=@updateDiffEditorStats
       }}
-      class='code-block code-block-diff'
+      class='code-block-editor code-block-diff'
       data-test-code-diff-editor
     >
       {{! Don't put anything here in this div as monaco modifier will override this element }}
@@ -505,7 +503,6 @@ class CodeBlockDiffEditor extends Component<Signature> {
 }
 
 class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
-  @tracked isNewFile: boolean = false;
   @service private declare operatorModeStateService: OperatorModeStateService;
   get fileName() {
     let realmUrl = this.operatorModeStateService.realmURL.href;
@@ -578,19 +575,22 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
     </style>
     <div class='code-block-diff-header'>
       <div class='left-section'>
-        <div class='mode'>
+        <div class='mode' data-test-file-mode>
           {{if @codeData.isNewFile 'Create' 'Edit'}}
         </div>
-        <div class='file-info'>
-          {{! <span class='edit-icon'>B</span> }}
+        <div class='file-info' data-test-file-name>
           <span class='filename'>{{this.fileName}}</span>
         </div>
       </div>
       <div class='right-section'>
         {{#if @diffEditorStats}}
           <div class='changes'>
-            <span class='removed'>-{{@diffEditorStats.linesRemoved}}</span>
-            <span class='added'>+{{@diffEditorStats.linesAdded}}</span>
+            <span class='removed' data-test-removed-lines>
+              -{{@diffEditorStats.linesRemoved}}
+            </span>
+            <span class='added' data-test-added-lines>
+              +{{@diffEditorStats.linesAdded}}
+            </span>
           </div>
         {{/if}}
       </div>
@@ -603,7 +603,7 @@ let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> 
     <style scoped>
       .code-block-actions {
         background: black;
-        height: 50px;
+        height: 45px;
         padding: var(--boxel-sp-sm) 27px;
         padding-right: var(--boxel-sp);
         display: flex;
@@ -611,6 +611,7 @@ let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> 
         gap: var(--boxel-sp-xs);
         border-bottom-left-radius: 12px;
         border-bottom-right-radius: 12px;
+        margin-top: -5px;
       }
     </style>
     <div class='code-block-actions'>
