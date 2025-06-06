@@ -71,6 +71,7 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 import { suspendGlobalErrorHook } from '../helpers/uncaught-exceptions';
+import { getService } from '@universal-ember/test-support';
 
 let matrixRoomId = '';
 let maybeBoomShouldBoom = true;
@@ -647,6 +648,11 @@ module('Acceptance | Commands tests', function (hooks) {
           }),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await waitFor('[data-test-submode-switcher=code]');
     assert.dom('[data-test-submode-switcher=code]').exists();
@@ -706,6 +712,11 @@ module('Acceptance | Commands tests', function (hooks) {
           }),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await waitFor(
       '[data-test-message-idx="0"][data-test-boxel-message-from="testuser"]',
@@ -904,6 +915,11 @@ module('Acceptance | Commands tests', function (hooks) {
           }),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
 
     await waitUntil(
@@ -1079,7 +1095,7 @@ module('Acceptance | Commands tests', function (hooks) {
     );
   });
 
-  test('ShowCard command added from a skill, can be automatically executed', async function (assert) {
+  test('ShowCard command added from a skill, can be automatically executed when agentId matches', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -1123,6 +1139,11 @@ module('Acceptance | Commands tests', function (hooks) {
           }),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await waitFor('[data-test-message-idx="0"]');
 
@@ -1161,6 +1182,67 @@ module('Acceptance | Commands tests', function (hooks) {
       message.content.commandRequestId,
       '1554f297-e9f2-43fe-8b95-55b29251444d',
     );
+  });
+
+  test('ShowCard command added from a skill, is not automatically executed when agentId does not match', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    let roomId = getRoomIds().pop()!;
+    // open assistant, ShowCard command is part of default CardEditing skill
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-message-field]');
+
+    // Need to create a new room so this new room will include skills card
+    await fillIn(
+      '[data-test-message-field]',
+      'Test message to enable new session button',
+    );
+    await click('[data-test-send-message-btn]');
+    await click('[data-test-create-room-btn]');
+
+    // simulate message
+    roomId = getRoomIds().pop()!;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Show the card',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '1554f297-e9f2-43fe-8b95-55b29251444d',
+          name: 'show-card_566f',
+          arguments: JSON.stringify({
+            description:
+              'Displaying the card with the Latin word for milkweed in the title.',
+            attributes: {
+              cardId: 'http://test-realm/test/Person/hassan',
+              title: 'Asclepias',
+            },
+          }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: 'some-other-agent-id',
+        },
+      },
+    });
+    await waitFor('[data-test-message-idx="0"]');
+
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-apply-state="ready"]',
+    );
+
+    assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
+    assert.dom('[data-test-submode-switcher=interact]').exists();
   });
 
   test('multiple commands can be requested in a single aibot message', async function (assert) {
@@ -1272,6 +1354,11 @@ module('Acceptance | Commands tests', function (hooks) {
           }),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await settled();
     assert
@@ -1330,6 +1417,11 @@ module('Acceptance | Commands tests', function (hooks) {
           }),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
 
     await settled();
@@ -1383,6 +1475,11 @@ module('Acceptance | Commands tests', function (hooks) {
             arguments: JSON.stringify({}),
           },
         ],
+        data: {
+          context: {
+            agentId: getService('matrix-service').agentId,
+          },
+        },
       });
 
       await settled();

@@ -799,6 +799,7 @@ export default class OperatorModeStateService extends Service {
     openCardIds: Set<string> = new Set([...this.getOpenCardIds()]),
   ): BoxelContext {
     return {
+      agentId: this.matrixService.agentId,
       submode: this.state.submode,
       debug: this.operatorModeController.debug,
       openCardIds: this.makeRemoteIdsList([...openCardIds]),

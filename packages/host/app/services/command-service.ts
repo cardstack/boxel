@@ -27,6 +27,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import { FileDef } from 'https://cardstack.com/base/file-api';
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import { shortenUuid } from '../utils/uuid';
@@ -37,7 +38,6 @@ import type RealmServerService from './realm-server';
 import type StoreService from './store';
 import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
 import type MessageCommand from '../lib/matrix-classes/message-command';
-import { FileDef } from 'https://cardstack.com/base/file-api';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
 
@@ -142,6 +142,10 @@ export default class CommandService extends Service {
 
       let message = roomResource.messages.find((m) => m.eventId === eventId);
       if (!message) {
+        continue;
+      }
+      if (message.agentId !== this.matrixService.agentId) {
+        // This command was sent by another agent, so we will not auto-execute it
         continue;
       }
       for (let messageCommand of message.commands) {

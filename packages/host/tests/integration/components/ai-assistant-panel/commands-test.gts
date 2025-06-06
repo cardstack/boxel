@@ -562,6 +562,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert.deepEqual(
       JSON.parse(commandResultEvents[0].content.data).context,
       {
+        agentId: getService('matrix-service').agentId,
         submode: 'interact',
         debug: false,
         openCardIds: ['http://test-realm/test/Person/fadhlan'],
@@ -646,6 +647,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert.deepEqual(
       JSON.parse(commandResultEvents[0].content.data).context,
       {
+        agentId: getService('matrix-service').agentId,
         submode: 'interact',
         debug: false,
         openCardIds: ['http://test-realm/test/Person/fadhlan'],
@@ -679,6 +681,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           }),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await settled();
     assert
@@ -719,6 +726,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           }),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await settled();
     assert
@@ -758,6 +770,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           }),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await settled();
     assert.dom('.result-list li:nth-child(6)').doesNotExist();
@@ -810,6 +827,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           arguments: JSON.stringify(toolArgs),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await settled();
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
@@ -877,6 +899,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           arguments: JSON.stringify(toolArgs),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await settled();
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
