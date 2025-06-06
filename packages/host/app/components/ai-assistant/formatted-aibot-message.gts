@@ -199,11 +199,8 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
         gap: var(--boxel-sp-xs);
         margin-top: var(--boxel-sp);
       }
-      .message {
-        position: relative;
-      }
 
-      .message > :deep(*) {
+      .message > :deep(*:first-child) {
         margin-top: 0;
       }
 
@@ -321,7 +318,12 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   };
 
   <template>
-    <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
+    <CodeBlock
+      @monacoSDK={{@monacoSDK}}
+      @codeData={{@codeData}}
+      class='code-block'
+      as |codeBlock|
+    >
       {{#if (bool @codeData.searchReplaceBlock)}}
         {{#if this.isAppliedOrIgnoredCodePatch}}
           <div>
@@ -401,6 +403,14 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
         --icon-background-color: var(--boxel-light);
         --icon-color: var(--boxel-danger);
         margin-top: var(--boxel-sp-5xs);
+      }
+
+      .code-block {
+        margin-top: 0;
+      }
+
+      .code-block + .code-block {
+        margin-top: 1rem;
       }
     </style>
   </template>
