@@ -37,12 +37,12 @@ export const assertFieldExists = (
 
 export const chooseAnotherInstance = async () => {
   await click('[data-test-instance-chooser]');
-  await click('[data-test-choose-another-instance]');
+  await click('[data-test-boxel-menu-item-text="Choose another instance"]');
 };
 
 export const createNewInstance = async () => {
   await click('[data-test-instance-chooser]');
-  await click('[data-test-create-instance]');
+  await click('[data-test-boxel-menu-item-text="Create new instance"]');
 };
 
 export const openFileInPlayground = async (

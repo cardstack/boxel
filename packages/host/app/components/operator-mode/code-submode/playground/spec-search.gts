@@ -18,7 +18,6 @@ interface Signature {
   Args: {
     query: Query;
     realms: string[];
-    canWriteRealm: boolean;
     createNewCard: () => void;
   };
 }
@@ -47,9 +46,7 @@ export default class SpecSearch extends Component<Signature> {
 
   private get canGenerateSpec() {
     return (
-      this.args.canWriteRealm &&
-      !this.specResults?.isLoading &&
-      this.specResults?.instances?.length === 0
+      !this.specResults?.isLoading && this.specResults?.instances?.length === 0
     );
   }
 }
