@@ -128,7 +128,7 @@ export default class AiAssistantToast extends Component<Signature> {
   </template>
 
   @service private declare matrixService: MatrixService;
-  _pollToken: number | null = null;
+  _pollToken: ReturnType<typeof pollTask> | null = null;
 
   private get state() {
     const state: {
@@ -188,7 +188,7 @@ export default class AiAssistantToast extends Component<Signature> {
         roomId: lastMessage[0],
         message: lastMessage[1],
       };
-
+      // eslint-disable-next-line ember/no-side-effects
       this._pollToken = pollTask(this, resetStateValue);
     }
 
