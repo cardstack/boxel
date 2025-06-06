@@ -726,14 +726,14 @@ export default class PlaygroundPanel extends Component<Signature> {
       />
     {{/if}}
 
-    {{#if this.isLoading}}
-      <LoadingIndicator @color='var(--boxel-light)' />
-    {{else}}
-      <section class='playground-panel' data-test-playground-panel>
-        <div
-          class='playground-panel-content'
-          style={{this.styleForPlaygroundContent}}
-        >
+    <section class='playground-panel' data-test-playground-panel>
+      <div
+        class='playground-panel-content'
+        style={{this.styleForPlaygroundContent}}
+      >
+        {{#if this.isLoading}}
+          <LoadingIndicator @color='var(--boxel-light)' />
+        {{else}}
           {{#let (if @isFieldDef this.field this.card) as |card|}}
             {{#let
               (component
@@ -823,9 +823,9 @@ export default class PlaygroundPanel extends Component<Signature> {
               {{/if}}
             {{/let}}
           {{/let}}
-        </div>
-      </section>
-    {{/if}}
+        {{/if}}
+      </div>
+    </section>
 
     <style scoped>
       .instance-chooser-container {
