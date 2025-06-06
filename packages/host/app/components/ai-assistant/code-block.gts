@@ -9,7 +9,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask, task, timeout } from 'ember-concurrency';
+import { restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 
@@ -31,8 +31,6 @@ import ApplyButton from '../ai-assistant/apply-button';
 
 import type { ComponentLike } from '@glint/template';
 import type * as _MonacoSDK from 'monaco-editor';
-import { hasEmptySearchPortion } from '@cardstack/host/commands/patch-code';
-import Owner from '@ember/owner';
 
 interface CopyCodeButtonSignature {
   Args: {
@@ -85,9 +83,9 @@ interface CodeBlockDiffEditorSignature {
   };
 }
 
-interface CodeBlockDiffEditorHeaderSignature {
+interface CodeBlockHeaderSignature {
   Args: {
-    codeData: CodeData;
+    codeData: Partial<CodeData>;
     diffEditorStats?: {
       linesRemoved: number;
       linesAdded: number;
@@ -118,8 +116,8 @@ interface Signature {
   Blocks: {
     default: [
       {
+        editorHeader: ComponentLike<CodeBlockHeaderSignature>;
         editor: ComponentLike<CodeBlockEditorSignature>;
-        diffEditorHeader: ComponentLike<CodeBlockDiffEditorHeaderSignature>;
         diffEditor: ComponentLike<CodeBlockDiffEditorSignature>;
         actions: ComponentLike<CodeBlockActionsSignature>;
       },
@@ -135,10 +133,8 @@ let CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
         editor=(component
           CodeBlockEditor monacoSDK=@monacoSDK codeData=@codeData
         )
-        diffEditorHeader=(component
-          CodeBlockDiffEditorHeader
-          codeData=@codeData
-          diffEditorStats=@diffEditorStats
+        editorHeader=(component
+          CodeBlockHeader codeData=@codeData diffEditorStats=@diffEditorStats
         )
         diffEditor=(component
           CodeBlockDiffEditor
@@ -185,7 +181,6 @@ interface MonacoDiffEditorSignature {
 class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
   private monacoState: {
     editor: _MonacoSDK.editor.IStandaloneDiffEditor;
-    lineChangeStats: { added: number; removed: number };
   } | null = null;
 
   modify(
@@ -474,18 +469,9 @@ class CodeBlockDiffEditor extends Component<Signature> {
     linesRemoved: number;
   } | null = null;
 
-  private updateDiffEditorStats = (stats: {
-    linesAdded: number;
-    linesRemoved: number;
-  }) => {
-    this.diffEditorStats = stats;
-  };
-
   <template>
     <style scoped>
       .code-block {
-        /* width: calc(100% + 2 * var(--boxel-sp));
-        margin-left: calc(-1 * var(--boxel-sp)); */
         max-height: 250px;
       }
 
@@ -497,7 +483,8 @@ class CodeBlockDiffEditor extends Component<Signature> {
         margin-left: 9px;
       }
 
-      .code-block-diff {
+      :deep(span[title='Double click to unfold']) {
+        margin-left: 5px;
       }
     </style>
     <div
@@ -517,7 +504,7 @@ class CodeBlockDiffEditor extends Component<Signature> {
   </template>
 }
 
-class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEditorHeaderSignature> {
+class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
   @tracked isNewFile: boolean = false;
   @service private declare operatorModeStateService: OperatorModeStateService;
   get fileName() {
@@ -540,7 +527,7 @@ class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEditorHeaderSigna
         border-top-right-radius: 12px;
         font-family: 'Segoe UI', sans-serif;
         font-size: 14px;
-        height: 45px;
+        height: 50px;
       }
 
       .code-block-diff-header .left-section {
@@ -592,7 +579,7 @@ class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEditorHeaderSigna
     <div class='code-block-diff-header'>
       <div class='left-section'>
         <div class='mode'>
-          {{if this.isNewFile 'Create' 'Edit'}}
+          {{if @codeData.isNewFile 'Create' 'Edit'}}
         </div>
         <div class='file-info'>
           {{! <span class='edit-icon'>B</span> }}
@@ -600,10 +587,12 @@ class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEditorHeaderSigna
         </div>
       </div>
       <div class='right-section'>
-        <div class='changes'>
-          <span class='removed'>-{{@diffEditorStats.linesRemoved}}</span>
-          <span class='added'>+{{@diffEditorStats.linesAdded}}</span>
-        </div>
+        {{#if @diffEditorStats}}
+          <div class='changes'>
+            <span class='removed'>-{{@diffEditorStats.linesRemoved}}</span>
+            <span class='added'>+{{@diffEditorStats.linesAdded}}</span>
+          </div>
+        {{/if}}
       </div>
     </div>
   </template>
@@ -618,9 +607,10 @@ let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> 
         padding: var(--boxel-sp-sm) 27px;
         padding-right: var(--boxel-sp);
         display: flex;
-        justify-content: flex-start;
-        /* width: calc(100% + 2 * var(--boxel-sp));
-        margin-left: calc(-1 * var(--boxel-sp)); */
+        justify-content: flex-end;
+        gap: var(--boxel-sp-xs);
+        border-bottom-left-radius: 12px;
+        border-bottom-right-radius: 12px;
       }
     </style>
     <div class='code-block-actions'>
@@ -657,8 +647,8 @@ class CopyCodeButton extends Component<CopyCodeButtonSignature> {
         font: 600 var(--boxel-font-xs);
         padding: 0;
         display: flex;
-        margin: auto;
-        width: 100%;
+        align-items: center;
+        width: auto;
       }
 
       .code-copy-button svg {

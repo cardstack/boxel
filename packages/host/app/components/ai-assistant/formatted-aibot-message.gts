@@ -327,6 +327,11 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
       {{#if (bool @codeData.searchReplaceBlock)}}
         {{#if this.isAppliedOrIgnoredCodePatch}}
           <div>
+            <codeBlock.editorHeader
+              @codeData={{@codeData}}
+              @diffEditorStats={{null}}
+            />
+            <codeBlock.editor @code={{this.codeForEditor}} @dimmed={{true}} />
             <codeBlock.actions as |actions|>
               <actions.copyCode
                 @code={{this.extractReplaceCode @codeData.searchReplaceBlock}}
@@ -339,7 +344,6 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
                 />
               {{/if}}
             </codeBlock.actions>
-            <codeBlock.editor @code={{this.codeForEditor}} @dimmed={{true}} />
           </div>
         {{else}}
           {{#if this.codeDiffResource.errorMessage}}
@@ -355,7 +359,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
             </div>
           {{/if}}
           {{#if this.codeDiffResource.isDataLoaded}}
-            <codeBlock.diffEditorHeader
+            <codeBlock.editorHeader
               @codeData={{@codeData}}
               @diffEditorStats={{this.diffEditorStats}}
             />
