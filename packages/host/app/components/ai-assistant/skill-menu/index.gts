@@ -1,7 +1,5 @@
 import Component from '@glimmer/component';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
-
 import { skillCardRef } from '@cardstack/runtime-common';
 
 import PillMenu, { PillMenuItem } from '@cardstack/host/components/pill-menu';
@@ -35,11 +33,12 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         <span class='header-icon' />
       </:headerIcon>
       <:headerDetail>
-        <span data-test-active-skills-count>{{this.activeSkills.length}}</span>
-        <span class='skills-length'>of
+        <span class='skills-length' data-test-active-skills-count>Skills
+          {{this.activeSkills.length}}</span>
+        <span class='expand-skills-length'>Skills:
+          {{this.activeSkills.length}}
+          of
           {{@skills.length}}
-          {{if (eq @skills.length 1) 'Skill' 'Skills'}}
-          Active
         </span>
       </:headerDetail>
     </PillMenu>
@@ -49,28 +48,26 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         --boxel-header-detail-margin-left: 0;
       }
       .skill-menu.pill-menu--minimized {
-        --boxel-pill-menu-width: 3.75rem;
+        --boxel-pill-menu-width: fit-content;
         white-space: nowrap;
         transition: width 0.2s ease-in;
       }
       .skill-menu.pill-menu--minimized:focus {
         outline: 0;
       }
-      .skill-menu.pill-menu--minimized:hover,
-      .skill-menu.pill-menu--minimized:focus-within {
-        --boxel-pill-menu-width: 100%;
-      }
       .skill-menu.pill-menu--minimized :deep(.expandable-header-button),
       .skill-menu.pill-menu--minimized :deep(.skills-length) {
-        visibility: collapse;
-        transition: visibility 0.2s ease-in;
+        display: block;
       }
-      .skill-menu.pill-menu--minimized:hover :deep(.expandable-header-button),
-      .skill-menu.pill-menu--minimized:hover :deep(.skills-length),
-      .skill-menu.pill-menu--minimized:focus-within
-        :deep(.expandable-header-button),
-      .skill-menu.pill-menu--minimized:focus-within :deep(.skills-length) {
-        visibility: visible;
+      .skill-menu.pill-menu--minimized :deep(.expand-skills-length) {
+        display: none;
+      }
+
+      .skill-menu:not(.pill-menu--minimized) :deep(.skills-length) {
+        display: none;
+      }
+      .skill-menu:not(.pill-menu--minimized) :deep(.expand-skills-length) {
+        display: block;
       }
       .header-icon {
         width: 20px;

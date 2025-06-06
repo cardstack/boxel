@@ -7,8 +7,13 @@ import { tracked } from '@glimmer/tracking';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask } from 'ember-concurrency';
 
-import { AddButton, Header } from '@cardstack/boxel-ui/components';
+import { Button, Header } from '@cardstack/boxel-ui/components';
 import { cn, gt, not, or } from '@cardstack/boxel-ui/helpers';
+
+import {
+  DropdownArrowFilled,
+  DropdownArrowUp,
+} from '@cardstack/boxel-ui/icons';
 
 import {
   chooseCard,
@@ -69,7 +74,11 @@ export default class PillMenu extends Component<Signature> {
             data-test-pill-menu-header-button
           >
             {{#if @isExpandableHeader}}
-              {{if this.isExpanded 'Hide' 'Show'}}
+              {{#if this.isExpanded}}
+                <DropdownArrowUp class='rotate-left' width='8px' height='8px' />
+              {{else}}
+                <DropdownArrowFilled class='flip' width='8px' height='8px' />
+              {{/if}}
             {{else}}
               {{yield to='headerButton'}}
             {{/if}}
@@ -101,18 +110,18 @@ export default class PillMenu extends Component<Signature> {
 
         {{#if @canAttachCard}}
           <footer class='menu-footer'>
-            <AddButton
+            <Button
               class='attach-button'
-              @variant='pill'
-              @iconWidth='14'
-              @iconHeight='14'
+              @kind='primary'
               {{on 'click' this.attachCard}}
               @disabled={{this.doAttachCard.isRunning}}
               data-test-pill-menu-add-button
             >
-              Add
+              Choose
+              {{if @itemDisplayName 'a ' 'an '}}
               {{if @itemDisplayName @itemDisplayName 'Item'}}
-            </AddButton>
+              to add
+            </Button>
           </footer>
         {{/if}}
       {{/if}}
@@ -124,6 +133,7 @@ export default class PillMenu extends Component<Signature> {
         --boxel-header-detail-max-width: 100%;
         --boxel-header-letter-spacing: var(--boxel-lsp);
         --button-outline: 2px;
+        --boxel-header-min-height: fit-content;
 
         display: grid;
         max-height: 100%;
@@ -145,6 +155,7 @@ export default class PillMenu extends Component<Signature> {
       .header-button {
         margin: var(--button-outline);
         padding: var(--pill-menu-spacing);
+        padding-left: 0;
         background: none;
         border: none;
         border-radius: var(--boxel-border-radius-xl);
@@ -158,7 +169,10 @@ export default class PillMenu extends Component<Signature> {
         outline-color: var(--boxel-highlight);
       }
       .expandable-header-button {
-        width: var(--boxel-pill-menu-expandable-header-button-width, 3.75rem);
+        width: var(
+          --boxel-pill-menu-expandable-header-button-width,
+          fit-content
+        );
         color: var(--boxel-450);
         text-transform: uppercase;
       }
@@ -187,15 +201,20 @@ export default class PillMenu extends Component<Signature> {
       }
       .pill-list:deep(.card-content) {
         max-width: initial;
+        font: 600 var(--boxel-font-xs);
       }
       .menu-footer {
         padding: var(--boxel-sp-xxs);
       }
       .attach-button {
-        --boxel-add-button-pill-font: var(--boxel-font-sm);
+        --boxel-button-font: 600 var(--boxel-font-xs);
+        --boxel-button-border: 1px solid var(--boxel-400);
+        border-radius: var(--boxel-border-radius);
+
         padding: var(--boxel-sp-4xs) var(--boxel-sp-xxxs);
         gap: var(--boxel-sp-xs);
         background: none;
+        width: 100%;
       }
       .attach-button:hover:not(:disabled),
       .attach-button:focus:not(:disabled) {
@@ -206,6 +225,36 @@ export default class PillMenu extends Component<Signature> {
       }
       .attach-button > :deep(svg > path) {
         stroke: none;
+      }
+      .pill-menu :deep(.menu-header .detail) {
+        font: 600 var(--boxel-font-xs);
+      }
+      .pill-menu:not(.pill-menu--minimized) :deep(.menu-header .header-icon) {
+        order: 2;
+      }
+      .pill-menu:not(.pill-menu--minimized) :deep(.menu-header .detail) {
+        order: 3;
+      }
+      .pill-menu:not(.pill-menu--minimized) :deep(.menu-header .content) {
+        order: 1;
+        margin-left: 0;
+      }
+      .pill-menu :deep(.menu-header .content .expandable-header-button) {
+        padding: 0;
+      }
+      .pill-menu :deep(.menu-header .content) {
+        margin-left: var(--boxel-sp-xs);
+      }
+      .pill-menu :deep(.menu-header) {
+        padding: var(--pill-menu-spacing);
+      }
+      .rotate-left {
+        transform: rotate(-90deg);
+        transform-origin: center;
+      }
+      .flip {
+        transform: rotate(180deg);
+        transform-origin: center;
       }
     </style>
   </template>
