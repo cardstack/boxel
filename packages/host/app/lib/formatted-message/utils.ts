@@ -7,7 +7,7 @@ import {
   isCompleteSearchReplaceBlock,
   parseSearchReplace,
 } from '../search-replace-block-parsing';
-
+import type * as _MonacoSDK from 'monaco-editor';
 export function extractCodeData(
   preElementString: string,
   roomId: string,
@@ -221,4 +221,40 @@ export function parseHtmlContent(
 
   doc.remove();
   return result;
+}
+
+export interface CodeDiffStats {
+  linesAdded: number;
+  linesRemoved: number;
+}
+
+export function makeCodeDiffStats(
+  lineChanges: _MonacoSDK.editor.ILineChange[] | null | undefined,
+) {
+  if (!lineChanges || !Array.isArray(lineChanges)) {
+    return { linesAdded: 0, linesRemoved: 0 };
+  }
+
+  let linesAdded = 0;
+  let linesRemoved = 0;
+
+  lineChanges.forEach((change) => {
+    const originalStart = change.originalStartLineNumber;
+    const originalEnd = change.originalEndLineNumber;
+    const modifiedStart = change.modifiedStartLineNumber;
+    const modifiedEnd = change.modifiedEndLineNumber;
+
+    if (originalStart === 0) {
+      linesAdded += modifiedEnd - modifiedStart + 1;
+    } else if (modifiedStart === 0) {
+      linesRemoved += originalEnd - originalStart + 1;
+    } else if (originalEnd === 0) {
+      linesAdded += modifiedEnd - modifiedStart + 1;
+    } else {
+      linesRemoved += originalEnd - originalStart + 1;
+      linesAdded += modifiedEnd - modifiedStart + 1;
+    }
+  });
+
+  return { linesAdded, linesRemoved };
 }

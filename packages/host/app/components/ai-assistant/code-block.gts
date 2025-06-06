@@ -15,7 +15,10 @@ import Modifier from 'ember-modifier';
 
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
-import { CodeData } from '@cardstack/host/lib/formatted-message/utils';
+import {
+  CodeData,
+  makeCodeDiffStats,
+} from '@cardstack/host/lib/formatted-message/utils';
 import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 
 import { MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -30,76 +33,6 @@ import type { ComponentLike } from '@glint/template';
 import type * as _MonacoSDK from 'monaco-editor';
 import { hasEmptySearchPortion } from '@cardstack/host/commands/patch-code';
 import Owner from '@ember/owner';
-
-function countDiffLines(
-  lineChanges: LineChange[] | null | undefined,
-  options: CountDiffLinesOptions = {},
-): DiffStats {
-  if (!lineChanges || !Array.isArray(lineChanges)) {
-    return { added: 0, removed: 0 };
-  }
-
-  let added = 0;
-  let removed = 0;
-
-  options.debug = true;
-
-  if (options.debug) {
-    console.log('Total changes:', lineChanges.length);
-    console.log('---');
-  }
-
-  lineChanges.forEach((change, index) => {
-    const originalStart = change.originalStartLineNumber;
-    const originalEnd = change.originalEndLineNumber;
-    const modifiedStart = change.modifiedStartLineNumber;
-    const modifiedEnd = change.modifiedEndLineNumber;
-
-    if (originalEnd < originalStart && originalStart !== 0) {
-      if (options.debug) {
-        console.error(
-          `❌ Invalid change #${index}: originalEnd (${originalEnd}) < originalStart (${originalStart})`,
-        );
-      }
-      return;
-    }
-
-    let changeType: 'ADD' | 'DELETE' | 'MODIFY';
-    let removedCount = 0;
-    let addedCount = 0;
-
-    if (originalStart === 0) {
-      changeType = 'ADD';
-      addedCount = modifiedEnd - modifiedStart + 1;
-      added += addedCount;
-    } else if (modifiedStart === 0) {
-      changeType = 'DELETE';
-      removedCount = originalEnd - originalStart + 1;
-      removed += removedCount;
-    } else {
-      changeType = 'MODIFY';
-      removedCount = originalEnd - originalStart + 1;
-      addedCount = modifiedEnd - modifiedStart + 1;
-      removed += removedCount;
-      added += addedCount;
-    }
-
-    if (options.debug) {
-      console.log(`Change #${index} [${changeType}]:`, {
-        original: `${originalStart}-${originalEnd} (${removedCount} lines)`,
-        modified: `${modifiedStart}-${modifiedEnd} (${addedCount} lines)`,
-        impact: `+${addedCount} -${removedCount}`,
-      });
-    }
-  });
-
-  if (options.debug) {
-    console.log('---');
-    console.log(`Total: +${added} -${removed}`);
-  }
-
-  return { added, removed };
-}
 
 interface CopyCodeButtonSignature {
   Args: {
@@ -196,24 +129,28 @@ interface Signature {
 }
 
 let CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
-  {{yield
-    (hash
-      editor=(component CodeBlockEditor monacoSDK=@monacoSDK codeData=@codeData)
-      diffEditor=(component
-        CodeBlockDiffEditor
-        monacoSDK=@monacoSDK
-        originalCode=@originalCode
-        modifiedCode=@modifiedCode
-        language=@language
+  <div ...attributes>
+    {{yield
+      (hash
+        editor=(component
+          CodeBlockEditor monacoSDK=@monacoSDK codeData=@codeData
+        )
+        diffEditorHeader=(component
+          CodeBlockDiffEditorHeader
+          codeData=@codeData
+          diffEditorStats=@diffEditorStats
+        )
+        diffEditor=(component
+          CodeBlockDiffEditor
+          monacoSDK=@monacoSDK
+          originalCode=@originalCode
+          modifiedCode=@modifiedCode
+          language=@language
+        )
+        actions=(component CodeBlockActionsComponent codeData=@codeData)
       )
-      diffEditorHeader=(component
-        CodeBlockDiffEditorHeader
-        codeData=@codeData
-        diffEditorStats=@diffEditorStats
-      )
-      actions=(component CodeBlockActionsComponent codeData=@codeData)
-    )
-  }}
+    }}
+  </div>
 </template>;
 
 export default CodeBlockComponent;
@@ -312,21 +249,11 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
 
       this.monacoState = {
         editor,
-        lineChangeStats: countDiffLines(editor.getLineChanges()),
       };
 
-      let monacoStateId = 'monaco_state_' + Date.now();
-      console.log('monacoStateId', monacoStateId);
-      window[monacoStateId] = this.monacoState;
-
       editor.onDidUpdateDiff(() => {
-        const stats = countDiffLines(editor.getLineChanges());
-
         if (updateDiffEditorStats) {
-          updateDiffEditorStats({
-            linesAdded: stats.added,
-            linesRemoved: stats.removed,
-          });
+          updateDiffEditorStats(makeCodeDiffStats(editor.getLineChanges()));
         }
       });
     }
@@ -540,6 +467,18 @@ class CodeBlockDiffEditor extends Component<Signature> {
     },
     theme: 'vs-dark',
     lineNumbers: 'off' as const,
+  };
+
+  @tracked diffEditorStats: {
+    linesAdded: number;
+    linesRemoved: number;
+  } | null = null;
+
+  private updateDiffEditorStats = (stats: {
+    linesAdded: number;
+    linesRemoved: number;
+  }) => {
+    this.diffEditorStats = stats;
   };
 
   <template>

@@ -23,7 +23,10 @@ import {
 
 import FormattedAiBotMessage from '@cardstack/host/components/ai-assistant/formatted-aibot-message';
 
-import { parseHtmlContent } from '@cardstack/host/lib/formatted-message/utils';
+import {
+  makeCodeDiffStats,
+  parseHtmlContent,
+} from '@cardstack/host/lib/formatted-message/utils';
 import CardService from '@cardstack/host/services/card-service';
 import MonacoService from '@cardstack/host/services/monaco-service';
 
@@ -496,5 +499,49 @@ ${REPLACE_MARKER}
         `[data-test-error-message="Failed to load code from malformed file url"]`,
       )
       .exists();
+  });
+
+  test('utils: makeCodeDiffStats', function (assert) {
+    let lineChanges = [
+      {
+        originalStartLineNumber: 308,
+        originalEndLineNumber: 0,
+        modifiedStartLineNumber: 309,
+        modifiedEndLineNumber: 309,
+        charChanges: [],
+      },
+    ];
+    assert.deepEqual(makeCodeDiffStats(lineChanges), {
+      linesAdded: 1,
+      linesRemoved: 0,
+    });
+
+    lineChanges = [
+      {
+        originalStartLineNumber: 83,
+        originalEndLineNumber: 84,
+        modifiedStartLineNumber: 83,
+        modifiedEndLineNumber: 85,
+        charChanges: [],
+      },
+      {
+        originalStartLineNumber: 90,
+        originalEndLineNumber: 90,
+        modifiedStartLineNumber: 91,
+        modifiedEndLineNumber: 92,
+        charChanges: [],
+      },
+      {
+        originalStartLineNumber: 96,
+        originalEndLineNumber: 96,
+        modifiedStartLineNumber: 98,
+        modifiedEndLineNumber: 99,
+        charChanges: [],
+      },
+    ];
+    assert.deepEqual(makeCodeDiffStats(lineChanges), {
+      linesAdded: 7,
+      linesRemoved: 4,
+    });
   });
 });
