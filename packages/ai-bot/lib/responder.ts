@@ -39,10 +39,11 @@ export class Responder {
     );
   }
 
-  constructor(client: MatrixClient, roomId: string) {
+  constructor(client: MatrixClient, roomId: string, agentId: string) {
     this.matrixResponsePublisher = new MatrixResponsePublisher(
       client,
       roomId,
+      agentId,
       this.responseState,
     );
   }

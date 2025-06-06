@@ -177,6 +177,7 @@ export default class MatrixService extends Service {
   private slidingSync: SlidingSync | undefined;
   private aiRoomIds: Set<string> = new Set();
   @tracked private _isLoadingMoreAIRooms = false;
+  agentId = uuidv4();
 
   constructor(owner: Owner) {
     super(owner);

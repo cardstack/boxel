@@ -13,13 +13,17 @@ import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-cons
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event';
+import type {
+  CardMessageContent,
+  Tool,
+} from 'https://cardstack.com/base/matrix-event';
 
 import HostBaseCommand from '../lib/host-base-command';
 
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
 
 export default class SendAiAssistantMessageCommand extends HostBaseCommand<
   typeof BaseCommandModule.SendAiAssistantMessageInput,
@@ -28,6 +32,8 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
   @service declare private cardService: CardService;
   @service declare private commandService: CommandService;
   @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+
   #cardAPI?: typeof CardAPI;
 
   static actionVerb = 'Send';
@@ -50,10 +56,15 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.SendAiAssistantMessageInput,
   ): Promise<BaseCommandModule.SendAiAssistantMessageResult> {
-    let { commandService, loaderService, matrixService } = this;
+    let {
+      commandService,
+      loaderService,
+      matrixService,
+      operatorModeStateService,
+    } = this;
     let roomId = input.roomId;
     let mappings = await basicMappings(loaderService.loader);
-    let tools = [];
+    let tools: Tool[] = [];
     let requireToolCall = input.requireCommandCall ?? false;
     if (requireToolCall && input.commands?.length > 1) {
       throw new Error('Cannot require tool call and have multiple commands');
@@ -115,6 +126,15 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
 
     let clientGeneratedId = input.clientGeneratedId ?? uuidv4();
 
+    let context = operatorModeStateService.getSummaryForAIBot(
+      new Set(attachedOpenCards.map((c) => c.id)),
+    );
+
+    context.realmUrl = input.realmUrl;
+    context.requireToolCall = requireToolCall;
+    context.tools = tools;
+    context.functions = [];
+
     let { event_id } = await matrixService.sendEvent(roomId, 'm.room.message', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: input.prompt || '',
@@ -123,13 +143,7 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
       data: {
         attachedFiles: files?.map((file: FileDef) => file.serialize()),
         attachedCards: cardFileDefs.map((file: FileDef) => file.serialize()),
-        context: {
-          openCardIds: attachedOpenCards.map((c) => c.id),
-          tools,
-          requireToolCall,
-          realmUrl: input.realmUrl,
-          functions: [],
-        },
+        context,
       },
     } as CardMessageContent);
     let commandModule = await this.loadCommandModule();

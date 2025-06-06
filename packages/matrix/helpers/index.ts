@@ -783,6 +783,26 @@ export async function getRoomEvents(
   return await getAllRoomEvents(roomId, accessToken);
 }
 
+export function getAgentId(
+  roomEvents: {
+    content?: {
+      data?: string;
+    };
+  }[],
+) {
+  // Iterate backwards and get the most recent agentId
+  for (let i = roomEvents.length - 1; i >= 0; i--) {
+    let event = roomEvents[i];
+    let data = event.content?.data as any;
+    if (data) {
+      let parsedData = JSON.parse(data);
+      if (parsedData.context?.agentId) {
+        return parsedData.context.agentId;
+      }
+    }
+  }
+}
+
 export async function getRoomsFromSync(username = 'user1', password = 'pass') {
   let { accessToken } = await loginUser(username, password);
   let response = (await sync(accessToken)) as any;
