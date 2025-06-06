@@ -58,6 +58,7 @@ interface Signature {
     parentFields: string[];
     goToDefinition: (
       codeRef: CodeRef | undefined,
+      codePath: URL | undefined,
       localName: string | undefined,
       fieldName?: string,
     ) => void;
@@ -256,7 +257,13 @@ export default class CardSchemaEditor extends Component<Signature> {
                 @kind='button'
                 {{on
                   'click'
-                  (fn @goToDefinition codeRef @cardType.localName undefined)
+                  (fn
+                    @goToDefinition
+                    codeRef
+                    this.fileURL
+                    @cardType.localName
+                    undefined
+                  )
                 }}
                 data-test-card-schema-navigational-button
               >
@@ -351,6 +358,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                               (fn
                                 @goToDefinition
                                 codeRef
+                                this.fileURL
                                 field.card.localName
                                 undefined
                               )
@@ -504,6 +512,10 @@ export default class CardSchemaEditor extends Component<Signature> {
     return (field.card as Type).module;
   }
 
+  get fileURL() {
+    return new URL(this.args.file.url);
+  }
+
   @action
   fieldTypes(field: FieldOfType) {
     let types = [];
@@ -574,6 +586,7 @@ export default class CardSchemaEditor extends Component<Signature> {
       // In the same file
       this.args.goToDefinition(
         undefined,
+        this.fileURL,
         this.args.cardType.localName,
         field.name,
       );
@@ -590,6 +603,7 @@ export default class CardSchemaEditor extends Component<Signature> {
         card: codeRef,
         field: field.name,
       },
+      this.fileURL,
       this.args.cardType.localName,
     );
   }

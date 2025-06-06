@@ -329,7 +329,7 @@ export default class CodeSubmode extends Component<Signature> {
       },
     );
     if (editedDeclaration) {
-      this.goToDefinition(undefined, editedDeclaration.localName);
+      this.goToDefinition(undefined, undefined, editedDeclaration.localName);
     }
   }
 
@@ -380,16 +380,17 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action
   private selectDeclaration(dec: ModuleDeclaration) {
-    this.goToDefinition(undefined, dec.localName);
+    this.goToDefinition(undefined, undefined, dec.localName);
   }
 
   @action
   private goToDefinitionAndResetCursorPosition(
     codeRef: CodeRef | undefined,
+    codePath: URL | undefined,
     localName: string | undefined,
     fieldName?: string,
   ) {
-    this.goToDefinition(codeRef, localName, fieldName);
+    this.goToDefinition(codeRef, codePath, localName, fieldName);
     if (this.codePath) {
       let urlString = this.codePath.toString();
       this.recentFilesService.updateCursorPositionByURL(
@@ -402,11 +403,14 @@ export default class CodeSubmode extends Component<Signature> {
   @action
   private goToDefinition(
     codeRef: CodeRef | undefined,
+    codePath: URL | undefined,
     localName: string | undefined,
     fieldName?: string,
   ) {
+    console.trace('goToDefinition', codeRef, localName, fieldName);
     this.operatorModeStateService.updateCodePathWithSelection({
       codeRef,
+      codePath,
       localName,
       fieldName,
       onLocalSelection: this.updateCursorByName,

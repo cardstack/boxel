@@ -400,11 +400,13 @@ export default class OperatorModeStateService extends Service {
 
   updateCodePathWithSelection({
     codeRef,
+    codePath,
     localName,
     fieldName,
     onLocalSelection,
   }: {
     codeRef: CodeRef | undefined;
+    codePath: URL | undefined;
     localName: string | undefined;
     fieldName: string | undefined;
     onLocalSelection?: (name: string, fieldName?: string) => void;
@@ -413,7 +415,7 @@ export default class OperatorModeStateService extends Service {
     if (codeRef && isResolvedCodeRef(codeRef)) {
       //(possibly) in a different module
       this.state.codeSelection = codeRef.name;
-      this.updateCodePath(new URL(codeRef.module));
+      this.updateCodePath(codePath!);
     } else if (
       codeRef &&
       'type' in codeRef &&
@@ -423,7 +425,7 @@ export default class OperatorModeStateService extends Service {
     ) {
       this.state.fieldSelection = codeRef.field;
       this.state.codeSelection = codeRef.card.name;
-      this.updateCodePath(new URL(codeRef.card.module));
+      this.updateCodePath(codePath!);
     } else if (localName && onLocalSelection) {
       //in the same module
       this.state.codeSelection = localName;

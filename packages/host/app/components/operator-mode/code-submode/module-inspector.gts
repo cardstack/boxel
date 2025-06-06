@@ -84,6 +84,7 @@ interface ModuleInspectorSignature {
     currentOpenFile: FileResource | undefined;
     goToDefinitionAndResetCursorPosition: (
       codeRef: CodeRef | undefined,
+      codePath: URL | undefined,
       localName: string | undefined,
       fieldName?: string,
     ) => void;
