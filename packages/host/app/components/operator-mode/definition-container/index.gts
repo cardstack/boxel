@@ -87,6 +87,7 @@ const ClickableModuleDefinitionContainer: TemplateOnlyComponent<ClickableModuleS
     <Clickable
       @goToDefinition={{@goToDefinition}}
       @codeRef={{@codeRef}}
+      @codePath={{@codePath}}
       @localName={{@localName}}
       data-test-clickable-definition-container
     >

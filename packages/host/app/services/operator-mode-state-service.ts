@@ -7,6 +7,7 @@ import Service, { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
 
 import { task, restartableTask } from 'ember-concurrency';
+import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
@@ -36,6 +37,8 @@ import type PlaygroundPanelService from '@cardstack/host/services/playground-pan
 import type Realm from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+
+import { ModuleInspectorSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import { Format } from 'https://cardstack.com/base/card-api';
 
@@ -69,6 +72,7 @@ export interface OperatorModeState {
   openDirs: Map<string, string[]>;
   codeSelection?: string;
   fieldSelection?: string;
+  moduleInspector?: ModuleInspectorView;
 }
 
 interface CardItem {
@@ -90,11 +94,14 @@ export type SerializedState = {
   codeSelection?: string;
   fieldSelection?: string;
   aiAssistantOpen?: boolean;
+  moduleInspector?: ModuleInspectorView;
 };
 
 interface OpenFileSubscriber {
   onStateChange: (state: FileResource['state']) => void;
 }
+
+export type ModuleInspectorView = 'schema' | 'spec' | 'preview';
 
 export default class OperatorModeStateService extends Service {
   @tracked state: OperatorModeState = new TrackedObject({
@@ -107,6 +114,8 @@ export default class OperatorModeStateService extends Service {
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
   private cardTitles = new TrackedMap<string, string>();
+
+  private panelSelections: Record<string, ModuleInspectorView>;
 
   @service declare private cardService: CardService;
   @service declare private loaderService: LoaderService;
@@ -125,6 +134,13 @@ export default class OperatorModeStateService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.reset.register(this);
+
+    let panelSelections = window.localStorage.getItem(
+      ModuleInspectorSelections,
+    );
+    this.panelSelections = new TrackedObject(
+      panelSelections ? JSON.parse(panelSelections) : {},
+    );
   }
 
   get aiAssistantOpen() {
@@ -148,6 +164,7 @@ export default class OperatorModeStateService extends Service {
       codePath: null,
       openDirs: new TrackedMap<string, string[]>(),
       aiAssistantOpen: false,
+      moduleInspector: 'schema' as ModuleInspectorView, // FIXME duplicate?
     });
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
@@ -371,13 +388,25 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
+  async updateModuleInspectorView(view: ModuleInspectorView) {
+    this.state.moduleInspector = view;
+    this.panelSelections[this.state.codePath?.href ?? ''] = view;
+    window.localStorage.setItem(
+      ModuleInspectorSelections,
+      JSON.stringify(this.panelSelections),
+    );
+    this.schedulePersist();
+  }
+
   updateCodePathWithSelection({
     codeRef,
+    codePath,
     localName,
     fieldName,
     onLocalSelection,
   }: {
     codeRef: CodeRef | undefined;
+    codePath: URL | undefined;
     localName: string | undefined;
     fieldName: string | undefined;
     onLocalSelection?: (name: string, fieldName?: string) => void;
@@ -386,7 +415,7 @@ export default class OperatorModeStateService extends Service {
     if (codeRef && isResolvedCodeRef(codeRef)) {
       //(possibly) in a different module
       this.state.codeSelection = codeRef.name;
-      this.updateCodePath(new URL(codeRef.module));
+      this.updateCodePath(codePath!);
     } else if (
       codeRef &&
       'type' in codeRef &&
@@ -396,7 +425,7 @@ export default class OperatorModeStateService extends Service {
     ) {
       this.state.fieldSelection = codeRef.field;
       this.state.codeSelection = codeRef.card.name;
-      this.updateCodePath(new URL(codeRef.card.module));
+      this.updateCodePath(codePath!);
     } else if (localName && onLocalSelection) {
       //in the same module
       this.state.codeSelection = localName;
@@ -438,7 +467,26 @@ export default class OperatorModeStateService extends Service {
     this.state.codePath = codePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
+
+    let moduleInspectorView =
+      this.panelSelections[codePath?.href ?? ''] ?? 'schema';
+
+    this.updateModuleInspectorView(moduleInspectorView);
+
     this.specPanelService.setSelection(null);
+  }
+
+  private persistModuleInspectorView(
+    codePath: string | null,
+    moduleInspector: ModuleInspectorView,
+  ) {
+    if (codePath) {
+      this.panelSelections[codePath] = moduleInspector;
+      window.localStorage.setItem(
+        ModuleInspectorSelections,
+        JSON.stringify(this.panelSelections),
+      );
+    }
   }
 
   replaceCodePath(codePath: URL | null) {
@@ -560,6 +608,7 @@ export default class OperatorModeStateService extends Service {
       codeSelection: this.state.codeSelection,
       fieldSelection: this.state.fieldSelection,
       aiAssistantOpen: this.state.aiAssistantOpen,
+      moduleInspector: this.state.moduleInspector,
     };
 
     for (let stack of this.state.stacks) {
@@ -612,6 +661,8 @@ export default class OperatorModeStateService extends Service {
       ]),
     );
 
+    console.log('in deserialise', rawState.codePath, rawState.moduleInspector);
+
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submodes.Interact,
@@ -621,7 +672,15 @@ export default class OperatorModeStateService extends Service {
       codeSelection: rawState.codeSelection,
       fieldSelection: rawState.fieldSelection,
       aiAssistantOpen: rawState.aiAssistantOpen ?? false,
+      moduleInspector: rawState.moduleInspector ?? 'schema', // FIXME this is defined elsewhere?
     });
+
+    if (rawState.codePath && rawState.moduleInspector) {
+      this.persistModuleInspectorView(
+        rawState.codePath,
+        rawState.moduleInspector,
+      );
+    }
 
     let stackIndex = 0;
     for (let stack of rawState.stacks) {

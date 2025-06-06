@@ -31,6 +31,7 @@ interface Signature {
     isReadOnly: boolean;
     goToDefinition: (
       codeRef: CodeRef | undefined,
+      codePath: URL | undefined,
       localName: string | undefined,
       fieldName?: string,
     ) => void;
