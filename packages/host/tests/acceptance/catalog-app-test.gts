@@ -572,7 +572,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         .hasText('Author');
     });
 
-    test('use is succesful even if target realm does not have a trailing slash', async function (assert) {
+    test('use is successful even if target realm does not have a trailing slash', async function (assert) {
       await visitOperatorMode({
         stacks: [[]],
       });
