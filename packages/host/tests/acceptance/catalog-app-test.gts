@@ -273,6 +273,7 @@ module('Acceptance | catalog app tests', function (hooks) {
       let fileName = parts[parts.length - 1];
       let uuid = fileName.replace(`.json`, '');
       assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
+      return filePath;
     } else {
       throw new Error(
         'file name shape not as expected when checking for [uuid].[extension]',
@@ -588,7 +589,7 @@ module('Acceptance | catalog app tests', function (hooks) {
           )
           .hasText('Author');
       });
-      test('skill listing: installs the card and redirects to code mode with persisted playground selection for first example successfully', async function (assert) {
+      test('skill listing: installs the card and redirects to code mode with preview on first skill successfully', async function (assert) {
         const listingName = 'talk-like-a-pirate';
         const listingId = `${catalogRealmURL}SkillListing/${listingName}`;
         await executeCommand(ListingRemixCommand, listingId, testRealm2URL);
@@ -607,7 +608,9 @@ module('Acceptance | catalog app tests', function (hooks) {
         if (instanceFolder) {
           await openDir(assert, instanceFolder);
         }
-        await verifyJSONWithUUIDInFolder(assert, instanceFolder);
+        let filePath = await verifyJSONWithUUIDInFolder(assert, instanceFolder);
+        let cardId = catalogRealmURL + filePath;
+        assert.dom(`[data-test-code-mode-card-renderer="${cardId}"]`);
       });
     });
 
