@@ -609,8 +609,12 @@ module('Acceptance | catalog app tests', function (hooks) {
           await openDir(assert, instanceFolder);
         }
         let filePath = await verifyJSONWithUUIDInFolder(assert, instanceFolder);
-        let cardId = catalogRealmURL + filePath;
-        assert.dom(`[data-test-code-mode-card-renderer="${cardId}"]`).exists();
+        let cardId = testRealm2URL + filePath;
+        let headerId = cardId.replace('.json', '');
+        await waitFor('[data-test-card-resource-loaded]');
+        assert
+          .dom(`[data-test-code-mode-card-renderer-header="${headerId}"]`)
+          .exists();
       });
     });
 
