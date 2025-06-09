@@ -352,7 +352,7 @@ export interface Field<
     instancePromise: Promise<BaseDef>,
     loadedValue: any,
     relativeTo: URL | undefined,
-    opts: DeserializeOpts,
+    opts?: DeserializeOpts,
   ): Promise<any>;
   emptyValue(instance: BaseDef): any;
   validate(instance: BaseDef, value: any): void;
@@ -2493,6 +2493,7 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
   doc,
   identityContext,
   relativeTo,
+  opts,
 }: {
   card: CardT;
   loadedValue: any;
@@ -2503,6 +2504,7 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
   doc: LooseSingleCardDocument | CardDocument;
   identityContext: IdentityContext;
   relativeTo: URL | undefined;
+  opts?: DeserializeOpts;
 }): Promise<any> {
   let field = getField(card, fieldName);
   if (!field) {
@@ -2517,6 +2519,7 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
     modelPromise,
     loadedValue,
     relativeTo,
+    opts,
   );
   return result;
 }
@@ -2806,6 +2809,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
           doc,
           identityContext,
           relativeTo: relativeToVal,
+          opts,
         }),
       ];
     }),
