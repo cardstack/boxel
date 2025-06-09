@@ -19,6 +19,7 @@ import {
   type ResolvedCodeRef,
   internalKeyFor,
   isLocalId,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
@@ -448,10 +449,30 @@ export default class OperatorModeStateService extends Service {
   };
 
   async updateCodePath(codePath: URL | null) {
-    this._state.codePath = codePath;
+    let canonicalCodePath = await this.determineCanonicalCodePath(codePath);
+    this._state.codePath = canonicalCodePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
     this.specPanelService.setSelection(null);
+  }
+
+  private async determineCanonicalCodePath(codePath: URL | null) {
+    if (!codePath) {
+      return codePath;
+    }
+
+    let response;
+    try {
+      response = await this.network.authedFetch(codePath, {
+        headers: { Accept: SupportedMimeType.CardSource },
+      });
+
+      if (response.ok) {
+        return new URL(response.url);
+      }
+    } catch (e) {
+      console.error('Error fetching canonical code path:', e);
+    }
   }
 
   replaceCodePath(codePath: URL | null) {
