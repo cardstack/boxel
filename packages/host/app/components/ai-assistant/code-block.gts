@@ -454,7 +454,7 @@ class CodeBlockDiffEditor extends Component<Signature> {
       top: 8,
     },
     theme: 'vs-dark',
-    lineNumbers: 'off' as const,
+    lineNumbers: 'off',
   };
 
   @tracked diffEditorStats: {
