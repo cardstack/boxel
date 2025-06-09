@@ -219,7 +219,7 @@ module('Acceptance | catalog app tests', function (hooks) {
   }
 
   async function verifySubmode(assert: Assert, submode: Submode) {
-    assert.dom(`[data-test-submode-switcher=${submode}]`);
+    assert.dom(`[data-test-submode-switcher=${submode}]`).exists();
   }
 
   async function toggleFileTree() {
@@ -583,7 +583,6 @@ module('Acceptance | catalog app tests', function (hooks) {
         );
         let instanceFolder = outerFolder + 'Author/';
         await verifyFolderInFileTree(assert, instanceFolder);
-        // await verifyFileInFielTree(assert, instancePath)
         let gtsFilePath = outerFolder + `${listingName}.gts`;
         await verifyFileInFileTree(assert, gtsFilePath);
         await waitForCodeEditor();
@@ -679,7 +678,6 @@ module('Acceptance | catalog app tests', function (hooks) {
       );
       let instanceFolder = outerFolder + 'Author/';
       await verifyFolderInFileTree(assert, instanceFolder);
-      // await verifyFileInFielTree(assert, instancePath)
       let gtsFilePath = outerFolder + `${listingName}.gts`;
       await verifyFileInFileTree(assert, gtsFilePath);
       await waitForCodeEditor();
