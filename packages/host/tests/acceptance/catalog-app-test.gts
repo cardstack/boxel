@@ -305,7 +305,7 @@ module('Acceptance | catalog app tests', function (hooks) {
   }
 
   module('catalog listing', async function () {
-    test('after clicking "Remix" button inside catalog , the ai room is initiated, and prompt is given correctly', async function (assert) {
+    test('after clicking "Remix" button inside catalog, the ai room is initiated, and prompt is given correctly', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -352,11 +352,8 @@ module('Acceptance | catalog app tests', function (hooks) {
     module('"use"', async function () {
       test('card listing', async function (assert) {
         const listingName = 'author';
-        await executeCommand(
-          ListingUseCommand,
-          testRealmURL + 'Listing/author.json',
-          testRealm2URL,
-        );
+        const listingId = testRealmURL + 'Listing/author.json';
+        await executeCommand(ListingUseCommand, listingId, testRealm2URL);
         await visitOperatorMode({
           submode: 'code',
           fileView: 'browser',
@@ -477,7 +474,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         /*
          * talk-like-a-pirate-[uuid]/Skill/[uuid].json
          */
-        let listingName = 'talk-like-a-pirate';
+        const listingName = 'talk-like-a-pirate';
         await executeCommand(
           ListingInstallCommand,
           `${catalogRealmURL}SkillListing/${listingName}`,
@@ -508,15 +505,12 @@ module('Acceptance | catalog app tests', function (hooks) {
     });
     module('"remix"', async function () {
       test('card listing: installs the card and redirects to code mode with persisted playground selection for first example successfully', async function (assert) {
-        let listingName = 'author';
+        const listingName = 'author';
+        const listingId = `${testRealmURL}Listing/${listingName}`;
         await visitOperatorMode({
           stacks: [[]],
         });
-        await executeCommand(
-          ListingRemixCommand,
-          `${testRealmURL}Listing/${listingName}`,
-          testRealm2URL,
-        );
+        await executeCommand(ListingRemixCommand, listingId, testRealm2URL);
         await waitForCodeEditor();
         await verifySubmode(assert, 'code');
         await toggleFileTree();
