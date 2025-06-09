@@ -157,7 +157,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
             {{#if this.hasExamples}}
               <BoxelButton
                 class='action-button'
-                data-test-catalog-listing-preview-button
+                data-test-catalog-listing-isolated-preview-button
                 {{on 'click' this.preview}}
               >
                 Preview
@@ -167,7 +167,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
               <:trigger as |bindings|>
                 <BoxelButton
                   class='action-button'
-                  data-test-catalog-listing-remix-button
+                  data-test-catalog-listing-isolated-remix-button
                   @kind='primary'
                   @loading={{this._remix.isRunning}}
                   @disabled={{this.remixDisabled}}
@@ -181,7 +181,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                   class='realm-dropdown-menu'
                   @closeMenu={{dd.close}}
                   @items={{this.remixRealmOptions}}
-                  data-test-catalog-listing-remix-dropdown
+                  data-test-catalog-listing-isolated-remix-dropdown
                 />
               </:content>
             </BoxelDropdown>

@@ -304,8 +304,8 @@ module('Acceptance | catalog app tests', function (hooks) {
     });
   }
 
-  module('catalog listing', async function () {
-    test('after clicking "Remix" button inside catalog, the ai room is initiated, and prompt is given correctly', async function (assert) {
+  module('catalog', async function (hooks) {
+    hooks.beforeEach(async function () {
       await visitOperatorMode({
         stacks: [
           [
@@ -319,6 +319,9 @@ module('Acceptance | catalog app tests', function (hooks) {
 
       await waitFor('.catalog-content');
       await waitFor('.showcase-center-div');
+    });
+
+    test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
       await waitFor(
         `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
       );
@@ -330,16 +333,80 @@ module('Acceptance | catalog app tests', function (hooks) {
           'Mortgage Calculator',
           '"Mortgage Calculator" button exist in listing',
         );
-
       await verifyButtonAction(
-        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-remix-button]`,
+        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-remix-button]`,
         'Remix',
         'I would like to remix this Mortgage Calculator under the following realm: http://test-realm/test/',
         assert,
       );
     });
 
-    skip('after clicking "Preview" button inside listing isolated, the listing opens up on stack', async function (assert) {});
+    test('after clicking "Preview" button, the example card opens up onto the stack', async function (assert) {
+      await waitFor(
+        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
+      );
+      assert
+        .dom(
+          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
+        )
+        .containsText(
+          'Mortgage Calculator',
+          '"Mortgage Calculator" button exist in listing',
+        );
+      await click(
+        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
+      );
+      assert
+        .dom(
+          `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
+        )
+        .exists();
+      assert
+        .dom(
+          `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
+        )
+        .hasText('Mortgage Calculator');
+    });
+  });
+
+  module('listing isolated', async function (hooks) {
+    hooks.beforeEach(async function () {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: mortgageCalculatorCardId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+    });
+
+    test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
+      await verifyButtonAction(
+        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-isolated-remix-button]`,
+        'Remix',
+        'I would like to remix this Mortgage Calculator under the following realm: http://test-realm/test/',
+        assert,
+      );
+    });
+
+    test('after clicking "Preview" button, the example card opens up onto the stack', async function (assert) {
+      await click(
+        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-isolated-preview-button]`,
+      );
+      assert
+        .dom(
+          `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
+        )
+        .exists();
+      assert
+        .dom(
+          `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
+        )
+        .hasText('Mortgage Calculator');
+    });
   });
 
   module('commands', async function (hooks) {
