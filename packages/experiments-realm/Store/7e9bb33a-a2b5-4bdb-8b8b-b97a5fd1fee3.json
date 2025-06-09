@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Store Chris",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "products.0": {
+        "links": {
+          "self": "../Product/c8e82779-059e-4f5c-ba5e-c8f73aa05235-1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../view-product-cards",
+        "name": "Store"
+      }
+    }
+  }
+}
