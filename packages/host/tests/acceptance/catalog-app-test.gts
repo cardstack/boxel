@@ -219,7 +219,7 @@ module('Acceptance | catalog app tests', function (hooks) {
   }
 
   async function verifySubmode(assert: Assert, submode: Submode) {
-    assert.dom(`[data-test-submode-switcher=${submode}]`);
+    assert.dom(`[data-test-submode-switcher=${submode}]`).exists();
   }
 
   async function toggleFileTree() {
@@ -538,11 +538,8 @@ module('Acceptance | catalog app tests', function (hooks) {
          * talk-like-a-pirate-[uuid]/Skill/[uuid].json
          */
         const listingName = 'talk-like-a-pirate';
-        await executeCommand(
-          ListingInstallCommand,
-          `${catalogRealmURL}SkillListing/${listingName}`,
-          testRealm2URL,
-        );
+        const listingId = `${catalogRealmURL}SkillListing/${listingName}`;
+        await executeCommand(ListingInstallCommand, listingId, testRealm2URL);
         await visitOperatorMode({
           submode: 'code',
           fileView: 'browser',
@@ -562,7 +559,6 @@ module('Acceptance | catalog app tests', function (hooks) {
         if (instanceFolder) {
           await openDir(assert, instanceFolder);
         }
-
         await verifyJSONWithUUIDInFolder(assert, instanceFolder);
       });
     });
@@ -592,6 +588,27 @@ module('Acceptance | catalog app tests', function (hooks) {
             '[data-test-playground-panel] [data-test-boxel-card-header-title]',
           )
           .hasText('Author');
+      });
+      test('skill listing: installs the card and redirects to code mode with persisted playground selection for first example successfully', async function (assert) {
+        const listingName = 'talk-like-a-pirate';
+        const listingId = `${catalogRealmURL}SkillListing/${listingName}`;
+        await executeCommand(ListingRemixCommand, listingId, testRealm2URL);
+        await waitForCodeEditor();
+        await verifySubmode(assert, 'code');
+        await toggleFileTree();
+        let outerFolder = await verifyFolderWithUUIDInFileTree(
+          assert,
+          listingName,
+        );
+        if (outerFolder) {
+          await openDir(assert, outerFolder);
+        }
+        let instanceFolder = outerFolder + 'Skill' + '/';
+        await verifyFolderInFileTree(assert, instanceFolder);
+        if (instanceFolder) {
+          await openDir(assert, instanceFolder);
+        }
+        await verifyJSONWithUUIDInFolder(assert, instanceFolder);
       });
     });
 
