@@ -586,11 +586,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         // await verifyFileInFielTree(assert, instancePath)
         let gtsFilePath = outerFolder + `${listingName}.gts`;
         await verifyFileInFileTree(assert, gtsFilePath);
-        //TODO: Below code should be checked without clicking on Preview https://linear.app/cardstack/issue/CS-8779/after-remix-command-playground-is-not-opened
-        await waitFor('[data-test-module-inspector-view="preview"]', {
-          timeout: 5_000,
-        });
-        await click('[data-test-module-inspector-view="preview"]');
+        await waitForCodeEditor();
         assert
           .dom(
             '[data-test-playground-panel] [data-test-boxel-card-header-title]',
@@ -686,11 +682,7 @@ module('Acceptance | catalog app tests', function (hooks) {
       // await verifyFileInFielTree(assert, instancePath)
       let gtsFilePath = outerFolder + `${listingName}.gts`;
       await verifyFileInFileTree(assert, gtsFilePath);
-      //TODO: Below code should be checked without clicking on Preview https://linear.app/cardstack/issue/CS-8779/after-remix-command-playground-is-not-opened
-      await waitFor('[data-test-module-inspector-view="preview"]', {
-        timeout: 5_000,
-      });
-      await click('[data-test-module-inspector-view="preview"]');
+      await waitForCodeEditor();
       assert
         .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
         .hasText('Author');
