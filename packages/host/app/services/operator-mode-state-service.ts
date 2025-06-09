@@ -463,6 +463,7 @@ export default class OperatorModeStateService extends Service {
 
     let response;
     try {
+      // FIXME this should be HEAD only?
       response = await this.network.authedFetch(codePath, {
         headers: { Accept: SupportedMimeType.CardSource },
       });
