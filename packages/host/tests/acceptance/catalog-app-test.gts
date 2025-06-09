@@ -563,6 +563,52 @@ module('Acceptance | catalog app tests', function (hooks) {
         testRealm2URL,
       );
 
+      await waitForCodeEditor();
+      assert
+        .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
+        .hasText('Author');
+    });
+
+    test('use is successful even if target realm does not have a trailing slash', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[]],
+      });
+
+      await executeCommand(
+        ListingUseCommand,
+        testRealmURL + 'Listing/author.json',
+        removeTrailingSlash(testRealm2URL), //realm =  http//test-realm/test-2:
+      );
+
+      await verifyFolderWithUUID(testRealm2URL, 'author', assert);
+
+      await verifyInstanceExists(testRealm2URL, 'author', 'Author', assert);
+    });
+
+    test('install is succesful even if target realm does not have a trailing slash', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[]],
+      });
+
+      await executeCommand(
+        ListingInstallCommand,
+        testRealmURL + 'Listing/author.json',
+        removeTrailingSlash(testRealm2URL), //realm =  http//test-realm/test-2:
+      );
+      await verifyInstanceExists(testRealm2URL, 'author', 'Author', assert);
+    });
+
+    test('remix is succesful even if target realm does not have a trailing slash', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[]],
+      });
+
+      await executeCommand(
+        ListingRemixCommand,
+        testRealmURL + 'Listing/author.json',
+        removeTrailingSlash(testRealm2URL), //realm =  http//test-realm/test-2:
+      );
+
       await waitFor('[data-test-module-inspector-view="preview"]', {
         timeout: 5_000,
       });
@@ -573,3 +619,7 @@ module('Acceptance | catalog app tests', function (hooks) {
     });
   });
 });
+
+function removeTrailingSlash(url: string): string {
+  return url.endsWith('/') && url.length > 1 ? url.slice(0, -1) : url;
+}
