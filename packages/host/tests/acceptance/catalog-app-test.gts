@@ -1,7 +1,7 @@
 import { click, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 
 import { validate as uuidValidate } from 'uuid';
 
@@ -597,8 +597,6 @@ module('Acceptance | catalog app tests', function (hooks) {
           )
           .hasText('Author');
       });
-
-      skip('skill listing: installs the card and redirects to code mode with persisted playground selection for first example successfully', async function () {});
     });
 
     test('"use" is successful even if target realm does not have a trailing slash', async function (assert) {
