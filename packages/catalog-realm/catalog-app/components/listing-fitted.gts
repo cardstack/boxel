@@ -94,6 +94,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
           <BoxelButton
             @kind='secondary-dark'
             class='preview-button'
+            data-test-catalog-listing-fitted-preview-button
             {{on 'click' this.preview}}
             aria-label='Preview'
           >
@@ -426,7 +427,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           <BoxelDropdown>
             <:trigger as |bindings|>
               <BoxelButton
-                data-test-catalog-listing-remix-button
+                data-test-catalog-listing-fitted-remix-button
                 @kind='primary'
                 @size='extra-small'
                 class='card-remix-button'
@@ -442,7 +443,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
                 class='realm-dropdown-menu'
                 @closeMenu={{dd.close}}
                 @items={{this.remixRealmOptions}}
-                data-test-catalog-listing-remix-dropdown
+                data-test-catalog-listing-fitted-remix-dropdown
               />
             </:content>
           </BoxelDropdown>
