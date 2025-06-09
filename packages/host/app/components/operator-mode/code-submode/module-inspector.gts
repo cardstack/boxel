@@ -441,7 +441,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     {{#if this.isCardPreviewError}}
       {{! this is here to make TS happy, this is always true }}
       {{#if @cardError}}
-        <CardError @error={{@cardError}} @hideHeader={{true}} />
+        <CardError @error={{@cardError}} />
       {{/if}}
     {{else if this.isEmptyFile}}
       <SyntaxErrorDisplay @syntaxErrors='File is empty' />

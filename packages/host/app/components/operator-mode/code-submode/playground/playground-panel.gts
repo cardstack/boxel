@@ -1,5 +1,4 @@
 import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { schedule } from '@ember/runloop';
 
@@ -198,9 +197,12 @@ export default class PlaygroundPanel extends Component<Signature> {
     );
   }
 
-  private get isWideFormat() {
+  private get prefersWideFormat() {
     if (!this.card) {
       return false;
+    }
+    if (this.format !== 'isolated' && this.format !== 'edit') {
+      return true;
     }
     let { constructor } = this.card;
     return Boolean(
@@ -210,9 +212,8 @@ export default class PlaygroundPanel extends Component<Signature> {
     );
   }
 
-  private get styleForPlaygroundContent(): SafeString {
-    const maxWidth =
-      this.format !== 'isolated' || this.isWideFormat ? '100%' : '50rem';
+  private get setMaxWidth(): SafeString {
+    const maxWidth = this.prefersWideFormat ? '100%' : '50rem';
     return htmlSafe(`max-width: ${maxWidth};`);
   }
   private get moduleId() {
@@ -574,13 +575,6 @@ export default class PlaygroundPanel extends Component<Signature> {
       ) as BoxelSelect | null
     )?.click();
 
-  @action
-  handleClick(e: MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    return false;
-  }
-
   private get fileToFixWithAi() {
     let codePath = this.operatorModeStateService.state.codePath?.href;
     if (!codePath) return undefined;
@@ -727,10 +721,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     {{/if}}
 
     <section class='playground-panel' data-test-playground-panel>
-      <div
-        class='playground-panel-content'
-        style={{this.styleForPlaygroundContent}}
-      >
+      <div class='playground-panel-content' style={{this.setMaxWidth}}>
         {{#if this.isLoading}}
           <LoadingIndicator @color='var(--boxel-light)' />
         {{else}}
@@ -766,13 +757,9 @@ export default class PlaygroundPanel extends Component<Signature> {
                       @fileToFixWithAi={{this.fileToFixWithAi}}
                     >
                       <:error>
-                        <button
-                          class='instance-chooser-container with-error'
-                          {{on 'click' this.handleClick}}
-                          {{on 'mouseup' this.handleClick}}
-                        >
+                        <div class='instance-chooser-container'>
                           <InstanceChooser />
-                        </button>
+                        </div>
                       </:error>
                     </CardError>
                   </CardContainer>
@@ -795,14 +782,8 @@ export default class PlaygroundPanel extends Component<Signature> {
                     @isFieldDef={{@isFieldDef}}
                   />
                 </div>
-                <section class='instance-and-format'>
-                  <button
-                    class='instance-chooser-container'
-                    {{on 'click' this.handleClick}}
-                    {{on 'mouseup' this.handleClick}}
-                  >
-                    <InstanceChooser />
-                  </button>
+                <section class='instance-chooser-container'>
+                  <InstanceChooser />
                   <FormatChooser
                     class='format-chooser'
                     @formats={{if @isFieldDef this.fieldFormats}}
@@ -828,28 +809,19 @@ export default class PlaygroundPanel extends Component<Signature> {
     </section>
 
     <style scoped>
-      .instance-chooser-container {
-        background: none;
-        border: none;
-        cursor: auto;
+      .playground-panel {
+        position: relative;
+        background-image: url('./playground-background.png');
+        background-position: left top;
+        background-repeat: repeat;
+        background-size: 22.5px;
+        height: 100%;
         width: 100%;
-        padding: 0;
-        margin-left: auto;
+        background-color: var(--boxel-dark);
+        font: var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+        overflow: auto;
       }
-
-      .instance-chooser-container :deep(.instance-chooser) {
-        height: auto;
-
-        border-radius: 0;
-        border-top-left-radius: var(--boxel-border-radius);
-        border-top-right-radius: var(--boxel-border-radius);
-      }
-
-      .instance-chooser-container.with-error :deep(.instance-chooser) {
-        border-radius: var(--boxel-border-radius);
-        box-shadow: var(--boxel-deep-box-shadow);
-      }
-
       .playground-panel-content {
         --playground-padding: var(--boxel-sp);
         display: flex;
@@ -865,8 +837,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         display: flex;
         flex-direction: column;
       }
-
-      .instance-and-format {
+      .instance-chooser-container {
         position: sticky;
         bottom: var(--playground-padding);
         border: 1px solid var(--boxel-450);
@@ -877,32 +848,23 @@ export default class PlaygroundPanel extends Component<Signature> {
         /* It’s meant to have two rounded borders, this removes a gap */
         border-radius: calc(var(--boxel-border-radius) + 1px);
       }
-
+      .instance-chooser-container :deep(.instance-chooser) {
+        border-radius: 0;
+        border-top-left-radius: var(--boxel-border-radius);
+        border-top-right-radius: var(--boxel-border-radius);
+      }
       .format-chooser {
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
       }
-
-      .playground-panel {
-        position: relative;
-        background-image: url('./playground-background.png');
-        background-position: left top;
-        background-repeat: repeat;
-        background-size: 22.5px;
-        height: 100%;
-        width: 100%;
-        background-color: var(--boxel-dark);
-        font: var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-        overflow: auto;
-      }
       .error-container {
         flex-grow: 1;
         display: grid;
-        grid-template-rows: max-content;
-        margin-left: calc(-1 * var(--boxel-sp));
-        padding-bottom: var(--boxel-sp-xxl);
-        width: calc(100% + calc(2 * var(--boxel-sp)));
+        grid-template-rows: max-content 1fr;
+      }
+      .error-container :deep(.instance-chooser) {
+        border-radius: var(--boxel-border-radius);
+        box-shadow: var(--boxel-deep-box-shadow);
       }
     </style>
   </template>

@@ -222,6 +222,10 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
     </BoxelSelect>
     <style scoped>
       .instance-chooser {
+        height: var(
+          --boxel-instance-chooser-height,
+          var(--boxel-form-control-height)
+        );
         outline-color: var(--boxel-highlight);
       }
 

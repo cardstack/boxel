@@ -25,7 +25,6 @@ import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import FormatChooser from '../code-submode/format-chooser';
 
-import EmbeddedPreview from './embedded-preview';
 import FittedFormatGallery from './fitted-format-gallery';
 
 interface Signature {
@@ -127,6 +126,9 @@ export default class CardRendererPanel extends Component<Signature> {
     <style scoped>
       .card-renderer-header {
         min-height: max-content;
+      }
+      .card-renderer-header:not(.is-editing) {
+        background-color: var(--boxel-100);
       }
       .card-renderer-body {
         flex-grow: 1;
