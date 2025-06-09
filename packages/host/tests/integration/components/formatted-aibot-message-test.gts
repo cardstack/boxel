@@ -255,7 +255,7 @@ let c = 3;
       isLastAssistantMessage: true,
     });
 
-    // First editor is a diff editor,
+    // First editor is a diff editor
     assert
       .dom('[data-test-code-block-index="0"] [data-test-code-diff-editor]')
       .exists();
@@ -537,8 +537,9 @@ ${REPLACE_MARKER}
   });
 
   test('utils: makeCodeDiffStats', function (assert) {
-    // A couple of examples where I got lineChanges from the monaco
-    // diff editor and I counted the green and red lines manually.
+    // A couple of real world examples where I got lineChanges from the monaco
+    // diff editor (using editor.getLineChanges()) and I counted
+    // the green and red lines manually and compared the results.
 
     let lineChanges = [
       {
