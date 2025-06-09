@@ -538,46 +538,94 @@ module('Acceptance | catalog app tests', function (hooks) {
       skip('skill listing: installs the card and redirects to code mode with persisted playground selection for first example successfully', async function (assert) {});
     });
 
-    test('use is successful even if target realm does not have a trailing slash', async function (assert) {
-      await visitOperatorMode({
-        stacks: [[]],
-      });
-
+    test('"use" is successful even if target realm does not have a trailing slash', async function (assert) {
+      const listingName = 'author';
+      const listingId = testRealmURL + 'Listing/author.json';
       await executeCommand(
         ListingUseCommand,
-        testRealmURL + 'Listing/author.json',
-        removeTrailingSlash(testRealm2URL), //realm =  http//test-realm/test-2:
+        listingId,
+        removeTrailingSlash(testRealm2URL),
       );
+      await visitOperatorMode({
+        submode: 'code',
+        fileView: 'browser',
+        codePath: `${testRealm2URL}index`,
+      });
+      await waitForCodeEditor();
+      let outerFolder = await verifyFolderWithUUIDInFileTree(
+        assert,
+        listingName,
+      );
+      if (outerFolder) {
+        await openDir(assert, outerFolder);
+      }
 
-      await verifyFolderWithUUID(testRealm2URL, 'author', assert);
-
-      await verifyInstanceExists(testRealm2URL, 'author', 'Author', assert);
+      let instanceFolder = outerFolder + 'Author' + '/';
+      await verifyFolderInFileTree(assert, instanceFolder);
+      if (instanceFolder) {
+        await openDir(assert, instanceFolder);
+      }
+      await verifyFileWithUUIDInFileTree(assert, instanceFolder, 'json');
     });
 
-    test('install is succesful even if target realm does not have a trailing slash', async function (assert) {
-      await visitOperatorMode({
-        stacks: [[]],
-      });
-
+    test('"install" is successful even if target realm does not have a trailing slash', async function (assert) {
+      const listingName = 'mortgage-calculator';
       await executeCommand(
         ListingInstallCommand,
-        testRealmURL + 'Listing/author.json',
-        removeTrailingSlash(testRealm2URL), //realm =  http//test-realm/test-2:
+        mortgageCalculatorCardId,
+        removeTrailingSlash(testRealm2URL),
       );
-      await verifyInstanceExists(testRealm2URL, 'author', 'Author', assert);
+      await visitOperatorMode({
+        submode: 'code',
+        fileView: 'browser',
+        codePath: `${testRealm2URL}index`,
+      });
+      await waitForCodeEditor();
+
+      // mortgage-calculator-[uuid]/
+      let outerFolder = await verifyFolderWithUUIDInFileTree(
+        assert,
+        listingName,
+      );
+      if (outerFolder) {
+        await openDir(assert, outerFolder);
+      }
+      // mortgage-calculator-[uuid]/mortgage-calculator.gts
+      let gtsFilePath = outerFolder + 'mortgage-calculator.gts';
+      await verifyFileInFileTree(assert, gtsFilePath);
+      // mortgage-calculator-[uuid]/MortgageCalculator/example.json
+      let instanceFolder = outerFolder + 'MortgageCalculator' + '/';
+      await verifyFolderInFileTree(assert, instanceFolder);
+      if (instanceFolder) {
+        await openDir(assert, instanceFolder);
+      }
+      await verifyFileWithUUIDInFileTree(assert, instanceFolder, 'json');
     });
 
-    test('remix is succesful even if target realm does not have a trailing slash', async function (assert) {
+    test('"remix" is successful even if target realm does not have a trailing slash', async function (assert) {
+      const listingName = 'author';
+      const listingId = `${testRealmURL}Listing/${listingName}`;
       await visitOperatorMode({
         stacks: [[]],
       });
-
       await executeCommand(
         ListingRemixCommand,
-        testRealmURL + 'Listing/author.json',
-        removeTrailingSlash(testRealm2URL), //realm =  http//test-realm/test-2:
+        listingId,
+        removeTrailingSlash(testRealm2URL),
       );
-
+      await waitForCodeEditor();
+      await verifySubmode(assert, 'code');
+      await toggleFileTree();
+      let outerFolder = await verifyFolderWithUUIDInFileTree(
+        assert,
+        listingName,
+      );
+      let instanceFolder = outerFolder + 'Author/';
+      await verifyFolderInFileTree(assert, instanceFolder);
+      // await verifyFileInFielTree(assert, instancePath)
+      let gtsFilePath = outerFolder + `${listingName}.gts`;
+      await verifyFileInFileTree(assert, gtsFilePath);
+      //TODO: Below code should be checked without clicking on Preview https://linear.app/cardstack/issue/CS-8779/after-remix-command-playground-is-not-opened
       await waitFor('[data-test-module-inspector-view="preview"]', {
         timeout: 5_000,
       });
