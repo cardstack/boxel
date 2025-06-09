@@ -522,7 +522,6 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
         padding: 8px 12px;
         border-top-left-radius: 12px;
         border-top-right-radius: 12px;
-        font-family: 'Segoe UI', sans-serif;
         font-size: 14px;
         height: 50px;
       }
@@ -571,6 +570,10 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
 
       .code-block-diff-header .changes .added {
         color: #66ff99;
+      }
+
+      .mode {
+        color: var(--boxel-300);
       }
     </style>
     <div class='code-block-diff-header'>
