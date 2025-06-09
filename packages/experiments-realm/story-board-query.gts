@@ -15,11 +15,15 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { concat, fn } from '@ember/helper';
 import { eq, gt } from '@cardstack/boxel-ui/helpers';
-import { Query } from '@cardstack/runtime-common';
-import { realmURL } from '@cardstack/runtime-common';
+import {
+  Query,
+  LooseSingleCardDocument,
+  realmURL,
+} from '@cardstack/runtime-common';
 import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
 import ExternalLinkIcon from '@cardstack/boxel-icons/external-link';
 import MessageSquareIcon from '@cardstack/boxel-icons/message-square';
+import { restartableTask } from 'ember-concurrency';
 
 interface StoryCardComponentArgs {
   Args: {
@@ -492,7 +496,7 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
     };
   }
 
-  private get realmHrefs(): string[] {
+  private get realmHrefs() {
     return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
   }
 
@@ -511,6 +515,48 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
       this.sortBy = sortType;
     });
   }
+
+  @action toggleSubmissionForm() {
+    this.createCard.perform();
+  }
+
+  private createCard = restartableTask(async () => {
+    let ref = {
+      module: new URL('./story-board-query', import.meta.url).href,
+      name: 'Story',
+    };
+
+    if (!ref) {
+      throw new Error('Missing card ref');
+    }
+
+    let currentRealm = this.args.model[realmURL];
+
+    let doc: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        attributes: {
+          title: null,
+          description: null,
+          author: null,
+          url: null,
+          upvotes: 0,
+          downvotes: 0,
+          commentUrl: null,
+          commentCount: 0,
+          submittedAt: null,
+        },
+        meta: {
+          adoptsFrom: ref,
+        },
+      },
+    };
+
+    await this.args.context?.actions?.createCard?.(ref, currentRealm, {
+      realmURL: currentRealm, // the realm to create the card in
+      doc,
+    });
+  });
 
   // View transition support for smooth reordering
   startViewTransition(callback: () => void) {
@@ -553,6 +599,13 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
                 Top
               </button>
             </div>
+            <button
+              type='button'
+              class='submit-btn'
+              {{on 'click' this.toggleSubmissionForm}}
+            >
+              Submit Story
+            </button>
           </div>
         </header>
 
@@ -573,6 +626,19 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
             <div class='empty-board'>
               <h3>No stories yet!</h3>
               <p>Be the first to submit a story to get the discussion started.</p>
+              <button
+                type='button'
+                class='submit-btn'
+                {{on 'click' this.toggleSubmissionForm}}
+              >
+                Submit the First Story
+              </button>
+
+              <span class='note'>
+                Note: Submission form clicking feature only works in interact
+                mode
+              </span>
+
             </div>
           {{/if}}
         </main>
@@ -598,11 +664,10 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
       }
 
       .board-mat {
+        height: 100%;
         max-width: 980px;
         margin: 0 auto;
         background: hsl(0 0% 100%);
-        min-height: 100vh;
-        overflow-y: auto;
         border-left: 1px solid hsl(0 0% 89.8%);
         border-right: 1px solid hsl(0 0% 89.8%);
       }
@@ -611,11 +676,16 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
         background: hsl(0 0% 100%);
         color: hsl(0 0% 3.9%);
         padding: 16px 24px;
+        position: sticky;
+        top: 0;
+        z-index: 1;
       }
 
       .header-content {
         display: flex;
         align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
         justify-content: space-between;
       }
 
@@ -628,6 +698,7 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
 
       .board-nav {
         display: flex;
+        margin-left: auto;
         gap: 8px;
       }
       .nav-btn {
@@ -649,6 +720,94 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
         background: hsl(0 0% 9%);
         color: hsl(0 0% 98%);
         border-color: hsl(0 0% 9%);
+      }
+
+      .submit-btn {
+        background: hsl(0 0% 9%);
+        color: hsl(0 0% 98%);
+        border: 1px solid hsl(0 0% 9%);
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+        font-size: 13px;
+        margin-left: auto;
+        transition: all 0.15s ease; /* ³⁴ consistent button styling */
+      }
+      .submit-btn:hover {
+        background: hsl(0 0% 15%);
+        border-color: hsl(0 0% 15%);
+      }
+      .submit-btn:disabled {
+        background: hsl(0 0% 89.8%);
+        color: hsl(0 0% 45.1%);
+        border-color: hsl(0 0% 89.8%);
+        cursor: not-allowed;
+      }
+      .submission-form {
+        background: hsl(0 0% 100%);
+        border: 1px solid hsl(0 0% 89.8%);
+        margin: 16px;
+        padding: 24px;
+        border-radius: 8px;
+        box-shadow:
+          0 1px 3px 0 hsl(0 0% 0% / 0.1),
+          0 1px 2px -1px hsl(0 0% 0% / 0.1); /* ³⁵ subtle shadow */
+      }
+      .submission-form h2 {
+        margin: 0 0 16px 0;
+        color: #333;
+        font-size: 16px;
+      }
+      .form-field {
+        margin-bottom: 12px;
+      }
+      .form-field label {
+        display: block;
+        font-weight: bold;
+        margin-bottom: 4px;
+        font-size: 12px;
+        color: #333;
+      }
+      .form-field input,
+      .form-field textarea {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 13px;
+        font-family: inherit;
+      }
+      .form-field input:focus,
+      .form-field textarea:focus {
+        border-color: #ff6600;
+        outline: none;
+      }
+      .form-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 16px;
+      }
+      .cancel-btn {
+        background: #666;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 3px;
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 12px;
+      }
+      .cancel-btn:hover {
+        background: #555;
+      }
+
+      .note {
+        font-size: 11px;
+        font-style: italic;
+        color: red;
+        margin-top: 10px;
+        display: block;
       }
 
       .stories-container {

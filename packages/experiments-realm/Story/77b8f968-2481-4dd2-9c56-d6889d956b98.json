@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "SHINCHAN",
+      "url": null,
+      "description": null,
+      "author": null,
+      "upvotes": null,
+      "downvotes": null,
+      "commentUrl": null,
+      "commentCount": null,
+      "submittedAt": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../story-board-query",
+        "name": "Story"
+      }
+    }
+  }
+}

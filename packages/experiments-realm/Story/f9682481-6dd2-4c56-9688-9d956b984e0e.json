@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Marrybrown",
+      "url": null,
+      "description": null,
+      "author": null,
+      "upvotes": 0,
+      "downvotes": 0,
+      "commentUrl": null,
+      "commentCount": 0,
+      "submittedAt": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../story-board-query",
+        "name": "Story"
+      }
+    }
+  }
+}
