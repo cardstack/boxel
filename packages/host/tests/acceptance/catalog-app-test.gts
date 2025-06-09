@@ -219,7 +219,7 @@ module('Acceptance | catalog app tests', function (hooks) {
   }
 
   async function verifySubmode(assert: Assert, submode: Submode) {
-    assert.dom('[data-test-submode-switcher] button').hasText(submode);
+    assert.dom(`[data-test-submode-switcher=${submode}]`);
   }
 
   async function toggleFileTree() {
