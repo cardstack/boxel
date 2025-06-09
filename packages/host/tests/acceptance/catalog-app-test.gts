@@ -198,10 +198,10 @@ module('Acceptance | catalog app tests', function (hooks) {
   });
 
   async function verifyButtonAction(
+    assert: Assert,
     buttonSelector: string,
     expectedText: string,
     expectedMessage: string,
-    assert: Assert,
   ) {
     await waitFor(buttonSelector);
     assert.dom(buttonSelector).containsText(expectedText);
@@ -330,10 +330,10 @@ module('Acceptance | catalog app tests', function (hooks) {
           '"Mortgage Calculator" button exist in listing',
         );
       await verifyButtonAction(
+        assert,
         `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-remix-button]`,
         'Remix',
         'I would like to remix this Mortgage Calculator under the following realm: http://test-realm/test/',
-        assert,
       );
     });
 
@@ -381,10 +381,10 @@ module('Acceptance | catalog app tests', function (hooks) {
 
     test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
       await verifyButtonAction(
+        assert,
         `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-isolated-remix-button]`,
         'Remix',
         'I would like to remix this Mortgage Calculator under the following realm: http://test-realm/test/',
-        assert,
       );
     });
 
