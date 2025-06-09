@@ -232,7 +232,7 @@ export default class InteractSubmode extends Component {
         opts?: { openCardInRightMostStack?: boolean },
       ): void => {
         if (opts?.openCardInRightMostStack) {
-          stackIndex = this.stacks.length;
+          stackIndex = here.stacks.length;
         }
         let newItem = new StackItem({
           id: cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id,
