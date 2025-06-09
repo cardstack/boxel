@@ -610,7 +610,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         }
         let filePath = await verifyJSONWithUUIDInFolder(assert, instanceFolder);
         let cardId = catalogRealmURL + filePath;
-        assert.dom(`[data-test-code-mode-card-renderer="${cardId}"]`);
+        assert.dom(`[data-test-code-mode-card-renderer="${cardId}"]`).exists();
       });
     });
 
