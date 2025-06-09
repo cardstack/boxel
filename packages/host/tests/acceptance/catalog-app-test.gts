@@ -381,11 +381,10 @@ module('Acceptance | catalog app tests', function (hooks) {
     });
     module('"install"', async function () {
       test('card listing ', async function (assert) {
-        // Given a listing:
+        // Given a card listing named "mortgage-calculator":
         /*
-         * mortgage-calculator/
-         * mortgage-calculator/mortgage-calculator.gts
-         * mortgage-calculator/MortgageCalculator/example.json
+         * mortgage-calculator/mortgage-calculator.gts <- spec points to this
+         * mortgage-calculator/MortgageCalculator/example.json <- listing points to this
          */
 
         // When I install the listing into my selected realm, it should be:
@@ -430,15 +429,16 @@ module('Acceptance | catalog app tests', function (hooks) {
       });
 
       test('field listing', async function (assert) {
-        // Given a listing:
+        // Given a field listing named "contact-link":
         /*
-         * fields/contact-link.gts
+         * fields/contact-link.gts <- spec points to this
          */
         // When I install the listing into my selected realm, it should be:
         /*
          * contact-link-[uuid]/contact-link.gts
          */
 
+        const listingName = 'contact-link';
         const contactLinkFieldListingCardId = `${catalogRealmURL}FieldListing/fb9494c4-0d61-4d2d-a6c0-7b16ca40b42b`;
 
         await executeCommand(
@@ -458,7 +458,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         // contact-link-[uuid]/
         let outerFolder = await verifyFolderWithUUIDInFileTree(
           assert,
-          'contact-link',
+          listingName,
         );
         if (outerFolder) {
           await openDir(assert, outerFolder);
@@ -469,6 +469,14 @@ module('Acceptance | catalog app tests', function (hooks) {
       });
 
       test('skill listing', async function (assert) {
+        // Given a skill listing named "talk-like-a-pirate":
+        /*
+         * SkillListing/talk-like-a-pirate.json <- listing points to this
+         */
+        // When I install the listing into my selected realm, it should be:
+        /*
+         * talk-like-a-pirate-[uuid]/Skill/[uuid].json
+         */
         let listingName = 'talk-like-a-pirate';
         await executeCommand(
           ListingInstallCommand,
