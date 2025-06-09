@@ -264,7 +264,7 @@ module('Acceptance | catalog app tests', function (hooks) {
   }
 
   async function verifyJSONWithUUIDInFolder(assert: Assert, dirPath: string) {
-    const fileSelector = `[data-test-file^="${incompletePath}"]`;
+    const fileSelector = `[data-test-file^="${dirPath}"]`;
     assert.dom(fileSelector).exists();
     const element = document.querySelector(fileSelector);
     const filePath = element?.getAttribute('data-test-file');
