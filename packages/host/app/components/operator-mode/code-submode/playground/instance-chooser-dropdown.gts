@@ -222,9 +222,7 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
     </BoxelSelect>
     <style scoped>
       .instance-chooser {
-        height: 26px;
-        border: 1px solid var(--boxel-dark);
-        outline: none;
+        outline-color: var(--boxel-highlight);
       }
 
       .instance-chooser :deep(.boxel-trigger) {

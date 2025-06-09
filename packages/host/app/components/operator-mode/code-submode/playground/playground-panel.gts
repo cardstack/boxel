@@ -851,12 +851,13 @@ export default class PlaygroundPanel extends Component<Signature> {
       }
 
       .playground-panel-content {
+        --playground-padding: var(--boxel-sp);
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp);
         min-height: 100%;
         margin-inline: auto;
-        padding: var(--boxel-sp);
+        padding: var(--playground-padding);
       }
       .preview-area {
         flex-grow: 1;
@@ -867,7 +868,7 @@ export default class PlaygroundPanel extends Component<Signature> {
 
       .instance-and-format {
         position: sticky;
-        bottom: 100px;
+        bottom: var(--playground-padding);
         border: 1px solid var(--boxel-450);
         margin: 0 auto;
         width: 380px;
