@@ -471,8 +471,11 @@ export default class OperatorModeStateService extends Service {
       if (response.ok) {
         return new URL(response.url);
       }
+
+      return codePath;
     } catch (e) {
       console.error('Error fetching canonical code path:', e);
+      return codePath;
     }
   }
 
