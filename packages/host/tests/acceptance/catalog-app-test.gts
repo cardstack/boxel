@@ -563,10 +563,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         testRealm2URL,
       );
 
-      await waitFor('[data-test-module-inspector-view="preview"]', {
-        timeout: 5_000,
-      });
-      await click('[data-test-module-inspector-view="preview"]');
+      await waitForCodeEditor();
       assert
         .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
         .hasText('Author');

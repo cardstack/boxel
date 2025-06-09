@@ -1,6 +1,7 @@
 import { service } from '@ember/service';
 
 import { timeout } from 'ember-concurrency';
+import window from 'ember-window-mock';
 
 import { isResolvedCodeRef } from '@cardstack/runtime-common';
 
@@ -84,7 +85,7 @@ export default class RemixCommand extends HostBaseCommand<
         await window.localStorage.setItem(
           'code-mode-panel-selections',
           JSON.stringify({
-            [codePath]: 'playground',
+            [codePath]: 'preview',
           }),
         );
       }
