@@ -25,7 +25,6 @@ import { logger } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
@@ -45,6 +44,7 @@ import {
 } from './lib/matrix/util';
 import { constructHistory } from './lib/history';
 import { isRecognisedDebugCommand } from './lib/debug';
+import { APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE } from '../runtime-common/matrix-constants';
 
 let log = logger('ai-bot');
 
@@ -298,7 +298,12 @@ export async function loadCurrentlySerializedFileDefs(
   aiBotUserId: string,
 ): Promise<SerializedFileDef[]> {
   let lastMessageEventByUser = history.findLast(
-    (event) => event.sender !== aiBotUserId,
+    (event) =>
+      event.sender !== aiBotUserId &&
+      ((event.type === 'm.room.message' &&
+        event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) ||
+        event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE ||
+        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE),
   );
 
   let mostRecentUserMessageContent = lastMessageEventByUser?.content as {
@@ -308,10 +313,7 @@ export async function loadCurrentlySerializedFileDefs(
     };
   };
 
-  if (
-    !mostRecentUserMessageContent ||
-    mostRecentUserMessageContent.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
-  ) {
+  if (!mostRecentUserMessageContent) {
     return [];
   }
 
@@ -354,7 +356,7 @@ export async function loadCurrentlySerializedFileDefs(
   );
 }
 
-export function attachedFilesToPrompt(
+export function attachedFilesToMessage(
   attachedFiles: SerializedFileDef[],
 ): string {
   if (!attachedFiles.length) {
@@ -747,7 +749,7 @@ export const buildContextMessage = async (
       result += `Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}\n\n`;
     }
     if (attachedFiles.length > 0) {
-      result += `\n\nAttached files:\n${attachedFilesToPrompt(attachedFiles)}`;
+      result += `\n\nAttached files:\n${attachedFilesToMessage(attachedFiles)}`;
     }
   }
 

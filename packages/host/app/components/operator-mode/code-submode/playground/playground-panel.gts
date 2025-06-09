@@ -179,7 +179,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     if (!this.card?.id) {
       return;
     }
-    this.persistToLocalStorage(this.card.id, format);
+    this.persistSelections(this.card.id, format);
   }
 
   private get realmInfo() {
@@ -413,23 +413,18 @@ export default class PlaygroundPanel extends Component<Signature> {
         format === selectedFormat &&
         fieldIndex === index
       ) {
+        // this is important for preventing some unnecessary screen flashes from happening
         return;
       }
     }
 
-    this.persistToLocalStorage(selectedCardId, selectedFormat, index);
-  };
-
-  private persistToLocalStorage = (
-    cardId: string,
-    format: Format,
-    index?: number,
-  ) => {
     this.playgroundPanelService.persistSelections(
       this.moduleId,
-      trimJsonExtension(cardId),
-      format,
-      index,
+      trimJsonExtension(selectedCardId),
+      selectedFormat,
+      index /* `undefined` means we are previewing a card instances. fields MUST have a corresponding index
+      based on their position on their spec's containedExamples field. otherwise, it means that we are previewing
+      a spec instance on playground instead of the field */,
     );
   };
 
@@ -629,7 +624,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       }
       let recentCard = prerenderedCards[0];
       // if there's no selected card, choose the most recent card as selected
-      this.persistToLocalStorage(recentCard.url, 'isolated');
+      this.persistSelections(recentCard.url, 'isolated');
       return recentCard;
     }
 
@@ -752,7 +747,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                 createNew=(if this.canWriteRealm this.createNew)
                 createNewIsRunning=this.createNewIsRunning
                 moduleId=this.moduleId
-                persistSelections=this.persistToLocalStorage
+                persistSelections=this.persistSelections
                 recentCardIds=this.recentCardIds
               )
               as |InstanceChooser|

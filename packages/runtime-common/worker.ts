@@ -139,6 +139,7 @@ export class Worker {
   #virtualNetwork: VirtualNetwork;
   #matrixURL: URL;
   #matrixClientCache: Map<string, MatrixClient> = new Map();
+  #realmAuthCache: WeakMap<MatrixClient, RealmAuthDataSource> = new WeakMap();
   #secretSeed: string;
   #fromScratch:
     | ((realmURL: URL, boom?: true) => Promise<IndexResults>)
@@ -210,6 +211,11 @@ export class Worker {
     function getFetch() {
       return _fetch!;
     }
+    let realmAuthDataSource = this.#realmAuthCache.get(matrixClient);
+    if (!realmAuthDataSource) {
+      realmAuthDataSource = new RealmAuthDataSource(matrixClient, getFetch);
+      this.#realmAuthCache.set(matrixClient, realmAuthDataSource);
+    }
     _fetch = fetcher(this.#virtualNetwork.fetch, [
       async (req, next) => {
         req.headers.set('X-Boxel-Building-Index', 'true');
@@ -219,7 +225,7 @@ export class Worker {
       async (req, next) => {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
       },
-      authorizationMiddleware(new RealmAuthDataSource(matrixClient, getFetch)),
+      authorizationMiddleware(realmAuthDataSource),
     ]);
     return _fetch;
   }

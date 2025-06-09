@@ -96,7 +96,7 @@ module('Responding', (hooks) => {
   hooks.beforeEach(() => {
     clock = FakeTimers.install();
     fakeMatrixClient = new FakeMatrixClient();
-    responder = new Responder(fakeMatrixClient, 'room-id');
+    responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId');
   });
 
   hooks.afterEach(() => {
@@ -128,6 +128,11 @@ module('Responding', (hooks) => {
       'Reasoning content should be thinking message',
     );
     assert.equal(sentEvents[0].content.body, '', 'Body should be empty');
+    assert.equal(
+      JSON.parse(sentEvents[0].content.data).context.agentId,
+      'abc123agentId',
+      'agentId should be sent',
+    );
 
     await responder.ensureThinkingMessageSent();
     sentEvents = fakeMatrixClient.getSentEvents();
@@ -176,6 +181,11 @@ module('Responding', (hooks) => {
         event_id: '0',
       },
       'The first content should replace the original thinking message',
+    );
+    assert.equal(
+      JSON.parse(sentEvents[1].content.data).context.agentId,
+      'abc123agentId',
+      'agentId should be sent',
     );
   });
 
@@ -318,6 +328,11 @@ module('Responding', (hooks) => {
       },
       'The tool call event should replace the thinking message',
     );
+    assert.equal(
+      JSON.parse(sentEvents[1].content.data).context.agentId,
+      'abc123agentId',
+      'agentId should be sent',
+    );
   });
 
   test('Sends tool call event with content when content is sent before tool call', async () => {
@@ -429,6 +444,11 @@ module('Responding', (hooks) => {
       true,
       'The tool call event should be sent together with isStreamingFinished set to true',
     );
+    assert.equal(
+      JSON.parse(sentEvents[3].content.data).context.agentId,
+      'abc123agentId',
+      'agentId should be sent',
+    );
   });
 
   test('Handles multiple tool calls', async () => {
@@ -533,6 +553,11 @@ module('Responding', (hooks) => {
         event_id: '0',
       },
       'The replacement event with the tool calls should replace the original message',
+    );
+    assert.equal(
+      JSON.parse(sentEvents[2].content.data).context.agentId,
+      'abc123agentId',
+      'agentId should be sent',
     );
   });
 

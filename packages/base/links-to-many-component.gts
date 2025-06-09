@@ -98,8 +98,11 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
   private chooseCard = restartableTask(async () => {
     let selectedCards = (this.args.model.value as any)[this.args.field.name];
     let selectedCardsQuery =
-      selectedCards?.map((card: any) => ({ not: { eq: { id: card.id } } })) ??
-      [];
+      selectedCards
+        ?.map((card: any) =>
+          card ? { not: { eq: { id: card.id } } } : undefined,
+        )
+        .filter(Boolean) ?? [];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     if (this.args.typeConstraint) {
       type = await getNarrowestType(this.args.typeConstraint, type, myLoader());

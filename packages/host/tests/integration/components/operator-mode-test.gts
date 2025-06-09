@@ -469,6 +469,24 @@ module('Integration | operator-mode', function (hooks) {
             }),
             pet: petMango,
           }),
+          'Person/hassan.json': {
+            data: {
+              attributes: {
+                firstName: 'Hassan',
+              },
+              relationships: {
+                friends: {
+                  links: { self: null },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
           'Person/burcu.json': new Person({
             firstName: 'Burcu',
             friends: [petJackie, petWoody, petBuzz],
@@ -1515,6 +1533,33 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-field="friends"] [data-test-pet]').doesNotExist();
     assert.dom('[data-test-add-new]').hasText('Add Pets');
     await click('[data-test-add-new]');
+    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
+    await click(`[data-test-select="${testRealmURL}Pet/jackie"]`);
+    await click('[data-test-card-catalog-go-button]');
+
+    await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+    assert.dom('[data-test-field="friends"]').containsText('Jackie');
+  });
+
+  test('can add a card to linksToMany field that has a null value for relationship', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/hassan"]`);
+    await click('[data-test-edit-button]');
+
+    assert.dom('[data-test-field="friends"] [data-test-pet]').doesNotExist();
+    assert
+      .dom('[data-test-field="friends"] [data-test-add-new]')
+      .hasText('Add Pets');
+    await click('[data-test-field="friends"] [data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
     await click(`[data-test-select="${testRealmURL}Pet/jackie"]`);
     await click('[data-test-card-catalog-go-button]');
