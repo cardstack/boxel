@@ -2717,7 +2717,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}BlogPost/1.json`);
 
-    operatorModeStateService.updateCodePath(
+    await operatorModeStateService.updateCodePath(
       new URL(`${testRealmURL}person.gts`),
     );
 
@@ -2765,7 +2765,7 @@ module('Integration | operator-mode', function (hooks) {
     let someRandomText = 'I am still typing a url';
     await typeIn('[data-test-card-url-bar-input]', someRandomText);
 
-    operatorModeStateService.updateCodePath(
+    await operatorModeStateService.updateCodePath(
       new URL(`${testRealmURL}person.gts`),
     );
 

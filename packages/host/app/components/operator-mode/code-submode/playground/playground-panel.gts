@@ -163,8 +163,8 @@ export default class PlaygroundPanel extends Component<Signature> {
         icon: IconLink,
       }),
       new MenuItem('Open in Code Mode', 'action', {
-        action: () =>
-          this.operatorModeStateService.updateCodePath(new URL(cardId)),
+        action: async () =>
+          await this.operatorModeStateService.updateCodePath(new URL(cardId)),
         icon: IconCode,
       }),
       new MenuItem('Open in Interact Mode', 'action', {
@@ -424,6 +424,8 @@ export default class PlaygroundPanel extends Component<Signature> {
       selectedFormat,
       index /* `undefined` means we are previewing a card instances. fields MUST have a corresponding index
       based on their position on their spec's containedExamples field. otherwise, it means that we are previewing
+
+
       a spec instance on playground instead of the field */,
     );
   };

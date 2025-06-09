@@ -340,7 +340,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
     }
   });
 
-  viewModule = () => {
+  viewModule = async () => {
     this.errorMessage = '';
     if (!this.args.model.moduleURL) {
       this.errorMessage = 'Module url is not available';
@@ -351,7 +351,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
         'Unable to view module. Context action "changeSubmode" is not available';
       return;
     }
-    this.args.context.actions.changeSubmode(
+    await this.args.context.actions.changeSubmode(
       new URL(this.args.model.moduleURL),
       'code',
     );
