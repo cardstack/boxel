@@ -127,6 +127,19 @@ export default class OperatorModeStateService extends Service {
     this.reset.register(this);
   }
 
+  get state() {
+    return {
+      stacks: this._state.stacks,
+      submode: this._state.submode,
+      codePath: this._state.codePath,
+      fileView: this._state.fileView,
+      openDirs: this._state.openDirs,
+      codeSelection: this._state.codeSelection,
+      fieldSelection: this._state.fieldSelection,
+      aiAssistantOpen: this._state.aiAssistantOpen,
+    } as const;
+  }
+
   get aiAssistantOpen() {
     return this._state.aiAssistantOpen;
   }
