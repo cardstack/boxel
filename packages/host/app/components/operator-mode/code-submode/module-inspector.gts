@@ -546,9 +546,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       />
     {{else if @card}}
       <CardRendererPanel
-        class='card-renderer-panel'
         @card={{@card}}
-        @realmURL={{this.operatorModeStateService.realmURL}}
         @format={{@previewFormat}}
         @setFormat={{@setPreviewFormat}}
         data-test-card-resource-loaded

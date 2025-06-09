@@ -1,33 +1,21 @@
 import { registerDestructor } from '@ember/destroyable';
-import { array } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { task } from 'ember-concurrency';
 
-import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 
-import { provide } from 'ember-provide-consume-context';
+import { CardHeader } from '@cardstack/boxel-ui/components';
+import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { IconLink, Eye } from '@cardstack/boxel-ui/icons';
 
-import {
-  BoxelDropdown,
-  IconButton,
-  Menu as BoxelMenu,
-  RealmIcon,
-  Tooltip,
-} from '@cardstack/boxel-ui/components';
-
-import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
-import { IconLink, Eye, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
-
-import {
-  realmURL,
-  cardTypeDisplayName,
-  RealmURLContextName,
-} from '@cardstack/runtime-common';
+import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+
+import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -44,11 +32,9 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     card: CardDef;
-    realmURL: URL;
     format?: Format; // defaults to 'isolated'
     setFormat: (format: Format) => void;
   };
-  Blocks: {};
 }
 
 export default class CardRendererPanel extends Component<Signature> {
@@ -73,78 +59,51 @@ export default class CardRendererPanel extends Component<Signature> {
     return this.args.format ?? 'isolated';
   }
 
-  private get urlForRealmLookup() {
-    let urlForRealmLookup =
-      this.args.card?.id ?? this.args?.card?.[realmURL]?.href;
-    if (!urlForRealmLookup) {
-      throw new Error(
-        `bug: cannot determine a URL to use for realm lookup of a card--this should always be set even for new cards`,
-      );
-    }
-    return urlForRealmLookup;
-  }
-
-  @provide(RealmURLContextName)
-  get realmURL() {
-    return this.args.realmURL;
-  }
-
-  openInInteractMode = () => {
+  private openInInteractMode = () => {
     this.operatorModeStateService.openCardInInteractMode(this.args.card.id);
   };
 
+  private get realmInfo() {
+    let url = this.args.card ? urlForRealmLookup(this.args.card) : undefined;
+    if (!url) {
+      return undefined;
+    }
+    return this.realm.info(url);
+  }
+
+  private get contextMenuItems(): MenuItem[] {
+    let menuItems: MenuItem[] = [
+      new MenuItem('Copy Card URL', 'action', {
+        action: () => this.copyToClipboard.perform(),
+        icon: IconLink,
+      }),
+      new MenuItem('Open in Interact Mode', 'action', {
+        action: () => this.openInInteractMode(),
+        icon: Eye,
+      }),
+    ];
+    return menuItems;
+  }
+
+  private get canEditCard() {
+    return Boolean(
+      this.format !== 'edit' && this.realm.canWrite(this.args.card.id),
+    );
+  }
+
   <template>
-    <div
+    <CardHeader
       class='card-renderer-header'
+      @cardTypeDisplayName={{cardTypeDisplayName @card}}
+      @cardTypeIcon={{cardTypeIcon @card}}
+      @realmInfo={{this.realmInfo}}
+      @onEdit={{if this.canEditCard (fn @setFormat 'edit')}}
+      @onFinishEditing={{if (eq this.format 'edit') (fn @setFormat 'isolated')}}
+      @isTopCard={{true}}
+      @moreOptionsMenuItems={{this.contextMenuItems}}
       data-test-code-mode-card-renderer-header={{@card.id}}
       ...attributes
-    >
-      <RealmIcon @realmInfo={{this.realm.info this.urlForRealmLookup}} />
-      <div class='header-title'>
-        {{cardTypeDisplayName @card}}
-      </div>
-      <div class='header-actions'>
-        <BoxelDropdown class='card-options'>
-          <:trigger as |bindings|>
-            <Tooltip @placement='top'>
-              <:trigger>
-                <IconButton
-                  @icon={{ThreeDotsHorizontal}}
-                  @width='20px'
-                  @height='20px'
-                  class='icon-button'
-                  aria-label='Options'
-                  data-test-more-options-button
-                  {{bindings}}
-                />
-              </:trigger>
-              <:content>
-                More Options
-              </:content>
-            </Tooltip>
-          </:trigger>
-          <:content as |dd|>
-            <BoxelMenu
-              @closeMenu={{dd.close}}
-              @items={{array
-                (menuItem
-                  'Copy Card URL' (perform this.copyToClipboard) icon=IconLink
-                )
-              }}
-            />
-            <BoxelMenu
-              @closeMenu={{dd.close}}
-              @items={{array
-                (menuItem
-                  'Open in Interact Mode' this.openInInteractMode icon=Eye
-                )
-              }}
-            />
-          </:content>
-        </BoxelDropdown>
-      </div>
-    </div>
-
+    />
     <div
       class='card-renderer-body'
       data-test-code-mode-card-renderer-body
@@ -156,12 +115,6 @@ export default class CardRendererPanel extends Component<Signature> {
       <div class='card-renderer-content'>
         {{#if (eq this.format 'fitted')}}
           <FittedFormatGallery @card={{@card}} />
-        {{else if (eq this.format 'embedded')}}
-          <EmbeddedPreview @card={{@card}} />
-        {{else if (eq this.format 'atom')}}
-          <div class='atom-wrapper'>
-            <CardRenderer @card={{@card}} @format={{this.format}} />
-          </div>
         {{else}}
           <CardRenderer @card={{@card}} @format={{this.format}} />
         {{/if}}
@@ -173,72 +126,34 @@ export default class CardRendererPanel extends Component<Signature> {
 
     <style scoped>
       .card-renderer-header {
-        background-color: var(--boxel-light);
-        padding: var(--boxel-sp);
-        display: flex;
-        gap: var(--boxel-sp-xxs);
-        align-items: center;
+        min-height: max-content;
       }
-
       .card-renderer-body {
         flex-grow: 1;
         overflow-y: auto;
+        z-index: 0;
       }
-
       .card-renderer-content {
         height: auto;
         margin: var(--boxel-sp-sm);
       }
-
       .card-renderer-content > :deep(.boxel-card-container.boundaries) {
         overflow: hidden;
       }
-
-      .header-actions {
-        margin-left: auto;
-      }
-
-      .header-title {
-        font: 600 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-
       .card-renderer-format-chooser {
         background-color: var(--boxel-dark);
         position: sticky;
-        bottom: 100px;
+        bottom: var(--boxel-sp-sm);
         width: 380px;
         margin: 0 auto;
         border-radius: var(--boxel-border-radius);
       }
-
       :deep(.format-chooser) {
         --boxel-format-chooser-border-color: var(--boxel-400);
         margin: 0;
         width: 100%;
         box-shadow: none;
         border-radius: var(--boxel-border-radius);
-      }
-
-      .icon-button {
-        --boxel-icon-button-width: 28px;
-        --boxel-icon-button-height: 28px;
-        border-radius: var(--boxel-border-radius-xs);
-
-        display: flex;
-        align-items: center;
-        justify-content: center;
-
-        font: var(--boxel-font-sm);
-        margin-left: var(--boxel-sp-xxxs);
-        z-index: 1;
-      }
-
-      .icon-button:not(:disabled):hover {
-        background-color: var(--boxel-dark-hover);
-      }
-      .atom-wrapper {
-        padding: var(--boxel-sp);
       }
     </style>
   </template>
