@@ -338,7 +338,18 @@
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "Updating the file...\nhttp://test.com/spaghetti-recipe.gts\n╔═══ SEARCH ════╗\nthis is the riveting content of the spaghetti-recipe.gts file\n╠═══════════════╣\nthis is the engaging content of the spaghetti-recipe.gts file\n╚═══ REPLACE ═══╝\n\nI will also create a file for rigatoni:\n\nhttp://test.com/rigatoni-recipe.gts\n╔═══ SEARCH ════╗\n╠═══════════════╣\nthis is the holy content of the rigatoni-recipe.gts file\n╚═══ REPLACE ═══╝\n",
+      "body": "Updating the file...\nhttp://test.com/spaghetti-recipe.gts\n╔═══ SEARCH ════╗\nthis is the riveting content of the spaghetti-recipe.gts file\n╠═══════════════╣\nthis is the engaging content of the spaghetti-recipe.gts file\n╚═══ REPLACE ═══╝\n",
+      "data": "{\"eventId\":\"$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE\",\"toolCall\":{\"type\":\"function\",\"id\":\"call_or0qFTa8y9Ef8ZVyRDNR2P1T\",\"name\":\"GetWeatherCommand_qPbgi8D3nYdEvEMwj6DVUX\",\"arguments\":{\"description\":\"Check the current weather conditions for traveling\",\"attributes\":{\"location\":\"New York\"}}}}",
+      "app.boxel.commandRequests": [
+        {
+          "id": "call_or0qFTa8y9Ef8ZVyRDNR2P1T",
+          "name": "GetWeatherCommand_qPbgi8D3nYdEvEMwj6DVUX",
+          "arguments": {
+            "description": "Check the current weather conditions for traveling",
+            "attributes": { "location": "New York" }
+          }
+        }
+      ],
       "msgtype": "app.boxel.message",
       "format": "org.matrix.custom.html",
       "isStreamingFinished": true,
@@ -380,34 +391,6 @@
       "age": 63267
     },
     "event_id": "$92DJh6JsIg0z0GmnkylmSz9BWPLcrN8pWnk1fiOEJTk",
-    "user_id": "@user:localhost",
-    "age": 63267
-  },
-  {
-    "type": "app.boxel.codePatchResult",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@user:localhost",
-    "content": {
-      "msgtype": "app.boxel.codePatchResult",
-      "m.relates_to": {
-        "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE",
-        "key": "rejected",
-        "rel_type": "app.boxel.codePatchAnnotation"
-      },
-      "codeBlockIndex": 1,
-      "data": {
-        "context": {
-          "tools": [],
-          "functions": [],
-          "submode": "code"
-        }
-      }
-    },
-    "origin_server_ts": 1736864370893,
-    "unsigned": {
-      "age": 63267
-    },
-    "event_id": "$000Jh6JsIg0z0GmnkylmSz9BWPLcrN8pWnk1fiOE111",
     "user_id": "@user:localhost",
     "age": 63267
   }

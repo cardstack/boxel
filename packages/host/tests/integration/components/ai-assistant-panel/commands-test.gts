@@ -24,6 +24,7 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
+  percySnapshot,
   testRealmURL,
   setupCardLogs,
   setupIntegrationTestRealm,
@@ -562,6 +563,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert.deepEqual(
       JSON.parse(commandResultEvents[0].content.data).context,
       {
+        agentId: getService('matrix-service').agentId,
         submode: 'interact',
         debug: false,
         openCardIds: ['http://test-realm/test/Person/fadhlan'],
@@ -646,6 +648,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert.deepEqual(
       JSON.parse(commandResultEvents[0].content.data).context,
       {
+        agentId: getService('matrix-service').agentId,
         submode: 'interact',
         debug: false,
         openCardIds: ['http://test-realm/test/Person/fadhlan'],
@@ -679,6 +682,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           }),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await settled();
     assert
@@ -719,6 +727,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           }),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await settled();
     assert
@@ -758,6 +771,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           }),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await settled();
     assert.dom('.result-list li:nth-child(6)').doesNotExist();
@@ -810,6 +828,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           arguments: JSON.stringify(toolArgs),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await settled();
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
@@ -877,6 +900,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           arguments: JSON.stringify(toolArgs),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await settled();
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
@@ -985,6 +1013,8 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert
       .dom('[data-test-ai-message-content] [data-test-editor]')
       .exists('View Code panel should remain open');
+
+    await percySnapshot(assert); // can preview code in ViewCode panel
   });
 
   test('when command in a message with continuations is done streaming, apply button is shown in ready state', async function (assert) {

@@ -7,7 +7,7 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
 import { format as formatDate, formatISO, isAfter, subMinutes } from 'date-fns';
-import { pollTask, runTask } from 'ember-lifeline';
+import { cancelPoll, pollTask, runTask } from 'ember-lifeline';
 
 import window from 'ember-window-mock';
 
@@ -128,6 +128,7 @@ export default class AiAssistantToast extends Component<Signature> {
   </template>
 
   @service private declare matrixService: MatrixService;
+  _pollToken: ReturnType<typeof pollTask> | null = null;
 
   private get state() {
     const state: {
@@ -140,7 +141,9 @@ export default class AiAssistantToast extends Component<Signature> {
       value: null,
       isResetStateValueBlocked: false,
     });
-
+    if (this._pollToken) {
+      cancelPoll(this, this._pollToken);
+    }
     const resetStateValue = (timeout = 3000) => {
       runTask(
         this,
@@ -185,8 +188,8 @@ export default class AiAssistantToast extends Component<Signature> {
         roomId: lastMessage[0],
         message: lastMessage[1],
       };
-
-      pollTask(this, resetStateValue);
+      // eslint-disable-next-line ember/no-side-effects
+      this._pollToken = pollTask(this, resetStateValue);
     }
 
     return state;

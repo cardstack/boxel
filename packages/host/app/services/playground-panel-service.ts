@@ -21,9 +21,12 @@ import type CardService from './card-service';
 import type StoreService from './store';
 
 export interface PlaygroundSelection {
-  cardId: string;
-  format: Format;
+  cardId: string; // for fields, this is their corresponding spec card's id, since fields do not have a card id
+  format: Format; // default is 'isolated' for cards, 'embedded' for fields
   fieldIndex?: number;
+  /* fieldIndex `undefined` means we are previewing a card instances. fields MUST have a corresponding index
+      based on their position on their spec's containedExamples field. otherwise, it means that we are previewing
+      a spec instance on playground instead of the field. */
 }
 
 export default class PlaygroundPanelService extends Service {

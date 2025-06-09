@@ -87,6 +87,8 @@ export default class MessageBuilder {
     return new Message({
       roomId: this.builderContext.roomId,
       author: this.builderContext.author,
+      agentId: (this.event.content as CardMessageContent)?.data?.context
+        ?.agentId,
       created: new Date(this.event.origin_server_ts),
       updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
       body: this.event.content.body,

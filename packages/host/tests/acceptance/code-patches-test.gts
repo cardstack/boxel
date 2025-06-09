@@ -1,5 +1,6 @@
 import { click, waitFor, findAll, waitUntil } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -115,6 +116,7 @@ ${REPLACE_MARKER}\n\`\`\``;
     assert.deepEqual(
       JSON.parse(codePatchResultEvents[0].content?.data ?? '{}').context,
       {
+        agentId: getService('matrix-service').agentId,
         codeMode: {
           currentFile: 'http://test-realm/test/hello.txt',
         },

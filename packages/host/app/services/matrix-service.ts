@@ -13,6 +13,7 @@ import {
   type RoomMember,
   type EmittedEvents,
 } from 'matrix-js-sdk';
+import { Filter } from 'matrix-js-sdk';
 import {
   type SlidingSync,
   type MSC3575List,
@@ -176,6 +177,7 @@ export default class MatrixService extends Service {
   private slidingSync: SlidingSync | undefined;
   private aiRoomIds: Set<string> = new Set();
   @tracked private _isLoadingMoreAIRooms = false;
+  agentId = uuidv4();
 
   constructor(owner: Owner) {
     super(owner);
@@ -1288,16 +1290,40 @@ export default class MatrixService extends Service {
 
     this.timelineLoadingState.set(roomId, true);
     try {
-      while (room.oldState.paginationToken != null) {
-        await this.client.scrollback(room);
-        let rs = room.getLiveTimeline().getState('f' as MatrixSDK.Direction);
-        if (rs) {
-          roomData.notifyRoomStateUpdated(rs);
-        }
+      // Create a filter that includes all events
+      let filter = new Filter(this.client.getUserId()!, 'old_messages');
+      filter.setDefinition({
+        room: {
+          timeline: {
+            limit: 30,
+            'org.matrix.msc3874.not_rel_types': ['m.replace'],
+          },
+        },
+      });
+
+      // Get or create a filtered timeline set
+      let timelineSet = room.getOrCreateFilteredTimelineSet(filter, {
+        prepopulateTimeline: true,
+        useSyncEvents: true,
+      });
+
+      let timeline = timelineSet.getLiveTimeline();
+      if (timeline.getPaginationToken('b' as MatrixSDK.Direction) == null) {
+        return;
+      }
+
+      while (timeline.getPaginationToken('b' as MatrixSDK.Direction) != null) {
+        await this.client.paginateEventTimeline(timeline, {
+          backwards: true,
+        });
+      }
+
+      let rs = room.getLiveTimeline().getState('f' as MatrixSDK.Direction);
+      if (rs) {
+        roomData.notifyRoomStateUpdated(rs);
       }
 
       // Wait for all events to be loaded in roomResource
-      let timeline = room.getLiveTimeline();
       let events = timeline.getEvents();
       this.timelineQueue.push(...events.map((e) => ({ event: e })));
       await this.drainTimeline();
