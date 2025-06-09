@@ -263,11 +263,7 @@ module('Acceptance | catalog app tests', function (hooks) {
     assert.dom(fileSelector).exists();
   }
 
-  async function verifyFileWithUUIDInFileTree(
-    assert: Assert,
-    incompletePath: string,
-    extension: string,
-  ) {
+  async function verifyJSONWithUUIDInFolder(assert: Assert, dirPath: string) {
     const fileSelector = `[data-test-file^="${incompletePath}"]`;
     assert.dom(fileSelector).exists();
     const element = document.querySelector(fileSelector);
@@ -275,7 +271,7 @@ module('Acceptance | catalog app tests', function (hooks) {
     let parts = filePath?.split('/');
     if (parts) {
       let fileName = parts[parts.length - 1];
-      let uuid = fileName.replace(`.${extension}`, '');
+      let uuid = fileName.replace(`.json`, '');
       assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
     } else {
       throw new Error(
@@ -440,7 +436,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         if (instanceFolder) {
           await openDir(assert, instanceFolder);
         }
-        await verifyFileWithUUIDInFileTree(assert, instanceFolder, 'json');
+        await verifyJSONWithUUIDInFolder(assert, instanceFolder);
       });
     });
     module('"install"', async function () {
@@ -489,7 +485,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         if (instanceFolder) {
           await openDir(assert, instanceFolder);
         }
-        await verifyFileWithUUIDInFileTree(assert, instanceFolder, 'json');
+        await verifyJSONWithUUIDInFolder(assert, instanceFolder);
       });
 
       test('field listing', async function (assert) {
@@ -567,7 +563,7 @@ module('Acceptance | catalog app tests', function (hooks) {
           await openDir(assert, instanceFolder);
         }
 
-        await verifyFileWithUUIDInFileTree(assert, instanceFolder, 'json');
+        await verifyJSONWithUUIDInFolder(assert, instanceFolder);
       });
     });
     module('"remix"', async function () {
@@ -632,7 +628,7 @@ module('Acceptance | catalog app tests', function (hooks) {
       if (instanceFolder) {
         await openDir(assert, instanceFolder);
       }
-      await verifyFileWithUUIDInFileTree(assert, instanceFolder, 'json');
+      await verifyJSONWithUUIDInFolder(assert, instanceFolder);
     });
 
     test('"install" is successful even if target realm does not have a trailing slash', async function (assert) {
@@ -666,7 +662,7 @@ module('Acceptance | catalog app tests', function (hooks) {
       if (instanceFolder) {
         await openDir(assert, instanceFolder);
       }
-      await verifyFileWithUUIDInFileTree(assert, instanceFolder, 'json');
+      await verifyJSONWithUUIDInFolder(assert, instanceFolder);
     });
 
     test('"remix" is successful even if target realm does not have a trailing slash', async function (assert) {
