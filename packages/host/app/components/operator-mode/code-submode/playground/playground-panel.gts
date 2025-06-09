@@ -144,7 +144,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get maybeGenerateFieldSpec() {
-    return this.canWriteRealm && this.args.isFieldDef && !this.cardResource?.id;
+    return this.canWriteRealm && this.args.isFieldDef && !this.card;
   }
 
   private copyToClipboard = task(async (id?: string) => {
@@ -174,7 +174,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get contextMenuItems() {
-    let cardId = this.cardResource?.id;
+    let cardId = this.card?.id;
     let menuItems: MenuItem[] = [
       new MenuItem('Copy Card URL', 'action', {
         action: () => this.copyToClipboard.perform(cardId),
@@ -263,9 +263,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get canEditCard() {
-    // in error case, we may not have `this.card?.id`, but we can get the id from `this.cardResource?.id`
-    let cardId = this.cardResource?.id;
-    return cardId && this.realm.canWrite(cardId);
+    return this.card?.id && this.realm.canWrite(this.card.id);
   }
 
   private get setEditMode() {
