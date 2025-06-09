@@ -579,7 +579,6 @@ module('Acceptance | catalog app tests', function (hooks) {
         );
         let instanceFolder = outerFolder + 'Author/';
         await verifyFolderInFileTree(assert, instanceFolder);
-        // await verifyFileInFielTree(assert, instancePath)
         let gtsFilePath = outerFolder + `${listingName}.gts`;
         await verifyFileInFileTree(assert, gtsFilePath);
         await waitForCodeEditor();
@@ -696,7 +695,6 @@ module('Acceptance | catalog app tests', function (hooks) {
       );
       let instanceFolder = outerFolder + 'Author/';
       await verifyFolderInFileTree(assert, instanceFolder);
-      // await verifyFileInFielTree(assert, instancePath)
       let gtsFilePath = outerFolder + `${listingName}.gts`;
       await verifyFileInFileTree(assert, gtsFilePath);
       await waitForCodeEditor();
