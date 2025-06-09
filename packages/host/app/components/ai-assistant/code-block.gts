@@ -454,7 +454,7 @@ class CodeBlockDiffEditor extends Component<Signature> {
       top: 8,
     },
     theme: 'vs-dark',
-    lineNumbers: 'off',
+    lineNumbers: 'off' as _MonacoSDK.editor.LineNumbersType | undefined,
   };
 
   @tracked diffEditorStats: {
