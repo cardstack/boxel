@@ -42,6 +42,7 @@ import {
   meta,
   baseRef,
   getAncestor,
+  isCardError,
   type Format,
   type Meta,
   type CardFields,
@@ -351,6 +352,7 @@ export interface Field<
     instancePromise: Promise<BaseDef>,
     loadedValue: any,
     relativeTo: URL | undefined,
+    opts: DeserializeOpts,
   ): Promise<any>;
   emptyValue(instance: BaseDef): any;
   validate(instance: BaseDef, value: any): void;
@@ -579,6 +581,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
+    opts: DeserializeOpts,
   ): Promise<BaseInstanceType<FieldT>[] | null> {
     if (value == null) {
       return null;
@@ -614,6 +617,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
               relativeTo,
               doc,
               identityContext,
+              opts,
             );
           } else {
             let meta = metas[index];
@@ -640,7 +644,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
             }
             return (
               await cardClassFromResource(resource, this.card, relativeTo)
-            )[deserialize](resource, relativeTo, doc, identityContext);
+            )[deserialize](resource, relativeTo, doc, identityContext, opts);
           }
         }),
       ),
@@ -813,9 +817,16 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     _instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
+    opts: DeserializeOpts,
   ): Promise<BaseInstanceType<CardT>> {
     if (primitive in this.card) {
-      return this.card[deserialize](value, relativeTo, doc, identityContext);
+      return this.card[deserialize](
+        value,
+        relativeTo,
+        doc,
+        identityContext,
+        opts,
+      );
     }
     if (fieldMeta && Array.isArray(fieldMeta)) {
       throw new Error(
@@ -843,7 +854,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     }
     return (await cardClassFromResource(resource, this.card, relativeTo))[
       deserialize
-    ](resource, relativeTo, doc, identityContext);
+    ](resource, relativeTo, doc, identityContext, opts);
   }
 
   emptyValue(_instance: BaseDef) {
@@ -1014,6 +1025,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     _instancePromise: Promise<CardDef>,
     loadedValue: any,
     relativeTo: URL | undefined,
+    opts: DeserializeOpts,
   ): Promise<BaseInstanceType<CardT> | null | NotLoadedValue> {
     if (!isRelationship(value)) {
       throw new Error(
@@ -1062,6 +1074,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       relativeTo,
       doc,
       identityContext,
+      opts,
     );
     deserialized[isSavedInstance] = true;
     return deserialized;
@@ -1403,6 +1416,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     instancePromise: Promise<BaseDef>,
     loadedValues: any,
     relativeTo: URL | undefined,
+    opts: DeserializeOpts,
   ): Promise<(BaseInstanceType<FieldT> | NotLoadedValue)[]> {
     if (!Array.isArray(values) && values.links.self === null) {
       return [];
@@ -1466,6 +1480,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
           relativeTo,
           doc,
           identityContext,
+          opts,
         );
         deserialized[isSavedInstance] = true;
         return deserialized;
@@ -1890,12 +1905,20 @@ export class BaseDef {
     relativeTo: URL | undefined,
     doc?: CardDocument,
     identityContext?: IdentityContext,
+    opts?: DeserializeOpts,
   ): Promise<BaseInstanceType<T>> {
     if (primitive in this) {
       // primitive cards can override this as need be
       return data;
     }
-    return _createFromSerialized(this, data, doc, relativeTo, identityContext);
+    return _createFromSerialized(
+      this,
+      data,
+      doc,
+      relativeTo,
+      identityContext,
+      opts,
+    );
   }
 
   static getComponent(
@@ -2586,6 +2609,10 @@ export function serializeCard(
   return doc;
 }
 
+interface DeserializeOpts {
+  ignoreBrokenLinks?: true;
+}
+
 // TODO Currently our deserialization process performs 2 tasks that probably
 // need to be disentangled:
 // 1. convert the data from a wire format to the native format
@@ -2602,7 +2629,9 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   resource: LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument,
   relativeTo: URL | undefined,
-  opts?: { identityContext?: IdentityContext },
+  opts?: DeserializeOpts & {
+    identityContext?: IdentityContext;
+  },
 ): Promise<BaseInstanceType<T>> {
   let identityContext = opts?.identityContext ?? new SimpleIdentityContext();
   let {
@@ -2621,6 +2650,7 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
     relativeTo,
     doc as CardDocument,
     identityContext,
+    opts,
   ) as BaseInstanceType<T>;
 }
 
@@ -2628,6 +2658,7 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
   identityContext: IdentityContext = new SimpleIdentityContext(),
+  opts?: DeserializeOpts,
 ): Promise<BaseInstanceType<T>> {
   identityContexts.set(instance, identityContext);
   if (!instance[relativeTo] && doc.data.id) {
@@ -2644,6 +2675,7 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
     resource: doc.data,
     doc,
     identityContext,
+    opts,
   });
 }
 
@@ -2658,6 +2690,7 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   doc: LooseSingleCardDocument | CardDocument | undefined,
   _relativeTo: URL | undefined,
   identityContext: IdentityContext = new SimpleIdentityContext(),
+  opts?: DeserializeOpts,
 ): Promise<BaseInstanceType<T>> {
   let resource: LooseCardResource | undefined;
   if (isCardResource(data)) {
@@ -2695,6 +2728,7 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
     resource,
     doc,
     identityContext,
+    opts,
   });
 }
 
@@ -2703,11 +2737,13 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   resource,
   doc,
   identityContext,
+  opts,
 }: {
   instance: BaseInstanceType<T>;
   resource: LooseCardResource;
   doc: LooseSingleCardDocument | CardDocument;
   identityContext: IdentityContext;
+  opts?: DeserializeOpts;
 }): Promise<BaseInstanceType<T>> {
   // because our store uses a tracked map for its identity map all the assembly
   // work that we are doing to deserialize the instance below is "live". so we
@@ -2824,7 +2860,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     // values we set that depend on computeds. Currently we do the thing that
     // is always correct.
     markAllComputedsStale(instance);
-    await recompute(instance);
+    await recompute(instance, {
+      ...(opts?.ignoreBrokenLinks ? { ignoreBrokenLinks: true } : {}),
+    });
 
     if (isCardInstance(instance) && resource.id != null) {
       // importantly, we place this synchronously after the assignment of the model's
@@ -3049,6 +3087,7 @@ export function getComponent(
 
 interface RecomputeOptions {
   loadFields?: true;
+  ignoreBrokenLinks?: true;
   // for host initiated renders (vs indexer initiated renders), glimmer will expect
   // all the fields to be available synchronously, in which case we need to buffer the
   // async in the recompute using this option
@@ -3166,10 +3205,23 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
       let card = Reflect.getPrototypeOf(instance)!
         .constructor as typeof BaseDef;
       let field: Field = getField(card, fieldName as string)!;
-      let result = (await field.handleNotLoadedError(instance, e, {
-        ...(field.isUsed ? { loadFields: true } : {}),
-        ...opts,
-      })) as T[K] | T[K][] | undefined;
+      let result: T[K] | T[K][] | undefined;
+      try {
+        result = (await field.handleNotLoadedError(instance, e, {
+          ...(field.isUsed ? { loadFields: true } : {}),
+          ...opts,
+        })) as T[K] | T[K][] | undefined;
+      } catch (innerErr) {
+        if (
+          opts?.ignoreBrokenLinks &&
+          isCardError(innerErr) &&
+          innerErr.status === 404
+        ) {
+          // ignoring the broken link
+        } else {
+          throw innerErr;
+        }
+      }
       if (result === undefined && isStaleValue(maybeStale)) {
         deserialized.set(
           fieldName as string,

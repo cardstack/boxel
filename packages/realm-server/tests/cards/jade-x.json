@@ -1,0 +1,14 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Jade X"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./friend-with-used-link.gts",
+        "name": "FriendWithUsedLink"
+      }
+    }
+  }
+}
