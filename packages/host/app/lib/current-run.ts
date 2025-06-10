@@ -545,6 +545,8 @@ export class CurrentRun {
         new URL(fileURL),
         {
           identityContext,
+          // we'll deal with broken links during rendering
+          ignoreBrokenLinks: true,
         },
       );
       await api.flushLogs();

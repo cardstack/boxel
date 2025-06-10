@@ -11,6 +11,8 @@ import ListingInstallCommand from '@cardstack/host/commands/listing-install';
 import ListingRemixCommand from '@cardstack/host/commands/listing-remix';
 import ListingUseCommand from '@cardstack/host/commands/listing-use';
 
+import { type Submode } from '@cardstack/host/components/submode-switcher';
+
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
@@ -196,10 +198,10 @@ module('Acceptance | catalog app tests', function (hooks) {
   });
 
   async function verifyButtonAction(
+    assert: Assert,
     buttonSelector: string,
     expectedText: string,
     expectedMessage: string,
-    assert: Assert,
   ) {
     await waitFor(buttonSelector);
     assert.dom(buttonSelector).containsText(expectedText);
@@ -216,96 +218,67 @@ module('Acceptance | catalog app tests', function (hooks) {
     assert.strictEqual(message.content.body, expectedMessage);
   }
 
-  async function verifyInstanceExists(
-    targetRealm: string,
-    targetDirPrefix: string,
-    dirName: string,
-    assert: Assert,
-  ) {
-    await visitOperatorMode({
-      submode: 'code',
-      fileView: 'browser',
-      codePath: `${targetRealm}index`,
-    });
-    await waitForCodeEditor();
-
-    await waitFor(`[data-test-directory^="${targetDirPrefix}"]`);
-    const element = document.querySelector(
-      `[data-test-directory^="${targetDirPrefix}"]`,
-    );
-    const fullPath = element?.getAttribute('data-test-directory');
-    await click(`[data-test-directory="${fullPath}"]`);
-
-    assert.dom(`[data-test-directory="${fullPath}"] .icon`).hasClass('open');
-
-    const instancePath = `${fullPath}${dirName}/`;
-    await waitFor(`[data-test-directory="${instancePath}"]`);
-    await click(`[data-test-directory="${instancePath}"]`);
-
-    assert
-      .dom(`[data-test-directory="${instancePath}"] .icon`)
-      .hasClass('open');
-
-    await waitFor(
-      `[data-test-file^="${instancePath}"][data-test-file$=".json"]`,
-    );
-    await click(`[data-test-file^="${instancePath}"][data-test-file$=".json"]`);
-    assert
-      .dom(`[data-test-file^="${instancePath}"][data-test-file$=".json"]`)
-      .exists()
-      .hasClass('selected');
+  async function verifySubmode(assert: Assert, submode: Submode) {
+    assert.dom(`[data-test-submode-switcher=${submode}]`).exists();
   }
 
-  async function verifyFileExists(
-    targetRealm: string,
-    targetDirPrefix: string,
-    dirName: string,
-    assert: Assert,
-  ) {
-    await visitOperatorMode({
-      submode: 'code',
-      fileView: 'browser',
-      codePath: `${targetRealm}index`,
-    });
-    await waitForCodeEditor();
-
-    await waitFor(`[data-test-directory^="${targetDirPrefix}"]`);
-    const element = document.querySelector(
-      `[data-test-directory^="${targetDirPrefix}"]`,
-    );
-    const fullPath = element?.getAttribute('data-test-directory');
-    await click(`[data-test-directory="${fullPath}"]`);
-
-    const filePath = `${fullPath}${dirName}`;
-    await waitFor(`[data-test-file="${filePath}"]`);
-    await click(`[data-test-file="${filePath}"]`);
-    assert
-      .dom(`[data-test-file="${filePath}"]`)
-      .exists('file exists')
-      .hasClass('selected', 'file is selected');
+  async function toggleFileTree() {
+    await click('[data-test-file-browser-toggle]');
   }
 
-  async function verifyFolderWithUUID(
-    targetRealm: string,
-    targetDirPrefix: string,
-    assert: Assert,
-  ) {
-    await visitOperatorMode({
-      submode: 'code',
-      fileView: 'browser',
-      codePath: `${targetRealm}index`,
-    });
-    await waitForCodeEditor();
-    await waitFor(`[data-test-directory^="${targetDirPrefix}-"]`);
-    const element = document.querySelector(
-      `[data-test-directory^="${targetDirPrefix}-"]`,
-    );
-    const fullPath = element?.getAttribute('data-test-directory');
+  // open directory if it is not already open and verify its in an open state
+  async function openDir(assert: Assert, dirPath: string) {
+    let selector = `[data-test-directory="${dirPath}"] .icon`; //.icon is the tag with open state class
+    let element = document.querySelector(selector);
+    if ((element as HTMLElement)?.classList.contains('closed')) {
+      await click(`[data-test-directory="${dirPath}"]`);
+    }
+    assert.dom(selector).hasClass('open');
+    let dirName = element?.getAttribute('data-test-directory');
+    return dirName;
+  }
 
-    // installed folder should be tailing with uuid
+  async function verifyFolderInFileTree(assert: Assert, dirName: string) {
+    let dirSelector = `[data-test-directory="${dirName}"]`;
+    assert.dom(dirSelector).exists();
+    return dirName;
+  }
+
+  async function verifyFolderWithUUIDInFileTree(
+    assert: Assert,
+    dirNamePrefix: string, //name without UUID
+  ) {
+    const element = document.querySelector(
+      `[data-test-directory^="${dirNamePrefix}-"]`,
+    );
+    const dirName = element?.getAttribute('data-test-directory');
     const uuid =
-      fullPath?.replace(`${targetDirPrefix}-`, '').replace('/', '') || '';
+      dirName?.replace(`${dirNamePrefix}-`, '').replace('/', '') || '';
     assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
+    return dirName;
+  }
+
+  async function verifyFileInFileTree(assert: Assert, fileName: string) {
+    const fileSelector = `[data-test-file="${fileName}"]`;
+    assert.dom(fileSelector).exists();
+  }
+
+  async function verifyJSONWithUUIDInFolder(assert: Assert, dirPath: string) {
+    const fileSelector = `[data-test-file^="${dirPath}"]`;
+    assert.dom(fileSelector).exists();
+    const element = document.querySelector(fileSelector);
+    const filePath = element?.getAttribute('data-test-file');
+    let parts = filePath?.split('/');
+    if (parts) {
+      let fileName = parts[parts.length - 1];
+      let uuid = fileName.replace(`.json`, '');
+      assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
+      return filePath;
+    } else {
+      throw new Error(
+        'file name shape not as expected when checking for [uuid].[extension]',
+      );
+    }
   }
 
   async function executeCommand(
@@ -328,46 +301,8 @@ module('Acceptance | catalog app tests', function (hooks) {
     });
   }
 
-  module('catalog listing', async function () {
-    test('after clicking "Use" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: mortgageCalculatorCardId,
-              format: 'isolated',
-            },
-          ],
-        ],
-      });
-      await verifyButtonAction(
-        '[data-test-catalog-listing-use-button]',
-        'Use',
-        'I would like to use this Mortgage Calculator under the following realm: http://test-realm/test/',
-        assert,
-      );
-    });
-
-    test('after clicking "Install" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: mortgageCalculatorCardId,
-              format: 'isolated',
-            },
-          ],
-        ],
-      });
-      await verifyButtonAction(
-        '[data-test-catalog-listing-install-button]',
-        'Install',
-        'I would like to install this Mortgage Calculator under the following realm: http://test-realm/test/',
-        assert,
-      );
-    });
-
-    test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
+  module('catalog', async function (hooks) {
+    hooks.beforeEach(async function () {
       await visitOperatorMode({
         stacks: [
           [
@@ -381,6 +316,9 @@ module('Acceptance | catalog app tests', function (hooks) {
 
       await waitFor('.catalog-content');
       await waitFor('.showcase-center-div');
+    });
+
+    test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
       await waitFor(
         `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
       );
@@ -392,227 +330,381 @@ module('Acceptance | catalog app tests', function (hooks) {
           'Mortgage Calculator',
           '"Mortgage Calculator" button exist in listing',
         );
-
       await verifyButtonAction(
-        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-remix-button]`,
+        assert,
+        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-remix-button]`,
         'Remix',
         'I would like to remix this Mortgage Calculator under the following realm: http://test-realm/test/',
-        assert,
       );
     });
 
-    test('use command copy the card to the workspace successfully', async function (assert) {
-      await visitOperatorMode({
-        stacks: [[]],
-      });
-
-      await executeCommand(
-        ListingUseCommand,
-        testRealmURL + 'Listing/author.json',
-        testRealm2URL,
+    test('after clicking "Preview" button, the example card opens up onto the stack', async function (assert) {
+      await waitFor(
+        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
       );
-
-      await verifyFolderWithUUID(testRealm2URL, 'author', assert);
-
-      await verifyInstanceExists(testRealm2URL, 'author', 'Author', assert);
+      assert
+        .dom(
+          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
+        )
+        .containsText(
+          'Mortgage Calculator',
+          '"Mortgage Calculator" button exist in listing',
+        );
+      await click(
+        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
+      );
+      assert
+        .dom(
+          `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
+        )
+        .exists();
+      assert
+        .dom(
+          `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
+        )
+        .hasText('Mortgage Calculator');
     });
+  });
 
-    test('use command copy skills from skill listing to the workspace successfully', async function (assert) {
-      let listingName = 'talk-like-a-pirate';
+  module('listing isolated', async function (hooks) {
+    hooks.beforeEach(async function () {
       await visitOperatorMode({
         stacks: [
           [
             {
-              id: `${catalogRealmURL}SkillListing/${listingName}`,
+              id: mortgageCalculatorCardId,
               format: 'isolated',
             },
           ],
         ],
       });
-      await executeCommand(
-        ListingUseCommand,
-        `${catalogRealmURL}SkillListing/${listingName}`,
-        testRealm2URL,
-      );
-      await verifyInstanceExists(testRealm2URL, listingName, 'Skill', assert);
     });
 
-    test('install command installs the card and example successfully', async function (assert) {
-      await visitOperatorMode({
-        stacks: [[]],
-      });
-
-      await executeCommand(
-        ListingInstallCommand,
-        testRealmURL + 'Listing/author.json',
-        testRealm2URL,
+    test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
+      await verifyButtonAction(
+        assert,
+        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-isolated-remix-button]`,
+        'Remix',
+        'I would like to remix this Mortgage Calculator under the following realm: http://test-realm/test/',
       );
-
-      await verifyInstanceExists(testRealm2URL, 'author', 'Author', assert);
     });
 
-    module(
-      'install command installs the listing with expected folder and file structure',
-      async function () {
-        test('card listing ', async function (assert) {
-          // Given a listing:
-          /*
-           * mortgage-calculator/
-           * mortgage-calculator/mortgage-calculator.gts
-           * mortgage-calculator/MortgageCalculator/example.json
-           */
-
-          // When I install the listing into my selected realm, it should be:
-          /*
-           *  mortgage-calculator-[uuid]/
-           *  mortgage-calculator-[uuid]/mortgage-calculator.gts
-           *  mortgage-calculator-[uuid]/MortgageCalculator/example.json
-           */
-
-          await visitOperatorMode({
-            stacks: [[]],
-          });
-
-          await executeCommand(
-            ListingInstallCommand,
-            mortgageCalculatorCardId,
-            testRealm2URL,
-          );
-
-          await verifyFolderWithUUID(
-            testRealm2URL,
-            'mortgage-calculator',
-            assert,
-          );
-
-          await verifyFileExists(
-            testRealm2URL,
-            'mortgage-calculator',
-            'mortgage-calculator.gts',
-            assert,
-          );
-
-          await verifyInstanceExists(
-            testRealm2URL,
-            'mortgage-calculator',
-            'MortgageCalculator',
-            assert,
-          );
-        });
-
-        test('field listing', async function (assert) {
-          // Given a listing:
-          /*
-           * fields/contact-link.gts
-           */
-
-          // When I install the listing into my selected realm, it should be:
-          /*
-           * contact-link-[uuid]/contact-link.gts
-           */
-
-          const contactLinkFieldListingCardId = `${catalogRealmURL}FieldListing/fb9494c4-0d61-4d2d-a6c0-7b16ca40b42b`;
-
-          await visitOperatorMode({
-            stacks: [[]],
-          });
-
-          await executeCommand(
-            ListingInstallCommand,
-            contactLinkFieldListingCardId,
-            testRealm2URL,
-          );
-
-          await visitOperatorMode({
-            submode: 'code',
-            fileView: 'browser',
-            codePath: `${testRealm2URL}index`,
-          });
-
-          await waitForCodeEditor();
-
-          await waitFor('[data-test-directory^="contact-link-"]');
-          const element = document.querySelector(
-            '[data-test-directory^="contact-link-"]',
-          );
-          const fullPath = element?.getAttribute('data-test-directory');
-
-          // installed field should be tailing with uuid
-          const uuid =
-            fullPath?.replace('contact-link-', '').replace('/', '') || '';
-          assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
-
-          await verifyFileExists(
-            testRealm2URL,
-            'contact-link',
-            'contact-link.gts',
-            assert,
-          );
-        });
-      },
-    );
-
-    test('remix command installs the card and redirects to code mode with persisted playground selection for first example successfully', async function (assert) {
-      await visitOperatorMode({
-        stacks: [[]],
-      });
-
-      await executeCommand(
-        ListingRemixCommand,
-        testRealmURL + 'Listing/author.json',
-        testRealm2URL,
+    test('after clicking "Preview" button, the example card opens up onto the stack', async function (assert) {
+      await click(
+        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-isolated-preview-button]`,
       );
-
-      await waitForCodeEditor();
       assert
-        .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
-        .hasText('Author');
+        .dom(
+          `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
+        )
+        .exists();
+      assert
+        .dom(
+          `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
+        )
+        .hasText('Mortgage Calculator');
     });
+  });
 
-    test('use is successful even if target realm does not have a trailing slash', async function (assert) {
+  module('commands', async function (hooks) {
+    hooks.beforeEach(async function () {
+      // we always run a command inside interact mode
       await visitOperatorMode({
         stacks: [[]],
       });
+    });
+    module('"use"', async function () {
+      test('card listing', async function (assert) {
+        const listingName = 'author';
+        const listingId = testRealmURL + 'Listing/author.json';
+        await executeCommand(ListingUseCommand, listingId, testRealm2URL);
+        await visitOperatorMode({
+          submode: 'code',
+          fileView: 'browser',
+          codePath: `${testRealm2URL}index`,
+        });
+        await waitForCodeEditor();
+        let outerFolder = await verifyFolderWithUUIDInFileTree(
+          assert,
+          listingName,
+        );
+        if (outerFolder) {
+          await openDir(assert, outerFolder);
+        }
 
+        let instanceFolder = outerFolder + 'Author' + '/';
+        await verifyFolderInFileTree(assert, instanceFolder);
+        if (instanceFolder) {
+          await openDir(assert, instanceFolder);
+        }
+        await verifyJSONWithUUIDInFolder(assert, instanceFolder);
+      });
+    });
+    module('"install"', async function () {
+      test('card listing ', async function (assert) {
+        // Given a card listing named "mortgage-calculator":
+        /*
+         * mortgage-calculator/mortgage-calculator.gts <- spec points to this
+         * mortgage-calculator/MortgageCalculator/example.json <- listing points to this
+         */
+
+        // When I install the listing into my selected realm, it should be:
+        /*
+         *  mortgage-calculator-[uuid]/
+         *  mortgage-calculator-[uuid]/mortgage-calculator.gts
+         *  mortgage-calculator-[uuid]/MortgageCalculator/[uuid].json
+         */
+
+        const listingName = 'mortgage-calculator';
+
+        await executeCommand(
+          ListingInstallCommand,
+          mortgageCalculatorCardId,
+          testRealm2URL,
+        );
+        await visitOperatorMode({
+          submode: 'code',
+          fileView: 'browser',
+          codePath: `${testRealm2URL}index`,
+        });
+        await waitForCodeEditor();
+
+        // mortgage-calculator-[uuid]/
+        let outerFolder = await verifyFolderWithUUIDInFileTree(
+          assert,
+          listingName,
+        );
+        if (outerFolder) {
+          await openDir(assert, outerFolder);
+        }
+        // mortgage-calculator-[uuid]/mortgage-calculator.gts
+        let gtsFilePath = outerFolder + 'mortgage-calculator.gts';
+        await verifyFileInFileTree(assert, gtsFilePath);
+        // mortgage-calculator-[uuid]/MortgageCalculator/example.json
+        let instanceFolder = outerFolder + 'MortgageCalculator' + '/';
+        await verifyFolderInFileTree(assert, instanceFolder);
+        if (instanceFolder) {
+          await openDir(assert, instanceFolder);
+        }
+        await verifyJSONWithUUIDInFolder(assert, instanceFolder);
+      });
+
+      test('field listing', async function (assert) {
+        // Given a field listing named "contact-link":
+        /*
+         * fields/contact-link.gts <- spec points to this
+         */
+        // When I install the listing into my selected realm, it should be:
+        /*
+         * contact-link-[uuid]/contact-link.gts
+         */
+
+        const listingName = 'contact-link';
+        const contactLinkFieldListingCardId = `${catalogRealmURL}FieldListing/fb9494c4-0d61-4d2d-a6c0-7b16ca40b42b`;
+
+        await executeCommand(
+          ListingInstallCommand,
+          contactLinkFieldListingCardId,
+          testRealm2URL,
+        );
+
+        await visitOperatorMode({
+          submode: 'code',
+          fileView: 'browser',
+          codePath: `${testRealm2URL}index`,
+        });
+
+        await waitForCodeEditor();
+
+        // contact-link-[uuid]/
+        let outerFolder = await verifyFolderWithUUIDInFileTree(
+          assert,
+          listingName,
+        );
+        if (outerFolder) {
+          await openDir(assert, outerFolder);
+        }
+        let gtsFilePath = outerFolder + 'contact-link.gts';
+        // contact-link-[uuid]/contact-link.gts
+        await verifyFileInFileTree(assert, gtsFilePath);
+      });
+
+      test('skill listing', async function (assert) {
+        // Given a skill listing named "talk-like-a-pirate":
+        /*
+         * SkillListing/talk-like-a-pirate.json <- listing points to this
+         */
+        // When I install the listing into my selected realm, it should be:
+        /*
+         * talk-like-a-pirate-[uuid]/Skill/[uuid].json
+         */
+        const listingName = 'talk-like-a-pirate';
+        const listingId = `${catalogRealmURL}SkillListing/${listingName}`;
+        await executeCommand(ListingInstallCommand, listingId, testRealm2URL);
+        await visitOperatorMode({
+          submode: 'code',
+          fileView: 'browser',
+          codePath: `${testRealm2URL}index`,
+        });
+        await waitForCodeEditor();
+
+        let outerFolder = await verifyFolderWithUUIDInFileTree(
+          assert,
+          listingName,
+        );
+        if (outerFolder) {
+          await openDir(assert, outerFolder);
+        }
+        let instanceFolder = outerFolder + 'Skill' + '/';
+        await verifyFolderInFileTree(assert, instanceFolder);
+        if (instanceFolder) {
+          await openDir(assert, instanceFolder);
+        }
+        await verifyJSONWithUUIDInFolder(assert, instanceFolder);
+      });
+    });
+    module('"remix"', async function () {
+      test('card listing: installs the card and redirects to code mode with persisted playground selection for first example successfully', async function (assert) {
+        const listingName = 'author';
+        const listingId = `${testRealmURL}Listing/${listingName}`;
+        await visitOperatorMode({
+          stacks: [[]],
+        });
+        await executeCommand(ListingRemixCommand, listingId, testRealm2URL);
+        await waitForCodeEditor();
+        await verifySubmode(assert, 'code');
+        await toggleFileTree();
+        let outerFolder = await verifyFolderWithUUIDInFileTree(
+          assert,
+          listingName,
+        );
+        let instanceFolder = outerFolder + 'Author/';
+        await verifyFolderInFileTree(assert, instanceFolder);
+        let gtsFilePath = outerFolder + `${listingName}.gts`;
+        await verifyFileInFileTree(assert, gtsFilePath);
+        await waitForCodeEditor();
+        assert
+          .dom(
+            '[data-test-playground-panel] [data-test-boxel-card-header-title]',
+          )
+          .hasText('Author');
+      });
+      test('skill listing: installs the card and redirects to code mode with preview on first skill successfully', async function (assert) {
+        const listingName = 'talk-like-a-pirate';
+        const listingId = `${catalogRealmURL}SkillListing/${listingName}`;
+        await executeCommand(ListingRemixCommand, listingId, testRealm2URL);
+        await waitForCodeEditor();
+        await verifySubmode(assert, 'code');
+        await toggleFileTree();
+        let outerFolder = await verifyFolderWithUUIDInFileTree(
+          assert,
+          listingName,
+        );
+        if (outerFolder) {
+          await openDir(assert, outerFolder);
+        }
+        let instanceFolder = outerFolder + 'Skill' + '/';
+        await verifyFolderInFileTree(assert, instanceFolder);
+        if (instanceFolder) {
+          await openDir(assert, instanceFolder);
+        }
+        let filePath = await verifyJSONWithUUIDInFolder(assert, instanceFolder);
+        let cardId = testRealm2URL + filePath;
+        let headerId = cardId.replace('.json', '');
+        await waitFor('[data-test-card-resource-loaded]');
+        assert
+          .dom(`[data-test-code-mode-card-renderer-header="${headerId}"]`)
+          .exists();
+      });
+    });
+
+    test('"use" is successful even if target realm does not have a trailing slash', async function (assert) {
+      const listingName = 'author';
+      const listingId = testRealmURL + 'Listing/author.json';
       await executeCommand(
         ListingUseCommand,
-        testRealmURL + 'Listing/author.json',
-        removeTrailingSlash(testRealm2URL), //realm =  http//test-realm/test-2:
+        listingId,
+        removeTrailingSlash(testRealm2URL),
       );
+      await visitOperatorMode({
+        submode: 'code',
+        fileView: 'browser',
+        codePath: `${testRealm2URL}index`,
+      });
+      await waitForCodeEditor();
+      let outerFolder = await verifyFolderWithUUIDInFileTree(
+        assert,
+        listingName,
+      );
+      if (outerFolder) {
+        await openDir(assert, outerFolder);
+      }
 
-      await verifyFolderWithUUID(testRealm2URL, 'author', assert);
-
-      await verifyInstanceExists(testRealm2URL, 'author', 'Author', assert);
+      let instanceFolder = outerFolder + 'Author' + '/';
+      await verifyFolderInFileTree(assert, instanceFolder);
+      if (instanceFolder) {
+        await openDir(assert, instanceFolder);
+      }
+      await verifyJSONWithUUIDInFolder(assert, instanceFolder);
     });
 
-    test('install is succesful even if target realm does not have a trailing slash', async function (assert) {
-      await visitOperatorMode({
-        stacks: [[]],
-      });
-
+    test('"install" is successful even if target realm does not have a trailing slash', async function (assert) {
+      const listingName = 'mortgage-calculator';
       await executeCommand(
         ListingInstallCommand,
-        testRealmURL + 'Listing/author.json',
-        removeTrailingSlash(testRealm2URL), //realm =  http//test-realm/test-2:
+        mortgageCalculatorCardId,
+        removeTrailingSlash(testRealm2URL),
       );
-      await verifyInstanceExists(testRealm2URL, 'author', 'Author', assert);
+      await visitOperatorMode({
+        submode: 'code',
+        fileView: 'browser',
+        codePath: `${testRealm2URL}index`,
+      });
+      await waitForCodeEditor();
+
+      // mortgage-calculator-[uuid]/
+      let outerFolder = await verifyFolderWithUUIDInFileTree(
+        assert,
+        listingName,
+      );
+      if (outerFolder) {
+        await openDir(assert, outerFolder);
+      }
+      // mortgage-calculator-[uuid]/mortgage-calculator.gts
+      let gtsFilePath = outerFolder + 'mortgage-calculator.gts';
+      await verifyFileInFileTree(assert, gtsFilePath);
+      // mortgage-calculator-[uuid]/MortgageCalculator/example.json
+      let instanceFolder = outerFolder + 'MortgageCalculator' + '/';
+      await verifyFolderInFileTree(assert, instanceFolder);
+      if (instanceFolder) {
+        await openDir(assert, instanceFolder);
+      }
+      await verifyJSONWithUUIDInFolder(assert, instanceFolder);
     });
 
-    test('remix is succesful even if target realm does not have a trailing slash', async function (assert) {
+    test('"remix" is successful even if target realm does not have a trailing slash', async function (assert) {
+      const listingName = 'author';
+      const listingId = `${testRealmURL}Listing/${listingName}`;
       await visitOperatorMode({
         stacks: [[]],
       });
-
       await executeCommand(
         ListingRemixCommand,
-        testRealmURL + 'Listing/author.json',
-        removeTrailingSlash(testRealm2URL), //realm =  http//test-realm/test-2:
+        listingId,
+        removeTrailingSlash(testRealm2URL),
       );
-
-      await waitFor('[data-test-module-inspector-view="preview"]', {
-        timeout: 5_000,
-      });
-      await click('[data-test-module-inspector-view="preview"]');
+      await waitForCodeEditor();
+      await verifySubmode(assert, 'code');
+      await toggleFileTree();
+      let outerFolder = await verifyFolderWithUUIDInFileTree(
+        assert,
+        listingName,
+      );
+      let instanceFolder = outerFolder + 'Author/';
+      await verifyFolderInFileTree(assert, instanceFolder);
+      let gtsFilePath = outerFolder + `${listingName}.gts`;
+      await verifyFileInFileTree(assert, gtsFilePath);
+      await waitForCodeEditor();
       assert
         .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
         .hasText('Author');

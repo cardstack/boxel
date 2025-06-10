@@ -148,6 +148,15 @@ module(basename(__filename), function () {
           },
           {
             type: 'card-type-summary',
+            id: `${testRealm.url}friend-with-used-link/FriendWithUsedLink`,
+            attributes: {
+              displayName: 'FriendWithUsedLink',
+              total: 2,
+              iconHTML,
+            },
+          },
+          {
+            type: 'card-type-summary',
             id: `${testRealm.url}home/Home`,
             attributes: {
               displayName: 'Home',

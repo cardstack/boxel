@@ -15,8 +15,11 @@ import Modifier from 'ember-modifier';
 
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
-import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
-import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
+import {
+  type CodeData,
+  makeCodeDiffStats,
+} from '@cardstack/host/lib/formatted-message/utils';
+import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
@@ -72,6 +75,20 @@ interface CodeBlockDiffEditorSignature {
     originalCode?: string | null;
     modifiedCode?: string | null;
     language?: string | null;
+    updateDiffEditorStats?: (stats: {
+      linesAdded: number;
+      linesRemoved: number;
+    }) => void;
+  };
+}
+
+interface CodeBlockHeaderSignature {
+  Args: {
+    codeData: Partial<CodeData>;
+    diffEditorStats?: {
+      linesRemoved: number;
+      linesAdded: number;
+    } | null;
   };
 }
 
@@ -83,10 +100,21 @@ interface Signature {
     modifiedCode?: string | null;
     language?: string | null;
     dimmed?: boolean;
+    mode?: 'edit' | 'create';
+    fileUrl?: string;
+    diffEditorStats?: {
+      linesRemoved: number;
+      linesAdded: number;
+    } | null;
+    updateDiffEditorStats?: (stats: {
+      linesAdded: number;
+      linesRemoved: number;
+    }) => void;
   };
   Blocks: {
     default: [
       {
+        editorHeader: ComponentLike<CodeBlockHeaderSignature>;
         editor: ComponentLike<CodeBlockEditorSignature>;
         diffEditor: ComponentLike<CodeBlockDiffEditorSignature>;
         actions: ComponentLike<CodeBlockActionsSignature>;
@@ -97,19 +125,26 @@ interface Signature {
 }
 
 let CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
-  {{yield
-    (hash
-      editor=(component CodeBlockEditor monacoSDK=@monacoSDK codeData=@codeData)
-      diffEditor=(component
-        CodeBlockDiffEditor
-        monacoSDK=@monacoSDK
-        originalCode=@originalCode
-        modifiedCode=@modifiedCode
-        language=@language
+  <div ...attributes>
+    {{yield
+      (hash
+        editorHeader=(component
+          CodeBlockHeader codeData=@codeData diffEditorStats=@diffEditorStats
+        )
+        editor=(component
+          CodeBlockEditor monacoSDK=@monacoSDK codeData=@codeData
+        )
+        diffEditor=(component
+          CodeBlockDiffEditor
+          monacoSDK=@monacoSDK
+          originalCode=@originalCode
+          modifiedCode=@modifiedCode
+          language=@language
+        )
+        actions=(component CodeBlockActionsComponent codeData=@codeData)
       )
-      actions=(component CodeBlockActionsComponent codeData=@codeData)
-    )
-  }}
+    }}
+  </div>
 </template>;
 
 export default CodeBlockComponent;
@@ -132,6 +167,10 @@ interface MonacoDiffEditorSignature {
       modifiedCode?: string | null;
       language?: string | null;
       editorDisplayOptions: MonacoEditorOptions;
+      updateDiffEditorStats?: (stats: {
+        linesAdded: number;
+        linesRemoved: number;
+      }) => void;
     };
   };
 }
@@ -150,6 +189,7 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
       originalCode,
       modifiedCode,
       language,
+      updateDiffEditorStats,
     }: MonacoDiffEditorSignature['Args']['Named'],
   ) {
     if (originalCode === undefined || modifiedCode === undefined) {
@@ -202,6 +242,12 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
       this.monacoState = {
         editor,
       };
+
+      editor.onDidUpdateDiff(() => {
+        if (updateDiffEditorStats) {
+          updateDiffEditorStats(makeCodeDiffStats(editor.getLineChanges()));
+        }
+      });
     }
 
     registerDestructor(this, () => {
@@ -361,10 +407,7 @@ class CodeBlockEditor extends Component<Signature> {
 
   <template>
     <style scoped>
-      .code-block {
-        margin-bottom: 15px;
-        width: calc(100% + 2 * var(--boxel-sp));
-        margin-left: calc(-1 * var(--boxel-sp));
+      .code-block-editor {
         max-height: 250px;
       }
 
@@ -379,7 +422,7 @@ class CodeBlockEditor extends Component<Signature> {
         codeData=@codeData
         editorDisplayOptions=this.editorDisplayOptions
       }}
-      class='code-block {{if @dimmed "dimmed"}}'
+      class='code-block-editor {{if @dimmed "dimmed"}}'
       data-test-editor
     >
       {{! Don't put anything here in this div as monaco modifier will override this element }}
@@ -405,22 +448,36 @@ class CodeBlockDiffEditor extends Component<Signature> {
     automaticLayout: true,
     scrollBeyondLastLine: false,
     padding: {
-      bottom: 8,
+      bottom: 0,
+      left: 8,
+      right: 8,
+      top: 8,
     },
     theme: 'vs-dark',
+    lineNumbers: 'off' as _MonacoSDK.editor.LineNumbersType | undefined,
   };
+
+  @tracked diffEditorStats: {
+    linesAdded: number;
+    linesRemoved: number;
+  } | null = null;
 
   <template>
     <style scoped>
-      .code-block {
-        margin-bottom: 15px;
-        width: calc(100% + 2 * var(--boxel-sp));
-        margin-left: calc(-1 * var(--boxel-sp));
+      .code-block-editor {
         max-height: 250px;
       }
 
       :deep(.line-insert) {
         background-color: rgb(19 255 32 / 66%) !important;
+      }
+
+      :deep(.diff-hidden-lines) {
+        margin-left: 9px;
+      }
+
+      :deep(span[title='Double click to unfold']) {
+        margin-left: 5px;
       }
     </style>
     <div
@@ -430,11 +487,111 @@ class CodeBlockDiffEditor extends Component<Signature> {
         language=@language
         originalCode=@originalCode
         modifiedCode=@modifiedCode
+        updateDiffEditorStats=@updateDiffEditorStats
       }}
-      class='code-block code-block-diff'
+      class='code-block-editor code-block-diff'
       data-test-code-diff-editor
     >
       {{! Don't put anything here in this div as monaco modifier will override this element }}
+    </div>
+  </template>
+}
+
+class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  get fileName() {
+    let realmUrl = this.operatorModeStateService.realmURL.href;
+    let fileUrl = this.args.codeData.fileUrl;
+
+    return fileUrl?.replace(realmUrl, '');
+  }
+
+  <template>
+    <style scoped>
+      .code-block-diff-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background-color: #2c2c3c;
+        color: #ffffff;
+        padding: 8px 12px;
+        border-top-left-radius: 12px;
+        border-top-right-radius: 12px;
+        font-size: 14px;
+        height: 50px;
+      }
+
+      .code-block-diff-header .left-section {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .code-block-diff-header .mode {
+      }
+
+      .code-block-diff-header .file-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .code-block-diff-header .file-info .edit-icon {
+        background-color: #f44a1c;
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-weight: bold;
+        color: #ffffff;
+      }
+
+      .code-block-diff-header .file-info .filename {
+        font-weight: 600;
+      }
+
+      .code-block-diff-header .right-section {
+        display: flex;
+        align-items: center;
+      }
+
+      .code-block-diff-header .changes {
+        display: flex;
+        gap: 6px;
+        font-weight: 600;
+      }
+
+      .code-block-diff-header .changes .removed {
+        color: #ff5f5f;
+      }
+
+      .code-block-diff-header .changes .added {
+        color: #66ff99;
+      }
+
+      .mode {
+        color: var(--boxel-300);
+      }
+    </style>
+    <div class='code-block-diff-header'>
+      <div class='left-section'>
+        <div class='mode' data-test-file-mode>
+          {{if @codeData.isNewFile 'Create' 'Edit'}}
+        </div>
+        <div class='file-info' data-test-file-name>
+          <span class='filename'>{{this.fileName}}</span>
+        </div>
+      </div>
+      <div class='right-section'>
+        {{#if @diffEditorStats}}
+          <div class='changes'>
+            <span class='removed' data-test-removed-lines>
+              -{{@diffEditorStats.linesRemoved}}
+            </span>
+            <span class='added' data-test-added-lines>
+              +{{@diffEditorStats.linesAdded}}
+            </span>
+          </div>
+        {{/if}}
+      </div>
     </div>
   </template>
 }
@@ -444,13 +601,15 @@ let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> 
     <style scoped>
       .code-block-actions {
         background: black;
-        height: 50px;
+        height: 45px;
         padding: var(--boxel-sp-sm) 27px;
         padding-right: var(--boxel-sp);
         display: flex;
-        justify-content: flex-start;
-        width: calc(100% + 2 * var(--boxel-sp));
-        margin-left: calc(-1 * var(--boxel-sp));
+        justify-content: flex-end;
+        gap: var(--boxel-sp-xs);
+        border-bottom-left-radius: 12px;
+        border-bottom-right-radius: 12px;
+        margin-top: -5px;
       }
     </style>
     <div class='code-block-actions'>
@@ -487,8 +646,8 @@ class CopyCodeButton extends Component<CopyCodeButtonSignature> {
         font: 600 var(--boxel-font-xs);
         padding: 0;
         display: flex;
-        margin: auto;
-        width: 100%;
+        align-items: center;
+        width: auto;
       }
 
       .code-copy-button svg {

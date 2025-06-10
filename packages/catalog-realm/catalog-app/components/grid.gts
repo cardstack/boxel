@@ -67,6 +67,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
           @query={{@query}}
           @format='fitted'
           @realms={{@realms}}
+          @isLive={{true}}
         >
           <:loading>
             Loading...

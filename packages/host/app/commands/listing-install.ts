@@ -41,6 +41,7 @@ interface InstallListingResult {
   selectedCodeRef?: ResolvedCodeRef;
   shouldPersistPlaygroundSelection: boolean;
   firstExampleCardId?: string;
+  skillCardIds?: string[];
 }
 
 export async function installListing({
@@ -140,22 +141,25 @@ export async function installListing({
     }
   }
 
+  let skillCardIds: string[] | undefined;
   if ('skills' in listing && Array.isArray(listing.skills)) {
-    await Promise.all(
-      listing.skills.map((skill: Skill) =>
-        new CopyCardCommand(commandContext).execute({
+    let results = await Promise.all(
+      listing.skills.map((skill: Skill) => {
+        return new CopyCardCommand(commandContext).execute({
           sourceCard: skill,
           realm: realmUrl,
           localDir,
-        }),
-      ),
+        });
+      }),
     );
+    skillCardIds = results.map((r) => r.newCardId);
   }
 
   return {
     selectedCodeRef,
     shouldPersistPlaygroundSelection,
     firstExampleCardId,
+    skillCardIds,
   };
 }
 
