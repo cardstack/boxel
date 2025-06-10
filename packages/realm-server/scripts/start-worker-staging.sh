@@ -14,8 +14,5 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='https://realms-staging.stack.cards/experiments/' \
   --toUrl='https://realms-staging.stack.cards/experiments/' \
   \
-  --fromUrl='https://realms-staging.stack.cards/seed/' \
-  --toUrl='https://realms-staging.stack.cards/seed/' \
-  \
   --fromUrl='https://realms-staging.stack.cards/catalog/' \
   --toUrl='https://realms-staging.stack.cards/catalog/'

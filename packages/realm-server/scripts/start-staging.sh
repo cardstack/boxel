@@ -1,7 +1,6 @@
 #! /bin/sh
 pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
-pnpm setup:seed-in-deployment
 pnpm setup:catalog-in-deployment
 NODE_NO_WARNINGS=1 \
   MATRIX_URL=https://matrix-staging.stack.cards \
@@ -12,8 +11,6 @@ NODE_NO_WARNINGS=1 \
   --matrixURL='https://matrix-staging.stack.cards' \
   --realmsRootPath='/persistent/realms' \
   --serverURL='https://realms-staging.stack.cards' \
-  --seedPath='/persistent/seed' \
-  --seedRealmURL='https://realms-staging.stack.cards/seed/' \
   \
   --path='/persistent/base' \
   --username='base_realm' \
@@ -25,11 +22,6 @@ NODE_NO_WARNINGS=1 \
   --username='experiments_realm' \
   --fromUrl='https://realms-staging.stack.cards/experiments/' \
   --toUrl='https://realms-staging.stack.cards/experiments/' \
-  \
-  --path='/persistent/seed' \
-  --username='seed_realm' \
-  --fromUrl='https://realms-staging.stack.cards/seed/' \
-  --toUrl='https://realms-staging.stack.cards/seed/' \
   \
   --path='/persistent/catalog' \
   --username='catalog_realm' \

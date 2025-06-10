@@ -105,7 +105,6 @@ module(basename(__filename), function () {
         let runner: QueueRunner;
         let request2: SuperTest<Test>;
         let testRealmDir: string;
-        let seedRealm: Realm | undefined;
 
         setupPermissionedRealm(hooks, {
           permissions: {
@@ -123,7 +122,6 @@ module(basename(__filename), function () {
             virtualNetwork.unmount(testRealm2.handle);
           }
           ({
-            seedRealm,
             testRealm: testRealm2,
             testRealmServer: testRealmServer2,
             testRealmHttpServer: testRealmHttpServer2,
@@ -151,9 +149,6 @@ module(basename(__filename), function () {
             await startRealmServer(dbAdapter, publisher, runner);
           },
           afterEach: async () => {
-            if (seedRealm) {
-              virtualNetwork.unmount(seedRealm.handle);
-            }
             await closeServer(testRealmHttpServer2);
           },
         });
@@ -400,7 +395,6 @@ module(basename(__filename), function () {
                     endpoint,
                     backgroundURL: 'http://example.com/background.jpg',
                     iconURL: 'http://example.com/icon.jpg',
-                    copyFromSeedRealm: false,
                   },
                 },
               }),
@@ -419,7 +413,6 @@ module(basename(__filename), function () {
                   endpoint,
                   backgroundURL: 'http://example.com/background.jpg',
                   iconURL: 'http://example.com/icon.jpg',
-                  copyFromSeedRealm: false,
                 },
               },
             },
@@ -1018,13 +1011,6 @@ module(basename(__filename), function () {
                   ...testRealmInfo,
                   realmUserId: '@node-test_realm:localhost',
                 },
-              },
-              // the seed realm is automatically added to the realm server running
-              // on port 4445 as a public realm
-              {
-                type: 'catalog-realm',
-                id: `${new URL('/seed/', testRealm2URL)}`,
-                attributes: testRealmInfo,
               },
             ],
           });

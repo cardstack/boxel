@@ -406,20 +406,17 @@ export default class MatrixService extends Service {
     name,
     iconURL,
     backgroundURL,
-    copyFromSeedRealm,
   }: {
     endpoint: string;
     name: string;
     iconURL?: string;
     backgroundURL?: string;
-    copyFromSeedRealm?: boolean;
   }) {
     let personalRealmURL = await this.realmServer.createRealm({
       endpoint,
       name,
       iconURL,
       backgroundURL,
-      copyFromSeedRealm,
     });
     let { realms = [] } =
       (await this.client.getAccountDataFromServer<{ realms: string[] }>(
