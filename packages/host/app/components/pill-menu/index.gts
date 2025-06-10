@@ -8,7 +8,7 @@ import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask } from 'ember-concurrency';
 
 import { Button, Header } from '@cardstack/boxel-ui/components';
-import { cn, gt, not, or } from '@cardstack/boxel-ui/helpers';
+import { gt, or } from '@cardstack/boxel-ui/helpers';
 
 import {
   DropdownArrowFilled,
@@ -30,13 +30,13 @@ export type PillMenuItem = {
 };
 
 interface Signature {
-  Element: HTMLDivElement;
+  Element: HTMLDivElement | HTMLButtonElement;
   Args: {
     title?: string;
     items: PillMenuItem[];
     itemDisplayName?: string;
-    isExpandableHeader?: boolean;
-    headerAction?: () => void;
+    onExpand?: () => void;
+    onCollapse?: () => void;
     canAttachCard?: boolean;
     query?: CardCatalogQuery;
     onChooseCard?: (cardId: string) => void;
@@ -45,47 +45,38 @@ interface Signature {
   Blocks: {
     headerIcon: [];
     headerDetail: [];
-    headerButton: [];
     content: [];
   };
 }
 
 export default class PillMenu extends Component<Signature> {
   <template>
-    <div
-      class={{cn 'pill-menu' pill-menu--minimized=(not this.isExpanded)}}
-      {{onClickOutside this.closeMenu exceptSelector='.card-catalog-modal'}}
-      ...attributes
-    >
-      <Header class='menu-header' @title={{@title}} data-test-pill-menu-header>
-        <:icon>
-          {{yield to='headerIcon'}}
-        </:icon>
-        <:detail>
-          {{yield to='headerDetail'}}
-        </:detail>
-        <:actions>
-          <button
-            {{on 'click' this.headerAction}}
-            class={{cn
-              'header-button'
-              expandable-header-button=@isExpandableHeader
-            }}
-            data-test-pill-menu-header-button
-          >
-            {{#if @isExpandableHeader}}
-              {{#if this.isExpanded}}
-                <DropdownArrowUp class='rotate-left' width='8px' height='8px' />
-              {{else}}
-                <DropdownArrowFilled class='flip' width='8px' height='8px' />
-              {{/if}}
-            {{else}}
-              {{yield to='headerButton'}}
-            {{/if}}
-          </button>
-        </:actions>
-      </Header>
-      {{#if this.isExpanded}}
+    {{#if this.isExpanded}}
+      <div
+        class='pill-menu'
+        {{onClickOutside
+          this.collapseMenu
+          exceptSelector='.card-catalog-modal'
+        }}
+        ...attributes
+      >
+        <Header class='menu-header' data-test-pill-menu-header>
+          <:icon>
+            {{yield to='headerIcon'}}
+          </:icon>
+          <:detail>
+            {{yield to='headerDetail'}}
+          </:detail>
+          <:actions>
+            <button
+              {{on 'click' this.collapseMenu}}
+              class='header-button'
+              data-test-pill-menu-button
+            >
+              <DropdownArrowUp class='rotate-left' width='8px' height='8px' />
+            </button>
+          </:actions>
+        </Header>
         {{#if (or (has-block 'content') (gt @items.length 0))}}
           <div class='menu-content'>
             {{yield to='content'}}
@@ -124,10 +115,23 @@ export default class PillMenu extends Component<Signature> {
             </Button>
           </footer>
         {{/if}}
-      {{/if}}
-    </div>
+      </div>
+    {{else}}
+      <button
+        {{on 'click' this.expandMenu}}
+        class='pill-menu-button'
+        data-test-pill-menu-button
+        ...attributes
+      >
+        {{yield to='headerIcon'}}
+        {{yield to='headerDetail'}}
+        <DropdownArrowFilled class='minimized-arrow' width='8px' height='8px' />
+      </button>
+    {{/if}}
     <style scoped>
       .pill-menu {
+        --boxel-header-gap: var(--boxel-sp-xxs);
+        --boxel-header-detail-margin-left: 0;
         --pill-menu-spacing: var(--boxel-pill-menu-spacing, var(--boxel-sp-xs));
         --boxel-header-padding: 0 0 0 var(--pill-menu-spacing);
         --boxel-header-detail-max-width: 100%;
@@ -145,17 +149,40 @@ export default class PillMenu extends Component<Signature> {
         font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp);
         box-shadow: var(--boxel-box-shadow);
+        transition: width 0.2s ease-in;
+      }
+      .pill-menu-button {
+        display: flex;
+        align-items: center;
+        font: 600 var(--boxel-font-xs);
+        gap: var(--boxel-sp-xxs);
+        padding: var(
+          --boxel-pill-menu-button-padding,
+          var(--pill-menu-spacing)
+        );
+        border: none;
+        white-space: nowrap;
+        background-color: transparent;
+        border: 1px solid transparent;
+        border-radius: var(--boxel-border-radius-xl);
+        width: fit-content;
+      }
+      .pill-menu-button:hover {
+        border: 1px solid var(--boxel-400);
       }
       .menu-header {
         overflow: hidden;
+        padding: var(
+          --boxel-pill-menu-header-padding,
+          var(--pill-menu-spacing)
+        );
       }
       .menu-header :deep(.title) {
         font: 600 var(--boxel-font);
       }
       .header-button {
         margin: var(--button-outline);
-        padding: var(--pill-menu-spacing);
-        padding-left: 0;
+        padding: 0;
         background: none;
         border: none;
         border-radius: var(--boxel-border-radius-xl);
@@ -185,6 +212,12 @@ export default class PillMenu extends Component<Signature> {
         gap: var(--pill-menu-spacing);
         overflow: hidden;
       }
+      .menu-footer {
+        padding: var(
+          --boxel-pill-menu-footer-padding,
+          var(--pill-menu-spacing)
+        );
+      }
       .pill-list {
         display: grid;
         gap: var(--boxel-sp-xs);
@@ -202,9 +235,6 @@ export default class PillMenu extends Component<Signature> {
       .pill-list:deep(.card-content) {
         max-width: initial;
         font: 600 var(--boxel-font-xs);
-      }
-      .menu-footer {
-        padding: var(--boxel-sp-xxs);
       }
       .attach-button {
         --boxel-button-font: 600 var(--boxel-font-xs);
@@ -229,54 +259,38 @@ export default class PillMenu extends Component<Signature> {
       .pill-menu :deep(.menu-header .detail) {
         font: 600 var(--boxel-font-xs);
       }
-      .pill-menu:not(.pill-menu--minimized) :deep(.menu-header .header-icon) {
+      .pill-menu :deep(.menu-header .header-icon) {
         order: 2;
       }
-      .pill-menu:not(.pill-menu--minimized) :deep(.menu-header .detail) {
+      .pill-menu :deep(.menu-header .detail) {
         order: 3;
       }
-      .pill-menu:not(.pill-menu--minimized) :deep(.menu-header .content) {
+      .pill-menu :deep(.menu-header .content) {
         order: 1;
         margin-left: 0;
-      }
-      .pill-menu :deep(.menu-header .content .expandable-header-button) {
-        padding: 0;
-      }
-      .pill-menu :deep(.menu-header .content) {
-        margin-left: var(--boxel-sp-xs);
-      }
-      .pill-menu :deep(.menu-header) {
-        padding: var(--pill-menu-spacing);
       }
       .rotate-left {
         transform: rotate(-90deg);
         transform-origin: center;
       }
-      .flip {
+      .minimized-arrow {
         transform: rotate(180deg);
         transform-origin: center;
+        margin-left: var(--boxel-sp-xs);
       }
     </style>
   </template>
 
-  @tracked isExpanded = !this.args.isExpandableHeader;
+  @tracked isExpanded = false;
 
-  @action headerAction() {
-    if (this.args.isExpandableHeader) {
-      this.toggleMenu();
-    }
-    this.args.headerAction?.();
+  @action expandMenu() {
+    this.isExpanded = true;
+    this.args.onExpand?.();
   }
 
-  @action toggleMenu() {
-    this.isExpanded = !this.isExpanded;
-  }
-
-  @action closeMenu() {
-    if (!this.args.isExpandableHeader) {
-      return;
-    }
+  @action collapseMenu() {
     this.isExpanded = false;
+    this.args.onCollapse?.();
   }
 
   @action private toggleActive(item: PillMenuItem) {

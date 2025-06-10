@@ -150,8 +150,8 @@ export default class Room extends Component<Signature> {
               @canSend={{this.canSend}}
               data-test-message-field={{@roomId}}
             />
-            <!-- TODO: Remove this bottom section after we move the attachment picker to chat input 
-                  and llm chooser to area__actions -->
+            {{! TODO: Remove this bottom section after we move the attachment picker to chat input 
+                  and llm chooser to area__actions }}
             <div class='chat-input-area__bottom-section'>
               <AiAssistantAttachmentPicker
                 @autoAttachedCardIds={{this.autoAttachedCardIds}}
@@ -178,7 +178,6 @@ export default class Room extends Component<Signature> {
             </div>
             <div class='chat-input-area__actions'>
               <AiAssistantSkillMenu
-                class='skills'
                 @skills={{this.sortedSkills}}
                 @onChooseCard={{perform this.attachSkillTask}}
                 @onUpdateSkillIsActive={{perform this.updateSkillIsActiveTask}}
@@ -196,13 +195,6 @@ export default class Room extends Component<Signature> {
         grid-template-rows: 1fr auto;
         height: 100%;
         overflow: hidden;
-      }
-      .skills {
-        position: sticky;
-        bottom: 0;
-        background-color: transparent;
-        border: 1px solid var(--boxel-400);
-        box-shadow: none;
       }
       .unread-indicator {
         position: sticky;
@@ -234,10 +226,10 @@ export default class Room extends Component<Signature> {
       }
       .chat-input-area__actions {
         display: flex;
-        padding: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-sm);
         gap: var(--boxel-sp-xxl);
         background-color: var(--boxel-light-100);
-        border-top: 1px solid #707070;
+        border-top: 1px solid var(--boxel-200);
       }
       :deep(.ai-assistant-conversation > *:first-child) {
         margin-top: auto;
