@@ -845,6 +845,24 @@ module('Acceptance | operator mode tests', function (hooks) {
       .exists();
   });
 
+  test('should open interact mode with index card after choosing a workspace', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    await click('[data-test-workspace-chooser-toggle]');
+    await click('[data-test-workspace="Test Workspace B"]');
+    assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
+    assert.dom('[data-test-submode-switcher] button').hasText('Interact');
+    assert.dom('[data-test-code-mode]').doesNotExist();
+  });
+
   module('2 stacks', function () {
     test('Toggling submode will open code submode and toggling back will restore the stack', async function (assert) {
       await visitOperatorMode({

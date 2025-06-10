@@ -787,6 +787,7 @@ export default class OperatorModeStateService extends Service {
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
         : new URL(id),
     );
+    this.updateSubmode(Submodes.Interact);
 
     this.operatorModeController.workspaceChooserOpened = false;
   };
