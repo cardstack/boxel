@@ -810,6 +810,8 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     await click('[data-test-workspace-chooser-toggle]');
     await click('[data-test-workspace="Cardstack Catalog"]');
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom(`[data-test-realm-name]`).hasText('In Cardstack Catalog');
     assert.dom(`[data-test-file="index.json"]`).hasClass('selected');
     assert.dom('[data-test-recent-file]').exists({ count: 4 });
@@ -828,9 +830,14 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     await click('[data-test-workspace-chooser-toggle]');
     await click('[data-test-workspace="Test Workspace B"]');
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom(`[data-test-realm-name]`).hasText('In Test Workspace B');
-    assert.dom(`[data-test-file="Pet/vangogh.json"]`).hasClass('selected');
-    assert.dom('[data-test-recent-file]').exists({ count: 4 });
+    assert.dom(`[data-test-file="index.json"]`).hasClass('selected');
+    assert.dom('[data-test-recent-file]').exists({ count: 5 });
+    assert
+      .dom(`[data-test-recent-file="${testRealmURL}Pet/vangogh.json"]`)
+      .exists();
     assert
       .dom(`[data-test-recent-file="http://localhost:4201/catalog/index.json"]`)
       .exists();
