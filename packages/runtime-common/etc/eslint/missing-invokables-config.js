@@ -20,6 +20,7 @@ module.exports = {
     not: ['not', '@cardstack/boxel-ui/helpers'],
     on: ['on', '@ember/modifier'],
     or: ['or', '@cardstack/boxel-ui/helpers'],
+    substring: ['substring', '@cardstack/boxel-ui/helpers'],
     subtract: ['subtract', '@cardstack/boxel-ui/helpers'],
   },
 };
