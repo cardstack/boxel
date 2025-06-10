@@ -21,7 +21,7 @@ import {
 import {
   getRoomEvents,
   type MatrixClient,
-  sendPromptAndEventList,
+  sendPromptAsDebugMessage,
 } from './lib/matrix/util';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
@@ -255,7 +255,7 @@ Common issues are:
           // if debug, send message with promptParts and event list
           if (isInDebugMode(eventList, aiBotUserId)) {
             // create files in memory
-            sendPromptAndEventList(client, room.roomId, promptParts, eventList);
+            sendPromptAsDebugMessage(client, room.roomId, promptParts);
           }
           await responder.ensureThinkingMessageSent();
         } catch (e) {

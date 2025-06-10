@@ -139,27 +139,35 @@ export async function sendErrorEvent(
   }
 }
 
-export async function sendPromptAndEventList(
+export async function sendDebugMessage(
   client: MatrixClient,
   roomId: string,
-  promptParts: PromptParts,
+  body: string,
+  data: any = {},
+) {
+  await client.sendEvent(roomId, APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE, {
+    msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+    body,
+    isStreamingFinished: true,
+    data: JSON.stringify(data),
+  });
+}
+
+export async function sendEventListAsDebugMessage(
+  client: MatrixClient,
+  roomId: string,
   eventList: DiscreteMatrixEvent[],
   customMessage: string = '',
 ) {
-  let stringContent = JSON.stringify({
-    promptParts,
-    eventList,
-  });
+  let stringContent = JSON.stringify(eventList);
   let sharedFile = await client.uploadContent(stringContent, {
     type: 'text/plain',
   });
-  await client.sendEvent(roomId, APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE, {
-    msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-    body:
-      'Debug: attached the prompt sent to the AI and the raw event list.\n\n' +
-      customMessage,
-    isStreamingFinished: true,
-    data: JSON.stringify({
+  await sendDebugMessage(
+    client,
+    roomId,
+    'Debug: attached the raw event list.\n\n' + customMessage,
+    {
       attachedFiles: [
         {
           sourceUrl: '',
@@ -168,8 +176,35 @@ export async function sendPromptAndEventList(
           contentType: 'text/plain',
         },
       ],
-    }),
+    },
+  );
+}
+
+export async function sendPromptAsDebugMessage(
+  client: MatrixClient,
+  roomId: string,
+  promptParts: PromptParts,
+  customMessage: string = '',
+) {
+  let stringContent = JSON.stringify(promptParts);
+  let sharedFile = await client.uploadContent(stringContent, {
+    type: 'text/plain',
   });
+  await sendDebugMessage(
+    client,
+    roomId,
+    'Debug: attached the prompt sent to the AI.\n\n' + customMessage,
+    {
+      attachedFiles: [
+        {
+          sourceUrl: '',
+          url: mxcUrlToHttp(sharedFile.content_uri, client.baseUrl),
+          name: 'debug-event.json',
+          contentType: 'text/plain',
+        },
+      ],
+    },
+  );
 }
 
 function getErrorMessage(error: any): string {
