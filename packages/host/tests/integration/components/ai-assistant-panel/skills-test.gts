@@ -512,28 +512,28 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).contentHash,
       initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).contentHash,
       'skill card instructions have changed',
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).url,
       initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).url,
       'skill card instructions have changed',
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).sourceUrl,
       initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).sourceUrl,
       'skill card source URL has not changed',
     );
@@ -624,28 +624,28 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).contentHash,
       initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).contentHash,
       'skill card instructions have changed',
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).url,
       initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).url,
       'skill card instructions have changed',
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).sourceUrl,
       initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).sourceUrl,
       'skill card source URL has not changed',
     );
@@ -729,28 +729,28 @@ ${REPLACE_MARKER}
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).contentHash,
       initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).contentHash,
       'skill card instructions have changed',
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).url,
       initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).url,
       'skill card instructions have changed',
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).sourceUrl,
       initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).sourceUrl,
       'skill card source URL has not changed',
     );
