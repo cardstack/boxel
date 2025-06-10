@@ -804,6 +804,16 @@ export const isCommandResultStatusApplied = (event?: MatrixEvent) => {
   );
 };
 
+export const isCodePatchResultStatusApplied = (event?: MatrixEvent) => {
+  if (event === undefined) {
+    return false;
+  }
+  return (
+    isCodePatchResultEvent(event.event as DiscreteMatrixEvent) &&
+    event.getContent()['m.relates_to']?.key === 'applied'
+  );
+};
+
 function getModel(eventlist: DiscreteMatrixEvent[]): string {
   let activeLLMEvent = eventlist.findLast(
     (event) => event.type === APP_BOXEL_ACTIVE_LLM,
