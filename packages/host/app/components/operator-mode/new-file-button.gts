@@ -24,7 +24,7 @@ export default class NewFileButton extends Component<Signature> {
         <Button
           class='new-file-button'
           @kind='primary'
-          @size='small'
+          @size='tall'
           @disabled={{@isCreateModalShown}}
           {{bindings}}
           data-test-new-file-button
@@ -51,14 +51,12 @@ export default class NewFileButton extends Component<Signature> {
 
     <style scoped>
       .new-file-button {
-        --new-file-button-width: 7.5rem;
+        --new-file-button-width: 6.25rem; /* 100px */
         --new-file-button-height: var(--operator-mode-top-bar-item-height);
-        --boxel-button-text-color: var(--boxel-dark);
 
         height: var(--new-file-button-height);
         width: var(--new-file-button-width);
-        margin-left: var(--operator-mode-spacing);
-        flex-shrink: 0;
+        box-shadow: var(--boxel-deep-box-shadow);
       }
       .new-file-button-icon {
         --icon-color: var(--boxel-dark);

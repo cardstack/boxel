@@ -102,7 +102,7 @@ export default class ButtonComponent extends Component<Signature> {
           justify-content: center;
           height: min-content;
           align-items: center;
-          border-radius: 100px;
+          border-radius: var(--boxel-border-radius-lg);
           transition:
             background-color var(--boxel-transition),
             border var(--boxel-transition);
@@ -247,8 +247,8 @@ export default class ButtonComponent extends Component<Signature> {
 
         .kind-primary-dark:not(:disabled):hover,
         .kind-primary-dark:not(:disabled):active {
-          --boxel-button-border: 1px solid var(--boxel-purple-800);
-          --boxel-button-color: var(--boxel-purple-800);
+          --boxel-button-border: 1px solid var(--boxel-700);
+          --boxel-button-color: var(--boxel-700);
         }
 
         .kind-text-only:not(:disabled) {
@@ -281,35 +281,35 @@ export default class ButtonComponent extends Component<Signature> {
 
         .size-extra-small {
           --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp);
-          --boxel-button-font: var(--boxel-font-xs);
+          --boxel-button-font: 500 var(--boxel-font-xs);
           --boxel-button-loading-icon-size: var(--boxel-font-size-xs);
-          --boxel-button-letter-spacing: var(--boxel-lsp-lg);
+          --boxel-button-letter-spacing: var(--boxel-lsp);
           --boxel-button-min-height: 1.8125rem;
         }
 
         /* thinner base button */
         .size-small {
           --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm);
-          --boxel-button-font: 600 var(--boxel-font-sm);
+          --boxel-button-font: 500 var(--boxel-font-sm);
           --boxel-button-loading-icon-size: var(--boxel-font-size-sm);
-          --boxel-button-letter-spacing: var(--boxel-lsp);
+          --boxel-button-letter-spacing: var(--boxel-lsp-xs);
           --boxel-button-min-height: 2rem;
         }
 
         .size-base {
           --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xl);
-          --boxel-button-font: 600 var(--boxel-font-sm);
+          --boxel-button-font: 500 var(--boxel-font-sm);
           --boxel-button-loading-icon-size: var(--boxel-font-size-sm);
-          --boxel-button-letter-spacing: var(--boxel-lsp);
+          --boxel-button-letter-spacing: var(--boxel-lsp-xs);
           --boxel-button-min-height: 2rem;
         }
 
         /* tall but thinner button */
         .size-tall {
-          --boxel-button-padding: var(--boxel-sp-xxs) var(--boxel-sp);
-          --boxel-button-font: 600 var(--boxel-font-sm);
+          --boxel-button-padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+          --boxel-button-font: 500 var(--boxel-font-sm);
           --boxel-button-loading-icon-size: var(--boxel-font-size-sm);
-          --boxel-button-letter-spacing: var(--boxel-lsp);
+          --boxel-button-letter-spacing: var(--boxel-lsp-xs);
           --boxel-button-min-height: 2.5rem;
         }
 
@@ -319,7 +319,7 @@ export default class ButtonComponent extends Component<Signature> {
         */
         .size-touch {
           --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
-          --boxel-button-font: 600 var(--boxel-font);
+          --boxel-button-font: 500 var(--boxel-font);
           --boxel-button-loading-icon-size: var(--boxel-font-size);
           --boxel-button-letter-spacing: var(--boxel-lsp-xs);
           --boxel-button-min-height: 3rem;

@@ -22,7 +22,7 @@ import {
   LoadingIndicator,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
-import { not, bool } from '@cardstack/boxel-ui/helpers';
+import { not } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -79,7 +79,6 @@ import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
 import CreateFileModal, { type FileType } from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
-import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
 
 interface Signature {
@@ -453,11 +452,6 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
-  @action
-  private onSelectNewFileType(fileType: FileType) {
-    this.createFile.perform(fileType);
-  }
-
   onStateChange(state: FileResource['state']) {
     this.userHasDismissedURLError = false;
     if (state === 'ready') {
@@ -636,6 +630,13 @@ export default class CodeSubmode extends Component<Signature> {
       : this.itemToDelete.id;
   }
 
+  private get newFileOptions() {
+    return {
+      onSelect: (fileType: FileType) => this.createFile.perform(fileType),
+      isCreateModalOpen: this.isCreateModalOpen,
+    };
+  }
+
   <template>
     {{consumeContext this.makeCardResource}}
     <AttachFileModal />
@@ -648,6 +649,7 @@ export default class CodeSubmode extends Component<Signature> {
     <SubmodeLayout
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
       @selectedCardRef={{this.selectedCodeRef}}
+      @newFileOptions={{this.newFileOptions}}
       as |search|
     >
       <div
@@ -662,10 +664,6 @@ export default class CodeSubmode extends Component<Signature> {
             @userHasDismissedError={{this.userHasDismissedURLError}}
             @dismissURLError={{this.dismissURLError}}
             @realmURL={{this.realmURL}}
-          />
-          <NewFileButton
-            @onSelectNewFileType={{this.onSelectNewFileType}}
-            @isCreateModalShown={{bool this.isCreateModalOpen}}
           />
         </div>
         <ResizablePanelGroup
@@ -844,10 +842,7 @@ export default class CodeSubmode extends Component<Signature> {
         --code-mode-container-border-radius: 10px;
         --code-mode-realm-icon-size: 1.125rem;
         --code-mode-active-box-shadow: 0 3px 5px 0 rgba(0, 0, 0, 0.35);
-        --code-mode-padding-top: calc(
-          var(--operator-mode-top-bar-item-height) +
-            (2 * (var(--operator-mode-spacing)))
-        );
+        --code-mode-padding-top: var(--operator-mode-top-bar-height);
         --monaco-background: var(--boxel-600);
         --monaco-readonly-background: #606060;
       }
@@ -907,17 +902,19 @@ export default class CodeSubmode extends Component<Signature> {
       }
 
       .code-mode-top-bar {
-        --code-mode-top-bar-left-offset: calc(
-          var(--operator-mode-left-column) - var(--operator-mode-spacing)
-        ); /* subtract additional padding */
+        --code-mode-top-bar-left-offset: 22rem; /* 352px */
 
         position: absolute;
         top: 0;
         right: 0;
         left: var(--code-mode-top-bar-left-offset);
-        padding: var(--operator-mode-spacing);
+        padding-block: var(--operator-mode-spacing);
+        padding-right: var(--operator-mode-spacing);
         display: flex;
         z-index: 1;
+      }
+      .code-mode-top-bar > :deep(* + *) {
+        margin-left: var(--operator-mode-spacing);
       }
 
       .loading {

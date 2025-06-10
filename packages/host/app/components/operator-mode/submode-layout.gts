@@ -3,7 +3,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
 import type RouterService from '@ember/routing/router-service';
-import { inject as service } from '@ember/service';
+import { service } from '@ember/service';
 
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -16,10 +16,7 @@ import { modifier } from 'ember-modifier';
 import { TrackedObject } from 'tracked-built-ins';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import { Avatar, IconButton } from '@cardstack/boxel-ui/components';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
-
-import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 
 import { ResolvedCodeRef } from '@cardstack/runtime-common';
 
@@ -39,16 +36,21 @@ import SearchSheet, {
   SearchSheetMode,
   SearchSheetModes,
 } from '../search-sheet';
-import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 
 import AskAiContainer from './ask-ai-container';
+import { type FileType } from './create-file-modal';
+import NewFileButton from './new-file-button';
 import WorkspaceChooser from './workspace-chooser';
+import WorkspaceChooserTriggerButton from './workspace-chooser/workspace-chooser-trigger-button';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
 import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type StoreService from '../../services/store';
+
+import SubmodeSwitcher, { type Submode, Submodes } from '../submode-switcher';
+import ProfileButton from '../profile-button';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -57,6 +59,10 @@ interface Signature {
     onSearchSheetClosed?: () => void;
     onCardSelectFromSearch: (cardId: string) => void;
     selectedCardRef?: ResolvedCodeRef | undefined;
+    newFileOptions?: {
+      onSelect: (fileType: FileType) => void;
+      isCreateModalOpen: boolean;
+    };
   };
   Blocks: {
     default: [
@@ -260,28 +266,27 @@ export default class SubmodeLayout extends Component<Signature> {
       >
         <ResizablePanel class='main-panel'>
           <div class='top-left-menu'>
-            <IconButton
-              @icon={{BoxelIcon}}
-              @width='40px'
-              @height='40px'
-              disabled={{this.isToggleWorkspaceChooserDisabled}}
-              class={{cn
-                'workspace-button'
-                dark-icon=(not this.workspaceChooserOpened)
-              }}
+            <WorkspaceChooserTriggerButton
+              class='workspace-button'
+              @isDisabled={{this.isToggleWorkspaceChooserDisabled}}
+              @isWorkspaceChooserOpen={{this.workspaceChooserOpened}}
               {{on 'click' this.toggleWorkspaceChooser}}
-              data-test-workspace-chooser-toggle
             />
             {{#if this.workspaceChooserOpened}}
-              <span
-                class='boxel-title'
-                data-test-submode-layout-title
-              >BOXEL</span>
+              <h1 class='boxel-title' data-test-submode-layout-title>
+                BOXEL
+              </h1>
             {{else}}
               <SubmodeSwitcher
                 @submode={{this.operatorModeStateService.state.submode}}
                 @onSubmodeSelect={{this.updateSubmode}}
               />
+              {{#if @newFileOptions}}
+                <NewFileButton
+                  @onSelectNewFileType={{@newFileOptions.onSelect}}
+                  @isCreateModalShown={{@newFileOptions.isCreateModalOpen}}
+                />
+              {{/if}}
             {{/if}}
           </div>
           {{#if this.workspaceChooserOpened}}
@@ -294,17 +299,11 @@ export default class SubmodeLayout extends Component<Signature> {
               openSearchToResults=this.openSearchAndShowResults
             )
           }}
-          <button
+          <ProfileButton
             class='profile-icon-button'
+            @matrixService={{this.matrixService}}
             {{on 'click' this.toggleProfileSummary}}
-            data-test-profile-icon-button
-          >
-            <Avatar
-              @isReady={{this.matrixService.profile.loaded}}
-              @userId={{this.matrixService.userId}}
-              @displayName={{this.matrixService.profile.displayName}}
-            />
-          </button>
+          />
           <SearchSheet
             @mode={{this.searchSheetMode}}
             @onSetup={{this.setupSearch}}
@@ -410,7 +409,6 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .top-left-menu {
-        width: var(--operator-mode-left-column);
         position: absolute;
         top: 0;
         left: 0;
@@ -420,37 +418,27 @@ export default class SubmodeLayout extends Component<Signature> {
         display: flex;
         align-items: center;
       }
+      .top-left-menu > :deep(* + *) {
+        margin-left: var(--operator-mode-spacing);
+      }
 
       .boxel-title {
+        margin-block: 0;
         color: var(--boxel-light);
         font: 900 var(--boxel-font-size-med) 'Rustica';
         letter-spacing: 3px;
       }
 
       .profile-icon-button {
-        --boxel-icon-button-width: var(--container-button-size);
-        --boxel-icon-button-height: var(--container-button-size);
         position: absolute;
         bottom: var(--operator-mode-spacing);
         left: var(--operator-mode-spacing);
-        padding: 0;
-        background: none;
-        border: none;
-        border-radius: 50px;
+        box-shadow: var(--boxel-deep-box-shadow);
         z-index: var(--host-profile-z-index);
       }
-
       .workspace-button {
-        --boxel-icon-button-width: var(--container-button-size);
-        --boxel-icon-button-height: var(--container-button-size);
-        border: none;
-        outline: var(--boxel-border-flexible);
-        margin-right: var(--operator-mode-spacing);
-        border-radius: var(--boxel-border-radius);
-      }
-      .dark-icon {
-        --icon-bg-opacity: 1;
-        --icon-color: var(--boxel-dark);
+        box-shadow: var(--boxel-deep-box-shadow);
+        z-index: var(--boxel-layer-floating-button);
       }
     </style>
   </template>

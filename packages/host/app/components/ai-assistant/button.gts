@@ -2,6 +2,8 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { cn } from '@cardstack/boxel-ui/helpers';
 
+import OperatorModeIconButton from '@cardstack/host/components/operator-mode/icon-button';
+
 interface Signature {
   Element: HTMLButtonElement;
   Args: {
@@ -10,18 +12,13 @@ interface Signature {
 }
 
 const AiAssistantButton: TemplateOnlyComponent<Signature> = <template>
-  <button
+  <OperatorModeIconButton
     class={{cn 'ai-assistant-button' is-active=@isActive}}
     data-test-open-ai-assistant
     ...attributes
   />
   <style scoped>
     .ai-assistant-button {
-      width: var(--container-button-size);
-      height: var(--container-button-size);
-      border-radius: var(--boxel-border-radius);
-      background-color: var(--boxel-dark);
-      border: var(--boxel-border-flexible);
       background-image: image-set(
         url('./ai-assist-icon.webp') 1x,
         url('./ai-assist-icon@2x.webp') 2x,
@@ -31,10 +28,6 @@ const AiAssistantButton: TemplateOnlyComponent<Signature> = <template>
       background-position: center;
       background-repeat: no-repeat;
     }
-    .ai-assistant-button:hover {
-      cursor: pointer;
-    }
-
     .ai-assistant-button.is-active {
       background-image:
         image-set(
@@ -52,7 +45,6 @@ const AiAssistantButton: TemplateOnlyComponent<Signature> = <template>
         40px 40px;
       background-position: center, center;
       background-repeat: no-repeat, no-repeat;
-      border: 1px solid rgba(0, 0, 0, 0.35);
     }
   </style>
 </template>;

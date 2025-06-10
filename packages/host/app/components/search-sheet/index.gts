@@ -16,12 +16,10 @@ import { trackedFunction } from 'ember-resources/util/function';
 import {
   Button,
   BoxelInput,
-  IconButton,
   BoxelInputBottomTreatments,
 } from '@cardstack/boxel-ui/components';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { IconSearch } from '@cardstack/boxel-ui/icons';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
@@ -33,6 +31,7 @@ import CardQueryResults from './card-query-results';
 import CardURLResults from './card-url-results';
 
 import RecentCardsSection from './recent-cards-section';
+import SearchSheetTriggerButton from './search-sheet-trigger-button';
 import { getCodeRefFromSearchKey } from './utils';
 
 import type LoaderService from '../../services/loader-service';
@@ -235,13 +234,9 @@ export default class SearchSheet extends Component<Signature> {
       {{onClickOutside @onBlur exceptSelector='.add-card-to-neighbor-stack'}}
     >
       {{#if (eq @mode 'closed')}}
-        <IconButton
+        <SearchSheetTriggerButton
           class='open-search-field'
-          @icon={{IconSearch}}
-          @width='24'
-          @height='24'
           {{on 'click' @onFocus}}
-          data-test-open-search-field
         />
       {{else}}
         <BoxelInput
@@ -408,13 +403,7 @@ export default class SearchSheet extends Component<Signature> {
         overflow-x: auto;
       }
       .open-search-field {
-        padding: 10px;
-        border-radius: 20px;
-        box-shadow: 0 5px 15px 0 rgba(0, 0, 0, 0.75);
-        border: solid 1px rgba(255, 255, 255, 0.35);
-        background-color: var(--boxel-700);
-
-        --icon-color: var(--boxel-teal);
+        box-shadow: var(--boxel-deep-box-shadow);
       }
     </style>
   </template>

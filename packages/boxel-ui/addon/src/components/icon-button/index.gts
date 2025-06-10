@@ -45,46 +45,71 @@ class IconButton extends Component<Signature> {
           class='svg-icon'
         />
       {{/if}}
+      {{yield}}
     </button>
     <style scoped>
-      button {
-        --inner-boxel-icon-button-width: var(--boxel-icon-button-width, 40px);
-        --inner-boxel-icon-button-height: var(--boxel-icon-button-height, 40px);
-        width: var(--inner-boxel-icon-button-width);
-        height: var(--inner-boxel-icon-button-height);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0;
-        background: var(--boxel-icon-button-background, none);
-        border: 1px solid transparent;
-        color: var(--boxel-icon-button-color, currentColor);
-        z-index: 0;
-        overflow: hidden;
-      }
+      @layer {
+        button {
+          --inner-boxel-icon-button-width: var(
+            --boxel-icon-button-width,
+            var(--boxel-form-control-height)
+          );
+          --inner-boxel-icon-button-height: var(
+            --boxel-icon-button-height,
+            var(--boxel-form-control-height)
+          );
+          width: var(--inner-boxel-icon-button-width);
+          height: var(--inner-boxel-icon-button-height);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
+          background: var(--boxel-icon-button-background, none);
+          border: 1px solid transparent;
+          border-radius: var(--boxel-border-radius-lg);
+          color: var(--boxel-icon-button-color, currentColor);
+          z-index: 0;
+          overflow: hidden;
+        }
 
-      button:hover {
-        cursor: pointer;
-      }
+        button:hover {
+          cursor: pointer;
+        }
 
-      button:disabled {
-        cursor: default;
-      }
+        button:disabled {
+          cursor: default;
+        }
 
-      .primary {
-        --icon-bg: var(--boxel-highlight);
-        --icon-border: var(--boxel-highlight);
-      }
+        .primary {
+          --icon-bg: var(--boxel-highlight);
+          --icon-border: var(--boxel-highlight);
+        }
 
-      .secondary {
-        --icon-color: var(--boxel-highlight);
-        border: 1px solid rgb(255 255 255 / 35%);
-        border-radius: 100px;
-        background-color: var(--boxel-icon-button-background, #41404d);
-      }
+        .primary-dark:not(:disabled) {
+          --icon-color: var(--boxel-highlight-hover);
+          --boxel-icon-button-background: var(--boxel-dark);
+          border: var(--boxel-border-flexible);
+        }
+        .primary-dark:not(:disabled):hover,
+        .primary-dark:not(:disabled):active {
+          --icon-color: var(--boxel-highlight);
+          --boxel-icon-button-background: var(--boxel-700);
+        }
 
-      .secondary:hover {
-        background-color: var(--boxel-purple-800);
+        .round {
+          border-radius: 50%;
+        }
+
+        .secondary {
+          --icon-color: var(--boxel-highlight);
+          border: 1px solid rgb(255 255 255 / 35%);
+          border-radius: 100px;
+          background-color: var(--boxel-icon-button-background, #41404d);
+        }
+
+        .secondary:hover {
+          background-color: var(--boxel-purple-800);
+        }
       }
     </style>
   </template>

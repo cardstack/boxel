@@ -95,14 +95,8 @@ export default class OperatorModeStack extends Component<Signature> {
 
     <style scoped>
       :global(:root) {
-        --stack-padding-top: calc(
-          var(--operator-mode-top-bar-item-height) +
-            (2 * (var(--operator-mode-spacing)))
-        );
-        --stack-padding-bottom: calc(
-          var(--operator-mode-bottom-bar-item-height) +
-            (2 * (var(--operator-mode-spacing)))
-        );
+        --stack-padding-top: var(--operator-mode-top-bar-height);
+        --stack-padding-bottom: var(--operator-mode-bottom-bar-height);
       }
       .operator-mode-stack {
         z-index: 0;

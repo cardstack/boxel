@@ -40,6 +40,8 @@ export default class SubmodeSwitcher extends Component<Signature> {
       <BoxelDropdown @contentClass='submode-switcher-dropdown'>
         <:trigger as |bindings|>
           <Button
+            @kind='primary-dark'
+            @size='tall'
             class='submode-switcher-dropdown-trigger'
             aria-label='Options'
             title={{this.appVersion}}
@@ -77,29 +79,18 @@ export default class SubmodeSwitcher extends Component<Signature> {
     </div>
     <style scoped>
       :global(:root) {
-        --submode-switcher-trigger-height: var(
-          --operator-mode-top-bar-item-height
-        );
         --submode-switcher-dropdown-content-border-radius: 0 0
-          var(--boxel-border-radius) var(--boxel-border-radius);
-        --submode-switcher-dropdown-content-bg-color: rgba(0, 0, 0, 0.45);
-        --submode-switcher-width: calc(
-          var(--operator-mode-left-column) - var(--container-button-size) - 3 *
-            var(--operator-mode-spacing)
-        );
+          var(--boxel-border-radius-lg) var(--boxel-border-radius-lg);
+        --submode-switcher-dropdown-content-bg-color: rgba(0, 0, 0, 0.55);
+        --submode-switcher-width: 10.25rem; /* 164px */
         --submode-switcher-height: var(--operator-mode-top-bar-item-height);
       }
       .submode-switcher-dropdown-trigger {
         --icon-color: var(--boxel-highlight);
 
-        height: var(--submode-switcher-trigger-height);
         border: none;
+        box-shadow: var(--boxel-deep-box-shadow);
         outline: var(--boxel-border-flexible);
-        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
-        border-radius: var(--boxel-border-radius);
-        background: var(--boxel-dark);
-        color: var(--boxel-light);
-        font: 500 var(--boxel-font-sm);
 
         position: relative;
         display: flex;
@@ -112,6 +103,9 @@ export default class SubmodeSwitcher extends Component<Signature> {
         transition:
           border-bottom-right-radius var(--boxel-transition),
           border-bottom-left-radius var(--boxel-transition);
+      }
+      .submode-switcher-dropdown-trigger:focus:not(:disabled) {
+        outline-offset: unset;
       }
 
       .submode-switcher-dropdown-trigger[aria-expanded='true'] {
