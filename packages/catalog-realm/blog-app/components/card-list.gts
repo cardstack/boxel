@@ -31,6 +31,7 @@ export class CardList extends GlimmerComponent<CardListSignature> {
           @query={{@query}}
           @format='embedded'
           @realms={{@realms}}
+          @isLive={{true}}
         >
           <:loading>
             Loading...
