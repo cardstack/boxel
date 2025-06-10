@@ -137,6 +137,12 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
     }
   });
 
+  private preTagGroupIndex = (htmlPartIndex: number) => {
+    return this.args
+      .htmlParts!.slice(0, htmlPartIndex)
+      .filter(isHtmlPreTagGroup).length;
+  };
+
   <template>
     <div class='message'>
       {{! We are splitting the html into parts so that we can target the
@@ -169,6 +175,7 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
             }}
             @monacoSDK={{@monacoSDK}}
             @isLastAssistantMessage={{@isLastAssistantMessage}}
+            @index={{this.preTagGroupIndex index}}
           />
         {{else}}
           {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
@@ -199,16 +206,9 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
         gap: var(--boxel-sp-xs);
         margin-top: var(--boxel-sp);
       }
-      .message {
-        position: relative;
-      }
 
-      .message > :deep(*) {
+      .message > :deep(*:first-child) {
         margin-top: 0;
-      }
-
-      .message > :deep(.code-block + :not(.code-block)) {
-        margin-top: 25px;
       }
 
       .ai-assistant-code-block-actions {
@@ -257,6 +257,7 @@ interface HtmlGroupCodeBlockSignature {
     onPatchCode: (codeData: CodeData) => void;
     monacoSDK: MonacoSDK;
     isLastAssistantMessage: boolean;
+    index: number;
   };
 }
 
@@ -264,6 +265,10 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   _codeDiffResource: CodeDiffResource | undefined;
   _searchReplaceBlock: string | null | undefined = null;
   _fileUrl: string | null | undefined = null;
+  @tracked diffEditorStats: {
+    linesRemoved: number;
+    linesAdded: number;
+  } | null = null;
 
   get codeDiffResource() {
     if (this._codeDiffResource) {
@@ -313,11 +318,29 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
     );
   }
 
+  private updateDiffEditorStats = (stats: {
+    linesAdded: number;
+    linesRemoved: number;
+  }) => {
+    this.diffEditorStats = stats;
+  };
+
   <template>
-    <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
+    <CodeBlock
+      @monacoSDK={{@monacoSDK}}
+      @codeData={{@codeData}}
+      class='code-block'
+      data-test-code-block-index={{@index}}
+      as |codeBlock|
+    >
       {{#if (bool @codeData.searchReplaceBlock)}}
         {{#if this.isAppliedOrIgnoredCodePatch}}
           <div>
+            <codeBlock.editorHeader
+              @codeData={{@codeData}}
+              @diffEditorStats={{null}}
+            />
+            <codeBlock.editor @code={{this.codeForEditor}} @dimmed={{true}} />
             <codeBlock.actions as |actions|>
               <actions.copyCode
                 @code={{this.extractReplaceCode @codeData.searchReplaceBlock}}
@@ -330,7 +353,6 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
                 />
               {{/if}}
             </codeBlock.actions>
-            <codeBlock.editor @code={{this.codeForEditor}} @dimmed={{true}} />
           </div>
         {{else}}
           {{#if this.codeDiffResource.errorMessage}}
@@ -346,6 +368,16 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
             </div>
           {{/if}}
           {{#if this.codeDiffResource.isDataLoaded}}
+            <codeBlock.editorHeader
+              @codeData={{@codeData}}
+              @diffEditorStats={{this.diffEditorStats}}
+            />
+            <codeBlock.diffEditor
+              @originalCode={{this.codeDiffResource.originalCode}}
+              @modifiedCode={{this.codeDiffResource.modifiedCode}}
+              @language={{@codeData.language}}
+              @updateDiffEditorStats={{this.updateDiffEditorStats}}
+            />
             <codeBlock.actions as |actions|>
               <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
               <actions.applyCodePatch
@@ -356,18 +388,19 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
                 @modifiedCode={{this.codeDiffResource.modifiedCode}}
               />
             </codeBlock.actions>
-            <codeBlock.diffEditor
-              @originalCode={{this.codeDiffResource.originalCode}}
-              @modifiedCode={{this.codeDiffResource.modifiedCode}}
-              @language={{@codeData.language}}
-            />
           {{/if}}
         {{/if}}
       {{else}}
+        {{#if @codeData.fileUrl}}
+          <codeBlock.editorHeader
+            @codeData={{@codeData}}
+            @diffEditorStats={{null}}
+          />
+        {{/if}}
+        <codeBlock.editor @code={{this.codeForEditor}} />
         <codeBlock.actions as |actions|>
           <actions.copyCode @code={{@codeData.code}} />
         </codeBlock.actions>
-        <codeBlock.editor @code={{this.codeForEditor}} />
       {{/if}}
     </CodeBlock>
 
@@ -389,6 +422,14 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
         --icon-background-color: var(--boxel-light);
         --icon-color: var(--boxel-danger);
         margin-top: var(--boxel-sp-5xs);
+      }
+
+      .code-block {
+        margin-top: 0;
+      }
+
+      .code-block + .code-block {
+        margin-top: 1rem;
       }
     </style>
   </template>
