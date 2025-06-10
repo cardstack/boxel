@@ -123,7 +123,10 @@ module('getModifyPrompt', (hooks) => {
     assert.equal(result[0].role, 'system');
     assert.equal(result[1].role, 'system');
     assert.equal(result[2].role, 'user');
-    assert.equal(result[1].content, 'The user has no open cards.\n');
+    assert.true(
+      result[1].content!.includes('The user has no open cards.\n'),
+      'should include the system context message about no open cards',
+    );
     assert.equal(result[2].content, 'Hey');
   });
 
@@ -3330,6 +3333,29 @@ Attached files:
     assert.equal(messages![1].role, 'system');
     assert.equal(messages![2].role, 'user');
     assert.equal(messages![3].role, 'assistant');
+  });
+
+  test('context message contains the current date and time', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/user-message-last-multiple.json'),
+        'utf-8',
+      ),
+    );
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.equal(messages![3].role, 'system');
+    assert.true(
+      !!messages![3].content!.match(
+        /Current date and time: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
+      ),
+      'Context message should contain the current date and time but was ' +
+        messages![3].content,
+    );
   });
 });
 

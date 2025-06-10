@@ -743,6 +743,7 @@ export const buildContextMessage = async (
   } else {
     result += `The user has no open cards.\n`;
   }
+  result += `\nCurrent date and time: ${new Date().toISOString()}\n`;
   if (attachedCards.length > 0 || attachedFiles.length > 0) {
     result += `The user currently has given you the following data to work with:\n\n`;
     if (attachedCards.length > 0) {
