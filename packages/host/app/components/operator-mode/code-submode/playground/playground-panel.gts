@@ -947,7 +947,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         overflow: auto;
       }
       .playground-panel-content {
-        --playground-padding: var(--boxel-sp);
+        --playground-padding: var(--boxel-sp-sm);
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp);
