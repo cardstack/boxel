@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Hassan X"
+    },
+    "relationships": {
+      "friend": {
+        "links": {
+          "self": "./jade-x"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./friend-with-used-link.gts",
+        "name": "FriendWithUsedLink"
+      }
+    }
+  }
+}

@@ -727,9 +727,25 @@ module(basename(__filename), function () {
                   kind: 'directory',
                 },
               },
+              'friend-with-used-link.gts': {
+                links: {
+                  related: `${testRealmHref}friend-with-used-link.gts`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
               'friend.gts': {
                 links: {
                   related: `${testRealmHref}friend.gts`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
+              'hassan-x.json': {
+                links: {
+                  related: `${testRealmHref}hassan-x.json`,
                 },
                 meta: {
                   kind: 'file',
@@ -754,6 +770,14 @@ module(basename(__filename), function () {
               'index.json': {
                 links: {
                   related: `${testRealmHref}index.json`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
+              'jade-x.json': {
+                links: {
+                  related: `${testRealmHref}jade-x.json`,
                 },
                 meta: {
                   kind: 'file',
