@@ -111,8 +111,7 @@ export default class RemixCommand extends HostBaseCommand<
         submode: 'code',
         codePath: selectedCodeRef.module,
       });
-    }
-    if ('skills' in listing) {
+    } else if ('skills' in listing) {
       // A listing can have more than one skill
       // The most optimum way for remixing is still to display only the first instance
       let firstSkillCardId =
