@@ -65,13 +65,13 @@ export default class RemixCommand extends HostBaseCommand<
       selectedCodeRef,
       shouldPersistPlaygroundSelection,
       firstExampleCardId,
+      skillCardIds,
     } = await installListing({
       realmUrl,
       listing,
       commandContext: this.commandContext,
       cardAPI,
     });
-
     if (selectedCodeRef && isResolvedCodeRef(selectedCodeRef)) {
       const codePath = selectedCodeRef.module.concat('.gts');
       if (shouldPersistPlaygroundSelection && firstExampleCardId) {
@@ -111,6 +111,17 @@ export default class RemixCommand extends HostBaseCommand<
         submode: 'code',
         codePath: selectedCodeRef.module,
       });
+    } else if ('skills' in listing) {
+      // A listing can have more than one skill
+      // The most optimum way for remixing is still to display only the first instance
+      let firstSkillCardId =
+        skillCardIds && skillCardIds.length > 0 ? skillCardIds[0] : undefined;
+      if (firstSkillCardId) {
+        await new SwitchSubmodeCommand(this.commandContext).execute({
+          submode: 'code',
+          codePath: firstSkillCardId,
+        });
+      }
     }
   }
 }
