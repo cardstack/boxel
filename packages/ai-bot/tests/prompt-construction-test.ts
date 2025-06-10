@@ -211,6 +211,10 @@ module('getModifyPrompt', (hooks) => {
         'attached card should be in the system context message',
       );
       assert.true(
+        result[1].content?.includes('Room ID: room1'),
+        'roomId should be in the system context message',
+      );
+      assert.true(
         result[1].content?.includes('Submode: interact'),
         'submode should be in the system context message',
       );

@@ -724,8 +724,14 @@ export const buildContextMessage = async (
     | undefined;
   let context = lastEventWithContext?.content.data?.context;
 
+  // Extract room ID from any event in history
+  let roomId = history.find((event) => event.room_id)?.room_id;
+
   if (context) {
     result += `The user is currently viewing the following user interface:\n`;
+    if (roomId) {
+      result += `Room ID: ${roomId}\n`;
+    }
     if (context?.submode) {
       result += `Submode: ${context.submode}\n`;
     }
