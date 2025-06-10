@@ -95,6 +95,7 @@ class BoxelDropdown extends Component<Signature> {
             allowOutsideClick=true
           )
         }}
+        {{this.autoCloseOnOutsideScroll dd}}
       >
         {{yield (hash close=dd.actions.close) to='content'}}
       </dd.Content>
@@ -215,6 +216,27 @@ class BoxelDropdown extends Component<Signature> {
       );
     };
   });
+
+  autoCloseOnOutsideScroll = createModifier(
+    (_element: HTMLElement, [dropdown]: [Dropdown]) => {
+      let handleScroll = (event: Event) => {
+        const dropdownContent = document.querySelector(
+          '.boxel-dropdown__content',
+        );
+        const target = event.target as Node;
+
+        if (!dropdownContent?.contains(target)) {
+          dropdown.actions.close();
+        }
+      };
+
+      window.addEventListener('scroll', handleScroll, true);
+
+      return () => {
+        window.removeEventListener('scroll', handleScroll, true);
+      };
+    },
+  );
 }
 
 declare module '@glint/environment-ember-loose/registry' {
