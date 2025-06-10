@@ -18,6 +18,7 @@ import {
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
+  APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -41,6 +42,7 @@ import type {
   CommandResultEvent,
   RealmServerEvent,
   CodePatchResultEvent,
+  ActiveLLMEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import type { Skill } from 'https://cardstack.com/base/skill';
@@ -333,6 +335,20 @@ export class RoomResource extends Resource<Args> {
 
   get activeLLM(): string {
     return this.llmBeingActivated ?? this.matrixRoom?.activeLLM ?? DEFAULT_LLM;
+  }
+
+  @cached
+  get usedLLMs(): string[] {
+    let usedLLMs = new Set<string>();
+    for (let event of this.events) {
+      if (event.type === APP_BOXEL_ACTIVE_LLM) {
+        let activeLLMEvent = event as ActiveLLMEvent;
+        if (activeLLMEvent.content.model) {
+          usedLLMs.add(activeLLMEvent.content.model);
+        }
+      }
+    }
+    return Array.from(usedLLMs);
   }
 
   get isActivatingLLM() {
