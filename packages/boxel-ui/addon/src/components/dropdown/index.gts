@@ -219,21 +219,55 @@ class BoxelDropdown extends Component<Signature> {
 
   autoCloseOnOutsideScroll = createModifier(
     (_element: HTMLElement, [dropdown]: [Dropdown]) => {
+      let isMouseOverDropdown = false;
+
+      let handleMouseEnter = () => {
+        isMouseOverDropdown = true;
+      };
+
+      let handleMouseLeave = () => {
+        isMouseOverDropdown = false;
+      };
+
       let handleScroll = (event: Event) => {
         const dropdownContent = document.querySelector(
           '.boxel-dropdown__content',
         );
         const target = event.target as Node;
 
-        if (!dropdownContent?.contains(target)) {
+        // Don't close if mouse is over dropdown
+        if (isMouseOverDropdown) {
+          return;
+        }
+
+        // Check if the scroll event is from the dropdown or its children
+        const isFromDropdown =
+          dropdownContent?.contains(target) ||
+          target === dropdownContent ||
+          target === _element;
+
+        if (!isFromDropdown) {
           dropdown.actions.close();
         }
       };
+
+      // Add mouse enter/leave listeners to dropdown content
+      const dropdownContent = document.querySelector(
+        '.boxel-dropdown__content',
+      );
+      if (dropdownContent) {
+        dropdownContent.addEventListener('mouseenter', handleMouseEnter);
+        dropdownContent.addEventListener('mouseleave', handleMouseLeave);
+      }
 
       window.addEventListener('scroll', handleScroll, true);
 
       return () => {
         window.removeEventListener('scroll', handleScroll, true);
+        if (dropdownContent) {
+          dropdownContent.removeEventListener('mouseenter', handleMouseEnter);
+          dropdownContent.removeEventListener('mouseleave', handleMouseLeave);
+        }
       };
     },
   );
