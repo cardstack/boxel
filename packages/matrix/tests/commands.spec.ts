@@ -337,10 +337,8 @@ test.describe('Commands', () => {
 
     // Add the skill card to the assistant
     await page.locator('[data-test-skill-menu]').hover();
-    await expect(
-      page.locator('[data-test-pill-menu-header-button]'),
-    ).toBeVisible();
-    await page.locator('[data-test-pill-menu-header-button]').click();
+    await expect(page.locator('[data-test-pill-menu-button]')).toBeVisible();
+    await page.locator('[data-test-pill-menu-button]').click();
     await page.locator('[data-test-pill-menu-add-button]').click();
     await page
       .locator('[data-test-card-catalog-item]', {
