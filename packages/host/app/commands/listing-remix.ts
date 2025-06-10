@@ -116,10 +116,12 @@ export default class RemixCommand extends HostBaseCommand<
       // The most optimum way for remixing is still to display only the first instance
       let firstSkillCardId =
         skillCardIds && skillCardIds.length > 0 ? skillCardIds[0] : undefined;
-      await new SwitchSubmodeCommand(this.commandContext).execute({
-        submode: 'code',
-        codePath: firstSkillCardId,
-      });
+      if (firstSkillCardId) {
+        await new SwitchSubmodeCommand(this.commandContext).execute({
+          submode: 'code',
+          codePath: firstSkillCardId,
+        });
+      }
     }
   }
 }
