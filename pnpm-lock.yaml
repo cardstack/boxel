@@ -621,7 +621,7 @@ patchedDependencies:
     hash: 32dda55b40f0bc860d0a8e93bee54d8005c34ed7ac5faed23ce9f5e5f57eea39
     path: patches/magic-string@0.25.9.patch
   matrix-js-sdk@31.0.0:
-    hash: f7331e92c25245e3263434342689cdc0909a71b7708e77263c9213e83c63e8f7
+    hash: da8bda830b9d7f1e427dd49230b55d93d77581ea2f6843cd57ea5c5f03bb3ce5
     path: patches/matrix-js-sdk@31.0.0.patch
   monaco-editor-webpack-plugin@7.1.0:
     hash: 98cfe2a40393462942e2d29ed97efabd9ff34b697dd261ef6ed3890c7b4619c6
@@ -738,7 +738,7 @@ importers:
         version: 4.17.21
       matrix-js-sdk:
         specifier: 'catalog:'
-        version: 31.0.0(patch_hash=f7331e92c25245e3263434342689cdc0909a71b7708e77263c9213e83c63e8f7)
+        version: 31.0.0(patch_hash=da8bda830b9d7f1e427dd49230b55d93d77581ea2f6843cd57ea5c5f03bb3ce5)
       openai:
         specifier: 'catalog:'
         version: 4.86.1(ws@8.18.1)
@@ -839,7 +839,7 @@ importers:
         version: 6.6.2
       matrix-js-sdk:
         specifier: 'catalog:'
-        version: 31.0.0(patch_hash=f7331e92c25245e3263434342689cdc0909a71b7708e77263c9213e83c63e8f7)
+        version: 31.0.0(patch_hash=da8bda830b9d7f1e427dd49230b55d93d77581ea2f6843cd57ea5c5f03bb3ce5)
       super-fast-md5:
         specifier: 'catalog:'
         version: 1.0.1
@@ -2308,7 +2308,7 @@ importers:
         version: 1.8.1
       matrix-js-sdk:
         specifier: 'catalog:'
-        version: 31.0.0(patch_hash=f7331e92c25245e3263434342689cdc0909a71b7708e77263c9213e83c63e8f7)
+        version: 31.0.0(patch_hash=da8bda830b9d7f1e427dd49230b55d93d77581ea2f6843cd57ea5c5f03bb3ce5)
       moment:
         specifier: 'catalog:'
         version: 2.29.4
@@ -2925,7 +2925,7 @@ importers:
     dependencies:
       matrix-js-sdk:
         specifier: 'catalog:'
-        version: 31.0.0(patch_hash=f7331e92c25245e3263434342689cdc0909a71b7708e77263c9213e83c63e8f7)
+        version: 31.0.0(patch_hash=da8bda830b9d7f1e427dd49230b55d93d77581ea2f6843cd57ea5c5f03bb3ce5)
     devDependencies:
       '@babel/preset-typescript':
         specifier: 'catalog:'
@@ -23259,7 +23259,7 @@ snapshots:
 
   matrix-events-sdk@0.0.1: {}
 
-  matrix-js-sdk@31.0.0(patch_hash=f7331e92c25245e3263434342689cdc0909a71b7708e77263c9213e83c63e8f7):
+  matrix-js-sdk@31.0.0(patch_hash=da8bda830b9d7f1e427dd49230b55d93d77581ea2f6843cd57ea5c5f03bb3ce5):
     dependencies:
       '@babel/runtime': 7.22.11
       '@matrix-org/matrix-sdk-crypto-wasm': 3.6.0

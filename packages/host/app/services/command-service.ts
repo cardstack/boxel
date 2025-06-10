@@ -27,6 +27,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import { FileDef } from 'https://cardstack.com/base/file-api';
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import { shortenUuid } from '../utils/uuid';
@@ -143,6 +144,10 @@ export default class CommandService extends Service {
       if (!message) {
         continue;
       }
+      if (message.agentId !== this.matrixService.agentId) {
+        // This command was sent by another agent, so we will not auto-execute it
+        continue;
+      }
       for (let messageCommand of message.commands) {
         if (this.currentlyExecutingCommandRequestIds.has(messageCommand.id!)) {
           continue;
@@ -182,6 +187,13 @@ export default class CommandService extends Service {
   run = task(async (command: MessageCommand) => {
     let { arguments: payload, eventId, id: commandRequestId } = command;
     let resultCard: CardDef | undefined;
+    // There may be some race conditions where the command is already being executed when this task starts
+    if (
+      this.currentlyExecutingCommandRequestIds.has(commandRequestId!) ||
+      this.executedCommandRequestIds.has(commandRequestId!)
+    ) {
+      return; // already executing this command
+    }
     try {
       this.matrixService.failedCommandState.delete(commandRequestId!);
       this.currentlyExecutingCommandRequestIds.add(commandRequestId!);
@@ -233,22 +245,38 @@ export default class CommandService extends Service {
       await this.matrixService.updateSkillsAndCommandsIfNeeded(
         command.message.roomId,
       );
+      let userContextForAiBot =
+        this.operatorModeStateService.getSummaryForAIBot();
       let cardIds = [
-        payload?.attributes?.cardId,
-        ...(payload?.attributes?.cardIds ?? []),
+        ...new Set([
+          ...(userContextForAiBot.openCardIds ?? []),
+          payload?.attributes?.cardId,
+          ...(payload?.attributes?.cardIds ?? []),
+        ]),
       ].filter(Boolean);
-      let cards = (await Promise.all(cardIds.map((id) => this.store.get(id))))
+      let cardsToAttach = (
+        await Promise.all(cardIds.map((id) => this.store.get(id)))
+      )
         .filter(Boolean)
         .filter(isCardInstance) as CardDef[];
 
+      let filesToAttach: FileDef[] = [];
+      if (userContextForAiBot.codeMode?.currentFile) {
+        filesToAttach.push(
+          this.matrixService.fileAPI.createFileDef({
+            sourceUrl: userContextForAiBot.codeMode.currentFile,
+            name: userContextForAiBot.codeMode.currentFile.split('/').pop(),
+          }),
+        );
+      }
       await this.matrixService.sendCommandResultEvent(
         command.message.roomId,
         eventId,
         commandRequestId!,
         resultCard,
-        cards,
-        [],
-        this.operatorModeStateService.getSummaryForAIBot(),
+        cardsToAttach,
+        filesToAttach,
+        userContextForAiBot,
       );
     } catch (e) {
       let error =

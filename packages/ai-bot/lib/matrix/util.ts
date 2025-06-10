@@ -1,5 +1,10 @@
 import { IContent, Method } from 'matrix-js-sdk';
-import { logger } from '@cardstack/runtime-common';
+import {
+  logger,
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+} from '@cardstack/runtime-common';
 import { OpenAIError } from 'openai/error';
 import * as Sentry from '@sentry/node';
 import {
@@ -11,8 +16,11 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import { MatrixEvent } from 'matrix-js-sdk';
 import { PromptParts, mxcUrlToHttp } from '../../helpers';
 import { encodeUri } from 'matrix-js-sdk/lib/utils';
 
@@ -271,4 +279,27 @@ export async function downloadFile(
   }
 
   return content;
+}
+
+export function isCommandOrCodePatchResult(
+  event: MatrixEvent | DiscreteMatrixEvent,
+): boolean {
+  let type =
+    (event as DiscreteMatrixEvent).type || (event as MatrixEvent).getType?.();
+  return (
+    type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE ||
+    type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE
+  );
+}
+
+export function extractCodePatchBlocks(s: string) {
+  let matches = [
+    ...s.matchAll(
+      new RegExp(
+        `${SEARCH_MARKER}.*?${SEPARATOR_MARKER}.*?${REPLACE_MARKER}`,
+        'gs',
+      ),
+    ),
+  ];
+  return matches.map((match) => match[0]);
 }
