@@ -178,13 +178,20 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     await page.evaluate(() => {
       console.log('url before back', window.location.href);
+      console.log(
+        new URL(window.location.href).searchParams.get('operatorModeState'),
+      );
     });
 
     await page.goBack();
 
     await page.evaluate(() => {
       console.log('url after back', window.location.href);
+      console.log(
+        new URL(window.location.href).searchParams.get('operatorModeState'),
+      );
     });
+
     await expect(
       page.locator(`[data-test-workspace="Test User's Workspace"]`),
     ).toHaveCount(1);
