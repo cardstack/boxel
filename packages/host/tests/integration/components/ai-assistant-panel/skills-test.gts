@@ -318,6 +318,11 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await click('[data-test-select="http://test-realm/test/Skill/example"]');
     await click('[data-test-card-catalog-go-button]');
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-skill-menu]')
+        ?.textContent?.includes('Skills: 2 of 2 active'),
+    );
     assert.dom('[data-test-skill-menu]').containsText('Skills: 2 of 2 active');
 
     const initialRoomStateSkillsJson = getRoomState(

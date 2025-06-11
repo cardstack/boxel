@@ -83,11 +83,11 @@ test.describe('Skills', () => {
     await expect(page.locator('[data-test-skill-menu]')).toHaveCount(1);
 
     await expect(page.locator('[data-test-skill-menu]')).toContainText(
-      'Skills 2',
+      'Skills 1',
     );
     await page.locator('[data-test-pill-menu-button]').click();
     await expect(page.locator('[data-test-skill-menu]')).toContainText(
-      'Skills: 2 of 2 active',
+      'Skills: 1 of 1 active',
     );
     await expect(page.locator('[data-test-skill-menu]')).toHaveClass(
       'pill-menu skill-menu',
