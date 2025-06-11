@@ -647,7 +647,11 @@ Above code blocks are now complete`;
         document.querySelectorAll('.code-block-diff .cdr.line-delete').length >
         1,
     );
-    await waitFor('.code-block-diff .cdr.line-insert');
+    await waitUntil(
+      () =>
+        document.querySelectorAll('.code-block-diff .cdr.line-insert').length >
+        4,
+    );
 
     assert.dom('.cdr.line-delete').exists({ count: 4 });
     assert.dom('.cdr.line-insert').exists({ count: 5 });
