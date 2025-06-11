@@ -63,6 +63,7 @@ module('getModifyPrompt', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
   let mockResponses: Map<string, { ok: boolean; text: string }>;
   let originalFetch: any;
+  let originalDate: typeof Date;
 
   hooks.beforeEach(() => {
     fakeMatrixClient = new FakeMatrixClient();
@@ -81,11 +82,22 @@ module('getModifyPrompt', (hooks) => {
       }
       throw new Error(`No mock response for ${url}`);
     };
+    // Save original Date constructor
+    originalDate = global.Date;
+    // Mock Date constructor to return a fixed date (for "Current date and time" message)
+    global.Date = class extends Date {
+      constructor() {
+        super();
+        return new originalDate('2025-06-11T11:43:00.533Z');
+      }
+    } as any;
   });
 
   hooks.afterEach(() => {
     fakeMatrixClient.resetSentEvents();
     (globalThis as any).fetch = originalFetch;
+    // Restore original Date constructor
+    global.Date = originalDate;
   });
 
   test('should generate a prompt from the user', async () => {
@@ -143,6 +155,7 @@ module('getModifyPrompt', (hooks) => {
     assert.equal(
       result[1].content,
       `The user is currently viewing the following user interface:
+Room ID: room1
 Submode: code
 Workspace: http://localhost:4201/experiments
 The user has no open cards.
@@ -150,6 +163,8 @@ File open in code editor: http://localhost:4201/experiments/Author/1
 Module inspector panel: preview
 Viewing card instance: http://localhost:4201/experiments/Author/1
 In format: isolated
+
+Current date and time: 2025-06-11T11:43:00.533Z
 `,
     );
   });
