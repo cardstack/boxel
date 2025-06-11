@@ -1,4 +1,5 @@
 import { waitFor, click, fillIn, settled } from '@ember/test-helpers';
+import { waitUntil } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
@@ -50,7 +51,6 @@ import {
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
-import { waitUntil } from '@ember/test-helpers';
 
 module('Integration | ai-assistant-panel | skills', function (hooks) {
   const realmName = 'Operator Mode Workspace';
