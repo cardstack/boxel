@@ -220,6 +220,7 @@ class BoxelDropdown extends Component<Signature> {
   autoCloseOnOutsideScroll = createModifier(
     (_element: HTMLElement, [dropdown]: [Dropdown]) => {
       let isMouseOverDropdown = false;
+      let closeTimeout: number | undefined;
 
       let handleMouseEnter = () => {
         isMouseOverDropdown = true;
@@ -247,7 +248,18 @@ class BoxelDropdown extends Component<Signature> {
           target === _element;
 
         if (!isFromDropdown) {
-          dropdown.actions.close();
+          // Clear any existing timeout
+          if (closeTimeout) {
+            window.clearTimeout(closeTimeout);
+          }
+
+          // Add a small delay before closing to allow for interactions
+          closeTimeout = window.setTimeout(() => {
+            // Only close if the dropdown is still open
+            if (dropdown.isOpen) {
+              dropdown.actions.close();
+            }
+          }, 200);
         }
       };
 
@@ -267,6 +279,9 @@ class BoxelDropdown extends Component<Signature> {
         if (dropdownContent) {
           dropdownContent.removeEventListener('mouseenter', handleMouseEnter);
           dropdownContent.removeEventListener('mouseleave', handleMouseLeave);
+        }
+        if (closeTimeout) {
+          window.clearTimeout(closeTimeout);
         }
       };
     },
