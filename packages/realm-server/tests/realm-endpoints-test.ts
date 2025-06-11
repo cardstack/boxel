@@ -30,7 +30,6 @@ import {
   closeServer,
   getFastbootState,
   matrixRegistrationSecret,
-  seedPath,
   testRealmInfo,
   waitUntil,
   testRealmHref,
@@ -66,7 +65,6 @@ module(basename(__filename), function () {
     let publisher: QueuePublisher;
     let runner: QueueRunner;
     let testRealmDir: string;
-    let seedRealm: Realm | undefined;
 
     function onRealmSetup(args: {
       testRealm: Realm;
@@ -117,20 +115,17 @@ module(basename(__filename), function () {
       if (testRealm2) {
         virtualNetwork.unmount(testRealm2.handle);
       }
-      ({
-        seedRealm,
-        testRealm: testRealm2,
-        testRealmHttpServer: testRealmHttpServer2,
-      } = await runTestRealmServer({
-        virtualNetwork,
-        testRealmDir,
-        realmsRootPath: join(dir.name, 'realm_server_2'),
-        realmURL: testRealm2URL,
-        dbAdapter,
-        publisher,
-        runner,
-        matrixURL,
-      }));
+      ({ testRealm: testRealm2, testRealmHttpServer: testRealmHttpServer2 } =
+        await runTestRealmServer({
+          virtualNetwork,
+          testRealmDir,
+          realmsRootPath: join(dir.name, 'realm_server_2'),
+          realmURL: testRealm2URL,
+          dbAdapter,
+          publisher,
+          runner,
+          matrixURL,
+        }));
 
       await testRealm.logInToMatrix();
     }
@@ -146,9 +141,6 @@ module(basename(__filename), function () {
         await startRealmServer(dbAdapter2, publisher, runner);
       },
       afterEach: async () => {
-        if (seedRealm) {
-          virtualNetwork.unmount(seedRealm.handle);
-        }
         await closeServer(testRealmHttpServer2);
       },
     });
@@ -973,7 +965,6 @@ module(basename(__filename), function () {
           dbAdapter,
           queue: publisher,
           getIndexHTML,
-          seedPath,
           serverURL: new URL('http://127.0.0.1:4446'),
           assetsURL: new URL(`http://example.com/notional-assets-host/`),
         }).listen(parseInt(localBaseRealmURL.port));

@@ -41,11 +41,6 @@ export async function registerRealmUsers(synapse: SynapseInstance) {
   );
   await registerUser(
     synapse,
-    'seed_realm',
-    await realmPassword('seed_realm', realmSecretSeed),
-  );
-  await registerUser(
-    synapse,
     'catalog_realm',
     await realmPassword('catalog_realm', realmSecretSeed),
   );
@@ -87,14 +82,10 @@ export async function createRealm(
   page: Page,
   endpoint: string,
   name = endpoint,
-  copyFromSeed = true,
 ) {
   await page.locator('[data-test-add-workspace]').click();
   await page.locator('[data-test-display-name-field]').fill(name);
   await page.locator('[data-test-endpoint-field]').fill(endpoint);
-  if (copyFromSeed) {
-    await page.locator('[data-test-copy-from-seed-field]').click();
-  }
   await page.locator('[data-test-create-workspace-submit]').click();
   await expect(page.locator(`[data-test-workspace="${name}"]`)).toBeVisible();
   await expect(page.locator('[data-test-create-workspace-modal]')).toHaveCount(

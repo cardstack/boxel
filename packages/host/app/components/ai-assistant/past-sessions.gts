@@ -5,6 +5,7 @@ import Component from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 
 import { IconButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
 
 import { SessionRoomData } from '../../services/ai-assistant-panel-service';
@@ -17,6 +18,7 @@ import type MatrixService from '../../services/matrix-service';
 interface Signature {
   Args: {
     sessions: SessionRoomData[];
+    currentRoomId: string | undefined;
     roomActions: RoomActions;
     onClose: () => void;
   };
@@ -67,7 +69,11 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
         {{#if @sessions}}
           <ul class='past-sessions' {{this.checkScroll}}>
             {{#each @sessions key='roomId' as |session|}}
-              <PastSessionItem @session={{session}} @actions={{@roomActions}} />
+              <PastSessionItem
+                @session={{session}}
+                @isCurrentRoom={{eq session.roomId @currentRoomId}}
+                @actions={{@roomActions}}
+              />
             {{/each}}
             {{#if this.matrixService.isLoadingMoreAIRooms}}
               <li

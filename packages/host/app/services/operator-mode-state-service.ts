@@ -796,11 +796,17 @@ export default class OperatorModeStateService extends Service {
 
   openCardInInteractMode(id: string, format: Format = 'isolated') {
     this.clearStacks();
+    let indexItem = new StackItem({
+      id: `${this.realm.url(id)}index`,
+      stackIndex: 0,
+      format: 'isolated',
+    });
     let newItem = new StackItem({
       id,
       stackIndex: 0,
       format,
     });
+    this.addItemToStack(indexItem);
     this.addItemToStack(newItem);
     this.updateSubmode(Submodes.Interact);
   }

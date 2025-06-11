@@ -724,8 +724,14 @@ export const buildContextMessage = async (
     | undefined;
   let context = lastEventWithContext?.content.data?.context;
 
+  // Extract room ID from any event in history
+  let roomId = history.find((event) => event.room_id)?.room_id;
+
   if (context) {
     result += `The user is currently viewing the following user interface:\n`;
+    if (roomId) {
+      result += `Room ID: ${roomId}\n`;
+    }
     if (context?.submode) {
       result += `Submode: ${context.submode}\n`;
     }
@@ -743,6 +749,7 @@ export const buildContextMessage = async (
   } else {
     result += `The user has no open cards.\n`;
   }
+  result += `\nCurrent date and time: ${new Date().toISOString()}\n`;
   if (attachedCards.length > 0 || attachedFiles.length > 0) {
     result += `The user currently has given you the following data to work with:\n\n`;
     if (attachedCards.length > 0) {
@@ -800,6 +807,16 @@ export const isCommandResultStatusApplied = (event?: MatrixEvent) => {
   }
   return (
     isCommandResultEvent(event.event as DiscreteMatrixEvent) &&
+    event.getContent()['m.relates_to']?.key === 'applied'
+  );
+};
+
+export const isCodePatchResultStatusApplied = (event?: MatrixEvent) => {
+  if (event === undefined) {
+    return false;
+  }
+  return (
+    isCodePatchResultEvent(event.event as DiscreteMatrixEvent) &&
     event.getContent()['m.relates_to']?.key === 'applied'
   );
 };

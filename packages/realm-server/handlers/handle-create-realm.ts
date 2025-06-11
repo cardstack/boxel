@@ -24,7 +24,6 @@ interface RealmCreationJSON {
       name: string;
       backgroundURL?: string;
       iconURL?: string;
-      copyFromSeedRealm?: boolean;
     };
   };
 }

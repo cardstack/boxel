@@ -66,7 +66,9 @@ module('Acceptance | catalog app tests', function (hooks) {
       name: 'room-test',
     });
     setupUserSubscription(matrixRoomId);
+    // this setup test realm is pretending to be a mock catalog
     await setupAcceptanceTestRealm({
+      realmURL: testRealmURL,
       mockMatrixUtils,
       contents: {
         'author/author.gts': authorCardSource,
@@ -162,16 +164,23 @@ module('Acceptance | catalog app tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {},
+            relationships: {
+              'startHere.0': {
+                links: {
+                  self: './Listing/author',
+                },
+              },
+            },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
-                name: 'CardsGrid',
+                module: `${catalogRealmURL}catalog-app/catalog`,
+                name: 'Catalog',
               },
             },
           },
         },
         '.realm.json': {
-          name: 'Test Workspace B',
+          name: 'Cardstack Catalog',
           backgroundURL:
             'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
@@ -193,6 +202,12 @@ module('Acceptance | catalog app tests', function (hooks) {
             },
           },
         },
+        '.realm.json': {
+          name: 'Test Workspace B',
+          backgroundURL:
+            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+        },
       },
     });
   });
@@ -206,7 +221,7 @@ module('Acceptance | catalog app tests', function (hooks) {
     await waitFor(buttonSelector);
     assert.dom(buttonSelector).containsText(expectedText);
     await click(buttonSelector);
-    await click(`[data-test-boxel-menu-item-text="Test Workspace B"]`);
+    await click(`[data-test-boxel-menu-item-text="Cardstack Catalog"]`);
 
     await waitFor(`[data-room-settled]`);
     await waitUntil(() => getRoomIds().length > 0);
@@ -336,6 +351,73 @@ module('Acceptance | catalog app tests', function (hooks) {
         'Remix',
         'I would like to remix this Mortgage Calculator under the following realm: http://test-realm/test/',
       );
+    });
+
+    test('after clicking "Remix" button, current realm (particularly catalog realm) is never displayed in realm options', async function (assert) {
+      // testing fitted
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}index`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      const listingId = testRealmURL + 'Listing/author';
+
+      await waitFor(
+        `[data-test-card="${listingId}"] [data-test-card-title="Author"]`,
+      );
+      assert
+        .dom(`[data-test-card="${listingId}"] [data-test-card-title="Author"]`)
+        .containsText('Author', '"Author" button exist in listing');
+      await click(
+        `[data-test-card="${listingId}"] [data-test-catalog-listing-fitted-remix-button]`,
+      );
+      assert
+        .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
+        .exists({ count: 1 });
+      assert
+        .dom(
+          '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Cardstack Catalog"]',
+        )
+        .doesNotExist();
+      assert
+        .dom(
+          '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Test Workspace B"]',
+        )
+        .exists();
+
+      // testing isolated
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: listingId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+      await click(
+        `[data-test-card="${listingId}"] [data-test-catalog-listing-isolated-remix-button]`,
+      );
+      assert
+        .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
+        .exists({ count: 1 });
+      assert
+        .dom(
+          '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Cardstack Catalog"]',
+        )
+        .doesNotExist();
+      assert
+        .dom(
+          '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Test Workspace B"]',
+        )
+        .exists();
     });
 
     test('after clicking "Preview" button, the example card opens up onto the stack', async function (assert) {
