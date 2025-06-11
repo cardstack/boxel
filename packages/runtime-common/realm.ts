@@ -2143,11 +2143,9 @@ export class Realm {
     let api = await this.loader.import<typeof CardAPI>(
       'https://cardstack.com/base/card-api',
     );
-    let card = (await api.createFromSerialized(
-      doc.data,
-      doc,
-      relativeTo,
-    )) as CardDef;
+    let card = (await api.createFromSerialized(doc.data, doc, relativeTo, {
+      ignoreBrokenLinks: true,
+    })) as CardDef;
     await api.flushLogs();
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
     delete data.data.id; // the ID is derived from the filename, so we don't serialize it on disk

@@ -150,6 +150,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         {{#if this.aiAssistantPanelService.isShowingPastSessions}}
           <AiAssistantPastSessionsList
             @sessions={{this.aiAssistantPanelService.aiSessionRooms}}
+            @currentRoomId={{this.matrixService.currentRoomId}}
             @roomActions={{this.roomActions}}
             @onClose={{this.aiAssistantPanelService.hidePastSessions}}
             {{popoverVelcro.loop}}

@@ -273,6 +273,7 @@ module('Acceptance | catalog app tests', function (hooks) {
       let fileName = parts[parts.length - 1];
       let uuid = fileName.replace(`.json`, '');
       assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
+      return filePath;
     } else {
       throw new Error(
         'file name shape not as expected when checking for [uuid].[extension]',
@@ -538,11 +539,8 @@ module('Acceptance | catalog app tests', function (hooks) {
          * talk-like-a-pirate-[uuid]/Skill/[uuid].json
          */
         const listingName = 'talk-like-a-pirate';
-        await executeCommand(
-          ListingInstallCommand,
-          `${catalogRealmURL}SkillListing/${listingName}`,
-          testRealm2URL,
-        );
+        const listingId = `${catalogRealmURL}SkillListing/${listingName}`;
+        await executeCommand(ListingInstallCommand, listingId, testRealm2URL);
         await visitOperatorMode({
           submode: 'code',
           fileView: 'browser',
@@ -562,7 +560,6 @@ module('Acceptance | catalog app tests', function (hooks) {
         if (instanceFolder) {
           await openDir(assert, instanceFolder);
         }
-
         await verifyJSONWithUUIDInFolder(assert, instanceFolder);
       });
     });
@@ -591,6 +588,33 @@ module('Acceptance | catalog app tests', function (hooks) {
             '[data-test-playground-panel] [data-test-boxel-card-header-title]',
           )
           .hasText('Author');
+      });
+      test('skill listing: installs the card and redirects to code mode with preview on first skill successfully', async function (assert) {
+        const listingName = 'talk-like-a-pirate';
+        const listingId = `${catalogRealmURL}SkillListing/${listingName}`;
+        await executeCommand(ListingRemixCommand, listingId, testRealm2URL);
+        await waitForCodeEditor();
+        await verifySubmode(assert, 'code');
+        await toggleFileTree();
+        let outerFolder = await verifyFolderWithUUIDInFileTree(
+          assert,
+          listingName,
+        );
+        if (outerFolder) {
+          await openDir(assert, outerFolder);
+        }
+        let instanceFolder = outerFolder + 'Skill' + '/';
+        await verifyFolderInFileTree(assert, instanceFolder);
+        if (instanceFolder) {
+          await openDir(assert, instanceFolder);
+        }
+        let filePath = await verifyJSONWithUUIDInFolder(assert, instanceFolder);
+        let cardId = testRealm2URL + filePath;
+        let headerId = cardId.replace('.json', '');
+        await waitFor('[data-test-card-resource-loaded]');
+        assert
+          .dom(`[data-test-code-mode-card-renderer-header="${headerId}"]`)
+          .exists();
       });
     });
 

@@ -1,5 +1,4 @@
 import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { schedule } from '@ember/runloop';
 
@@ -19,7 +18,13 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
-import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
+import {
+  Eye,
+  Folder,
+  IconCode,
+  IconLink,
+  IconPlusThin,
+} from '@cardstack/boxel-ui/icons';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
@@ -40,11 +45,14 @@ import {
   type PrerenderedCardLike,
 } from '@cardstack/runtime-common';
 
+import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
-import type LoaderService from '@cardstack/host/services/loader-service';
 
+import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
+import type CommandService from '@cardstack/host/services/command-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
@@ -60,15 +68,19 @@ import type {
   FieldDef,
   Format,
 } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { Spec } from 'https://cardstack.com/base/spec';
 
 import PrerenderedCardSearch from '../../../prerendered-card-search';
 import CardError from '../../card-error';
 import FormatChooser from '../format-chooser';
 
+import AiAssistantIcon from './ai-assistant-icon-bw';
 import FieldPickerModal from './field-chooser-modal';
 
-import InstanceSelectDropdown from './instance-chooser-dropdown';
+import InstanceSelectDropdown, {
+  BULK_GENERATED_ITEM_COUNT,
+} from './instance-chooser-dropdown';
 import PlaygroundPreview from './playground-preview';
 import SpecSearch from './spec-search';
 
@@ -94,6 +106,8 @@ interface Signature {
 
 export default class PlaygroundPanel extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
+  @service private declare aiAssistantPanelService: AiAssistantPanelService;
+  @service private declare commandService: CommandService;
   @service private declare loaderService: LoaderService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -129,14 +143,20 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get maybeGenerateFieldSpec() {
-    return this.args.isFieldDef && !this.card;
+    return this.canWriteRealm && this.args.isFieldDef && !this.card;
   }
 
-  private copyToClipboard = task(async (id: string) => {
+  private copyToClipboard = task(async (id?: string) => {
+    if (!id) {
+      return;
+    }
     await navigator.clipboard.writeText(id);
   });
 
-  private openInInteractMode = (id: string) => {
+  private openInInteractMode = (id?: string) => {
+    if (!id) {
+      return;
+    }
     this.operatorModeStateService.openCardInInteractMode(
       id,
       this.format === 'edit' ? 'edit' : 'isolated',
@@ -153,24 +173,75 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get contextMenuItems() {
-    if (!this.card?.id) {
-      return undefined;
-    }
-    let cardId = this.card.id;
+    let cardId = this.card?.id;
     let menuItems: MenuItem[] = [
       new MenuItem('Copy Card URL', 'action', {
         action: () => this.copyToClipboard.perform(cardId),
         icon: IconLink,
+        disabled: !cardId,
       }),
       new MenuItem('Open in Code Mode', 'action', {
         action: () =>
-          this.operatorModeStateService.updateCodePath(new URL(cardId)),
+          this.operatorModeStateService.updateCodePath(
+            cardId ? new URL(cardId) : null,
+          ),
         icon: IconCode,
+        disabled: !cardId,
       }),
       new MenuItem('Open in Interact Mode', 'action', {
         action: () => this.openInInteractMode(cardId),
         icon: Eye,
+        disabled: !cardId,
       }),
+      new MenuItem('Fill in sample data with AI', 'action', {
+        action: () => this.generateSampleData.perform(),
+        icon: AiAssistantIcon,
+        disabled: !this.canEditCard,
+      }),
+      new MenuItem(
+        `Generate ${BULK_GENERATED_ITEM_COUNT} examples with AI`,
+        'action',
+        {
+          action: () =>
+            this.generateSampleData.perform({
+              bulkGenerate: true,
+            }),
+          icon: AiAssistantIcon,
+          disabled: !this.canWriteRealm,
+        },
+      ),
+    ];
+    return menuItems;
+  }
+
+  private get afterMenuOptions(): MenuItem[] {
+    let menuItems: MenuItem[] = [
+      new MenuItem('Create new instance', 'action', {
+        action: () => this.createNew(),
+        icon: this.createNewIsRunning ? LoadingIndicator : IconPlusThin,
+        disabled: this.createNewIsRunning || !this.canWriteRealm,
+      }),
+      new MenuItem('Choose another instance', 'action', {
+        action: () => this.chooseInstance(),
+        icon: Folder,
+      }),
+      new MenuItem('Fill in sample data with AI', 'action', {
+        action: () => this.generateSampleData.perform(),
+        icon: AiAssistantIcon,
+        disabled: !this.canEditCard,
+      }),
+      new MenuItem(
+        `Generate ${BULK_GENERATED_ITEM_COUNT} examples with AI`,
+        'action',
+        {
+          action: () =>
+            this.generateSampleData.perform({
+              bulkGenerate: true,
+            }),
+          icon: AiAssistantIcon,
+          disabled: !this.canWriteRealm,
+        },
+      ),
     ];
     return menuItems;
   }
@@ -191,16 +262,19 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get canEditCard() {
-    return Boolean(
-      this.format !== 'edit' &&
-        this.card?.id &&
-        this.realm.canWrite(this.card.id),
-    );
+    return this.card?.id && this.realm.canWrite(this.card.id);
   }
 
-  private get isWideFormat() {
+  private get setEditMode() {
+    return this.format !== 'edit' && this.canEditCard;
+  }
+
+  private get prefersWideFormat() {
     if (!this.card) {
       return false;
+    }
+    if (this.format !== 'isolated' && this.format !== 'edit') {
+      return true;
     }
     let { constructor } = this.card;
     return Boolean(
@@ -210,9 +284,8 @@ export default class PlaygroundPanel extends Component<Signature> {
     );
   }
 
-  private get styleForPlaygroundContent(): SafeString {
-    const maxWidth =
-      this.format !== 'isolated' || this.isWideFormat ? '100%' : '50rem';
+  private get setMaxWidth(): SafeString {
+    const maxWidth = this.prefersWideFormat ? '100%' : '50rem';
     return htmlSafe(`max-width: ${maxWidth};`);
   }
   private get moduleId() {
@@ -422,9 +495,9 @@ export default class PlaygroundPanel extends Component<Signature> {
       this.moduleId,
       trimJsonExtension(selectedCardId),
       selectedFormat,
-      index /* `undefined` means we are previewing a card instances. fields MUST have a corresponding index
-      based on their position on their spec's containedExamples field. otherwise, it means that we are previewing
-      a spec instance on playground instead of the field */,
+      index, // `undefined` means we are previewing a card instances. fields MUST have a corresponding index
+      // based on their position on their spec's containedExamples field. otherwise, it means that we are previewing
+      // a spec instance on playground instead of the field,
     );
   };
 
@@ -489,6 +562,7 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   private createNewCard = restartableTask(async () => {
     let newCardJSON: LooseSingleCardDocument;
+
     if (this.args.isFieldDef) {
       let fieldCard = await loadCardDef(this.args.codeRef, {
         loader: this.loaderService.loader,
@@ -574,16 +648,11 @@ export default class PlaygroundPanel extends Component<Signature> {
       ) as BoxelSelect | null
     )?.click();
 
-  @action
-  handleClick(e: MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    return false;
-  }
-
-  private get fileToFixWithAi() {
+  private get currentFileDef(): FileDef | undefined {
     let codePath = this.operatorModeStateService.state.codePath?.href;
-    if (!codePath) return undefined;
+    if (!codePath) {
+      return undefined;
+    }
 
     return this.matrixService.fileAPI.createFileDef({
       sourceUrl: codePath,
@@ -678,6 +747,57 @@ export default class PlaygroundPanel extends Component<Signature> {
     }
   };
 
+  private generateSampleData = restartableTask(
+    async (opts?: { bulkGenerate: boolean }) => {
+      if (!this.operatorModeStateService.openFileURL) {
+        throw new Error('Please open a file');
+      }
+
+      let card = this.card;
+
+      await this.aiAssistantPanelService.openPanel();
+
+      let { commandContext } = this.commandService;
+      let sendMessageCommand = new SendAiAssistantMessageCommand(
+        commandContext,
+      );
+
+      let prompt: string;
+
+      if (opts?.bulkGenerate) {
+        prompt = `Generate ${BULK_GENERATED_ITEM_COUNT} additional examples`;
+        if (this.args.isFieldDef) {
+          prompt += ` on this card's spec.`;
+        } else {
+          prompt += ` of the attached card instance.`;
+        }
+      } else {
+        prompt = `Fill in sample data`;
+        if (this.args.isFieldDef) {
+          prompt += ` for this example on the card's spec.`;
+        } else if (card) {
+          prompt += ` for the attached card instance.`;
+        } else {
+          // if there is no selected card for some reason (maybe an error case),
+          // AI can generate sample card instances using the specified moduleId
+          // otherwise it complains about not having an open card or
+          // generates instances for all card definitions on the file
+          prompt += ` for the selected module ${this.moduleId} in the attached file.`;
+        }
+      }
+
+      await sendMessageCommand.execute({
+        roomId: this.matrixService.currentRoomId,
+        prompt,
+        openCardIds: card?.id ? [card.id] : undefined,
+        attachedCards: card ? [card] : undefined,
+        attachedFileURLs: [this.operatorModeStateService.openFileURL],
+        realmUrl: this.operatorModeStateService.realmURL.href,
+      });
+      this.closeInstanceChooser();
+    },
+  );
+
   <template>
     {{consumeContext this.makeCardResource}}
 
@@ -727,10 +847,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     {{/if}}
 
     <section class='playground-panel' data-test-playground-panel>
-      <div
-        class='playground-panel-content'
-        style={{this.styleForPlaygroundContent}}
-      >
+      <div class='playground-panel-content' style={{this.setMaxWidth}}>
         {{#if this.isLoading}}
           <LoadingIndicator @color='var(--boxel-light)' />
         {{else}}
@@ -738,17 +855,16 @@ export default class PlaygroundPanel extends Component<Signature> {
             {{#let
               (component
                 InstanceSelectDropdown
-                cardOptions=(if @isFieldDef undefined this.cardOptions)
+                isFieldDef=@isFieldDef
+                cardOptions=this.cardOptions
                 fieldOptions=this.fieldInstances
                 findSelectedCard=this.findSelectedCard
                 selection=this.dropdownSelection
                 onSelect=this.onSelect
-                chooseCard=this.chooseInstance
-                createNew=(if this.canWriteRealm this.createNew)
-                createNewIsRunning=this.createNewIsRunning
                 moduleId=this.moduleId
                 persistSelections=this.persistSelections
                 recentCardIds=this.recentCardIds
+                afterMenuOptions=this.afterMenuOptions
               )
               as |InstanceChooser|
             }}
@@ -763,16 +879,12 @@ export default class PlaygroundPanel extends Component<Signature> {
                     <CardError
                       @error={{this.cardError}}
                       @cardCreationError={{this.cardError.meta.isCreationError}}
-                      @fileToFixWithAi={{this.fileToFixWithAi}}
+                      @fileToFixWithAi={{this.currentFileDef}}
                     >
                       <:error>
-                        <button
-                          class='instance-chooser-container with-error'
-                          {{on 'click' this.handleClick}}
-                          {{on 'mouseup' this.handleClick}}
-                        >
+                        <div class='instance-chooser-container'>
                           <InstanceChooser />
-                        </button>
+                        </div>
                       </:error>
                     </CardError>
                   </CardContainer>
@@ -787,7 +899,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                     @format={{this.format}}
                     @realmInfo={{this.realmInfo}}
                     @contextMenuItems={{this.contextMenuItems}}
-                    @onEdit={{if this.canEditCard (fn this.setFormat 'edit')}}
+                    @onEdit={{if this.setEditMode (fn this.setFormat 'edit')}}
                     @onFinishEditing={{if
                       (eq this.format 'edit')
                       (fn this.setFormat this.defaultFormat)
@@ -795,14 +907,8 @@ export default class PlaygroundPanel extends Component<Signature> {
                     @isFieldDef={{@isFieldDef}}
                   />
                 </div>
-                <section class='instance-and-format'>
-                  <button
-                    class='instance-chooser-container'
-                    {{on 'click' this.handleClick}}
-                    {{on 'mouseup' this.handleClick}}
-                  >
-                    <InstanceChooser />
-                  </button>
+                <section class='instance-chooser-container'>
+                  <InstanceChooser />
                   <FormatChooser
                     class='format-chooser'
                     @formats={{if @isFieldDef this.fieldFormats}}
@@ -817,7 +923,6 @@ export default class PlaygroundPanel extends Component<Signature> {
                 <SpecSearch
                   @query={{this.specQuery}}
                   @realms={{this.realmServer.availableRealmURLs}}
-                  @canWriteRealm={{this.canWriteRealm}}
                   @createNewCard={{this.createNew}}
                 />
               {{/if}}
@@ -828,60 +933,6 @@ export default class PlaygroundPanel extends Component<Signature> {
     </section>
 
     <style scoped>
-      .instance-chooser-container {
-        background: none;
-        border: none;
-        cursor: auto;
-        width: 100%;
-        padding: 0;
-        margin-left: auto;
-      }
-
-      .instance-chooser-container :deep(.instance-chooser) {
-        height: auto;
-
-        border-radius: 0;
-        border-top-left-radius: var(--boxel-border-radius);
-        border-top-right-radius: var(--boxel-border-radius);
-      }
-
-      .instance-chooser-container.with-error :deep(.instance-chooser) {
-        border-radius: var(--boxel-border-radius);
-        box-shadow: var(--boxel-deep-box-shadow);
-      }
-
-      .playground-panel-content {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp);
-        min-height: 100%;
-        margin-inline: auto;
-        padding: var(--boxel-sp);
-      }
-      .preview-area {
-        flex-grow: 1;
-        z-index: 0;
-        display: flex;
-        flex-direction: column;
-      }
-
-      .instance-and-format {
-        position: sticky;
-        bottom: 100px;
-        border: 1px solid var(--boxel-450);
-        margin: 0 auto;
-        width: 380px;
-        justify-content: space-between;
-
-        /* It’s meant to have two rounded borders, this removes a gap */
-        border-radius: calc(var(--boxel-border-radius) + 1px);
-      }
-
-      .format-chooser {
-        border-bottom-left-radius: var(--boxel-border-radius);
-        border-bottom-right-radius: var(--boxel-border-radius);
-      }
-
       .playground-panel {
         position: relative;
         background-image: url('./playground-background.png');
@@ -895,13 +946,49 @@ export default class PlaygroundPanel extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
         overflow: auto;
       }
+      .playground-panel-content {
+        --playground-padding: var(--boxel-sp-sm);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+        min-height: 100%;
+        margin-inline: auto;
+        padding: var(--playground-padding);
+      }
+      .preview-area {
+        flex-grow: 1;
+        z-index: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .instance-chooser-container {
+        position: sticky;
+        bottom: var(--playground-padding);
+        border: 1px solid var(--boxel-450);
+        margin: 0 auto;
+        width: 380px;
+        justify-content: space-between;
+
+        /* It’s meant to have two rounded borders, this removes a gap */
+        border-radius: calc(var(--boxel-border-radius) + 1px);
+      }
+      .instance-chooser-container :deep(.instance-chooser) {
+        border-radius: 0;
+        border-top-left-radius: var(--boxel-border-radius);
+        border-top-right-radius: var(--boxel-border-radius);
+      }
+      .format-chooser {
+        border-bottom-left-radius: var(--boxel-border-radius);
+        border-bottom-right-radius: var(--boxel-border-radius);
+      }
       .error-container {
         flex-grow: 1;
         display: grid;
-        grid-template-rows: max-content;
-        margin-left: calc(-1 * var(--boxel-sp));
-        padding-bottom: var(--boxel-sp-xxl);
-        width: calc(100% + calc(2 * var(--boxel-sp)));
+        grid-template-rows: max-content 1fr;
+      }
+      .error-container :deep(.instance-chooser) {
+        border-radius: var(--boxel-border-radius);
+        box-shadow: var(--boxel-deep-box-shadow);
       }
     </style>
   </template>
