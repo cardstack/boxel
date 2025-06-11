@@ -292,6 +292,46 @@ export function getRelevantCards(
   };
 }
 
+export function hasSomeAttachedCards(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): boolean {
+  for (let event of history) {
+    if (event.type !== 'm.room.message') {
+      continue;
+    }
+
+    if (event.sender !== aiBotUserId) {
+      let { content } = event;
+      let attachedCards = (content as CardMessageContent).data?.attachedCards
+        ?.map((attachedCard: SerializedFileDef) =>
+          attachedCard.content
+            ? (JSON.parse(attachedCard.content) as LooseSingleCardDocument)
+            : undefined,
+        )
+        .filter((card) => card !== undefined);
+      if (attachedCards?.length) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+export function getAttachedCards(eventContent: CardMessageContent) {
+  return (
+    eventContent.data?.attachedCards
+      ?.map((attachedCard: SerializedFileDef) =>
+        attachedCard.content
+          ? (JSON.parse(attachedCard.content).data as LooseCardResource)
+          : undefined,
+      )
+      ?.filter((card) => card?.id) // Only include cards with valid IDs
+      ?.sort((a, b) => String(a!.id!).localeCompare(String(b!.id!))) ?? []
+  );
+}
+
 export async function loadCurrentlySerializedFileDefs(
   client: MatrixClient,
   history: DiscreteMatrixEvent[],
@@ -637,11 +677,17 @@ export async function getModifyPrompt(
         codePatchResults,
       ).forEach((message) => historicalMessages.push(message));
     }
-    if (body && event.sender !== aiBotUserId) {
-      historicalMessages.push({
-        role: 'user',
-        content: body,
-      });
+    if (event.sender !== aiBotUserId) {
+      let attachments = buildAttachmentsMessagePart(
+        event.content as CardMessageContent,
+      );
+      let content = [body, attachments].filter(Boolean).join('\n\n');
+      if (content) {
+        historicalMessages.push({
+          role: 'user',
+          content,
+        });
+      }
     }
   }
   let systemMessage = `${MODIFY_SYSTEM_MESSAGE}\n`;
@@ -689,16 +735,20 @@ export async function getModifyPrompt(
   return messages;
 }
 
+export const buildAttachmentsMessagePart = (content: CardMessageContent) => {
+  let attachedCards = getAttachedCards(content);
+  if (attachedCards.length === 0) {
+    return '';
+  }
+  return `Attached Cards:\n${JSON.stringify(attachedCards, null, 2)}\n`;
+};
+
 export const buildContextMessage = async (
   client: MatrixClient,
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   tools: Tool[],
 ): Promise<string> => {
-  let { mostRecentlyAttachedCard, attachedCards } = getRelevantCards(
-    history,
-    aiBotUserId,
-  );
   let result = '';
 
   let attachedFiles = await loadCurrentlySerializedFileDefs(
@@ -757,11 +807,11 @@ export const buildContextMessage = async (
     result += `The user has no open cards.\n`;
   }
   result += `\nCurrent date and time: ${new Date().toISOString()}\n`;
-  if (attachedCards.length > 0 || attachedFiles.length > 0) {
+  if (attachedFiles.length > 0) {
     result += `The user currently has given you the following data to work with:\n\n`;
-    if (attachedCards.length > 0) {
-      result += `Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}\n\n`;
-    }
+    // if (attachedCards.length > 0) {
+    //   result += `Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}\n\n`;
+    // }
     if (attachedFiles.length > 0) {
       result += `\n\nAttached files:\n${attachedFilesToMessage(attachedFiles)}`;
     }
@@ -771,7 +821,11 @@ export const buildContextMessage = async (
     (tool) => tool.function.name === 'patchCardInstance',
   );
 
-  if (attachedFiles.length == 0 && attachedCards.length > 0 && !cardPatchTool) {
+  if (
+    attachedFiles.length == 0 &&
+    !cardPatchTool &&
+    hasSomeAttachedCards(history, aiBotUserId)
+  ) {
     result +=
       'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
   }

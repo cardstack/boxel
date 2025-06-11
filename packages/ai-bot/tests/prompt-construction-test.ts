@@ -236,21 +236,28 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(result[0].role, 'system');
     assert.equal(result[1].role, 'system');
     assert.equal(result[2].role, 'user');
-    assert.equal(result[2].content, 'Hey');
+    assert.true(
+      result[2].content?.startsWith('Hey'),
+      'message body should be in the user prompt',
+    );
     if (
       history[0].type === 'm.room.message' &&
       history[0].content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
     ) {
       assert.true(
-        result[1].content?.includes(
+        result[2].content?.includes(
           JSON.stringify(
             history[0].content.data.attachedCards![0].content
-              ? JSON.parse(history[0].content.data.attachedCards![0].content)
-                  .data
+              ? [
+                  JSON.parse(history[0].content.data.attachedCards![0].content)
+                    .data,
+                ]
               : '',
+            null,
+            2,
           ),
         ),
-        'attached card should be in the system context message',
+        'attached card should be in the message that it was sent with',
       );
       assert.true(
         result[1].content?.includes('Room ID: room1'),
@@ -852,7 +859,7 @@ Attached files:
     assert.equal(attachedCards.length, 2);
   });
 
-  test('Gets multiple uploaded cards in the system context message', async () => {
+  test('Handles multiple uploaded cards across user messages', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -861,7 +868,7 @@ Attached files:
         content: {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
-          body: 'Hey',
+          body: 'Hey 1',
           data: {
             attachedCards: [
               {
@@ -910,7 +917,7 @@ Attached files:
         content: {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
-          body: 'Hey',
+          body: 'Hey 2',
           data: {
             attachedCards: [
               {
@@ -960,16 +967,16 @@ Attached files:
       undefined,
       fakeMatrixClient,
     );
-    const systemContextMessage = fullPrompt.findLast(
-      (message) => message.role === 'system',
+    const userMessages = fullPrompt.filter(
+      (message) => message.role === 'user',
     );
     assert.true(
-      systemContextMessage?.content?.includes(
+      userMessages[0]?.content?.includes(
         'http://localhost:4201/experiments/Author/1',
       ),
     );
     assert.true(
-      systemContextMessage?.content?.includes(
+      userMessages[1]?.content?.includes(
         'http://localhost:4201/experiments/Author/2',
       ),
     );
@@ -1339,11 +1346,11 @@ Attached files:
     let nonEditableCardsMessage =
       'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
 
+    let userContextMessage = messages?.[messages.length - 2];
     assert.ok(
-      messages?.[messages.length - 2].content?.includes(
-        nonEditableCardsMessage,
-      ),
-      'System context message should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files',
+      userContextMessage?.content?.includes(nonEditableCardsMessage),
+      'System context message should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files, but was ' +
+        userContextMessage?.content,
     );
 
     // Now add a tool
@@ -1677,9 +1684,6 @@ Attached files:
       await getPromptParts(eventList, '@aibot:localhost', fakeMatrixClient)
     ).messages!;
 
-    const { attachedCards } = getRelevantCards(eventList, '@aibot:localhost');
-    assert.equal(attachedCards.length, 1);
-
     assert.equal(result[0].role, 'system');
     assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.true(
@@ -1692,11 +1696,12 @@ Attached files:
       result[0].content?.includes('Use pirate colloquialism when responding.'),
       'skill card instructions included in the system message',
     );
+    assert.equal(result[2].role, 'user');
     assert.true(
-      result![1].content?.includes(
-        'attributes":{"appTitle":"Radio Episode Tracker for Nerds"',
+      result![2].content?.includes(
+        'attributes": {\n      "appTitle": "Radio Episode Tracker for Nerds"',
       ),
-      'attached card details included in the system context message',
+      'attached card details included in the user message',
     );
   });
 
@@ -3065,7 +3070,7 @@ Attached files:
       'patchCardInstance',
       'Should have patchCardInstance tool call',
     );
-    assert.true(messages![9].content!.includes('Business Card V2'));
+    assert.true(messages![6].content!.includes('Business Card V2'));
   });
 
   test('Responds to completion of lone code patch', async function () {
