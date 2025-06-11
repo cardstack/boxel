@@ -190,7 +190,7 @@ export default class Room extends Component<Signature> {
                   class='llm-select'
                   @selected={{@roomResource.activeLLM}}
                   @onChange={{perform @roomResource.activateLLMTask}}
-                  @options={{this.supportedLLMs}}
+                  @options={{this.llmsForSelectMenu}}
                   @disabled={{@roomResource.isActivatingLLM}}
                   @onExpand={{fn this.setSelectedAction 'llm-select'}}
                   @onCollapse={{fn this.setSelectedAction undefined}}
@@ -613,8 +613,12 @@ export default class Room extends Component<Signature> {
     return this.args.roomResource.skills;
   }
 
-  private get supportedLLMs(): string[] {
-    return DEFAULT_LLM_LIST.sort();
+  private get llmsForSelectMenu() {
+    return [
+      ...new Set([...DEFAULT_LLM_LIST, ...this.args.roomResource.usedLLMs]),
+    ]
+      .filter(Boolean)
+      .sort();
   }
 
   private get sortedSkills(): RoomSkill[] {
