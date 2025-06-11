@@ -95,7 +95,7 @@ class BoxelDropdown extends Component<Signature> {
             allowOutsideClick=true
           )
         }}
-        {{this.autoCloseOnOutsideScroll dd}}
+        {{this.autoCloseOnOutsidePointer dd}}
       >
         {{yield (hash close=dd.actions.close) to='content'}}
       </dd.Content>
@@ -217,37 +217,25 @@ class BoxelDropdown extends Component<Signature> {
     };
   });
 
-  autoCloseOnOutsideScroll = createModifier(
+  autoCloseOnOutsidePointer = createModifier(
     (_element: HTMLElement, [dropdown]: [Dropdown]) => {
-      let isMouseOverDropdown = false;
       let closeTimeout: number | undefined;
 
-      let handleMouseEnter = () => {
-        isMouseOverDropdown = true;
-      };
-
-      let handleMouseLeave = () => {
-        isMouseOverDropdown = false;
-      };
-
-      let handleScroll = (event: Event) => {
+      let handleMouseMove = (event: MouseEvent) => {
         const dropdownContent = document.querySelector(
           '.boxel-dropdown__content',
-        );
-        const target = event.target as Node;
+        ) as HTMLElement;
 
-        // Don't close if mouse is over dropdown
-        if (isMouseOverDropdown) {
-          return;
-        }
+        if (!dropdownContent) return;
 
-        // Check if the scroll event is from the dropdown or its children
-        const isFromDropdown =
-          dropdownContent?.contains(target) ||
-          target === dropdownContent ||
-          target === _element;
+        const rect = dropdownContent.getBoundingClientRect();
+        const isOutside =
+          event.clientX < rect.left ||
+          event.clientX > rect.right ||
+          event.clientY < rect.top ||
+          event.clientY > rect.bottom;
 
-        if (!isFromDropdown) {
+        if (isOutside) {
           // Clear any existing timeout
           if (closeTimeout) {
             window.clearTimeout(closeTimeout);
@@ -260,26 +248,19 @@ class BoxelDropdown extends Component<Signature> {
               dropdown.actions.close();
             }
           }, 200);
+        } else {
+          // Clear timeout if mouse is inside
+          if (closeTimeout) {
+            window.clearTimeout(closeTimeout);
+            closeTimeout = undefined;
+          }
         }
       };
 
-      // Add mouse enter/leave listeners to dropdown content
-      const dropdownContent = document.querySelector(
-        '.boxel-dropdown__content',
-      );
-      if (dropdownContent) {
-        dropdownContent.addEventListener('mouseenter', handleMouseEnter);
-        dropdownContent.addEventListener('mouseleave', handleMouseLeave);
-      }
-
-      window.addEventListener('scroll', handleScroll, true);
+      window.addEventListener('mousemove', handleMouseMove);
 
       return () => {
-        window.removeEventListener('scroll', handleScroll, true);
-        if (dropdownContent) {
-          dropdownContent.removeEventListener('mouseenter', handleMouseEnter);
-          dropdownContent.removeEventListener('mouseleave', handleMouseLeave);
-        }
+        window.removeEventListener('mousemove', handleMouseMove);
         if (closeTimeout) {
           window.clearTimeout(closeTimeout);
         }
