@@ -4,9 +4,11 @@ import { module, test } from 'qunit';
 
 import { specRef, type Realm } from '@cardstack/runtime-common';
 
+import { BULK_GENERATED_ITEM_COUNT } from '@cardstack/host/components/operator-mode/code-submode/playground/instance-chooser-dropdown';
 import ENV from '@cardstack/host/config/environment';
 
 import {
+  assertMessages,
   percySnapshot,
   setupAcceptanceTestRealm,
   setupLocalIndexing,
@@ -998,6 +1000,50 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       await settled();
       assertFieldExists(assert, 'embedded');
       assert.dom('[data-test-embedded-comment-title]').doesNotExist();
+    });
+
+    test('can request AI assistant to fill in sample data', async function (assert) {
+      const prompt = `Fill in sample data for this example on the card's spec.`;
+      const menuItem = 'Fill in sample data with AI';
+      const commandMessage = {
+        from: 'testuser',
+        message: prompt,
+        cards: [{ id: `${testRealmURL}Spec/toy` }],
+        files: [{ name: 'pet.gts', sourceUrl: `${testRealmURL}pet.gts` }],
+      };
+      await openFileInPlayground('pet.gts', testRealmURL, {
+        declaration: 'ToyField',
+      });
+      assert
+        .dom('[data-test-instance-chooser]')
+        .containsText('Toy - Example 1');
+      assertFieldExists(assert, 'embedded');
+
+      await click('[data-test-instance-chooser]');
+      await click(`[data-test-boxel-menu-item-text="${menuItem}"]`);
+      assertMessages(assert, [commandMessage]);
+    });
+
+    test('can request AI assistant to bulk generate samples', async function (assert) {
+      const prompt = `Generate ${BULK_GENERATED_ITEM_COUNT} additional examples on this card's spec.`;
+      const menuItem = `Generate ${BULK_GENERATED_ITEM_COUNT} examples with AI`;
+      const commandMessage = {
+        from: 'testuser',
+        message: prompt,
+        cards: [{ id: `${testRealmURL}Spec/toy` }],
+        files: [{ name: 'pet.gts', sourceUrl: `${testRealmURL}pet.gts` }],
+      };
+      await openFileInPlayground('pet.gts', testRealmURL, {
+        declaration: 'ToyField',
+      });
+      assert
+        .dom('[data-test-instance-chooser]')
+        .containsText('Toy - Example 1');
+      assertFieldExists(assert, 'embedded');
+
+      await click('[data-test-instance-chooser]');
+      await click(`[data-test-boxel-menu-item-text="${menuItem}"]`);
+      assertMessages(assert, [commandMessage]);
     });
   });
 

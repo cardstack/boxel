@@ -91,14 +91,13 @@ export default class CardErrorComponent extends Component<Signature> {
         justify-content: center;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
-        margin: var(--boxel-sp);
       }
       .card-error {
         flex: 1;
         opacity: 0.4;
         border-radius: 0;
         box-shadow: none;
-        overflow: visible;
+        overflow-y: auto;
       }
       .message {
         width: 100%;

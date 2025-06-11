@@ -237,9 +237,14 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
     assert
       .dom('[data-test-past-sessions-button] [data-test-has-active-sessions]')
       .doesNotExist();
+    await click('[data-test-past-sessions-button]');
     assert
       .dom(`[data-test-enter-room='${roomId}'] [data-test-is-streaming]`)
       .doesNotExist();
+    assert
+      .dom(`[data-room-id='${roomId}']`)
+      .hasAttribute('data-is-current-room');
+    await click('[data-test-ai-assistant-panel]'); // close the menu
 
     // Create a new room with some activity (this could happen when we will have a feature that interacts with AI outside of the AI pannel, i.e. "commands")
 
@@ -289,6 +294,9 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
     assert
       .dom(`[data-test-joined-room='${roomId}']`)
       .doesNotContainText('Updated');
+    assert
+      .dom(`[data-room-id='${anotherRoomId}']`)
+      .doesNotHaveAttribute('data-is-current-room');
 
     await click(`[data-test-enter-room='${anotherRoomId}']`);
     assert
@@ -316,5 +324,11 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
     assert
       .dom(`[data-test-joined-room='${anotherRoomId}']`)
       .doesNotContainText('Updated');
+    assert
+      .dom(`[data-room-id='${anotherRoomId}']`)
+      .hasAttribute('data-is-current-room');
+    assert
+      .dom(`[data-room-id='${roomId}']`)
+      .doesNotHaveAttribute('data-is-current-room');
   });
 });

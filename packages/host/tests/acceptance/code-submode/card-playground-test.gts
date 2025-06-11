@@ -11,7 +11,13 @@ import { triggerEvent } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { trimJsonExtension, type Realm } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  trimJsonExtension,
+  type Realm,
+} from '@cardstack/runtime-common';
+
+import { BULK_GENERATED_ITEM_COUNT } from '@cardstack/host/components/operator-mode/code-submode/playground/instance-chooser-dropdown';
 
 import {
   percySnapshot,
@@ -160,6 +166,11 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     setupOnSave(hooks);
 
     hooks.beforeEach(async function () {
+      let loader = getService('loader-service').loader;
+      let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
+      cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
+      let { CardsGrid } = cardsGrid;
+
       matrixRoomId = createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
@@ -170,6 +181,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         mockMatrixUtils,
         realmURL: testRealmURL,
         contents: {
+          'index.json': new CardsGrid(),
           'author.gts': authorCard,
           'blog-post.gts': blogPostCard,
           'code-ref-driver.gts': codeRefDriverCard,
@@ -514,7 +526,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .exists();
 
       await click('[data-test-open-search-field]');
-      await click('[data-test-search-result-index="4"]');
+      await click('[data-test-search-result-index="5"]');
       assert
         .dom(`[data-test-stack-card="${testRealmURL}Category/landscaping"]`)
         .exists();
@@ -582,7 +594,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await click('[data-test-more-options-button]');
       assert
         .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
-        .exists({ count: 3 });
+        .exists({ count: 5 });
 
       await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
       assert
@@ -601,7 +613,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await click('[data-test-boxel-menu-item-text="Open in Interact Mode"]');
       assert
         .dom(
-          `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Author/jane-doe"]`,
+          `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}index"]`,
+        )
+        .exists();
+      assert
+        .dom(
+          `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Author/jane-doe"]`,
         )
         .exists();
       assert.dom('[data-test-author-title]').hasText('Jane Doe');
@@ -694,7 +711,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await click('[data-test-boxel-menu-item-text="Open in Interact Mode"]');
       assert
         .dom(
-          `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Author/jane-doe"]`,
+          `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}index"]`,
+        )
+        .exists();
+      assert
+        .dom(
+          `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Author/jane-doe"]`,
         )
         .exists();
       assert
@@ -1224,6 +1246,56 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0].id, cardId);
     });
+
+    test('can request AI assistant to fill in sample data', async function (assert) {
+      const prompt = `Fill in sample data for the attached card instance.`;
+      const menuItem = 'Fill in sample data with AI';
+      const commandMessage = {
+        from: 'testuser',
+        message: prompt,
+        cards: [{ id: `${testRealmURL}BlogPost/mad-hatter` }],
+        files: [
+          { name: 'blog-post.gts', sourceUrl: `${testRealmURL}blog-post.gts` },
+        ],
+      };
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'BlogPost',
+      });
+      assertCardExists(assert, `${testRealmURL}BlogPost/mad-hatter`);
+
+      await click('[data-test-instance-chooser]');
+      await click(`[data-test-boxel-menu-item-text="${menuItem}"]`);
+      assertMessages(assert, [commandMessage]);
+
+      await click('[data-test-more-options-button]');
+      await click(`[data-test-boxel-menu-item-text="${menuItem}"]`);
+      assertMessages(assert, [commandMessage, commandMessage]);
+    });
+
+    test('can request AI assistant to bulk generate samples', async function (assert) {
+      const prompt = `Generate ${BULK_GENERATED_ITEM_COUNT} additional examples of the attached card instance.`;
+      const menuItem = `Generate ${BULK_GENERATED_ITEM_COUNT} examples with AI`;
+      const commandMessage = {
+        from: 'testuser',
+        message: prompt,
+        cards: [{ id: `${testRealmURL}BlogPost/mad-hatter` }],
+        files: [
+          { name: 'blog-post.gts', sourceUrl: `${testRealmURL}blog-post.gts` },
+        ],
+      };
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'BlogPost',
+      });
+      assertCardExists(assert, `${testRealmURL}BlogPost/mad-hatter`);
+
+      await click('[data-test-instance-chooser]');
+      await click(`[data-test-boxel-menu-item-text="${menuItem}"]`);
+      assertMessages(assert, [commandMessage]);
+
+      await click('[data-test-more-options-button]');
+      await click(`[data-test-boxel-menu-item-text="${menuItem}"]`);
+      assertMessages(assert, [commandMessage, commandMessage]);
+    });
   });
 
   module('multiple realms', function (hooks) {
@@ -1475,7 +1547,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await openFileInPlayground('boom-person.gts', testRealmURL, {
         declaration: 'BoomPerson',
       });
-      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+      assert
+        .dom('[data-test-instance-chooser]')
+        .hasText('Select card instance');
       assert
         .dom('[data-test-card-error]')
         .exists('auto-generated card has error in it');
@@ -1575,7 +1649,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await openFileInPlayground('boom-person.gts', testRealmURL, {
         declaration: 'BoomPerson',
       });
-      assert.dom('[data-test-instance-chooser]').containsText('Please Select');
+      assert
+        .dom('[data-test-instance-chooser]')
+        .containsText('Select card instance');
 
       assert
         .dom('[data-test-error-container]')

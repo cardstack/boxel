@@ -7,6 +7,7 @@ import {
   StringField,
   linksTo,
   Component,
+  realmURL,
 } from 'https://cardstack.com/base/card-api';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
@@ -51,14 +52,16 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   }
 
   get remixRealmOptions() {
-    return this.writableRealms.map((realm) => {
-      return new MenuItem(realm.name, 'action', {
-        action: () => {
-          this.remix(realm.url);
-        },
-        iconURL: realm.iconURL ?? '/default-realm-icon.png',
+    return this.writableRealms
+      .filter((realm) => realm.url !== this.args.model[realmURL]?.href)
+      .map((realm) => {
+        return new MenuItem(realm.name, 'action', {
+          action: () => {
+            this.remix(realm.url);
+          },
+          iconURL: realm.iconURL ?? '/default-realm-icon.png',
+        });
       });
-    });
   }
 
   _remix = task(async (realm: string) => {
