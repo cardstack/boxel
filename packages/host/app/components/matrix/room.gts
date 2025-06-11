@@ -893,11 +893,11 @@ export default class Room extends Component<Signature> {
   }
 
   private get displaySkillMenu() {
-    return this.selectedAction !== 'llm-select';
+    return !this.selectedAction || this.selectedAction === 'skill-menu';
   }
 
   private get displayLLMSelect() {
-    return this.selectedAction !== 'skill-menu';
+    return !this.selectedAction || this.selectedAction === 'llm-select';
   }
 }
 

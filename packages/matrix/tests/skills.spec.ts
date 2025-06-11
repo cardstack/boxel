@@ -51,8 +51,9 @@ test.describe('Skills', () => {
   ) {
     if (openSkillMenu) {
       await expect(page.locator('[data-test-skill-menu]')).toHaveCount(1);
-      await page.locator('[data-test-skill-menu]').hover();
-      await page.locator('[data-test-pill-menu-button]').click();
+      await page
+        .locator('[data-test-skill-menu][data-test-pill-menu-button]')
+        .click();
     }
     await page.locator('[data-test-pill-menu-add-button]').click();
     await page.locator(`[data-test-select="${cardId}"]`).click();
@@ -85,12 +86,11 @@ test.describe('Skills', () => {
     await expect(page.locator('[data-test-skill-menu]')).toContainText(
       'Skills 2',
     );
-    await page.locator('[data-test-pill-menu-button]').click();
+    await page
+      .locator('[data-test-skill-menu][data-test-pill-menu-button]')
+      .click();
     await expect(page.locator('[data-test-skill-menu]')).toContainText(
       'Skills: 2 of 2 active',
-    );
-    await expect(page.locator('[data-test-skill-menu]')).toHaveClass(
-      'pill-menu skill-menu',
     );
     await expect(page.locator('[data-test-pill-menu-item]')).toHaveCount(2);
     await expect(
@@ -166,7 +166,9 @@ test.describe('Skills', () => {
     await page.locator('[data-test-submode-switcher] button').click();
     await page.locator('[data-test-boxel-menu-item-text="Code"]').click();
     await page.locator('[data-test-skill-menu]').hover();
-    await page.locator('[data-test-pill-menu-button]').click();
+    await page
+      .locator('[data-test-skill-menu][data-test-pill-menu-button]')
+      .click();
 
     // Check that each default skill card for code mode is attached
     for (const skillCardURL of defaultSkillCardsForCodeMode) {
@@ -263,7 +265,9 @@ test.describe('Skills', () => {
 
     expect(page.locator('[data-test-skill-menu]')).toHaveText('Skills 4');
     await page.locator('[data-test-skill-menu]').hover();
-    await page.locator('[data-test-pill-menu-button]').click();
+    await page
+      .locator('[data-test-skill-menu][data-test-pill-menu-button]')
+      .click();
     await page
       .locator(`[data-test-card-pill-toggle="${cardEditingSkillCardId}-on"]`)
       .click(); // toggle off default skill card
@@ -307,7 +311,9 @@ test.describe('Skills', () => {
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
     await page.locator('[data-test-skill-menu]').hover();
-    await page.locator('[data-test-pill-menu-button]').click();
+    await page
+      .locator('[data-test-skill-menu][data-test-pill-menu-button]')
+      .click();
     await page
       .locator(`[data-test-card-pill-toggle="${skillCard2}-off"]`)
       .click(); // toggle on skill 2
@@ -394,10 +400,12 @@ test.describe('Skills', () => {
     await page.locator('[data-test-close-button]').click();
 
     // Add the skill card to the assistant
-    await page.locator('[data-test-skill-menu]').hover();
-    await expect(page.locator('[data-test-pill-menu-button]')).toBeVisible();
-    await page.locator('[data-test-pill-menu-button]').click();
-    await page.locator('[data-test-pill-menu-add-button]').click();
+    await page
+      .locator('[data-test-skill-menu][data-test-pill-menu-button]')
+      .click();
+    await page
+      .locator('[data-test-skill-menu] [data-test-pill-menu-add-button]')
+      .click();
     await page
       .locator('[data-test-card-catalog-item]', {
         hasText: 'Automatic Switch Command',

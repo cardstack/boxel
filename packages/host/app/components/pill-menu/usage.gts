@@ -45,8 +45,11 @@ export default class PillMenuUsage extends Component {
             1 Active
           </:headerDetail>
           <:content>
-            You have selected the following cards:
+            This is the content of the pill menu.
           </:content>
+          <:footer>
+            This is the footer of the pill menu.
+          </:footer>
         </PillMenu>
       </:example>
       <:api as |Args|>
