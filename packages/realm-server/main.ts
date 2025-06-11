@@ -77,8 +77,6 @@ let {
   toUrl: toUrls,
   username: usernames,
   useRegistrationSecretFunction,
-  seedPath,
-  seedRealmURL,
   migrateDB,
   workerManagerPort,
 } = yargs(process.argv.slice(2))
@@ -116,15 +114,6 @@ let {
     distURL: {
       description:
         'the URL of a deployed host app. (This can be provided instead of the --distPath)',
-      type: 'string',
-    },
-    seedPath: {
-      description:
-        'the path of the seed realm which is used to seed new realms',
-      type: 'string',
-    },
-    seedRealmURL: {
-      description: 'The URL of the seed realm',
       type: 'string',
     },
     matrixURL: {
@@ -274,8 +263,6 @@ let autoMigrate = migrateDB || undefined;
     assetsURL: dist,
     getIndexHTML,
     serverURL: new URL(serverURL),
-    seedPath,
-    seedRealmURL: seedRealmURL ? new URL(seedRealmURL) : undefined,
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
     enableFileWatcher: ENABLE_FILE_WATCHER,
     getRegistrationSecret: useRegistrationSecretFunction

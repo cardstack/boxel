@@ -45,7 +45,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       template: 'test',
     });
     await smtpStart();
-    realmServer = await startRealmServer({ includeSeedRealm: true });
+    realmServer = await startRealmServer();
   });
 
   test.afterEach(async () => {
@@ -186,11 +186,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toHaveCount(1);
     await showAllCards(page);
-    await expect(
-      page.locator(
-        `[data-test-cards-grid-item="${newRealmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0"]`,
-      ),
-    ).toHaveCount(1);
     await page.locator(`[data-test-workspace-chooser-toggle]`).click();
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
     await page.locator(`[data-test-workspace-chooser-toggle]`).click();
@@ -264,14 +259,10 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     // assert that logged in user can navigate directly to card in private realm without
     // being asked to login
-    await page.goto(
-      `${newRealmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0`,
-    );
+    await page.goto(newRealmURL);
     await expect(
-      page.locator(
-        `[data-test-card="${newRealmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0"]`,
-      ),
-    ).toContainText('Some folks say');
+      page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
+    ).toHaveCount(1);
 
     // assert that non-logged in user is prompted to login before navigating
     // directly to card in private repo
@@ -279,14 +270,12 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await assertLoggedOut(page);
 
     await login(page, 'user1', 'mypassword1!', {
-      url: `${newRealmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0`,
+      url: newRealmURL,
       skipOpeningAssistant: true,
     });
     await assertLoggedIn(page, { displayName: 'Test User' });
     await expect(
-      page.locator(
-        `[data-test-card="${newRealmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0"]`,
-      ),
+      page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toHaveCount(1);
 
     let auth = await loginUser(`user1`, 'mypassword1!');

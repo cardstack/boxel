@@ -8,8 +8,6 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import { TrackedObject } from 'tracked-built-ins';
 
-import { IconX } from '@cardstack/boxel-ui/icons';
-
 import { baseRealm, getPlural } from '@cardstack/runtime-common';
 
 import type StoreService from '@cardstack/host/services/store';
@@ -29,7 +27,6 @@ export default class PillMenuUsage extends Component {
   @service private declare store: StoreService;
 
   @tracked private title = 'Pill Menu';
-  @tracked private isExpandableHeader = false;
   @tracked private items: PillMenuItem[] = sampleCardURLs.map(
     (cardId) =>
       new TrackedObject({
@@ -47,8 +44,12 @@ export default class PillMenuUsage extends Component {
     return this.items.filter((item) => item.isActive);
   }
 
-  @action private headerAction() {
-    console.log('Header button clicked');
+  @action private onExpand() {
+    console.log('Pill menu expanded');
+  }
+
+  @action private onCollapse() {
+    console.log('Pill menu collapsed');
   }
 
   @action private onChooseCard(cardId: string) {
@@ -72,8 +73,8 @@ export default class PillMenuUsage extends Component {
           @title={{this.title}}
           @items={{this.items}}
           @itemDisplayName={{this.itemDisplayName}}
-          @isExpandableHeader={{this.isExpandableHeader}}
-          @headerAction={{this.headerAction}}
+          @onExpand={{this.onExpand}}
+          @onCollapse={{this.onCollapse}}
           @canAttachCard={{this.canAttachCard}}
           @onChooseCard={{this.onChooseCard}}
           @onChangeItemIsActive={{this.onChangeItemIsActive}}
@@ -93,9 +94,6 @@ export default class PillMenuUsage extends Component {
             {{getPlural this.itemDisplayName}}
             Are Active
           </:headerDetail>
-          <:headerButton>
-            <IconX width='10' height='10' alt='Close' />
-          </:headerButton>
           <:content>
             You have selected the following cards:
           </:content>
@@ -118,13 +116,6 @@ export default class PillMenuUsage extends Component {
           @description='Display name used when referring to menu items'
           @value={{this.itemDisplayName}}
           @onInput={{fn (mut this.itemDisplayName)}}
-        />
-        <Args.Bool
-          @name='isExpandableHeader'
-          @description='Whether the menu content can be hidden or shown by clicking the header button.'
-          @defaultValue={{false}}
-          @value={{this.isExpandableHeader}}
-          @onInput={{fn (mut this.isExpandableHeader)}}
         />
         <Args.Action
           @name='headerAction'

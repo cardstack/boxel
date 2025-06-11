@@ -33,6 +33,7 @@ export type RoomActions = {
 interface Signature {
   Args: {
     session: SessionRoomData;
+    isCurrentRoom: boolean;
     actions: RoomActions;
   };
 }
@@ -43,6 +44,7 @@ export default class PastSessionItem extends Component<Signature> {
       class='session'
       data-test-joined-room={{@session.roomId}}
       data-room-id={{@session.roomId}}
+      data-is-current-room={{@isCurrentRoom}}
     >
       <button
         class='view-session-button'
@@ -135,7 +137,12 @@ export default class PastSessionItem extends Component<Signature> {
         cursor: pointer;
         border-radius: 8px;
       }
-      .session:hover + .session {
+      .session[data-is-current-room] {
+        border: 1px solid var(--boxel-highlight);
+        border-radius: 8px;
+      }
+      .session:hover + .session:not([data-is-current-room]),
+      .session[data-is-current-room] + .session {
         border-top-color: transparent;
       }
       .name {

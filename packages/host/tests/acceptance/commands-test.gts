@@ -951,7 +951,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-room-settled]');
     // open skill menu
-    await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
 
     // add useful-commands skill, which includes the switch-submode command
@@ -1033,7 +1033,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-room-settled]');
     // open skill menu
-    await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     // add useful-commands skill, which includes the switch-submode command
     await click(
@@ -1252,7 +1252,7 @@ module('Acceptance | Commands tests', function (hooks) {
     });
     await click('[data-test-open-ai-assistant]');
     // open skill menu
-    await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
 
     await click(
