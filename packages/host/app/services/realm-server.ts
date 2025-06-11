@@ -115,7 +115,6 @@ export default class RealmServerService extends Service {
     name: string;
     iconURL?: string;
     backgroundURL?: string;
-    copyFromSeedRealm?: boolean;
   }) {
     await this.login();
 
