@@ -137,14 +137,6 @@ export default class Room extends Component<Signature> {
                   {{on 'click' this.scrollToFirstUnread}}
                 >{{this.unreadMessageText}}</BoxelButton>
               </div>
-            {{else}}
-              <AiAssistantSkillMenu
-                class='skills'
-                @skills={{this.sortedSkills}}
-                @onChooseCard={{perform this.attachSkillTask}}
-                @onUpdateSkillIsActive={{perform this.updateSkillIsActiveTask}}
-                data-test-skill-menu
-              />
             {{/if}}
           {{/if}}
         </AiAssistantConversation>
@@ -158,6 +150,8 @@ export default class Room extends Component<Signature> {
               @canSend={{this.canSend}}
               data-test-message-field={{@roomId}}
             />
+            {{! TODO: Remove this bottom section after we move the attachment picker to chat input 
+                  and llm chooser to area__actions }}
             <div class='chat-input-area__bottom-section'>
               <AiAssistantAttachmentPicker
                 @autoAttachedCardIds={{this.autoAttachedCardIds}}
@@ -182,6 +176,14 @@ export default class Room extends Component<Signature> {
                 @disabled={{@roomResource.isActivatingLLM}}
               />
             </div>
+            <div class='chat-input-area__actions'>
+              <AiAssistantSkillMenu
+                @skills={{this.sortedSkills}}
+                @onChooseCard={{perform this.attachSkillTask}}
+                @onUpdateSkillIsActive={{perform this.updateSkillIsActiveTask}}
+                data-test-skill-menu
+              />
+            </div>
           </div>
         </footer>
       </section>
@@ -193,11 +195,6 @@ export default class Room extends Component<Signature> {
         grid-template-rows: 1fr auto;
         height: 100%;
         overflow: hidden;
-      }
-      .skills {
-        position: sticky;
-        bottom: 0;
-        margin-left: auto;
       }
       .unread-indicator {
         position: sticky;
@@ -226,6 +223,13 @@ export default class Room extends Component<Signature> {
       .chat-input-area__bottom-section
         :deep(.ember-basic-dropdown-content-wormhole-origin) {
         position: absolute; /* This prevents layout shift when menu opens */
+      }
+      .chat-input-area__actions {
+        display: flex;
+        padding: var(--boxel-sp-sm);
+        gap: var(--boxel-sp-xxl);
+        background-color: var(--boxel-light-100);
+        border-top: 1px solid var(--boxel-200);
       }
       :deep(.ai-assistant-conversation > *:first-child) {
         margin-top: auto;

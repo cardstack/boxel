@@ -1,6 +1,8 @@
+import { fn } from '@ember/helper';
+import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { tracked } from '@glimmer/tracking';
 
 import { skillCardRef } from '@cardstack/runtime-common';
 
@@ -9,7 +11,7 @@ import PillMenu, { PillMenuItem } from '@cardstack/host/components/pill-menu';
 import { RoomSkill } from '@cardstack/host/resources/room';
 
 interface Signature {
-  Element: HTMLDivElement;
+  Element: HTMLDivElement | HTMLButtonElement;
   Args: {
     skills: RoomSkill[];
     onChooseCard?: (cardId: string) => void;
@@ -24,8 +26,9 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       @query={{this.query}}
       @items={{@skills}}
       @itemDisplayName='Skill'
-      @isExpandableHeader={{true}}
       @canAttachCard={{true}}
+      @onExpand={{fn this.setExpanded true}}
+      @onCollapse={{fn this.setExpanded false}}
       @onChooseCard={{this.attachSkill}}
       @onChangeItemIsActive={{this.updateItemIsActive}}
       tabindex='0'
@@ -35,44 +38,15 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         <span class='header-icon' />
       </:headerIcon>
       <:headerDetail>
-        <span data-test-active-skills-count>{{this.activeSkills.length}}</span>
-        <span class='skills-length'>of
-          {{@skills.length}}
-          {{if (eq @skills.length 1) 'Skill' 'Skills'}}
-          Active
-        </span>
+        <span
+          class='skills-length'
+          data-test-active-skills-count
+        >{{this.headerText}}</span>
       </:headerDetail>
     </PillMenu>
     <style scoped>
-      .skill-menu {
-        --boxel-header-gap: var(--boxel-sp-xxs);
-        --boxel-header-detail-margin-left: 0;
-      }
-      .skill-menu.pill-menu--minimized {
-        --boxel-pill-menu-width: 3.75rem;
-        white-space: nowrap;
-        transition: width 0.2s ease-in;
-      }
-      .skill-menu.pill-menu--minimized:focus {
-        outline: 0;
-      }
-      .skill-menu.pill-menu--minimized:hover,
-      .skill-menu.pill-menu--minimized:focus-within {
-        --boxel-pill-menu-width: 100%;
-      }
-      .skill-menu.pill-menu--minimized :deep(.expandable-header-button),
-      .skill-menu.pill-menu--minimized :deep(.skills-length) {
-        visibility: collapse;
-        transition: visibility 0.2s ease-in;
-      }
-      .skill-menu.pill-menu--minimized:hover :deep(.expandable-header-button),
-      .skill-menu.pill-menu--minimized:hover :deep(.skills-length),
-      .skill-menu.pill-menu--minimized:focus-within
-        :deep(.expandable-header-button),
-      .skill-menu.pill-menu--minimized:focus-within :deep(.skills-length) {
-        visibility: visible;
-      }
       .header-icon {
+        display: inline-block;
         width: 20px;
         height: 18px;
         background-image: url('./robot-head@2x.webp');
@@ -81,8 +55,30 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         background-size: contain;
         flex-shrink: 0;
       }
+      .skill-menu {
+        --boxel-pill-menu-header-padding: 0;
+        --boxel-pill-menu-content-padding: var(--boxel-sp) 0;
+        --boxel-pill-menu-footer-padding: 0;
+        --boxel-pill-menu-button-padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+        background-color: transparent;
+        box-shadow: none;
+      }
     </style>
   </template>
+
+  @tracked private isExpanded = false;
+
+  @action
+  private setExpanded(isExpanded: boolean) {
+    this.isExpanded = isExpanded;
+  }
+
+  private get headerText() {
+    if (this.isExpanded) {
+      return `Skills: ${this.activeSkills.length} of ${this.args.skills.length} active`;
+    }
+    return `Skills ${this.activeSkills.length}`;
+  }
 
   private get query() {
     let selectedCardIds =
