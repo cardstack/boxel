@@ -1045,7 +1045,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await click('[data-option-index="1"]'); // change selected instance
       assert.dom('[data-test-selected-item]').containsText('Future Tech');
       assertCardExists(assert, categoryId2, 'embedded');
-      debugger;
+
       assert.deepEqual(
         getPlaygroundSelections()?.[categoryModuleId],
         {
