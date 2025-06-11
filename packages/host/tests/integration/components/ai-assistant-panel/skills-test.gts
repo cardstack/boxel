@@ -50,6 +50,7 @@ import {
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
+import { waitUntil } from '@ember/test-helpers';
 
 module('Integration | ai-assistant-panel | skills', function (hooks) {
   const realmName = 'Operator Mode Workspace';
@@ -305,6 +306,12 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
 
     await waitFor('[data-test-room-settled]');
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-skill-menu]')
+          ?.textContent?.trim() === 'Skills 2',
+    );
     assert.dom('[data-test-skill-menu]').containsText('Skills 2');
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     assert.dom('[data-test-skill-menu]').containsText('Skills: 2 of 2 active');
