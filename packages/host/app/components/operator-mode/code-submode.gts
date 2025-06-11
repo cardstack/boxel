@@ -384,12 +384,12 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
-  private goToDefinitionAndResetCursorPosition(
+  private async goToDefinitionAndResetCursorPosition(
     codeRef: CodeRef | undefined,
     localName: string | undefined,
     fieldName?: string,
   ) {
-    this.goToDefinition(codeRef, localName, fieldName);
+    await this.goToDefinition(codeRef, localName, fieldName);
     if (this.codePath) {
       let urlString = this.codePath.toString();
       this.recentFilesService.updateCursorPositionByURL(

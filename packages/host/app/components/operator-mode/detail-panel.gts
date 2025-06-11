@@ -78,7 +78,7 @@ interface Signature {
     goToDefinition: (
       codeRef: ResolvedCodeRef | undefined,
       localName: string | undefined,
-    ) => void;
+    ) => Promise<void>;
     createFile: (
       fileType: FileType,
       definitionClass?: {
