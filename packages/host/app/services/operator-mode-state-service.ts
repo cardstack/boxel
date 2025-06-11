@@ -45,6 +45,10 @@ import { type Stack } from '../components/operator-mode/interact-submode';
 
 import { removeFileExtension } from '../components/search-sheet/utils';
 
+import {
+  CodeModePanelSelections,
+  PlaygroundSelections,
+} from '../utils/local-storage-keys';
 import MatrixService from './matrix-service';
 import NetworkService from './network';
 
@@ -55,6 +59,7 @@ import type SpecPanelService from './spec-panel-service';
 import type StoreService from './store';
 
 import type IndexController from '../controllers';
+import { PlaygroundSelection } from '@cardstack/host/services/playground-panel-service';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -814,21 +819,51 @@ export default class OperatorModeStateService extends Service {
     return controller;
   }
 
+  get moduleInspectorPanel() {
+    return (
+      JSON.parse(window.localStorage.getItem(CodeModePanelSelections) ?? '{}')[
+        this.codePathString ?? ''
+      ] ?? 'schema'
+    );
+  }
+
+  get playgroundPanelSelection(): PlaygroundSelection | undefined {
+    if (this.moduleInspectorPanel === 'preview') {
+      let playgroundSelections = JSON.parse(
+        window.localStorage.getItem(PlaygroundSelections) ?? '{}',
+      );
+      let playgroundPanelSelection = Object.values(playgroundSelections).find(
+        (selection: any) => selection.url === this.codePathString,
+      );
+      return playgroundPanelSelection as PlaygroundSelection | undefined;
+    }
+    return undefined;
+  }
+
   getSummaryForAIBot(
     openCardIds: Set<string> = new Set([...this.getOpenCardIds()]),
   ): BoxelContext {
+    let codeMode =
+      this._state.submode === Submodes.Code
+        ? {
+            currentFile: this.codePathString,
+            moduleInspectorPanel: this.moduleInspectorPanel,
+            previewPanelSelection: this.playgroundPanelSelection
+              ? {
+                  cardId: this.playgroundPanelSelection.cardId,
+                  format: this.playgroundPanelSelection.format,
+                }
+              : undefined,
+          }
+        : undefined;
+
     return {
       agentId: this.matrixService.agentId,
       submode: this._state.submode,
       debug: this.operatorModeController.debug,
       openCardIds: this.makeRemoteIdsList([...openCardIds]),
       realmUrl: this.realmURL.href,
-      codeMode:
-        this._state.submode === Submodes.Code
-          ? {
-              currentFile: this.codePathString,
-            }
-          : undefined,
+      codeMode,
     };
   }
 
