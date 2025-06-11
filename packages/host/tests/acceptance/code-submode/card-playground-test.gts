@@ -11,7 +11,11 @@ import { triggerEvent } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { trimJsonExtension, type Realm } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  trimJsonExtension,
+  type Realm,
+} from '@cardstack/runtime-common';
 
 import { BULK_GENERATED_ITEM_COUNT } from '@cardstack/host/components/operator-mode/code-submode/playground/instance-chooser-dropdown';
 
@@ -162,6 +166,11 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     setupOnSave(hooks);
 
     hooks.beforeEach(async function () {
+      let loader = getService('loader-service').loader;
+      let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
+      cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
+      let { CardsGrid } = cardsGrid;
+
       matrixRoomId = createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'room-test',
@@ -172,6 +181,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         mockMatrixUtils,
         realmURL: testRealmURL,
         contents: {
+          'index.json': new CardsGrid(),
           'author.gts': authorCard,
           'blog-post.gts': blogPostCard,
           'code-ref-driver.gts': codeRefDriverCard,
@@ -516,7 +526,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .exists();
 
       await click('[data-test-open-search-field]');
-      await click('[data-test-search-result-index="4"]');
+      await click('[data-test-search-result-index="5"]');
       assert
         .dom(`[data-test-stack-card="${testRealmURL}Category/landscaping"]`)
         .exists();
@@ -603,7 +613,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await click('[data-test-boxel-menu-item-text="Open in Interact Mode"]');
       assert
         .dom(
-          `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Author/jane-doe"]`,
+          `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}index"]`,
+        )
+        .exists();
+      assert
+        .dom(
+          `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Author/jane-doe"]`,
         )
         .exists();
       assert.dom('[data-test-author-title]').hasText('Jane Doe');
@@ -696,7 +711,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await click('[data-test-boxel-menu-item-text="Open in Interact Mode"]');
       assert
         .dom(
-          `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Author/jane-doe"]`,
+          `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}index"]`,
+        )
+        .exists();
+      assert
+        .dom(
+          `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Author/jane-doe"]`,
         )
         .exists();
       assert
