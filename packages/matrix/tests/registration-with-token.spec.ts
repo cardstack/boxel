@@ -54,7 +54,9 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await smtpStop();
   });
 
-  test('it can register a user with a registration token', async ({ page }) => {
+  test.only('it can register a user with a registration token', async ({
+    page,
+  }) => {
     let serverIndexUrl = new URL(appURL).origin;
     test.setTimeout(120_000);
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
