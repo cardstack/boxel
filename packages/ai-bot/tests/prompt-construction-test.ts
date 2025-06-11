@@ -678,10 +678,20 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
 
+    let userMessages = prompt.filter((message) => message.role === 'user');
     assert.ok(
-      prompt[prompt.length - 2].content?.includes(
+      userMessages[0]?.content?.includes(
         `
-Attached files:
+Attached Files:
+[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
+[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt)
+      `.trim(),
+      ),
+    );
+    assert.ok(
+      userMessages[1]?.content?.includes(
+        `
+Attached Files:
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts): this is the content of the spaghetti-recipe.gts file
 [best-friends.txt](http://test-realm-server/my-realm/best-friends.txt): this is the content of the best-friends.txt file
 [file-that-does-not-exist.txt](http://test.com/my-realm/file-that-does-not-exist.txt): Error loading attached file: HTTP error. Status: 404

@@ -332,6 +332,49 @@ export function getAttachedCards(eventContent: CardMessageContent) {
   );
 }
 
+export async function getAttachedFiles(
+  client: MatrixClient,
+  messageEvent: CardMessageEvent,
+  history: DiscreteMatrixEvent[],
+): Promise<SerializedFileDef[]> {
+  let attachedFiles = messageEvent.content?.data?.attachedFiles ?? [];
+  return Promise.all(
+    attachedFiles.map(async (attachedFile: SerializedFileDef) => {
+      // If the file is attached later in the history, we should not include the content here
+      let shouldIncludeContent = !history
+        .slice(history.indexOf(messageEvent) + 1)
+        .some(
+          (event) =>
+            event.type === 'm.room.message' &&
+            event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
+            event.content?.data?.attachedFiles?.some(
+              (file: SerializedFileDef) => file.url === attachedFile.url,
+            ),
+        );
+
+      let result: SerializedFileDef = {
+        url: attachedFile.url,
+        sourceUrl: attachedFile.sourceUrl ?? '',
+        name: attachedFile.name,
+        contentType: attachedFile.contentType,
+      };
+      if (shouldIncludeContent) {
+        try {
+          result.content = await downloadFile(client, attachedFile);
+        } catch (error) {
+          log.error(`Failed to fetch file ${attachedFile.url}:`, error);
+          Sentry.captureException(error, {
+            extra: { fileUrl: attachedFile.url, fileName: attachedFile.name },
+          });
+          result.error = `Error loading attached file: ${(error as Error).message}`;
+          result.content = undefined;
+        }
+      }
+      return result;
+    }),
+  );
+}
+
 export async function loadCurrentlySerializedFileDefs(
   client: MatrixClient,
   history: DiscreteMatrixEvent[],
@@ -409,7 +452,11 @@ export function attachedFilesToMessage(
         return `${hyperlink}: ${f.error}`;
       }
 
-      return `${hyperlink}: ${f.content}`;
+      if (f.content) {
+        return `${hyperlink}: ${f.content}`;
+      } else {
+        return `${hyperlink}`;
+      }
     })
     .join('\n');
 }
@@ -678,8 +725,10 @@ export async function getModifyPrompt(
       ).forEach((message) => historicalMessages.push(message));
     }
     if (event.sender !== aiBotUserId) {
-      let attachments = buildAttachmentsMessagePart(
-        event.content as CardMessageContent,
+      let attachments = await buildAttachmentsMessagePart(
+        client,
+        event as CardMessageEvent,
+        history,
       );
       let content = [body, attachments].filter(Boolean).join('\n\n');
       if (content) {
@@ -735,12 +784,21 @@ export async function getModifyPrompt(
   return messages;
 }
 
-export const buildAttachmentsMessagePart = (content: CardMessageContent) => {
-  let attachedCards = getAttachedCards(content);
-  if (attachedCards.length === 0) {
-    return '';
+export const buildAttachmentsMessagePart = async (
+  client: MatrixClient,
+  messageEvent: CardMessageEvent,
+  history: DiscreteMatrixEvent[],
+) => {
+  let attachedCards = getAttachedCards(messageEvent.content);
+  let result = '';
+  if (attachedCards.length > 0) {
+    result += `Attached Cards:\n${JSON.stringify(attachedCards, null, 2)}\n`;
   }
-  return `Attached Cards:\n${JSON.stringify(attachedCards, null, 2)}\n`;
+  let attachedFiles = await getAttachedFiles(client, messageEvent, history);
+  if (attachedFiles.length > 0) {
+    result += `Attached Files:\n${attachedFilesToMessage(attachedFiles)}\n`;
+  }
+  return result;
 };
 
 export const buildContextMessage = async (
