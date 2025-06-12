@@ -1153,8 +1153,8 @@ module(basename(__filename), function () {
         { ...realm.realmIndexUpdater.stats },
         {
           moduleErrors: 0,
-          instanceErrors: 3,
-          modulesIndexed: 7,
+          instanceErrors: 6,
+          modulesIndexed: 10,
           instancesIndexed: 6,
           totalIndexEntries: 16,
         },
