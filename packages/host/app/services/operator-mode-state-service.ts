@@ -464,27 +464,16 @@ export default class OperatorModeStateService extends Service {
     let response;
     try {
       // TODO Change to HEAD in CS-8846
-      console.log('Prefetching canonical code path:', codePath.href);
       response = await this.network.authedFetch(codePath, {
         headers: { Accept: SupportedMimeType.CardSource },
       });
 
-      if (codePath.href.includes('person')) {
-        // debugger;
-      }
-
       if (response.ok) {
-        console.log('Canonical code path found:', response.url);
         return new URL(response.url);
       }
 
-      console.log(
-        'Response not ok, returning original code path:',
-        codePath.href,
-      );
       return codePath;
-    } catch (e) {
-      console.error('Error fetching canonical code path:', e);
+    } catch (_e) {
       return codePath;
     }
   }
