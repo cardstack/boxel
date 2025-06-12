@@ -337,10 +337,15 @@ test.describe('Commands', () => {
     await page.locator('[data-test-close-button]').click();
 
     // Add the skill card to the assistant
-    await page.locator('[data-test-skill-menu]').hover();
-    await expect(page.locator('[data-test-pill-menu-button]')).toBeVisible();
-    await page.locator('[data-test-pill-menu-button]').click();
-    await page.locator('[data-test-pill-menu-add-button]').click();
+    await expect(
+      page.locator('[data-test-skill-menu][data-test-pill-menu-button]'),
+    ).toBeVisible();
+    await page
+      .locator('[data-test-skill-menu][data-test-pill-menu-button]')
+      .click();
+    await page
+      .locator('[data-test-skill-menu] [data-test-pill-menu-add-button]')
+      .click();
     await page
       .locator('[data-test-card-catalog-item]', {
         hasText: 'Automatic Switch Command',

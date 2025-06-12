@@ -746,6 +746,13 @@ export const buildContextMessage = async (
     if (context?.codeMode?.currentFile) {
       result += `File open in code editor: ${context.codeMode.currentFile}\n`;
     }
+    if (context?.codeMode?.moduleInspectorPanel) {
+      result += `Module inspector panel: ${context.codeMode.moduleInspectorPanel}\n`;
+    }
+    if (context?.codeMode?.previewPanelSelection) {
+      result += `Viewing card instance: ${context.codeMode.previewPanelSelection.cardId}\n`;
+      result += `In format: ${context.codeMode.previewPanelSelection.format}\n`;
+    }
   } else {
     result += `The user has no open cards.\n`;
   }
