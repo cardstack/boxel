@@ -54,6 +54,36 @@ module(basename(__filename), function () {
             },
           },
         },
+        'intentional-error.gts': `
+          import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+          import { Component } from 'https://cardstack.com/base/card-api';
+          export class IntentionalError extends CardDef {
+            @field name = contains(StringField);
+            static displayName = "Intentional Error";
+            static isolated = class extends Component {
+              get message() {
+                if (this.args.model.name === 'Intentional Error') {
+                  throw new Error('intentional failure during render')
+                }
+                return this.args.model.name;
+              }
+              <template>{{this.message}}</template>
+            }
+          }
+        `,
+        '2.json': {
+          data: {
+            attributes: {
+              name: 'Intentional Error',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './intentional-error',
+                name: 'IntentionalError',
+              },
+            },
+          },
+        },
       },
     });
 
@@ -113,6 +143,22 @@ module(basename(__filename), function () {
       test('searchDoc', function (assert) {
         assert.strictEqual(result.searchDoc.name, 'Maple');
         assert.strictEqual(result.searchDoc._cardType, 'Cat');
+      });
+    });
+
+    module('errors', function (hooks) {
+      let result: RenderResponse;
+
+      hooks.before(async () => {
+        const testCardURL = `${realmURL}2`;
+        result = await prerenderCard(testCardURL);
+      });
+
+      test('error during render', function (assert) {
+        assert.ok(
+          /TODO: error result here/.test(result.isolatedHTML),
+          `failed to match embedded html:${JSON.stringify(result.isolatedHTML)}`,
+        );
       });
     });
   });
