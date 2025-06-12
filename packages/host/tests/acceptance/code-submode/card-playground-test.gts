@@ -1466,6 +1466,13 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         }
       }
     `;
+    const syntaxError = `
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      // missing StringField import
+      export class Boom extends CardDef {
+        @field firstName = contains(StringField);
+      }
+    `;
 
     hooks.beforeEach(async function () {
       matrixRoomId = createAndJoinRoom({
@@ -1484,6 +1491,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           'boom-pet.gts': boomPet,
           'person.gts': personCard,
           'boom-person.gts': boomPerson,
+          'syntax-error.gts': syntaxError,
           'Person/delilah.json': {
             data: {
               attributes: { title: 'Delilah' },
@@ -1497,6 +1505,20 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
         },
       }));
+    });
+
+    test('it renders a module error', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}syntax-error.gts`,
+      });
+
+      assert
+        .dom('[data-test-syntax-error] [data-test-error-stack]')
+        .containsText(
+          `{ "additionalErrors": null, "message": "encountered error loading module \\"${testRealmURL}syntax-error.gts\\": StringField is not defined", "status": 500 }`,
+          'error message is correct (and contains no "deps" field)',
+        );
     });
 
     test('it renders a playground instance with an error that has does not have a last known good state', async function (assert) {
