@@ -367,7 +367,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert
       .dom('[data-test-llm-select-item="anthropic/claude-3.7-sonnet"]')
       .hasText('anthropic/claude-3.7-sonnet');
-    await click('[data-test-llm-select-item="anthropic/claude-3.7-sonnet"]');
+    await click(
+      '[data-test-llm-select-item="anthropic/claude-3.7-sonnet"] button',
+    );
+    await click('[data-test-pill-menu-button]');
     assert.dom('[data-test-llm-select-selected]').hasText('claude-3.7-sonnet');
 
     let roomState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
