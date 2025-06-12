@@ -10,6 +10,10 @@ import { not } from '@cardstack/boxel-ui/helpers';
 import { Send } from '@cardstack/boxel-ui/icons';
 import { setCssVar } from '@cardstack/boxel-ui/modifiers';
 
+import AttachButton from '../attachment-picker/attach-button';
+
+import type { WithBoundArgs } from '@glint/template';
+
 interface Signature {
   Element: HTMLDivElement;
   Args: {
@@ -17,6 +21,10 @@ interface Signature {
     onInput: (val: string) => void;
     onSend: () => void;
     canSend: boolean;
+    attachButton?: WithBoundArgs<
+      typeof AttachButton,
+      'submode' | 'files' | 'cards' | 'chooseCard' | 'chooseFile'
+    >;
   };
 }
 
@@ -26,6 +34,9 @@ export default class AiAssistantChatInput extends Component<Signature> {
       <label for='ai-chat-input' class='boxel-sr-only'>
         Enter text to chat with AI Assistant
       </label>
+      {{#if @attachButton}}
+        <@attachButton @width='30' @height='30' />
+      {{/if}}
       <BoxelInput
         class='chat-input'
         @id='ai-chat-input'
@@ -54,7 +65,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
     <style scoped>
       .chat-input-container {
         display: grid;
-        grid-template-columns: 1fr auto;
+        grid-template-columns: auto 1fr auto;
         gap: var(--boxel-sp-xxs);
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xxs) var(--boxel-sp-xxs)
           var(--boxel-sp-xs);
@@ -83,7 +94,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
         height: var(--boxel-icon-med);
         background-color: var(--boxel-highlight);
         border-radius: var(--boxel-border-radius-sm);
-        align-self: flex-end;
+        align-self: flex-start;
       }
       .send-button:hover:not(:disabled),
       .send-button:focus:not(:disabled) {
@@ -138,7 +149,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
     const lineHeight = 20;
     const padding = 8;
     const minLines = 1;
-    const maxLines = 15;
+    const maxLines = 6;
 
     // Calculate actual line count from newlines in the content
     let newlineCount = (this.args.value.match(/\n/g) ?? []).length;
