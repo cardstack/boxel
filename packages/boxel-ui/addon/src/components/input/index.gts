@@ -66,7 +66,7 @@ export interface Signature {
     onChange?: (ev: Event) => void;
     onFocus?: (ev: Event) => void;
     onInput?: (val: string) => void;
-    onKeyPress?: (ev: KeyboardEvent) => void;
+    onKeyPress?: (ev: KeyboardEvent) => Promise<void> | void;
     optional?: boolean;
     placeholder?: string;
     required?: boolean;

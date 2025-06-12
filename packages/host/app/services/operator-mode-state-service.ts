@@ -19,6 +19,7 @@ import {
   type ResolvedCodeRef,
   internalKeyFor,
   isLocalId,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
@@ -390,7 +391,7 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
-  updateCodePathWithSelection({
+  async updateCodePathWithSelection({
     codeRef,
     localName,
     fieldName,
@@ -405,7 +406,7 @@ export default class OperatorModeStateService extends Service {
     if (codeRef && isResolvedCodeRef(codeRef)) {
       //(possibly) in a different module
       this._state.codeSelection = codeRef.name;
-      this.updateCodePath(new URL(codeRef.module));
+      await this.updateCodePath(new URL(codeRef.module));
     } else if (
       codeRef &&
       'type' in codeRef &&
@@ -415,7 +416,7 @@ export default class OperatorModeStateService extends Service {
     ) {
       this._state.fieldSelection = codeRef.field;
       this._state.codeSelection = codeRef.card.name;
-      this.updateCodePath(new URL(codeRef.card.module));
+      await this.updateCodePath(new URL(codeRef.card.module));
     } else if (localName && onLocalSelection) {
       //in the same module
       this._state.codeSelection = localName;
@@ -448,16 +449,39 @@ export default class OperatorModeStateService extends Service {
     return this._state.codePath?.toString();
   }
 
-  onFileSelected = (entryPath: LocalPath) => {
+  onFileSelected = async (entryPath: LocalPath) => {
     let fileUrl = new RealmPaths(this.realmURL).fileURL(entryPath);
-    this.updateCodePath(fileUrl);
+    await this.updateCodePath(fileUrl);
   };
 
-  updateCodePath(codePath: URL | null) {
-    this._state.codePath = codePath;
+  async updateCodePath(codePath: URL | null) {
+    let canonicalCodePath = await this.determineCanonicalCodePath(codePath);
+    this._state.codePath = canonicalCodePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
     this.specPanelService.setSelection(null);
+  }
+
+  private async determineCanonicalCodePath(codePath: URL | null) {
+    if (!codePath) {
+      return codePath;
+    }
+
+    let response;
+    try {
+      // TODO Change to HEAD in CS-8846
+      response = await this.network.authedFetch(codePath, {
+        headers: { Accept: SupportedMimeType.CardSource },
+      });
+
+      if (response.ok) {
+        return new URL(response.url);
+      }
+
+      return codePath;
+    } catch (_e) {
+      return codePath;
+    }
   }
 
   replaceCodePath(codePath: URL | null) {
@@ -781,7 +805,7 @@ export default class OperatorModeStateService extends Service {
     this.updateSubmode(Submodes.Interact);
   }
 
-  openWorkspace = (realmUrl: string) => {
+  openWorkspace = async (realmUrl: string) => {
     let id = `${realmUrl}index`;
     let stackItem = new StackItem({
       id,
@@ -794,7 +818,7 @@ export default class OperatorModeStateService extends Service {
     let lastOpenedFile = this.recentFilesService.recentFiles.find(
       (file: RecentFile) => file.realmURL.href === realmUrl,
     );
-    this.updateCodePath(
+    await this.updateCodePath(
       lastOpenedFile
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
         : new URL(id),

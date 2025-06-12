@@ -59,7 +59,7 @@ export default class ShowCardCommand extends HostBaseCommand<
         ) ||
         operatorModeStateService.state.codeSelection !== cardDefRef.name
       ) {
-        operatorModeStateService.updateCodePath(
+        await operatorModeStateService.updateCodePath(
           new URL(cardDefRef.module + '.gts'),
         );
       }
