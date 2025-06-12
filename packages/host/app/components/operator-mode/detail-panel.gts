@@ -1,4 +1,4 @@
-import { concat, fn } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -77,7 +77,6 @@ interface Signature {
     openSearch: (term: string) => void;
     goToDefinition: (
       codeRef: ResolvedCodeRef | undefined,
-      codePath: URL | undefined,
       localName: string | undefined,
     ) => Promise<void>;
     createFile: (
@@ -382,25 +381,7 @@ export default class DetailPanel extends Component<Signature> {
     return `${numberOfElements} ${getPlural('item', numberOfElements)}`;
   }
 
-  private get readyFileURL() {
-    return new URL(this.args.readyFile.url);
-  }
-
-  private get composedThing() {
-    return new URL(
-      `${this.cardInstanceType?.type?.module}${this.cardInstanceType?.type?.moduleInfo.extension}`,
-    );
-  }
-
-  private get superURL() {
-    return new URL(
-      `${this.cardType?.type?.super?.module}${this.cardType?.type?.super?.moduleInfo.extension}`,
-    );
-  }
-
   <template>
-    <span>readyFileURL:
-      {{this.readyFileURL.href}}</span>
     {{#if this.isLoading}}
       <div class='loading'>
         <LoadingIndicator />
@@ -458,13 +439,8 @@ export default class DetailPanel extends Component<Signature> {
             <Divider @label='Adopts From' />
             {{#if this.cardInstanceType.type}}
               {{#let (getCodeRef this.cardInstanceType.type) as |codeRef|}}
-                before CclickableModuleDefinitionContainer, readyFileURL:
-                {{this.readyFileURL.href}}
-                {{log 'composed thing' this.composedThing.href}}
-                {{! ClickableModuleDefinitionContainer case when visiting instance }}
                 <ClickableModuleDefinitionContainer
                   @title='Card Definition'
-                  @codePath={{this.composedThing}}
                   @fileURL={{this.cardInstanceType.type.module}}
                   @name={{this.cardInstanceType.type.displayName}}
                   @fileExtension={{this.cardInstanceType.type.moduleInfo.extension}}
@@ -493,12 +469,8 @@ export default class DetailPanel extends Component<Signature> {
                 {{#if this.cardType.type.super}}
                   {{#let (getCodeRef this.cardType.type.super) as |codeRef|}}
                     <Divider @label='Inherits From' />
-                    superURL:
-                    {{this.superURL.href}}
-                    {{! ClickableModuleDefinitionContainer case when visiting super }}
                     <ClickableModuleDefinitionContainer
                       @title={{definitionTitle}}
-                      @codePath={{this.superURL}}
                       @fileURL={{this.cardType.type.super.module}}
                       @name={{this.cardType.type.super.displayName}}
                       @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
@@ -513,7 +485,6 @@ export default class DetailPanel extends Component<Signature> {
                   {{#let (getCodeRef this.cardType.type) as |codeRef|}}
                     <ClickableModuleDefinitionContainer
                       @title={{definitionTitle}}
-                      @codePath={{this.readyFileURL}}
                       @fileURL={{this.cardType.type.module}}
                       @name={{this.cardType.type.displayName}}
                       @fileExtension={{this.cardType.type.moduleInfo.extension}}
