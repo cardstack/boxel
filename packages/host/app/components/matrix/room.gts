@@ -158,7 +158,7 @@ export default class Room extends Component<Signature> {
               'Current card is shared automatically'
               'Topmost card is shared automatically'
             }}
-            as |Pills AttachButton|
+            as |AttachedItems AttachButton|
           >
             <div class='chat-input-area' data-test-chat-input-area>
               <AiAssistantChatInput
@@ -169,11 +169,9 @@ export default class Room extends Component<Signature> {
                 @canSend={{this.canSend}}
                 data-test-message-field={{@roomId}}
               />
-              {{! TODO: Remove this bottom section after we move the attachment picker to chat input 
-                  and llm chooser to area__actions }}
-              <div class='chat-input-area__bottom-section'>
-                <Pills />
-              </div>
+              {{#if this.displayAttachedItems}}
+                <AttachedItems />
+              {{/if}}
 
               <div class='chat-input-area__actions'>
                 {{#if this.displaySkillMenu}}
@@ -231,16 +229,6 @@ export default class Room extends Component<Signature> {
         background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
-      }
-      .chat-input-area__bottom-section {
-        display: flex;
-        justify-content: space-between;
-        padding-right: var(--boxel-sp-xxs);
-        gap: var(--boxel-sp-xxl);
-      }
-      .chat-input-area__bottom-section
-        :deep(.ember-basic-dropdown-content-wormhole-origin) {
-        position: absolute; /* This prevents layout shift when menu opens */
       }
       .chat-input-area__actions {
         display: flex;
@@ -907,6 +895,15 @@ export default class Room extends Component<Signature> {
 
   private get displayLLMSelect() {
     return !this.selectedAction || this.selectedAction === 'llm-select';
+  }
+
+  private get displayAttachedItems() {
+    return (
+      this.filesToAttach?.length ||
+      this.cardIdsToAttach?.length ||
+      this.autoAttachedFile ||
+      this.autoAttachedCardIds?.size
+    );
   }
 }
 

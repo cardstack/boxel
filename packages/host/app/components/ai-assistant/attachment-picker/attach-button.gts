@@ -5,7 +5,7 @@ import Component from '@glimmer/component';
 import { restartableTask } from 'ember-concurrency';
 
 import { AddButton } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { chooseCard, baseCardRef, chooseFile } from '@cardstack/runtime-common';
 
@@ -22,8 +22,6 @@ interface Signature {
     cards: CardDef[];
     chooseCard: (cardId: string) => void;
     chooseFile: (file: FileDef) => void;
-    width?: string;
-    height?: string;
   };
 }
 
@@ -31,20 +29,16 @@ export default class AttachButton extends Component<Signature> {
   <template>
     {{#if (eq @submode 'code')}}
       <AddButton
-        class={{cn 'attach-button'}}
+        class='attach-button'
         @variant='pill'
-        @iconWidth={{unless @width '14'}}
-        @iconHeight={{unless @height '14'}}
         {{on 'click' this.chooseFile}}
         @disabled={{this.doChooseFile.isRunning}}
         data-test-choose-file-btn
       />
     {{else}}
       <AddButton
-        class={{cn 'attach-button'}}
+        class='attach-button'
         @variant='pill'
-        @iconWidth={{unless @width '14'}}
-        @iconHeight={{unless @height '14'}}
         {{on 'click' this.chooseCard}}
         @disabled={{this.chooseCardTask.isRunning}}
         data-test-choose-card-btn
@@ -52,7 +46,8 @@ export default class AttachButton extends Component<Signature> {
     {{/if}}
     <style scoped>
       .attach-button {
-        height: 30px;
+        height: var(--attach-button-height, 30px);
+        width: var(--attach-button-width, auto);
         padding: 0;
         gap: var(--boxel-sp-xs);
         background: none;

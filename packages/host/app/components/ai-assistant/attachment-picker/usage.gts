@@ -63,7 +63,11 @@ export default class AiAssistantCardPickerUsage extends Component {
           @autoAttachedFile={{this.autoAttachedFile}}
           @filesToAttach={{this.filesToAttach}}
           @submode='interact'
-        />
+          as |AttachedItems AttachButton|
+        >
+          <AttachedItems />
+          <AttachButton />
+        </AiAssistantAttachmentPicker>
         <CardCatalogModal />
       </:example>
       <:api as |Args|>

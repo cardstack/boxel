@@ -35,7 +35,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
         Enter text to chat with AI Assistant
       </label>
       {{#if @attachButton}}
-        <@attachButton @width='30' @height='30' />
+        <@attachButton />
       {{/if}}
       <BoxelInput
         class='chat-input'
