@@ -106,6 +106,25 @@ module(basename(__filename), function () {
           );
         });
 
+        test('serves a card-source HEAD request that results in redirect', async function (assert) {
+          let response = await request
+            .head('/person')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 302, 'HTTP 302 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'realm url header is correct',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'realm is public readable',
+          );
+          assert.strictEqual(response.headers['location'], '/person.gts');
+        });
+
         test('serves a card-source GET request that results in redirect', async function (assert) {
           let response = await request
             .get('/person')
