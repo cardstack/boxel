@@ -428,7 +428,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     {{#if this.isCardPreviewError}}
       {{! this is here to make TS happy, this is always true }}
       {{#if @cardError}}
-        <CardError @error={{@cardError}} @hideHeader={{true}} />
+        <CardError @error={{@cardError}} />
       {{/if}}
     {{else if this.isEmptyFile}}
       <SyntaxErrorDisplay @syntaxErrors='File is empty' />
@@ -533,9 +533,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       />
     {{else if @card}}
       <CardRendererPanel
-        class='card-renderer-panel'
         @card={{@card}}
-        @realmURL={{this.operatorModeStateService.realmURL}}
         @format={{@previewFormat}}
         @setFormat={{@setPreviewFormat}}
         data-test-card-resource-loaded

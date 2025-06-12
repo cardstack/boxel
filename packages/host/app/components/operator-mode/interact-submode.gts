@@ -232,7 +232,7 @@ export default class InteractSubmode extends Component {
         opts?: { openCardInRightMostStack?: boolean },
       ): void => {
         if (opts?.openCardInRightMostStack) {
-          stackIndex = this.stacks.length;
+          stackIndex = here.stacks.length;
         }
         let newItem = new StackItem({
           id: cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id,
@@ -329,8 +329,11 @@ export default class InteractSubmode extends Component {
         }
         await changeSizeCallback();
       },
-      changeSubmode: (url: URL, submode: Submode = 'code'): void => {
-        here.operatorModeStateService.updateCodePath(url);
+      changeSubmode: async (
+        url: URL,
+        submode: Submode = 'code',
+      ): Promise<void> => {
+        await here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
       },
     };

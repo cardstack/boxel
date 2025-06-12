@@ -1212,4 +1212,35 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       'Source URLs remain the same even after modification',
     );
   });
+
+  test('displays non-standard used LLMs in panel', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    await getService('matrix-service').sendActiveLLMEvent(
+      roomId,
+      'non-standard-llm-1',
+    );
+    await waitUntil(() =>
+      find(`[data-test-llm-select-selected]`)?.textContent?.includes(
+        'non-standard-llm-1',
+      ),
+    );
+    await getService('matrix-service').sendActiveLLMEvent(
+      roomId,
+      'non-standard-llm-2',
+    );
+    await waitUntil(() =>
+      find(`[data-test-llm-select-selected]`)?.textContent?.includes(
+        'non-standard-llm-2',
+      ),
+    );
+    assert
+      .dom(`[data-test-llm-select-selected]`)
+      .containsText(
+        'non-standard-llm-2',
+        'Non-standard LLM is displayed in the panel',
+      );
+    await click(`[data-test-llm-select-selected]`);
+    assert.dom('.menu-content').containsText('non-standard-llm-1');
+    assert.dom('.menu-content').containsText('non-standard-llm-2');
+  });
 });

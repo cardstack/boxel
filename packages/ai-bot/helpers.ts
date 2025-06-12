@@ -25,7 +25,6 @@ import { logger } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
@@ -45,6 +44,7 @@ import {
 } from './lib/matrix/util';
 import { constructHistory } from './lib/history';
 import { isRecognisedDebugCommand } from './lib/debug';
+import { APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE } from '../runtime-common/matrix-constants';
 
 let log = logger('ai-bot');
 
@@ -298,7 +298,12 @@ export async function loadCurrentlySerializedFileDefs(
   aiBotUserId: string,
 ): Promise<SerializedFileDef[]> {
   let lastMessageEventByUser = history.findLast(
-    (event) => event.sender !== aiBotUserId,
+    (event) =>
+      event.sender !== aiBotUserId &&
+      ((event.type === 'm.room.message' &&
+        event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) ||
+        event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE ||
+        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE),
   );
 
   let mostRecentUserMessageContent = lastMessageEventByUser?.content as {
@@ -308,10 +313,7 @@ export async function loadCurrentlySerializedFileDefs(
     };
   };
 
-  if (
-    !mostRecentUserMessageContent ||
-    mostRecentUserMessageContent.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
-  ) {
+  if (!mostRecentUserMessageContent) {
     return [];
   }
 
@@ -354,7 +356,7 @@ export async function loadCurrentlySerializedFileDefs(
   );
 }
 
-export function attachedFilesToPrompt(
+export function attachedFilesToMessage(
   attachedFiles: SerializedFileDef[],
 ): string {
   if (!attachedFiles.length) {
@@ -722,8 +724,14 @@ export const buildContextMessage = async (
     | undefined;
   let context = lastEventWithContext?.content.data?.context;
 
+  // Extract room ID from any event in history
+  let roomId = history.find((event) => event.room_id)?.room_id;
+
   if (context) {
     result += `The user is currently viewing the following user interface:\n`;
+    if (roomId) {
+      result += `Room ID: ${roomId}\n`;
+    }
     if (context?.submode) {
       result += `Submode: ${context.submode}\n`;
     }
@@ -738,16 +746,24 @@ export const buildContextMessage = async (
     if (context?.codeMode?.currentFile) {
       result += `File open in code editor: ${context.codeMode.currentFile}\n`;
     }
+    if (context?.codeMode?.moduleInspectorPanel) {
+      result += `Module inspector panel: ${context.codeMode.moduleInspectorPanel}\n`;
+    }
+    if (context?.codeMode?.previewPanelSelection) {
+      result += `Viewing card instance: ${context.codeMode.previewPanelSelection.cardId}\n`;
+      result += `In format: ${context.codeMode.previewPanelSelection.format}\n`;
+    }
   } else {
     result += `The user has no open cards.\n`;
   }
+  result += `\nCurrent date and time: ${new Date().toISOString()}\n`;
   if (attachedCards.length > 0 || attachedFiles.length > 0) {
     result += `The user currently has given you the following data to work with:\n\n`;
     if (attachedCards.length > 0) {
       result += `Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}\n\n`;
     }
     if (attachedFiles.length > 0) {
-      result += `\n\nAttached files:\n${attachedFilesToPrompt(attachedFiles)}`;
+      result += `\n\nAttached files:\n${attachedFilesToMessage(attachedFiles)}`;
     }
   }
 
@@ -798,6 +814,16 @@ export const isCommandResultStatusApplied = (event?: MatrixEvent) => {
   }
   return (
     isCommandResultEvent(event.event as DiscreteMatrixEvent) &&
+    event.getContent()['m.relates_to']?.key === 'applied'
+  );
+};
+
+export const isCodePatchResultStatusApplied = (event?: MatrixEvent) => {
+  if (event === undefined) {
+    return false;
+  }
+  return (
+    isCodePatchResultEvent(event.event as DiscreteMatrixEvent) &&
     event.getContent()['m.relates_to']?.key === 'applied'
   );
 };

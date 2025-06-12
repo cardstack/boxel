@@ -160,13 +160,13 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     return this.args.activeSpec?.id ?? this.args.activeSpec?.[localId];
   }
 
-  @action private viewSpecInstance() {
+  @action private async viewSpecInstance() {
     if (!this.selectedId || isLocalId(this.selectedId)) {
       return;
     }
 
     const selectedUrl = new URL(this.selectedId);
-    this.operatorModeStateService.updateCodePath(selectedUrl);
+    await this.operatorModeStateService.updateCodePath(selectedUrl);
   }
 
   <template>

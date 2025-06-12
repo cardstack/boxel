@@ -79,7 +79,7 @@ interface Signature {
       codeRef: ResolvedCodeRef | undefined,
       codePath: URL | undefined,
       localName: string | undefined,
-    ) => void;
+    ) => Promise<void>;
     createFile: (
       fileType: FileType,
       definitionClass?: {

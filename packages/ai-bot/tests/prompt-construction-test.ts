@@ -63,6 +63,7 @@ module('getModifyPrompt', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
   let mockResponses: Map<string, { ok: boolean; text: string }>;
   let originalFetch: any;
+  let originalDate: typeof Date;
 
   hooks.beforeEach(() => {
     fakeMatrixClient = new FakeMatrixClient();
@@ -81,11 +82,22 @@ module('getModifyPrompt', (hooks) => {
       }
       throw new Error(`No mock response for ${url}`);
     };
+    // Save original Date constructor
+    originalDate = global.Date;
+    // Mock Date constructor to return a fixed date (for "Current date and time" message)
+    global.Date = class extends Date {
+      constructor() {
+        super();
+        return new originalDate('2025-06-11T11:43:00.533Z');
+      }
+    } as any;
   });
 
   hooks.afterEach(() => {
     fakeMatrixClient.resetSentEvents();
     (globalThis as any).fetch = originalFetch;
+    // Restore original Date constructor
+    global.Date = originalDate;
   });
 
   test('should generate a prompt from the user', async () => {
@@ -95,10 +107,24 @@ module('getModifyPrompt', (hooks) => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
           isStreamingFinished: true,
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/experiments',
+              submode: 'code',
+              codeMode: {
+                currentFile: 'http://localhost:4201/experiments/Author/1',
+                moduleInspectorPanel: 'preview',
+                previewPanelSelection: {
+                  cardId: 'http://localhost:4201/experiments/Author/1',
+                  format: 'isolated',
+                },
+              },
+            },
+          },
         },
         sender: '@user:localhost',
         room_id: 'room1',
@@ -123,8 +149,24 @@ module('getModifyPrompt', (hooks) => {
     assert.equal(result[0].role, 'system');
     assert.equal(result[1].role, 'system');
     assert.equal(result[2].role, 'user');
-    assert.equal(result[1].content, 'The user has no open cards.\n');
     assert.equal(result[2].content, 'Hey');
+
+    console.log(result[1].content);
+    assert.equal(
+      result[1].content,
+      `The user is currently viewing the following user interface:
+Room ID: room1
+Submode: code
+Workspace: http://localhost:4201/experiments
+The user has no open cards.
+File open in code editor: http://localhost:4201/experiments/Author/1
+Module inspector panel: preview
+Viewing card instance: http://localhost:4201/experiments/Author/1
+In format: isolated
+
+Current date and time: 2025-06-11T11:43:00.533Z
+`,
+    );
   });
 
   test('should generate a more structured response if the user uploads a card', async () => {
@@ -209,6 +251,10 @@ module('getModifyPrompt', (hooks) => {
           ),
         ),
         'attached card should be in the system context message',
+      );
+      assert.true(
+        result[1].content?.includes('Room ID: room1'),
+        'roomId should be in the system context message',
       );
       assert.true(
         result[1].content?.includes('Submode: interact'),
@@ -3250,53 +3296,6 @@ Attached files:
       'Tool call result should include "Cloudy"',
     );
   });
-});
-
-module('set model in prompt', (hooks) => {
-  let fakeMatrixClient: FakeMatrixClient;
-
-  hooks.beforeEach(() => {
-    fakeMatrixClient = new FakeMatrixClient();
-  });
-
-  hooks.afterEach(() => {
-    fakeMatrixClient.resetSentEvents();
-  });
-
-  test('default active LLM must be equal to `DEFAULT_LLM`', async () => {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(
-          __dirname,
-          'resources/chats/required-tool-call-in-last-message.json',
-        ),
-        'utf-8',
-      ),
-    );
-
-    const { model } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(model, DEFAULT_LLM);
-  });
-
-  test('use latest active llm', async () => {
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
-        path.join(__dirname, 'resources/chats/set-active-llm.json'),
-        'utf-8',
-      ),
-    );
-
-    const { model } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.strictEqual(model, 'google/gemini-pro-1.5');
-  });
 
   test('context message is placed before last user message when just one user message', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
@@ -3377,5 +3376,75 @@ module('set model in prompt', (hooks) => {
     assert.equal(messages![1].role, 'system');
     assert.equal(messages![2].role, 'user');
     assert.equal(messages![3].role, 'assistant');
+  });
+
+  test('context message contains the current date and time', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/user-message-last-multiple.json'),
+        'utf-8',
+      ),
+    );
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.equal(messages![3].role, 'system');
+    assert.true(
+      !!messages![3].content!.match(
+        /Current date and time: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
+      ),
+      'Context message should contain the current date and time but was ' +
+        messages![3].content,
+    );
+  });
+});
+
+module('set model in prompt', (hooks) => {
+  let fakeMatrixClient: FakeMatrixClient;
+
+  hooks.beforeEach(() => {
+    fakeMatrixClient = new FakeMatrixClient();
+  });
+
+  hooks.afterEach(() => {
+    fakeMatrixClient.resetSentEvents();
+  });
+
+  test('default active LLM must be equal to `DEFAULT_LLM`', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          __dirname,
+          'resources/chats/required-tool-call-in-last-message.json',
+        ),
+        'utf-8',
+      ),
+    );
+
+    const { model } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(model, DEFAULT_LLM);
+  });
+
+  test('use latest active llm', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/set-active-llm.json'),
+        'utf-8',
+      ),
+    );
+
+    const { model } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(model, 'google/gemini-pro-1.5');
   });
 });

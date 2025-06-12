@@ -491,8 +491,8 @@ export default class CardSchemaEditor extends Component<Signature> {
     this.removeFieldModalShown = !this.removeFieldModalShown;
   }
 
-  @action openCardDefinition(moduleURL: string) {
-    this.operatorModeStateService.updateCodePath(new URL(moduleURL));
+  @action async openCardDefinition(moduleURL: string) {
+    await this.operatorModeStateService.updateCodePath(new URL(moduleURL));
   }
 
   @action

@@ -6,60 +6,24 @@ import { tracked } from '@glimmer/tracking';
 
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import { TrackedObject } from 'tracked-built-ins';
-
-import { IconX } from '@cardstack/boxel-ui/icons';
-
-import { baseRealm, getPlural } from '@cardstack/runtime-common';
-
 import type StoreService from '@cardstack/host/services/store';
 
 import headerIcon from '../ai-assistant/ai-assist-icon@2x.webp';
 
 import PillMenu from './index';
 
-import type { PillMenuItem } from './index';
-
-const sampleCardURLs = [
-  `${baseRealm.url}Skill/card-editing`,
-  `${baseRealm.url}Skill/source-code-editing`,
-];
-
 export default class PillMenuUsage extends Component {
   @service private declare store: StoreService;
 
   @tracked private title = 'Pill Menu';
-  @tracked private isExpandableHeader = false;
-  @tracked private items: PillMenuItem[] = sampleCardURLs.map(
-    (cardId) =>
-      new TrackedObject({
-        cardId,
-        realmURL: undefined,
-        isActive: true,
-      }),
-  );
-
-  @tracked private itemDisplayName = 'Card';
-  @tracked private canAttachCard = false;
   private headerIconURL = headerIcon;
 
-  private get activeItems() {
-    return this.items.filter((item) => item.isActive);
+  @action private onExpand() {
+    console.log('Pill menu expanded');
   }
 
-  @action private headerAction() {
-    console.log('Header button clicked');
-  }
-
-  @action private onChooseCard(cardId: string) {
-    this.items = [
-      ...this.items,
-      new TrackedObject({ cardId, realmURL: undefined, isActive: true }),
-    ];
-  }
-
-  @action private onChangeItemIsActive(item: PillMenuItem, isActive: boolean) {
-    item.isActive = isActive;
+  @action private onCollapse() {
+    console.log('Pill menu collapsed');
   }
 
   <template>
@@ -68,16 +32,7 @@ export default class PillMenuUsage extends Component {
         Component with a header and a list of card pills.
       </:description>
       <:example>
-        <PillMenu
-          @title={{this.title}}
-          @items={{this.items}}
-          @itemDisplayName={{this.itemDisplayName}}
-          @isExpandableHeader={{this.isExpandableHeader}}
-          @headerAction={{this.headerAction}}
-          @canAttachCard={{this.canAttachCard}}
-          @onChooseCard={{this.onChooseCard}}
-          @onChangeItemIsActive={{this.onChangeItemIsActive}}
-        >
+        <PillMenu @onExpand={{this.onExpand}} @onCollapse={{this.onCollapse}}>
           <:headerIcon>
             <img
               src={{this.headerIconURL}}
@@ -87,18 +42,14 @@ export default class PillMenuUsage extends Component {
             />
           </:headerIcon>
           <:headerDetail>
-            {{this.activeItems.length}}
-            of
-            {{this.items.length}}
-            {{getPlural this.itemDisplayName}}
-            Are Active
+            1 Active
           </:headerDetail>
-          <:headerButton>
-            <IconX width='10' height='10' alt='Close' />
-          </:headerButton>
           <:content>
-            You have selected the following cards:
+            This is the content of the pill menu.
           </:content>
+          <:footer>
+            This is the footer of the pill menu.
+          </:footer>
         </PillMenu>
       </:example>
       <:api as |Args|>
@@ -108,42 +59,9 @@ export default class PillMenuUsage extends Component {
           @value={{this.title}}
           @onInput={{fn (mut this.title)}}
         />
-        <Args.Object
-          @name='items'
-          @description='Cards to be displayed on the pill menu.'
-          @value={{this.items}}
-        />
-        <Args.String
-          @name='itemDisplayName'
-          @description='Display name used when referring to menu items'
-          @value={{this.itemDisplayName}}
-          @onInput={{fn (mut this.itemDisplayName)}}
-        />
-        <Args.Bool
-          @name='isExpandableHeader'
-          @description='Whether the menu content can be hidden or shown by clicking the header button.'
-          @defaultValue={{false}}
-          @value={{this.isExpandableHeader}}
-          @onInput={{fn (mut this.isExpandableHeader)}}
-        />
         <Args.Action
           @name='headerAction'
           @description='Action to take when header button is clicked.'
-        />
-        <Args.Bool
-          @name='canAttachCard'
-          @description='Whether the user can add more items to the menu'
-          @defaultValue={{false}}
-          @value={{this.canAttachCard}}
-          @onInput={{fn (mut this.canAttachCard)}}
-        />
-        <Args.Object
-          @name='query'
-          @description='Query for filtering the cards displayed in the catalog.'
-        />
-        <Args.Action
-          @name='onChooseCard'
-          @description='Action to take when a card is selected from the catalog. "@canAttachCard" must be set to true.'
         />
       </:api>
     </FreestyleUsage>

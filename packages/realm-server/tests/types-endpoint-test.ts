@@ -39,7 +39,6 @@ module(basename(__filename), function () {
     let publisher: QueuePublisher;
     let runner: QueueRunner;
     let testRealmDir: string;
-    let seedRealm: Realm | undefined;
 
     function onRealmSetup(args: {
       testRealm: Realm;
@@ -92,20 +91,17 @@ module(basename(__filename), function () {
       if (testRealm2) {
         virtualNetwork.unmount(testRealm2.handle);
       }
-      ({
-        seedRealm,
-        testRealm: testRealm2,
-        testRealmHttpServer: testRealmHttpServer2,
-      } = await runTestRealmServer({
-        virtualNetwork,
-        testRealmDir,
-        realmsRootPath: join(dir.name, 'realm_server_2'),
-        realmURL: testRealm2URL,
-        dbAdapter,
-        publisher,
-        runner,
-        matrixURL,
-      }));
+      ({ testRealm: testRealm2, testRealmHttpServer: testRealmHttpServer2 } =
+        await runTestRealmServer({
+          virtualNetwork,
+          testRealmDir,
+          realmsRootPath: join(dir.name, 'realm_server_2'),
+          realmURL: testRealm2URL,
+          dbAdapter,
+          publisher,
+          runner,
+          matrixURL,
+        }));
 
       await testRealm.logInToMatrix();
     }
@@ -121,9 +117,6 @@ module(basename(__filename), function () {
         await startRealmServer(dbAdapter2, publisher, runner);
       },
       afterEach: async () => {
-        if (seedRealm) {
-          virtualNetwork.unmount(seedRealm.handle);
-        }
         await closeServer(testRealmHttpServer2);
       },
     });
@@ -142,6 +135,15 @@ module(basename(__filename), function () {
             id: `${testRealm.url}friend/Friend`,
             attributes: {
               displayName: 'Friend',
+              total: 2,
+              iconHTML,
+            },
+          },
+          {
+            type: 'card-type-summary',
+            id: `${testRealm.url}friend-with-used-link/FriendWithUsedLink`,
+            attributes: {
+              displayName: 'FriendWithUsedLink',
               total: 2,
               iconHTML,
             },

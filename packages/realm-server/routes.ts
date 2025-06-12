@@ -24,14 +24,12 @@ export type CreateRoutesArgs = {
     name,
     backgroundURL,
     iconURL,
-    copyFromSeedRealm,
   }: {
     ownerUserId: string;
     endpoint: string;
     name: string;
     backgroundURL?: string;
     iconURL?: string;
-    copyFromSeedRealm?: boolean;
   }) => Promise<Realm>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;

@@ -69,6 +69,7 @@ jobs:
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
               - 'packages/host/**'
+              - 'packages/matrix/**'
               - 'packages/realm-server/**'
             realm-server:
               - *shared
@@ -77,6 +78,7 @@ jobs:
               - 'packages/boxel-ui/**'
               - 'packages/eslint-plugin-boxel/**'
               - 'packages/postgres/**'
+              - 'packages/realm-server/**'
             vscode-boxel-tools:
               - *shared
               - 'packages/vscode-boxel-tools/**'

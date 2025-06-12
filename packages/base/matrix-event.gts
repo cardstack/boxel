@@ -167,6 +167,7 @@ export type EncodedCommandRequest = Omit<CommandRequest, 'arguments'> & {
 };
 
 export interface BoxelContext {
+  agentId?: string;
   openCardIds?: string[];
   realmUrl?: string;
   tools?: Tool[];
@@ -174,6 +175,11 @@ export interface BoxelContext {
   submode?: string;
   codeMode?: {
     currentFile?: string;
+    moduleInspectorPanel?: string;
+    previewPanelSelection?: {
+      cardId: string;
+      format: string;
+    };
   };
   debug?: boolean;
   requireToolCall?: boolean;

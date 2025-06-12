@@ -21,7 +21,7 @@ import {
 import {
   getRoomEvents,
   type MatrixClient,
-  sendPromptAndEventList,
+  sendPromptAsDebugMessage,
 } from './lib/matrix/util';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
@@ -236,7 +236,12 @@ Common issues are:
           );
         }
 
-        const responder = new Responder(client, room.roomId);
+        let contentData =
+          typeof event.getContent().data === 'string'
+            ? JSON.parse(event.getContent().data)
+            : event.getContent().data;
+        const agentId = contentData.context?.agentId;
+        const responder = new Responder(client, room.roomId, agentId);
 
         if (Responder.eventWillDefinitelyTriggerResponse(event)) {
           await responder.ensureThinkingMessageSent();
@@ -250,7 +255,7 @@ Common issues are:
           // if debug, send message with promptParts and event list
           if (isInDebugMode(eventList, aiBotUserId)) {
             // create files in memory
-            sendPromptAndEventList(client, room.roomId, promptParts, eventList);
+            sendPromptAsDebugMessage(client, room.roomId, promptParts);
           }
           await responder.ensureThinkingMessageSent();
         } catch (e) {

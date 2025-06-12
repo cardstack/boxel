@@ -24,8 +24,6 @@ NODE_ENV=development \
   --port=4201 \
   --matrixURL='http://localhost:8008' \
   --realmsRootPath='./realms/localhost_4201' \
-  --seedPath='../seed-realm' \
-  --seedRealmURL='http://localhost:4201/seed/' \
   --migrateDB \
   $1 \
   \
@@ -38,11 +36,6 @@ NODE_ENV=development \
   --username='experiments_realm' \
   --fromUrl='http://localhost:4201/experiments/' \
   --toUrl='http://localhost:4201/experiments/' \
-  \
-  --path='../seed-realm' \
-  --username='seed_realm' \
-  --fromUrl='http://localhost:4201/seed/' \
-  --toUrl='http://localhost:4201/seed/' \
   \
   --path='../catalog-realm' \
   --username='catalog_realm' \

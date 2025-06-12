@@ -1,8 +1,9 @@
 import { service } from '@ember/service';
 
 import { timeout } from 'ember-concurrency';
+import window from 'ember-window-mock';
 
-import { isResolvedCodeRef } from '@cardstack/runtime-common';
+import { isResolvedCodeRef, RealmPaths } from '@cardstack/runtime-common';
 
 import * as CardAPI from 'https://cardstack.com/base/card-api';
 import * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -48,7 +49,13 @@ export default class RemixCommand extends HostBaseCommand<
     input: BaseCommandModule.ListingInput,
   ): Promise<undefined> {
     let realmUrls = this.realmServer.availableRealmURLs;
-    let { realm: realmUrl, listing: listingInput } = input;
+    let { realm, listing: listingInput } = input;
+    let realmUrl = new RealmPaths(new URL(realm)).url;
+
+    // Make sure realm is valid
+    if (!realmUrls.includes(realmUrl)) {
+      throw new Error(`Invalid realm: ${realmUrl}`);
+    }
 
     // this is intentionally to type because base command cannot interpret Listing type from catalog
     const listing = listingInput as Listing;
@@ -58,14 +65,13 @@ export default class RemixCommand extends HostBaseCommand<
       selectedCodeRef,
       shouldPersistPlaygroundSelection,
       firstExampleCardId,
+      skillCardIds,
     } = await installListing({
-      realmUrls,
       realmUrl,
       listing,
       commandContext: this.commandContext,
       cardAPI,
     });
-
     if (selectedCodeRef && isResolvedCodeRef(selectedCodeRef)) {
       const codePath = selectedCodeRef.module.concat('.gts');
       if (shouldPersistPlaygroundSelection && firstExampleCardId) {
@@ -84,7 +90,7 @@ export default class RemixCommand extends HostBaseCommand<
         await window.localStorage.setItem(
           'code-mode-panel-selections',
           JSON.stringify({
-            [codePath]: 'playground',
+            [codePath]: 'preview',
           }),
         );
       }
@@ -105,6 +111,17 @@ export default class RemixCommand extends HostBaseCommand<
         submode: 'code',
         codePath: selectedCodeRef.module,
       });
+    } else if ('skills' in listing) {
+      // A listing can have more than one skill
+      // The most optimum way for remixing is still to display only the first instance
+      let firstSkillCardId =
+        skillCardIds && skillCardIds.length > 0 ? skillCardIds[0] : undefined;
+      if (firstSkillCardId) {
+        await new SwitchSubmodeCommand(this.commandContext).execute({
+          submode: 'code',
+          codePath: firstSkillCardId,
+        });
+      }
     }
   }
 }

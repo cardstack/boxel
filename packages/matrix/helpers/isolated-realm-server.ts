@@ -9,7 +9,6 @@ setGracefulCleanup();
 const testRealmCards = resolve(
   join(__dirname, '..', '..', 'host', 'tests', 'cards'),
 );
-const seedPath = resolve(join(__dirname, '..', '..', 'seed-realm'));
 const realmServerDir = resolve(join(__dirname, '..', '..', 'realm-server'));
 const matrixDir = resolve(join(__dirname, '..'));
 export const appURL = 'http://localhost:4205/test';
@@ -18,7 +17,7 @@ export const appURL = 'http://localhost:4205/test';
 // judgement to decide if your test really merits an isolated realm for testing
 // or if a mock would be more suitable.
 
-export async function startServer(opts?: { includeSeedRealm: boolean }) {
+export async function startServer() {
   let dir = dirSync();
   let testRealmDir = join(dir.name, 'test');
   ensureDirSync(testRealmDir);
@@ -43,12 +42,6 @@ export async function startServer(opts?: { includeSeedRealm: boolean }) {
     `--fromUrl='http://localhost:4205/test/'`,
     `--toUrl='http://localhost:4205/test/'`,
   ];
-  if (opts?.includeSeedRealm) {
-    workerArgs = workerArgs.concat([
-      `--fromUrl='http://localhost:4205/seed/'`,
-      `--toUrl='http://localhost:4205/seed/'`,
-    ]);
-  }
   workerArgs = workerArgs.concat([
     `--fromUrl='https://cardstack.com/base/'`,
     `--toUrl='http://localhost:4201/base/'`,
@@ -74,8 +67,6 @@ export async function startServer(opts?: { includeSeedRealm: boolean }) {
     `--port=4205`,
     `--matrixURL='http://localhost:8008'`,
     `--realmsRootPath='${dir.name}'`,
-    `--seedPath='${seedPath}'`,
-    `--seedRealmURL='http://localhost:4205/seed/'`,
     `--workerManagerPort=4212`,
     `--migrateDB`,
     `--useRegistrationSecretFunction`,
@@ -87,14 +78,6 @@ export async function startServer(opts?: { includeSeedRealm: boolean }) {
     `--fromUrl='http://localhost:4205/test/'`,
     `--toUrl='http://localhost:4205/test/'`,
   ]);
-  if (opts?.includeSeedRealm) {
-    serverArgs = serverArgs.concat([
-      `--path='${seedPath}'`,
-      `--username='seed_realm'`,
-      `--fromUrl='http://localhost:4205/seed/'`,
-      `--toUrl='http://localhost:4205/seed/'`,
-    ]);
-  }
   serverArgs = serverArgs.concat([
     `--fromUrl='https://cardstack.com/base/'`,
     `--toUrl='http://localhost:4201/base/'`,

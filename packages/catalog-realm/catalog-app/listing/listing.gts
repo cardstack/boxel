@@ -7,6 +7,7 @@ import {
   StringField,
   linksTo,
   Component,
+  realmURL,
 } from 'https://cardstack.com/base/card-api';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
@@ -50,48 +51,27 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     this.writableRealms = setupAllRealmsInfo(this.args);
   }
 
-  get useRealmOptions() {
-    return this.writableRealms.map((realm) => {
-      return new MenuItem(realm.name, 'action', {
-        action: () => {
-          this.use(realm.url);
-        },
-        iconURL: realm.iconURL ?? '/default-realm-icon.png',
+  get remixRealmOptions() {
+    return this.writableRealms
+      .filter((realm) => realm.url !== this.args.model[realmURL]?.href)
+      .map((realm) => {
+        return new MenuItem(realm.name, 'action', {
+          action: () => {
+            this.remix(realm.url);
+          },
+          iconURL: realm.iconURL ?? '/default-realm-icon.png',
+        });
       });
-    });
   }
 
-  get installRealmOptions() {
-    return this.writableRealms.map((realm) => {
-      return new MenuItem(realm.name, 'action', {
-        action: () => {
-          this.install(realm.url);
-        },
-        iconURL: realm.iconURL ?? '/default-realm-icon.png',
-      });
-    });
-  }
-
-  _use = task(async (realm: string) => {
+  _remix = task(async (realm: string) => {
     let commandContext = this.args.context?.commandContext;
     if (!commandContext) {
       throw new Error('Missing commandContext');
     }
     await new ListingInitCommand(commandContext).execute({
       realm,
-      actionType: 'use',
-      listing: this.args.model as Listing,
-    });
-  });
-
-  _install = task(async (realm: string) => {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
-      throw new Error('Missing commandContext');
-    }
-    await new ListingInitCommand(commandContext).execute({
-      realm,
-      actionType: 'install',
+      actionType: 'remix',
       listing: this.args.model as Listing,
     });
   });
@@ -107,7 +87,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     );
   }
 
-  get useOrInstallDisabled() {
+  get remixDisabled() {
     return !this.hasOneOrMoreSpec && !this.hasSkills;
   }
 
@@ -118,12 +98,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     this.args.context?.actions?.viewCard?.(this.args.model.examples[0]);
   }
 
-  @action use(realmUrl: string) {
-    this._use.perform(realmUrl);
-  }
-
-  @action install(realmUrl: string) {
-    this._install.perform(realmUrl);
+  @action remix(realmUrl: string) {
+    this._remix.perform(realmUrl);
   }
 
   get appName(): string {
@@ -184,7 +160,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
             {{#if this.hasExamples}}
               <BoxelButton
                 class='action-button'
-                data-test-catalog-listing-preview-button
+                data-test-catalog-listing-isolated-preview-button
                 {{on 'click' this.preview}}
               >
                 Preview
@@ -194,41 +170,21 @@ class EmbeddedTemplate extends Component<typeof Listing> {
               <:trigger as |bindings|>
                 <BoxelButton
                   class='action-button'
-                  data-test-catalog-listing-use-button
-                  @loading={{this._use.isRunning}}
-                  @disabled={{this.useOrInstallDisabled}}
+                  data-test-catalog-listing-isolated-remix-button
+                  @kind='primary'
+                  @loading={{this._remix.isRunning}}
+                  @disabled={{this.remixDisabled}}
                   {{bindings}}
                 >
-                  Use
+                  Remix
                 </BoxelButton>
               </:trigger>
               <:content as |dd|>
                 <BoxelMenu
                   class='realm-dropdown-menu'
                   @closeMenu={{dd.close}}
-                  @items={{this.useRealmOptions}}
-                  data-test-catalog-listing-use-dropdown
-                />
-              </:content>
-            </BoxelDropdown>
-            <BoxelDropdown>
-              <:trigger as |bindings|>
-                <BoxelButton
-                  class='action-button'
-                  data-test-catalog-listing-install-button
-                  @loading={{this._install.isRunning}}
-                  @disabled={{this.useOrInstallDisabled}}
-                  {{bindings}}
-                >
-                  Install
-                </BoxelButton>
-              </:trigger>
-              <:content as |dd|>
-                <BoxelMenu
-                  class='realm-dropdown-menu'
-                  @closeMenu={{dd.close}}
-                  @items={{this.installRealmOptions}}
-                  data-test-catalog-listing-install-dropdown
+                  @items={{this.remixRealmOptions}}
+                  data-test-catalog-listing-isolated-remix-dropdown
                 />
               </:content>
             </BoxelDropdown>

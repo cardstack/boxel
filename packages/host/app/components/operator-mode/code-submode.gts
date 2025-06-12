@@ -329,7 +329,7 @@ export default class CodeSubmode extends Component<Signature> {
       },
     );
     if (editedDeclaration) {
-      this.goToDefinition(undefined, undefined, editedDeclaration.localName);
+      this.goToDefinition(undefined, editedDeclaration.localName);
     }
   }
 
@@ -380,17 +380,16 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action
   private selectDeclaration(dec: ModuleDeclaration) {
-    this.goToDefinition(undefined, undefined, dec.localName);
+    this.goToDefinition(undefined, dec.localName);
   }
 
   @action
-  private goToDefinitionAndResetCursorPosition(
+  private async goToDefinitionAndResetCursorPosition(
     codeRef: CodeRef | undefined,
-    codePath: URL | undefined,
     localName: string | undefined,
     fieldName?: string,
   ) {
-    this.goToDefinition(codeRef, codePath, localName, fieldName);
+    await this.goToDefinition(codeRef, localName, fieldName);
     if (this.codePath) {
       let urlString = this.codePath.toString();
       this.recentFilesService.updateCursorPositionByURL(
@@ -401,16 +400,13 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
-  private goToDefinition(
+  private async goToDefinition(
     codeRef: CodeRef | undefined,
-    codePath: URL | undefined,
     localName: string | undefined,
     fieldName?: string,
   ) {
-    console.trace('goToDefinition', codeRef, localName, fieldName);
-    this.operatorModeStateService.updateCodePathWithSelection({
+    await this.operatorModeStateService.updateCodePathWithSelection({
       codeRef,
-      codePath,
       localName,
       fieldName,
       onLocalSelection: this.updateCursorByName,
@@ -526,9 +522,11 @@ export default class CodeSubmode extends Component<Signature> {
     if (recentFile) {
       let recentFileUrl = `${recentFile.realmURL}${recentFile.filePath}`;
 
-      this.operatorModeStateService.updateCodePath(new URL(recentFileUrl));
+      await this.operatorModeStateService.updateCodePath(
+        new URL(recentFileUrl),
+      );
     } else {
-      this.operatorModeStateService.updateCodePath(null);
+      await this.operatorModeStateService.updateCodePath(null);
     }
 
     await timeout(500); // task running message can be displayed long enough for the user to read it
@@ -580,7 +578,7 @@ export default class CodeSubmode extends Component<Signature> {
       );
       this.isCreateModalOpen = false;
       if (url) {
-        this.operatorModeStateService.updateCodePath(url);
+        await this.operatorModeStateService.updateCodePath(url);
         this.setPreviewFormat('edit');
       }
     },
@@ -611,11 +609,11 @@ export default class CodeSubmode extends Component<Signature> {
     this.updateCursorByName = updateCursorByName;
   };
 
-  @action private openSearchResultInEditor(cardId: string) {
+  @action private async openSearchResultInEditor(cardId: string) {
     let codePath = cardId.endsWith('.json')
       ? new URL(cardId)
       : new URL(cardId + '.json');
-    this.operatorModeStateService.updateCodePath(codePath);
+    await this.operatorModeStateService.updateCodePath(codePath);
   }
 
   @action private setPreviewFormat(format: Format) {

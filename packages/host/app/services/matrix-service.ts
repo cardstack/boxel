@@ -177,6 +177,7 @@ export default class MatrixService extends Service {
   private slidingSync: SlidingSync | undefined;
   private aiRoomIds: Set<string> = new Set();
   @tracked private _isLoadingMoreAIRooms = false;
+  agentId = uuidv4();
 
   constructor(owner: Owner) {
     super(owner);
@@ -405,20 +406,17 @@ export default class MatrixService extends Service {
     name,
     iconURL,
     backgroundURL,
-    copyFromSeedRealm,
   }: {
     endpoint: string;
     name: string;
     iconURL?: string;
     backgroundURL?: string;
-    copyFromSeedRealm?: boolean;
   }) {
     let personalRealmURL = await this.realmServer.createRealm({
       endpoint,
       name,
       iconURL,
       backgroundURL,
-      copyFromSeedRealm,
     });
     let { realms = [] } =
       (await this.client.getAccountDataFromServer<{ realms: string[] }>(
@@ -1016,10 +1014,7 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [
-      `${baseRealm.url}Skill/boxel-environment`,
-      `${baseRealm.url}Skill/card-editing`,
-    ];
+    let interactModeDefaultSkills = [`${baseRealm.url}Skill/boxel-environment`];
 
     let codeModeDefaultSkills = [
       `${baseRealm.url}Skill/boxel-environment`,

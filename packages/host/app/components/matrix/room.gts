@@ -1,11 +1,12 @@
 import { registerDestructor } from '@ember/destroyable';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { cached } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import {
   enqueueTask,
@@ -137,14 +138,6 @@ export default class Room extends Component<Signature> {
                   {{on 'click' this.scrollToFirstUnread}}
                 >{{this.unreadMessageText}}</BoxelButton>
               </div>
-            {{else}}
-              <AiAssistantSkillMenu
-                class='skills'
-                @skills={{this.sortedSkills}}
-                @onChooseCard={{perform this.attachSkillTask}}
-                @onUpdateSkillIsActive={{perform this.updateSkillIsActiveTask}}
-                data-test-skill-menu
-              />
             {{/if}}
           {{/if}}
         </AiAssistantConversation>
@@ -158,6 +151,8 @@ export default class Room extends Component<Signature> {
               @canSend={{this.canSend}}
               data-test-message-field={{@roomId}}
             />
+            {{! TODO: Remove this bottom section after we move the attachment picker to chat input 
+                  and llm chooser to area__actions }}
             <div class='chat-input-area__bottom-section'>
               <AiAssistantAttachmentPicker
                 @autoAttachedCardIds={{this.autoAttachedCardIds}}
@@ -175,12 +170,32 @@ export default class Room extends Component<Signature> {
                   'Topmost card is shared automatically'
                 }}
               />
-              <LLMSelect
-                @selected={{@roomResource.activeLLM}}
-                @onChange={{perform @roomResource.activateLLMTask}}
-                @options={{this.supportedLLMs}}
-                @disabled={{@roomResource.isActivatingLLM}}
-              />
+            </div>
+            <div class='chat-input-area__actions'>
+              {{#if this.displaySkillMenu}}
+                <AiAssistantSkillMenu
+                  class='skill-menu'
+                  @skills={{this.sortedSkills}}
+                  @onChooseCard={{perform this.attachSkillTask}}
+                  @onUpdateSkillIsActive={{perform
+                    this.updateSkillIsActiveTask
+                  }}
+                  @onExpand={{fn this.setSelectedAction 'skill-menu'}}
+                  @onCollapse={{fn this.setSelectedAction undefined}}
+                  data-test-skill-menu
+                />
+              {{/if}}
+              {{#if this.displayLLMSelect}}
+                <LLMSelect
+                  class='llm-select'
+                  @selected={{@roomResource.activeLLM}}
+                  @onChange={{perform @roomResource.activateLLMTask}}
+                  @options={{this.llmsForSelectMenu}}
+                  @disabled={{@roomResource.isActivatingLLM}}
+                  @onExpand={{fn this.setSelectedAction 'llm-select'}}
+                  @onCollapse={{fn this.setSelectedAction undefined}}
+                />
+              {{/if}}
             </div>
           </div>
         </footer>
@@ -193,11 +208,6 @@ export default class Room extends Component<Signature> {
         grid-template-rows: 1fr auto;
         height: 100%;
         overflow: hidden;
-      }
-      .skills {
-        position: sticky;
-        bottom: 0;
-        margin-left: auto;
       }
       .unread-indicator {
         position: sticky;
@@ -227,6 +237,13 @@ export default class Room extends Component<Signature> {
         :deep(.ember-basic-dropdown-content-wormhole-origin) {
         position: absolute; /* This prevents layout shift when menu opens */
       }
+      .chat-input-area__actions {
+        display: flex;
+        padding: var(--boxel-sp-sm);
+        gap: var(--boxel-sp-sm);
+        background-color: var(--boxel-light-100);
+        border-top: 1px solid var(--boxel-200);
+      }
       :deep(.ai-assistant-conversation > *:first-child) {
         margin-top: auto;
       }
@@ -239,10 +256,19 @@ export default class Room extends Component<Signature> {
         margin-left: auto;
         margin-right: auto;
       }
+      .skill-menu:deep(.pill-menu-button),
+      .llm-select:deep(.pill-menu-button) {
+        flex: 1;
+      }
+      .llm-select :deep(.menu-content) {
+        margin-right: calc(-2 * var(--boxel-sp-sm));
+        padding-right: var(--boxel-sp-sm);
+      }
     </style>
   </template>
 
   @consume(GetCardContextName) private declare getCard: getCard;
+  @tracked private selectedAction: 'skill-menu' | 'llm-select' | undefined;
 
   @service private declare store: StoreService;
   @service private declare cardService: CardService;
@@ -587,8 +613,12 @@ export default class Room extends Component<Signature> {
     return this.args.roomResource.skills;
   }
 
-  private get supportedLLMs(): string[] {
-    return DEFAULT_LLM_LIST.sort();
+  private get llmsForSelectMenu() {
+    return [
+      ...new Set([...DEFAULT_LLM_LIST, ...this.args.roomResource.usedLLMs]),
+    ]
+      .filter(Boolean)
+      .sort();
   }
 
   private get sortedSkills(): RoomSkill[] {
@@ -860,6 +890,19 @@ export default class Room extends Component<Signature> {
       });
     }
   });
+
+  @action
+  private setSelectedAction(action: 'skill-menu' | 'llm-select' | undefined) {
+    this.selectedAction = action;
+  }
+
+  private get displaySkillMenu() {
+    return !this.selectedAction || this.selectedAction === 'skill-menu';
+  }
+
+  private get displayLLMSelect() {
+    return !this.selectedAction || this.selectedAction === 'llm-select';
+  }
 }
 
 declare module '@glint/environment-ember-loose/registry' {

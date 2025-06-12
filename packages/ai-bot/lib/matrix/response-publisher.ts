@@ -66,6 +66,7 @@ export default class MatrixResponsePublisher {
   constructor(
     readonly client: MatrixClient,
     readonly roomId: string,
+    readonly agentId: string,
     readonly responseState: ResponseState,
   ) {}
 
@@ -95,6 +96,11 @@ export default class MatrixResponsePublisher {
           );
         let extraData: Partial<CardMessageContent> = {
           isStreamingFinished: true,
+          data: {
+            context: {
+              agentId: this.agentId,
+            },
+          },
           [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]: true,
         };
         if (this.previousResponseEventId) {
@@ -129,6 +135,11 @@ export default class MatrixResponsePublisher {
 
       let extraData: any = {
         isStreamingFinished: responseStateSnapshot.isStreamingFinished,
+        data: {
+          context: {
+            agentId: this.agentId,
+          },
+        },
       };
       if (this.currentResponseEvent.needsContinuation) {
         extraData[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] =
@@ -180,7 +191,10 @@ export default class MatrixResponsePublisher {
       this.roomId,
       '',
       undefined,
-      { isStreamingFinished: false },
+      {
+        isStreamingFinished: false,
+        data: { context: { agentId: this.agentId } },
+      },
       [],
       thinkingMessage,
     );

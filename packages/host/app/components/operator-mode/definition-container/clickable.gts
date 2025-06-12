@@ -7,11 +7,9 @@ import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 export interface ClickableArgs {
   goToDefinition: (
     codeRef: ResolvedCodeRef | undefined,
-    codePath: URL | undefined,
     localName: string | undefined,
-  ) => void;
+  ) => Promise<void>;
   codeRef?: ResolvedCodeRef;
-  codePath: URL | undefined;
   localName?: string;
 }
 
@@ -25,12 +23,8 @@ interface ClickableSignature {
 
 export class Clickable extends Component<ClickableSignature> {
   @action
-  handleClick() {
-    this.args.goToDefinition(
-      this.args.codeRef,
-      this.args.codePath,
-      this.args.localName,
-    );
+  async handleClick() {
+    await this.args.goToDefinition(this.args.codeRef, this.args.localName);
   }
   <template>
     <button
