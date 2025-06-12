@@ -902,9 +902,9 @@ export default class OperatorModeStateService extends Service {
 
   get moduleInspectorPanel() {
     return (
-      JSON.parse(window.localStorage.getItem(CodeModePanelSelections) ?? '{}')[
-        this.codePathString ?? ''
-      ] ?? 'schema'
+      JSON.parse(
+        window.localStorage.getItem(ModuleInspectorSelections) ?? '{}',
+      )[this.codePathString ?? ''] ?? 'schema'
     );
   }
 
