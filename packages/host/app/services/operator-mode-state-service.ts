@@ -33,6 +33,7 @@ import { maybe } from '@cardstack/host/resources/maybe';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import { PlaygroundSelection } from '@cardstack/host/services/playground-panel-service';
 import type Realm from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
@@ -44,6 +45,11 @@ import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 import { type Stack } from '../components/operator-mode/interact-submode';
 
 import { removeFileExtension } from '../components/search-sheet/utils';
+
+import {
+  CodeModePanelSelections,
+  PlaygroundSelections,
+} from '../utils/local-storage-keys';
 
 import MatrixService from './matrix-service';
 import NetworkService from './network';
@@ -814,21 +820,51 @@ export default class OperatorModeStateService extends Service {
     return controller;
   }
 
+  get moduleInspectorPanel() {
+    return (
+      JSON.parse(window.localStorage.getItem(CodeModePanelSelections) ?? '{}')[
+        this.codePathString ?? ''
+      ] ?? 'schema'
+    );
+  }
+
+  get playgroundPanelSelection(): PlaygroundSelection | undefined {
+    if (this.moduleInspectorPanel === 'preview') {
+      let playgroundSelections = JSON.parse(
+        window.localStorage.getItem(PlaygroundSelections) ?? '{}',
+      );
+      let playgroundPanelSelection = Object.values(playgroundSelections).find(
+        (selection: any) => selection.url === this.codePathString,
+      );
+      return playgroundPanelSelection as PlaygroundSelection | undefined;
+    }
+    return undefined;
+  }
+
   getSummaryForAIBot(
     openCardIds: Set<string> = new Set([...this.getOpenCardIds()]),
   ): BoxelContext {
+    let codeMode =
+      this._state.submode === Submodes.Code
+        ? {
+            currentFile: this.codePathString,
+            moduleInspectorPanel: this.moduleInspectorPanel,
+            previewPanelSelection: this.playgroundPanelSelection
+              ? {
+                  cardId: this.playgroundPanelSelection.cardId,
+                  format: this.playgroundPanelSelection.format,
+                }
+              : undefined,
+          }
+        : undefined;
+
     return {
       agentId: this.matrixService.agentId,
       submode: this._state.submode,
       debug: this.operatorModeController.debug,
       openCardIds: this.makeRemoteIdsList([...openCardIds]),
       realmUrl: this.realmURL.href,
-      codeMode:
-        this._state.submode === Submodes.Code
-          ? {
-              currentFile: this.codePathString,
-            }
-          : undefined,
+      codeMode,
     };
   }
 

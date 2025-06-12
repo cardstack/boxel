@@ -63,6 +63,7 @@ module('getModifyPrompt', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
   let mockResponses: Map<string, { ok: boolean; text: string }>;
   let originalFetch: any;
+  let originalDate: typeof Date;
 
   hooks.beforeEach(() => {
     fakeMatrixClient = new FakeMatrixClient();
@@ -81,11 +82,22 @@ module('getModifyPrompt', (hooks) => {
       }
       throw new Error(`No mock response for ${url}`);
     };
+    // Save original Date constructor
+    originalDate = global.Date;
+    // Mock Date constructor to return a fixed date (for "Current date and time" message)
+    global.Date = class extends Date {
+      constructor() {
+        super();
+        return new originalDate('2025-06-11T11:43:00.533Z');
+      }
+    } as any;
   });
 
   hooks.afterEach(() => {
     fakeMatrixClient.resetSentEvents();
     (globalThis as any).fetch = originalFetch;
+    // Restore original Date constructor
+    global.Date = originalDate;
   });
 
   test('should generate a prompt from the user', async () => {
@@ -95,10 +107,24 @@ module('getModifyPrompt', (hooks) => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
           isStreamingFinished: true,
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/experiments',
+              submode: 'code',
+              codeMode: {
+                currentFile: 'http://localhost:4201/experiments/Author/1',
+                moduleInspectorPanel: 'preview',
+                previewPanelSelection: {
+                  cardId: 'http://localhost:4201/experiments/Author/1',
+                  format: 'isolated',
+                },
+              },
+            },
+          },
         },
         sender: '@user:localhost',
         room_id: 'room1',
@@ -123,11 +149,24 @@ module('getModifyPrompt', (hooks) => {
     assert.equal(result[0].role, 'system');
     assert.equal(result[1].role, 'system');
     assert.equal(result[2].role, 'user');
-    assert.true(
-      result[1].content!.includes('The user has no open cards.\n'),
-      'should include the system context message about no open cards',
-    );
     assert.equal(result[2].content, 'Hey');
+
+    console.log(result[1].content);
+    assert.equal(
+      result[1].content,
+      `The user is currently viewing the following user interface:
+Room ID: room1
+Submode: code
+Workspace: http://localhost:4201/experiments
+The user has no open cards.
+File open in code editor: http://localhost:4201/experiments/Author/1
+Module inspector panel: preview
+Viewing card instance: http://localhost:4201/experiments/Author/1
+In format: isolated
+
+Current date and time: 2025-06-11T11:43:00.533Z
+`,
+    );
   });
 
   test('should generate a more structured response if the user uploads a card', async () => {
