@@ -454,6 +454,7 @@ export default class OperatorModeStateService extends Service {
   };
 
   updateCodePath(codePath: URL | null) {
+    console.log('updateCodePath', codePath?.href);
     this._state.codePath = codePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();

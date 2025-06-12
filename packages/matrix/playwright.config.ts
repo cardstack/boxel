@@ -6,7 +6,7 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
-  forbidOnly: !!process.env.CI,
+  forbidOnly: false,
   retries: process.env.CI ? 2 : 0,
   workers: 1,
   reporter: process.env.CI ? 'blob' : 'html',
@@ -15,7 +15,7 @@ export default defineConfig({
     baseURL: 'http://localhost:4202/test',
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
+    trace: 'on',
   },
   // General timeout per test
   timeout: 60000,
