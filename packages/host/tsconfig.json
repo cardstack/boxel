@@ -36,7 +36,6 @@
     "transform": {
       "include": [
         "../experiments-realm/**",
-        "../seed-realm/**",
         "../catalog-realm/**/*",
         "../base/**",
         "app/**",
@@ -49,7 +48,6 @@
     "../base/**/*",
     "../experiments-realm/**/*",
     "../catalog-realm/**/*",
-    "../seed-realm/**/*",
     "app/**/*",
     "tests/**/*",
     "types/**/*"
