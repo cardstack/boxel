@@ -310,15 +310,20 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
       () =>
         document
           .querySelector('[data-test-skill-menu]')
-          ?.textContent?.trim() === 'Skills 2',
+          ?.textContent?.trim() === 'Skills 1',
     );
-    assert.dom('[data-test-skill-menu]').containsText('Skills 2');
+    assert.dom('[data-test-skill-menu]').containsText('Skills 1');
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    assert.dom('[data-test-skill-menu]').containsText('Skills: 2 of 2 active');
+    assert.dom('[data-test-skill-menu]').containsText('Skills: 1 of 1 active');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await click('[data-test-select="http://test-realm/test/Skill/example"]');
     await click('[data-test-card-catalog-go-button]');
-    assert.dom('[data-test-skill-menu]').containsText('Skills: 3 of 3 active');
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-skill-menu]')
+        ?.textContent?.includes('Skills: 2 of 2 active'),
+    );
+    assert.dom('[data-test-skill-menu]').containsText('Skills: 2 of 2 active');
 
     const initialRoomStateSkillsJson = getRoomState(
       roomId,
@@ -352,9 +357,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
 
     await waitFor('[data-test-room-settled]');
-    assert.dom('[data-test-skill-menu]').containsText('Skills 2');
+    assert.dom('[data-test-skill-menu]').containsText('Skills 1');
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
-    assert.dom('[data-test-skill-menu]').containsText('Skills: 2 of 2 active');
+    assert.dom('[data-test-skill-menu]').containsText('Skills: 1 of 1 active');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await click('[data-test-select="http://test-realm/test/Skill/example"]');
     await click('[data-test-card-catalog-go-button]');
@@ -527,28 +532,28 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).contentHash,
       initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).contentHash,
       'skill card instructions have changed',
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).url,
       initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).url,
       'skill card instructions have changed',
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).sourceUrl,
       initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).sourceUrl,
       'skill card source URL has not changed',
     );
@@ -639,28 +644,28 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).contentHash,
       initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).contentHash,
       'skill card instructions have changed',
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).url,
       initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).url,
       'skill card instructions have changed',
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).sourceUrl,
       initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).sourceUrl,
       'skill card source URL has not changed',
     );
@@ -744,28 +749,28 @@ ${REPLACE_MARKER}
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).contentHash,
       initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).contentHash,
       'skill card instructions have changed',
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).url,
       initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).url,
       'skill card instructions have changed',
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).sourceUrl,
       initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
-        c.sourceUrl.endsWith('card-editing'),
+        c.sourceUrl.endsWith('environment'),
       ).sourceUrl,
       'skill card source URL has not changed',
     );

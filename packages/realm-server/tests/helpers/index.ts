@@ -113,9 +113,6 @@ export const realmSecretSeed = `shhh! it's a secret`;
 export const matrixRegistrationSecret: string =
   getSynapseConfig()!.registration_shared_secret; // as long as synapse has been started at least once, this will always exist
 
-export const seedPath = resolve(
-  join(__dirname, '..', '..', '..', 'seed-realm'),
-);
 const basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
 
 let manager = new RunnerOptionsManager();
@@ -439,24 +436,6 @@ export async function runTestRealmServer({
 
   virtualNetwork.mount(testRealm.handle);
   let realms = [testRealm];
-  let seedRealmURL: URL | undefined;
-  let seedRealm: Realm | undefined;
-  if (realmURL.pathname && realmURL.pathname !== '/') {
-    seedRealmURL = new URL('/seed/', realmURL);
-    seedRealm = await createRealm({
-      dir: testRealmDir,
-      fileSystem,
-      realmURL: seedRealmURL.href,
-      permissions,
-      virtualNetwork,
-      matrixConfig,
-      publisher,
-      dbAdapter,
-      enableFileWatcher,
-    });
-    virtualNetwork.mount(seedRealm.handle);
-    realms.push(seedRealm);
-  }
   let matrixClient = new MatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
@@ -474,8 +453,6 @@ export async function runTestRealmServer({
     dbAdapter,
     queue: publisher,
     getIndexHTML,
-    seedPath,
-    seedRealmURL,
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
@@ -484,7 +461,6 @@ export async function runTestRealmServer({
   return {
     testRealmDir,
     testRealm,
-    seedRealm,
     testRealmServer,
     testRealmHttpServer,
     matrixClient,

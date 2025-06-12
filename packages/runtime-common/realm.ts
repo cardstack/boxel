@@ -218,7 +218,6 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #disableModuleCaching = false;
-  #copiedFromRealm: URL | undefined;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -273,7 +272,6 @@ export class Realm {
       seed: secretSeed,
     });
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
-    this.#copiedFromRealm = opts?.copiedFromRealm;
     let fetch = fetcher(virtualNetwork.fetch, [
       async (req, next) => {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
@@ -600,25 +598,16 @@ export class Realm {
   async #startup() {
     await Promise.resolve();
     let startTime = Date.now();
-    if (this.#copiedFromRealm) {
-      await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
-      this.broadcastRealmEvent({
-        eventName: 'index',
-        indexType: 'copy',
-        sourceRealmURL: this.#copiedFromRealm.href,
-      });
-    } else {
-      let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-      let promise = this.#realmIndexUpdater.run();
-      if (isNewIndex) {
-        // we only await the full indexing at boot if this is a brand new index
-        await promise;
-      }
-      this.broadcastRealmEvent({
-        eventName: 'index',
-        indexType: 'full',
-      });
+    let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
+    let promise = this.#realmIndexUpdater.run();
+    if (isNewIndex) {
+      // we only await the full indexing at boot if this is a brand new index
+      await promise;
     }
+    this.broadcastRealmEvent({
+      eventName: 'index',
+      indexType: 'full',
+    });
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
     );
