@@ -10,6 +10,7 @@ import { tracked } from '@glimmer/tracking';
 import { dropTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
+import { Alert } from '@cardstack/boxel-ui/components';
 import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
@@ -36,7 +37,6 @@ import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import ApplyButton from './apply-button';
 import CodeBlock from './code-block';
-import ErrorMessage from './error-message';
 
 interface FormattedAiBotMessageSignature {
   Element: HTMLDivElement;
@@ -359,11 +359,11 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
           </div>
         {{else}}
           {{#if this.codeDiffResource.errorMessage}}
-            <ErrorMessage
-              class='error-container'
+            <Alert
               data-test-error-message={{this.codeDiffResource.errorMessage}}
-              @errorMessage={{this.errorMessage
-                this.codeDiffResource.errorMessage
+              @type='error'
+              @messages={{array
+                (this.errorMessage this.codeDiffResource.errorMessage)
               }}
             />
           {{/if}}

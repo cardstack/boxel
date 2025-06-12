@@ -11,6 +11,7 @@ import { format as formatDate, formatISO } from 'date-fns';
 import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
+import { Alert } from '@cardstack/boxel-ui/components';
 import { and, cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -29,7 +30,6 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
-import ErrorMessage from '../error-message';
 import FormattedAiBotMessage from '../formatted-aibot-message';
 import FormattedUserMessage from '../formatted-user-message';
 
@@ -297,19 +297,12 @@ export default class AiAssistantMessage extends Component<Signature> {
           {{/if}}
 
           <div class='error-footer'>
-            {{#if @errorMessage}}
-              <ErrorMessage
-                @errorMessage={{@errorMessage}}
+            {{#if this.errorMessages.length}}
+              <Alert
+                @type='error'
+                @messages={{this.errorMessages}}
                 @retryAction={{@retryAction}}
               />
-            {{/if}}
-            {{#if @collectionResource.cardErrors.length}}
-              {{#each @collectionResource.cardErrors as |error|}}
-                <ErrorMessage
-                  @errorMessage={{(collectionResourceError error.id)}}
-                  @retryAction={{@retryAction}}
-                />
-              {{/each}}
             {{/if}}
           </div>
         </div>
@@ -391,7 +384,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
 
       .is-from-assistant .content {
-        background-color: var(--ai-bot-message-background-color);
+        background-color: transparent;
         color: var(--boxel-light);
         /* the below font-smoothing options are only recommended for light-colored
           text on dark background (otherwise not good for accessibility) */
@@ -500,6 +493,15 @@ export default class AiAssistantMessage extends Component<Signature> {
     return [
       ...(this.args.collectionResource ? [this.args.collectionResource] : []),
       ...(this.args.files ?? []),
+    ];
+  }
+
+  private get errorMessages() {
+    return [
+      ...(this.args.errorMessage ? [this.args.errorMessage] : []),
+      ...(this.args.collectionResource?.cardErrors.map((error) =>
+        collectionResourceError(error.id),
+      ) ?? []),
     ];
   }
 }
