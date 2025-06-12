@@ -22,7 +22,7 @@ import {
   LoadingIndicator,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
-import { not, bool } from '@cardstack/boxel-ui/helpers';
+import { not } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -79,7 +79,6 @@ import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
 import CreateFileModal, { type FileType } from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
-import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
 
 interface Signature {
@@ -453,9 +452,11 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
-  @action
-  private onSelectNewFileType(fileType: FileType) {
-    this.createFile.perform(fileType);
+  private get newFileOptions() {
+    return {
+      onSelect: (fileType: FileType) => this.createFile.perform(fileType),
+      isCreateModalOpen: this.isCreateModalOpen,
+    };
   }
 
   onStateChange(state: FileResource['state']) {
@@ -648,8 +649,10 @@ export default class CodeSubmode extends Component<Signature> {
       ></div>
     {{/let}}
     <SubmodeLayout
+      class='code-submode-layout'
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
       @selectedCardRef={{this.selectedCodeRef}}
+      @newFileOptions={{this.newFileOptions}}
       as |search|
     >
       <div
@@ -664,10 +667,6 @@ export default class CodeSubmode extends Component<Signature> {
             @userHasDismissedError={{this.userHasDismissedURLError}}
             @dismissURLError={{this.dismissURLError}}
             @realmURL={{this.realmURL}}
-          />
-          <NewFileButton
-            @onSelectNewFileType={{this.onSelectNewFileType}}
-            @isCreateModalShown={{bool this.isCreateModalOpen}}
           />
         </div>
         <ResizablePanelGroup
@@ -854,6 +853,11 @@ export default class CodeSubmode extends Component<Signature> {
         --monaco-readonly-background: #606060;
       }
 
+      .code-submode-layout {
+        --submode-bar-item-outline: 2px solid transparent;
+        --submode-bar-item-box-shadow: none;
+      }
+
       .code-mode {
         height: 100%;
         max-height: 100vh;
@@ -909,17 +913,18 @@ export default class CodeSubmode extends Component<Signature> {
       }
 
       .code-mode-top-bar {
-        --code-mode-top-bar-left-offset: calc(
-          var(--operator-mode-left-column) - var(--operator-mode-spacing)
-        ); /* subtract additional padding */
-
         position: absolute;
         top: 0;
         right: 0;
-        left: var(--code-mode-top-bar-left-offset);
-        padding: var(--operator-mode-spacing);
+        left: var(--operator-mode-left-column);
+        padding-block: var(--operator-mode-spacing);
+        padding-right: var(--operator-mode-spacing);
         display: flex;
         z-index: 1;
+      }
+      .code-mode-top-bar
+        > :deep(* + *:not(.ember-basic-dropdown-content-wormhole-origin)) {
+        margin-left: var(--operator-mode-spacing);
       }
 
       .loading {
