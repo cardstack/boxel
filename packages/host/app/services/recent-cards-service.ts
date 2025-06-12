@@ -84,6 +84,7 @@ export default class RecentCardsService extends Service {
       if (isCardInstance(instance)) {
         this.addNewCard(instance);
       }
+      return;
     }
 
     const existingCardIndex = this.findRecentCardIndex(newId);
@@ -142,5 +143,11 @@ export default class RecentCardsService extends Service {
       'recent-cards',
       JSON.stringify(this.ascendingRecentCards),
     );
+  }
+}
+
+declare module '@ember/service' {
+  interface Registry {
+    'recent-cards-service': RecentCardsService;
   }
 }

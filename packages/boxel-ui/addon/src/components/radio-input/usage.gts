@@ -194,8 +194,8 @@ export default class RadioInputUsage extends Component {
           @name='example-radio-usage'
           @checkedId={{this.checkedIdItems}}
           @disabled={{this.disabled}}
-          @orientation={{'vertical'}}
-          @spacing={{'compact'}}
+          @orientation='vertical'
+          @spacing='compact'
           @hideRadio={{false}}
           @hideBorder={{true}}
           style={{cssVar
@@ -219,8 +219,8 @@ export default class RadioInputUsage extends Component {
           @name='example-radio-usage'
           @checkedId={{this.checkedIdTshirts}}
           @disabled={{this.disabled}}
-          @orientation={{'horizontal'}}
-          @spacing={{'default'}}
+          @orientation='horizontal'
+          @spacing='default'
           @hideRadio={{true}}
           @hideBorder={{false}}
           style={{cssVar

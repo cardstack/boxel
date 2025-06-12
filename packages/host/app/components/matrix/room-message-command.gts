@@ -143,7 +143,7 @@ export default class RoomMessageCommand extends Component<Signature> {
 
     let showCardCommand = new ShowCardCommand(commandContext);
     await showCardCommand.execute({
-      cardIdToShow: newCardId,
+      cardId: newCardId,
     });
   }
 
@@ -192,7 +192,7 @@ export default class RoomMessageCommand extends Component<Signature> {
             @state={{this.applyButtonState}}
             {{on 'click' @runCommand}}
             data-test-command-apply={{this.applyButtonState}}
-          />
+          >{{@messageCommand.actionVerb}}</ApplyButton>
         </div>
         {{#if this.isDisplayingCode}}
           <CodeBlock

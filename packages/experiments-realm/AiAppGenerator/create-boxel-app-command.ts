@@ -15,6 +15,7 @@ export default class CreateBoxelApp extends Command<
   typeof CreateProductRequirementsInput,
   typeof CardDef
 > {
+  static actionVerb = 'Create';
   inputType = CreateProductRequirementsInput;
 
   protected async run(input: CreateProductRequirementsInput): Promise<CardDef> {
@@ -26,7 +27,7 @@ export default class CreateBoxelApp extends Command<
       await createPRDCommand.execute(input);
 
     let showCardCommand = new ShowCardCommand(this.commandContext);
-    await showCardCommand.execute({ cardIdToShow: prdCard.id });
+    await showCardCommand.execute({ cardId: prdCard.id });
 
     let generateCodeCommand = new GenerateCodeCommand(this.commandContext);
     let { code, appName } = await generateCodeCommand.execute({
@@ -72,7 +73,7 @@ export default class CreateBoxelApp extends Command<
     });
 
     // show the app card
-    await showCardCommand.execute({ cardIdToShow: myAppCard.id });
+    await showCardCommand.execute({ cardId: myAppCard.id });
 
     return myAppCard;
   }

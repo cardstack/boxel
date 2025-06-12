@@ -1,17 +1,31 @@
 import { waitFor, click, fillIn, settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
+
 import { module, test } from 'qunit';
 
-import { baseRealm, skillCardRef } from '@cardstack/runtime-common';
+import {
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+  baseRealm,
+  skillCardRef,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { APP_BOXEL_ROOM_SKILLS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import { FileDef } from 'https://cardstack.com/base/file-api';
 
 import {
   testRealmURL,
@@ -19,7 +33,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
-  lookupLoaderService,
   getMonacoContent,
   setMonacoContent,
 } from '../../../helpers';
@@ -47,7 +60,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   setupLocalIndexing(hooks);
@@ -69,14 +82,12 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     })(),
   });
 
-  let { getRoomState } = mockMatrixUtils;
+  let { getRoomState, simulateRemoteMessage } = mockMatrixUtils;
 
   let noop = () => {};
 
   hooks.beforeEach(async function () {
-    operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
+    operatorModeStateService = getService('operator-mode-state-service');
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -174,6 +185,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
               undefined
             > {
               static displayName = 'SearchAndOpenCardCommand';
+              static actionVerb = 'Search';
               async getInputType() {
                 return new SearchCardsByTypeAndTitleCommand(
                   this.commandContext,
@@ -189,7 +201,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
                 if (searchResult.cardIds.length > 0) {
                   let showCardCommand = new ShowCardCommand(this.commandContext);
                   await showCardCommand.execute({
-                    cardIdToShow: searchResult.cardIds[0],
+                    cardId: searchResult.cardIds[0],
                   });
                 }
                 return undefined;
@@ -245,6 +257,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
             },
           },
         },
+        'hello.txt': 'Hello, world!',
         '.realm.json': `{ "name": "${realmName}" }`,
       },
     });
@@ -460,7 +473,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
   });
 
-  test('updated skill card instructions result in new event and updated room state', async function (assert) {
+  test('updated skill card instructions result in new event and updated room state when sending message', async function (assert) {
     const roomId = await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
 
     await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
@@ -498,34 +511,275 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
       'room state has changed',
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[0].contentHash,
-      initialRoomStateSkillsJson.enabledSkillCards[0].contentHash,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).contentHash,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).contentHash,
       'skill card instructions have changed',
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[0].url,
-      initialRoomStateSkillsJson.enabledSkillCards[0].url,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).url,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).url,
       'skill card instructions have changed',
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[0].sourceUrl,
-      initialRoomStateSkillsJson.enabledSkillCards[0].sourceUrl,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).sourceUrl,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).sourceUrl,
       'skill card source URL has not changed',
     );
 
     assert.notStrictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[1].contentHash,
-      initialRoomStateSkillsJson.enabledSkillCards[1].contentHash,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).contentHash,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).contentHash,
       'skill card instructions have changed',
     );
     assert.notStrictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[1].url,
-      initialRoomStateSkillsJson.enabledSkillCards[1].url,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).url,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).url,
       'skill card instructions have changed',
     );
     assert.strictEqual(
-      finalRoomStateSkillsJson.enabledSkillCards[1].sourceUrl,
-      initialRoomStateSkillsJson.enabledSkillCards[1].sourceUrl,
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).sourceUrl,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).sourceUrl,
+      'skill card source URL has not changed',
+    );
+  });
+
+  test('updated skill card instructions result in new event and updated room state when command is completing', async function (assert) {
+    const roomId = await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
+
+    await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click('[data-test-select="http://test-realm/test/Skill/example"]');
+    await click('[data-test-card-catalog-go-button]');
+
+    const initialRoomStateSkillsJson = getRoomState(
+      roomId,
+      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+    );
+
+    await click('[data-test-edit-button]');
+    await fillIn(
+      '[data-test-field="instructions"] textarea',
+      'Updated instructions',
+    );
+    await click('[data-test-edit-button]');
+    await click('[data-test-close-button]');
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: '',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
+          arguments: JSON.stringify({
+            attributes: {
+              description: 'Searching for card',
+              type: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          }),
+        },
+      ],
+    });
+    // Click on the apply button, skill card will be updated since it has changed
+    await waitFor('[data-test-message-idx="0"]');
+    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+
+    const finalRoomStateSkillsJson = getRoomState(
+      roomId,
+      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+    );
+    assert.notDeepEqual(
+      finalRoomStateSkillsJson,
+      initialRoomStateSkillsJson,
+      'room state has changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).contentHash,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).contentHash,
+      'skill card instructions have changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).url,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).url,
+      'skill card instructions have changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).sourceUrl,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).sourceUrl,
+      'skill card source URL has not changed',
+    );
+
+    assert.notStrictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).contentHash,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).contentHash,
+      'skill card instructions have changed',
+    );
+    assert.notStrictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).url,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).url,
+      'skill card instructions have changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).sourceUrl,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).sourceUrl,
+      'skill card source URL has not changed',
+    );
+  });
+
+  test('updated skill card instructions result in new event and updated room state when code patch is completing', async function (assert) {
+    const roomId = await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
+
+    await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click('[data-test-select="http://test-realm/test/Skill/example"]');
+    await click('[data-test-card-catalog-go-button]');
+
+    const initialRoomStateSkillsJson = getRoomState(
+      roomId,
+      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+    );
+
+    await click('[data-test-edit-button]');
+    await fillIn(
+      '[data-test-field="instructions"] textarea',
+      'Updated instructions',
+    );
+    await click('[data-test-edit-button]');
+    await click('[data-test-close-button]');
+
+    let codeBlock = `\`\`\`
+http://test-realm/test/hello.txt
+${SEARCH_MARKER}
+Hello, world!
+${SEPARATOR_MARKER}
+Hi, world!
+${REPLACE_MARKER}
+\`\`\``;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+    // Click on the apply button, skill card will be updated since it has changed
+    await waitFor('[data-test-apply-code-button]');
+    await click('[data-test-apply-code-button]');
+
+    const finalRoomStateSkillsJson = getRoomState(
+      roomId,
+      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+    );
+    assert.notDeepEqual(
+      finalRoomStateSkillsJson,
+      initialRoomStateSkillsJson,
+      'room state has changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).contentHash,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).contentHash,
+      'skill card instructions have changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).url,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).url,
+      'skill card instructions have changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).sourceUrl,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('card-editing'),
+      ).sourceUrl,
+      'skill card source URL has not changed',
+    );
+
+    assert.notStrictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).contentHash,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).contentHash,
+      'skill card instructions have changed',
+    );
+    assert.notStrictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).url,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).url,
+      'skill card instructions have changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).sourceUrl,
+      initialRoomStateSkillsJson.enabledSkillCards.find((c: FileDef) =>
+        c.sourceUrl.endsWith('example'),
+      ).sourceUrl,
       'skill card source URL has not changed',
     );
   });

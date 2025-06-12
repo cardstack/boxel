@@ -101,6 +101,13 @@ export default class RoomMessage extends Component<Signature> {
     return this.message.author.userId === aiBotUserId;
   }
 
+  private get isLastAssistantMessage() {
+    return (
+      this.isFromAssistant &&
+      this.args.index === this.args.roomResource.indexOfLastNonDebugMessage
+    );
+  }
+
   private run = task(async (command: MessageCommand) => {
     return this.commandService.run.unlinked().perform(command);
   });
@@ -122,8 +129,10 @@ export default class RoomMessage extends Component<Signature> {
         @reasoningContent={{this.message.reasoningContent}}
         @monacoSDK={{@monacoSDK}}
         @datetime={{this.message.created}}
+        @roomId={{this.message.roomId}}
         @eventId={{this.message.eventId}}
         @index={{@index}}
+        @isLastAssistantMessage={{this.isLastAssistantMessage}}
         @registerScroller={{@registerScroller}}
         @isFromAssistant={{this.isFromAssistant}}
         @profileAvatar={{component
@@ -135,6 +144,7 @@ export default class RoomMessage extends Component<Signature> {
         @collectionResource={{this.attachedCardCollection}}
         @files={{this.message.attachedFiles}}
         @errorMessage={{this.errorMessage}}
+        @isDebugMessage={{this.message.isDebugMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{@retryAction}}
         @isPending={{@isPending}}

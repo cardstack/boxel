@@ -58,7 +58,8 @@ export default class AiAssistantMessageUsage extends Component {
               @datetime={{this.datetime}}
               @isFromAssistant={{this.isFromAssistant}}
               @index={{0}}
-              @eventId={{'123'}}
+              @eventId='123'
+              @roomId='!abcd'
               @registerScroller={{this.noop}}
               @profileAvatar={{component
                 Avatar
@@ -69,6 +70,7 @@ export default class AiAssistantMessageUsage extends Component {
               @errorMessage={{this.errorMessage}}
               @retryAction={{this.retryAction}}
               @isStreaming={{this.isStreaming}}
+              @isLastAssistantMessage={{true}}
             >
               <em>Optional embedded content</em>
             </AiAssistantMessage>
@@ -139,7 +141,8 @@ export default class AiAssistantMessageUsage extends Component {
               @datetime={{this.twoMinutesAgo}}
               @isFromAssistant={{false}}
               @index={{0}}
-              @eventId={{'124'}}
+              @eventId='124'
+              @roomId='!abcd'
               @registerScroller={{this.noop}}
               @monacoSDK={{this.noopMonacoSDK}}
               @profileAvatar={{component
@@ -148,16 +151,19 @@ export default class AiAssistantMessageUsage extends Component {
                 isReady=true
               }}
               @isStreaming={{false}}
+              @isLastAssistantMessage={{false}}
             />
             <AiAssistantMessage
               @messageHTML='Culpa fugiat ex ipsum commodo anim. Cillum reprehenderit eu consectetur laboris dolore in cupidatat. Deserunt ipsum voluptate sit velit aute ad velit exercitation sint. Velit esse velit est et amet labore velit nisi magna ea elit nostrud quis anim..'
               @index={{1}}
-              @eventId={{'125'}}
+              @eventId='125'
+              @roomId='!abcd'
               @monacoSDK={{this.noopMonacoSDK}}
               @registerScroller={{this.noop}}
               @datetime={{this.oneMinutesAgo}}
               @isFromAssistant={{true}}
               @isStreaming={{false}}
+              @isLastAssistantMessage={{true}}
             />
           </AiAssistantConversation>
         </div>

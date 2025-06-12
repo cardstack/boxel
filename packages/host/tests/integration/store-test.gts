@@ -2,12 +2,14 @@ import {
   type RenderingTestContext,
   waitUntil,
   waitFor,
+  click,
   typeIn,
 } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
@@ -30,9 +32,7 @@ import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { getSearch } from '@cardstack/host/resources/search';
 import type LoaderService from '@cardstack/host/services/loader-service';
-import type MessageService from '@cardstack/host/services/message-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 import { type CardErrorJSONAPI } from '@cardstack/host/services/store';
 
@@ -41,8 +41,6 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import {
-  lookupLoaderService,
-  lookupService,
   testRealmURL,
   setupLocalIndexing,
   setupOnSave,
@@ -142,13 +140,11 @@ module('Integration | Store', function (hooks) {
       };
     }
     BoomPersonDef = BoomPerson;
-    loaderService = lookupLoaderService();
+    loaderService = getService('loader-service');
     loader = loaderService.loader;
     api = await loader.import(`${baseRealm.url}card-api`);
-    store = lookupService<StoreService>('store');
-    operatorModeStateService = lookupService<OperatorModeStateService>(
-      'operator-mode-state-service',
-    );
+    store = getService('store');
+    operatorModeStateService = getService('operator-mode-state-service');
     identityContext = (store as any).identityContext as IdentityContext;
 
     ({ adapter: testRealmAdapter, realm: testRealm } =
@@ -164,7 +160,7 @@ module('Integration | Store', function (hooks) {
           'Person/boris.json': new Person({ name: 'Boris' }),
         },
       }));
-    let realmService = lookupService<RealmService>('realm');
+    let realmService = getService('realm');
     await realmService.login(testRealmURL);
   });
 
@@ -944,6 +940,113 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('can patch an unsaved instance', async function (assert) {
+    let instance = new PersonDef({ name: 'Andrea' });
+    await store.add(instance, { doNotPersist: true, realm: testRealmURL });
+
+    await store.patch(instance[localId], {
+      attributes: {
+        name: 'Andrea Updated',
+      },
+      relationships: {
+        bestFriend: {
+          links: { self: `${testRealmURL}Person/queenzy` },
+        },
+        'friends.0': {
+          links: { self: `${testRealmURL}Person/germaine` },
+        },
+      },
+    });
+
+    let peekedInstance = store.peek(instance[localId]);
+    let queenzy = store.peek(`${testRealmURL}Person/queenzy`);
+    let germaine = store.peek(`${testRealmURL}Person/germaine`);
+    assert.strictEqual(
+      peekedInstance,
+      instance,
+      'the patched instance is in the store',
+    );
+    assert.ok(isCardInstance(queenzy), 'queenzy is in the store');
+    assert.ok(isCardInstance(germaine), 'germaine is in the store');
+    assert.strictEqual(
+      instance[realmURL]?.href,
+      testRealmURL,
+      'the realm config on the instance is preserved',
+    );
+
+    assert.strictEqual(
+      (instance as any).name,
+      'Andrea Updated',
+      'the contains field was patched',
+    );
+    assert.strictEqual(
+      (instance as any).bestFriend,
+      queenzy,
+      'the linksTo field was patched',
+    );
+    assert.deepEqual(
+      (instance as any).friends,
+      [germaine],
+      'the linksToMany field was patched',
+    );
+
+    await waitUntil(() => instance.id, {
+      timeoutMessage: 'waiting for instance to get assigned an id',
+    });
+    assert.ok(instance.id, 'instance was assigned a remote id');
+  });
+
+  test<TestContextWithSave>('can skip save when patching an instance', async function (assert) {
+    this.onSave(() => {
+      assert.ok(false, 'should not save');
+    });
+
+    let instance = await store.patch(
+      `${testRealmURL}Person/hassan`,
+      {
+        attributes: {
+          name: 'Hassan Updated',
+        },
+        relationships: {
+          bestFriend: {
+            links: { self: `${testRealmURL}Person/jade` },
+          },
+          'friends.0': {
+            links: { self: `${testRealmURL}Person/germaine` },
+          },
+        },
+      },
+      { doNotPersist: true },
+    );
+
+    let peekedInstance = store.peek(`${testRealmURL}Person/hassan`);
+    let jade = store.peek(`${testRealmURL}Person/jade`);
+    let germaine = store.peek(`${testRealmURL}Person/germaine`);
+    assert.strictEqual(
+      peekedInstance,
+      instance,
+      'the patched instance is in the store',
+    );
+    assert.ok(isCardInstance(jade), 'jade is in the store');
+    assert.ok(isCardInstance(germaine), 'germaine is in the store');
+
+    assert.strictEqual(
+      (instance as any).name,
+      'Hassan Updated',
+      'the contains field was patched',
+    );
+    assert.strictEqual(
+      (instance as any).bestFriend,
+      jade,
+      'the linksTo field was patched',
+    );
+    assert.deepEqual(
+      (instance as any).friends,
+      [germaine],
+      'the linksToMany field was patched',
+    );
+  });
+
   test('can search', async function (assert) {
     let results = await store.search(
       {
@@ -1080,9 +1183,11 @@ module('Integration | Store', function (hooks) {
     );
 
     await waitFor('[data-test-card-error]');
+    assert.dom('[data-test-error-message]').hasText('intentional error thrown');
+    await click('[data-test-toggle-details]');
     assert
-      .dom('[data-test-error-detail]')
-      .includesText('intentional error thrown');
+      .dom('[data-test-error-details]')
+      .includesText('Stack trace: No stack trace is available.');
 
     await testRealm.write(
       'Person/hassan.json',
@@ -1571,7 +1676,7 @@ module('Integration | Store', function (hooks) {
     );
 
     let deferred = new Deferred<void>();
-    lookupService<MessageService>('message-service')
+    getService('message-service')
       .listenerCallbacks.get(testRealmURL)!
       .push((ev: RealmEventContent) => {
         if (ev.eventName === 'index' && ev.indexType === 'incremental') {
@@ -1666,7 +1771,7 @@ module('Integration | Store', function (hooks) {
     );
 
     let deferred = new Deferred<void>();
-    lookupService<MessageService>('message-service')
+    getService('message-service')
       .listenerCallbacks.get(testRealmURL)!
       .push((ev: RealmEventContent) => {
         if (ev.eventName === 'index' && ev.indexType === 'incremental') {
@@ -1758,7 +1863,7 @@ module('Integration | Store', function (hooks) {
     );
 
     let deferred = new Deferred<void>();
-    lookupService<MessageService>('message-service')
+    getService('message-service')
       .listenerCallbacks.get(testRealmURL)!
       .push((ev: RealmEventContent) => {
         if (ev.eventName === 'index' && ev.indexType === 'incremental') {

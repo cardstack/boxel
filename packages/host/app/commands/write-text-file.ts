@@ -11,6 +11,7 @@ export default class WriteTextFileCommand extends HostBaseCommand<
   @service declare private network: NetworkService;
 
   description = `Write a text file to a realm, such as a module or a card.`;
+  static actionVerb = 'Write';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();

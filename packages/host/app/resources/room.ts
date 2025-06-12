@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
@@ -5,15 +6,22 @@ import { tracked, cached } from '@glimmer/tracking';
 import { TaskInstance, restartableTask, timeout } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 
+import difference from 'lodash/difference';
+
 import { TrackedMap } from 'tracked-built-ins';
 
-import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  isCardInstance,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -27,9 +35,11 @@ import type {
   JoinEvent,
   LeaveEvent,
   CardMessageEvent,
+  DebugMessageEvent,
   MessageEvent,
   CommandResultEvent,
   RealmServerEvent,
+  CodePatchResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import type { Skill } from 'https://cardstack.com/base/skill';
@@ -46,6 +56,7 @@ import type Room from '../lib/matrix-classes/room';
 
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
@@ -64,8 +75,9 @@ interface Args {
 }
 
 export class RoomResource extends Resource<Args> {
+  #skillIds = new Set<string>();
+  #hasRegisteredDestructor = false;
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
-  private _skillCardsCache: TrackedMap<string, Skill> = new TrackedMap();
   private _nameEventsCache: TrackedMap<string, RoomNameEvent> =
     new TrackedMap();
   @tracked private _createEvent: RoomCreateEvent | undefined;
@@ -80,6 +92,7 @@ export class RoomResource extends Resource<Args> {
   // that updates immediately after the user selects the LLM.
   @tracked private llmBeingActivated: string | undefined;
   @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private commandService: CommandService;
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
@@ -90,6 +103,14 @@ export class RoomResource extends Resource<Args> {
     }
     this.roomId = named.roomId;
     this.processing = this.processRoomTask.perform(named.roomId);
+    if (!this.#hasRegisteredDestructor) {
+      this.#hasRegisteredDestructor = true;
+      registerDestructor(this, () => {
+        for (let id of this.#skillIds ?? []) {
+          this.store.dropReference(id);
+        }
+      });
+    }
   }
 
   get isProcessing() {
@@ -112,7 +133,11 @@ export class RoomResource extends Resource<Args> {
       if (!memberIds || !memberIds.includes(this.matrixService.aiBotUserId)) {
         return;
       }
-      await this.loadSkillCards(this.matrixRoom.skillsConfig.enabledSkillCards);
+      // TODO: enabledSkillCards can have references to skills whose URL
+      // does not exist anymore (i.e. skill has been deleted or renamed). In
+      // this case we should probably remove/update the reference from the skillConfig.
+      // CS-8776
+      await this.loadSkills(this.matrixRoom.skillsConfig.enabledSkillCards);
 
       let index = this._messageCache.size;
       // This is brought up to this level so if the
@@ -133,8 +158,18 @@ export class RoomResource extends Resource<Args> {
               });
             }
             break;
+          case APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE:
+            await this.loadRoomMessage({ roomId, event, index });
+            break;
           case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
-            this.updateMessageCommandResult({ roomId, event, index });
+            await this.updateMessageCommandResult({ roomId, event, index });
+            break;
+          case APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE:
+            this.updateMessageCodePatchResult({
+              roomId,
+              codePatchResultEvent: event,
+              index,
+            });
             break;
           case 'm.room.create':
             await this.loadRoomCreateEvent(event);
@@ -162,6 +197,7 @@ export class RoomResource extends Resource<Args> {
     }
     return [...this._messageCache.values()]
       .filter((m) => m.roomId === this.roomId)
+      .filter((m) => !m.continuationOf)
       .sort((a, b) => a.created.getTime() - b.created.getTime());
   }
 
@@ -195,6 +231,16 @@ export class RoomResource extends Resource<Args> {
     return this.members.filter(
       (m) => m.membership === 'join' && m.roomId === this.roomId,
     );
+  }
+
+  get indexOfLastNonDebugMessage() {
+    // We want to find the last message that is not a debug message
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i].isDebugMessage !== true) {
+        return i;
+      }
+    }
+    return -1;
   }
 
   private get events() {
@@ -254,8 +300,8 @@ export class RoomResource extends Resource<Args> {
     // Usable commands are all commands on *active* skills
     let commands = [];
     for (let skill of this.skills) {
-      let skillCard = this._skillCardsCache.get(skill.cardId);
-      if (skillCard && skill.isActive) {
+      let skillCard = this.store.peek<Skill>(skill.cardId);
+      if (skillCard && isCardInstance(skillCard) && skill.isActive) {
         commands.push(...skillCard.commands);
       }
     }
@@ -343,71 +389,90 @@ export class RoomResource extends Resource<Args> {
     return event.content.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE;
   }
 
-  private async createSkillCard(cardDoc: LooseSingleCardDocument) {
-    let cardId = cardDoc.data.id;
+  private async loadSkill(doc: LooseSingleCardDocument) {
+    let cardId = doc.data.id;
     if (!cardId) {
-      console.warn(
-        `No card id found, this should not happen, this can happen if you add a skill card to a room without saving it, and without giving it an ID`,
+      throw new Error(
+        `SKill card document has no id, this should not happen: ${JSON.stringify(doc, null, 2)}`,
       );
-      return;
     }
-    if (this._skillCardsCache.has(cardId)) {
-      return this._skillCardsCache.get(cardId);
+    let skillCard = await this.store.get<Skill>(cardId);
+    if (isCardInstance(skillCard)) {
+      return skillCard;
+    } else {
+      // A known reason for this is that the skill has been renamed
+      return undefined;
     }
-
-    let skillCard = await this.store.add<Skill>(cardDoc, {
-      doNotPersist: true,
-    });
-    this._skillCardsCache.set(cardId, skillCard);
-    return skillCard;
   }
 
-  private async loadSkillCards(skillCardFileDefs: SerializedFile[]) {
+  private async loadSkills(skillCardFileDefs: SerializedFile[]) {
+    let skillIds: string[] = [];
     for (let skillCardFileDef of skillCardFileDefs) {
       let cardDoc =
         await this.matrixService.downloadCardFileDef(skillCardFileDef);
-      await this.createSkillCard(cardDoc);
+      let skill = await this.loadSkill(cardDoc);
+      if (skill?.id) {
+        skillIds.push(skill.id);
+      }
+    }
+    let oldReferences = [...(this.#skillIds ?? [])];
+    let newReferences = [...(skillIds ?? [])];
+    this.#skillIds = new Set(skillIds);
+    let referencesToDrop = difference(oldReferences, newReferences);
+    for (let id of referencesToDrop) {
+      this.store.dropReference(id);
+    }
+    let referencesToAdd = difference(newReferences, oldReferences);
+    for (let id of referencesToAdd) {
+      this.store.addReference(id);
     }
   }
 
-  private loadRoomMessage({
+  private async loadRoomMessage({
     roomId,
     event,
     index,
   }: {
     roomId: string;
-    event: MessageEvent | CardMessageEvent;
+    event: MessageEvent | CardMessageEvent | DebugMessageEvent;
     index: number;
   }) {
     let effectiveEventId = this.getEffectiveEventId(event);
-
     let message = this._messageCache.get(effectiveEventId);
-    let author = this.upsertRoomMember({
-      roomId,
-      userId: event.sender,
-    });
-    let messageBuilder = new MessageBuilder(event, getOwner(this)!, {
-      roomId,
-      effectiveEventId,
-      author,
-      index,
-      events: this.events,
-      skills: this.skills,
-      skillCardsCache: this._skillCardsCache,
-    });
+    if (!message?.isStreamingOfEventFinished) {
+      let author = this.upsertRoomMember({
+        roomId,
+        userId: event.sender,
+      });
+      let messageBuilder = new MessageBuilder(event, getOwner(this)!, {
+        roomId,
+        effectiveEventId,
+        author,
+        index,
+        events: this.events,
+        skills: this.skills,
+      });
 
-    if (!message) {
-      message = messageBuilder.buildMessage();
-      this._messageCache.set(
-        message.clientGeneratedId ?? effectiveEventId,
-        message as any,
-      );
+      if (!message) {
+        message = await messageBuilder.buildMessage();
+        this._messageCache.set(
+          message.clientGeneratedId ?? effectiveEventId,
+          message as any,
+        );
+      } else {
+        await messageBuilder.updateMessage(message);
+      }
     }
 
-    messageBuilder.updateMessage(message);
+    if (message.continuationOf) {
+      let continuedFromMessage = this._messageCache.get(message.continuationOf);
+      if (continuedFromMessage) {
+        continuedFromMessage.continuedInMessage = message;
+      }
+    }
   }
 
-  private updateMessageCommandResult({
+  private async updateMessageCommandResult({
     roomId,
     event,
     index,
@@ -444,14 +509,52 @@ export class RoomResource extends Resource<Args> {
         events: this.events,
         skills: this.skills,
         commandResultEvent: event,
-        skillCardsCache: this._skillCardsCache,
       },
     );
-    messageBuilder.updateMessageCommandResult(message);
+    await messageBuilder.updateMessageCommandResult(message);
+  }
+
+  private updateMessageCodePatchResult({
+    roomId,
+    codePatchResultEvent,
+    index,
+  }: {
+    roomId: string;
+    codePatchResultEvent: CodePatchResultEvent;
+    index: number;
+  }) {
+    let codePatchEventId =
+      codePatchResultEvent.content['m.relates_to']?.event_id;
+    let message = this._messageCache.get(codePatchEventId);
+    if (!message) {
+      return;
+    }
+    let codePatchEvent = this.events.find(
+      (e: any) => e.event_i === codePatchEventId,
+    ) as CardMessageEvent;
+    let author = this.upsertRoomMember({
+      roomId,
+      userId: codePatchResultEvent.sender,
+    });
+    let messageBuilder = new MessageBuilder(codePatchEvent, getOwner(this)!, {
+      roomId,
+      effectiveEventId: codePatchEventId,
+      author,
+      index,
+      events: this.events,
+      skills: this.skills,
+      codePatchResultEvent,
+    });
+    messageBuilder.updateMessageCodePatchResult(message);
   }
 
   private getEffectiveEventId(
-    event: MessageEvent | CardMessageEvent | CommandResultEvent,
+    event:
+      | MessageEvent
+      | CardMessageEvent
+      | CommandResultEvent
+      | CodePatchResultEvent
+      | DebugMessageEvent,
   ) {
     if (!('m.relates_to' in event.content)) {
       return event.event_id;

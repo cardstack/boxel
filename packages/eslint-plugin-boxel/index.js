@@ -2,6 +2,8 @@ module.exports = {
   // Export rules
   rules: {
     'template-missing-invokable': require('./lib/rules/template-missing-invokable'),
+    'missing-card-api-import': require('./lib/rules/missing-card-api-import'),
+    'no-duplicate-imports': require('./lib/rules/no-duplicate-imports'),
     // Add other rules here
   },
 

@@ -8,12 +8,10 @@ import {
 
 import { triggerEvent } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { trimJsonExtension, type Realm } from '@cardstack/runtime-common';
-
-import type RealmServerService from '@cardstack/host/services/realm-server';
-import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import {
   percySnapshot,
@@ -23,7 +21,6 @@ import {
   setupUserSubscription,
   testRealmURL,
   visitOperatorMode,
-  lookupLoaderService,
   withoutLoaderMonitoring,
   type TestContextWithSave,
   assertMessages,
@@ -346,7 +343,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         codePath: `${testRealmURL}blog-post.gts`,
       });
       assert
-        .dom('[data-test-selected-accordion-item="schema-editor"]')
+        .dom('[data-test-active-module-inspector-view="schema"]')
         .exists('schema editor is open by default');
       assert
         .dom('[data-test-playground-panel]')
@@ -358,7 +355,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .dom('[data-test-playground-panel]')
         .exists('playground panel exists for Category (exported card def)');
 
-      await click('[data-test-accordion-item="schema-editor"] > button');
+      await click('[data-test-module-inspector-view="schema"]');
       await selectDeclaration('LocalCategoryCard');
       assert.dom('[data-test-incompatible-nonexports]').doesNotExist();
       await togglePlaygroundPanel();
@@ -371,7 +368,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       await selectDeclaration('RandomClass');
       assert
-        .dom('[data-test-accordion-item="playground"]')
+        .dom('[data-test-module-inspector-view="preview"]')
         .doesNotExist(
           'does not exist for RandomClass (not a card or field def)',
         );
@@ -393,16 +390,21 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         [testRealmURL, 'BlogPost/urban-living.json'],
         [testRealmURL, 'Author/jane-doe.json'],
       ]);
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'Category',
+      });
       assert
         .dom('[data-test-selected-item]')
-        .hasText('City Design', 'most recent category card is pre-selected');
+        .containsText(
+          'City Design',
+          'most recent category card is pre-selected',
+        );
       assertCardExists(assert, `${testRealmURL}Category/city-design`);
 
       await selectDeclaration('BlogPost');
       assert
         .dom('[data-test-selected-item]')
-        .hasText(
+        .containsText(
           'Mad As a Hatter',
           'pre-selected card is updated when selected card def changes',
         );
@@ -411,7 +413,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await selectDeclaration('Category');
       assert
         .dom('[data-test-selected-item]')
-        .hasText('City Design', 'correct card is still pre-selected');
+        .containsText('City Design', 'correct card is still pre-selected');
       assertCardExists(assert, `${testRealmURL}Category/city-design`);
 
       await click('[data-test-instance-chooser]');
@@ -420,7 +422,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .exists({ count: 2 });
 
       await click('[data-option-index="1"]');
-      assert.dom('[data-test-selected-item]').hasText('Future Tech');
+      assert.dom('[data-test-selected-item]').containsText('Future Tech');
       assertCardExists(assert, `${testRealmURL}Category/future-tech`);
 
       assert.strictEqual(
@@ -433,7 +435,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await selectDeclaration('BlogPost');
       assert
         .dom('[data-test-selected-item]')
-        .hasText(
+        .containsText(
           'Mad As a Hatter',
           'correct card is pre-selected when selected card def changes',
         );
@@ -442,7 +444,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await selectDeclaration('Category');
       assert
         .dom('[data-test-selected-item]')
-        .hasText('Future Tech', 'persisted card is selected');
+        .containsText('Future Tech', 'persisted card is selected');
       assertCardExists(assert, `${testRealmURL}Category/future-tech`);
 
       await percySnapshot(assert);
@@ -467,10 +469,15 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         [`${testRealmURL}Category/future-tech.json`, ts - 4], // duplicate
       ]);
 
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'Category',
+      });
       assert
         .dom('[data-test-selected-item]')
-        .hasText('Home Gym', 'most recent category instance is pre-selected');
+        .containsText(
+          'Home Gym',
+          'most recent category instance is pre-selected',
+        );
       assertCardExists(assert, `${testRealmURL}Category/home-gym`);
 
       await click('[data-test-instance-chooser]');
@@ -488,7 +495,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       assert
         .dom('[data-test-selected-item]')
-        .hasText('Home Gym', 'selected card has not changed');
+        .containsText('Home Gym', 'selected card has not changed');
       assertCardExists(assert, `${testRealmURL}Category/home-gym`);
 
       await click('[data-test-instance-chooser]');
@@ -506,18 +513,20 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .dom(`[data-test-stack-card="${testRealmURL}Category/home-gym"]`)
         .exists();
 
-      await click('[data-test-search-field]');
+      await click('[data-test-open-search-field]');
       await click('[data-test-search-result-index="4"]');
       assert
         .dom(`[data-test-stack-card="${testRealmURL}Category/landscaping"]`)
         .exists();
       // opened home-gym and landscaping in interact-mode and back to playground
 
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'Category',
+      });
       await togglePlaygroundPanel();
       assert
         .dom('[data-test-selected-item]')
-        .hasText('Home Gym', 'selected card has not changed');
+        .containsText('Home Gym', 'selected card has not changed');
       assertCardExists(assert, `${testRealmURL}Category/home-gym`);
 
       await click('[data-test-instance-chooser]');
@@ -531,7 +540,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('can update the instance chooser when selected card def changes (same file)', async function (assert) {
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'Category',
+      });
       assert.dom('[data-test-selected-item]').containsText('City Design');
       await click('[data-test-instance-chooser]');
       assert.dom('[data-option-index]').exists({ count: 2 });
@@ -545,7 +556,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('can update the instance chooser when a different file is opened', async function (assert) {
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'Category',
+      });
       assert.dom('[data-test-selected-item]').containsText('City Design');
       assertCardExists(assert, `${testRealmURL}Category/city-design`);
       await click('[data-test-instance-chooser]');
@@ -555,7 +568,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await click('[data-test-file-browser-toggle]');
       await click('[data-test-file="author.gts"]');
       await togglePlaygroundPanel();
-      assert.dom('[data-test-selected-item]').hasText('Jane Doe');
+      assert.dom('[data-test-selected-item]').containsText('Jane Doe');
       assertCardExists(assert, `${testRealmURL}Author/jane-doe`);
       await click('[data-test-instance-chooser]');
       assert.dom('li.ember-power-select-option').exists({ count: 1 });
@@ -563,7 +576,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('can use the header context menu to open instance in code mode', async function (assert) {
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       await click('[data-test-more-options-button]');
       assert
         .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
@@ -575,11 +590,13 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           `[data-test-code-mode-card-renderer-header="${testRealmURL}Author/jane-doe"]`,
         )
         .exists();
-      assert.dom('[data-test-accordion-item="playground"]').doesNotExist();
+      assert.dom('[data-test-module-inspector-view="preview"]').doesNotExist();
     });
 
     test('can use the header context menu to open instance in interact mode', async function (assert) {
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       await click('[data-test-more-options-button]');
       await click('[data-test-boxel-menu-item-text="Open in Interact Mode"]');
       assert
@@ -592,7 +609,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('can display selected card in the chosen format', async function (assert) {
       const cardId = `${testRealmURL}Author/jane-doe`;
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       assert
         .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
         .hasText('Author');
@@ -639,7 +658,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('can toggle edit format via button on card header', async function (assert) {
       const cardId = `${testRealmURL}Author/jane-doe`;
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       assert
         .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
         .hasText('Author');
@@ -665,7 +686,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('can use the header context menu to open instance in edit format in interact mode', async function (assert) {
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       await selectFormat('edit');
       await click('[data-test-more-options-button]');
       await click('[data-test-boxel-menu-item-text="Open in Interact Mode"]');
@@ -681,12 +704,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('can choose another instance to be opened in playground panel', async function (assert) {
       removeRecentFiles();
-      let recentFilesService = this.owner.lookup(
-        'service:recent-files-service',
-      ) as RecentFilesService;
+      let recentFilesService = getService('recent-files-service');
       assert.strictEqual(recentFilesService.recentFiles?.length, 0);
 
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'BlogPost');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'BlogPost',
+      });
       await chooseAnotherInstance();
       assert.dom('[data-test-card-catalog-modal]').exists();
       assert.dom('[data-test-card-catalog-item]').exists({ count: 3 });
@@ -723,9 +746,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test<TestContextWithSave>('can create new instance', async function (assert) {
       removeRecentFiles();
-      let recentFilesService = this.owner.lookup(
-        'service:recent-files-service',
-      ) as RecentFilesService;
+      let recentFilesService = getService('recent-files-service');
       assert.strictEqual(recentFilesService.recentFiles?.length, 0);
 
       await visitOperatorMode({
@@ -757,7 +778,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       );
       assert
         .dom('[data-test-instance-chooser] [data-test-selected-item]')
-        .hasText('Untitled Blog Post', 'created instance is selected');
+        .containsText('Untitled Blog Post', 'created instance is selected');
       assertCardExists(
         assert,
         id!,
@@ -773,11 +794,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test<TestContextWithSave>('can create new instance with CodeRef field', async function (assert) {
-      await openFileInPlayground(
-        'code-ref-driver.gts',
-        testRealmURL,
-        'CodeRefDriver',
-      );
+      await openFileInPlayground('code-ref-driver.gts', testRealmURL, {
+        declaration: 'CodeRefDriver',
+      });
       let id: string | undefined;
       this.onSave((url) => {
         id = url.href;
@@ -787,7 +806,10 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       assert
         .dom('[data-test-instance-chooser] [data-test-selected-item]')
-        .hasText('Untitled Code Ref Driver', 'created instance is selected');
+        .containsText(
+          'Untitled Code Ref Driver',
+          'created instance is selected',
+        );
       assert
         .dom(
           `[data-test-playground-panel] [data-test-card][data-test-card-format="edit"]`,
@@ -801,11 +823,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('can set relative CodeRef field', async function (assert) {
-      await openFileInPlayground(
-        'code-ref-driver.gts',
-        testRealmURL,
-        'CodeRefDriver',
-      );
+      await openFileInPlayground('code-ref-driver.gts', testRealmURL, {
+        declaration: 'CodeRefDriver',
+      });
       await createNewInstance();
 
       assert
@@ -858,15 +878,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         </template>
           }
         }`;
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       await waitFor('[data-test-selected-item]');
-      assert.dom('[data-test-selected-item]').hasText('Jane Doe');
+      assert.dom('[data-test-selected-item]').containsText('Jane Doe');
       assert.dom('[data-test-author-title]').containsText('Jane Doe');
 
       await realm.write('author.gts', authorCard);
       await settled();
       await waitFor('[data-test-selected-item]');
-      assert.dom('[data-test-selected-item]').hasText('Jane Doe');
+      assert.dom('[data-test-selected-item]').containsText('Jane Doe');
       assert.dom('[data-test-author-title]').containsText('Hello Jane Doe');
     });
 
@@ -926,14 +948,16 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           </template>
           }
       }`;
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'BlogPost');
+      await openFileInPlayground('blog-post.gts', testRealmURL, {
+        declaration: 'BlogPost',
+      });
       await waitFor('[data-test-selected-item]');
       assert
         .dom('[data-test-selected-item]')
         .exists('title exists on first render');
       assert
         .dom('[data-test-selected-item]')
-        .hasText('Mad As a Hatter', 'selected item title is correct');
+        .containsText('Mad As a Hatter', 'selected item title is correct');
       assert.dom('[data-test-post-title]').hasText('Mad As a Hatter');
       assert.dom('[data-test-byline]').containsText('Jane Doe');
 
@@ -941,7 +965,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await settled();
       await waitFor('[data-test-selected-item]');
       assert.dom('[data-test-selected-item]').exists('title exists on update');
-      assert.dom('[data-test-selected-item]').hasText('Mad As a Hatter');
+      assert.dom('[data-test-selected-item]').containsText('Mad As a Hatter');
       assert
         .dom('[data-test-post-title]')
         .containsText('Hello Mad As a Hatter');
@@ -973,8 +997,10 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         },
       });
 
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
-      assert.dom('[data-test-selected-item]').hasText('Jane Doe');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
+      assert.dom('[data-test-selected-item]').containsText('Jane Doe');
       assertCardExists(assert, authorId, 'edit');
       await selectFormat('atom'); // change selected format
       assertCardExists(assert, authorId, 'atom');
@@ -989,12 +1015,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       await click(`[data-test-recent-file="${testRealmURL}blog-post.gts"]`); // change open file
       await togglePlaygroundPanel();
-      assert.dom('[data-test-selected-item]').hasText('City Design');
+      assert.dom('[data-test-selected-item]').containsText('City Design');
       assertCardExists(assert, categoryId1, 'embedded');
 
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="1"]'); // change selected instance
-      assert.dom('[data-test-selected-item]').hasText('Future Tech');
+      assert.dom('[data-test-selected-item]').containsText('Future Tech');
       assertCardExists(assert, categoryId2, 'embedded');
       assert.deepEqual(
         getPlaygroundSelections()?.[categoryModuleId],
@@ -1041,7 +1067,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test<TestContextWithSave>('trigger auto saved in edit format', async function (assert) {
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="0"]');
       await click('[data-test-edit-button]');
@@ -1061,7 +1089,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test<TestContextWithSave>('automatically attaches the selected card to the AI message', async function (assert) {
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="0"]');
       await click('[data-test-open-ai-assistant]');
@@ -1074,7 +1104,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       await click('[data-test-file-browser-toggle]');
       await click('[data-test-file="blog-post.gts"]');
-      await click('[data-test-accordion-item="playground"] button');
+      await click('[data-test-module-inspector-view="preview"]');
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="1"]');
       assert
@@ -1115,9 +1145,11 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test<TestContextWithSave>('instance chooser only appears when panel is opened', async function (assert) {
-      await openFileInPlayground('author.gts', testRealmURL, 'Author');
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
       assert.dom('[data-test-instance-chooser]').exists();
-      await click('[data-test-accordion-item="playground"] button');
+      await click('[data-test-module-inspector-view="spec"]');
       assert.dom('[data-test-instance-chooser]').doesNotExist();
     });
 
@@ -1136,7 +1168,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       assert.strictEqual(results.length, 0);
 
-      await openFileInPlayground('person.gts', testRealmURL, 'Person');
+      await openFileInPlayground('person.gts', testRealmURL, {
+        declaration: 'Person',
+      });
       assert.dom('[data-test-selected-item]').containsText('Untitled Person');
 
       recentFiles = getRecentFiles();
@@ -1171,7 +1205,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0].id, cardId);
 
-      await openFileInPlayground('person.gts', testRealmURL, 'Pet');
+      await openFileInPlayground('person.gts', testRealmURL, {
+        declaration: 'Pet',
+      });
       assert
         .dom('[data-test-selected-item]')
         .doesNotContainText('Untitled Pet');
@@ -1211,9 +1247,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       setupUserSubscription(matrixRoomId);
 
-      let realmServerService = this.owner.lookup(
-        'service:realm-server',
-      ) as RealmServerService;
+      let realmServerService = getService('realm-server');
       personalRealmURL = `${realmServerService.url}testuser/personal/`;
       additionalRealmURL = `${realmServerService.url}testuser/aaa/`; // writeable realm that is lexically before the personal realm
       setActiveRealms([additionalRealmURL, personalRealmURL]);
@@ -1252,11 +1286,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('can create new instance in currently open realm', async function (assert) {
       removeRecentFiles();
-      await openFileInPlayground(
-        'author-card.gts',
-        additionalRealmURL,
-        'Author',
-      );
+      await openFileInPlayground('author-card.gts', additionalRealmURL, {
+        declaration: 'Author',
+      });
       assert
         .dom(
           '[data-test-playground-panel] [data-test-card][data-test-card-format="edit"]',
@@ -1328,7 +1360,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         @field boom = contains(BoomField);
       }
     `;
-    const boomPerson = `import { field, contains, CardDef, Component, StringField } from 'https://cardstack.com/base/card-api';
+    const boomPerson = `import { field, contains, CardDef, FieldDef, Component, StringField } from 'https://cardstack.com/base/card-api';
       export class BoomPerson extends CardDef {
         static displayName = 'Boom Person';
         @field firstName = contains(StringField);
@@ -1338,6 +1370,19 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           </template>
           boom = () => fn();
         }
+      }
+
+      export class FailingField extends FieldDef {
+        static displayName = 'Failing Field';
+        @field title = contains(StringField);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <p>This will fail.</p> {{this.boom}}
+          </template>
+          boom = () => {
+            throw new Error('boom!');
+          };
+        };
       }
 
       export class WorkingCard extends CardDef {
@@ -1405,7 +1450,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           format: 'isolated',
         },
       });
-      await openFileInPlayground('boom-pet.gts', testRealmURL, 'BoomPet');
+      await openFileInPlayground('boom-pet.gts', testRealmURL, {
+        declaration: 'BoomPet',
+      });
       assert
         .dom('[data-test-boxel-card-header-title]')
         .containsText('Card Error: Internal Server Error');
@@ -1415,25 +1462,25 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert
         .dom('[data-test-card-error]')
         .containsText('This card contains an error.');
-      assert.dom('[data-test-error-title]').hasText('Internal Server Error');
+      assert.dom('[data-test-error-message]').hasText('Boom!');
       assert.dom('[data-test-format-chooser]').doesNotExist();
 
-      await click('[data-test-error-detail-toggle] button');
-      assert.dom('[data-test-error-detail]').hasText('Boom!');
+      await click('[data-test-toggle-details]');
+      assert
+        .dom('[data-test-error-details]')
+        .includesText('Stack trace: No stack trace');
     });
 
     test('it renders error info when creating new instance causes error after file was created in realm', async function (assert) {
-      await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
-      assert
-        .dom('[data-test-instance-chooser]')
-        .hasText('Untitled Boom Person');
+      await openFileInPlayground('boom-person.gts', testRealmURL, {
+        declaration: 'BoomPerson',
+      });
+      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
       assert
         .dom('[data-test-card-error]')
-        .doesNotExist('auto-generated card has not error in edit format');
+        .exists('auto-generated card has error in it');
 
       await createNewInstance();
-      // switch to isolated mode to see the current server state
-      await click('[data-test-format-chooser="isolated"]');
 
       assert
         .dom('[data-test-playground-panel] [data-test-card]')
@@ -1441,15 +1488,19 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert
         .dom('[data-test-card-error]')
         .hasText('This card contains an error.');
-      assert.dom('[data-test-error-title]').hasText('Internal Server Error');
+      assert
+        .dom('[data-test-error-message]')
+        .hasText(
+          'Encountered error rendering HTML for card: fn is not defined',
+        );
 
-      await click('[data-test-error-detail-toggle] button');
-      assert.dom('[data-test-error-detail]').containsText('fn is not defined');
+      await click('[data-test-toggle-details]');
+      assert.dom('[data-test-error-details]').containsText('fn is not defined');
 
       await withoutLoaderMonitoring(async () => {
         // The loader service is shared between the realm server and the host.
         // need to reset the loader to pick up the changed module in the indexer
-        lookupLoaderService().resetLoader();
+        getService('loader-service').resetLoader();
         // fix error
         await realm.write(
           'boom-person.gts',
@@ -1474,16 +1525,57 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-error-container]').doesNotExist();
     });
 
-    test('it can clear card-creation error (that resulted in new file in the realm) when different card-def is selected', async function (assert) {
-      await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
+    test('it can clear card-creation error that did not result in new file in the realm', async function (assert) {
+      await openFileInPlayground('boom-pet.gts', testRealmURL, {
+        declaration: 'BoomPet',
+      });
+
       assert
-        .dom('[data-test-instance-chooser]')
-        .hasText('Untitled Boom Person');
-      assert.dom('[data-test-error-container]').doesNotExist();
+        .dom('[data-test-card-error]')
+        .exists('auto-generated card has error in it');
 
       await createNewInstance();
-      // switch to isolated mode to see the current server state
-      await click('[data-test-format-chooser="isolated"]');
+
+      assert
+        .dom('[data-test-playground-panel] [data-test-card]')
+        .doesNotExist();
+      assert
+        .dom('[data-test-card-error]')
+        .hasText('This card contains an error.');
+      assert.dom('[data-test-error-message]').hasText('Boom!');
+
+      await withoutLoaderMonitoring(async () => {
+        // The loader service is shared between the realm server and the host.
+        // need to reset the loader to pick up the changed module in the indexer
+        getService('loader-service').resetLoader();
+        // the error was introduced in a part of the card that is run directly
+        // in the realm server so we also need to make sure to reset the realm's loader
+        // (not just the loader for the index). This is a test env idiosyncrasy
+        // that doesn't exist in real life.
+        realm.__resetLoaderForTest();
+        // fix error
+        await realm.write(
+          'boom-pet.gts',
+          `import { contains, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
+            export class BoomPet extends CardDef {
+              static displayName = 'Boom Pet';
+              @field boom = contains(StringField);
+            }
+          `,
+        );
+      });
+      await waitFor(`[data-test-error-container]`, {
+        count: 0,
+        timeout: 5_000,
+      });
+      assert.dom('[data-test-error-container]').doesNotExist();
+    });
+
+    test('it can clear card-creation error (that resulted in new file in the realm) when different card-def is selected', async function (assert) {
+      await openFileInPlayground('boom-person.gts', testRealmURL, {
+        declaration: 'BoomPerson',
+      });
+      assert.dom('[data-test-instance-chooser]').containsText('Please Select');
 
       assert
         .dom('[data-test-error-container]')
@@ -1501,6 +1593,54 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .exists('can navigate back to the error card def');
     });
 
+    test('it can clear card-creation error for a failing field', async function (assert) {
+      await openFileInPlayground('boom-person.gts', testRealmURL, {
+        declaration: 'FailingField',
+      });
+
+      assert
+        .dom('[data-test-card-error]')
+        .exists('auto-generated card has error in it');
+
+      await createNewInstance();
+
+      assert
+        .dom('[data-test-playground-panel] [data-test-card]')
+        .doesNotExist();
+      assert
+        .dom('[data-test-card-error]')
+        .hasText('This card contains an error.');
+      assert
+        .dom('[data-test-error-message]')
+        .hasText('Encountered error rendering HTML for card: boom!');
+
+      await withoutLoaderMonitoring(async () => {
+        // The loader service is shared between the realm server and the host.
+        // need to reset the loader to pick up the changed module in the indexer
+        getService('loader-service').resetLoader();
+        // fix error
+        await realm.write(
+          'boom-person.gts',
+          `import { contains, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
+           export class FailingField extends FieldDef {
+             static displayName = 'Failing Field';
+             @field title = contains(StringField);
+             static embedded = class Embedded extends Component<typeof this> {
+               <template>
+                 <p>This will not fail.</p>
+               </template>
+             };
+           }
+          `,
+        );
+      });
+      await waitFor(`[data-test-error-container]`, {
+        count: 0,
+        timeout: 5_000,
+      });
+      assert.dom('[data-test-error-container]').doesNotExist();
+    });
+
     test('it can render stale card in edit format when the server is in an error state for the card', async function (assert) {
       const cardId = `${testRealmURL}Person/delilah`;
       setRecentFiles([[testRealmURL, 'Person/delilah.json']]);
@@ -1511,7 +1651,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         },
       });
 
-      await openFileInPlayground('person.gts', testRealmURL, 'Person');
+      await openFileInPlayground('person.gts', testRealmURL, {
+        declaration: 'Person',
+      });
       await click('[data-test-edit-button]');
 
       assert
@@ -1586,7 +1728,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         },
       });
 
-      await openFileInPlayground('person.gts', testRealmURL, 'Person');
+      await openFileInPlayground('person.gts', testRealmURL, {
+        declaration: 'Person',
+      });
       assert
         .dom('[data-test-boxel-card-header-title]')
         .containsText('Card Error: Link Not Found');
@@ -1594,11 +1738,13 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert
         .dom('[data-test-playground-panel] [data-test-field="title"]')
         .containsText('Delilah', 'last known good state is rendered');
-      assert.dom('[data-test-error-title]').hasText('Link Not Found');
+      assert
+        .dom('[data-test-error-message]')
+        .hasText(`missing file ${testRealmURL}Person/missing-link.json`);
       assert.dom('[data-test-format-chooser]').doesNotExist();
 
-      await click('[data-test-error-detail-toggle] button');
-      assert.dom('[data-test-error-detail]').containsText('missing file');
+      await click('[data-test-toggle-details]');
+      assert.dom('[data-test-error-details]').containsText('missing file');
       assert.dom('[data-test-error-stack]').exists();
 
       // fix error

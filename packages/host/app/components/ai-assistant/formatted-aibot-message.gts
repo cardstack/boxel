@@ -10,16 +10,20 @@ import { tracked } from '@glimmer/tracking';
 import { dropTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
-import { and, bool } from '@cardstack/boxel-ui/helpers';
+import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
+
+import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
 import {
   type HtmlTagGroup,
   wrapLastTextNodeInStreamingTextSpan,
-  CodeData,
   HtmlPreTagGroup,
+  CodeData,
 } from '@cardstack/host/lib/formatted-message/utils';
+
+import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
 
 import {
   type CodeDiffResource,
@@ -39,8 +43,11 @@ interface FormattedAiBotMessageSignature {
   Element: HTMLDivElement;
   Args: {
     htmlParts?: HtmlTagGroup[];
+    roomId: string;
+    eventId: string;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
+    isLastAssistantMessage: boolean;
   };
 }
 
@@ -65,6 +72,9 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
 
   private get isApplyAllButtonDisplayed() {
     if (this.args.isStreaming) {
+      return false;
+    }
+    if (!this.args.isLastAssistantMessage) {
       return false;
     }
     return (
@@ -158,6 +168,7 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
               (array htmlPart.codeData)
             }}
             @monacoSDK={{@monacoSDK}}
+            @isLastAssistantMessage={{@isLastAssistantMessage}}
           />
         {{else}}
           {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
@@ -217,16 +228,16 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
         max-height: 30vh;
       }
 
-      /*
-        This filter is a best-effort approximation of a good looking dark theme that is a function of the white theme that
-        we use for code previews in the AI panel. While Monaco editor does support multiple themes, it does not support
-        monaco instances with different themes *on the same page*. This is why we are using a filter to approximate the
-        dark theme. More details here: https://github.com/Microsoft/monaco-editor/issues/338 (monaco uses global style tags
-        with hardcoded colors; any instance will override the global style tag, making all code editors look the same,
-        effectively disabling multiple themes to be used on the same page)
-      */
+      /* our dark-mode background-color is too similar to AI-Assistant message background,
+        so we are using a darker background for code-blocks */
       :global(.code-block .monaco-editor) {
-        filter: invert(1) hue-rotate(151deg) brightness(0.8) grayscale(0.1);
+        --vscode-editor-background: var(--boxel-dark);
+        --vscode-editorGutter-background: var(--boxel-dark);
+      }
+
+      /* this improves inserted-line legibility by reducing green background overlay opacity */
+      :global(.code-block .monaco-editor .line-insert) {
+        opacity: 0.4;
       }
     </style>
   </template>
@@ -245,6 +256,7 @@ interface HtmlGroupCodeBlockSignature {
     codePatchStatus: CodePatchStatus | 'ready' | 'applying';
     onPatchCode: (codeData: CodeData) => void;
     monacoSDK: MonacoSDK;
+    isLastAssistantMessage: boolean;
   };
 }
 
@@ -278,32 +290,106 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
     return this._codeDiffResource;
   }
 
+  private extractReplaceCode(searchReplaceBlock: string | null | undefined) {
+    if (!searchReplaceBlock) {
+      return null;
+    }
+    return parseSearchReplace(searchReplaceBlock).replaceContent;
+  }
+
+  private get codeForEditor() {
+    if (this.isAppliedOrIgnoredCodePatch) {
+      return this.extractReplaceCode(this.args.codeData.searchReplaceBlock);
+    } else {
+      return this.args.codeData.code;
+    }
+  }
+
+  private get isAppliedOrIgnoredCodePatch() {
+    // Ignored means the user moved on to the next message
+    return (
+      this.args.codePatchStatus === 'applied' ||
+      !this.args.isLastAssistantMessage
+    );
+  }
+
   <template>
     <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
       {{#if (bool @codeData.searchReplaceBlock)}}
-        {{#if this.codeDiffResource.isDataLoaded}}
-          <codeBlock.actions as |actions|>
-            <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
-            <actions.applyCodePatch
-              @codeData={{@codeData}}
-              @performPatch={{fn @onPatchCode @codeData}}
-              @patchCodeStatus={{@codePatchStatus}}
+        {{#if this.isAppliedOrIgnoredCodePatch}}
+          <div>
+            <codeBlock.actions as |actions|>
+              <actions.copyCode
+                @code={{this.extractReplaceCode @codeData.searchReplaceBlock}}
+              />
+              {{#if (eq @codePatchStatus 'applied')}}
+                {{! This is just to show the ✅ icon to signalize that the code patch has been applied }}
+                <actions.applyCodePatch
+                  @codeData={{@codeData}}
+                  @patchCodeStatus={{@codePatchStatus}}
+                />
+              {{/if}}
+            </codeBlock.actions>
+            <codeBlock.editor @code={{this.codeForEditor}} @dimmed={{true}} />
+          </div>
+        {{else}}
+          {{#if this.codeDiffResource.errorMessage}}
+            <div
+              class='error-message'
+              data-test-error-message={{this.codeDiffResource.errorMessage}}
+            >
+              <FailureBordered class='error-icon' />
+              <div class='error-message-content'>
+                <b>Code could not be displayed: </b>
+                {{this.codeDiffResource.errorMessage}}
+              </div>
+            </div>
+          {{/if}}
+          {{#if this.codeDiffResource.isDataLoaded}}
+            <codeBlock.actions as |actions|>
+              <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
+              <actions.applyCodePatch
+                @codeData={{@codeData}}
+                @performPatch={{fn @onPatchCode @codeData}}
+                @patchCodeStatus={{@codePatchStatus}}
+                @originalCode={{this.codeDiffResource.originalCode}}
+                @modifiedCode={{this.codeDiffResource.modifiedCode}}
+              />
+            </codeBlock.actions>
+            <codeBlock.diffEditor
               @originalCode={{this.codeDiffResource.originalCode}}
               @modifiedCode={{this.codeDiffResource.modifiedCode}}
+              @language={{@codeData.language}}
             />
-          </codeBlock.actions>
-          <codeBlock.diffEditor
-            @originalCode={{this.codeDiffResource.originalCode}}
-            @modifiedCode={{this.codeDiffResource.modifiedCode}}
-            @language={{@codeData.language}}
-          />
+          {{/if}}
         {{/if}}
       {{else}}
         <codeBlock.actions as |actions|>
           <actions.copyCode @code={{@codeData.code}} />
         </codeBlock.actions>
-        <codeBlock.editor />
+        <codeBlock.editor @code={{this.codeForEditor}} />
       {{/if}}
     </CodeBlock>
+
+    <style scoped>
+      .error-message {
+        background-color: var(--boxel-danger);
+        color: var(--boxel-light);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        display: flex;
+        gap: var(--boxel-sp-xs);
+        margin-bottom: var(--boxel-sp-xs);
+      }
+
+      .error-message > svg {
+        margin-top: 0px;
+      }
+
+      .error-icon {
+        --icon-background-color: var(--boxel-light);
+        --icon-color: var(--boxel-danger);
+        margin-top: var(--boxel-sp-5xs);
+      }
+    </style>
   </template>
 }

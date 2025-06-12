@@ -24,7 +24,7 @@ import { MatrixEvent } from 'matrix-js-sdk';
 
 import pluralize from 'pluralize';
 
-import { TrackedObject, TrackedSet, TrackedArray } from 'tracked-built-ins';
+import { TrackedObject, TrackedArray } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
@@ -37,7 +37,6 @@ import {
   ResolvedCodeRef,
   internalKeyFor,
   isCardInstance,
-  isLocalId,
 } from '@cardstack/runtime-common';
 import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
 
@@ -89,14 +88,14 @@ export default class Room extends Component<Signature> {
     {{#if (not this.doMatrixEventFlush.isRunning)}}
       <section
         class='room'
-        data-room-settled={{(and
+        data-room-settled={{and
           this.doWhenRoomChanges.isIdle
           (not this.matrixService.isLoadingTimeline)
-        )}}
-        data-test-room-settled={{(and
+        }}
+        data-test-room-settled={{and
           this.doWhenRoomChanges.isIdle
           (not this.matrixService.isLoadingTimeline)
-        )}}
+        }}
         data-test-room-name={{@roomResource.name}}
         data-test-room={{@roomId}}
         data-room-id={{@roomId}}
@@ -254,6 +253,9 @@ export default class Room extends Component<Signature> {
   @service private declare playgroundPanelService: PlaygroundPanelService;
 
   private autoAttachmentResource = getAutoAttachment(this, {
+    submode: () => this.operatorModeStateService.state.submode,
+    autoAttachedFileUrl: () => this.autoAttachedFileUrl,
+    playgroundPanelCardId: () => this.playgroundPanelCardId,
     topMostStackItems: () => this.topMostStackItems,
     attachedCardIds: () => this.cardIdsToAttach,
     removedCardIds: () => this.removedAttachedCardIds,
@@ -688,7 +690,7 @@ export default class Room extends Component<Signature> {
   private removeCard(id: string) {
     if (this.playgroundPanelCardId === id) {
       this.removePlaygroundPanelCard();
-    } else if (this.autoAttachmentResource.cardIds.has(id)) {
+    } else if (this.autoAttachedCardIds.has(id)) {
       this.removedAttachedCardIds.push(id);
     } else {
       const cardIndex = this.cardIdsToAttach?.findIndex((url) => url === id);
@@ -760,14 +762,9 @@ export default class Room extends Component<Signature> {
         ) || []),
         ...this.autoAttachedCardIds,
       ]);
-      let context = {
-        submode: this.operatorModeStateService.state.submode,
-        openCardIds: this.makeRemoteIdsList([...openCardIds]),
-      };
+      let context =
+        this.operatorModeStateService.getSummaryForAIBot(openCardIds);
       try {
-        if (files?.length) {
-          files = await this.matrixService.uploadFiles(files);
-        }
         let cards: CardDef[] | undefined;
         if (typeof cardsOrIds?.[0] === 'string') {
           // we use detached instances since these are just
@@ -811,44 +808,7 @@ export default class Room extends Component<Signature> {
     this.removedAttachedCardIds.splice(0);
   });
 
-  private makeRemoteIdsList(ids: (string | undefined)[]) {
-    return ids
-      .map((id) => {
-        if (!id) {
-          return undefined;
-        }
-        if (isLocalId(id)) {
-          let maybeInstance = this.store.peek(id);
-          if (
-            maybeInstance &&
-            isCardInstance(maybeInstance) &&
-            maybeInstance.id
-          ) {
-            return maybeInstance.id;
-          } else {
-            return undefined;
-          }
-        }
-        return id;
-      })
-      .filter(Boolean) as string[];
-  }
-
   private get autoAttachedCardIds() {
-    if (this.operatorModeStateService.state.submode === Submodes.Code) {
-      // also get the card ids of the cards that are open in code mode
-      let cardIds = new TrackedSet<string>();
-      if (this.autoAttachedFileUrl?.endsWith('.json')) {
-        // remove the json extension. TODO: is there a way of getting the actual card id
-        let cardId = this.autoAttachedFileUrl.replace(/\.json$/, '');
-        cardIds.add(cardId);
-      }
-      if (this.playgroundPanelCardId) {
-        cardIds.add(this.playgroundPanelCardId);
-      }
-      return cardIds;
-    }
-
     return this.autoAttachmentResource.cardIds;
   }
 

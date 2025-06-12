@@ -6,7 +6,11 @@ import { inject as service } from '@ember/service';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import { ResolvedCodeRef } from '@cardstack/runtime-common';
+import {
+  type ResolvedCodeRef,
+  getClass,
+  isCardInstance,
+} from '@cardstack/runtime-common';
 
 import {
   CommandRequest,
@@ -17,20 +21,30 @@ import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
+  APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
+  APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { RoomSkill } from '@cardstack/host/resources/room';
-import type CommandService from '@cardstack/host/services/command-service';
 
-import MatrixService from '@cardstack/host/services/matrix-service';
+import type CommandService from '@cardstack/host/services/command-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import type { CommandStatus } from 'https://cardstack.com/base/command';
 import { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type {
   CardMessageContent,
   CardMessageEvent,
+  CodePatchResultEvent,
+  DebugMessageEvent,
   CommandResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
@@ -39,6 +53,7 @@ import type { Skill } from 'https://cardstack.com/base/skill';
 
 import { RoomMember } from './member';
 import { Message } from './message';
+import MessageCodePatchResult from './message-code-patch-result';
 import MessageCommand from './message-command';
 
 const ErrorMessage: Record<string, string> = {
@@ -47,7 +62,7 @@ const ErrorMessage: Record<string, string> = {
 
 export default class MessageBuilder {
   constructor(
-    private event: MessageEvent | CardMessageEvent,
+    private event: MessageEvent | CardMessageEvent | DebugMessageEvent,
     owner: Owner,
     private builderContext: {
       roomId: string;
@@ -56,15 +71,17 @@ export default class MessageBuilder {
       index: number;
       skills: RoomSkill[];
       events: DiscreteMatrixEvent[];
+      codePatchResultEvent?: CodePatchResultEvent;
       commandResultEvent?: CommandResultEvent;
-      skillCardsCache: Map<string, Skill>;
     },
   ) {
     setOwner(this, owner);
   }
 
   @service declare private commandService: CommandService;
+  @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
+  @service declare private store: StoreService;
 
   private get coreMessageArgs() {
     return new Message({
@@ -83,6 +100,10 @@ export default class MessageBuilder {
       reasoningContent:
         (this.event.content as CardMessageContent)['app.boxel.reasoning'] ||
         null,
+      hasContinuation: hasContinuation(this.event),
+      continuationOf: isCardMessageEvent(this.event)
+        ? (this.event.content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] ?? null)
+        : null,
     });
   }
 
@@ -127,38 +148,50 @@ export default class MessageBuilder {
     return errorMessage;
   }
 
-  buildMessage(): Message {
+  async buildMessage(): Promise<Message> {
     let { event } = this;
     let message = this.coreMessageArgs;
     message.errorMessage = this.errorMessage;
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
       message.clientGeneratedId = this.clientGeneratedId;
+      message.setIsStreamingFinished(!!event.content.isStreamingFinished);
       message.attachedCardIds = this.attachedCardIds;
       if (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY]) {
-        message.commands = this.buildMessageCommands(message);
+        message.setCommands(await this.buildMessageCommands(message));
       }
+      message.codePatchResults = this.buildMessageCodePatchResults(message);
     } else if (event.content.msgtype === 'm.text') {
-      message.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
+      message.setIsStreamingFinished(!!event.content.isStreamingFinished);
     }
+    if (event.type === APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE) {
+      message.isDebugMessage = true;
+    }
+
     return message;
   }
 
-  updateMessage(message: Message) {
+  async updateMessage(message: Message) {
     if (message.created.getTime() > this.event.origin_server_ts) {
       message.created = new Date(this.event.origin_server_ts);
       return;
     }
 
-    message.body = this.event.content.body;
-    message.reasoningContent =
+    message.setBody(this.event.content.body);
+    message.setReasoningContent(
       (this.event.content as CardMessageContent)[
         APP_BOXEL_REASONING_CONTENT_KEY
-      ] || null;
-    message.isStreamingFinished =
+      ] || null,
+    );
+    message.setIsStreamingFinished(
       'isStreamingFinished' in this.event.content
         ? this.event.content.isStreamingFinished
-        : undefined;
-    message.updated = new Date();
+        : undefined,
+    );
+    message.hasContinuation = hasContinuation(this.event);
+    message.continuationOf = isCardMessageEvent(this.event)
+      ? (this.event.content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] ?? null)
+      : null;
+    message.setUpdated(new Date());
     message.errorMessage = this.errorMessage;
 
     let encodedCommandRequests =
@@ -173,7 +206,7 @@ export default class MessageBuilder {
         command.commandRequest = decodeCommandRequest(encodedCommandRequest);
       } else {
         message.commands.push(
-          this.buildMessageCommand(
+          await this.buildMessageCommand(
             message,
             decodeCommandRequest(encodedCommandRequest),
           ),
@@ -182,28 +215,41 @@ export default class MessageBuilder {
     }
   }
 
-  updateMessageCommandResult(message: Message) {
+  async updateMessageCommandResult(message: Message) {
     if (message.commands.length === 0) {
-      message.commands = this.buildMessageCommands(message);
+      message.setCommands(await this.buildMessageCommands(message));
     }
 
     if (this.builderContext.commandResultEvent && message.commands.length > 0) {
       let event = this.builderContext.commandResultEvent;
-      let messageCommand = message.commands.find(
-        (c) => c.commandRequest.id === event.content.commandRequestId,
-      );
-      if (messageCommand) {
-        messageCommand.commandStatus = event.content['m.relates_to']
-          .key as CommandStatus;
-        messageCommand.commandResultFileDef =
-          event.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-            ? event.content.data.card
-            : undefined;
+      if (
+        event.content.msgtype ===
+          APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
+        event.content.msgtype ===
+          APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE
+      ) {
+        let commandRequestId = event.content.commandRequestId;
+        let messageCommand = message.commands.find(
+          (c) => c.commandRequest.id === commandRequestId,
+        );
+        if (messageCommand) {
+          messageCommand.commandStatus = event.content['m.relates_to']
+            .key as CommandStatus;
+          messageCommand.commandResultFileDef =
+            event.content.msgtype ===
+            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+              ? event.content.data.card
+              : undefined;
+        }
       }
     }
   }
 
-  private buildMessageCommands(message: Message) {
+  updateMessageCodePatchResult(message: Message) {
+    message.codePatchResults = this.buildMessageCodePatchResults(message);
+  }
+
+  private async buildMessageCommands(message: Message) {
     let eventContent = this.event.content as CardMessageContent;
     let commandRequests = eventContent[APP_BOXEL_COMMAND_REQUESTS_KEY];
     if (!commandRequests) {
@@ -211,7 +257,7 @@ export default class MessageBuilder {
     }
     let commands = new TrackedArray<MessageCommand>();
     for (let commandRequest of commandRequests) {
-      let command = this.buildMessageCommand(
+      let command = await this.buildMessageCommand(
         message,
         decodeCommandRequest(commandRequest),
       );
@@ -220,7 +266,7 @@ export default class MessageBuilder {
     return commands;
   }
 
-  private buildMessageCommand(
+  private async buildMessageCommand(
     message: Message,
     commandRequest: Partial<CommandRequest>,
   ) {
@@ -242,8 +288,8 @@ export default class MessageBuilder {
       | { codeRef: ResolvedCodeRef; requiresApproval: boolean }
       | undefined;
     findCommand: for (let skill of this.builderContext.skills) {
-      let skillCard = this.builderContext.skillCardsCache.get(skill.cardId);
-      if (!skillCard) {
+      let skillCard = await this.store.get<Skill>(skill.cardId);
+      if (!skillCard || !isCardInstance(skillCard)) {
         continue;
       }
       for (let candidateSkillCommand of skillCard.commands) {
@@ -254,12 +300,24 @@ export default class MessageBuilder {
       }
     }
 
+    let actionVerb = 'Apply';
+    if (skillCommand?.codeRef) {
+      let CommandKlass = (await getClass(
+        skillCommand?.codeRef,
+        this.loaderService.loader,
+      )) as { actionVerb: string };
+      if (CommandKlass?.actionVerb) {
+        actionVerb = CommandKlass.actionVerb;
+      }
+    }
+
     let messageCommand = new MessageCommand(
       message,
       commandRequest,
       skillCommand?.codeRef,
       this.builderContext.effectiveEventId,
       skillCommand?.requiresApproval ?? true,
+      actionVerb,
       (commandResultEvent?.content['m.relates_to']?.key ||
         'ready') as CommandStatus,
       commandResultEvent?.content.msgtype ===
@@ -270,4 +328,54 @@ export default class MessageBuilder {
     );
     return messageCommand;
   }
+
+  private buildMessageCodePatchResults(message: Message) {
+    let codePatchResultEvents = this.builderContext.events.filter((e: any) => {
+      let r = e.content['m.relates_to'];
+      if (!r) {
+        return false;
+      }
+      return (
+        e.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
+        r.rel_type === APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE &&
+        r.event_id === message.eventId
+      );
+    }) as CodePatchResultEvent[];
+
+    let codePatchResults = new TrackedArray<MessageCodePatchResult>();
+    for (let codePatchResultEvent of codePatchResultEvents) {
+      codePatchResults.push(
+        new MessageCodePatchResult(
+          message,
+          this.builderContext.effectiveEventId,
+          codePatchResultEvent.content['m.relates_to'].key,
+          codePatchResultEvent.content.codeBlockIndex,
+          getOwner(this)!,
+        ),
+      );
+    }
+    return codePatchResults;
+  }
+}
+
+export function isCardMessageEvent(
+  matrixEvent: DiscreteMatrixEvent,
+): matrixEvent is CardMessageEvent {
+  if (matrixEvent.type === APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE) {
+    return true;
+  }
+  if (matrixEvent.type !== 'm.room.message') {
+    return false;
+  }
+  if (!matrixEvent.content) {
+    return false;
+  }
+  return matrixEvent.content?.msgtype === APP_BOXEL_MESSAGE_MSGTYPE;
+}
+
+function hasContinuation(matrixEvent: DiscreteMatrixEvent) {
+  return (
+    isCardMessageEvent(matrixEvent) &&
+    matrixEvent.content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY] === true
+  );
 }

@@ -1,5 +1,7 @@
 import { click, waitFor, fillIn, find, settled } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
+
 import window from 'ember-window-mock';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
@@ -10,8 +12,6 @@ import {
   Deferred,
   baseRealm,
 } from '@cardstack/runtime-common';
-
-import type EnvironmentService from '@cardstack/host/services/environment-service';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
@@ -27,6 +27,7 @@ import {
   visitOperatorMode,
   waitForCodeEditor,
   setupUserSubscription,
+  withSlowSave,
   type TestContextWithSave,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
@@ -57,9 +58,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     });
     setupUserSubscription(matrixRoomId);
 
-    monacoService = this.owner.lookup(
-      'service:monaco-service',
-    ) as MonacoService;
+    monacoService = getService('monaco-service');
 
     window.localStorage.setItem(
       RecentFiles,
@@ -441,6 +440,52 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       .containsText('MangoXXX');
   });
 
+  test('card instance changes made in monaco editor are synchronized with store', async function (assert) {
+    assert.expect(2);
+    let expected: LooseSingleCardDocument = {
+      data: {
+        attributes: {
+          name: 'MangoXXX',
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}pet`,
+            name: 'Pet',
+          },
+        },
+      },
+    };
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Pet/mango`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Pet/mango.json`,
+    });
+
+    await waitForCodeEditor();
+    assert
+      .dom('[data-test-code-mode-card-renderer-body] [data-test-field="name"]')
+      .containsText('Mango');
+
+    // use a slow save so that we can be sure the synchronization we are seeing
+    // is not a result of indexing activity
+    await withSlowSave(1000, async () => {
+      setMonacoContent(JSON.stringify(expected));
+      await settled();
+      assert
+        .dom(
+          '[data-test-code-mode-card-renderer-body] [data-test-field="name"]',
+        )
+        .containsText('MangoXXX');
+    });
+  });
+
   test<TestContextWithSave>('card instance change made in card editor is auto-saved', async function (assert) {
     assert.expect(2);
 
@@ -541,9 +586,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   });
 
   test<TestContextWithSave>('unsaved changes made in monaco editor are saved when opening a different file', async function (assert) {
-    let environment = this.owner.lookup(
-      'service:environment-service',
-    ) as EnvironmentService;
+    let environment = getService('environment-service');
     environment.autoSaveDelayMs = 1000; // slowdown the auto save so it doesn't interfere with this test
     assert.expect(2);
     await visitOperatorMode({
@@ -569,9 +612,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   });
 
   test<TestContextWithSave>('unsaved changes made in card editor are saved when switching out of code submode', async function (assert) {
-    let environment = this.owner.lookup(
-      'service:environment-service',
-    ) as EnvironmentService;
+    let environment = getService('environment-service');
     environment.autoSaveDelayMs = 1000; // slowdown the auto save so it doesn't interfere with this test
     let numSaves = 0;
     assert.expect(2);
@@ -713,7 +754,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         window
           .getComputedStyle(find('.monaco-editor-background')!)
           .getPropertyValue('background-color')!,
-        'rgb(235, 234, 237)', // equivalent to #ebeaed
+        'rgb(96, 96, 96)', // equivalent to #606060
         'monaco editor is greyed out when read-only',
       );
 

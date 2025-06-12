@@ -1,18 +1,16 @@
 import { getOwner } from '@ember/owner';
 import { RenderingTestContext } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import AddFieldToCardDefinitionCommand from '@cardstack/host/commands/add-field-to-card-definition';
-import CardService from '@cardstack/host/services/card-service';
-import type CommandService from '@cardstack/host/services/command-service';
 
 import RealmService from '@cardstack/host/services/realm';
 
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  lookupService,
   testRealmURL,
   testRealmInfo,
 } from '../../helpers';
@@ -57,8 +55,8 @@ module(
     });
 
     test('adds a field to a card definition', async function (assert) {
-      let commandService = lookupService<CommandService>('command-service');
-      let cardService = lookupService<CardService>('card-service');
+      let commandService = getService('command-service');
+      let cardService = getService('card-service');
       let addFieldToCardDefinitionCommand = new AddFieldToCardDefinitionCommand(
         commandService.commandContext,
       );
@@ -76,9 +74,9 @@ module(
         },
         fieldType: 'contains',
       });
-      let response = await cardService.getSource(
-        new URL('person.gts', testRealmURL),
-      );
+      let response = (
+        await cardService.getSource(new URL('person.gts', testRealmURL))
+      ).content;
       assert.strictEqual(
         response,
         `
@@ -95,8 +93,8 @@ module(
     });
 
     test('can add a computed field', async function (assert) {
-      let commandService = lookupService<CommandService>('command-service');
-      let cardService = lookupService<CardService>('card-service');
+      let commandService = getService('command-service');
+      let cardService = getService('card-service');
       let addFieldToCardDefinitionCommand = new AddFieldToCardDefinitionCommand(
         commandService.commandContext,
       );
@@ -124,9 +122,9 @@ module(
           }`,
       });
 
-      let response = await cardService.getSource(
-        new URL('person.gts', testRealmURL),
-      );
+      let response = (
+        await cardService.getSource(new URL('person.gts', testRealmURL))
+      ).content;
       assert.strictEqual(
         response,
         `

@@ -30,6 +30,8 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
   @service declare private matrixService: MatrixService;
   #cardAPI?: typeof CardAPI;
 
+  static actionVerb = 'Send';
+
   async getInputType() {
     let commandModule = await this.loadCommandModule();
     const { SendAiAssistantMessageInput } = commandModule;
@@ -125,6 +127,8 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
           openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
           requireToolCall,
+          realmUrl: input.realmUrl,
+          functions: [],
         },
       },
     } as CardMessageContent);

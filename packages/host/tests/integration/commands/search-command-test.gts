@@ -1,19 +1,20 @@
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { SearchCardsByTypeAndTitleCommand } from '@cardstack/host/commands/search-cards';
-import type CommandService from '@cardstack/host/services/command-service';
+import {
+  SearchCardsByQueryCommand,
+  SearchCardsByTypeAndTitleCommand,
+} from '@cardstack/host/commands/search-cards';
 
 import {
   testRealmURL,
-  lookupService,
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
-  lookupLoaderService,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -25,7 +26,7 @@ module('Integration | commands | search', function (hooks) {
   let loader: Loader;
 
   hooks.beforeEach(function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   setupLocalIndexing(hooks);
@@ -42,7 +43,7 @@ module('Integration | commands | search', function (hooks) {
   });
 
   hooks.beforeEach(async function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
 
@@ -77,7 +78,7 @@ module('Integration | commands | search', function (hooks) {
   });
 
   test('search for a title', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let searchCommand = new SearchCardsByTypeAndTitleCommand(
       commandService.commandContext,
     );
@@ -90,7 +91,7 @@ module('Integration | commands | search', function (hooks) {
   });
 
   test('search for a card type', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
+    let commandService = getService('command-service');
     let searchCommand = new SearchCardsByTypeAndTitleCommand(
       commandService.commandContext,
     );
@@ -103,5 +104,22 @@ module('Integration | commands | search', function (hooks) {
       result.cardIds.every((id) => id.includes('Author')),
       'All results should be Author cards',
     );
+  });
+
+  test('search with a query', async function (assert) {
+    let commandService = getService('command-service');
+    let searchCommand = new SearchCardsByQueryCommand(
+      commandService.commandContext,
+    );
+    let result = await searchCommand.execute({
+      query: {
+        filter: {
+          eq: { firstName: 'R2-D2' },
+          on: { module: 'http://test-realm/test/author', name: 'Author' },
+        },
+      },
+    });
+    assert.strictEqual(result.cardIds.length, 1);
+    assert.strictEqual(result.cardIds[0], 'http://test-realm/test/Author/r2');
   });
 });

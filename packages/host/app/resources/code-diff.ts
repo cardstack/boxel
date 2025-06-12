@@ -21,6 +21,7 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
   @tracked originalCode: string | undefined | null;
   @tracked modifiedCode: string | undefined | null;
   @tracked searchReplaceBlock: string | undefined | null;
+  @tracked errorMessage: string | undefined | null;
 
   @service declare private cardService: CardService;
   @service declare private commandService: CommandService;
@@ -29,6 +30,17 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
     let { fileUrl, searchReplaceBlock } = named;
     this.fileUrl = fileUrl;
     this.searchReplaceBlock = searchReplaceBlock;
+    if (!fileUrl) {
+      this.errorMessage = 'Missing file URL in the code block';
+      return;
+    }
+
+    if (!searchReplaceBlock) {
+      this.errorMessage = 'Missing search and replace block';
+      return;
+    }
+
+    this.errorMessage = null;
 
     this.load.perform();
   }
@@ -42,8 +54,18 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
     if (!fileUrl || !searchReplaceBlock) {
       return;
     }
-    let result = await this.cardService.getSource(new URL(fileUrl));
-    this.originalCode = result;
+    try {
+      let result = await this.cardService.getSource(new URL(fileUrl));
+      if (result.status === 404) {
+        this.originalCode = ''; // We are creating a new file, so we don't have the original code
+      } else {
+        this.originalCode = result.content;
+      }
+    } catch (error) {
+      this.errorMessage = `Failed to load code from ${fileUrl}`;
+      return;
+    }
+
     let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
       this.commandService.commandContext,
     );
@@ -62,9 +84,6 @@ export function getCodeDiffResultResource(
   fileUrl?: string | null,
   searchReplaceBlock?: string | null,
 ) {
-  if (!fileUrl || !searchReplaceBlock) {
-    throw new Error('fileUrl and searchReplaceBlock are required');
-  }
   return CodeDiffResource.from(parent, () => ({
     named: {
       fileUrl,

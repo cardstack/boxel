@@ -48,14 +48,15 @@ export const createNewInstance = async () => {
 export const openFileInPlayground = async (
   filePath: string,
   realmURL = testRealmURL,
-  declaration?: string,
+  opts?: { declaration?: string; codeSelection?: string },
 ) => {
   await visitOperatorMode({
     submode: 'code',
     codePath: `${realmURL}${filePath}`,
+    ...(opts?.codeSelection ? { codeSelection: opts.codeSelection } : {}),
   });
-  if (declaration) {
-    await selectDeclaration(declaration);
+  if (opts?.declaration) {
+    await selectDeclaration(opts.declaration);
   }
   await togglePlaygroundPanel();
 };
@@ -69,10 +70,10 @@ export const selectFormat = async (format: Format) =>
   await click(`[data-test-format-chooser="${format}"]`);
 
 export const togglePlaygroundPanel = async () =>
-  await click('[data-test-accordion-item="playground"] button');
+  await click('[data-test-module-inspector-view="preview"]');
 
 export const toggleSpecPanel = async () =>
-  await click('[data-test-accordion-item="spec-preview"] button');
+  await click('[data-test-module-inspector-view="spec"]');
 
 // PlaygroundSelections
 export function getPlaygroundSelections(): Record<

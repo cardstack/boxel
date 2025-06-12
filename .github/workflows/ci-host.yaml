@@ -4,6 +4,17 @@ on:
   push:
     branches: [main]
   pull_request:
+    paths:
+      - "packages/host/**"
+      - "packages/base/**"
+      - "packages/boxel-icons/**"
+      - "packages/boxel-ui/**"
+      - "packages/eslint-plugin-boxel/**"
+      - "packages/realm-server/**"
+      - "packages/runtime-common/**"
+      - ".github/workflows/ci-host.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
   workflow_dispatch:
 
 permissions:
@@ -49,7 +60,7 @@ jobs:
           wait-for: 3m
           wait-on: http-get://localhost:4200
       - name: Start realm servers
-        run: pnpm start:all | tee -a /tmp/server.log &
+        run: pnpm start:skip-experiments | tee -a /tmp/server.log &
         working-directory: packages/realm-server
       - name: create realm users
         run: pnpm register-realm-users

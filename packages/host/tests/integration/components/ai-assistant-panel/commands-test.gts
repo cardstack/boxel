@@ -2,6 +2,8 @@ import { waitFor, click, fillIn } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
+
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -11,6 +13,8 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
+  APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -26,7 +30,6 @@ import {
   setupLocalIndexing,
   setupOnSave,
   type TestContextWithSave,
-  lookupLoaderService,
 } from '../../../helpers';
 import {
   CardDef,
@@ -52,7 +55,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   setupLocalIndexing(hooks);
@@ -80,9 +83,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
   let noop = () => {};
 
   hooks.beforeEach(async function () {
-    operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
+    operatorModeStateService = getService('operator-mode-state-service');
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -487,7 +488,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       .exists({ count: 2 });
   });
 
-  test('after command is issued, a reaction event will be dispatched', async function (assert) {
+  test('after command is executed, a command result event will be dispatched', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -557,10 +558,31 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       commandResultEvents.length,
       1,
       'command result event is dispatched',
+    );
+    assert.deepEqual(
+      JSON.parse(commandResultEvents[0].content.data).context,
+      {
+        submode: 'interact',
+        debug: false,
+        openCardIds: ['http://test-realm/test/Person/fadhlan'],
+        realmUrl: 'http://test-realm/test/',
+      },
+      'command result event contains the context',
+    );
+    assert.deepEqual(
+      JSON.parse(commandResultEvents[0].content.data).attachedCards[0].name,
+      'Evie',
+      'command result event contains cards whose ID was reference in the input of the command as attached cards 1',
+    );
+    assert.deepEqual(
+      JSON.parse(commandResultEvents[0].content.data).attachedCards[0]
+        .sourceUrl,
+      'http://test-realm/test/Person/fadhlan',
+      'command result event contains cards whose ID was reference in the input of the command as attached cards 2',
     );
   });
 
-  test('after search command is issued, a command result event is dispatched', async function (assert) {
+  test('after search command is executed, a command result event is dispatched', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -620,6 +642,16 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       commandResultEvents.length,
       1,
       'command result event is dispatched',
+    );
+    assert.deepEqual(
+      JSON.parse(commandResultEvents[0].content.data).context,
+      {
+        submode: 'interact',
+        debug: false,
+        openCardIds: ['http://test-realm/test/Person/fadhlan'],
+        realmUrl: 'http://test-realm/test/',
+      },
+      'command result event contains the context',
     );
   });
 
@@ -953,5 +985,155 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert
       .dom('[data-test-ai-message-content] [data-test-editor]')
       .exists('View Code panel should remain open');
+  });
+
+  test('when command in a message with continuations is done streaming, apply button is shown in ready state', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
+    let initialEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+    });
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]: true,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: initialEventId,
+      },
+    });
+    let continuationEventId = simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        body: 'Changing first names',
+        format: 'org.matrix.custom.html',
+        [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: initialEventId,
+        [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          {
+            id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
+            name: 'patchCard',
+          },
+        ],
+        isStreamingFinished: false,
+      },
+    );
+
+    await settled();
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]');
+    assert.dom('[data-test-message-idx]').exists({ count: 1 });
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .exists({ count: 1 });
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first names',
+      format: 'org.matrix.custom.html',
+      [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: initialEventId,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
+          name: 'patchCard',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
+              },
+            },
+          }),
+        },
+        {
+          id: 'f2da5504-b92f-480a-986a-56ec606d240e',
+          name: 'patchCard',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/hassan`,
+              patch: { attributes: { firstName: 'Ivana' } },
+            },
+          }),
+        },
+      ],
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: continuationEventId,
+      },
+    });
+    await settled();
+
+    assert.dom('[data-test-message-idx]').exists({ count: 1 });
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .exists({ count: 2 });
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first names',
+      format: 'org.matrix.custom.html',
+      [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: initialEventId,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
+          name: 'patchCard',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
+              },
+            },
+          }),
+        },
+        {
+          id: 'f2da5504-b92f-480a-986a-56ec606d240e',
+          name: 'patchCard',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/hassan`,
+              patch: { attributes: { firstName: 'Ivana' } },
+            },
+          }),
+        },
+      ],
+      isStreamingFinished: true,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: continuationEventId,
+      },
+    });
+    await settled();
+
+    assert.dom('[data-test-message-idx]').exists({ count: 1 });
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .exists({ count: 0 });
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply="ready"]')
+      .exists({ count: 2 });
   });
 });

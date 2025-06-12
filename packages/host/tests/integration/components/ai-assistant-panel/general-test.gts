@@ -1,7 +1,15 @@
-import { waitFor, waitUntil, click, triggerEvent } from '@ember/test-helpers';
+import {
+  click,
+  find,
+  waitFor,
+  waitUntil,
+  triggerEvent,
+} from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import { fillIn } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
+
+import { getService } from '@universal-ember/test-support';
 
 import { format, subMinutes } from 'date-fns';
 
@@ -13,13 +21,15 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
+  APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { CurrentRoomIdPersistenceKey } from '@cardstack/host/utils/local-storage-keys';
@@ -31,7 +41,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
-  lookupLoaderService,
   getMonacoContent,
   setMonacoContent,
 } from '../../../helpers';
@@ -60,7 +69,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   setupLocalIndexing(hooks);
@@ -92,9 +101,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
   let noop = () => {};
 
   hooks.beforeEach(async function () {
-    operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
+    operatorModeStateService = getService('operator-mode-state-service');
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -678,9 +685,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     await click(`[data-test-enter-room="${anotherRoomId}"]`);
     await waitFor('[data-test-message-idx="0"]');
 
-    let matrixService = this.owner.lookup(
-      'service:matrix-service',
-    ) as MatrixService;
+    let matrixService = getService('matrix-service');
     assert.deepEqual(
       Array.from(matrixService.currentUserEventReadReceipts.keys()),
       [eventId2, eventId3],
@@ -758,7 +763,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       '@aibot:localhost',
       {
         body: 'This is the first message',
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
       },
       {
@@ -770,7 +775,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       '@aibot:localhost',
       {
         body: 'Second message body',
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
       },
       {
@@ -782,7 +787,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       '@aibot:localhost',
       {
         body: 'First replacement message body',
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         ['m.relates_to']: {
           event_id: firstMessageId,
@@ -869,6 +874,158 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     assert
       .dom('[data-test-message-idx="1"] [data-test-ai-message-content]')
       .containsText('I sent a message from the background.');
+  });
+
+  test('continuation events should be combined into one message that uses `created` from the oldest message', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+    let firstMessageId = simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: '',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: false,
+        [APP_BOXEL_REASONING_CONTENT_KEY]: 'Here is some reasoning that',
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      },
+    );
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: '',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        [APP_BOXEL_REASONING_CONTENT_KEY]:
+          'Here is some reasoning that I am doing to figure things out. It continues',
+        [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]: true,
+        ['m.relates_to']: {
+          event_id: firstMessageId,
+          rel_type: 'm.replace',
+        },
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 31).getTime(),
+      },
+    );
+    let secondMessageId = simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: '',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        [APP_BOXEL_REASONING_CONTENT_KEY]: ' with some more reasoning. Hmmm...',
+        [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]: true,
+        [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: firstMessageId,
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 32).getTime(),
+      },
+    );
+    await waitFor('[data-test-message-idx="0"]');
+    await waitUntil(() =>
+      (find('[data-test-message-idx="0"]') as HTMLElement)?.innerText.includes(
+        'with some more reasoning',
+      ),
+    );
+
+    assert
+      .dom('[data-test-message-idx="0"]')
+      .containsText(
+        'Wednesday Jan 3, 2024, 12:30 PM Thinking... Here is some reasoning that I am doing to figure things out. It continues with some more reasoning. Hmmm...',
+      );
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-ai-avatar]')
+      .hasClass('ai-avatar-animated', 'Message is in progress');
+    let thirdMessageId = simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'Now we are on to the body where ',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        [APP_BOXEL_REASONING_CONTENT_KEY]: '',
+        [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]: true,
+        [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: secondMessageId,
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 33).getTime(),
+      },
+    );
+    let fourthMessageId = simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'a thing can be done',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: false,
+
+        [APP_BOXEL_REASONING_CONTENT_KEY]: '',
+        [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: thirdMessageId,
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 34).getTime(),
+      },
+    );
+
+    await waitUntil(() =>
+      (find('[data-test-message-idx="0"]') as HTMLElement).innerText.includes(
+        'a thing can be done',
+      ),
+    );
+
+    assert
+      .dom('[data-test-message-idx="0"]')
+      .containsText(
+        'Wednesday Jan 3, 2024, 12:30 PM Thinking... Here is some reasoning that I am doing to figure things out. It continues with some more reasoning. Hmmm... Now we are on to the body where a thing can be done',
+      );
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-ai-avatar]')
+      .hasClass('ai-avatar-animated', 'Message is in progress');
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'a thing can be done.',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        ['m.relates_to']: {
+          event_id: fourthMessageId,
+          rel_type: 'm.replace',
+        },
+
+        [APP_BOXEL_REASONING_CONTENT_KEY]: '',
+        [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]: thirdMessageId,
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 35).getTime(),
+      },
+    );
+    await waitUntil(() =>
+      (find('[data-test-message-idx="0"]') as HTMLElement).innerText.includes(
+        'a thing can be done.',
+      ),
+    );
+    assert
+      .dom('[data-test-message-idx="0"]')
+      .containsText(
+        'Wednesday Jan 3, 2024, 12:30 PM Thinking... Here is some reasoning that I am doing to figure things out. It continues with some more reasoning. Hmmm... Now we are on to the body where a thing can be done.',
+      );
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-ai-avatar]')
+      .doesNotHaveClass(
+        'ai-avatar-animated',
+        'Message is in no longer in progress',
+      );
   });
 
   test('ensures cards are reuploaded only when content changes', async function (assert) {

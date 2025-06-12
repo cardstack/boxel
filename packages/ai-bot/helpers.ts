@@ -9,30 +9,40 @@ import {
 import { ToolChoice } from '@cardstack/runtime-common/helpers/ai';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
-  Tool,
-  SkillsConfigEvent,
   ActiveLLMEvent,
+  CardMessageContent,
   CardMessageEvent,
   CommandResultEvent,
-  CardMessageContent,
   EncodedCommandRequest,
+  SkillsConfigEvent,
+  Tool,
+  CodePatchResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
-import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
+import { MatrixEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
 import {
-  APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  DEFAULT_LLM,
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import { SerializedFileDef, downloadFile, MatrixClient } from './lib/matrix';
+import {
+  SerializedFileDef,
+  downloadFile,
+  MatrixClient,
+} from './lib/matrix/util';
+import { constructHistory } from './lib/history';
+import { isRecognisedDebugCommand } from './lib/debug';
 
 let log = logger('ai-bot');
 
@@ -83,13 +93,6 @@ export type PromptParts =
 
 export type Message = CommandMessage | TextMessage;
 
-export class HistoryConstructionError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'HistoryConstructionError';
-  }
-}
-
 export async function getPromptParts(
   eventList: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -131,106 +134,6 @@ export async function getPromptParts(
   };
 }
 
-export async function constructHistory(
-  eventlist: IRoomEvent[],
-  client: MatrixClient,
-) {
-  /**
-   * We send a lot of events to create messages,
-   * as we stream updates to the UI. This works by
-   * sending a new event with the full content and
-   * information about which event it should replace
-   *
-   * This function is to construct the chat as a user
-   * would see it - with only the latest event for each
-   * message.
-   */
-  const latestEventsMap = new Map<string, DiscreteMatrixEvent>();
-  for (let rawEvent of eventlist) {
-    if (rawEvent.content.data) {
-      try {
-        rawEvent.content.data = JSON.parse(rawEvent.content.data);
-      } catch (e) {
-        Sentry.captureException(e, {
-          attachments: [
-            {
-              data: rawEvent.content.data,
-              filename: 'rawEventContentData.txt',
-            },
-          ],
-        });
-        log.error('Error parsing JSON', e);
-        throw new HistoryConstructionError((e as Error).message);
-      }
-    }
-    let event = { ...rawEvent } as DiscreteMatrixEvent;
-    if (
-      event.type !== 'm.room.message' &&
-      event.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE
-    ) {
-      continue;
-    }
-    let eventId = event.event_id!;
-    if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
-      let { attachedCards } = event.content.data ?? {};
-      if (attachedCards && attachedCards.length > 0) {
-        event.content.data.attachedCards = await Promise.all(
-          attachedCards.map(async (attachedCard: SerializedFileDef) => {
-            try {
-              return {
-                ...attachedCard,
-                content: await downloadFile(client, attachedCard),
-              };
-            } catch (e) {
-              return {
-                ...attachedCard,
-                error: `Error loading attached card: ${e}`,
-              };
-            }
-          }),
-        );
-      }
-    } else if (
-      event.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE &&
-      event.content.data.card
-    ) {
-      try {
-        event.content.data.card = {
-          ...event.content.data.card,
-          content: await downloadFile(client, event.content.data.card),
-        };
-      } catch (e) {
-        event.content.data.card = {
-          ...event.content.data.card,
-          error: `Error loading attached card: ${e}`,
-        };
-      }
-    }
-
-    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
-    if (event.content['m.relates_to']?.rel_type === 'm.replace') {
-      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
-      eventId = event.content['m.relates_to']!.event_id!;
-      event.event_id = eventId;
-    }
-    const existingEvent = latestEventsMap.get(eventId);
-    if (
-      !existingEvent ||
-      // we check the timestamps of the events because the existing event may
-      // itself be an already replaced event. The idea is that you can perform
-      // multiple replacements on an event. In order to prevent backing out a
-      // subsequent replacement we also assert that the replacement timestamp is
-      // after the event that it is replacing
-      existingEvent.origin_server_ts < event.origin_server_ts
-    ) {
-      latestEventsMap.set(eventId, event);
-    }
-  }
-  let latestEvents = Array.from(latestEventsMap.values());
-  latestEvents.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
-  return latestEvents;
-}
-
 function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
   // If the aibot is awaiting command results, it should not respond yet.
   let lastEventExcludingCommandResults = history.findLast(
@@ -240,6 +143,15 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
   if (!lastEventExcludingCommandResults) {
     return false;
   }
+
+  // if the last event is a debug command from the user, we should not respond
+  if (
+    lastEventExcludingCommandResults.type == 'm.room.message' &&
+    isRecognisedDebugCommand(lastEventExcludingCommandResults.content.body)
+  ) {
+    return false;
+  }
+
   let commandRequests = (
     lastEventExcludingCommandResults.content as CardMessageContent
   )[APP_BOXEL_COMMAND_REQUESTS_KEY];
@@ -252,6 +164,10 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
       return history.slice(lastEventIndex).some((event) => {
         return (
           event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+          (event.content.msgtype ===
+            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
+            event.content.msgtype ===
+              APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
           event.content.commandRequestId === commandRequest.id
         );
       });
@@ -483,7 +399,7 @@ export async function getTools(
       continue;
     }
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
-      let eventTools = event.content.data.context.tools;
+      let eventTools = event.content.data?.context?.tools;
       if (eventTools?.length) {
         for (let tool of eventTools) {
           toolMap.set(tool.function.name, tool);
@@ -496,13 +412,18 @@ export async function getTools(
   );
 }
 
+export function getLastUserMessage(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): DiscreteMatrixEvent | undefined {
+  return history.findLast((event) => event.sender !== aiBotUserId);
+}
+
 export function getToolChoice(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): ToolChoice {
-  const lastUserMessage = history.findLast(
-    (event) => event.sender !== aiBotUserId,
-  );
+  const lastUserMessage = getLastUserMessage(history, aiBotUserId);
 
   if (
     !lastUserMessage ||
@@ -545,6 +466,22 @@ function getCommandResults(
   return commandResultEvents;
 }
 
+function getCodePatchResults(
+  cardMessageEvent: CardMessageEvent,
+  history: DiscreteMatrixEvent[],
+) {
+  let codePatchResultEvents = history.filter((e) => {
+    if (
+      isCodePatchResultEvent(e) &&
+      e.content['m.relates_to']?.event_id === cardMessageEvent.event_id
+    ) {
+      return true;
+    }
+    return false;
+  }) as CodePatchResultEvent[];
+  return codePatchResultEvents;
+}
+
 function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
   const content = event.content as CardMessageContent;
   return (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
@@ -563,15 +500,18 @@ function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
 
 function toPromptMessageWithToolResults(
   event: CardMessageEvent,
-  history: DiscreteMatrixEvent[],
+  commandResults: CommandResultEvent[] = [],
 ): OpenAIPromptMessage[] {
-  let commandResults = getCommandResults(event, history);
   const messageContent = event.content as CardMessageContent;
   return (messageContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
     (commandRequest: Partial<EncodedCommandRequest>) => {
       let content = 'pending';
       let commandResult = commandResults.find(
         (commandResult) =>
+          (commandResult.content.msgtype ===
+            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
+            commandResult.content.msgtype ===
+              APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
           commandResult.content.commandRequestId === commandRequest.id,
       );
       if (commandResult) {
@@ -584,9 +524,9 @@ function toPromptMessageWithToolResults(
           let cardContent =
             commandResult.content.data.card.content ??
             commandResult.content.data.card.error;
-          content = `Command ${status}, with result card: ${cardContent}.\n`;
+          content = `Tool call ${status == 'applied' ? 'executed' : status}, with result card: ${cardContent}.\n`;
         } else {
-          content = `Command ${status}.\n`;
+          content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
         }
       }
       return {
@@ -610,7 +550,7 @@ export async function getModifyPrompt(
     aiBotUserId.indexOf(':') === -1 ||
     aiBotUserId.startsWith('@') === false
   ) {
-    throw new Error("Username must be a full id, e.g. '@ai-bot:localhost'");
+    throw new Error("Username must be a full id, e.g. '@aibot:localhost'");
   }
   let historicalMessages: OpenAIPromptMessage[] = [];
   for (let event of history) {
@@ -627,11 +567,20 @@ export async function getModifyPrompt(
       continue;
     }
     let body = event.content.body;
+
     if (event.sender === aiBotUserId) {
       let toolCalls = toToolCalls(event as CardMessageEvent);
+      let commandResults = getCommandResults(
+        event as CardMessageEvent,
+        history,
+      );
+      let codePatchReults = getCodePatchResults(
+        event as CardMessageEvent,
+        history,
+      );
       let historicalMessage: OpenAIPromptMessage = {
         role: 'assistant',
-        content: elideCodeBlocks(body),
+        content: elideCodeBlocks(body, codePatchReults),
       };
       if (toolCalls.length) {
         historicalMessage.tool_calls = toolCalls;
@@ -640,63 +589,22 @@ export async function getModifyPrompt(
       if (toolCalls.length) {
         toPromptMessageWithToolResults(
           event as CardMessageEvent,
-          history,
+          commandResults,
         ).forEach((message) => historicalMessages.push(message));
       }
     }
     if (body && event.sender !== aiBotUserId) {
-      if (
-        event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
-        event.content.data?.context?.openCardIds
-      ) {
-        body = `User message: ${body}
-          Context: the user has the following cards open: ${JSON.stringify(
-            event.content.data.context.openCardIds,
-          )}`;
-      } else {
-        body = `User message: ${body}
-          Context: the user has no open cards.`;
-      }
       historicalMessages.push({
         role: 'user',
         content: body,
       });
     }
   }
-
-  let { mostRecentlyAttachedCard, attachedCards } = getRelevantCards(
-    history,
-    aiBotUserId,
-  );
-
-  let attachedFiles = await loadCurrentlySerializedFileDefs(
-    client,
-    history,
-    aiBotUserId,
-  );
-
-  let systemMessage = `${MODIFY_SYSTEM_MESSAGE}
-The user currently has given you the following data to work with:
-
-Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}
-
-Attached files:
-${attachedFilesToPrompt(attachedFiles)}
-`;
-
+  let systemMessage = `${MODIFY_SYSTEM_MESSAGE}\n`;
   if (skillCards.length) {
     systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
     systemMessage += skillCardsToMessage(skillCards);
     systemMessage += '\n';
-  }
-
-  let cardPatchTool = tools.find(
-    (tool) => tool.function.name === 'patchCardInstance',
-  );
-
-  if (attachedFiles.length == 0 && attachedCards.length > 0 && !cardPatchTool) {
-    systemMessage +=
-      'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
   }
 
   let messages: OpenAIPromptMessage[] = [
@@ -707,8 +615,98 @@ ${attachedFilesToPrompt(attachedFiles)}
   ];
 
   messages = messages.concat(historicalMessages);
+  let contextContent = await buildContextMessage(
+    client,
+    history,
+    aiBotUserId,
+    tools,
+  );
+  let contextMessagePosition = messages.findLastIndex(
+    (m) => m.role === 'user' || m.role === 'tool',
+  );
+  messages.splice(contextMessagePosition, 0, {
+    role: 'system',
+    content: contextContent,
+  });
+
   return messages;
 }
+
+export const buildContextMessage = async (
+  client: MatrixClient,
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+  tools: Tool[],
+): Promise<string> => {
+  let { mostRecentlyAttachedCard, attachedCards } = getRelevantCards(
+    history,
+    aiBotUserId,
+  );
+  let result = '';
+
+  let attachedFiles = await loadCurrentlySerializedFileDefs(
+    client,
+    history,
+    aiBotUserId,
+  );
+
+  let lastEventWithContext = history.findLast((ev) => {
+    if (ev.sender === aiBotUserId) {
+      return false;
+    }
+    return (
+      (ev.type === 'm.room.message' &&
+        ev.content.msgtype == APP_BOXEL_MESSAGE_MSGTYPE) ||
+      ev.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE ||
+      ev.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE
+    );
+  }) as
+    | CardMessageEvent
+    | CommandResultEvent
+    | CodePatchResultEvent
+    | undefined;
+  let context = lastEventWithContext?.content.data?.context;
+
+  if (context) {
+    result += `The user is currently viewing the following user interface:\n`;
+    if (context?.submode) {
+      result += `Submode: ${context.submode}\n`;
+    }
+    if (context?.realmUrl) {
+      result += `Workspace: ${context.realmUrl}\n`;
+    }
+    if (context?.openCardIds && context.openCardIds.length > 0) {
+      result += `Open cards:\n${context.openCardIds.map((id) => ` - ${id}\n`)}`;
+    } else {
+      result += `The user has no open cards.\n`;
+    }
+    if (context?.codeMode?.currentFile) {
+      result += `File open in code editor: ${context.codeMode.currentFile}\n`;
+    }
+  } else {
+    result += `The user has no open cards.\n`;
+  }
+  if (attachedCards.length > 0 || attachedFiles.length > 0) {
+    result += `The user currently has given you the following data to work with:\n\n`;
+    if (attachedCards.length > 0) {
+      result += `Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}\n\n`;
+    }
+    if (attachedFiles.length > 0) {
+      result += `\n\nAttached files:\n${attachedFilesToPrompt(attachedFiles)}`;
+    }
+  }
+
+  let cardPatchTool = tools.find(
+    (tool) => tool.function.name === 'patchCardInstance',
+  );
+
+  if (attachedFiles.length == 0 && attachedCards.length > 0 && !cardPatchTool) {
+    result +=
+      'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
+  }
+
+  return result;
+};
 
 export const attachedCardsToMessage = (
   mostRecentlyAttachedCard: LooseCardResource | undefined,
@@ -772,9 +770,46 @@ export function isCommandResultEvent(
   );
 }
 
-export const OMIT_CODE_CHANGE_PLACEHOLDER: string =
-  '[Omitting previously suggested code change]';
-function elideCodeBlocks(content: string) {
+export function isCodePatchResultEvent(
+  event?: DiscreteMatrixEvent,
+): event is CodePatchResultEvent {
+  if (event === undefined) {
+    return false;
+  }
+  return (
+    event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
+    event.content['m.relates_to']?.rel_type ===
+      APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE
+  );
+}
+
+function elideCodeBlocks(
+  content: string,
+  codePatchResults: CodePatchResultEvent[],
+) {
+  const DEFAULT_PLACEHOLDER: string =
+    '[Omitting previously suggested code change]';
+  const PLACEHOLDERS = {
+    applied: '[Omitting previously suggested and applied code change]',
+    rejected: '[Omitting previously suggested and rejected code change]',
+    failed: '[Omitting previously suggested code change that failed to apply]',
+  };
+
+  function getPlaceholder(codeBlockIndex: number) {
+    let codePatchResult = codePatchResults.find((codePatchResult) => {
+      return codePatchResult.content.codeBlockIndex === codeBlockIndex;
+    });
+    if (codePatchResult) {
+      return (
+        PLACEHOLDERS[codePatchResult.content['m.relates_to'].key] ??
+        DEFAULT_PLACEHOLDER
+      );
+    }
+    return DEFAULT_PLACEHOLDER;
+  }
+
+  let codeBlockIndex = 0;
+
   while (
     content.includes(SEARCH_MARKER) &&
     content.includes(SEPARATOR_MARKER) &&
@@ -793,8 +828,35 @@ function elideCodeBlocks(content: string) {
     // replace the content between the markers with a placeholder
     content =
       content.substring(0, searchStartIndex) +
-      OMIT_CODE_CHANGE_PLACEHOLDER +
+      getPlaceholder(codeBlockIndex) +
       content.substring(replaceEndIndex + REPLACE_MARKER.length);
+
+    codeBlockIndex++;
   }
   return content;
+}
+
+export function mxcUrlToHttp(mxc: string, baseUrl: string): string {
+  if (mxc.indexOf('mxc://') !== 0) {
+    throw new Error('Invalid MXC URL ' + mxc);
+  }
+  let serverAndMediaId = mxc.slice(6); // strips mxc://
+  let prefix = '/_matrix/client/v1/media/download/';
+
+  return baseUrl + prefix + serverAndMediaId;
+}
+
+export function isInDebugMode(
+  eventList: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): boolean {
+  let lastUserMessage = getLastUserMessage(eventList, aiBotUserId);
+  if (
+    !lastUserMessage ||
+    !lastUserMessage.content ||
+    typeof lastUserMessage.content !== 'object'
+  ) {
+    return false;
+  }
+  return (lastUserMessage.content as any).data?.context?.debug ?? false;
 }

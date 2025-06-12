@@ -6,17 +6,22 @@ import type {
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
+  APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
+  APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { type SerializedFile } from './file-api';
 
@@ -145,10 +150,35 @@ export interface Tool {
   };
 }
 
+export interface DebugMessageEvent extends BaseMatrixEvent {
+  type: typeof APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE;
+  content: CardMessageContent;
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
 // Synapse JSON does not support decimals, so we encode all arguments as stringified JSON
 export type EncodedCommandRequest = Omit<CommandRequest, 'arguments'> & {
   arguments: string;
 };
+
+export interface BoxelContext {
+  openCardIds?: string[];
+  realmUrl?: string;
+  tools?: Tool[];
+  toolChoice?: ToolChoice;
+  submode?: string;
+  codeMode?: {
+    currentFile?: string;
+  };
+  debug?: boolean;
+  requireToolCall?: boolean;
+  functions?: Tool['function'][];
+}
 
 export interface CardMessageContent {
   'm.relates_to'?: {
@@ -159,8 +189,10 @@ export interface CardMessageContent {
   format: 'org.matrix.custom.html';
   body: string;
   isStreamingFinished?: boolean;
+  [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]?: boolean;
+  [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]?: string; // event_id of the message we are continuing
   [APP_BOXEL_REASONING_CONTENT_KEY]?: string;
-  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[];
+  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[]; // TODO
   errorMessage?: string;
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.
@@ -169,16 +201,7 @@ export interface CardMessageContent {
     // we retrieve the content on the server side by downloading the file
     attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
     attachedCards?: (SerializedFile & { content?: string; error?: string })[];
-    context: {
-      openCardIds?: string[];
-      tools?: Tool[];
-      toolChoice?: ToolChoice;
-      submode?: string;
-      requireToolCall?: boolean;
-      functions: Tool['function'][];
-    };
-    cardEventId?: string;
-    card?: LooseSingleCardDocument;
+    context?: BoxelContext;
   };
 }
 
@@ -208,6 +231,18 @@ export interface CommandResultEvent extends BaseMatrixEvent {
     prev_sender?: string;
   };
 }
+
+export interface CodePatchResultEvent extends BaseMatrixEvent {
+  type: typeof APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE;
+  content: CodePatchResultContent;
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
 export interface CommandDefinitionSchema {
   codeRef: {
     module: string;
@@ -226,6 +261,9 @@ export interface CommandResultWithOutputContent {
   data: {
     // we retrieve the content on the server side by downloading the file
     card?: SerializedFile & { content?: string; error?: string };
+    context?: BoxelContext;
+    attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
+    attachedCards?: (SerializedFile & { content?: string; error?: string })[];
   };
   msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE;
 }
@@ -238,9 +276,29 @@ export interface CommandResultWithNoOutputContent {
   };
   msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE;
   commandRequestId: string;
+  data: {
+    context?: BoxelContext;
+    attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
+    attachedCards?: (SerializedFile & { content?: string; error?: string })[];
+  };
 }
 
 export type CodePatchStatus = 'applied' | 'failed'; // possibly add 'rejected' in the future
+
+export interface CodePatchResultContent {
+  'm.relates_to': {
+    rel_type: typeof APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE;
+    key: CodePatchStatus;
+    event_id: string;
+  };
+  msgtype: typeof APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE;
+  codeBlockIndex: number;
+  data: {
+    context?: BoxelContext;
+    attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
+    attachedCards?: (SerializedFile & { content?: string; error?: string })[];
+  };
+}
 
 export interface RealmServerEvent extends BaseMatrixEvent {
   type: 'm.room.message';
@@ -312,18 +370,20 @@ export interface FileRemovedEventContent {
 }
 
 export type MatrixEvent =
-  | RoomCreateEvent
-  | RoomJoinRules
-  | RoomPowerLevels
-  | MessageEvent
-  | CommandResultEvent
+  | ActiveLLMEvent
   | CardMessageEvent
-  | RealmServerEvent
-  | RealmEvent
-  | RoomNameEvent
-  | RoomTopicEvent
+  | CodePatchResultEvent
+  | CommandResultEvent
+  | DebugMessageEvent
   | InviteEvent
   | JoinEvent
   | LeaveEvent
-  | SkillsConfigEvent
-  | ActiveLLMEvent;
+  | MessageEvent
+  | RealmEvent
+  | RealmServerEvent
+  | RoomCreateEvent
+  | RoomJoinRules
+  | RoomNameEvent
+  | RoomPowerLevels
+  | RoomTopicEvent
+  | SkillsConfigEvent;

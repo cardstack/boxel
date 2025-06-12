@@ -1,5 +1,7 @@
-import { click, fillIn, triggerEvent } from '@ember/test-helpers';
+import { click, fillIn, triggerEvent, waitUntil } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
+
+import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
@@ -17,7 +19,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
-  lookupLoaderService,
   assertMessages,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
@@ -34,7 +35,7 @@ module('Integration | ask-ai', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   setupLocalIndexing(hooks);
@@ -53,9 +54,7 @@ module('Integration | ask-ai', function (hooks) {
   let noop = () => {};
 
   hooks.beforeEach(async function () {
-    operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
+    operatorModeStateService = getService('operator-mode-state-service');
 
     const petCard = `import { CardDef, Component } from "https://cardstack.com/base/card-api";
       export class Pet extends CardDef {
@@ -98,8 +97,16 @@ module('Integration | ask-ai', function (hooks) {
     });
   });
 
-  const sendAskAiMessage = async (message: string) => {
+  const sendAskAiMessage = async (message: string, assert: Assert) => {
+    assert.dom('[data-test-ask-ai-input]').hasStyle({ width: '140px' });
     await fillIn('[data-test-ask-ai-input]', message);
+    await waitUntil(() => {
+      let el = document.querySelector(
+        '[data-test-ask-ai-input]',
+      ) as HTMLElement | null;
+      return el && getComputedStyle(el).width === '310px';
+    });
+    assert.dom('[data-test-ask-ai-input]').hasStyle({ width: '310px' });
     await triggerEvent('[data-test-ask-ai-input]', 'keydown', {
       key: 'Enter',
       code: 'Enter',
@@ -136,7 +143,7 @@ module('Integration | ask-ai', function (hooks) {
       .hasText('New AI Assistant Chat');
     assert
       .dom('[data-test-pill-menu-header]')
-      .containsText('1 of 1 Skill Active');
+      .containsText('2 of 2 Skills Active');
     await assertMessages(assert, [
       {
         from: 'testuser',
@@ -144,7 +151,7 @@ module('Integration | ask-ai', function (hooks) {
         cards: [{ id: cardId, title: 'Marco' }],
       },
     ]);
-    assert.dom('[data-test-ask-ai-input]').hasNoValue();
+    assert.dom('[data-test-ask-ai-input]').doesNotExist();
     assert.dom('[data-test-message-field]').hasNoValue();
   });
 
@@ -166,20 +173,20 @@ module('Integration | ask-ai', function (hooks) {
     assert.dom('[data-test-ask-ai-input]').hasNoValue();
     assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
 
-    await sendAskAiMessage('Hello world');
+    await sendAskAiMessage('Hello world', assert);
     assert
       .dom('[data-test-ai-assistant-panel] [data-test-chat-title]')
       .hasText('New AI Assistant Chat');
     assert
       .dom('[data-test-pill-menu-header]')
-      .containsText('1 of 1 Skill Active');
+      .containsText('2 of 2 Skills Active');
     await assertMessages(assert, [
       {
         from: 'testuser',
         message: 'Hello world',
       },
     ]);
-    assert.dom('[data-test-ask-ai-input]').hasNoValue();
+    assert.dom('[data-test-ask-ai-input]').doesNotExist();
     assert.dom('[data-test-message-field]').hasNoValue();
   });
 
@@ -210,13 +217,16 @@ module('Integration | ask-ai', function (hooks) {
     assert.dom('[data-test-code-mode]').exists();
     assert.dom('[data-test-ask-ai-input]').hasNoValue();
     assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
-    await sendAskAiMessage('Change embedded template background to blue');
+    await sendAskAiMessage(
+      'Change embedded template background to blue',
+      assert,
+    );
     assert
       .dom('[data-test-ai-assistant-panel] [data-test-chat-title]')
       .hasText('New AI Assistant Chat');
     assert
       .dom('[data-test-pill-menu-header]')
-      .containsText('2 of 2 Skills Active');
+      .containsText('3 of 3 Skills Active');
     await assertMessages(assert, [
       {
         from: 'testuser',
@@ -228,22 +238,7 @@ module('Integration | ask-ai', function (hooks) {
     await click('[data-test-past-sessions-button]');
     assert.dom('[data-test-joined-room]').exists({ count: 1 });
     await click('[data-test-past-sessions-button]');
-
-    // sending new message from AskAI box to open panel
-    await sendAskAiMessage('Change title to Marquitos');
-    await assertMessages(assert, [
-      {
-        from: 'testuser',
-        message: 'Change title to Marquitos',
-        cards: [{ id: marcoId, title: 'Marco' }],
-        files: [{ sourceUrl: petCardId, name: 'pet.gts' }],
-      },
-    ]);
-    assert.dom('[data-test-ask-ai-input]').hasNoValue();
-    assert.dom('[data-test-message-field]').hasNoValue();
-    await click('[data-test-past-sessions-button]');
-    assert.dom('[data-test-joined-room]').exists({ count: 2 });
-    await click('[data-test-past-sessions-button]');
+    assert.dom('[data-test-ask-ai-input]').doesNotExist();
 
     // sending message to open room via panel's chatbox
     await fillIn('[data-test-message-field]', 'Goodbye');
@@ -251,7 +246,7 @@ module('Integration | ask-ai', function (hooks) {
     await assertMessages(assert, [
       {
         from: 'testuser',
-        message: 'Change title to Marquitos',
+        message: 'Change embedded template background to blue',
         cards: [{ id: marcoId, title: 'Marco' }],
         files: [{ sourceUrl: petCardId, name: 'pet.gts' }],
       },
@@ -263,7 +258,7 @@ module('Integration | ask-ai', function (hooks) {
       },
     ]);
     await click('[data-test-past-sessions-button]');
-    assert.dom('[data-test-joined-room]').exists({ count: 2 });
+    assert.dom('[data-test-joined-room]').exists({ count: 1 });
     await click('[data-test-past-sessions-button]');
   });
 });

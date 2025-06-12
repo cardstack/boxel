@@ -8,9 +8,9 @@ import { isTesting } from '@embroider/macros';
 import { formatDistanceToNow } from 'date-fns';
 import { task } from 'ember-concurrency';
 
-import mergeWith from 'lodash/mergeWith';
-
-import { stringify } from 'qs';
+import cloneDeep from 'lodash/cloneDeep';
+import isEqual from 'lodash/isEqual';
+import merge from 'lodash/merge';
 
 import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 
@@ -315,15 +315,19 @@ export default class StoreService extends Service implements StoreInterface {
   async patch<T extends CardDef = CardDef>(
     id: string,
     patch: PatchData,
+    opts?: { doNotPersist?: true },
   ): Promise<T | CardErrorJSONAPI | undefined> {
     // eslint-disable-next-line ember/classic-decorator-no-classic-methods
     let instance = await this.get<T>(id);
     if (!instance || !isCardInstance(instance)) {
       return;
     }
+    if (opts?.doNotPersist) {
+      await this.stopAutoSaving(instance);
+    }
     let doc = await this.cardService.serializeCard(instance);
     if (patch.attributes) {
-      doc.data.attributes = mergeWith(doc.data.attributes, patch.attributes);
+      doc.data.attributes = merge(doc.data.attributes, patch.attributes);
     }
     if (patch.relationships) {
       let mergedRel = mergeRelationships(
@@ -334,9 +338,12 @@ export default class StoreService extends Service implements StoreInterface {
         doc.data.relationships = mergedRel;
       }
     }
+    if (patch.meta) {
+      doc.data.meta = merge(doc.data.meta, patch.meta);
+    }
     let linkedCards = await this.loadPatchedInstances(
       patch,
-      new URL(instance.id),
+      instance.id ? new URL(instance.id) : undefined,
     );
     for (let [field, value] of Object.entries(linkedCards)) {
       if (field.includes('.')) {
@@ -351,22 +358,27 @@ export default class StoreService extends Service implements StoreInterface {
         }
         (inner as any)[leaf.match(/^\d+$/) ? Number(leaf) : leaf] = value;
       } else {
-        // TODO this could trigger a save. perhaps instead we could
-        // introduce a new option to updateFromSerialized to accept a list of
-        // fields to pre-load? which in this case would be any relationships that
-        // were patched in
         (instance as any)[field] = value;
       }
     }
     let api = await this.cardService.getAPI();
     await api.updateFromSerialized(instance, doc, this.identityContext);
-    return (await this.persistAndUpdate(instance)) as T | CardErrorJSONAPI;
+    if (opts?.doNotPersist) {
+      await this.startAutoSaving(instance);
+    } else {
+      await this.persistAndUpdate(instance);
+    }
+    return instance as T | CardErrorJSONAPI;
   }
 
   async search(query: Query, realmURL: URL): Promise<CardDef[]> {
-    let json = await this.cardService.fetchJSON(
-      `${realmURL}_search?${stringify(query, { strictNullHandling: true })}`,
-    );
+    let json = await this.cardService.fetchJSON(`${realmURL}_search`, {
+      method: 'QUERY',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(query),
+    });
     if (!isCardCollectionDocument(json)) {
       throw new Error(
         `The realm search response was not a card collection document:
@@ -407,15 +419,18 @@ export default class StoreService extends Service implements StoreInterface {
   async flush() {
     await this.ready;
     await Promise.allSettled(this.newReferencePromises);
-    do {
-      await Promise.allSettled(this.autoSavePromises.values());
-    } while (
-      [...this.autoSaveQueues.values()].find((queue) => queue.length > 1)
-    );
+  }
+
+  async flushSaves() {
+    await Promise.allSettled(this.autoSavePromises.values());
   }
 
   getReferenceCount(id: string) {
     return this.referenceCount.get(id) ?? 0;
+  }
+
+  isSameId(a: string, b: string): boolean {
+    return a === b || this.peek(a) === this.peek(b);
   }
 
   private async wireUpNewReference(url: string) {
@@ -547,7 +562,10 @@ export default class StoreService extends Service implements StoreInterface {
             `reloading file resource ${invalidation} because event has no clientRequestId`,
           );
         } else if (this.cardService.clientRequestIds.has(clientRequestId)) {
-          if (clientRequestId.startsWith('instance:')) {
+          if (
+            clientRequestId.startsWith('instance:') ||
+            clientRequestId.startsWith('editor-with-instance')
+          ) {
             realmEventsLogger.debug(
               `ignoring invalidation for card ${invalidation} because request id ${clientRequestId} is ours and an instance type`,
             );
@@ -957,11 +975,6 @@ export default class StoreService extends Service implements StoreInterface {
     opts?: CreateOptions,
   ): Promise<CardDef | CardErrorJSONAPI> {
     return await this.withTestWaiters(async () => {
-      let cardChanged = false;
-      function onCardChange() {
-        cardChanged = true;
-      }
-      let api: typeof CardAPI | undefined;
       let isNew = !instance.id;
       let inflightMutation = this.inflightCardMutations.get(
         instance[localIdSymbol],
@@ -976,8 +989,6 @@ export default class StoreService extends Service implements StoreInterface {
       let deferred = new Deferred<void>();
       this.inflightCardMutations.set(instance[localIdSymbol], deferred.promise);
       try {
-        api = await this.cardService.getAPI();
-        api.subscribeToChanges(instance, onCardChange);
         let doc = await this.cardService.serializeCard(instance, {
           // for a brand new card that has no id yet, we don't know what we are
           // relativeTo because its up to the realm server to assign us an ID, so
@@ -1004,24 +1015,24 @@ export default class StoreService extends Service implements StoreInterface {
           localDir: opts?.localDir,
         });
 
-        // if the card changed while the save was in flight then don't merge the
-        // server state--the next auto save will include these
-        // unsaved changes. also if there are new foreign links we'll hold off
-        // on merging the server state until we have received the new foreign
-        // link ID's from the other realm(s) (handled in this.updateForeignConsumersOf())
-        if (!cardChanged && !this.hasNewForeignLinks(instance)) {
-          await api.updateFromSerialized(instance, json, this.identityContext);
-        } else if (isNew) {
-          // in this case a new card was created, but there is an immediate change
-          // that was made--so we save off the new ID for the card so in the next
-          // save we'll correlate to the correct card ID
-          api.setId(instance, json.data.id!); // resources from the server will always have ID's
+        let api = await this.cardService.getAPI();
+        // the store state represents the latest state and the server state is
+        // potentially out-of-date. As such we only merge the server state that
+        // the store does not know about specifically remote ID's and realm
+        // meta. the attributes and relationships state from the server are
+        // thrown away since the store has a more recent version of these.
+        if (needsServerStateMerge(instance, json)) {
+          let serverState = cloneDeep(json);
+          delete serverState.data.attributes;
+          delete serverState.data.relationships;
+          await api.updateFromSerialized(
+            instance,
+            serverState,
+            this.identityContext,
+          );
         }
-        if (this.onSaveSubscriber) {
-          this.onSaveSubscriber(new URL(json.data.id!), json);
-        }
-
         if (isNew) {
+          api.setId(instance, json.data.id!);
           this.subscribeToRealm(new URL(instance.id));
           this.operatorModeStateService.handleCardIdAssignment(
             instance[localIdSymbol],
@@ -1029,6 +1040,9 @@ export default class StoreService extends Service implements StoreInterface {
           await this.updateForeignConsumersOf(instance);
           this.setIdentityContext(instance);
           await this.startAutoSaving(instance);
+        }
+        if (this.onSaveSubscriber) {
+          this.onSaveSubscriber(new URL(json.data.id!), json);
         }
         return instance;
       } catch (err) {
@@ -1041,29 +1055,9 @@ export default class StoreService extends Service implements StoreInterface {
         this.setIdentityContext(cardError);
         return cardError;
       } finally {
-        api?.unsubscribeFromChanges(instance, onCardChange);
         deferred.fulfill();
       }
     });
-  }
-
-  private async hasNewForeignLinks(instance: CardDef) {
-    let instanceRealm = instance[realmURLSymbol]?.href;
-    if (!instanceRealm) {
-      return;
-    }
-    let deps = this.identityContext.dependenciesOf(
-      await this.cardService.getAPI(),
-      instance,
-    );
-    return Boolean(
-      deps.find(
-        (c) =>
-          !c.id &&
-          c[realmURLSymbol]?.href &&
-          c[realmURLSymbol].href !== instanceRealm,
-      ),
-    );
   }
 
   // in the case we are making a cross realm relationship with a link that
@@ -1135,7 +1129,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async loadPatchedInstances(
     patchData: PatchData,
-    relativeTo: URL,
+    relativeTo: URL | undefined,
   ): Promise<{
     [fieldName: string]: CardDef | CardDef[];
   }> {
@@ -1167,7 +1161,10 @@ export default class StoreService extends Service implements StoreInterface {
     return result;
   }
 
-  private async loadRelationshipInstance(rel: Relationship, relativeTo: URL) {
+  private async loadRelationshipInstance(
+    rel: Relationship,
+    relativeTo: URL | undefined,
+  ) {
     if (!rel.links?.self) {
       return;
     }
@@ -1216,6 +1213,16 @@ function processCardError(
   }
 }
 
+function needsServerStateMerge(
+  instance: CardDef,
+  serverState: SingleCardDocument,
+): boolean {
+  return (
+    instance.id !== serverState.data.id ||
+    !isEqual(instance[meta]?.realmInfo, serverState.data.meta.realmInfo)
+  );
+}
+
 export function asURL(urlOrDoc: string | LooseSingleCardDocument) {
   return typeof urlOrDoc === 'string'
     ? urlOrDoc.replace(/\.json$/, '')
@@ -1237,4 +1244,10 @@ function resolveDocUrl(id?: string, realm?: string, local?: string) {
     return path.directoryURL(local).href;
   }
   return path.url;
+}
+
+declare module '@ember/service' {
+  interface Registry {
+    store: StoreService;
+  }
 }

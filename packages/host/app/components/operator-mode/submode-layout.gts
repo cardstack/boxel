@@ -29,6 +29,8 @@ import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 
+import config from '@cardstack/host/config/environment';
+
 import type IndexController from '@cardstack/host/controllers';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
@@ -42,6 +44,7 @@ import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 import AskAiContainer from './ask-ai-container';
 import WorkspaceChooser from './workspace-chooser';
 
+import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
 import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -99,6 +102,7 @@ export default class SubmodeLayout extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare router: RouterService;
   @service private declare store: StoreService;
+  @service private declare aiAssistantPanelService: AiAssistantPanelService;
 
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
@@ -120,7 +124,7 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   private get aiAssistantVisibilityClass() {
-    return this.operatorModeStateService.aiAssistantOpen
+    return this.aiAssistantPanelService.isOpen
       ? 'ai-assistant-open'
       : 'ai-assistant-closed';
   }
@@ -214,6 +218,7 @@ export default class SubmodeLayout extends Component<Signature> {
   @action
   private storeSearchElement(element: HTMLElement) {
     this.searchElement = element;
+    this.searchElement.focus();
   }
   @action
   private openSearchAndShowResults(term: string) {
@@ -311,24 +316,28 @@ export default class SubmodeLayout extends Component<Signature> {
             @onInputInsertion={{this.storeSearchElement}}
           />
           <AiAssistantToast
-            @hide={{this.operatorModeStateService.aiAssistantOpen}}
-            @onViewInChatClick={{this.operatorModeStateService.openAiAssistant}}
+            @hide={{this.aiAssistantPanelService.isOpen}}
+            @onViewInChatClick={{this.aiAssistantPanelService.openPanel}}
           />
-          <AskAiContainer @selectedCardRef={{@selectedCardRef}} />
+          {{#if config.featureFlags.SHOW_ASK_AI}}
+            {{#if (not this.aiAssistantPanelService.isOpen)}}
+              <AskAiContainer @selectedCardRef={{@selectedCardRef}} />
+            {{/if}}
+          {{/if}}
           <AiAssistantButton
             class='chat-btn'
-            @isActive={{this.operatorModeStateService.aiAssistantOpen}}
+            @isActive={{this.aiAssistantPanelService.isOpen}}
             {{on
               'click'
               (if
-                this.operatorModeStateService.aiAssistantOpen
-                this.operatorModeStateService.closeAiAssistant
-                this.operatorModeStateService.openAiAssistant
+                this.aiAssistantPanelService.isOpen
+                this.aiAssistantPanelService.closePanel
+                this.aiAssistantPanelService.openPanel
               )
             }}
           />
         </ResizablePanel>
-        {{#if this.operatorModeStateService.aiAssistantOpen}}
+        {{#if this.aiAssistantPanelService.isOpen}}
           <ResizablePanel
             class='ai-assistant-resizable-panel'
             @defaultSize={{this.aiPanelWidths.defaultWidth}}
@@ -336,11 +345,13 @@ export default class SubmodeLayout extends Component<Signature> {
             @collapsible={{false}}
           >
             <AiAssistantPanel
-              @onClose={{this.operatorModeStateService.closeAiAssistant}}
+              @onClose={{this.aiAssistantPanelService.closePanel}}
               @resizeHandle={{ResizeHandle}}
               @selectedCardRef={{@selectedCardRef}}
-              class='ai-assistant-panel
-                {{if this.workspaceChooserOpened "left-border"}}'
+              class={{cn
+                'ai-assistant-panel'
+                left-border=this.workspaceChooserOpened
+              }}
             />
           </ResizablePanel>
         {{/if}}

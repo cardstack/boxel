@@ -39,6 +39,8 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 
 import { Format } from 'https://cardstack.com/base/card-api';
 
+import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
+
 import { type Stack } from '../components/operator-mode/interact-submode';
 
 import { removeFileExtension } from '../components/search-sheet/utils';
@@ -49,6 +51,7 @@ import NetworkService from './network';
 import type CardService from './card-service';
 import type { RecentFile } from './recent-files-service';
 import type ResetService from './reset';
+import type SpecPanelService from './spec-panel-service';
 import type StoreService from './store';
 
 import type IndexController from '../controllers';
@@ -117,6 +120,7 @@ export default class OperatorModeStateService extends Service {
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
   @service declare private playgroundPanelService: PlaygroundPanelService;
+  @service declare private specPanelService: SpecPanelService;
 
   constructor(owner: Owner) {
     super(owner);
@@ -291,7 +295,7 @@ export default class OperatorModeStateService extends Service {
       .map((stack) => stack[stack.length - 1]);
   }
 
-  getOpenCardIds(selectedCardRef?: ResolvedCodeRef): string[] | undefined {
+  getOpenCardIds(selectedCardRef?: ResolvedCodeRef): string[] {
     if (this.state.submode === Submodes.Code) {
       let openCardsInCodeMode = [];
       // selectedCardRef is only needed for determining open playground card id in code submode
@@ -309,14 +313,13 @@ export default class OperatorModeStateService extends Service {
         }
       }
       return openCardsInCodeMode;
-    }
-    if (this.state.submode === Submodes.Interact) {
+    } else {
+      // Interact mode
       return this.topMostStackItems()
         .filter((stackItem: StackItem) => stackItem)
         .map((stackItem: StackItem) => stackItem.id)
         .filter(Boolean) as string[];
     }
-    return;
   }
 
   getOpenCards = restartableTask(async (selectedCardRef?: ResolvedCodeRef) => {
@@ -356,13 +359,15 @@ export default class OperatorModeStateService extends Service {
     return this.schedulePersist();
   }
 
-  updateSubmode(submode: Submode) {
+  async updateSubmode(submode: Submode) {
     this.state.submode = submode;
     this.schedulePersist();
 
     if (submode === Submodes.Code) {
-      this.matrixService.setLLMForCodeMode();
-      this.matrixService.activateCodingSkill();
+      await Promise.all([
+        this.matrixService.setLLMForCodeMode(),
+        this.matrixService.activateCodingSkill(),
+      ]);
     }
   }
 
@@ -433,6 +438,7 @@ export default class OperatorModeStateService extends Service {
     this.state.codePath = codePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
+    this.specPanelService.setSelection(null);
   }
 
   replaceCodePath(codePath: URL | null) {
@@ -787,5 +793,51 @@ export default class OperatorModeStateService extends Service {
     ) as IndexController;
 
     return controller;
+  }
+
+  getSummaryForAIBot(
+    openCardIds: Set<string> = new Set([...this.getOpenCardIds()]),
+  ): BoxelContext {
+    return {
+      submode: this.state.submode,
+      debug: this.operatorModeController.debug,
+      openCardIds: this.makeRemoteIdsList([...openCardIds]),
+      realmUrl: this.realmURL.href,
+      codeMode:
+        this.state.submode === Submodes.Code
+          ? {
+              currentFile: this.codePathString,
+            }
+          : undefined,
+    };
+  }
+
+  private makeRemoteIdsList(ids: (string | undefined)[]) {
+    return ids
+      .map((id) => {
+        if (!id) {
+          return undefined;
+        }
+        if (isLocalId(id)) {
+          let maybeInstance = this.store.peek(id);
+          if (
+            maybeInstance &&
+            isCardInstance(maybeInstance) &&
+            maybeInstance.id
+          ) {
+            return maybeInstance.id;
+          } else {
+            return undefined;
+          }
+        }
+        return id;
+      })
+      .filter(Boolean) as string[];
+  }
+}
+
+declare module '@ember/service' {
+  interface Registry {
+    'operator-mode-state-service': OperatorModeStateService;
   }
 }

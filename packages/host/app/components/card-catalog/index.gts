@@ -16,13 +16,15 @@ import { Button } from '@cardstack/boxel-ui/components';
 import { add, cn, eq, gt, lt, subtract } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
-import type { RealmInfo, CodeRef } from '@cardstack/runtime-common';
+import type {
+  RealmInfo,
+  CodeRef,
+  PrerenderedCardLike,
+} from '@cardstack/runtime-common';
 
 import RestoreScrollPosition from '@cardstack/host/modifiers/restore-scroll-position';
 import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 import type RealmService from '@cardstack/host/services/realm';
-
-import { type PrerenderedCard } from '../prerendered-card-search';
 
 import { removeFileExtension } from '../search-sheet/utils';
 
@@ -36,7 +38,7 @@ export interface NewCardArgs {
 
 interface ButtonSignature {
   Args: {
-    card?: PrerenderedCard;
+    card?: PrerenderedCardLike;
     newCard?: NewCardArgs;
     isSelected: boolean;
     select: (
@@ -149,7 +151,7 @@ const ItemButton: TemplateOnlyComponent<ButtonSignature> = <template>
 
 interface Signature {
   Args: {
-    cards: PrerenderedCard[];
+    cards: PrerenderedCardLike[];
     select: (
       card?: string | NewCardArgs,
       ev?: KeyboardEvent | MouseEvent,
@@ -189,7 +191,7 @@ export default class CardCatalog extends Component<Signature> {
                 as |isSelected|
               }}
                 <ItemButton
-                  @newCard={{(this.newCardArgs realmUrl)}}
+                  @newCard={{this.newCardArgs realmUrl}}
                   @isSelected={{isSelected}}
                   @select={{@select}}
                   @handleEnterKey={{this.handleEnterKey}}
@@ -272,7 +274,7 @@ export default class CardCatalog extends Component<Signature> {
                 as |isSelected|
               }}
                 <ItemButton
-                  @newCard={{(this.newCardArgs realmUrl)}}
+                  @newCard={{this.newCardArgs realmUrl}}
                   @isSelected={{isSelected}}
                   @select={{@select}}
                   @handleEnterKey={{this.handleEnterKey}}
@@ -347,7 +349,7 @@ export default class CardCatalog extends Component<Signature> {
   private get groupedCardsByRealm(): Record<
     string,
     {
-      cards: PrerenderedCard[];
+      cards: PrerenderedCardLike[];
       cardsTotal: number;
       displayedCardsCount: number;
       realmInfo: RealmInfo;
@@ -377,7 +379,7 @@ export default class CardCatalog extends Component<Signature> {
       {} as Record<
         string,
         {
-          cards: PrerenderedCard[];
+          cards: PrerenderedCardLike[];
           realmInfo: RealmInfo;
           cardsTotal: number;
           displayedCardsCount: number;

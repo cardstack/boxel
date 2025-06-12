@@ -1,5 +1,6 @@
-import { IContent } from 'matrix-js-sdk';
-import { MatrixClient } from '../../lib/matrix';
+import type { IContent } from 'matrix-js-sdk';
+import type { MatrixClient } from '../../lib/matrix/util';
+import { Method } from 'matrix-js-sdk';
 
 export class FakeMatrixClient implements MatrixClient {
   private eventId = 0;
@@ -9,6 +10,35 @@ export class FakeMatrixClient implements MatrixClient {
     eventType: string;
     content: IContent;
   }[] = [];
+
+  baseUrl = 'https://example.com';
+
+  async uploadContent(
+    _content: string,
+    _opts?: {
+      type: string;
+    },
+  ): Promise<{ content_uri: string }> {
+    return {
+      content_uri: 'https://example.com/content',
+    };
+  }
+
+  http: {
+    authedRequest: (
+      method: Method,
+      path: string,
+      queryParams: any,
+    ) => Promise<any>;
+  } = {
+    authedRequest: async (
+      _method: Method,
+      _path: string,
+      _queryParams: any,
+    ) => {
+      return { chunk: [] };
+    },
+  };
 
   async sendEvent(
     roomId: string,

@@ -5,19 +5,24 @@ import OpenAI from 'openai';
 import { logger, aiBotUsername, DEFAULT_LLM } from '@cardstack/runtime-common';
 import {
   type PromptParts,
-  constructHistory,
   isCommandResultStatusApplied,
   getPromptParts,
+  isInDebugMode,
 } from './helpers';
 
+import { handleDebugCommands, isRecognisedDebugCommand } from './lib/debug';
+import { constructHistory } from './lib/history';
+import { Responder } from './lib/responder';
 import {
   shouldSetRoomTitle,
   setTitle,
   roomTitleAlreadySet,
 } from './lib/set-title';
-import { Responder } from './lib/responder';
-import { handleDebugCommands } from './lib/debug';
-import { MatrixClient } from './lib/matrix';
+import {
+  getRoomEvents,
+  type MatrixClient,
+  sendPromptAndEventList,
+} from './lib/matrix/util';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CommandResultEvent,
@@ -104,13 +109,18 @@ class Assistant {
     }
   }
 
-  async handleDebugCommands(eventBody: string, roomId: string) {
+  async handleDebugCommands(
+    eventBody: string,
+    roomId: string,
+    eventList: DiscreteMatrixEvent[],
+  ) {
     return handleDebugCommands(
       this.openai,
       eventBody,
       this.client,
       roomId,
       this.id,
+      eventList,
     );
   }
 
@@ -154,6 +164,7 @@ Common issues are:
       process.exit(1);
     });
   let { user_id: aiBotUserId } = auth;
+
   let assistant = new Assistant(client, aiBotUserId);
   await assistant.loadToolCallCapableModels();
 
@@ -181,7 +192,9 @@ Common issues are:
     RoomEvent.Timeline,
     async function (event, room, toStartOfTimeline) {
       try {
-        let eventBody = event.getContent().body;
+        // Ensure that the event body we have is a string
+        // it's possible that this is sent undefined
+        let eventBody = event.getContent().body || '';
         let senderMatrixUserId = event.getSender()!;
         if (!room) {
           return;
@@ -211,20 +224,33 @@ Common issues are:
           eventBody,
         );
 
+        let promptParts: PromptParts;
+        let eventList = await getRoomEvents(room.roomId, client, event.getId());
+
+        // Return early here if it's a debug event
+        if (isRecognisedDebugCommand(eventBody)) {
+          return await assistant.handleDebugCommands(
+            eventBody,
+            room.roomId,
+            eventList,
+          );
+        }
+
         const responder = new Responder(client, room.roomId);
 
         if (Responder.eventWillDefinitelyTriggerResponse(event)) {
           await responder.ensureThinkingMessageSent();
         }
 
-        let promptParts: PromptParts;
-        let initial = await client.roomInitialSync(room!.roomId, 1000);
-        let eventList = (initial!.messages?.chunk ||
-          []) as DiscreteMatrixEvent[];
         try {
           promptParts = await getPromptParts(eventList, aiBotUserId, client);
           if (!promptParts.shouldRespond) {
             return;
+          }
+          // if debug, send message with promptParts and event list
+          if (isInDebugMode(eventList, aiBotUserId)) {
+            // create files in memory
+            sendPromptAndEventList(client, room.roomId, promptParts, eventList);
           }
           await responder.ensureThinkingMessageSent();
         } catch (e) {
@@ -346,8 +372,7 @@ Common issues are:
     );
     try {
       //TODO: optimise this so we don't need to sync room events within a reaction event
-      let initial = await client.roomInitialSync(room!.roomId, 1000);
-      let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
+      let eventList = await getRoomEvents(room.roomId, client, event.getId());
       if (roomTitleAlreadySet(eventList)) {
         return;
       }
@@ -365,33 +390,6 @@ Common issues are:
       Sentry.captureException(e);
       return;
     }
-  });
-
-  //handle debug events
-  client.on(RoomEvent.Timeline, async function (event, room) {
-    if (event.event.origin_server_ts! < startTime) {
-      return;
-    }
-    if (event.getType() !== 'm.room.message') {
-      return;
-    }
-    if (!room) {
-      return;
-    }
-    let eventBody = event.getContent().body;
-    let isDebugEvent = eventBody.startsWith('debug:');
-    if (!isDebugEvent) {
-      return;
-    }
-    log.info(
-      '(%s) (Room: "%s" %s) (Message: %s %s)',
-      event.getType(),
-      room?.name,
-      room?.roomId,
-      event.getSender(),
-      eventBody,
-    );
-    return await assistant.handleDebugCommands(eventBody, room.roomId);
   });
 
   await client.startClient();

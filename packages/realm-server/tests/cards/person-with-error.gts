@@ -38,7 +38,10 @@ export class PersonCard extends CardDef {
       };
     }
     get realms() {
-      return [this.args.model[realmURL]];
+      return [this.args.model[realmURL]!];
+    }
+    get realmHrefs() {
+      return this.realms.map((url) => url.href);
     }
     <template>
       <style>
@@ -56,7 +59,7 @@ export class PersonCard extends CardDef {
         <PrerenderedCardSearch
           @query={{this.query}}
           @format='fitted'
-          @realms={{this.realms}}
+          @realms={{this.realmHrefs}}
           @isLive={{true}}
         >
 

@@ -42,6 +42,9 @@ import {
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
@@ -72,8 +75,11 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as FileAPI from 'https://cardstack.com/base/file-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 import type {
+  BoxelContext,
   CardMessageContent,
   MatrixEvent as DiscreteMatrixEvent,
+  CodePatchResultContent,
+  CodePatchStatus,
   CommandResultWithNoOutputContent,
   CommandResultWithOutputContent,
   RealmEventContent,
@@ -118,11 +124,6 @@ const SLIDING_SYNC_LIST_RANGE_END = 9;
 const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
 
 const realmEventsLogger = logger('realm:events');
-
-export type OperatorModeContext = {
-  submode: Submode;
-  openCardIds: string[];
-};
 
 export default class MatrixService extends Service {
   @service declare private loaderService: LoaderService;
@@ -183,7 +184,7 @@ export default class MatrixService extends Service {
   }
 
   private setLoggerLevelFromEnvironment() {
-    // This will pick up the level if it’s in LOG_LEVELS
+    // This will pick up the level if it's in LOG_LEVELS
     logger('matrix');
   }
 
@@ -504,18 +505,19 @@ export default class MatrixService extends Service {
         if (this.startedAtTs === -1) {
           this.startedAtTs = 0;
         }
-        await this.initSlidingSync();
-        await this.client.startClient({ slidingSync: this.slidingSync });
         let accountDataContent = await this._client.getAccountDataFromServer<{
           realms: string[];
         }>(APP_BOXEL_REALMS_EVENT_TYPE);
-        await this.realmServer.setAvailableRealmURLs(
-          accountDataContent?.realms ?? [],
-        );
         await Promise.all([
-          this.loginToRealms(),
           this.realmServer.fetchCatalogRealms(),
+          this.realmServer.setAvailableRealmURLs(
+            accountDataContent?.realms ?? [],
+          ),
         ]);
+
+        await this.initSlidingSync(accountDataContent);
+        await this.client.startClient({ slidingSync: this.slidingSync });
+
         this.postLoginCompleted = true;
       } catch (e) {
         console.log('Error starting Matrix client', e);
@@ -528,11 +530,7 @@ export default class MatrixService extends Service {
     }
   }
 
-  private async initSlidingSync() {
-    let accountData = await this.client.getAccountDataFromServer<{
-      realms: string[];
-    }>(APP_BOXEL_REALMS_EVENT_TYPE);
-
+  private async initSlidingSync(accountData?: { realms: string[] } | null) {
     let lists: Map<string, MSC3575List> = new Map();
     lists.set(SLIDING_SYNC_AI_ROOM_LIST_NAME, {
       ranges: [[0, SLIDING_SYNC_LIST_RANGE_END]],
@@ -543,14 +541,7 @@ export default class MatrixService extends Service {
       required_state: [['*', '*']],
     });
     lists.set(SLIDING_SYNC_AUTH_ROOM_LIST_NAME, {
-      ranges: [
-        [
-          0,
-          accountData
-            ? accountData?.realms.length
-            : SLIDING_SYNC_LIST_RANGE_END,
-        ],
-      ],
+      ranges: [[0, accountData?.realms.length ?? SLIDING_SYNC_LIST_RANGE_END]],
       filters: {
         is_dm: true,
       },
@@ -588,7 +579,7 @@ export default class MatrixService extends Service {
     return this.slidingSync;
   }
 
-  private async loginToRealms() {
+  async loginToRealms() {
     // This is where we would actually load user-specific choices out of the
     // user's profile based on this.client.getUserId();
     let activeRealms = this.realmServer.availableRealmURLs;
@@ -619,6 +610,7 @@ export default class MatrixService extends Service {
     eventType: string,
     content:
       | CardMessageContent
+      | CodePatchResultContent
       | CommandResultWithNoOutputContent
       | CommandResultWithOutputContent,
   ) {
@@ -752,6 +744,10 @@ export default class MatrixService extends Service {
     );
   }
 
+  async downloadAsFileInBrowser(serializedFile: FileAPI.SerializedFile) {
+    return await this.client.downloadAsFileInBrowser(serializedFile);
+  }
+
   async uploadCards(cards: CardDef[]) {
     let cardFileDefs = await this.client.uploadCards(cards);
     return cardFileDefs;
@@ -774,15 +770,23 @@ export default class MatrixService extends Service {
     invokedToolFromEventId: string,
     toolCallId: string,
     resultCard?: CardDef,
+    attachedCards: CardDef[] = [],
+    attachedFiles: FileDef[] = [],
+    context?: BoxelContext,
   ) {
-    let cardFileDef: FileDef | undefined;
+    let resultCardFileDef: FileDef | undefined;
     if (resultCard) {
-      [cardFileDef] = await this.client.uploadCards([resultCard]);
+      [resultCardFileDef] = await this.client.uploadCards([resultCard]);
     }
+    let contentData = await this.withContextAndAttachments(
+      context,
+      attachedCards,
+      attachedFiles,
+    );
     let content:
       | CommandResultWithNoOutputContent
       | CommandResultWithOutputContent;
-    if (cardFileDef === undefined) {
+    if (resultCardFileDef === undefined) {
       content = {
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
         commandRequestId: toolCallId,
@@ -791,6 +795,7 @@ export default class MatrixService extends Service {
           key: 'applied',
           rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
         },
+        data: contentData,
       };
     } else {
       content = {
@@ -802,7 +807,8 @@ export default class MatrixService extends Service {
         },
         commandRequestId: toolCallId,
         data: {
-          card: cardFileDef.serialize(),
+          ...contentData,
+          card: resultCardFileDef.serialize(),
         },
       };
     }
@@ -821,6 +827,45 @@ export default class MatrixService extends Service {
     }
   }
 
+  async sendCodePatchResultEvent(
+    roomId: string,
+    eventId: string,
+    codeBlockIndex: number,
+    resultKey: CodePatchStatus,
+    attachedCards: CardDef[] = [],
+    attachedFiles: FileDef[] = [],
+    context: BoxelContext,
+  ) {
+    let contentData = await this.withContextAndAttachments(
+      context,
+      attachedCards,
+      attachedFiles,
+    );
+    let content: CodePatchResultContent = {
+      msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+      codeBlockIndex,
+      'm.relates_to': {
+        event_id: eventId,
+        key: resultKey,
+        rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+      },
+      data: contentData,
+    };
+    try {
+      return await this.sendEvent(
+        roomId,
+        APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+        content,
+      );
+    } catch (e) {
+      throw new Error(
+        `Error sending code patch result event: ${
+          'message' in (e as Error) ? (e as Error).message : e
+        }`,
+      );
+    }
+  }
+
   async uploadFiles(files: FileDef[]) {
     return await this.client.uploadFiles(files);
   }
@@ -831,11 +876,10 @@ export default class MatrixService extends Service {
     attachedCards: CardDef[] = [],
     attachedFiles: FileDef[] = [],
     clientGeneratedId = uuidv4(),
-    context?: OperatorModeContext,
+    context?: BoxelContext,
   ): Promise<void> {
     let tools: Tool[] = [];
     let attachedOpenCards: CardDef[] = [];
-    let submode = context?.submode;
     let mappings = await basicMappings(this.loaderService.loader);
     // Open cards are attached automatically
     // If they are not attached, the user is not allowing us to
@@ -856,7 +900,11 @@ export default class MatrixService extends Service {
     }
 
     await this.updateSkillsAndCommandsIfNeeded(roomId);
-    let cardFileDefs = await this.uploadCards(attachedCards);
+    let contentData = await this.withContextAndAttachments(
+      context,
+      attachedCards,
+      attachedFiles,
+    );
 
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -864,15 +912,36 @@ export default class MatrixService extends Service {
       format: 'org.matrix.custom.html',
       clientGeneratedId,
       data: {
-        attachedFiles: attachedFiles.map((file: FileDef) => file.serialize()),
-        attachedCards: cardFileDefs.map((file: FileDef) => file.serialize()),
+        attachedFiles: contentData.attachedFiles,
+        attachedCards: contentData.attachedCards,
         context: {
+          ...contentData.context,
           openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
-          submode,
+          debug: context?.debug,
+          functions: [],
         },
       },
     } as CardMessageContent);
+  }
+
+  private async withContextAndAttachments(
+    context?: BoxelContext,
+    attachedCards: CardDef[] = [],
+    attachedFiles: FileDef[] = [],
+  ): Promise<{
+    context: BoxelContext | undefined;
+    attachedCards: ReturnType<FileDef['serialize']>[];
+    attachedFiles: ReturnType<FileDef['serialize']>[];
+  }> {
+    let cardFileDefs = await this.uploadCards(attachedCards);
+    let uploadedFileDefs = await this.uploadFiles(attachedFiles);
+
+    return {
+      context,
+      attachedCards: cardFileDefs.map((file: FileDef) => file.serialize()),
+      attachedFiles: uploadedFileDefs.map((file: FileDef) => file.serialize()),
+    };
   }
 
   getLastActiveTimestamp(roomId: string, defaultTimestamp: number) {
@@ -946,10 +1015,14 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [`${baseRealm.url}Skill/card-editing`];
+    let interactModeDefaultSkills = [
+      `${baseRealm.url}Skill/boxel-environment`,
+      `${baseRealm.url}Skill/card-editing`,
+    ];
 
     let codeModeDefaultSkills = [
-      `${baseRealm.url}Skill/boxel-coding`,
+      `${baseRealm.url}Skill/boxel-environment`,
+      `${baseRealm.url}Skill/boxel-development`,
       `${baseRealm.url}Skill/source-code-editing`,
     ];
 
@@ -1532,11 +1605,11 @@ export default class MatrixService extends Service {
     });
   }
 
-  setLLMForCodeMode() {
-    this.setLLMModel(DEFAULT_CODING_LLM);
+  async setLLMForCodeMode() {
+    return this.setLLMModel(DEFAULT_CODING_LLM);
   }
 
-  private setLLMModel(model: string) {
+  private async setLLMModel(model: string) {
     if (!DEFAULT_LLM_LIST.includes(model)) {
       throw new Error(`Cannot find LLM model: ${model}`);
     }
@@ -1547,7 +1620,7 @@ export default class MatrixService extends Service {
     if (!roomResource) {
       return;
     }
-    roomResource.activateLLMTask.perform(model);
+    return roomResource.activateLLMTask.perform(model);
   }
 
   loadMoreAIRooms() {
@@ -1629,4 +1702,10 @@ function getAuth(): LoginResponse | undefined {
     return;
   }
   return JSON.parse(auth) as LoginResponse;
+}
+
+declare module '@ember/service' {
+  interface Registry {
+    'matrix-service': MatrixService;
+  }
 }

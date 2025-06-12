@@ -7,6 +7,10 @@ import * as CopyCardCommandModule from './copy-card';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
 import * as GetBoxelUiStateModule from './get-boxel-ui-state';
+import * as ListingInitCommandModule from './listing-action-init';
+import * as ListingInstallCommandModule from './listing-install';
+import * as ListingRemixCommandModule from './listing-remix';
+import * as ListingUseCommandModule from './listing-use';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
 import * as PatchCardInstanceCommandModule from './patch-card-instance';
 import * as PatchCodeCommandModule from './patch-code';
@@ -16,6 +20,9 @@ import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SetActiveLlmModule from './set-active-llm';
 import * as ShowCardCommandModule from './show-card';
 import * as SwitchSubmodeCommandModule from './switch-submode';
+import * as TransformCardsCommandModule from './transform-cards';
+import * as UpdateCodePathWithSelectionCommandModule from './update-code-path-with-selection';
+import * as UpdatePlaygroundSelectionCommandModule from './update-playground-selection';
 import * as UpdateSkillActivationCommandModule from './update-skill-activation';
 import * as WriteTextFileCommandModule from './write-text-file';
 
@@ -47,6 +54,22 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-boxel-ui-state',
     GetBoxelUiStateModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/listing-action-init',
+    ListingInitCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/listing-install',
+    ListingInstallCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/listing-use',
+    ListingUseCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/listing-remix',
+    ListingRemixCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/patch-card-instance',
@@ -83,6 +106,18 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/switch-submode',
     SwitchSubmodeCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/transform-cards',
+    TransformCardsCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/update-code-path-with-selection',
+    UpdateCodePathWithSelectionCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/update-playground-selection',
+    UpdatePlaygroundSelectionCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/update-skill-activation',

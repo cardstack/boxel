@@ -54,7 +54,6 @@ import {
   visitOperatorMode,
   setupUserSubscription,
   delay,
-  getMonacoContent,
 } from '../helpers';
 
 import {
@@ -152,6 +151,7 @@ module('Acceptance | Commands tests', function (hooks) {
       @service
       private declare operatorModeStateService: OperatorModeStateService;
       static displayName = 'ScheduleMeetingCommand';
+      static actionVerb = 'Schedule';
 
       async getInputType() {
         return ScheduleMeetingInput;
@@ -195,7 +195,7 @@ module('Acceptance | Commands tests', function (hooks) {
 
         let showCardCommand = new ShowCardCommand(this.commandContext);
         await showCardCommand.execute({
-          cardIdToShow: meeting.id,
+          cardId: meeting.id,
         });
 
         return undefined;
@@ -204,6 +204,7 @@ module('Acceptance | Commands tests', function (hooks) {
 
     class SleepCommand extends Command<typeof ScheduleMeetingInput> {
       static displayName = 'SleepCommand';
+      static actionVerb = 'Sleep';
       async getInputType() {
         return ScheduleMeetingInput;
       }
@@ -215,6 +216,7 @@ module('Acceptance | Commands tests', function (hooks) {
 
     class MaybeBoomCommand extends Command<undefined, undefined> {
       static displayName = 'MaybeBoomCommand';
+      static actionVerb = 'Boom?';
       async getInputType() {
         return undefined;
       }
@@ -231,6 +233,7 @@ module('Acceptance | Commands tests', function (hooks) {
       undefined
     > {
       static displayName = 'SearchAndOpenCardCommand';
+      static actionVerb = 'Search';
       async getInputType() {
         return new SearchCardsByTypeAndTitleCommand(
           this.commandContext,
@@ -246,7 +249,7 @@ module('Acceptance | Commands tests', function (hooks) {
         if (searchResult.cardIds.length > 0) {
           let showCardCommand = new ShowCardCommand(this.commandContext);
           await showCardCommand.execute({
-            cardIdToShow: searchResult.cardIds[0],
+            cardId: searchResult.cardIds[0],
           });
         }
         return undefined;
@@ -538,8 +541,7 @@ module('Acceptance | Commands tests', function (hooks) {
             'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
         },
-        'hello.txt': 'Hello, world!',
-        'hi.txt': 'Hi, world!\nHow are you?',
+        'hi.txt': 'hi',
       },
     });
   });
@@ -730,104 +732,6 @@ module('Acceptance | Commands tests', function (hooks) {
     assert
       .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
       .exists();
-  });
-
-  test('can patch code', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}hello.txt`,
-    });
-    await click('[data-test-open-ai-assistant]');
-    let roomId = getRoomIds().pop()!;
-
-    let codeBlock = `\`\`\`
-// File url: http://test-realm/test/hello.txt
-<<<<<<< SEARCH
-Hello, world!
-=======
-Hi, world!
->>>>>>> REPLACE\n\`\`\``;
-    simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: codeBlock,
-      msgtype: 'org.text',
-      format: 'org.matrix.custom.html',
-      isStreamingFinished: true,
-    });
-    let originalContent = getMonacoContent();
-    assert.strictEqual(originalContent, 'Hello, world!');
-    await waitFor('[data-test-apply-code-button]');
-    await click('[data-test-apply-code-button]');
-    await waitUntil(() => getMonacoContent() === 'Hi, world!');
-  });
-
-  test('can patch code when there are multiple patches using "Accept All" button', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}hello.txt`,
-    });
-
-    // there are 3 patches in the message
-    // 1. hello.txt: Hello, world! -> Hi, world!
-    // 2. hi.txt: Hi, world! -> Greetings, world!
-    // 3. hi.txt: How are you? -> We are one!
-
-    let codeBlock = `\`\`\`
-// File url: http://test-realm/test/hello.txt
-<<<<<<< SEARCH
-Hello, world!
-=======
-Hi, world!
->>>>>>> REPLACE
-\`\`\`
-
- \`\`\`
-// File url: http://test-realm/test/hi.txt
-<<<<<<< SEARCH
-Hi, world!
-=======
-Greetings, world!
->>>>>>> REPLACE
-\`\`\`
-
-\`\`\`
-// File url: http://test-realm/test/hi.txt
-<<<<<<< SEARCH
-How are you?
-=======
-We are one!
->>>>>>> REPLACE
-\`\`\``;
-
-    await click('[data-test-open-ai-assistant]');
-    let roomId = getRoomIds().pop()!;
-
-    simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: codeBlock,
-      msgtype: 'org.text',
-      format: 'org.matrix.custom.html',
-      isStreamingFinished: true,
-    });
-
-    await waitFor('[data-test-apply-all-code-patches-button]');
-    await click('[data-test-apply-all-code-patches-button]');
-
-    await waitFor('.code-patch-actions [data-test-apply-state="applied"]');
-    assert.dom('[data-test-apply-state="applied"]').exists({ count: 4 }); // 3 patches + 1 for "Accept All" button
-
-    assert.strictEqual(
-      getMonacoContent(),
-      'Hi, world!',
-      'hello.txt should be patched',
-    );
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}hi.txt`,
-    });
-
-    // We can see content that is the result of 2 patches made to this file (hi.txt)
-    await waitUntil(
-      () => getMonacoContent() === 'Greetings, world!\nWe are one!',
-    );
   });
 
   test('a command sent via SendAiAssistantMessageCommand without autoExecute flag is not automatically executed by the bot', async function (assert) {
@@ -1147,6 +1051,9 @@ We are one!
     assert
       .dom('[data-test-message-idx="0"] .command-description')
       .containsText('Finding and opening Hassan card');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply]')
+      .containsText('Search');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
     assert
       .dom(
@@ -1210,7 +1117,7 @@ We are one!
             description:
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
-              cardIdToShow: 'http://test-realm/test/Person/hassan',
+              cardId: 'http://test-realm/test/Person/hassan',
               title: 'Asclepias',
             },
           }),

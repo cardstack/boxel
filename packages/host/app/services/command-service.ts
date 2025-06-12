@@ -11,13 +11,14 @@ import { TrackedSet } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
-  type PatchData,
   Command,
   CommandContext,
   CommandContextStamp,
+  delay,
   getClass,
   identifyCard,
-  delay,
+  isCardInstance,
+  type PatchData,
 } from '@cardstack/runtime-common';
 
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
@@ -28,12 +29,14 @@ import type Realm from '@cardstack/host/services/realm';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
-import MessageCommand from '../lib/matrix-classes/message-command';
 import { shortenUuid } from '../utils/uuid';
 
 import type LoaderService from './loader-service';
+import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmServerService from './realm-server';
 import type StoreService from './store';
+import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
+import type MessageCommand from '../lib/matrix-classes/message-command';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
 
@@ -43,11 +46,12 @@ type GenericCommand = Command<
 >;
 
 export default class CommandService extends Service {
-  @service declare private matrixService: MatrixService;
-  @service declare private store: StoreService;
   @service declare private loaderService: LoaderService;
+  @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: Realm;
   @service declare private realmServer: RealmServerService;
+  @service declare private store: StoreService;
   currentlyExecutingCommandRequestIds = new TrackedSet<string>();
   executedCommandRequestIds = new TrackedSet<string>();
   private commandProcessingEventQueue: string[] = [];
@@ -146,7 +150,7 @@ export default class CommandService extends Service {
         if (this.executedCommandRequestIds.has(messageCommand.id!)) {
           continue;
         }
-        if (messageCommand.commandResultFileDef) {
+        if (messageCommand.status === 'applied') {
           continue;
         }
         if (!messageCommand.name) {
@@ -226,11 +230,25 @@ export default class CommandService extends Service {
         );
       }
       this.executedCommandRequestIds.add(commandRequestId!);
+      await this.matrixService.updateSkillsAndCommandsIfNeeded(
+        command.message.roomId,
+      );
+      let cardIds = [
+        payload?.attributes?.cardId,
+        ...(payload?.attributes?.cardIds ?? []),
+      ].filter(Boolean);
+      let cards = (await Promise.all(cardIds.map((id) => this.store.get(id))))
+        .filter(Boolean)
+        .filter(isCardInstance) as CardDef[];
+
       await this.matrixService.sendCommandResultEvent(
         command.message.roomId,
         eventId,
         commandRequestId!,
         resultCard,
+        cards,
+        [],
+        this.operatorModeStateService.getSummaryForAIBot(),
       );
     } catch (e) {
       let error =
@@ -283,7 +301,7 @@ export default class CommandService extends Service {
   }
 
   patchCode = async (
-    _roomId: string,
+    roomId: string,
     fileUrl: string | null,
     codeDataItems: {
       searchReplaceBlock?: string | null;
@@ -312,18 +330,26 @@ export default class CommandService extends Service {
           `${codeBlock.eventId}:${codeBlock.codeBlockIndex}`,
         );
       }
-      let resultSends: Promise<void>[] = [];
+      await this.matrixService.updateSkillsAndCommandsIfNeeded(roomId);
+      let fileDef = this.matrixService.fileAPI.createFileDef({
+        sourceUrl: fileUrl,
+        name: fileUrl.split('/').pop(),
+      });
 
-      for (const _codeBlock of codeDataItems) {
-        // TODO: Uncomment this when we have the code patch result event
-        // resultSends.push(
-        //   this.matrixService.sendCodePatchResultEvent(
-        //     roomId,
-        //     codeBlock.eventId,
-        //     codeBlock.index,
-        //     'applied',
-        //   ),
-        // );
+      let context = this.operatorModeStateService.getSummaryForAIBot();
+      let resultSends: Promise<unknown>[] = [];
+      for (const codeData of codeDataItems) {
+        resultSends.push(
+          this.matrixService.sendCodePatchResultEvent(
+            roomId,
+            codeData.eventId,
+            codeData.codeBlockIndex,
+            'applied',
+            [], // TODO: this should show be what is open in playground, if anything
+            [fileDef],
+            context,
+          ),
+        );
       }
       await Promise.all(resultSends);
     } finally {
@@ -336,12 +362,12 @@ export default class CommandService extends Service {
     }
   };
 
-  private isCodeBlockApplying(codeBlock: {
+  private isCodeBlockApplying(codeData: {
     eventId: string;
     codeBlockIndex: number;
   }) {
     return this.currentlyExecutingCommandRequestIds.has(
-      `${codeBlock.eventId}:${codeBlock.codeBlockIndex}`,
+      `${codeData.eventId}:${codeData.codeBlockIndex}`,
     );
   }
 
@@ -354,19 +380,35 @@ export default class CommandService extends Service {
     );
   }
 
-  getCodePatchStatus = (codeBlock: {
+  private getCodePatchResult(codeData: {
+    roomId: string;
+    eventId: string;
+    codeBlockIndex: number;
+  }): MessageCodePatchResult | undefined {
+    let roomResource = this.matrixService.roomResources.get(codeData.roomId);
+    if (!roomResource) {
+      return undefined;
+    }
+    let message = roomResource.messages.find(
+      (m) => m.eventId === codeData.eventId,
+    );
+    return message?.codePatchResults?.find(
+      (c) => c.index === codeData.codeBlockIndex,
+    );
+  }
+
+  getCodePatchStatus = (codeData: {
     roomId: string;
     eventId: string;
     codeBlockIndex: number;
   }): CodePatchStatus | 'applying' | 'ready' => {
-    if (this.isCodeBlockApplying(codeBlock)) {
+    if (this.isCodeBlockApplying(codeData)) {
       return 'applying';
     }
-    if (this.isCodeBlockRecentlyApplied(codeBlock)) {
+    if (this.isCodeBlockRecentlyApplied(codeData)) {
       return 'applied';
     }
-    return 'ready';
-    // return this.getCodePatchResult(codeBlock)?.status ?? 'ready';
+    return this.getCodePatchResult(codeData)?.status ?? 'ready';
   };
 }
 
@@ -378,4 +420,10 @@ function hasPatchData(payload: any): payload is PatchPayload {
     (payload.attributes?.patch?.attributes ||
       payload.attributes?.patch?.relationships)
   );
+}
+
+declare module '@ember/service' {
+  interface Registry {
+    'command-service': CommandService;
+  }
 }

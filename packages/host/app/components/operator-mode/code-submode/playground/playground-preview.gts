@@ -115,11 +115,6 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
       line-height: 1.27;
       letter-spacing: 0.17px;
     }
-    .isolated-and-edit-preview {
-      margin-left: calc(-1 * var(--boxel-sp));
-      width: calc(100% + calc(2 * var(--boxel-sp)));
-      margin-right: calc(-1 * var(--boxel-sp));
-    }
   </style>
 </template>;
 

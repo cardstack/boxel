@@ -2,15 +2,22 @@ import { waitFor, waitUntil, click } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { getService } from '@universal-ember/test-support';
+
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import {
+  APP_BOXEL_MESSAGE_MSGTYPE,
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+  baseRealm,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
@@ -21,7 +28,6 @@ import {
   setupLocalIndexing,
   setupOnSave,
   getMonacoContent,
-  lookupLoaderService,
 } from '../../../helpers';
 import {
   CardDef,
@@ -45,7 +51,7 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function () {
-    loader = lookupLoaderService().loader;
+    loader = getService('loader-service').loader;
   });
 
   setupLocalIndexing(hooks);
@@ -72,15 +78,15 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
   let noop = () => {};
 
   hooks.beforeEach(async function () {
-    operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
+    operatorModeStateService = getService('operator-mode-state-service');
 
     // Add cardService mock for example.com/component.gts
-    let cardService = this.owner.lookup('service:card-service') as CardService;
+    let cardService = getService('card-service');
     cardService.getSource = async (url: URL) => {
       if (url.toString() === 'https://example.com/component.gts') {
-        return Promise.resolve(`import Component from '@glimmer/component';
+        return {
+          status: 200,
+          content: `import Component from '@glimmer/component';
 
 export default class MyComponent extends Component {
   a = 1;
@@ -92,9 +98,13 @@ export default class MyComponent extends Component {
       <p>Value of b: {{this.b}}</p>
     </div>
   </template>
-}`);
+}`,
+        };
       }
-      return Promise.resolve('');
+      return {
+        status: 404,
+        content: '',
+      };
     };
 
     class Address extends FieldDef {
@@ -202,7 +212,7 @@ export default class MyComponent extends Component {
       '@aibot:localhost',
       {
         body: 'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -222,7 +232,7 @@ export default class MyComponent extends Component {
       '@aibot:localhost',
       {
         body: 'this is another message',
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -250,7 +260,7 @@ export default class MyComponent extends Component {
       '@aibot:localhost',
       {
         body: 'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -274,7 +284,7 @@ export default class MyComponent extends Component {
       '@aibot:localhost',
       {
         body: 'this is another message',
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -340,10 +350,10 @@ const data = {
 \`\`\`
 
 \`\`\`typescript
-  <<<<<<< SEARCH
+  ${SEARCH_MARKER}
     let a = 1;
     let c = 3;
-  =======
+  ${SEPARATOR_MARKER}
     let a = 2;
 \`\`\`
 
@@ -360,7 +370,7 @@ You can use these in your HTML documents to display formatted text, code snippet
       '@aibot:localhost',
       {
         body: messageWithNestedPreTags,
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -467,7 +477,7 @@ And another code block without language specified:
       '@aibot:localhost',
       {
         body: messageWithHtmlOutsideBackticks,
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -528,7 +538,7 @@ And some regular text with <b>HTML tags</b> that should be displayed as actual H
       '@aibot:localhost',
       {
         body: messageWithHtmlInBackticksNoLang,
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -574,8 +584,8 @@ And some regular text with <b>HTML tags</b> that should be displayed as actual H
     let messageWithSearchAndReplaceBlock = `Here's some HTML inside codeblock with search and replace block:
 
 \`\`\`gts
-// File url: https://example.com/component.gts
-  <<<<<<< SEARCH
+https://example.com/component.gts
+${SEARCH_MARKER}
 import Component from '@glimmer/component';
 
 export default class MyComponent extends Component {
@@ -589,7 +599,7 @@ export default class MyComponent extends Component {
     </div>
   </template>
 }
-=======
+${SEPARATOR_MARKER}
 import Component from '@glimmer/component';
 
 export default class MyComponent extends Component {
@@ -604,7 +614,7 @@ export default class MyComponent extends Component {
     </div>
   </template>
 }
->>>>>>> REPLACE
+${REPLACE_MARKER}
 \`\`\`
 
 Above code blocks are now complete`;
@@ -614,7 +624,7 @@ Above code blocks are now complete`;
       '@aibot:localhost',
       {
         body: messageWithSearchAndReplaceBlock,
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -642,11 +652,11 @@ Above code blocks are now complete`;
     let messageWithSearchAndReplaceBlock = `Here's some HTML inside codeblock with search and replace block:
 
 \`\`\`txt
-// File url: https://example.com/blank.txt
-<<<<<<< SEARCH
-=======
+https://example.com/blank.txt
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
 hello
->>>>>>> REPLACE
+${REPLACE_MARKER}
 \`\`\`
 
 Above code blocks are now complete`;
@@ -656,7 +666,7 @@ Above code blocks are now complete`;
       '@aibot:localhost',
       {
         body: messageWithSearchAndReplaceBlock,
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },

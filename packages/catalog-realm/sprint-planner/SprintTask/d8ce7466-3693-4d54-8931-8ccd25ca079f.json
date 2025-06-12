@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 0,
+        "label": "Not Started",
+        "color": "#B0BEC5",
+        "completed": false
+      },
+      "dateRange": {
+        "start": "2024-11-13",
+        "end": "2024-12-17"
+      },
+      "priority": {
+        "index": 4,
+        "label": "Highest"
+      },
+      "name": "Build Date Range Card",
+      "details": "✅ Task: Build Date Range Component\nDescription:\nCreate a reusable DateRangePicker component that allows users to select a start date and an end date. The component should ensure that:\n\n- The end date cannot be before the start date.\n- Both dates are displayed clearly.\n- Optionally, a default range (e.g., today to 7 days later) is shown initially.\n- Emits a dateRangeChanged event (or equivalent binding) when either date changes.\n\nThe component should support:\n- Mobile responsiveness\n- Accessibility (keyboard navigation, screen reader labels)\n- Optional min/max date restrictions",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/f379cb36-a323-4213-8477-572a31d5d21d"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/df163805-2f30-427d-b400-c9db1fa5db9e"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/7bfbc444-5054-460f-b6e1-39e5443de074"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "SprintTask"
+      }
+    }
+  }
+}

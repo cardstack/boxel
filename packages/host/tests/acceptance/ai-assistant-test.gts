@@ -1,5 +1,7 @@
 import { click, fillIn, waitFor, waitUntil, visit } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
+
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
@@ -12,8 +14,6 @@ import {
   DEFAULT_LLM,
   DEFAULT_LLM_LIST,
 } from '@cardstack/runtime-common/matrix-constants';
-
-import { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
 
 import {
   setupLocalIndexing,
@@ -47,6 +47,13 @@ async function selectCardFromCatalog(cardId: string) {
   await click(`[data-test-select="${cardId}"]`);
   await click('[data-test-card-catalog-go-button]');
 }
+
+let countryDefinition = `import { field, contains, CardDef } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+  export class Country extends CardDef {
+    static displayName = 'Country';
+    @field name = contains(StringField);
+  }`;
 
 let matrixRoomId: string;
 module('Acceptance | AI Assistant tests', function (hooks) {
@@ -155,6 +162,20 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       contents: {
         'person.gts': { Person },
         'pet.gts': { Pet },
+        'country.gts': countryDefinition,
+        'Country/indonesia.json': {
+          data: {
+            attributes: {
+              name: 'Indonesia',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}country`,
+                name: 'Country',
+              },
+            },
+          },
+        },
         'Pet/ringo.json': new Pet({ name: 'Ringo' }),
         'Person/hassan.json': new Person({
           firstName: 'Hassan',
@@ -258,6 +279,70 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     ]);
   });
 
+  test('attached cards include computed fields', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    const testCard = `${testRealmURL}Person/hassan`;
+
+    await fillIn('[data-test-message-field]', `Message - 1`);
+    await selectCardFromCatalog(testCard);
+    await click('[data-test-send-message-btn]');
+
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message: 'Message - 1',
+        cards: [{ id: testCard, title: 'Hassan' }],
+      },
+    ]);
+
+    let roomEvents = mockMatrixUtils.getRoomEvents(matrixRoomId);
+    let lastMessageEvent = roomEvents[roomEvents.length - 1];
+
+    // This series of checks just covers common places this may
+    // fail as there are a lot of layers here.
+    assert.ok(lastMessageEvent, 'A message event was found');
+    let messageDataString = lastMessageEvent.content?.data;
+    assert.ok(messageDataString, 'Message has data string');
+    let messageData = JSON.parse(messageDataString); // Assuming data is a JSON string
+    assert.ok(messageData, 'Message data is parsable');
+    let attachedCards = messageData.attachedCards;
+    assert.ok(attachedCards, 'Message has attachedCards');
+    assert.strictEqual(attachedCards.length, 1, 'One card is attached');
+    let attachedCard = attachedCards[0];
+    assert.ok(attachedCard, 'Attached card is present');
+    const mxcUrl = attachedCard.url;
+
+    assert.ok(mxcUrl, 'Attached card has a URL (mxc)');
+    // The mock matrix server uses http://mock-server/ for its mxc content
+    assert.ok(
+      mxcUrl.startsWith('http://mock-server/'),
+      `Card URL "${mxcUrl}" should start with http://mock-server/`,
+    );
+
+    // Download the card file def
+    const matrixService = getService('matrix-service');
+
+    let cardContent = await matrixService.downloadCardFileDef(attachedCard);
+
+    // Check that the computed title is present in the downloaded content
+    assert.strictEqual(
+      cardContent.data.attributes!.title,
+      'Hassan Abdel-Rahman',
+      'Computed card title is present in downloaded content',
+    );
+  });
+
   test('displays active LLM in chat input', async function (assert) {
     await visitOperatorMode({
       stacks: [
@@ -289,7 +374,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.strictEqual(roomState.model, 'anthropic/claude-3.7-sonnet');
   });
 
-  test('defaults to anthropic/claude-3.7-sonnet in code mode', async function (assert) {
+  test('defaults to anthropic/claude-sonnet-4 in code mode', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -305,7 +390,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    assert.dom('[data-test-llm-select-selected]').hasText('claude-3.7-sonnet');
+    assert.dom('[data-test-llm-select-selected]').hasText('claude-sonnet-4');
 
     createAndJoinRoom({
       sender: '@testuser:localhost',
@@ -315,7 +400,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-past-sessions-button]');
     await waitFor("[data-test-enter-room='mock_room_1']");
     await click('[data-test-enter-room="mock_room_1"]');
-    assert.dom('[data-test-llm-select-selected]').hasText('claude-3.7-sonnet');
+    assert.dom('[data-test-llm-select-selected]').hasText('claude-sonnet-4');
   });
 
   test('auto-attached file is not displayed in interact mode', async function (assert) {
@@ -376,6 +461,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom('[data-test-autoattached-file]').exists();
     assert.dom('[data-test-autoattached-card]').exists();
+    await click(`[data-test-autoattached-card] [data-test-remove-card-btn]`);
+    assert.dom('[data-test-autoattached-card]').doesNotExist();
   });
 
   test<TestContextWithSave>('can send a newly created auto-attached card', async function (assert) {
@@ -586,9 +673,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-ai-assistant-panel]').exists();
 
     // Verify URL contains updated state with aiAssistantOpen: true
-    let operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeState;
+    let operatorModeStateService = getService('operator-mode-state-service');
     assert.true(
       operatorModeStateService.aiAssistantOpen,
       'URL state should have aiAssistantOpen: true',
@@ -622,5 +707,119 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       )}`,
     );
     assert.dom('[data-test-ai-assistant-panel]').exists();
+  });
+
+  test('auto-attached cards behaviour', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      codePath: `${testRealmURL}index.json`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    // In interact mode, auto-attached cards must be the top most cards in the stack
+    // unless the card is manually chosen
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    assert.dom('[data-test-autoattached-file]').doesNotExist();
+    assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Person/fadhlan"][data-test-autoattached-card]`,
+      )
+      .exists();
+
+    await click('[data-test-add-card-right-stack]');
+    await fillIn('[data-test-search-field]', 'Mango');
+    await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+    assert.dom('[data-test-autoattached-card]').exists({ count: 2 });
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Person/fadhlan"][data-test-autoattached-card]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Pet/mango"][data-test-autoattached-card]`,
+      )
+      .exists();
+
+    await click('[data-test-choose-card-btn]');
+    await fillIn('[data-test-search-field]', 'Mango');
+    await click(`[data-test-select="${testRealmURL}Pet/mango"]`);
+    await click('[data-test-card-catalog-go-button]');
+    assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Person/fadhlan"][data-test-autoattached-card]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Pet/mango"][data-test-autoattached-card]`,
+      )
+      .doesNotExist();
+    assert.dom(`[data-test-attached-card="${testRealmURL}Pet/mango"]`).exists();
+
+    // In code mode, auto-attached card must be the playground panel card and the card of the opened file with json extension
+    // unless the card is manually chosen
+    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Person/fadhlan"][data-test-autoattached-card]`,
+      )
+      .doesNotExist();
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Pet/mango"][data-test-autoattached-card]`,
+      )
+      .doesNotExist();
+    assert.dom(`[data-test-attached-card="${testRealmURL}Pet/mango"]`).exists();
+
+    await click('[data-test-file-browser-toggle]');
+    await click('[data-test-directory="Person/"]');
+    await click('[data-test-file="Person/fadhlan.json"]');
+    assert.dom('[data-test-attached-card]').exists({ count: 2 });
+    assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
+    assert.dom('[data-test-autoattached-file]').exists({ count: 1 });
+    assert.dom(`[data-test-attached-card="${testRealmURL}Pet/mango"]`).exists();
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Person/fadhlan"][data-test-autoattached-card]`,
+      )
+      .exists();
+
+    await click('[data-test-file="country.gts"]');
+    await click('[data-test-module-inspector-view="preview"]');
+    assert.dom('[data-test-attached-card]').exists({ count: 2 });
+    assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
+    assert.dom('[data-test-autoattached-file]').exists({ count: 1 });
+    assert.dom(`[data-test-attached-card="${testRealmURL}Pet/mango"]`).exists();
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Country/indonesia"][data-test-autoattached-card]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-attached-file="${testRealmURL}country.gts"][data-test-autoattached-file]`,
+      )
+      .exists();
+
+    // auto-attached cards should be removable
+    await click(
+      `[data-test-attached-card="${testRealmURL}Country/indonesia"] [data-test-remove-card-btn]`,
+    );
+    assert
+      .dom(`[data-test-attached-card="${testRealmURL}Country/indonesia"]`)
+      .doesNotExist();
   });
 });

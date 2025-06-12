@@ -9,6 +9,8 @@ import {
   visit,
 } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
+
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
@@ -20,8 +22,6 @@ import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
-import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
-import RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import {
   elementIsVisible,
@@ -548,9 +548,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       },
     }));
 
-    monacoService = this.owner.lookup(
-      'service:monaco-service',
-    ) as MonacoService;
+    monacoService = getService('monaco-service');
   });
 
   test('inspector will show json instance definition and module definition in card inheritance panel', async function (assert) {
@@ -751,7 +749,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         `[data-test-card-schema="exported card"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
       )
       .exists();
-    assert.dom(`[data-test-total-fields]`).containsText('4 Fields');
+    assert.dom(`[data-test-total-fields]`).containsText('4');
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
 
     // clicking on a field
@@ -770,7 +768,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .includesText('exported field');
     await waitFor('[data-test-card-schema="exported field"]');
     assert.dom('[data-test-card-schema="exported field"]').exists({ count: 1 });
-    assert.dom(`[data-test-total-fields]`).containsText('1 Field');
+    assert.dom(`[data-test-total-fields]`).containsText('1');
     assert
       .dom(
         `[data-test-card-schema="exported field"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
@@ -965,12 +963,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('can delete a card instance from code submode with no recent files to fall back on', async function (assert) {
-    let recentCardsService = this.owner.lookup(
-      'service:recent-cards-service',
-    ) as RecentCardsService;
-    let recentFilesService = this.owner.lookup(
-      'service:recent-files-service',
-    ) as RecentFilesService;
+    let recentCardsService = getService('recent-cards-service');
+    let recentFilesService = getService('recent-files-service');
 
     [`${testRealmURL}Pet/vangogh`, `${testRealmURL}Person/1`].map((url) =>
       recentCardsService.add(url),
@@ -1046,9 +1040,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('Can delete a card instance from code submode and fall back to recent file', async function (assert) {
-    let recentFilesService = this.owner.lookup(
-      'service:recent-files-service',
-    ) as RecentFilesService;
+    let recentFilesService = getService('recent-files-service');
 
     await visitOperatorMode({
       stacks: [
@@ -1119,9 +1111,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('can delete a card definition and fallback to recent file', async function (assert) {
-    let recentFilesService = this.owner.lookup(
-      'service:recent-files-service',
-    ) as RecentFilesService;
+    let recentFilesService = getService('recent-files-service');
 
     await visitOperatorMode({
       submode: 'code',
@@ -1157,9 +1147,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('can delete a card definition with no recent files to fall back on', async function (assert) {
-    let recentFilesService = this.owner.lookup(
-      'service:recent-files-service',
-    ) as RecentFilesService;
+    let recentFilesService = getService('recent-files-service');
 
     await visitOperatorMode({
       stacks: [[]],
@@ -1560,7 +1548,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .exists({ count: 1 });
     assert.dom(`[data-test-card-schema="local parent"]`).exists();
     assert.dom(`[data-test-card-schema="local grandparent"]`).exists();
-    assert.dom(`[data-test-total-fields]`).containsText('3 Fields');
+    assert.dom(`[data-test-total-fields]`).containsText('3');
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
     assert.true(monacoService.getLineCursorOn()?.includes('GrandParent'));
 
@@ -1581,7 +1569,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-card-schema="my sport"]').exists({ count: 1 });
     assert.dom(`[data-test-card-schema="my hobby"]`).exists({ count: 1 });
     assert.dom(`[data-test-card-schema="my activity"]`).exists({ count: 1 });
-    assert.dom(`[data-test-total-fields]`).containsText('0 Fields');
+    assert.dom(`[data-test-total-fields]`).containsText('0');
     assert.true(monacoService.getLineCursorOn()?.includes(elementName));
 
     //clicking on inherited field defined locally
@@ -1594,7 +1582,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-card-schema="my hobby"]');
     assert.dom(`[data-test-card-schema="my hobby"]`).exists({ count: 1 });
     assert.dom(`[data-test-card-schema="my activity"]`).exists({ count: 1 });
-    assert.dom(`[data-test-total-fields]`).containsText('0 Fields');
+    assert.dom(`[data-test-total-fields]`).containsText('0');
     assert.true(monacoService.getLineCursorOn()?.includes('Hobby'));
     assert.true(monacoService.getLineCursorOn()?.includes('Activity'));
   });
@@ -1759,7 +1747,7 @@ export class TestCard extends ExportedCard {
     assert
       .dom('[data-test-card-schema]')
       .exists({ count: 4 }, 'the card hierarchy is displayed in schema editor');
-    assert.dom('[data-test-total-fields]').containsText('4 Fields');
+    assert.dom('[data-test-total-fields]').containsText('4');
 
     // assert modal state is cleared
     await waitForCodeEditor();
@@ -1921,7 +1909,7 @@ export class ExportedCard extends ExportedCardParent {
     assert
       .dom('[data-test-card-schema]')
       .exists({ count: 4 }, 'the card hierarchy is displayed in schema editor');
-    assert.dom('[data-test-total-fields]').containsText('4 Fields');
+    assert.dom('[data-test-total-fields]').containsText('4');
   });
 
   test('field error message displays if you try to inherit using a filename that already exists', async function (assert) {

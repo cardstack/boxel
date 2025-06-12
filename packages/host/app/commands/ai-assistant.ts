@@ -9,6 +9,8 @@ import type { Skill } from 'https://cardstack.com/base/skill';
 
 import HostBaseCommand from '../lib/host-base-command';
 
+import OperatorModeStateService from '../services/operator-mode-state-service';
+
 import AddSkillsToRoomCommand from './add-skills-to-room';
 import CreateAiAssistantRoomCommand from './create-ai-assistant-room';
 import OpenAiAssistantRoomCommand from './open-ai-assistant-room';
@@ -23,8 +25,11 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
   typeof BaseCommandModule.SendAiAssistantMessageResult
 > {
   @service declare private store: StoreService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   #cardAPI?: typeof CardAPI;
+
+  static actionVerb = 'Send';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
@@ -66,6 +71,7 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
       attachedCards: [...(await attachedCardsPromise)],
       attachedFileURLs: input.attachedFileURLs,
       openCardIds: input.openCardIds,
+      realmUrl: this.operatorModeStateService.realmURL.href,
     });
     return sendMessageResult;
   }

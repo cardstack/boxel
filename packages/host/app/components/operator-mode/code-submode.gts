@@ -18,7 +18,10 @@ import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { consume, provide } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
-import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
+import {
+  LoadingIndicator,
+  ResizablePanelGroup,
+} from '@cardstack/boxel-ui/components';
 import { not, bool } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
@@ -286,6 +289,10 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get isReady() {
     return isReady(this.currentOpenFile);
+  }
+
+  private get isLoading() {
+    return this.currentOpenFile?.state === 'loading';
   }
 
   private get readyFile() {
@@ -697,6 +704,8 @@ export default class CodeSubmode extends Component<Signature> {
                           @createFile={{perform this.createFile}}
                           @openSearch={{search.openSearchToResults}}
                         />
+                      {{else if this.isLoading}}
+                        <LoadingIndicator class='loading-indicator' />
                       {{/if}}
                     </:inspector>
                     <:browser>
@@ -737,7 +746,7 @@ export default class CodeSubmode extends Component<Signature> {
               @defaultSize={{this.defaultPanelWidths.codeEditorPanel}}
               @minSize={{20}}
             >
-              <InnerContainer>
+              <InnerContainer class='monaco-editor-panel'>
                 {{#if this.isReady}}
                   <CodeEditor
                     @file={{this.currentOpenFile}}
@@ -754,11 +763,17 @@ export default class CodeSubmode extends Component<Signature> {
                     @isSaving={{this.isSaving}}
                     @isReadOnly={{this.isReadOnly}}
                   />
+                {{else if this.isLoading}}
+                  <LoadingIndicator class='loading-indicator' />
                 {{/if}}
               </InnerContainer>
             </ResizablePanel>
             <ResizeHandle />
-            <ResizablePanel @defaultSize={{this.defaultPanelWidths.rightPanel}}>
+            <ResizablePanel
+              @defaultSize={{this.defaultPanelWidths.rightPanel}}
+              {{! TODO in CS-8713: make this have a minimum width }}
+              @collapsible={{false}}
+            >
               <InnerContainer>
                 {{#if this.isReady}}
                   <ModuleInspector
@@ -778,6 +793,8 @@ export default class CodeSubmode extends Component<Signature> {
                     @selectedDeclaration={{this.selectedDeclaration}}
                     @setPreviewFormat={{this.setPreviewFormat}}
                   />
+                {{else if this.isLoading}}
+                  <LoadingIndicator class='loading-indicator' />
                 {{/if}}
               </InnerContainer>
             </ResizablePanel>
@@ -831,6 +848,8 @@ export default class CodeSubmode extends Component<Signature> {
           var(--operator-mode-top-bar-item-height) +
             (2 * (var(--operator-mode-spacing)))
         );
+        --monaco-background: var(--boxel-600);
+        --monaco-readonly-background: #606060;
       }
 
       .code-mode {
@@ -872,6 +891,14 @@ export default class CodeSubmode extends Component<Signature> {
         background-color: var(--code-mode-panel-background-color);
       }
 
+      .monaco-editor-panel {
+        background-color: var(--monaco-background);
+      }
+      .monaco-editor-panel :deep(.binary-info) {
+        --icon-color: var(--boxel-light);
+        color: var(--boxel-light);
+      }
+
       .choose-file-prompt {
         margin: 0;
         padding: var(--boxel-sp);
@@ -906,6 +933,14 @@ export default class CodeSubmode extends Component<Signature> {
       :deep(.boxel-panel, .separator-vertical, .separator-horizontal) {
         box-shadow: var(--boxel-deep-box-shadow);
         border-radius: var(--boxel-border-radius-xl);
+      }
+
+      .loading-indicator {
+        height: 100%;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
     </style>
   </template>

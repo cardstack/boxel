@@ -14,6 +14,7 @@ import NumberField from './number';
 import { Skill } from './skill';
 import {
   JsonField,
+  QueryField,
   SearchCardsByQueryInput,
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
@@ -49,8 +50,17 @@ export class PatchCardInput extends CardDef {
   @field patch = contains(JsonField);
 }
 
-export class ShowCardInput extends CardDef {
-  @field cardIdToShow = contains(StringField);
+export class CardIdCard extends CardDef {
+  @field cardId = contains(StringField);
+}
+
+export class ReadTextFileInput extends CardDef {
+  @field realm = contains(StringField);
+  @field path = contains(StringField);
+}
+
+export class FileContents extends CardDef {
+  @field content = contains(StringField);
 }
 
 export class SwitchSubmodeInput extends CardDef {
@@ -70,6 +80,19 @@ export class CreateInstanceInput extends CardDef {
   @field realm = contains(StringField);
 }
 
+export class UpdateCodePathWithSelectionInput extends CardDef {
+  @field codeRef = contains(CodeRefField);
+  @field localName = contains(StringField);
+  @field fieldName = contains(StringField);
+}
+
+export class UpdatePlaygroundSelectionInput extends CardDef {
+  @field moduleId = contains(StringField);
+  @field cardId = contains(StringField);
+  @field format = contains(StringField);
+  @field fieldIndex = contains(NumberField);
+}
+
 export class ApplySearchReplaceBlockInput extends CardDef {
   @field fileContent = contains(StringField);
   @field codeBlock = contains(StringField);
@@ -86,8 +109,6 @@ export class LintAndFixInput extends CardDef {
 
 export class LintAndFixResult extends CardDef {
   @field output = contains(StringField);
-  @field fixed = contains(BooleanField);
-  @field messages = containsMany(JsonField);
 }
 
 export class PatchCodeInput extends CardDef {
@@ -141,6 +162,7 @@ export class SendAiAssistantMessageInput extends CardDef {
   @field clientGeneratedId = contains(StringField);
   @field attachedCards = linksToMany(CardDef);
   @field attachedFileURLs = containsMany(StringField);
+  @field realmUrl = contains(StringField);
   @field openCardIds = containsMany(StringField);
   @field requireCommandCall = contains(BooleanField);
   // This is a bit of a "fake" field in that it would not serialize properly.
@@ -189,6 +211,26 @@ export class AddFieldToCardDefinitionInput extends CardDef {
   @field outgoingRealmURL = contains(StringField); // should be provided when the other 2 params are provided
   @field addFieldAtIndex = contains(NumberField); // if provided, the field will be added at the specified index in the card's possibleFields map
   @field computedFieldFunctionSourceCode = contains(StringField); // if provided, the field will be added as a computed field
+}
+
+export class ListingActionInput extends CardDef {
+  @field realm = contains(StringField);
+  @field actionType = contains(StringField);
+  @field listing = linksTo(CardDef);
+}
+
+export class ListingInput extends CardDef {
+  @field realm = contains(StringField);
+  @field listing = linksTo(CardDef);
+}
+
+export class VisitCardsInput extends CardDef {
+  @field query = contains(QueryField);
+  @field commandRef = contains(CodeRefField);
+}
+
+export class JsonCard extends CardDef {
+  @field json = contains(JsonField);
 }
 
 export {

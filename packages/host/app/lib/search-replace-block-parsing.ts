@@ -14,11 +14,11 @@ interface SearchReplaceResult {
  * It tries to detect the search and replace content even if the markers are missing or incomplete.
  *
  * The format is:
- * <<<<<<< SEARCH
+ * ╔═══ SEARCH ════╗
  * code to search
- * =======
+ * ╠═══════════════╣
  * code to replace
- * >>>>>>> REPLACE
+ * ╚═══ REPLACE ═══╝
  *
  * @param input - The input string to parse
  * @returns An object containing searchContent and replaceContent, even if  the search/replace markers are missing or incomplete
@@ -94,8 +94,8 @@ export function isCompleteSearchReplaceBlock(code?: string | null): boolean {
     return false;
   }
   return (
-    code.includes('<<<<<<< SEARCH') &&
-    code.includes('=======') &&
-    code.includes('>>>>>>> REPLACE')
+    code.includes(SEARCH_MARKER) &&
+    code.includes(SEPARATOR_MARKER) &&
+    code.includes(REPLACE_MARKER)
   );
 }

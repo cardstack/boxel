@@ -35,7 +35,7 @@ export default class RemoveFieldModal extends Component<Signature> {
 
     this.args.moduleSyntax.removeField(identifiedCard, field.name);
 
-    await file.write(moduleSyntax.code(), true);
+    await file.write(moduleSyntax.code(), { flushLoader: true });
     this.args.onClose();
   });
 

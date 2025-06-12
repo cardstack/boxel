@@ -17,6 +17,8 @@ export class SearchCardsByTypeAndTitleCommand extends HostBaseCommand<
 > {
   description = 'Search for card instances by type and/or title';
 
+  static actionVerb = 'Search';
+
   async getInputType() {
     let commandModule = await this.loadCommandModule();
     const { SearchCardsByTypeAndTitleInput } = commandModule;
@@ -74,9 +76,18 @@ export class SearchCardsByQueryCommand extends HostBaseCommand<
     let realmUrls = this.realmServer.availableRealmURLs;
     let instances = flatMap(
       await Promise.all(
-        realmUrls.map(
-          async (realm) => await this.store.search(input.query, new URL(realm)),
-        ),
+        realmUrls.map(async (realm) => {
+          try {
+            let realmInstances = await this.store.search(
+              input.query,
+              new URL(realm),
+            );
+            return realmInstances;
+          } catch (e) {
+            console.error(`Error searching in realm ${realm}:`, e, input.query);
+            return [];
+          }
+        }),
       ),
     );
 
