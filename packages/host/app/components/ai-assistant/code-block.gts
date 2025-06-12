@@ -500,10 +500,9 @@ class CodeBlockDiffEditor extends Component<Signature> {
 class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   get fileName() {
-    let realmUrl = this.operatorModeStateService.realmURL.href;
-    let fileUrl = this.args.codeData.fileUrl;
-
-    return fileUrl?.replace(realmUrl, '');
+    return (
+      new URL(this.args.codeData.fileUrl ?? '').pathname.split('/').pop() || ''
+    );
   }
 
   <template>
