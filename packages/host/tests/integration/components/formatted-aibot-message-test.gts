@@ -30,8 +30,6 @@ import {
 import CardService from '@cardstack/host/services/card-service';
 import MonacoService from '@cardstack/host/services/monaco-service';
 
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
