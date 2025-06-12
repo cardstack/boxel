@@ -127,7 +127,7 @@ interface ScrollPositionSignature {
 
 // an amount of pixels from the bottom of the element that we would consider to
 // be scrolled "all the way down"
-const BOTTOM_THRESHOLD = 50;
+export const BOTTOM_THRESHOLD = 50;
 class ScrollPosition extends Modifier<ScrollPositionSignature> {
   private hasRegistered = false;
   modify(
@@ -566,7 +566,7 @@ const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSign
       .ai-assistant-conversation {
         display: flex;
         flex-direction: column;
-        padding: 0 var(--boxel-sp);
+        padding: 0 var(--boxel-sp) var(--boxel-sp) var(--boxel-sp);
         overflow-y: auto;
       }
     </style>
