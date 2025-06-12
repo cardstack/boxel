@@ -41,6 +41,8 @@ export default class SubmodeSwitcher extends Component<Signature> {
         <:trigger as |bindings|>
           <Button
             class='submode-switcher-dropdown-trigger'
+            @kind='primary-dark'
+            @size='tall'
             aria-label='Options'
             title={{this.appVersion}}
             {{on 'click' this.toggleDropdown}}
@@ -77,34 +79,22 @@ export default class SubmodeSwitcher extends Component<Signature> {
     </div>
     <style scoped>
       :global(:root) {
-        --submode-switcher-trigger-height: var(
-          --operator-mode-top-bar-item-height
-        );
         --submode-switcher-dropdown-content-border-radius: 0 0
           var(--boxel-border-radius) var(--boxel-border-radius);
-        --submode-switcher-dropdown-content-bg-color: rgba(0, 0, 0, 0.45);
-        --submode-switcher-width: calc(
-          var(--operator-mode-left-column) - var(--container-button-size) - 3 *
-            var(--operator-mode-spacing)
-        );
+        --submode-switcher-dropdown-content-bg-color: rgba(0, 0, 0, 0.5);
+        --submode-switcher-width: 10.25rem; /* 164px */
         --submode-switcher-height: var(--operator-mode-top-bar-item-height);
       }
       .submode-switcher-dropdown-trigger {
         --icon-color: var(--boxel-highlight);
+        --boxel-button-font: 500 var(--boxel-font-sm);
 
-        height: var(--submode-switcher-trigger-height);
-        border: none;
-        outline: var(--boxel-border-flexible);
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+        background-color: var(--boxel-dark);
         border-radius: var(--boxel-border-radius);
-        background: var(--boxel-dark);
-        color: var(--boxel-light);
-        font: 500 var(--boxel-font-sm);
 
         position: relative;
-        display: flex;
         justify-content: flex-start;
-        align-items: center;
         width: var(--submode-switcher-width);
         height: var(--submode-switcher-height);
         gap: var(--boxel-sp-xs);
