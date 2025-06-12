@@ -206,19 +206,12 @@ module('getModifyPrompt', (hooks) => {
       history[0].content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
     ) {
       assert.true(
-        result[2].content?.includes(
-          JSON.stringify(
-            history[0].content.data.attachedCards![0].content
-              ? [
-                  JSON.parse(history[0].content.data.attachedCards![0].content)
-                    .data,
-                ]
-              : '',
-            null,
-            2,
-          ),
-        ),
-        'attached card should be in the message that it was sent with',
+        result[2].content?.includes(`"firstName": "Terry"`),
+        'attached card should be in the message that it was sent with 1',
+      );
+      assert.true(
+        result[2].content?.includes(`"lastName": "Pratchett"`),
+        'attached card should be in the message that it was sent with 2',
       );
       assert.true(
         result[1].content?.includes('Room ID: room1'),
@@ -494,7 +487,7 @@ module('getModifyPrompt', (hooks) => {
     assert.equal(attachedCards.length, 0);
   });
 
-  test('downloads attached files', async () => {
+  test('downloads most recent version of attached files', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -888,9 +881,31 @@ Attached Files:
         content: {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
-          body: 'Hey 2',
+          body: 'Hey again with a newer version of the card plus a second card',
           data: {
             attachedCards: [
+              {
+                sourceUrl: 'http://localhost:4201/experiments/Author/1',
+                url: 'http://localhost:4201/experiments/Author/1',
+                name: 'Author',
+                contentType: 'application/json',
+                content: JSON.stringify({
+                  data: {
+                    type: 'card',
+                    id: 'http://localhost:4201/experiments/Author/1',
+                    attributes: {
+                      firstName: 'Newer Terry',
+                      lastName: 'Pratchett',
+                    },
+                    meta: {
+                      adoptsFrom: {
+                        module: '../author',
+                        name: 'Author',
+                      },
+                    },
+                  },
+                }),
+              },
               {
                 sourceUrl: 'http://localhost:4201/experiments/Author/2',
                 url: 'http://localhost:4201/experiments/Author/2',
@@ -945,6 +960,18 @@ Attached Files:
       userMessages[0]?.content?.includes(
         'http://localhost:4201/experiments/Author/1',
       ),
+    );
+    assert.false(
+      userMessages[0]?.content?.includes('"firstName": "Terry"'),
+      'should not include the contents of the first version of the card in the first user message',
+    );
+    assert.true(
+      userMessages[1]?.content?.includes(
+        'http://localhost:4201/experiments/Author/1',
+      ),
+    );
+    assert.true(
+      userMessages[1]?.content?.includes('"firstName": "Newer Terry"'),
     );
     assert.true(
       userMessages[1]?.content?.includes(
@@ -1670,7 +1697,7 @@ Attached Files:
     assert.equal(result[2].role, 'user');
     assert.true(
       result![2].content?.includes(
-        'attributes": {\n      "appTitle": "Radio Episode Tracker for Nerds"',
+        '"appTitle": "Radio Episode Tracker for Nerds"',
       ),
       'attached card details included in the user message',
     );

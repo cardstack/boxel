@@ -319,16 +319,42 @@ export function hasSomeAttachedCards(
   return false;
 }
 
-export function getAttachedCards(eventContent: CardMessageContent) {
+export function getAttachedCards(
+  messageEvent: CardMessageEvent,
+  history: DiscreteMatrixEvent[],
+) {
+  let attachedCards = messageEvent.content?.data?.attachedCards ?? [];
   return (
-    eventContent.data?.attachedCards
-      ?.map((attachedCard: SerializedFileDef) =>
-        attachedCard.content
-          ? (JSON.parse(attachedCard.content).data as LooseCardResource)
-          : undefined,
-      )
-      ?.filter((card) => card?.id) // Only include cards with valid IDs
-      ?.sort((a, b) => String(a!.id!).localeCompare(String(b!.id!))) ?? []
+    attachedCards
+      .map((attachedCard: SerializedFileDef) => {
+        // If the file is attached later in the history, we should not include the content here
+        let shouldIncludeContent = !history
+          .slice(history.indexOf(messageEvent) + 1)
+          .some(
+            (event) =>
+              event.type === 'm.room.message' &&
+              event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
+              event.content?.data?.attachedCards?.some(
+                (cardAttachment: SerializedFileDef) =>
+                  cardAttachment.url === attachedCard.url,
+              ),
+          );
+
+        let result: SerializedFileDef = {
+          url: attachedCard.url,
+          sourceUrl: attachedCard.sourceUrl ?? '',
+          name: attachedCard.name,
+          contentType: attachedCard.contentType,
+        };
+        if (shouldIncludeContent) {
+          result.content = attachedCard.content
+            ? JSON.parse(attachedCard.content).data
+            : undefined;
+        }
+        return result;
+      })
+      ?.filter((cardFileDef) => cardFileDef?.url) // Only include cards with valid urls
+      ?.sort((a, b) => String(a!.url!).localeCompare(String(b!.url!))) ?? []
   );
 }
 
@@ -789,7 +815,7 @@ export const buildAttachmentsMessagePart = async (
   messageEvent: CardMessageEvent,
   history: DiscreteMatrixEvent[],
 ) => {
-  let attachedCards = getAttachedCards(messageEvent.content);
+  let attachedCards = getAttachedCards(messageEvent, history);
   let result = '';
   if (attachedCards.length > 0) {
     result += `Attached Cards:\n${JSON.stringify(attachedCards, null, 2)}\n`;
