@@ -32,6 +32,17 @@ import ApplyButton from '../ai-assistant/apply-button';
 import type { ComponentLike } from '@glint/template';
 import type * as _MonacoSDK from 'monaco-editor';
 
+import { menuDivider, menuItem } from '@cardstack/boxel-ui/helpers';
+
+import { ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
+
+import {
+  BoxelDropdown,
+  IconButton,
+  Menu,
+} from '@cardstack/boxel-ui/components';
+import { array } from '@ember/helper';
+
 interface CopyCodeButtonSignature {
   Args: {
     code?: string | null;
@@ -506,6 +517,10 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
     return fileUrl?.replace(realmUrl, '');
   }
 
+  openInCodeMode = () => {
+    console.log('openInCodeMode');
+  };
+
   <template>
     <style scoped>
       .code-block-diff-header {
@@ -527,7 +542,17 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
         gap: 8px;
       }
 
-      .code-block-diff-header .mode {
+      .file-info {
+        padding: 4px 8px;
+        border: 1px solid;
+        border-radius: 5px;
+        border-color: #5c5d5e;
+        background: transparent;
+        color: #f7f7f7;
+      }
+
+      .file-info:hover {
+        border-color: #ffffff;
       }
 
       .code-block-diff-header .file-info {
@@ -546,6 +571,20 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
 
       .code-block-diff-header .file-info .filename {
         font-weight: 600;
+      }
+
+      .code-block-diff-header .file-info .more-options {
+        background: none;
+        border: none;
+        color: var(--boxel-300);
+        padding: 4px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+      }
+
+      .code-block-diff-header .file-info .more-options:hover {
+        color: #ffffff;
       }
 
       .code-block-diff-header .right-section {
@@ -570,15 +609,49 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
       .mode {
         color: var(--boxel-300);
       }
+
+      .context-menu-trigger {
+        rotate: 90deg;
+        --boxel-icon-button-width: 14px;
+        --boxel-icon-button-height: 14px;
+      }
+      .context-menu-trigger {
+        --icon-color: #f7f7f7;
+      }
+
+      .context-menu-trigger:hover {
+        --icon-color: #ffffff;
+      }
     </style>
     <div class='code-block-diff-header'>
       <div class='left-section'>
         <div class='mode' data-test-file-mode>
           {{if @codeData.isNewFile 'Create' 'Edit'}}
         </div>
-        <div class='file-info' data-test-file-name>
-          <span class='filename'>{{this.fileName}}</span>
-        </div>
+        <BoxelDropdown @contentClass=''>
+          <:trigger as |bindings|>
+            <button class='file-info' data-test-file-name {{bindings}}>
+
+              <span class='filename'>{{this.fileName}}</span>
+              <IconButton
+                class='context-menu-trigger'
+                @icon={{ThreeDotsHorizontal}}
+                aria-label='field options'
+                ...attributes
+              />
+            </button>
+          </:trigger>
+          <:content as |dd|>
+            <Menu
+              class='context-menu-list'
+              @items={{array
+                (menuItem 'Open in Code Mode' this.openInCodeMode)
+              }}
+              @closeMenu={{dd.close}}
+            />
+          </:content>
+        </BoxelDropdown>
+
       </div>
       <div class='right-section'>
         {{#if @diffEditorStats}}
