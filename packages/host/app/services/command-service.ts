@@ -11,13 +11,14 @@ import { TrackedSet } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
-  type PatchData,
   Command,
   CommandContext,
   CommandContextStamp,
+  delay,
   getClass,
   identifyCard,
-  delay,
+  isCardInstance,
+  type PatchData,
 } from '@cardstack/runtime-common';
 
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
@@ -26,11 +27,13 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import { FileDef } from 'https://cardstack.com/base/file-api';
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import { shortenUuid } from '../utils/uuid';
 
 import type LoaderService from './loader-service';
+import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmServerService from './realm-server';
 import type StoreService from './store';
 import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
@@ -44,11 +47,12 @@ type GenericCommand = Command<
 >;
 
 export default class CommandService extends Service {
-  @service declare private matrixService: MatrixService;
-  @service declare private store: StoreService;
   @service declare private loaderService: LoaderService;
+  @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: Realm;
   @service declare private realmServer: RealmServerService;
+  @service declare private store: StoreService;
   currentlyExecutingCommandRequestIds = new TrackedSet<string>();
   executedCommandRequestIds = new TrackedSet<string>();
   private commandProcessingEventQueue: string[] = [];
@@ -140,6 +144,10 @@ export default class CommandService extends Service {
       if (!message) {
         continue;
       }
+      if (message.agentId !== this.matrixService.agentId) {
+        // This command was sent by another agent, so we will not auto-execute it
+        continue;
+      }
       for (let messageCommand of message.commands) {
         if (this.currentlyExecutingCommandRequestIds.has(messageCommand.id!)) {
           continue;
@@ -179,6 +187,13 @@ export default class CommandService extends Service {
   run = task(async (command: MessageCommand) => {
     let { arguments: payload, eventId, id: commandRequestId } = command;
     let resultCard: CardDef | undefined;
+    // There may be some race conditions where the command is already being executed when this task starts
+    if (
+      this.currentlyExecutingCommandRequestIds.has(commandRequestId!) ||
+      this.executedCommandRequestIds.has(commandRequestId!)
+    ) {
+      return; // already executing this command
+    }
     try {
       this.matrixService.failedCommandState.delete(commandRequestId!);
       this.currentlyExecutingCommandRequestIds.add(commandRequestId!);
@@ -230,11 +245,38 @@ export default class CommandService extends Service {
       await this.matrixService.updateSkillsAndCommandsIfNeeded(
         command.message.roomId,
       );
-      await this.matrixService.sendToolCallCommandResultEvent(
+      let userContextForAiBot =
+        this.operatorModeStateService.getSummaryForAIBot();
+      let cardIds = [
+        ...new Set([
+          ...(userContextForAiBot.openCardIds ?? []),
+          payload?.attributes?.cardId,
+          ...(payload?.attributes?.cardIds ?? []),
+        ]),
+      ].filter(Boolean);
+      let cardsToAttach = (
+        await Promise.all(cardIds.map((id) => this.store.get(id)))
+      )
+        .filter(Boolean)
+        .filter(isCardInstance) as CardDef[];
+
+      let filesToAttach: FileDef[] = [];
+      if (userContextForAiBot.codeMode?.currentFile) {
+        filesToAttach.push(
+          this.matrixService.fileAPI.createFileDef({
+            sourceUrl: userContextForAiBot.codeMode.currentFile,
+            name: userContextForAiBot.codeMode.currentFile.split('/').pop(),
+          }),
+        );
+      }
+      await this.matrixService.sendCommandResultEvent(
         command.message.roomId,
         eventId,
         commandRequestId!,
         resultCard,
+        cardsToAttach,
+        filesToAttach,
+        userContextForAiBot,
       );
     } catch (e) {
       let error =
@@ -317,6 +359,12 @@ export default class CommandService extends Service {
         );
       }
       await this.matrixService.updateSkillsAndCommandsIfNeeded(roomId);
+      let fileDef = this.matrixService.fileAPI.createFileDef({
+        sourceUrl: fileUrl,
+        name: fileUrl.split('/').pop(),
+      });
+
+      let context = this.operatorModeStateService.getSummaryForAIBot();
       let resultSends: Promise<unknown>[] = [];
       for (const codeData of codeDataItems) {
         resultSends.push(
@@ -325,6 +373,9 @@ export default class CommandService extends Service {
             codeData.eventId,
             codeData.codeBlockIndex,
             'applied',
+            [], // TODO: this should show be what is open in playground, if anything
+            [fileDef],
+            context,
           ),
         );
       }

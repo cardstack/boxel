@@ -23,9 +23,14 @@ import {
 
 import FormattedAiBotMessage from '@cardstack/host/components/ai-assistant/formatted-aibot-message';
 
-import { parseHtmlContent } from '@cardstack/host/lib/formatted-message/utils';
+import {
+  makeCodeDiffStats,
+  parseHtmlContent,
+} from '@cardstack/host/lib/formatted-message/utils';
 import CardService from '@cardstack/host/services/card-service';
 import MonacoService from '@cardstack/host/services/monaco-service';
+
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -35,12 +40,13 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
 
   let monacoService: MonacoService;
   let cardService: CardService;
+  let operatorModeStateService: OperatorModeStateService;
   let roomId = '!abcd';
   let eventId = '1234';
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     monacoService = getService('monaco-service');
-
+    operatorModeStateService = getService('operator-mode-state-service');
     cardService = getService('card-service');
 
     cardService.getSource = async () => {
@@ -49,6 +55,10 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
         content: 'let a = 1;\nlet b = 2;',
       });
     };
+
+    (operatorModeStateService as any).cachedRealmURL = new URL(
+      'https://example.com/',
+    );
   });
 
   async function renderFormattedAiBotMessage(testScenario: any) {
@@ -61,6 +71,7 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
         @eventId={{testScenario.eventId}}
         @htmlParts={{testScenario.htmlParts}}
         @isStreaming={{testScenario.isStreaming}}
+        @isLastAssistantMessage={{testScenario.isLastAssistantMessage}}
       />
     </template>);
   }
@@ -83,6 +94,7 @@ puts "💎"
         eventId,
       ),
       isStreaming: false,
+      isLastAssistantMessage: true,
     });
 
     let messageElement = (this as RenderingTestContext).element.querySelector(
@@ -93,22 +105,15 @@ puts "💎"
     assert.ok(directChildren[0]?.tagName == 'P');
     assert.ok(
       directChildren[1]?.tagName == 'DIV' &&
-        directChildren[1]?.classList.contains('code-block-actions'),
+        directChildren[1]?.classList.contains('code-block'),
     );
+    assert.ok(directChildren[2]?.tagName == 'P');
     assert.ok(
-      directChildren[2]?.tagName == 'DIV' &&
-        directChildren[2]?.classList.contains('code-block'),
+      directChildren[3]?.tagName == 'DIV' &&
+        directChildren[3]?.classList.contains('code-block'),
     );
-    assert.ok(directChildren[3]?.tagName == 'P');
-    assert.ok(
-      directChildren[4]?.tagName == 'DIV' &&
-        directChildren[4]?.classList.contains('code-block-actions'),
-    );
-    assert.ok(
-      directChildren[5]?.tagName == 'DIV' &&
-        directChildren[5]?.classList.contains('code-block'),
-    );
-    assert.ok(directChildren[6]?.tagName == 'P');
+    assert.ok(directChildren[4]?.tagName == 'P');
+
     assert.dom('.monaco-editor').exists({ count: 2 });
     assert.dom('pre').doesNotExist();
   });
@@ -124,6 +129,7 @@ puts "💎"
         eventId,
       ),
       isStreaming: false,
+      isLastAssistantMessage: true,
     });
 
     assert.dom('[data-test-apply-code-button]').doesNotExist();
@@ -143,6 +149,7 @@ ${SEARCH_MARKER}
         eventId,
       ),
       isStreaming: false,
+      isLastAssistantMessage: true,
     });
     await waitUntil(() => document.querySelectorAll('.view-line').length > 3);
 
@@ -170,6 +177,7 @@ ${SEPARATOR_MARKER}
         eventId,
       ),
       isStreaming: false,
+      isLastAssistantMessage: true,
     });
 
     await waitUntil(() => document.querySelectorAll('.view-line').length > 4);
@@ -200,6 +208,7 @@ ${REPLACE_MARKER}
         eventId,
       ),
       isStreaming: false,
+      isLastAssistantMessage: true,
     });
 
     // monaco diff editor is rendered when the diff block is complete (i.e. code block streaming has finished)
@@ -243,12 +252,48 @@ let c = 3;
         eventId,
       ),
       isStreaming: false,
+      isLastAssistantMessage: true,
     });
 
-    // First editor is a diff editor, the second is a standard code block
-    assert.dom('[data-test-apply-code-button]').exists({ count: 1 });
-    assert.dom('.code-block').exists({ count: 2 });
-    assert.dom('.code-block-diff').exists({ count: 1 });
+    // First editor is a diff editor
+    assert
+      .dom('[data-test-code-block-index="0"] [data-test-code-diff-editor]')
+      .exists();
+    assert
+      .dom('[data-test-code-block-index="0"] [data-test-file-mode]')
+      .hasText('Edit');
+    assert
+      .dom('[data-test-code-block-index="0"] [data-test-file-name]')
+      .hasText('file.ts');
+    await waitFor('[data-test-code-block-index="0"] [data-test-removed-lines]');
+    assert
+      .dom('[data-test-code-block-index="0"] [data-test-removed-lines]')
+      .hasText('-2');
+    assert
+      .dom('[data-test-code-block-index="0"] [data-test-added-lines]')
+      .hasText('+1');
+    assert
+      .dom('[data-test-code-block-index="0"] [data-test-apply-code-button]')
+      .exists();
+
+    // The second is a standard code block
+    assert.dom('[data-test-code-block-index="1"] [data-test-editor]').exists();
+    assert
+      .dom('[data-test-code-block-index="1"] [data-test-file-mode]')
+      .hasText('Edit');
+    assert
+      .dom('[data-test-code-block-index="1"] [data-test-removed-lines]')
+      .doesNotExist();
+    assert
+      .dom('[data-test-code-block-index="1"] [data-test-added-lines]')
+      .doesNotExist();
+    assert
+      .dom('[data-test-code-block-index="1"] [data-test-file-name]')
+      .hasText('file.ts');
+    assert
+      .dom('[data-test-code-block-index="1"] [data-test-apply-code-button]')
+      .doesNotExist();
+    assert.dom('[data-test-code-block-index="1"] [data-test-editor]').exists();
 
     await percySnapshot(assert);
   });
@@ -279,6 +324,7 @@ ${REPLACE_MARKER}
         eventId,
       ),
       isStreaming: false,
+      isLastAssistantMessage: true,
     });
 
     assert.dom('[data-test-apply-all-code-patches-button]').exists();
@@ -310,6 +356,7 @@ ${REPLACE_MARKER}
         eventId,
       ),
       isStreaming: true,
+      isLastAssistantMessage: true,
     });
 
     assert.dom('[data-test-apply-all-code-patches-button]').doesNotExist();
@@ -339,6 +386,7 @@ ${REPLACE_MARKER}
           @roomId='!abcd'
           @eventId='1234'
           @isStreaming={{true}}
+          @isLastAssistantMessage={{true}}
         />
       </template>
     }
@@ -386,6 +434,7 @@ ${REPLACE_MARKER}
           @roomId='!abcd'
           @eventId='1234'
           @isStreaming={{this.isStreaming}}
+          @isLastAssistantMessage={{true}}
         />
       </template>
     }
@@ -477,6 +526,7 @@ ${REPLACE_MARKER}
         eventId,
       ),
       isStreaming: false,
+      isLastAssistantMessage: true,
     });
 
     assert
@@ -484,5 +534,53 @@ ${REPLACE_MARKER}
         `[data-test-error-message="Failed to load code from malformed file url"]`,
       )
       .exists();
+  });
+
+  test('utils: makeCodeDiffStats', function (assert) {
+    // A couple of real world examples where I got lineChanges from the monaco
+    // diff editor (using editor.getLineChanges()) and I counted
+    // the green and red lines manually and compared the results.
+
+    let lineChanges = [
+      {
+        originalStartLineNumber: 308,
+        originalEndLineNumber: 0,
+        modifiedStartLineNumber: 309,
+        modifiedEndLineNumber: 309,
+        charChanges: [],
+      },
+    ];
+    assert.deepEqual(makeCodeDiffStats(lineChanges), {
+      linesAdded: 1,
+      linesRemoved: 0,
+    });
+
+    lineChanges = [
+      {
+        originalStartLineNumber: 83,
+        originalEndLineNumber: 84,
+        modifiedStartLineNumber: 83,
+        modifiedEndLineNumber: 85,
+        charChanges: [],
+      },
+      {
+        originalStartLineNumber: 90,
+        originalEndLineNumber: 90,
+        modifiedStartLineNumber: 91,
+        modifiedEndLineNumber: 92,
+        charChanges: [],
+      },
+      {
+        originalStartLineNumber: 96,
+        originalEndLineNumber: 96,
+        modifiedStartLineNumber: 98,
+        modifiedEndLineNumber: 99,
+        charChanges: [],
+      },
+    ];
+    assert.deepEqual(makeCodeDiffStats(lineChanges), {
+      linesAdded: 7,
+      linesRemoved: 4,
+    });
   });
 });

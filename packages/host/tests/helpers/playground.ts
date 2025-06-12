@@ -37,12 +37,12 @@ export const assertFieldExists = (
 
 export const chooseAnotherInstance = async () => {
   await click('[data-test-instance-chooser]');
-  await click('[data-test-choose-another-instance]');
+  await click('[data-test-boxel-menu-item-text="Choose another instance"]');
 };
 
 export const createNewInstance = async () => {
   await click('[data-test-instance-chooser]');
-  await click('[data-test-create-instance]');
+  await click('[data-test-boxel-menu-item-text="Create new instance"]');
 };
 
 export const openFileInPlayground = async (
@@ -70,10 +70,10 @@ export const selectFormat = async (format: Format) =>
   await click(`[data-test-format-chooser="${format}"]`);
 
 export const togglePlaygroundPanel = async () =>
-  await click('[data-test-accordion-item="playground"] button');
+  await click('[data-test-module-inspector-view="preview"]');
 
 export const toggleSpecPanel = async () =>
-  await click('[data-test-accordion-item="spec-preview"] button');
+  await click('[data-test-module-inspector-view="spec"]');
 
 // PlaygroundSelections
 export function getPlaygroundSelections(): Record<

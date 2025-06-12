@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { Credentials, registerUser } from '../docker/synapse';
+import { Credentials, putEvent, registerUser } from '../docker/synapse';
 import {
   login,
   logout,
@@ -1047,5 +1047,103 @@ test.describe('Room messages', () => {
     await expect(page.locator('[data-test-ai-bot-retry-button]')).toHaveCount(
       0,
     );
+  });
+
+  test('filters out messages with m.replace when loading room history', async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass', { url: appURL });
+    let room1 = await getRoomId(page);
+
+    let event1 = await putEvent(
+      userCred.accessToken,
+      room1,
+      'm.room.message',
+      '1',
+      {
+        msgtype: 'm.text',
+        format: 'org.matrix.custom.html',
+        body: 'Initial streaming message',
+        isStreamingFinished: false,
+      },
+    );
+
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        message: 'Initial streaming message',
+      },
+    ]);
+
+    let replaceEvent1 = await putEvent(
+      userCred.accessToken,
+      room1,
+      'm.room.message',
+      '2',
+      {
+        msgtype: 'm.text',
+        format: 'org.matrix.custom.html',
+        body: 'Initial streaming message, additional text from replacement event 1',
+        isStreamingFinished: false,
+        'm.relates_to': {
+          rel_type: 'm.replace',
+          event_id: event1.event_id,
+        },
+      },
+    );
+
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        message:
+          'Initial streaming message, additional text from replacement event 1',
+      },
+    ]);
+
+    let replaceEvent2 = await putEvent(
+      userCred.accessToken,
+      room1,
+      'm.room.message',
+      '3',
+      {
+        msgtype: 'm.text',
+        format: 'org.matrix.custom.html',
+        body: 'Initial streaming message, additional text from replacement event 1, additional text from replacement event 2',
+        isStreamingFinished: false,
+        'm.relates_to': {
+          rel_type: 'm.replace',
+          event_id: event1.event_id,
+        },
+      },
+    );
+
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        message:
+          'Initial streaming message, additional text from replacement event 1, additional text from replacement event 2',
+      },
+    ]);
+
+    await page.reload();
+    let response = await page.waitForResponse(
+      (response) =>
+        response.url().includes('/messages') && response.status() === 200,
+    );
+    const body = await response.json();
+    const messageEventIds = body.chunk
+      .filter((e: { type: string }) => e.type === 'm.room.message')
+      .map((e: { event_id: string }) => e.event_id);
+    expect(messageEventIds).not.toContain(replaceEvent1.event_id);
+    expect(messageEventIds).not.toContain(replaceEvent2.event_id);
+    expect(messageEventIds).toContain(event1.event_id);
+
+    await assertMessages(page, [
+      {
+        from: 'user1',
+        message:
+          'Initial streaming message, additional text from replacement event 1, additional text from replacement event 2',
+      },
+    ]);
   });
 });

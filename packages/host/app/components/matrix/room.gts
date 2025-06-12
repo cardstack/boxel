@@ -24,7 +24,7 @@ import { MatrixEvent } from 'matrix-js-sdk';
 
 import pluralize from 'pluralize';
 
-import { TrackedObject, TrackedSet, TrackedArray } from 'tracked-built-ins';
+import { TrackedObject, TrackedArray } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
@@ -37,7 +37,6 @@ import {
   ResolvedCodeRef,
   internalKeyFor,
   isCardInstance,
-  isLocalId,
 } from '@cardstack/runtime-common';
 import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
 
@@ -89,14 +88,14 @@ export default class Room extends Component<Signature> {
     {{#if (not this.doMatrixEventFlush.isRunning)}}
       <section
         class='room'
-        data-room-settled={{(and
+        data-room-settled={{and
           this.doWhenRoomChanges.isIdle
           (not this.matrixService.isLoadingTimeline)
-        )}}
-        data-test-room-settled={{(and
+        }}
+        data-test-room-settled={{and
           this.doWhenRoomChanges.isIdle
           (not this.matrixService.isLoadingTimeline)
-        )}}
+        }}
         data-test-room-name={{@roomResource.name}}
         data-test-room={{@roomId}}
         data-room-id={{@roomId}}
@@ -138,14 +137,6 @@ export default class Room extends Component<Signature> {
                   {{on 'click' this.scrollToFirstUnread}}
                 >{{this.unreadMessageText}}</BoxelButton>
               </div>
-            {{else}}
-              <AiAssistantSkillMenu
-                class='skills'
-                @skills={{this.sortedSkills}}
-                @onChooseCard={{perform this.attachSkillTask}}
-                @onUpdateSkillIsActive={{perform this.updateSkillIsActiveTask}}
-                data-test-skill-menu
-              />
             {{/if}}
           {{/if}}
         </AiAssistantConversation>
@@ -159,6 +150,8 @@ export default class Room extends Component<Signature> {
               @canSend={{this.canSend}}
               data-test-message-field={{@roomId}}
             />
+            {{! TODO: Remove this bottom section after we move the attachment picker to chat input 
+                  and llm chooser to area__actions }}
             <div class='chat-input-area__bottom-section'>
               <AiAssistantAttachmentPicker
                 @autoAttachedCardIds={{this.autoAttachedCardIds}}
@@ -179,8 +172,16 @@ export default class Room extends Component<Signature> {
               <LLMSelect
                 @selected={{@roomResource.activeLLM}}
                 @onChange={{perform @roomResource.activateLLMTask}}
-                @options={{this.supportedLLMs}}
+                @options={{this.llmsForSelectMenu}}
                 @disabled={{@roomResource.isActivatingLLM}}
+              />
+            </div>
+            <div class='chat-input-area__actions'>
+              <AiAssistantSkillMenu
+                @skills={{this.sortedSkills}}
+                @onChooseCard={{perform this.attachSkillTask}}
+                @onUpdateSkillIsActive={{perform this.updateSkillIsActiveTask}}
+                data-test-skill-menu
               />
             </div>
           </div>
@@ -194,11 +195,6 @@ export default class Room extends Component<Signature> {
         grid-template-rows: 1fr auto;
         height: 100%;
         overflow: hidden;
-      }
-      .skills {
-        position: sticky;
-        bottom: 0;
-        margin-left: auto;
       }
       .unread-indicator {
         position: sticky;
@@ -228,6 +224,13 @@ export default class Room extends Component<Signature> {
         :deep(.ember-basic-dropdown-content-wormhole-origin) {
         position: absolute; /* This prevents layout shift when menu opens */
       }
+      .chat-input-area__actions {
+        display: flex;
+        padding: var(--boxel-sp-sm);
+        gap: var(--boxel-sp-xxl);
+        background-color: var(--boxel-light-100);
+        border-top: 1px solid var(--boxel-200);
+      }
       :deep(.ai-assistant-conversation > *:first-child) {
         margin-top: auto;
       }
@@ -254,6 +257,9 @@ export default class Room extends Component<Signature> {
   @service private declare playgroundPanelService: PlaygroundPanelService;
 
   private autoAttachmentResource = getAutoAttachment(this, {
+    submode: () => this.operatorModeStateService.state.submode,
+    autoAttachedFileUrl: () => this.autoAttachedFileUrl,
+    playgroundPanelCardId: () => this.playgroundPanelCardId,
     topMostStackItems: () => this.topMostStackItems,
     attachedCardIds: () => this.cardIdsToAttach,
     removedCardIds: () => this.removedAttachedCardIds,
@@ -585,8 +591,12 @@ export default class Room extends Component<Signature> {
     return this.args.roomResource.skills;
   }
 
-  private get supportedLLMs(): string[] {
-    return DEFAULT_LLM_LIST.sort();
+  private get llmsForSelectMenu() {
+    return [
+      ...new Set([...DEFAULT_LLM_LIST, ...this.args.roomResource.usedLLMs]),
+    ]
+      .filter(Boolean)
+      .sort();
   }
 
   private get sortedSkills(): RoomSkill[] {
@@ -688,7 +698,7 @@ export default class Room extends Component<Signature> {
   private removeCard(id: string) {
     if (this.playgroundPanelCardId === id) {
       this.removePlaygroundPanelCard();
-    } else if (this.autoAttachmentResource.cardIds.has(id)) {
+    } else if (this.autoAttachedCardIds.has(id)) {
       this.removedAttachedCardIds.push(id);
     } else {
       const cardIndex = this.cardIdsToAttach?.findIndex((url) => url === id);
@@ -760,11 +770,8 @@ export default class Room extends Component<Signature> {
         ) || []),
         ...this.autoAttachedCardIds,
       ]);
-      let context = {
-        submode: this.operatorModeStateService.state.submode,
-        openCardIds: this.makeRemoteIdsList([...openCardIds]),
-        realmUrl: this.operatorModeStateService.realmURL.href,
-      };
+      let context =
+        this.operatorModeStateService.getSummaryForAIBot(openCardIds);
       try {
         let cards: CardDef[] | undefined;
         if (typeof cardsOrIds?.[0] === 'string') {
@@ -809,44 +816,7 @@ export default class Room extends Component<Signature> {
     this.removedAttachedCardIds.splice(0);
   });
 
-  private makeRemoteIdsList(ids: (string | undefined)[]) {
-    return ids
-      .map((id) => {
-        if (!id) {
-          return undefined;
-        }
-        if (isLocalId(id)) {
-          let maybeInstance = this.store.peek(id);
-          if (
-            maybeInstance &&
-            isCardInstance(maybeInstance) &&
-            maybeInstance.id
-          ) {
-            return maybeInstance.id;
-          } else {
-            return undefined;
-          }
-        }
-        return id;
-      })
-      .filter(Boolean) as string[];
-  }
-
   private get autoAttachedCardIds() {
-    if (this.operatorModeStateService.state.submode === Submodes.Code) {
-      // also get the card ids of the cards that are open in code mode
-      let cardIds = new TrackedSet<string>();
-      if (this.autoAttachedFileUrl?.endsWith('.json')) {
-        // remove the json extension. TODO: is there a way of getting the actual card id
-        let cardId = this.autoAttachedFileUrl.replace(/\.json$/, '');
-        cardIds.add(cardId);
-      }
-      if (this.playgroundPanelCardId) {
-        cardIds.add(this.playgroundPanelCardId);
-      }
-      return cardIds;
-    }
-
     return this.autoAttachmentResource.cardIds;
   }
 

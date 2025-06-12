@@ -29,6 +29,8 @@ import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 
+import config from '@cardstack/host/config/environment';
+
 import type IndexController from '@cardstack/host/controllers';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
@@ -317,8 +319,10 @@ export default class SubmodeLayout extends Component<Signature> {
             @hide={{this.aiAssistantPanelService.isOpen}}
             @onViewInChatClick={{this.aiAssistantPanelService.openPanel}}
           />
-          {{#if (not this.aiAssistantPanelService.isOpen)}}
-            <AskAiContainer @selectedCardRef={{@selectedCardRef}} />
+          {{#if config.featureFlags.SHOW_ASK_AI}}
+            {{#if (not this.aiAssistantPanelService.isOpen)}}
+              <AskAiContainer @selectedCardRef={{@selectedCardRef}} />
+            {{/if}}
           {{/if}}
           <AiAssistantButton
             class='chat-btn'

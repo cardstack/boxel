@@ -10,7 +10,7 @@ import { tracked } from '@glimmer/tracking';
 import { dropTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
-import { and, bool } from '@cardstack/boxel-ui/helpers';
+import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
@@ -20,6 +20,8 @@ import {
   HtmlPreTagGroup,
   CodeData,
 } from '@cardstack/host/lib/formatted-message/utils';
+
+import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
 
 import {
   type CodeDiffResource,
@@ -44,6 +46,7 @@ interface FormattedAiBotMessageSignature {
     eventId: string;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
+    isLastAssistantMessage: boolean;
   };
 }
 
@@ -68,6 +71,9 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
 
   private get isApplyAllButtonDisplayed() {
     if (this.args.isStreaming) {
+      return false;
+    }
+    if (!this.args.isLastAssistantMessage) {
       return false;
     }
     return (
@@ -130,6 +136,12 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
     }
   });
 
+  private preTagGroupIndex = (htmlPartIndex: number) => {
+    return this.args
+      .htmlParts!.slice(0, htmlPartIndex)
+      .filter(isHtmlPreTagGroup).length;
+  };
+
   <template>
     <div class='message'>
       {{! We are splitting the html into parts so that we can target the
@@ -161,6 +173,8 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
               (array htmlPart.codeData)
             }}
             @monacoSDK={{@monacoSDK}}
+            @isLastAssistantMessage={{@isLastAssistantMessage}}
+            @index={{this.preTagGroupIndex index}}
           />
         {{else}}
           {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
@@ -191,16 +205,9 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
         gap: var(--boxel-sp-xs);
         margin-top: var(--boxel-sp);
       }
-      .message {
-        position: relative;
-      }
 
-      .message > :deep(*) {
+      .message > :deep(*:first-child) {
         margin-top: 0;
-      }
-
-      .message > :deep(.code-block + :not(.code-block)) {
-        margin-top: 25px;
       }
 
       .ai-assistant-code-block-actions {
@@ -248,6 +255,8 @@ interface HtmlGroupCodeBlockSignature {
     codePatchStatus: CodePatchStatus | 'ready' | 'applying';
     onPatchCode: (codeData: CodeData) => void;
     monacoSDK: MonacoSDK;
+    isLastAssistantMessage: boolean;
+    index: number;
   };
 }
 
@@ -255,6 +264,10 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   _codeDiffResource: CodeDiffResource | undefined;
   _searchReplaceBlock: string | null | undefined = null;
   _fileUrl: string | null | undefined = null;
+  @tracked diffEditorStats: {
+    linesRemoved: number;
+    linesAdded: number;
+  } | null = null;
 
   get codeDiffResource() {
     if (this._codeDiffResource) {
@@ -285,46 +298,123 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
     return 'Code could not be displayed: ' + errorMessage;
   }
 
+  private extractReplaceCode(searchReplaceBlock: string | null | undefined) {
+    if (!searchReplaceBlock) {
+      return null;
+    }
+    return parseSearchReplace(searchReplaceBlock).replaceContent;
+  }
+
+  private get codeForEditor() {
+    if (this.isAppliedOrIgnoredCodePatch) {
+      return this.extractReplaceCode(this.args.codeData.searchReplaceBlock);
+    } else {
+      return this.args.codeData.code;
+    }
+  }
+
+  private get isAppliedOrIgnoredCodePatch() {
+    // Ignored means the user moved on to the next message
+    return (
+      this.args.codePatchStatus === 'applied' ||
+      !this.args.isLastAssistantMessage
+    );
+  }
+
+  private updateDiffEditorStats = (stats: {
+    linesAdded: number;
+    linesRemoved: number;
+  }) => {
+    this.diffEditorStats = stats;
+  };
+
   <template>
-    <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
+    <CodeBlock
+      @monacoSDK={{@monacoSDK}}
+      @codeData={{@codeData}}
+      class='code-block'
+      data-test-code-block-index={{@index}}
+      as |codeBlock|
+    >
       {{#if (bool @codeData.searchReplaceBlock)}}
-        {{#if this.codeDiffResource.errorMessage}}
-          <ErrorMessage
-            class='error-container'
-            data-test-error-message={{this.codeDiffResource.errorMessage}}
-            @errorMessage={{this.errorMessage
-              this.codeDiffResource.errorMessage
-            }}
-          />
-        {{/if}}
-        {{#if this.codeDiffResource.isDataLoaded}}
-          <codeBlock.actions as |actions|>
-            <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
-            <actions.applyCodePatch
+        {{#if this.isAppliedOrIgnoredCodePatch}}
+          <div>
+            <codeBlock.editorHeader
               @codeData={{@codeData}}
-              @performPatch={{fn @onPatchCode @codeData}}
-              @patchCodeStatus={{@codePatchStatus}}
+              @diffEditorStats={{null}}
+            />
+            <codeBlock.editor @code={{this.codeForEditor}} @dimmed={{true}} />
+            <codeBlock.actions as |actions|>
+              <actions.copyCode
+                @code={{this.extractReplaceCode @codeData.searchReplaceBlock}}
+              />
+              {{#if (eq @codePatchStatus 'applied')}}
+                {{! This is just to show the ✅ icon to signalize that the code patch has been applied }}
+                <actions.applyCodePatch
+                  @codeData={{@codeData}}
+                  @patchCodeStatus={{@codePatchStatus}}
+                />
+              {{/if}}
+            </codeBlock.actions>
+          </div>
+        {{else}}
+          {{#if this.codeDiffResource.errorMessage}}
+            <ErrorMessage
+              class='error-container'
+              data-test-error-message={{this.codeDiffResource.errorMessage}}
+              @errorMessage={{this.errorMessage
+                this.codeDiffResource.errorMessage
+              }}
+            />
+          {{/if}}
+          {{#if this.codeDiffResource.isDataLoaded}}
+            <codeBlock.editorHeader
+              @codeData={{@codeData}}
+              @diffEditorStats={{this.diffEditorStats}}
+            />
+            <codeBlock.diffEditor
               @originalCode={{this.codeDiffResource.originalCode}}
               @modifiedCode={{this.codeDiffResource.modifiedCode}}
+              @language={{@codeData.language}}
+              @updateDiffEditorStats={{this.updateDiffEditorStats}}
             />
-          </codeBlock.actions>
-          <codeBlock.diffEditor
-            @originalCode={{this.codeDiffResource.originalCode}}
-            @modifiedCode={{this.codeDiffResource.modifiedCode}}
-            @language={{@codeData.language}}
-          />
+            <codeBlock.actions as |actions|>
+              <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
+              <actions.applyCodePatch
+                @codeData={{@codeData}}
+                @performPatch={{fn @onPatchCode @codeData}}
+                @patchCodeStatus={{@codePatchStatus}}
+                @originalCode={{this.codeDiffResource.originalCode}}
+                @modifiedCode={{this.codeDiffResource.modifiedCode}}
+              />
+            </codeBlock.actions>
+          {{/if}}
         {{/if}}
       {{else}}
+        {{#if @codeData.fileUrl}}
+          <codeBlock.editorHeader
+            @codeData={{@codeData}}
+            @diffEditorStats={{null}}
+          />
+        {{/if}}
+        <codeBlock.editor @code={{this.codeForEditor}} />
         <codeBlock.actions as |actions|>
           <actions.copyCode @code={{@codeData.code}} />
         </codeBlock.actions>
-        <codeBlock.editor />
       {{/if}}
     </CodeBlock>
 
     <style scoped>
       .error-container {
         margin-bottom: var(--boxel-sp-xs);
+      }
+
+      .code-block {
+        margin-top: 0;
+      }
+
+      .code-block + .code-block {
+        margin-top: 1rem;
       }
     </style>
   </template>

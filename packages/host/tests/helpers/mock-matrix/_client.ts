@@ -20,6 +20,7 @@ import {
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
@@ -154,6 +155,10 @@ export class MockClient implements ExtendedClient {
     return this.clientOpts.baseUrl;
   }
 
+  downloadContentAsBlob(_file: FileDef): Promise<Blob> {
+    throw new Error('Method not implemented.');
+  }
+
   hashMessageWithSecret(_message: string): Promise<string> {
     throw new Error('Method not implemented.');
   }
@@ -239,6 +244,13 @@ export class MockClient implements ExtendedClient {
     _room: MatrixSDK.Room,
     _limit?: number | undefined,
   ): Promise<MatrixSDK.Room> {
+    throw new Error('Method not implemented.');
+  }
+
+  paginateEventTimeline(
+    _timeline: MatrixSDK.EventTimeline,
+    _opts?: MatrixSDK.IPaginateOpts | undefined,
+  ): Promise<boolean> {
     throw new Error('Method not implemented.');
   }
 
@@ -433,6 +445,10 @@ export class MockClient implements ExtendedClient {
     let hit = this.serverState.rooms.find((r) => r.id === roomId);
     if (hit) {
       return {
+        roomId,
+        client: this,
+        myUserId: this.loggedInAs!,
+        opts: {},
         getMember(_userId: string) {
           return {
             membership: 'join',
@@ -451,7 +467,34 @@ export class MockClient implements ExtendedClient {
                 .map((e) => new MatrixEvent(e)),
           };
         },
-      } as MatrixSDK.Room;
+        getOrCreateFilteredTimelineSet: (
+          filter: MatrixSDK.Filter,
+          _opts = {},
+        ) => {
+          return {
+            getLiveTimeline: () => ({
+              getEvents: () => [],
+              getPaginationToken: () => null,
+              setPaginationToken: () => {},
+              getNeighbouringTimeline: () => null,
+            }),
+            addLiveEvent: () => {},
+            getTimelines: () => [],
+            getFilter: () => filter,
+            setFilter: () => {},
+            getTimelineForEvent: () => null,
+            addTimeline: () => ({
+              getEvents: () => [],
+              getPaginationToken: () => null,
+              setPaginationToken: () => {},
+              getNeighbouringTimeline: () => null,
+            }),
+            addEventsToTimeline: () => {},
+            handleRemoteEcho: () => {},
+            canContain: () => true,
+          };
+        },
+      } as unknown as MatrixSDK.Room;
     }
     return null;
   }
@@ -476,6 +519,7 @@ export class MockClient implements ExtendedClient {
       case APP_BOXEL_ROOM_SKILLS_EVENT_TYPE:
       case APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE:
       case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
+      case APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE:
       case APP_BOXEL_ACTIVE_LLM:
       case APP_BOXEL_REALM_EVENT_TYPE:
       case 'm.room.create':
@@ -692,6 +736,12 @@ export class MockClient implements ExtendedClient {
       throw new Error(`content not found for ${serializedFile.url}`);
     }
     return JSON.parse(content.toString()) as LooseSingleCardDocument;
+  }
+
+  async downloadAsFileInBrowser(
+    _serializedFile: SerializedFile,
+  ): Promise<void> {
+    throw new Error('Method not implemented: downloadAsFileInBrowser');
   }
 
   mxcUrlToHttp(mxcUrl: string): string {

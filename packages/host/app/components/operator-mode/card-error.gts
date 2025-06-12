@@ -32,6 +32,9 @@ interface Signature {
     fileToFixWithAi?: FileDef;
   };
   Element: HTMLElement;
+  Blocks: {
+    error: [];
+  };
 }
 
 export default class CardErrorComponent extends Component<Signature> {
@@ -70,7 +73,11 @@ export default class CardErrorComponent extends Component<Signature> {
       @title={{this.errorTitle}}
       @viewInCodeMode={{@viewInCodeMode}}
       @fileToFixWithAi={{@fileToFixWithAi}}
-    />
+    >
+      <:error>
+        {{yield to='error'}}
+      </:error>
+    </CardErrorDetail>
 
     <style scoped>
       .icon {
@@ -84,14 +91,13 @@ export default class CardErrorComponent extends Component<Signature> {
         justify-content: center;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
-        margin: var(--boxel-sp);
       }
       .card-error {
         flex: 1;
         opacity: 0.4;
         border-radius: 0;
         box-shadow: none;
-        overflow: visible;
+        overflow-y: auto;
       }
       .message {
         width: 100%;

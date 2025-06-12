@@ -112,20 +112,22 @@ module('getModifyPrompt', (hooks) => {
 
     const result = await getModifyPrompt(
       history,
-      '@ai-bot:localhost',
+      '@aibot:localhost',
       undefined,
       undefined,
       fakeMatrixClient,
     );
 
     // Should have a system prompt and a user prompt
-    assert.equal(result.length, 2);
+    assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[1].role, 'user');
-    assert.equal(
-      result[1].content,
-      'User message: Hey\n          Context: the user has no open cards.',
+    assert.equal(result[1].role, 'system');
+    assert.equal(result[2].role, 'user');
+    assert.true(
+      result[1].content!.includes('The user has no open cards.\n'),
+      'should include the system context message about no open cards',
     );
+    assert.equal(result[2].content, 'Hey');
   });
 
   test('should generate a more structured response if the user uploads a card', async () => {
@@ -140,8 +142,10 @@ module('getModifyPrompt', (hooks) => {
           body: 'Hey',
           data: {
             context: {
+              openCardIds: ['http://localhost:4201/experiments/Author/1'],
               tools: [],
-              submode: undefined,
+              submode: 'interact',
+              realmUrl: 'http://localhost:4201/experiments',
               functions: [],
             },
             attachedCards: [
@@ -182,23 +186,24 @@ module('getModifyPrompt', (hooks) => {
 
     const result = await getModifyPrompt(
       history,
-      '@ai-bot:localhost',
+      '@aibot:localhost',
       undefined,
       undefined,
       fakeMatrixClient,
     );
 
     // Should include the body as well as the card
-    assert.equal(result.length, 2);
+    assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[1].role, 'user');
-    assert.true(result[1].content?.includes('Hey'));
+    assert.equal(result[1].role, 'system');
+    assert.equal(result[2].role, 'user');
+    assert.equal(result[2].content, 'Hey');
     if (
       history[0].type === 'm.room.message' &&
       history[0].content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
     ) {
       assert.true(
-        result[0].content?.includes(
+        result[1].content?.includes(
           JSON.stringify(
             history[0].content.data.attachedCards![0].content
               ? JSON.parse(history[0].content.data.attachedCards![0].content)
@@ -206,6 +211,27 @@ module('getModifyPrompt', (hooks) => {
               : '',
           ),
         ),
+        'attached card should be in the system context message',
+      );
+      assert.true(
+        result[1].content?.includes('Room ID: room1'),
+        'roomId should be in the system context message',
+      );
+      assert.true(
+        result[1].content?.includes('Submode: interact'),
+        'submode should be in the system context message',
+      );
+      assert.true(
+        result[1].content?.includes(
+          'Workspace: http://localhost:4201/experiments',
+        ),
+        'workspace should be in the system context message',
+      );
+      assert.true(
+        result[1].content?.includes(
+          'Open cards:\n - http://localhost:4201/experiments/Author/1\n',
+        ),
+        'open card ids should be in the system context message',
       );
     } else {
       assert.true(
@@ -240,7 +266,7 @@ module('getModifyPrompt', (hooks) => {
     try {
       await getModifyPrompt(
         history,
-        'ai-bot',
+        '@aibot@localhost',
         undefined,
         undefined,
         fakeMatrixClient,
@@ -249,7 +275,7 @@ module('getModifyPrompt', (hooks) => {
     } catch (e) {
       assert.equal(
         (e as Error).message,
-        "Username must be a full id, e.g. '@ai-bot:localhost'",
+        "Username must be a full id, e.g. '@aibot:localhost'",
       );
     }
   });
@@ -474,7 +500,11 @@ module('getModifyPrompt', (hooks) => {
           data: {
             context: {
               tools: [],
-              submode: undefined,
+              submode: 'code',
+              codeMode: {
+                currentFile:
+                  'http://test-realm-server/my-realm/spaghetti-recipe.gts',
+              },
               functions: [],
             },
             attachedFiles: [
@@ -504,7 +534,7 @@ module('getModifyPrompt', (hooks) => {
       },
       {
         type: 'm.room.message',
-        sender: '@ai-bot:localhost',
+        sender: '@aibot:localhost',
         content: {
           body: 'Ok. What do you want me to do with these files?',
           msgtype: 'm.text',
@@ -531,7 +561,11 @@ module('getModifyPrompt', (hooks) => {
           data: {
             context: {
               tools: [],
-              submode: undefined,
+              submode: 'code',
+              codeMode: {
+                currentFile:
+                  'http://test-realm-server/my-realm/spaghetti-recipe.gts',
+              },
               functions: [],
             },
             attachedFiles: [
@@ -599,7 +633,7 @@ module('getModifyPrompt', (hooks) => {
     );
 
     assert.ok(
-      prompt[0].content?.includes(
+      prompt[prompt.length - 2].content?.includes(
         `
 Attached files:
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts): this is the content of the spaghetti-recipe.gts file
@@ -608,6 +642,13 @@ Attached files:
 [example.pdf](http://test.com/my-realm/example.pdf): Error loading attached file: Unsupported file type: application/pdf. For now, only text files are supported.
       `.trim(),
       ),
+    );
+
+    assert.ok(
+      prompt[prompt.length - 2].content?.includes(
+        'File open in code editor: http://test-realm-server/my-realm/spaghetti-recipe.gts',
+      ),
+      'Context should include the URL of the file open in the code editor',
     );
   });
 
@@ -772,7 +813,7 @@ Attached files:
     assert.equal(attachedCards.length, 2);
   });
 
-  test('Gets multiple uploaded cards in the system prompt', async () => {
+  test('Gets multiple uploaded cards in the system context message', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -880,16 +921,16 @@ Attached files:
       undefined,
       fakeMatrixClient,
     );
-    const systemMessage = fullPrompt.find(
+    const systemContextMessage = fullPrompt.findLast(
       (message) => message.role === 'system',
     );
     assert.true(
-      systemMessage?.content?.includes(
+      systemContextMessage?.content?.includes(
         'http://localhost:4201/experiments/Author/1',
       ),
     );
     assert.true(
-      systemMessage?.content?.includes(
+      systemContextMessage?.content?.includes(
         'http://localhost:4201/experiments/Author/2',
       ),
     );
@@ -1260,8 +1301,10 @@ Attached files:
       'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
 
     assert.ok(
-      messages?.[0].content?.includes(nonEditableCardsMessage),
-      'System message should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files',
+      messages?.[messages.length - 2].content?.includes(
+        nonEditableCardsMessage,
+      ),
+      'System context message should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files',
     );
 
     // Now add a tool
@@ -1280,8 +1323,10 @@ Attached files:
     );
 
     assert.ok(
-      !messages2?.[0].content?.includes(nonEditableCardsMessage),
-      'System message should not include the "unable to edit cards" message when there are attached cards and a tool',
+      !messages2?.[messages2.length - 2].content?.includes(
+        nonEditableCardsMessage,
+      ),
+      'System context message should not include the "unable to edit cards" message when there are attached cards and a tool',
     );
 
     // Now remove cards, tools, and add an attached file
@@ -1304,8 +1349,10 @@ Attached files:
     );
 
     assert.ok(
-      !messages3?.[0].content?.includes(nonEditableCardsMessage),
-      'System message should not include the "unable to edit cards" message when there is an attached file',
+      !messages3?.[messages3.length - 2].content?.includes(
+        nonEditableCardsMessage,
+      ),
+      'System context message should not include the "unable to edit cards" message when there is an attached file',
     );
   });
 
@@ -1478,9 +1525,9 @@ Attached files:
     });
 
     const result = (
-      await getPromptParts(eventList, '@ai-bot:localhost', fakeMatrixClient)
+      await getPromptParts(eventList, '@aibot:localhost', fakeMatrixClient)
     ).messages!;
-    assert.equal(result.length, 2);
+    assert.equal(result.length, 3);
     assert.equal(result[0].role, 'system');
     assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.false(result[0].content?.includes('['));
@@ -1588,26 +1635,29 @@ Attached files:
     });
 
     const result = (
-      await getPromptParts(eventList, '@ai-bot:localhost', fakeMatrixClient)
-    ).messages;
+      await getPromptParts(eventList, '@aibot:localhost', fakeMatrixClient)
+    ).messages!;
 
-    const { attachedCards } = getRelevantCards(eventList, '@ai-bot:localhost');
+    const { attachedCards } = getRelevantCards(eventList, '@aibot:localhost');
     assert.equal(attachedCards.length, 1);
 
-    assert.equal(result![0].role, 'system');
-    assert.true(result![0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
+    assert.equal(result[0].role, 'system');
+    assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.true(
-      result![0].content?.includes(
+      result[0].content?.includes(
         'If the user wants the data they see edited, AND the patchCardInstance function is available',
       ),
+      'skill card instructions included in the system message',
     );
     assert.true(
-      result![0].content?.includes('Use pirate colloquialism when responding.'),
+      result[0].content?.includes('Use pirate colloquialism when responding.'),
+      'skill card instructions included in the system message',
     );
     assert.true(
-      result![0].content?.includes(
+      result![1].content?.includes(
         'attributes":{"appTitle":"Radio Episode Tracker for Nerds"',
       ),
+      'attached card details included in the system context message',
     );
   });
 
@@ -1818,11 +1868,11 @@ Attached files:
 
     const { messages, tools, toolChoice } = await getPromptParts(
       eventList,
-      '@ai-bot:localhost',
+      '@aibot:localhost',
       fakeMatrixClient,
     );
-    assert.equal(messages!.length, 2);
-    assert.equal(messages![1].role, 'user');
+    assert.equal(messages!.length, 3);
+    assert.equal(messages![2].role, 'user');
     assert.true(tools!.length === 1);
     assert.deepEqual(toolChoice, {
       type: 'function',
@@ -1936,7 +1986,7 @@ Attached files:
       {
         type: 'm.room.message',
         room_id: 'room-id-1',
-        sender: '@ai-bot:localhost',
+        sender: '@aibot:localhost',
         content: {
           body: 'It looks like you want to search for card instances based on the "Author" card you provided. Just for clarity, would you like to search for more cards based on the "Author" module type or something else specific?\n\nFor example, do you want to find all card instances of type "Author" or a different type of card/module?',
           msgtype: 'm.text',
@@ -2057,7 +2107,7 @@ Attached files:
       {
         type: 'm.room.message',
         room_id: 'room-id-1',
-        sender: '@ai-bot:localhost',
+        sender: '@aibot:localhost',
         content: {
           body: "Search for card instances of type 'Author'",
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -2145,6 +2195,12 @@ Attached files:
                 },
               }),
             },
+            context: {
+              openCardIds: ['http://localhost:4201/drafts/Author/1'],
+              tools: [],
+              submode: 'interact',
+              functions: [],
+            },
           },
         },
         origin_server_ts: 1722242853988,
@@ -2159,12 +2215,12 @@ Attached files:
     const tools = await getTools(
       history,
       [],
-      '@ai-bot:localhost',
+      '@aibot:localhost',
       fakeMatrixClient,
     );
     const result = await getModifyPrompt(
       history,
-      '@ai-bot:localhost',
+      '@aibot:localhost',
       tools,
       [],
       fakeMatrixClient,
@@ -2839,48 +2895,14 @@ Attached files:
     );
   });
 
-  test('Elides code blocks in prompt', async () => {
+  test('Elides code blocks in prompt and includes results', async () => {
     // sending older codeblocks back to the model just confuses it and wastes tokens
     // so we need to remove them from the prompt
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/code-blocks.json'),
-        'utf-8',
-      ),
-    );
-
-    const { messages } = await getPromptParts(
-      eventList,
-      '@aibot:localhost',
-      fakeMatrixClient,
-    );
-    assert.equal(messages!.length, 3);
-    assert.equal(messages![2].role, 'assistant');
-    assert.equal(
-      messages![2].content,
-      'Right, let us make a tic tac toe game.\n' +
-        '\n' +
-        'https://test.com/tic-tac.gts\n' +
-        '[Omitting previously suggested code change]' +
-        '\n\n' +
-        'https://test.com/tac-toe.gts\n' +
-        '[Omitting previously suggested code change]' +
-        '\n\n' +
-        'I can add some more whiz bang if you want. Let me know!',
-    );
-  });
-
-  test('Elided code blocks reflect their results', async () => {
-    // Set up mock responses for file downloads
-    mockResponses.set('http://test.com/spaghetti-recipe.gts', {
-      ok: true,
-      text: 'this is the riveting content of the spaghetti-recipe.gts file',
-    });
-    const eventList: DiscreteMatrixEvent[] = JSON.parse(
-      readFileSync(
         path.join(
           __dirname,
-          'resources/chats/connect-code-blocks-to-results.json',
+          'resources/chats/two-code-blocks-two-results.json',
         ),
         'utf-8',
       ),
@@ -2891,8 +2913,10 @@ Attached files:
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    assert.equal(messages!.length, 3);
-    assert.equal(messages![2].role, 'assistant');
+    assert.deepEqual(
+      messages!.map((m) => m.role),
+      ['system', 'user', 'assistant', 'system', 'user'],
+    );
     assert.equal(
       messages![2].content,
       'Updating the file...\n' +
@@ -2902,7 +2926,7 @@ Attached files:
         'I will also create a file for rigatoni:\n' +
         '\n' +
         'http://test.com/rigatoni-recipe.gts\n' +
-        '[Omitting previously suggested and rejected code change]\n',
+        '[Omitting previously suggested code change that failed to apply]\n',
     );
   });
 
@@ -2979,9 +3003,8 @@ Attached files:
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    assert.equal(messages!.length, 9);
+    assert.equal(messages!.length, 10);
     assert.equal(messages![0].role, 'system');
-    assert.true(messages![0].content!.includes('Business Card V2'));
     assert.false(messages![0].content!.includes('Business Card V1'));
     assert.equal(messages![2].role, 'assistant');
     assert.equal(
@@ -2990,9 +3013,7 @@ Attached files:
     );
     assert.equal(messages![3].role, 'user');
     assert.true(
-      messages![3].content!.startsWith(
-        'User message: change the name to stephanie',
-      ),
+      messages![3].content!.startsWith('change the name to stephanie'),
     );
     assert.equal(messages![4].role, 'assistant');
     assert.equal(
@@ -3004,6 +3025,340 @@ Attached files:
       messages![4].tool_calls![0].function.name,
       'patchCardInstance',
       'Should have patchCardInstance tool call',
+    );
+    assert.true(messages![9].content!.includes('Business Card V2'));
+  });
+
+  test('Responds to completion of lone code patch', async function () {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/one-code-block-one-result.json'),
+        'utf-8',
+      ),
+    );
+    const { shouldRespond, messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
+    // patch code results should be included
+    const userMessages = messages!.filter((message) => message.role === 'user');
+    assert.strictEqual(userMessages.length, 2, 'Should have two user messages');
+    assert.strictEqual(
+      userMessages[1].content,
+      '(The user has successfully applied code patch 1.)',
+    );
+  });
+
+  test('Does not respond to first code patch result when two patches were proposed', async function () {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/two-code-blocks-one-result.json'),
+        'utf-8',
+      ),
+    );
+    const { shouldRespond } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      shouldRespond,
+      false,
+      'AiBot does not solicit a response before all tool calls are made',
+    );
+  });
+
+  test('Responds to second code patch result when two patches were proposed', async function () {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          __dirname,
+          'resources/chats/two-code-blocks-two-results.json',
+        ),
+        'utf-8',
+      ),
+    );
+
+    const { shouldRespond, messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
+    // patch code results should be deserialised
+    const userMessages = messages!.filter((message) => message.role === 'user');
+    assert.strictEqual(
+      userMessages.length,
+      2,
+      'Should have three two messages',
+    );
+    assert.strictEqual(
+      userMessages[1].content,
+      '(The user has successfully applied code patch 1.)\n(The user tried to apply code patch 2 but it failed to apply.)',
+    );
+  });
+
+  test('Does not respond to code patch result when a command is also proposed', async function () {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          __dirname,
+          'resources/chats/code-block-and-command-one-result.json',
+        ),
+        'utf-8',
+      ),
+    );
+    const { shouldRespond } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      shouldRespond,
+      false,
+      'AiBot does not solicit a response before all tool calls are made',
+    );
+  });
+
+  test('Responds to command result when patch and command proposed and patch already completed', async function () {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          __dirname,
+          'resources/chats/code-block-and-command-two-results-a.json',
+        ),
+        'utf-8',
+      ),
+    );
+
+    mockResponses.set('mxc://mock-server/weather-report-1', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            temperature: '22°C',
+            conditions: 'Cloudy',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/admin/onnx/commandexample',
+              name: 'WeatherReport',
+            },
+          },
+        },
+      }),
+    });
+
+    const { shouldRespond, messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
+    assert.deepEqual(
+      messages!.map((m) => m.role),
+      ['system', 'user', 'assistant', 'tool', 'system', 'user'],
+    );
+    // patch code results should be deserialised
+    const userMessages = messages!.filter((message) => message.role === 'user');
+    assert.strictEqual(
+      userMessages.length,
+      2,
+      'Should have three user messages',
+    );
+    assert.strictEqual(
+      userMessages[1].content,
+      '(The user has successfully applied code patch 1.)',
+    );
+    const toolResultMessages = messages!.filter(
+      (message) => message.role === 'tool',
+    );
+    assert.strictEqual(
+      toolResultMessages.length,
+      1,
+      'Should have one tool result message',
+    );
+    assert.ok(
+      toolResultMessages[0].content!.includes('Cloudy'),
+      'Tool call result should include "Cloudy"',
+    );
+  });
+
+  test('Responds to command result when patch and command proposed and patch already completed with command completing first', async function () {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          __dirname,
+          'resources/chats/code-block-and-command-two-results-b.json',
+        ),
+        'utf-8',
+      ),
+    );
+
+    mockResponses.set('mxc://mock-server/weather-report-1', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            temperature: '22°C',
+            conditions: 'Cloudy',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/admin/onnx/commandexample',
+              name: 'WeatherReport',
+            },
+          },
+        },
+      }),
+    });
+
+    const { shouldRespond, messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
+    assert.deepEqual(
+      messages!.map((m) => m.role),
+      ['system', 'user', 'assistant', 'tool', 'system', 'user'],
+    );
+    // patch code results should be messages
+    const userMessages = messages!.filter((message) => message.role === 'user');
+    assert.strictEqual(
+      userMessages.length,
+      2,
+      'Should have three user messages',
+    );
+    assert.strictEqual(
+      userMessages[1].content,
+      '(The user has successfully applied code patch 1.)',
+    );
+    const toolResultMessages = messages!.filter(
+      (message) => message.role === 'tool',
+    );
+    assert.strictEqual(
+      toolResultMessages.length,
+      1,
+      'Should have one tool result message',
+    );
+    assert.ok(
+      toolResultMessages[0].content!.includes('Cloudy'),
+      'Tool call result should include "Cloudy"',
+    );
+  });
+
+  test('context message is placed before last user message when just one user message', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/user-message-last-single.json'),
+        'utf-8',
+      ),
+    );
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.equal(messages![0].role, 'system');
+    assert.equal(messages![1].role, 'system');
+    assert.equal(messages![2].role, 'user');
+  });
+
+  test('context message is placed before last user message when multiple user messages', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/user-message-last-multiple.json'),
+        'utf-8',
+      ),
+    );
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.equal(messages![0].role, 'system');
+    assert.equal(messages![1].role, 'user');
+    assert.equal(messages![2].role, 'assistant');
+    assert.equal(messages![3].role, 'system');
+    assert.equal(messages![4].role, 'user');
+  });
+
+  test('context message is placed after the last tool call if the last message is a tool call', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/tool-call-last.json'),
+        'utf-8',
+      ),
+    );
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.equal(messages![0].role, 'system');
+    assert.equal(messages![1].role, 'user');
+    assert.equal(messages![2].role, 'assistant');
+    assert.equal(messages![3].role, 'user');
+    assert.equal(messages![4].role, 'assistant');
+    assert.equal(messages![5].role, 'user');
+    assert.equal(messages![6].role, 'assistant');
+    assert.equal(messages![7].role, 'tool');
+    assert.equal(messages![8].role, 'system');
+  });
+
+  test('context message is placed after the last user message if the last message is an assistant message', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/assistant-message-last.json'),
+        'utf-8',
+      ),
+    );
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.equal(messages![0].role, 'system');
+    assert.equal(messages![1].role, 'system');
+    assert.equal(messages![2].role, 'user');
+    assert.equal(messages![3].role, 'assistant');
+  });
+
+  test('context message contains the current date and time', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/user-message-last-multiple.json'),
+        'utf-8',
+      ),
+    );
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.equal(messages![3].role, 'system');
+    assert.true(
+      !!messages![3].content!.match(
+        /Current date and time: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,
+      ),
+      'Context message should contain the current date and time but was ' +
+        messages![3].content,
     );
   });
 });

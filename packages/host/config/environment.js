@@ -42,7 +42,9 @@ module.exports = function (environment) {
     hostsOwnAssets: true,
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
-    featureFlags: {},
+    featureFlags: {
+      SHOW_ASK_AI: process.env.SHOW_ASK_AI === 'true' || false,
+    },
   };
 
   if (environment === 'development') {
@@ -70,7 +72,9 @@ module.exports = function (environment) {
     ENV.loginMessageTimeoutMs = 0;
     ENV.minSaveTaskDurationMs = 0;
     ENV.sqlSchema = sqlSchema;
-    ENV.featureFlags = {};
+    ENV.featureFlags = {
+      SHOW_ASK_AI: true,
+    };
   }
 
   if (environment === 'production') {

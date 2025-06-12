@@ -7,6 +7,7 @@ import {
   type CopyCardsWithCodeRef,
   type Command,
   listingNameWithUuid,
+  RealmPaths,
 } from '@cardstack/runtime-common';
 
 import * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -28,7 +29,6 @@ interface CopyMeta {
 }
 
 interface InstallListingInput {
-  realmUrls: string[];
   realmUrl: string;
   listing: Listing;
   commandContext: Command<
@@ -41,20 +41,15 @@ interface InstallListingResult {
   selectedCodeRef?: ResolvedCodeRef;
   shouldPersistPlaygroundSelection: boolean;
   firstExampleCardId?: string;
+  skillCardIds?: string[];
 }
 
 export async function installListing({
-  realmUrls,
   realmUrl,
   listing,
   commandContext,
   cardAPI,
 }: InstallListingInput): Promise<InstallListingResult> {
-  // Make sure realm is valid
-  if (!realmUrls.includes(realmUrl)) {
-    throw new Error(`Invalid realm: ${realmUrl}`);
-  }
-
   const copyMeta: CopyMeta[] = [];
 
   const localDir = listingNameWithUuid(listing.name);
@@ -146,22 +141,25 @@ export async function installListing({
     }
   }
 
+  let skillCardIds: string[] | undefined;
   if ('skills' in listing && Array.isArray(listing.skills)) {
-    await Promise.all(
-      listing.skills.map((skill: Skill) =>
-        new CopyCardCommand(commandContext).execute({
+    let results = await Promise.all(
+      listing.skills.map((skill: Skill) => {
+        return new CopyCardCommand(commandContext).execute({
           sourceCard: skill,
           realm: realmUrl,
           localDir,
-        }),
-      ),
+        });
+      }),
     );
+    skillCardIds = results.map((r) => r.newCardId);
   }
 
   return {
     selectedCodeRef,
     shouldPersistPlaygroundSelection,
     firstExampleCardId,
+    skillCardIds,
   };
 }
 
@@ -194,14 +192,20 @@ export default class ListingInstallCommand extends HostBaseCommand<
     input: BaseCommandModule.ListingInput,
   ): Promise<undefined> {
     let realmUrls = this.realmServer.availableRealmURLs;
-    let { realm: realmUrl, listing: listingInput } = input;
+    let { realm, listing: listingInput } = input;
+
+    let realmUrl = new RealmPaths(new URL(realm)).url;
+
+    // Make sure realm is valid
+    if (!realmUrls.includes(realmUrl)) {
+      throw new Error(`Invalid realm: ${realmUrl}`);
+    }
 
     // this is intentionally to type because base command cannot interpret Listing type from catalog
     const listing = listingInput as Listing;
     const cardAPI = await this.loadCardAPI();
 
     await installListing({
-      realmUrls,
       realmUrl,
       listing,
       commandContext: this.commandContext,

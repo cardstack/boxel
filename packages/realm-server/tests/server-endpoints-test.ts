@@ -105,7 +105,6 @@ module(basename(__filename), function () {
         let runner: QueueRunner;
         let request2: SuperTest<Test>;
         let testRealmDir: string;
-        let seedRealm: Realm | undefined;
 
         setupPermissionedRealm(hooks, {
           permissions: {
@@ -123,7 +122,6 @@ module(basename(__filename), function () {
             virtualNetwork.unmount(testRealm2.handle);
           }
           ({
-            seedRealm,
             testRealm: testRealm2,
             testRealmServer: testRealmServer2,
             testRealmHttpServer: testRealmHttpServer2,
@@ -151,9 +149,6 @@ module(basename(__filename), function () {
             await startRealmServer(dbAdapter, publisher, runner);
           },
           afterEach: async () => {
-            if (seedRealm) {
-              virtualNetwork.unmount(seedRealm.handle);
-            }
             await closeServer(testRealmHttpServer2);
           },
         });
@@ -223,32 +218,6 @@ module(basename(__filename), function () {
             existsSync(join(realmPath, 'index.json')),
             'seed file index.json exists',
           );
-          assert.ok(
-            existsSync(
-              join(
-                realmPath,
-                'HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0.json',
-              ),
-            ),
-            'seed file HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0.json exists',
-          );
-          assert.notOk(
-            existsSync(join(realmPath, 'package.json')),
-            'ignored seed file package.json does not exist',
-          );
-          assert.notOk(
-            existsSync(join(realmPath, 'node_modules')),
-            'ignored seed file node_modules/ does not exist',
-          );
-          assert.notOk(
-            existsSync(join(realmPath, '.gitignore')),
-            'ignored seed file .gitignore does not exist',
-          );
-          assert.notOk(
-            existsSync(join(realmPath, 'tsconfig.json')),
-            'ignored seed file tsconfig.json does not exist',
-          );
-
           let permissions = await fetchUserPermissions(
             dbAdapter,
             new URL(json.data.id),
@@ -266,28 +235,6 @@ module(basename(__filename), function () {
           let realm = testRealmServer2.testingOnlyRealms.find(
             (r) => r.url === json.data.id,
           )!;
-          {
-            // owner can get a seeded instance
-            let response = await request2
-              .get(`/${owner}/${endpoint}/jade`)
-              .set('Accept', 'application/vnd.card+json')
-              .set(
-                'Authorization',
-                `Bearer ${createJWT(realm, ownerUserId, [
-                  'read',
-                  'write',
-                  'realm-owner',
-                ])}`,
-              );
-
-            assert.strictEqual(response.status, 200, 'HTTP 200 status');
-            let doc = response.body as SingleCardDocument;
-            assert.strictEqual(
-              doc.data.attributes?.title,
-              'Jade',
-              'instance data is correct',
-            );
-          }
           {
             // owner can create an instance
             let response = await request2
@@ -400,7 +347,6 @@ module(basename(__filename), function () {
                     endpoint,
                     backgroundURL: 'http://example.com/background.jpg',
                     iconURL: 'http://example.com/icon.jpg',
-                    copyFromSeedRealm: false,
                   },
                 },
               }),
@@ -419,7 +365,6 @@ module(basename(__filename), function () {
                   endpoint,
                   backgroundURL: 'http://example.com/background.jpg',
                   iconURL: 'http://example.com/icon.jpg',
-                  copyFromSeedRealm: false,
                 },
               },
             },
@@ -1018,13 +963,6 @@ module(basename(__filename), function () {
                   ...testRealmInfo,
                   realmUserId: '@node-test_realm:localhost',
                 },
-              },
-              // the seed realm is automatically added to the realm server running
-              // on port 4445 as a public realm
-              {
-                type: 'catalog-realm',
-                id: `${new URL('/seed/', testRealm2URL)}`,
-                attributes: testRealmInfo,
               },
             ],
           });

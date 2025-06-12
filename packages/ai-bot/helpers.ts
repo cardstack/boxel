@@ -25,7 +25,6 @@ import { logger } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
-  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
@@ -40,8 +39,12 @@ import {
   SerializedFileDef,
   downloadFile,
   MatrixClient,
+  isCommandOrCodePatchResult,
+  extractCodePatchBlocks,
 } from './lib/matrix/util';
 import { constructHistory } from './lib/history';
+import { isRecognisedDebugCommand } from './lib/debug';
+import { APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE } from '../runtime-common/matrix-constants';
 
 let log = logger('ai-bot');
 
@@ -134,24 +137,37 @@ export async function getPromptParts(
 }
 
 function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
-  // If the aibot is awaiting command results, it should not respond yet.
-  let lastEventExcludingCommandResults = history.findLast(
-    (event) => event.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  // If the aibot is awaiting command or code patch results, it should not respond yet.
+  let lastEventExcludingResults = history.findLast(
+    (event) => !isCommandOrCodePatchResult(event),
   );
 
-  if (!lastEventExcludingCommandResults) {
+  if (!lastEventExcludingResults) {
     return false;
   }
-  let commandRequests = (
-    lastEventExcludingCommandResults.content as CardMessageContent
-  )[APP_BOXEL_COMMAND_REQUESTS_KEY];
-  if (!commandRequests || commandRequests.length === 0) {
-    return true;
+
+  // if the last event is a debug command from the user, we should not respond
+  if (
+    lastEventExcludingResults.type == 'm.room.message' &&
+    isRecognisedDebugCommand(lastEventExcludingResults.content.body)
+  ) {
+    return false;
   }
-  let lastEventIndex = history.indexOf(lastEventExcludingCommandResults);
-  let allCommandsHaveResults = commandRequests.every(
-    (commandRequest: Partial<EncodedCommandRequest>) => {
-      return history.slice(lastEventIndex).some((event) => {
+
+  let commandRequests =
+    (lastEventExcludingResults.content as CardMessageContent)[
+      APP_BOXEL_COMMAND_REQUESTS_KEY
+    ] ?? [];
+  let codePatchBlocks = extractCodePatchBlocks(
+    (lastEventExcludingResults.content as CardMessageContent).body,
+  );
+  let lastEventIndex = history.indexOf(lastEventExcludingResults);
+  let recentEventsToCheck = history.slice(lastEventIndex + 1);
+
+  let allCommandsHaveResults =
+    commandRequests.length === 0 ||
+    commandRequests.every((commandRequest: Partial<EncodedCommandRequest>) => {
+      return recentEventsToCheck.some((event) => {
         return (
           event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
           (event.content.msgtype ===
@@ -161,9 +177,18 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
           event.content.commandRequestId === commandRequest.id
         );
       });
-    },
-  );
-  return allCommandsHaveResults;
+    });
+  let allCodePatchesHaveResults =
+    codePatchBlocks.length === 0 ||
+    codePatchBlocks.every((_codePatchBlock: string, codePatchIndex: number) => {
+      return recentEventsToCheck.some((event) => {
+        return (
+          isCodePatchResultEvent(event) &&
+          event.content.codeBlockIndex === codePatchIndex
+        );
+      });
+    });
+  return allCommandsHaveResults && allCodePatchesHaveResults;
 }
 
 async function getEnabledSkills(
@@ -273,7 +298,12 @@ export async function loadCurrentlySerializedFileDefs(
   aiBotUserId: string,
 ): Promise<SerializedFileDef[]> {
   let lastMessageEventByUser = history.findLast(
-    (event) => event.sender !== aiBotUserId,
+    (event) =>
+      event.sender !== aiBotUserId &&
+      ((event.type === 'm.room.message' &&
+        event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) ||
+        event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE ||
+        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE),
   );
 
   let mostRecentUserMessageContent = lastMessageEventByUser?.content as {
@@ -283,10 +313,7 @@ export async function loadCurrentlySerializedFileDefs(
     };
   };
 
-  if (
-    !mostRecentUserMessageContent ||
-    mostRecentUserMessageContent.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
-  ) {
+  if (!mostRecentUserMessageContent) {
     return [];
   }
 
@@ -329,7 +356,7 @@ export async function loadCurrentlySerializedFileDefs(
   );
 }
 
-export function attachedFilesToPrompt(
+export function attachedFilesToMessage(
   attachedFiles: SerializedFileDef[],
 ): string {
   if (!attachedFiles.length) {
@@ -402,13 +429,18 @@ export async function getTools(
   );
 }
 
+export function getLastUserMessage(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): DiscreteMatrixEvent | undefined {
+  return history.findLast((event) => event.sender !== aiBotUserId);
+}
+
 export function getToolChoice(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): ToolChoice {
-  const lastUserMessage = history.findLast(
-    (event) => event.sender !== aiBotUserId,
-  );
+  const lastUserMessage = getLastUserMessage(history, aiBotUserId);
 
   if (
     !lastUserMessage ||
@@ -483,44 +515,72 @@ function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
   );
 }
 
-function toPromptMessageWithToolResults(
+function toResultMessages(
   event: CardMessageEvent,
   commandResults: CommandResultEvent[] = [],
+  codePatchResults: CodePatchResultEvent[] = [],
 ): OpenAIPromptMessage[] {
   const messageContent = event.content as CardMessageContent;
-  return (messageContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
-    (commandRequest: Partial<EncodedCommandRequest>) => {
-      let content = 'pending';
-      let commandResult = commandResults.find(
-        (commandResult) =>
-          (commandResult.content.msgtype ===
-            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
-            commandResult.content.msgtype ===
-              APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
-          commandResult.content.commandRequestId === commandRequest.id,
-      );
-      if (commandResult) {
-        let status = commandResult.content['m.relates_to']?.key;
-        if (
+  let commandResultMessages = (
+    messageContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []
+  ).map((commandRequest: Partial<EncodedCommandRequest>) => {
+    let content = 'pending';
+    let commandResult = commandResults.find(
+      (commandResult) =>
+        (commandResult.content.msgtype ===
+          APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
           commandResult.content.msgtype ===
-            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE &&
-          commandResult.content.data.card
-        ) {
-          let cardContent =
-            commandResult.content.data.card.content ??
-            commandResult.content.data.card.error;
-          content = `Tool call ${status == 'applied' ? 'executed' : status}, with result card: ${cardContent}.\n`;
-        } else {
-          content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
-        }
+            APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
+        commandResult.content.commandRequestId === commandRequest.id,
+    );
+    if (commandResult) {
+      let status = commandResult.content['m.relates_to']?.key;
+      if (
+        commandResult.content.msgtype ===
+          APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE &&
+        commandResult.content.data.card
+      ) {
+        let cardContent =
+          commandResult.content.data.card.content ??
+          commandResult.content.data.card.error;
+        content = `Tool call ${status == 'applied' ? 'executed' : status}, with result card: ${cardContent}.\n`;
+      } else {
+        content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
       }
-      return {
-        role: 'tool',
-        tool_call_id: commandRequest.id,
-        content,
-      };
-    },
-  );
+    }
+    return {
+      role: 'tool',
+      tool_call_id: commandRequest.id,
+      content,
+    } as OpenAIPromptMessage;
+  });
+  let codePatchBlocks = extractCodePatchBlocks(messageContent.body);
+  let codePatchResultMessages: OpenAIPromptMessage[] = [];
+  if (codePatchBlocks.length) {
+    let codePatchResultsContent = codePatchBlocks
+      .map((_codePatchBlock, codeBlockIndex) => {
+        let codePatchResultEvent = codePatchResults.find(
+          (codePatchResultEvent) =>
+            codePatchResultEvent.content.codeBlockIndex === codeBlockIndex,
+        );
+        let content = `(The user has not applied code patch ${codeBlockIndex + 1}/.)`;
+        if (codePatchResultEvent) {
+          let status = codePatchResultEvent.content['m.relates_to']?.key;
+          if (status === 'applied') {
+            content = `(The user has successfully applied code patch ${codeBlockIndex + 1}.)`;
+          } else if (status === 'failed') {
+            content = `(The user tried to apply code patch ${codeBlockIndex + 1} but it failed to apply.)`;
+          }
+        }
+        return content;
+      })
+      .join('\n');
+    codePatchResultMessages.push({
+      role: 'user',
+      content: codePatchResultsContent,
+    });
+  }
+  return [...commandResultMessages, ...codePatchResultMessages];
 }
 
 export async function getModifyPrompt(
@@ -535,14 +595,14 @@ export async function getModifyPrompt(
     aiBotUserId.indexOf(':') === -1 ||
     aiBotUserId.startsWith('@') === false
   ) {
-    throw new Error("Username must be a full id, e.g. '@ai-bot:localhost'");
+    throw new Error("Username must be a full id, e.g. '@aibot:localhost'");
   }
   let historicalMessages: OpenAIPromptMessage[] = [];
   for (let event of history) {
     if (event.type !== 'm.room.message') {
       continue;
     }
-    if (isCommandResultEvent(event)) {
+    if (isCommandOrCodePatchResult(event)) {
       continue; // we'll include these with the tool calls
     }
     if (
@@ -552,93 +612,43 @@ export async function getModifyPrompt(
       continue;
     }
     let body = event.content.body;
+
     if (event.sender === aiBotUserId) {
-      let toolCalls = toToolCalls(event as CardMessageEvent);
-      let commandResults = getCommandResults(
-        event as CardMessageEvent,
-        history,
-      );
-      let codePatchReults = getCodePatchResults(
+      let codePatchResults = getCodePatchResults(
         event as CardMessageEvent,
         history,
       );
       let historicalMessage: OpenAIPromptMessage = {
         role: 'assistant',
-        content: elideCodeBlocks(body, codePatchReults),
+        content: elideCodeBlocks(body, codePatchResults),
       };
+      let toolCalls = toToolCalls(event as CardMessageEvent);
       if (toolCalls.length) {
         historicalMessage.tool_calls = toolCalls;
       }
       historicalMessages.push(historicalMessage);
-      if (toolCalls.length) {
-        toPromptMessageWithToolResults(
-          event as CardMessageEvent,
-          commandResults,
-        ).forEach((message) => historicalMessages.push(message));
-      }
+      let commandResults = getCommandResults(
+        event as CardMessageEvent,
+        history,
+      );
+      toResultMessages(
+        event as CardMessageEvent,
+        commandResults,
+        codePatchResults,
+      ).forEach((message) => historicalMessages.push(message));
     }
     if (body && event.sender !== aiBotUserId) {
-      if (
-        event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
-        event.content.data?.context?.openCardIds
-      ) {
-        body = `User message: ${body}
-          Context: the user has the following cards open: ${JSON.stringify(
-            event.content.data.context.openCardIds,
-          )}`;
-      } else {
-        body = `User message: ${body}
-          Context: the user has no open cards.`;
-      }
       historicalMessages.push({
         role: 'user',
         content: body,
       });
     }
   }
-
-  let { mostRecentlyAttachedCard, attachedCards } = getRelevantCards(
-    history,
-    aiBotUserId,
-  );
-
-  let attachedFiles = await loadCurrentlySerializedFileDefs(
-    client,
-    history,
-    aiBotUserId,
-  );
-
-  let lastMessageEventByUser = history.findLast(
-    (event) => event.sender !== aiBotUserId,
-  );
-
-  let realmUrl = (lastMessageEventByUser as CardMessageEvent).content.data
-    ?.context?.realmUrl;
-
-  let systemMessage = `${MODIFY_SYSTEM_MESSAGE}
-The user currently has given you the following data to work with:
-
-Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}
-
-Attached files:
-${attachedFilesToPrompt(attachedFiles)}
-
-The user is operating in a realm with this URL: ${realmUrl}
-`;
-
+  let systemMessage = `${MODIFY_SYSTEM_MESSAGE}\n`;
   if (skillCards.length) {
     systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
     systemMessage += skillCardsToMessage(skillCards);
     systemMessage += '\n';
-  }
-
-  let cardPatchTool = tools.find(
-    (tool) => tool.function.name === 'patchCardInstance',
-  );
-
-  if (attachedFiles.length == 0 && attachedCards.length > 0 && !cardPatchTool) {
-    systemMessage +=
-      'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
   }
 
   let messages: OpenAIPromptMessage[] = [
@@ -649,8 +659,118 @@ The user is operating in a realm with this URL: ${realmUrl}
   ];
 
   messages = messages.concat(historicalMessages);
+  let contextContent = await buildContextMessage(
+    client,
+    history,
+    aiBotUserId,
+    tools,
+  );
+  // The context should be placed where it explains the state of the host.
+  // This is either:
+  // * After the last tool call message, if the last message was a tool call
+  // * Before the last user message otherwise
+  // OpenAI will error if you put the system message between the
+  // assistant and tool messages.
+  let contextMessage: OpenAIPromptMessage = {
+    role: 'system',
+    content: contextContent,
+  };
+  let lastMessage = messages[messages.length - 1];
+  if (lastMessage.role === 'tool') {
+    messages.push(contextMessage);
+  } else {
+    // Find the last user message and insert context before it
+    let lastUserIndex = messages.findLastIndex((msg) => msg.role === 'user');
+    if (lastUserIndex !== -1) {
+      messages.splice(lastUserIndex, 0, contextMessage);
+    }
+  }
+
   return messages;
 }
+
+export const buildContextMessage = async (
+  client: MatrixClient,
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+  tools: Tool[],
+): Promise<string> => {
+  let { mostRecentlyAttachedCard, attachedCards } = getRelevantCards(
+    history,
+    aiBotUserId,
+  );
+  let result = '';
+
+  let attachedFiles = await loadCurrentlySerializedFileDefs(
+    client,
+    history,
+    aiBotUserId,
+  );
+
+  let lastEventWithContext = history.findLast((ev) => {
+    if (ev.sender === aiBotUserId) {
+      return false;
+    }
+    return (
+      (ev.type === 'm.room.message' &&
+        ev.content.msgtype == APP_BOXEL_MESSAGE_MSGTYPE) ||
+      ev.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE ||
+      ev.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE
+    );
+  }) as
+    | CardMessageEvent
+    | CommandResultEvent
+    | CodePatchResultEvent
+    | undefined;
+  let context = lastEventWithContext?.content.data?.context;
+
+  // Extract room ID from any event in history
+  let roomId = history.find((event) => event.room_id)?.room_id;
+
+  if (context) {
+    result += `The user is currently viewing the following user interface:\n`;
+    if (roomId) {
+      result += `Room ID: ${roomId}\n`;
+    }
+    if (context?.submode) {
+      result += `Submode: ${context.submode}\n`;
+    }
+    if (context?.realmUrl) {
+      result += `Workspace: ${context.realmUrl}\n`;
+    }
+    if (context?.openCardIds && context.openCardIds.length > 0) {
+      result += `Open cards:\n${context.openCardIds.map((id) => ` - ${id}\n`)}`;
+    } else {
+      result += `The user has no open cards.\n`;
+    }
+    if (context?.codeMode?.currentFile) {
+      result += `File open in code editor: ${context.codeMode.currentFile}\n`;
+    }
+  } else {
+    result += `The user has no open cards.\n`;
+  }
+  result += `\nCurrent date and time: ${new Date().toISOString()}\n`;
+  if (attachedCards.length > 0 || attachedFiles.length > 0) {
+    result += `The user currently has given you the following data to work with:\n\n`;
+    if (attachedCards.length > 0) {
+      result += `Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}\n\n`;
+    }
+    if (attachedFiles.length > 0) {
+      result += `\n\nAttached files:\n${attachedFilesToMessage(attachedFiles)}`;
+    }
+  }
+
+  let cardPatchTool = tools.find(
+    (tool) => tool.function.name === 'patchCardInstance',
+  );
+
+  if (attachedFiles.length == 0 && attachedCards.length > 0 && !cardPatchTool) {
+    result +=
+      'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
+  }
+
+  return result;
+};
 
 export const attachedCardsToMessage = (
   mostRecentlyAttachedCard: LooseCardResource | undefined,
@@ -687,6 +807,16 @@ export const isCommandResultStatusApplied = (event?: MatrixEvent) => {
   }
   return (
     isCommandResultEvent(event.event as DiscreteMatrixEvent) &&
+    event.getContent()['m.relates_to']?.key === 'applied'
+  );
+};
+
+export const isCodePatchResultStatusApplied = (event?: MatrixEvent) => {
+  if (event === undefined) {
+    return false;
+  }
+  return (
+    isCodePatchResultEvent(event.event as DiscreteMatrixEvent) &&
     event.getContent()['m.relates_to']?.key === 'applied'
   );
 };
@@ -735,7 +865,6 @@ function elideCodeBlocks(
     '[Omitting previously suggested code change]';
   const PLACEHOLDERS = {
     applied: '[Omitting previously suggested and applied code change]',
-    rejected: '[Omitting previously suggested and rejected code change]',
     failed: '[Omitting previously suggested code change that failed to apply]',
   };
 
@@ -778,4 +907,29 @@ function elideCodeBlocks(
     codeBlockIndex++;
   }
   return content;
+}
+
+export function mxcUrlToHttp(mxc: string, baseUrl: string): string {
+  if (mxc.indexOf('mxc://') !== 0) {
+    throw new Error('Invalid MXC URL ' + mxc);
+  }
+  let serverAndMediaId = mxc.slice(6); // strips mxc://
+  let prefix = '/_matrix/client/v1/media/download/';
+
+  return baseUrl + prefix + serverAndMediaId;
+}
+
+export function isInDebugMode(
+  eventList: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): boolean {
+  let lastUserMessage = getLastUserMessage(eventList, aiBotUserId);
+  if (
+    !lastUserMessage ||
+    !lastUserMessage.content ||
+    typeof lastUserMessage.content !== 'object'
+  ) {
+    return false;
+  }
+  return (lastUserMessage.content as any).data?.context?.debug ?? false;
 }

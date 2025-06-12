@@ -1,5 +1,10 @@
 import { IContent, Method } from 'matrix-js-sdk';
-import { logger } from '@cardstack/runtime-common';
+import {
+  logger,
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+} from '@cardstack/runtime-common';
 import { OpenAIError } from 'openai/error';
 import * as Sentry from '@sentry/node';
 import {
@@ -10,18 +15,32 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import { MatrixEvent } from 'matrix-js-sdk';
+import { PromptParts, mxcUrlToHttp } from '../../helpers';
 import { encodeUri } from 'matrix-js-sdk/lib/utils';
 
 let log = logger('ai-bot');
 
 export interface MatrixClient {
+  baseUrl: string;
+
   sendEvent(
     roomId: string,
     eventType: string,
     content: IContent,
   ): Promise<{ event_id: string }>;
+
+  uploadContent(
+    content: string,
+    opts: {
+      type: string;
+    },
+  ): Promise<{ content_uri: string }>;
 
   sendStateEvent(
     roomId: string,
@@ -118,6 +137,39 @@ export async function sendErrorEvent(
     log.error(`Error sending error message back to user: ${e}`);
     Sentry.captureException(e);
   }
+}
+
+export async function sendPromptAndEventList(
+  client: MatrixClient,
+  roomId: string,
+  promptParts: PromptParts,
+  eventList: DiscreteMatrixEvent[],
+  customMessage: string = '',
+) {
+  let stringContent = JSON.stringify({
+    promptParts,
+    eventList,
+  });
+  let sharedFile = await client.uploadContent(stringContent, {
+    type: 'text/plain',
+  });
+  await client.sendEvent(roomId, APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE, {
+    msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+    body:
+      'Debug: attached the prompt sent to the AI and the raw event list.\n\n' +
+      customMessage,
+    isStreamingFinished: true,
+    data: JSON.stringify({
+      attachedFiles: [
+        {
+          sourceUrl: '',
+          url: mxcUrlToHttp(sharedFile.content_uri, client.baseUrl),
+          name: 'debug-event.json',
+          contentType: 'text/plain',
+        },
+      ],
+    }),
+  });
 }
 
 function getErrorMessage(error: any): string {
@@ -227,4 +279,27 @@ export async function downloadFile(
   }
 
   return content;
+}
+
+export function isCommandOrCodePatchResult(
+  event: MatrixEvent | DiscreteMatrixEvent,
+): boolean {
+  let type =
+    (event as DiscreteMatrixEvent).type || (event as MatrixEvent).getType?.();
+  return (
+    type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE ||
+    type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE
+  );
+}
+
+export function extractCodePatchBlocks(s: string) {
+  let matches = [
+    ...s.matchAll(
+      new RegExp(
+        `${SEARCH_MARKER}.*?${SEPARATOR_MARKER}.*?${REPLACE_MARKER}`,
+        'gs',
+      ),
+    ),
+  ];
+  return matches.map((match) => match[0]);
 }

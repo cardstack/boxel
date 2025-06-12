@@ -26,6 +26,7 @@ import {
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
+  APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -43,6 +44,7 @@ import type {
   CardMessageContent,
   CardMessageEvent,
   CodePatchResultEvent,
+  DebugMessageEvent,
   CommandResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
@@ -60,7 +62,7 @@ const ErrorMessage: Record<string, string> = {
 
 export default class MessageBuilder {
   constructor(
-    private event: MessageEvent | CardMessageEvent,
+    private event: MessageEvent | CardMessageEvent | DebugMessageEvent,
     owner: Owner,
     private builderContext: {
       roomId: string;
@@ -85,6 +87,8 @@ export default class MessageBuilder {
     return new Message({
       roomId: this.builderContext.roomId,
       author: this.builderContext.author,
+      agentId: (this.event.content as CardMessageContent)?.data?.context
+        ?.agentId,
       created: new Date(this.event.origin_server_ts),
       updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
       body: this.event.content.body,
@@ -161,6 +165,10 @@ export default class MessageBuilder {
     } else if (event.content.msgtype === 'm.text') {
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
     }
+    if (event.type === APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE) {
+      message.isDebugMessage = true;
+    }
+
     return message;
   }
 
@@ -355,6 +363,9 @@ export default class MessageBuilder {
 export function isCardMessageEvent(
   matrixEvent: DiscreteMatrixEvent,
 ): matrixEvent is CardMessageEvent {
+  if (matrixEvent.type === APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE) {
+    return true;
+  }
   if (matrixEvent.type !== 'm.room.message') {
     return false;
   }

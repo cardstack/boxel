@@ -1,4 +1,4 @@
-import { click, fillIn, triggerEvent } from '@ember/test-helpers';
+import { click, fillIn, triggerEvent, waitUntil } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
@@ -97,8 +97,16 @@ module('Integration | ask-ai', function (hooks) {
     });
   });
 
-  const sendAskAiMessage = async (message: string) => {
+  const sendAskAiMessage = async (message: string, assert: Assert) => {
+    assert.dom('[data-test-ask-ai-input]').hasStyle({ width: '140px' });
     await fillIn('[data-test-ask-ai-input]', message);
+    await waitUntil(() => {
+      let el = document.querySelector(
+        '[data-test-ask-ai-input]',
+      ) as HTMLElement | null;
+      return el && getComputedStyle(el).width === '310px';
+    });
+    assert.dom('[data-test-ask-ai-input]').hasStyle({ width: '310px' });
     await triggerEvent('[data-test-ask-ai-input]', 'keydown', {
       key: 'Enter',
       code: 'Enter',
@@ -133,9 +141,7 @@ module('Integration | ask-ai', function (hooks) {
     assert
       .dom('[data-test-ai-assistant-panel] [data-test-chat-title]')
       .hasText('New AI Assistant Chat');
-    assert
-      .dom('[data-test-pill-menu-header]')
-      .containsText('2 of 2 Skills Active');
+    assert.dom('[data-test-pill-menu-button]').containsText('Skills 1');
     await assertMessages(assert, [
       {
         from: 'testuser',
@@ -165,13 +171,11 @@ module('Integration | ask-ai', function (hooks) {
     assert.dom('[data-test-ask-ai-input]').hasNoValue();
     assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
 
-    await sendAskAiMessage('Hello world');
+    await sendAskAiMessage('Hello world', assert);
     assert
       .dom('[data-test-ai-assistant-panel] [data-test-chat-title]')
       .hasText('New AI Assistant Chat');
-    assert
-      .dom('[data-test-pill-menu-header]')
-      .containsText('2 of 2 Skills Active');
+    assert.dom('[data-test-pill-menu-button]').containsText('Skills 1');
     await assertMessages(assert, [
       {
         from: 'testuser',
@@ -209,13 +213,14 @@ module('Integration | ask-ai', function (hooks) {
     assert.dom('[data-test-code-mode]').exists();
     assert.dom('[data-test-ask-ai-input]').hasNoValue();
     assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
-    await sendAskAiMessage('Change embedded template background to blue');
+    await sendAskAiMessage(
+      'Change embedded template background to blue',
+      assert,
+    );
     assert
       .dom('[data-test-ai-assistant-panel] [data-test-chat-title]')
       .hasText('New AI Assistant Chat');
-    assert
-      .dom('[data-test-pill-menu-header]')
-      .containsText('3 of 3 Skills Active');
+    assert.dom('[data-test-pill-menu-button]').containsText('Skills 3');
     await assertMessages(assert, [
       {
         from: 'testuser',

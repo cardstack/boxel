@@ -46,8 +46,10 @@ interface RoomMessageOptional {
   errorMessage?: string;
   clientGeneratedId?: string | null;
   reasoningContent?: string | null;
+  isDebugMessage?: boolean;
   hasContinuation?: boolean;
   continuationOf?: string | null;
+  agentId?: string;
 }
 
 export class Message implements RoomMessageInterface {
@@ -68,12 +70,14 @@ export class Message implements RoomMessageInterface {
   transactionId?: string | null;
   errorMessage?: string;
   clientGeneratedId?: string;
+  isDebugMessage?: boolean;
 
   author: RoomMember;
   status: EventStatus | null;
   _updated: Date;
   eventId: string;
   roomId: string;
+  agentId?: string;
 
   //This property is used for testing purpose
   instanceId: string;
@@ -88,6 +92,7 @@ export class Message implements RoomMessageInterface {
     this._updated = init.updated;
     this.status = init.status;
     this.roomId = init.roomId;
+    this.agentId = init.agentId;
     this.attachedFiles = init.attachedFiles;
     this.hasContinuation = init.hasContinuation;
     this.continuationOf = init.continuationOf;

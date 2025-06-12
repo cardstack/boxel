@@ -2,6 +2,7 @@ import {
   Component,
   CardDef,
   CardContext,
+  realmURL,
 } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
 
@@ -94,6 +95,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
           <BoxelButton
             @kind='secondary-dark'
             class='preview-button'
+            data-test-catalog-listing-fitted-preview-button
             {{on 'click' this.preview}}
             aria-label='Preview'
           >
@@ -346,14 +348,16 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
   }
 
   get remixRealmOptions() {
-    return this.writableRealms.map((realm) => {
-      return new MenuItem(realm.name, 'action', {
-        action: () => {
-          this.remix(realm.url);
-        },
-        iconURL: realm.iconURL ?? '/default-realm-icon.png',
+    return this.writableRealms
+      .filter((realm) => realm.url !== this.args.model[realmURL]?.href)
+      .map((realm) => {
+        return new MenuItem(realm.name, 'action', {
+          action: () => {
+            this.remix(realm.url);
+          },
+          iconURL: realm.iconURL ?? '/default-realm-icon.png',
+        });
       });
-    });
   }
 
   get firstImage() {
@@ -412,7 +416,9 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
       </div>
       <div class='info-section'>
         <div class='card-content'>
-          <h3 class='card-title' data-test-card-title>{{@model.name}}</h3>
+          <h3 class='card-title' data-test-card-title={{@model.name}}>
+            {{@model.name}}
+          </h3>
           <h4 class='card-display-name' data-test-card-display-name>
             {{this.publisherInfo}}
           </h4>
@@ -424,7 +430,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           <BoxelDropdown>
             <:trigger as |bindings|>
               <BoxelButton
-                data-test-catalog-listing-remix-button
+                data-test-catalog-listing-fitted-remix-button
                 @kind='primary'
                 @size='extra-small'
                 class='card-remix-button'
@@ -440,7 +446,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
                 class='realm-dropdown-menu'
                 @closeMenu={{dd.close}}
                 @items={{this.remixRealmOptions}}
-                data-test-catalog-listing-remix-dropdown
+                data-test-catalog-listing-fitted-remix-dropdown
               />
             </:content>
           </BoxelDropdown>

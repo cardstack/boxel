@@ -24,6 +24,7 @@ import Eye from './icons/eye.gts';
 import FailureBordered from './icons/failure-bordered.gts';
 import File from './icons/file.gts';
 import FileAlert from './icons/file-alert.gts';
+import Folder from './icons/folder.gts';
 import FourLines from './icons/four-lines.gts';
 import Grid3x3 from './icons/grid-3x3.gts';
 import Group from './icons/group.gts';
@@ -88,6 +89,7 @@ export const ALL_ICON_COMPONENTS = [
   FailureBordered,
   File,
   FileAlert,
+  Folder,
   FourLines,
   Grid3x3,
   Group,
@@ -153,6 +155,7 @@ export {
   FailureBordered,
   File,
   FileAlert,
+  Folder,
   FourLines,
   Grid3x3,
   Group,

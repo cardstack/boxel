@@ -104,14 +104,7 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
   _lastCardUrls: string[] | undefined;
   _lastSearchResults: PrerenderedCard[] | undefined;
   _lastRealms: string[] | undefined;
-  realmsNeedingRefresh = new TrackedSet<string>();
-
-  constructor(owner: unknown, args: PrerenderedCardComponentSignature['Args']) {
-    super(owner, args);
-    for (const realm of this.args.realms) {
-      this.realmsNeedingRefresh.add(realm);
-    }
-  }
+  realmsNeedingRefresh = new TrackedSet<string>(this.args.realms);
 
   async searchPrerendered(
     query: Query,
@@ -264,7 +257,7 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
   }
 
   private markRealmNeedsRefreshing = (ev: RealmEventContent, realm: string) => {
-    if (ev.eventName === 'index') {
+    if (ev.eventName === 'index' && ev.indexType === 'incremental') {
       this.realmsNeedingRefresh.add(realm);
     }
   };

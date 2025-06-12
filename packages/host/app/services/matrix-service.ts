@@ -13,6 +13,7 @@ import {
   type RoomMember,
   type EmittedEvents,
 } from 'matrix-js-sdk';
+import { Filter } from 'matrix-js-sdk';
 import {
   type SlidingSync,
   type MSC3575List,
@@ -75,6 +76,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as FileAPI from 'https://cardstack.com/base/file-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 import type {
+  BoxelContext,
   CardMessageContent,
   MatrixEvent as DiscreteMatrixEvent,
   CodePatchResultContent,
@@ -123,12 +125,6 @@ const SLIDING_SYNC_LIST_RANGE_END = 9;
 const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
 
 const realmEventsLogger = logger('realm:events');
-
-export type OperatorModeContext = {
-  submode: Submode;
-  openCardIds: string[];
-  realmUrl: string;
-};
 
 export default class MatrixService extends Service {
   @service declare private loaderService: LoaderService;
@@ -181,6 +177,7 @@ export default class MatrixService extends Service {
   private slidingSync: SlidingSync | undefined;
   private aiRoomIds: Set<string> = new Set();
   @tracked private _isLoadingMoreAIRooms = false;
+  agentId = uuidv4();
 
   constructor(owner: Owner) {
     super(owner);
@@ -409,20 +406,17 @@ export default class MatrixService extends Service {
     name,
     iconURL,
     backgroundURL,
-    copyFromSeedRealm,
   }: {
     endpoint: string;
     name: string;
     iconURL?: string;
     backgroundURL?: string;
-    copyFromSeedRealm?: boolean;
   }) {
     let personalRealmURL = await this.realmServer.createRealm({
       endpoint,
       name,
       iconURL,
       backgroundURL,
-      copyFromSeedRealm,
     });
     let { realms = [] } =
       (await this.client.getAccountDataFromServer<{ realms: string[] }>(
@@ -523,11 +517,6 @@ export default class MatrixService extends Service {
         await this.initSlidingSync(accountDataContent);
         await this.client.startClient({ slidingSync: this.slidingSync });
 
-        // Do not need to wait for these to complete,
-        // in the workspace chooser we'll retrigger login and wait for them to complete
-        // and when fetching cards or files we have reautentication mechanism.
-        this.loginToRealms();
-
         this.postLoginCompleted = true;
       } catch (e) {
         console.log('Error starting Matrix client', e);
@@ -589,7 +578,7 @@ export default class MatrixService extends Service {
     return this.slidingSync;
   }
 
-  private async loginToRealms() {
+  async loginToRealms() {
     // This is where we would actually load user-specific choices out of the
     // user's profile based on this.client.getUserId();
     let activeRealms = this.realmServer.availableRealmURLs;
@@ -754,6 +743,10 @@ export default class MatrixService extends Service {
     );
   }
 
+  async downloadAsFileInBrowser(serializedFile: FileAPI.SerializedFile) {
+    return await this.client.downloadAsFileInBrowser(serializedFile);
+  }
+
   async uploadCards(cards: CardDef[]) {
     let cardFileDefs = await this.client.uploadCards(cards);
     return cardFileDefs;
@@ -771,20 +764,28 @@ export default class MatrixService extends Service {
     await this.client.cacheContentHashIfNeeded(event);
   }
 
-  async sendToolCallCommandResultEvent(
+  async sendCommandResultEvent(
     roomId: string,
     invokedToolFromEventId: string,
     toolCallId: string,
     resultCard?: CardDef,
+    attachedCards: CardDef[] = [],
+    attachedFiles: FileDef[] = [],
+    context?: BoxelContext,
   ) {
-    let cardFileDef: FileDef | undefined;
+    let resultCardFileDef: FileDef | undefined;
     if (resultCard) {
-      [cardFileDef] = await this.client.uploadCards([resultCard]);
+      [resultCardFileDef] = await this.client.uploadCards([resultCard]);
     }
+    let contentData = await this.withContextAndAttachments(
+      context,
+      attachedCards,
+      attachedFiles,
+    );
     let content:
       | CommandResultWithNoOutputContent
       | CommandResultWithOutputContent;
-    if (cardFileDef === undefined) {
+    if (resultCardFileDef === undefined) {
       content = {
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
         commandRequestId: toolCallId,
@@ -793,6 +794,7 @@ export default class MatrixService extends Service {
           key: 'applied',
           rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
         },
+        data: contentData,
       };
     } else {
       content = {
@@ -804,7 +806,8 @@ export default class MatrixService extends Service {
         },
         commandRequestId: toolCallId,
         data: {
-          card: cardFileDef.serialize(),
+          ...contentData,
+          card: resultCardFileDef.serialize(),
         },
       };
     }
@@ -828,7 +831,15 @@ export default class MatrixService extends Service {
     eventId: string,
     codeBlockIndex: number,
     resultKey: CodePatchStatus,
+    attachedCards: CardDef[] = [],
+    attachedFiles: FileDef[] = [],
+    context: BoxelContext,
   ) {
+    let contentData = await this.withContextAndAttachments(
+      context,
+      attachedCards,
+      attachedFiles,
+    );
     let content: CodePatchResultContent = {
       msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
       codeBlockIndex,
@@ -837,6 +848,7 @@ export default class MatrixService extends Service {
         key: resultKey,
         rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
       },
+      data: contentData,
     };
     try {
       return await this.sendEvent(
@@ -863,11 +875,10 @@ export default class MatrixService extends Service {
     attachedCards: CardDef[] = [],
     attachedFiles: FileDef[] = [],
     clientGeneratedId = uuidv4(),
-    context?: OperatorModeContext,
+    context?: BoxelContext,
   ): Promise<void> {
     let tools: Tool[] = [];
     let attachedOpenCards: CardDef[] = [];
-    let { submode, realmUrl } = context ?? {};
     let mappings = await basicMappings(this.loaderService.loader);
     // Open cards are attached automatically
     // If they are not attached, the user is not allowing us to
@@ -888,8 +899,11 @@ export default class MatrixService extends Service {
     }
 
     await this.updateSkillsAndCommandsIfNeeded(roomId);
-    let cardFileDefs = await this.uploadCards(attachedCards);
-    let uploadedFileDefs = await this.uploadFiles(attachedFiles);
+    let contentData = await this.withContextAndAttachments(
+      context,
+      attachedCards,
+      attachedFiles,
+    );
 
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -897,19 +911,36 @@ export default class MatrixService extends Service {
       format: 'org.matrix.custom.html',
       clientGeneratedId,
       data: {
-        attachedFiles: uploadedFileDefs.map((file: FileDef) =>
-          file.serialize(),
-        ),
-        attachedCards: cardFileDefs.map((file: FileDef) => file.serialize()),
+        attachedFiles: contentData.attachedFiles,
+        attachedCards: contentData.attachedCards,
         context: {
+          ...contentData.context,
           openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
-          submode,
-          realmUrl,
+          debug: context?.debug,
           functions: [],
         },
       },
     } as CardMessageContent);
+  }
+
+  private async withContextAndAttachments(
+    context?: BoxelContext,
+    attachedCards: CardDef[] = [],
+    attachedFiles: FileDef[] = [],
+  ): Promise<{
+    context: BoxelContext | undefined;
+    attachedCards: ReturnType<FileDef['serialize']>[];
+    attachedFiles: ReturnType<FileDef['serialize']>[];
+  }> {
+    let cardFileDefs = await this.uploadCards(attachedCards);
+    let uploadedFileDefs = await this.uploadFiles(attachedFiles);
+
+    return {
+      context,
+      attachedCards: cardFileDefs.map((file: FileDef) => file.serialize()),
+      attachedFiles: uploadedFileDefs.map((file: FileDef) => file.serialize()),
+    };
   }
 
   getLastActiveTimestamp(roomId: string, defaultTimestamp: number) {
@@ -983,10 +1014,7 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [
-      `${baseRealm.url}Skill/boxel-environment`,
-      `${baseRealm.url}Skill/card-editing`,
-    ];
+    let interactModeDefaultSkills = [`${baseRealm.url}Skill/boxel-environment`];
 
     let codeModeDefaultSkills = [
       `${baseRealm.url}Skill/boxel-environment`,
@@ -1256,16 +1284,40 @@ export default class MatrixService extends Service {
 
     this.timelineLoadingState.set(roomId, true);
     try {
-      while (room.oldState.paginationToken != null) {
-        await this.client.scrollback(room);
-        let rs = room.getLiveTimeline().getState('f' as MatrixSDK.Direction);
-        if (rs) {
-          roomData.notifyRoomStateUpdated(rs);
-        }
+      // Create a filter that includes all events
+      let filter = new Filter(this.client.getUserId()!, 'old_messages');
+      filter.setDefinition({
+        room: {
+          timeline: {
+            limit: 30,
+            'org.matrix.msc3874.not_rel_types': ['m.replace'],
+          },
+        },
+      });
+
+      // Get or create a filtered timeline set
+      let timelineSet = room.getOrCreateFilteredTimelineSet(filter, {
+        prepopulateTimeline: true,
+        useSyncEvents: true,
+      });
+
+      let timeline = timelineSet.getLiveTimeline();
+      if (timeline.getPaginationToken('b' as MatrixSDK.Direction) == null) {
+        return;
+      }
+
+      while (timeline.getPaginationToken('b' as MatrixSDK.Direction) != null) {
+        await this.client.paginateEventTimeline(timeline, {
+          backwards: true,
+        });
+      }
+
+      let rs = room.getLiveTimeline().getState('f' as MatrixSDK.Direction);
+      if (rs) {
+        roomData.notifyRoomStateUpdated(rs);
       }
 
       // Wait for all events to be loaded in roomResource
-      let timeline = room.getLiveTimeline();
       let events = timeline.getEvents();
       this.timelineQueue.push(...events.map((e) => ({ event: e })));
       await this.drainTimeline();

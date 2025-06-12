@@ -17,6 +17,7 @@ import {
   showAllCards,
   waitUntil,
   setupUserSubscribed,
+  getAgentId,
 } from '../helpers';
 import {
   synapseStart,
@@ -337,10 +338,8 @@ test.describe('Commands', () => {
 
     // Add the skill card to the assistant
     await page.locator('[data-test-skill-menu]').hover();
-    await expect(
-      page.locator('[data-test-pill-menu-header-button]'),
-    ).toBeVisible();
-    await page.locator('[data-test-pill-menu-header-button]').click();
+    await expect(page.locator('[data-test-pill-menu-button]')).toBeVisible();
+    await page.locator('[data-test-pill-menu-button]').click();
     await page.locator('[data-test-pill-menu-add-button]').click();
     await page
       .locator('[data-test-card-catalog-item]', {
@@ -357,14 +356,20 @@ test.describe('Commands', () => {
     await page.locator('[data-test-message-idx="0"]').waitFor();
 
     let roomId = await getRoomId(page);
-    let numEventsBeforeResponse = (await getRoomEvents('user1', 'pass', roomId))
-      .length;
+    let roomEvents = await getRoomEvents('user1', 'pass', roomId);
+    let numEventsBeforeResponse = roomEvents.length;
+    let agentId = getAgentId(roomEvents);
     // Note: this should really be posted by the aibot user but we can't do that easily
     // in this test, and this reproduces the bug
     await putEvent(userCred.accessToken, roomId, 'm.room.message', '1', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       body: '',
+      data: JSON.stringify({
+        context: {
+          agentId,
+        },
+      }),
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
@@ -435,6 +440,11 @@ test.describe('Commands', () => {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
+      data: JSON.stringify({
+        context: {
+          agentId,
+        },
+      }),
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: 'a8fe43a4-7bd3-40a7-8455-50e31038e3a4',

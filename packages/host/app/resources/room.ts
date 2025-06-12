@@ -8,6 +8,7 @@ import { Resource } from 'ember-resources';
 
 import difference from 'lodash/difference';
 
+import { IRoomEvent } from 'matrix-js-sdk';
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -17,10 +18,12 @@ import {
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
+  APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -34,10 +37,12 @@ import type {
   JoinEvent,
   LeaveEvent,
   CardMessageEvent,
+  DebugMessageEvent,
   MessageEvent,
   CommandResultEvent,
   RealmServerEvent,
   CodePatchResultEvent,
+  ActiveLLMEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import type { Skill } from 'https://cardstack.com/base/skill';
@@ -54,6 +59,7 @@ import type Room from '../lib/matrix-classes/room';
 
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
@@ -89,6 +95,7 @@ export class RoomResource extends Resource<Args> {
   // that updates immediately after the user selects the LLM.
   @tracked private llmBeingActivated: string | undefined;
   @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private commandService: CommandService;
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
@@ -129,6 +136,10 @@ export class RoomResource extends Resource<Args> {
       if (!memberIds || !memberIds.includes(this.matrixService.aiBotUserId)) {
         return;
       }
+      // TODO: enabledSkillCards can have references to skills whose URL
+      // does not exist anymore (i.e. skill has been deleted or renamed). In
+      // this case we should probably remove/update the reference from the skillConfig.
+      // CS-8776
       await this.loadSkills(this.matrixRoom.skillsConfig.enabledSkillCards);
 
       let index = this._messageCache.size;
@@ -149,6 +160,9 @@ export class RoomResource extends Resource<Args> {
                 index,
               });
             }
+            break;
+          case APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE:
+            await this.loadRoomMessage({ roomId, event, index });
             break;
           case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
             await this.updateMessageCommandResult({ roomId, event, index });
@@ -220,6 +234,16 @@ export class RoomResource extends Resource<Args> {
     return this.members.filter(
       (m) => m.membership === 'join' && m.roomId === this.roomId,
     );
+  }
+
+  get indexOfLastNonDebugMessage() {
+    // We want to find the last message that is not a debug message
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i].isDebugMessage !== true) {
+        return i;
+      }
+    }
+    return -1;
   }
 
   private get events() {
@@ -313,6 +337,20 @@ export class RoomResource extends Resource<Args> {
     return this.llmBeingActivated ?? this.matrixRoom?.activeLLM ?? DEFAULT_LLM;
   }
 
+  @cached
+  get usedLLMs(): string[] {
+    let usedLLMs = new Set<string>();
+    for (let event of this.events) {
+      if (event.type === APP_BOXEL_ACTIVE_LLM) {
+        let activeLLMEvent = event as ActiveLLMEvent;
+        if (activeLLMEvent.content.model) {
+          usedLLMs.add(activeLLMEvent.content.model);
+        }
+      }
+    }
+    return Array.from(usedLLMs);
+  }
+
   get isActivatingLLM() {
     return this.activateLLMTask.isRunning;
   }
@@ -379,7 +417,8 @@ export class RoomResource extends Resource<Args> {
     if (isCardInstance(skillCard)) {
       return skillCard;
     } else {
-      throw new Error(`Cannot find skill ${cardId}`);
+      // A known reason for this is that the skill has been renamed
+      return undefined;
     }
   }
 
@@ -406,16 +445,31 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
+  private getAggregatedReplacement(event: IRoomEvent) {
+    let finalRawEvent;
+    const originalEventId = event.event_id;
+    let replacedRawEvent = event.unsigned?.['m.relations']?.['m.replace'];
+    if (!event.content['m.relates_to']?.rel_type && replacedRawEvent) {
+      finalRawEvent = replacedRawEvent;
+      finalRawEvent.event_id = originalEventId;
+    } else {
+      finalRawEvent = event;
+    }
+    return finalRawEvent;
+  }
+
   private async loadRoomMessage({
     roomId,
     event,
     index,
   }: {
     roomId: string;
-    event: MessageEvent | CardMessageEvent;
+    event: MessageEvent | CardMessageEvent | DebugMessageEvent;
     index: number;
   }) {
     let effectiveEventId = this.getEffectiveEventId(event);
+    event = this.getAggregatedReplacement(event);
+
     let message = this._messageCache.get(effectiveEventId);
     if (!message?.isStreamingOfEventFinished) {
       let author = this.upsertRoomMember({
@@ -531,7 +585,8 @@ export class RoomResource extends Resource<Args> {
       | MessageEvent
       | CardMessageEvent
       | CommandResultEvent
-      | CodePatchResultEvent,
+      | CodePatchResultEvent
+      | DebugMessageEvent,
   ) {
     if (!('m.relates_to' in event.content)) {
       return event.event_id;

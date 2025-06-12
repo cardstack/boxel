@@ -24,8 +24,5 @@ NODE_ENV=development \
   --fromUrl='http://localhost:4201/experiments/' \
   --toUrl='http://localhost:4201/experiments/' \
   \
-  --fromUrl='http://localhost:4201/seed/' \
-  --toUrl='http://localhost:4201/seed/' \
-  \
   --fromUrl='http://localhost:4201/catalog/' \
   --toUrl='http://localhost:4201/catalog/'

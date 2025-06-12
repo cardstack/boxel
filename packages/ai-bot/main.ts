@@ -7,9 +7,10 @@ import {
   type PromptParts,
   isCommandResultStatusApplied,
   getPromptParts,
+  isInDebugMode,
 } from './helpers';
 
-import { handleDebugCommands } from './lib/debug';
+import { handleDebugCommands, isRecognisedDebugCommand } from './lib/debug';
 import { constructHistory } from './lib/history';
 import { Responder } from './lib/responder';
 import {
@@ -17,7 +18,11 @@ import {
   setTitle,
   roomTitleAlreadySet,
 } from './lib/set-title';
-import { getRoomEvents, type MatrixClient } from './lib/matrix/util';
+import {
+  getRoomEvents,
+  type MatrixClient,
+  sendPromptAndEventList,
+} from './lib/matrix/util';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CommandResultEvent,
@@ -104,13 +109,18 @@ class Assistant {
     }
   }
 
-  async handleDebugCommands(eventBody: string, roomId: string) {
+  async handleDebugCommands(
+    eventBody: string,
+    roomId: string,
+    eventList: DiscreteMatrixEvent[],
+  ) {
     return handleDebugCommands(
       this.openai,
       eventBody,
       this.client,
       roomId,
       this.id,
+      eventList,
     );
   }
 
@@ -154,6 +164,7 @@ Common issues are:
       process.exit(1);
     });
   let { user_id: aiBotUserId } = auth;
+
   let assistant = new Assistant(client, aiBotUserId);
   await assistant.loadToolCallCapableModels();
 
@@ -181,7 +192,9 @@ Common issues are:
     RoomEvent.Timeline,
     async function (event, room, toStartOfTimeline) {
       try {
-        let eventBody = event.getContent().body;
+        // Ensure that the event body we have is a string
+        // it's possible that this is sent undefined
+        let eventBody = event.getContent().body || '';
         let senderMatrixUserId = event.getSender()!;
         if (!room) {
           return;
@@ -211,19 +224,38 @@ Common issues are:
           eventBody,
         );
 
-        const responder = new Responder(client, room.roomId);
+        let promptParts: PromptParts;
+        let eventList = await getRoomEvents(room.roomId, client, event.getId());
+
+        // Return early here if it's a debug event
+        if (isRecognisedDebugCommand(eventBody)) {
+          return await assistant.handleDebugCommands(
+            eventBody,
+            room.roomId,
+            eventList,
+          );
+        }
+
+        let contentData =
+          typeof event.getContent().data === 'string'
+            ? JSON.parse(event.getContent().data)
+            : event.getContent().data;
+        const agentId = contentData.context?.agentId;
+        const responder = new Responder(client, room.roomId, agentId);
 
         if (Responder.eventWillDefinitelyTriggerResponse(event)) {
           await responder.ensureThinkingMessageSent();
         }
 
-        let promptParts: PromptParts;
-        let eventList = await getRoomEvents(room.roomId, client, event.getId());
-
         try {
           promptParts = await getPromptParts(eventList, aiBotUserId, client);
           if (!promptParts.shouldRespond) {
             return;
+          }
+          // if debug, send message with promptParts and event list
+          if (isInDebugMode(eventList, aiBotUserId)) {
+            // create files in memory
+            sendPromptAndEventList(client, room.roomId, promptParts, eventList);
           }
           await responder.ensureThinkingMessageSent();
         } catch (e) {
@@ -363,33 +395,6 @@ Common issues are:
       Sentry.captureException(e);
       return;
     }
-  });
-
-  //handle debug events
-  client.on(RoomEvent.Timeline, async function (event, room) {
-    if (event.event.origin_server_ts! < startTime) {
-      return;
-    }
-    if (event.getType() !== 'm.room.message') {
-      return;
-    }
-    if (!room) {
-      return;
-    }
-    let eventBody = event.getContent().body;
-    let isDebugEvent = eventBody.startsWith('debug:');
-    if (!isDebugEvent) {
-      return;
-    }
-    log.info(
-      '(%s) (Room: "%s" %s) (Message: %s %s)',
-      event.getType(),
-      room?.name,
-      room?.roomId,
-      event.getSender(),
-      eventBody,
-    );
-    return await assistant.handleDebugCommands(eventBody, room.roomId);
   });
 
   await client.startClient();

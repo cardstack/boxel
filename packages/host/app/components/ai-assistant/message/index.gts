@@ -1,6 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
@@ -43,6 +44,7 @@ interface Signature {
     datetime: Date;
     isFromAssistant: boolean;
     isStreaming: boolean;
+    isLastAssistantMessage: boolean;
     profileAvatar?: ComponentLike;
     collectionResource?: ReturnType<getCardCollection>;
     files?: FileDef[] | undefined;
@@ -56,6 +58,7 @@ interface Signature {
       scrollTo: Element['scrollIntoView'];
     }) => void;
     errorMessage?: string;
+    isDebugMessage?: boolean;
     isPending?: boolean;
     retryAction?: () => void;
   };
@@ -179,6 +182,7 @@ function collectionResourceError(id: string | null | undefined) {
 export default class AiAssistantMessage extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare matrixService: MatrixService;
+
   get isReasoningExpandedByDefault() {
     let result =
       this.args.isStreaming &&
@@ -200,6 +204,15 @@ export default class AiAssistantMessage extends Component<Signature> {
       !this.isReasoningExpanded,
     );
   };
+
+  @action
+  private async downloadFile(file: FileDef) {
+    try {
+      await this.matrixService.downloadAsFileInBrowser(file);
+    } catch (error) {
+      console.error('Error downloading file:', error);
+    }
+  }
 
   get hasMessageHTMLParts() {
     return !!this.args.messageHTMLParts;
@@ -237,7 +250,8 @@ export default class AiAssistantMessage extends Component<Signature> {
                 Thinking...
               {{else}}
                 <details open={{this.isReasoningExpanded}} data-test-reasoning>
-                  {{! template-lint-disable no-invalid-interactive}}
+                  {{! template-lint-disable no-invalid-interactive }}
+                  {{! template-lint-disable no-nested-interactive }}
                   <summary
                     {{on 'click' this.updateReasoningExpanded}}
                   >Thinking...</summary>
@@ -254,6 +268,7 @@ export default class AiAssistantMessage extends Component<Signature> {
               @roomId={{@roomId}}
               @eventId={{@eventId}}
               @isStreaming={{@isStreaming}}
+              @isLastAssistantMessage={{@isLastAssistantMessage}}
             />
           {{else}}
             <FormattedUserMessage @html={{@messageHTML}} />
@@ -272,7 +287,10 @@ export default class AiAssistantMessage extends Component<Signature> {
                     />
                   {{/each}}
                 {{else}}
-                  <FilePill @file={{item}} />
+                  <FilePill
+                    @file={{item}}
+                    @downloadFile={{if @isDebugMessage this.downloadFile}}
+                  />
                 {{/if}}
               {{/each}}
             </div>
