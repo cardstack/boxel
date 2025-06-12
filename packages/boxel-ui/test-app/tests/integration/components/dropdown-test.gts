@@ -1,12 +1,6 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'test-app/tests/helpers';
-import {
-  click,
-  render,
-  waitFor,
-  triggerEvent,
-  settled,
-} from '@ember/test-helpers';
+import { click, render, waitFor, triggerEvent } from '@ember/test-helpers';
 import {
   BoxelDropdown,
   Menu as BoxelMenu,
@@ -60,7 +54,6 @@ module('Integration | Component | dropdown', function (hooks) {
     });
 
     // Wait for all pending operations to complete
-    await settled();
     await waitFor('[data-test-boxel-dropdown-content]', { count: 0 });
     assert
       .dom('[data-test-boxel-dropdown-content]')
@@ -83,7 +76,7 @@ module('Integration | Component | dropdown', function (hooks) {
     });
 
     // Wait for all pending operations to complete
-    await settled();
+    await waitFor('[data-test-boxel-dropdown-content]');
     assert
       .dom('[data-test-boxel-dropdown-content]')
       .exists('dropdown should stay open when mouse moves back inside quickly');
