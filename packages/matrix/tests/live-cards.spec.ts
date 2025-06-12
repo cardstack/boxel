@@ -39,7 +39,7 @@ test.describe('Live Cards', () => {
       template: 'test',
     });
     await registerRealmUsers(synapse);
-    realmServer = await startRealmServer({ includeSeedRealm: true });
+    realmServer = await startRealmServer();
     await registerUser(synapse, 'user1', 'pass');
     await setupUserSubscribed('@user1:localhost', realmServer);
   });
@@ -58,57 +58,52 @@ test.describe('Live Cards', () => {
       skipOpeningAssistant: true,
     });
     await createRealm(page, realmName);
-    await page.goto(
-      `${realmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0`,
-    );
+    let instanceUrl = await postNewCard(page, realmURL, {
+      data: {
+        attributes: {
+          title: 'test card title',
+          description: 'test card description',
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/card-api',
+            name: 'CardDef',
+          },
+        },
+      },
+    });
+    await page.goto(instanceUrl);
     await expect(
-      page.locator(
-        `[data-test-card="${realmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0"]`,
-      ),
-    ).toContainText('Some folks say');
+      page.locator(`[data-test-card="${instanceUrl}"]`),
+    ).toContainText('test card title');
 
     // assert that instance updates are live bound
     await expect(
       page.locator('[data-test-realm-indexing-indicator]'),
     ).toHaveCount(0);
 
-    await patchCardInstance(
-      page,
-      realmURL,
-      `${realmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0`,
-      {
-        data: {
-          type: 'card',
-          attributes: {
-            fullName: 'Hello Mars',
-            heroUrl:
-              'https://boxel-images.boxel.ai/app-assets/hello-world/beach-volley-hero.jpg',
-            headshotUrl:
-              'https://boxel-images.boxel.ai/app-assets/hello-world/luke-vb-headshot.jpg',
-            bio: 'Luke Melia is a beach volleyball player living in downtown New York City. He is a left-side defender with a good serve and good court sense. What Luke lacks in height, he makes up in heart and craftiness.\n\nOutside of playing beach volleyball, Luke enjoys watching professional beach volleyball, primarily the AVP (the American domestic pro tour) and the FIVB (the world tour). He also enjoys surfing, skateboarding, parkour, and rock climbing.\n\nWhen Luke is not competing or challenging himself physically, he is usually writing code or creating digital products. His languages of choice are Ruby and Javascript.\n\nLuke lives in New York City with his wife and two daughters.',
-            quote:
-              "Some folks say I was born on the wrong coast, that I live a West Coast lifestyle in New York City. But I've found a way to integrate beach volleyball into my life as a New Yorker. I've been lucky enough to play plenty outside of New York, too, from Cali to Bali to Thailand and lots of spots in between. I guess you could say I'm poly-coastal!",
-            description: null,
-            thumbnailURL: null,
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../hello-world',
-              name: 'HelloWorld',
-            },
+    await patchCardInstance(page, realmURL, instanceUrl, {
+      data: {
+        type: 'card',
+        attributes: {
+          title: 'updated card title',
+          description: 'updated card description',
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/card-api',
+            name: 'CardDef',
           },
         },
       },
-    );
+    });
 
     await expect(
       page.locator('[data-test-realm-indexing-indicator]'),
     ).toHaveCount(1);
     await expect(
-      page.locator(
-        `[data-test-card="${realmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0"]`,
-      ),
-    ).toContainText('Hello Mars');
+      page.locator(`[data-test-card="${instanceUrl}"]`),
+    ).toContainText('updated card title');
     await expect(
       page.locator('[data-test-realm-indexing-indicator]'),
     ).toHaveCount(0);
@@ -208,12 +203,26 @@ test.describe('Live Cards', () => {
       skipOpeningAssistant: true,
     });
     await createRealm(page, realmName);
+    let instanceUrl = await postNewCard(page, realmURL, {
+      data: {
+        attributes: {
+          title: 'test card title',
+          description: 'test card description',
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/card-api',
+            name: 'CardDef',
+          },
+        },
+      },
+    });
 
     await page.goto(
       `${realmURL}?operatorModeState=${encodeURIComponent(
         JSON.stringify({
           stacks: [],
-          codePath: `${realmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0`,
+          codePath: instanceUrl,
           fileView: 'browser',
           submode: 'code',
         }),
@@ -226,9 +235,7 @@ test.describe('Live Cards', () => {
     await new Promise((r) => setTimeout(r, 5000));
     let content = await getMonacoContent(page);
 
-    await page
-      .locator('[data-test-field="fullName"] input')
-      .fill('Replacement');
+    await page.locator('[data-test-field="title"] input').fill('Replacement');
 
     await waitUntil(async () => (await getMonacoContent(page)) !== content);
 

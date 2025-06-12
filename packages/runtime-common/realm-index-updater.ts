@@ -233,8 +233,6 @@ export class RealmIndexUpdater {
     // hard coded test URLs
     if ((globalThis as any).__environment === 'test') {
       switch (this.realmURL.href) {
-        case 'http://localhost:4205/seed/':
-          return 'seed_realm';
         case 'http://127.0.0.1:4441/':
           return 'base_realm';
         case 'http://127.0.0.1:4444/':

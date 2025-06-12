@@ -11,6 +11,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
+import { BOTTOM_THRESHOLD } from '@cardstack/host/components/ai-assistant/message';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
@@ -176,9 +177,9 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
         conversationElement.scrollHeight -
           conversationElement.clientHeight -
           conversationElement.scrollTop,
-        // we'll use a 20px threshold for considering the ai assistant scrolled
+        // we'll use a threshold for considering the ai assistant scrolled
         // all the way to the bottom
-      ) < 20
+      ) < BOTTOM_THRESHOLD
     );
   }
   function isAiAssistantScrolledToTop() {

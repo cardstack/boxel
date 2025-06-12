@@ -1240,7 +1240,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
         'Non-standard LLM is displayed in the panel',
       );
     await click(`[data-test-llm-select-selected]`);
-    assert.dom('.llm-select__dropdown').containsText('non-standard-llm-1');
-    assert.dom('.llm-select__dropdown').containsText('non-standard-llm-2');
+    assert.dom('.menu-content').containsText('non-standard-llm-1');
+    assert.dom('.menu-content').containsText('non-standard-llm-2');
   });
 });
