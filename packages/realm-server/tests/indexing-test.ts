@@ -637,7 +637,7 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          totalIndexEntries: 13,
+          totalIndexEntries: 16,
         },
         'indexed correct number of files',
       );
@@ -665,7 +665,7 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          totalIndexEntries: 9,
+          totalIndexEntries: 12,
         },
         'indexed correct number of files',
       );
@@ -684,7 +684,7 @@ module(basename(__filename), function () {
           instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
           moduleErrors: 3, // post, fancy person, person
           modulesIndexed: 0,
-          totalIndexEntries: 3,
+          totalIndexEntries: 6,
         },
         'indexed correct number of files',
       );
@@ -717,7 +717,7 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          totalIndexEntries: 9,
+          totalIndexEntries: 12,
         },
         'indexed correct number of files',
       );
@@ -755,7 +755,7 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          totalIndexEntries: 9,
+          totalIndexEntries: 12,
         },
         'indexed correct number of files',
       );
@@ -790,7 +790,7 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          totalIndexEntries: 13,
+          totalIndexEntries: 16,
         },
         'indexed correct number of files',
       );
@@ -829,7 +829,7 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          totalIndexEntries: 9,
+          totalIndexEntries: 12,
         },
         'instance and module are in error state before dependency is available',
       );
@@ -907,7 +907,7 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          totalIndexEntries: 12,
+          totalIndexEntries: 15,
         },
         'index did not touch any files',
       );
@@ -948,7 +948,7 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 1,
-          totalIndexEntries: 13,
+          totalIndexEntries: 16,
         },
         'indexed correct number of files',
       );
@@ -990,7 +990,7 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          totalIndexEntries: 13,
+          totalIndexEntries: 16,
         },
         'indexed correct number of files',
       );
@@ -1041,7 +1041,7 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 0,
           modulesIndexed: 0,
-          totalIndexEntries: 11,
+          totalIndexEntries: 14,
         },
         'indexed correct number of files',
       );
@@ -1082,7 +1082,7 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 1,
-          totalIndexEntries: 13,
+          totalIndexEntries: 16,
         },
         'indexed correct number of files',
       );
@@ -1156,7 +1156,7 @@ module(basename(__filename), function () {
           instanceErrors: 3,
           modulesIndexed: 7,
           instancesIndexed: 6,
-          totalIndexEntries: 13,
+          totalIndexEntries: 16,
         },
         'indexed correct number of files',
       );
