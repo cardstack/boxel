@@ -2,8 +2,10 @@ import { setTitle } from './set-title';
 import {
   sendErrorEvent,
   sendMessageEvent,
-  sendPromptAndEventList,
   MatrixClient,
+  sendPromptAsDebugMessage,
+  sendEventListAsDebugMessage,
+  sendDebugMessage,
 } from './matrix/util';
 import OpenAI from 'openai';
 
@@ -13,7 +15,9 @@ import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/b
 
 export function isRecognisedDebugCommand(eventBody: string) {
   return (
-    eventBody.startsWith('debug:promptandevents') ||
+    eventBody.startsWith('debug:help') ||
+    eventBody.startsWith('debug:prompt') ||
+    eventBody.startsWith('debug:eventlist') ||
     eventBody.startsWith('debug:title:') ||
     eventBody.startsWith('debug:boom') ||
     eventBody.startsWith('debug:patch:')
@@ -28,26 +32,59 @@ export async function handleDebugCommands(
   userId: string,
   eventList: DiscreteMatrixEvent[],
 ) {
-  if (eventBody.startsWith('debug:promptandevents')) {
+  if (eventBody.startsWith('debug:help')) {
+    sendDebugMessage(
+      client,
+      roomId,
+      `There are a few debug commands you can use:\n\n
+To get the prompt sent to the AI with the last user message:\n
+  debug:prompt\n
+To get the prompt but with some events removed:\n
+  debug:prompt:(number of events to remove)\n
+To get the raw event list:\n
+  debug:eventlist\n
+To set the room name:\n
+  debug:title:set:\n
+To throw an error:\n
+  debug:boom:\n
+To create a new title:\n
+  debug:title:create:\n
+To patch a card:\n
+  debug:patch:\n
+      `,
+    );
+  }
+  if (eventBody.startsWith('debug:prompt')) {
     let customMessage =
       'Add a number to remove that many user and LLM events from the event list:\n' +
-      'debug:promptandevents:<number of events to remove>\n\n' +
-      'Example: debug:promptandevents:3';
-    if (eventBody.startsWith('debug:promptandevents:')) {
-      let removeEventsString = eventBody.split('debug:promptandevents:')[1];
+      'debug:prompt:<number of events to remove>\n\n' +
+      'Example: debug:prompt:3';
+    if (eventBody.startsWith('debug:prompt:')) {
+      let removeEventsString = eventBody.split('debug:prompt:')[1];
       let numberOfEventsToRemove = parseInt(removeEventsString) || 0;
       eventList = eventList.slice(0, -numberOfEventsToRemove);
       customMessage = `Removed ${numberOfEventsToRemove} events`;
+    } else {
+      // Go to the last message not from the bot
+      // that is not a debug message
+      let lastUserMessage = eventList.findLast(
+        (event) =>
+          event.sender !== userId &&
+          event.type === 'm.room.message' &&
+          !isRecognisedDebugCommand((event.content as any).body ?? ''),
+      );
+      if (lastUserMessage) {
+        eventList = eventList.slice(0, eventList.indexOf(lastUserMessage) + 1);
+        customMessage = `Removing events back to the last non-debug user message`;
+      }
     }
 
     let promptParts = await getPromptParts(eventList, userId, client);
-    sendPromptAndEventList(
-      client,
-      roomId,
-      promptParts,
-      eventList,
-      customMessage,
-    );
+    await sendPromptAsDebugMessage(client, roomId, promptParts, customMessage);
+  }
+
+  if (eventBody.startsWith('debug:eventlist')) {
+    await sendEventListAsDebugMessage(client, roomId, eventList);
   }
   // Explicitly set the room name
   if (eventBody.startsWith('debug:title:set:')) {
