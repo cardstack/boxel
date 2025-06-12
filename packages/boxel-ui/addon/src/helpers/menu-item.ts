@@ -20,6 +20,8 @@ interface MenuItemOptions {
   subtext?: string;
   tabindex: number | string;
   url: string;
+  subtext?: string;
+  postscript?: string;
 }
 export class MenuItem {
   text: string;
