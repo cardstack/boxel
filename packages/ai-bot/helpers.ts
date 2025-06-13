@@ -37,7 +37,6 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
-  SerializedFileDef,
   downloadFile,
   MatrixClient,
   isCommandOrCodePatchResult,
@@ -46,6 +45,7 @@ import {
 import { constructHistory } from './lib/history';
 import { isRecognisedDebugCommand } from './lib/debug';
 import { APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE } from '../runtime-common/matrix-constants';
+import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
 
 let log = logger('ai-bot');
 
