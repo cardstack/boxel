@@ -161,10 +161,11 @@ export default class Room extends Component<Signature> {
             }}
             as |AttachedItems AttachButton|
           >
-            {{#if this.displayActionChin}}
+            {{#if this.displayActionBar}}
               <AiAssistantActionBar
                 @acceptAll={{perform this.executeAllReadyActionsTask}}
                 @cancel={{this.cancelActionChin}}
+                @acceptingAll={{this.executeAllReadyActionsTask.isRunning}}
               />
             {{/if}}
             <div class='chat-input-area' data-test-chat-input-area>
@@ -950,7 +951,10 @@ export default class Room extends Component<Signature> {
   }
 
   @cached
-  private get displayActionChin() {
+  private get displayActionBar() {
+    if (this.executeAllReadyActionsTask.isRunning) {
+      return true;
+    }
     let lastMessage = this.messages[this.messages.length - 1];
     if (
       this.lastCanceledActionMessageId &&
@@ -985,8 +989,8 @@ export default class Room extends Component<Signature> {
   }
 
   executeAllReadyActionsTask = task(async () => {
-    await this.executeReadyCommands();
     await this.executeReadyCodePatches();
+    await this.executeReadyCommands();
   });
 
   @action

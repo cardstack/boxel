@@ -7,6 +7,7 @@ interface Signature {
   Args: {
     acceptAll: () => void;
     cancel: () => void;
+    acceptingAll?: boolean;
   };
 }
 
@@ -16,6 +17,8 @@ const AiAssistantActionBar: TemplateOnlyComponent<Signature> = <template>
       @kind='primary'
       class='action-btn'
       data-test-accept-all
+      @disabled={{@acceptingAll}}
+      @loading={{@acceptingAll}}
       {{on 'click' @acceptAll}}
     >Accept All</BoxelButton>
     <BoxelButton
