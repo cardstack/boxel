@@ -1,32 +1,37 @@
-import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
-
-import flatMap from 'lodash/flatMap';
-import startCase from 'lodash/startCase';
 
 import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown, IconPlus } from '@cardstack/boxel-ui/icons';
 
-import { type FileType, newFileTypes } from './create-file-modal';
+import { type FileType } from './create-file-modal';
+
+export interface NewFileOptions {
+  onSelect: (fileType: FileType) => void;
+  menuItems: MenuItem[];
+  isDisabled?: boolean;
+  initiallyOpened?: boolean;
+  onClose?: () => void;
+}
 
 interface Signature {
-  Args: {
-    onSelectNewFileType: (fileType: FileType) => void;
-    isCreateModalShown: boolean;
-  };
+  Args: NewFileOptions;
   Element: HTMLElement;
 }
 
 export default class NewFileButton extends Component<Signature> {
   <template>
-    <BoxelDropdown @contentClass='gap-above'>
+    <BoxelDropdown
+      @initiallyOpened={{@initiallyOpened}}
+      @onClose={{@onClose}}
+      @contentClass='gap-above'
+    >
       <:trigger as |bindings|>
         <Button
           class='new-file-dropdown-trigger'
           @kind='primary'
           @size='tall'
-          @disabled={{@isCreateModalShown}}
+          @disabled={{@isDisabled}}
           {{bindings}}
           aria-label='Create new file'
           ...attributes
@@ -50,7 +55,8 @@ export default class NewFileButton extends Component<Signature> {
       <:content as |dd|>
         <Menu
           class='new-file-menu'
-          @items={{this.menuItems}}
+          @items={{@menuItems}}
+          @onSelect={{@onSelect}}
           @closeMenu={{dd.close}}
           data-test-new-file-dropdown-menu
         />
@@ -115,21 +121,4 @@ export default class NewFileButton extends Component<Signature> {
       }
     </style>
   </template>
-
-  private get menuItems() {
-    return flatMap(newFileTypes, ({ id, icon, description, extension }) => {
-      if (id === 'duplicate-instance' || id === 'spec-instance') {
-        return [];
-      }
-      let displayName = capitalize(startCase(id));
-      return [
-        new MenuItem(displayName, 'action', {
-          action: () => this.args.onSelectNewFileType({ id, displayName }),
-          subtext: description,
-          icon,
-          postscript: extension,
-        }),
-      ];
-    });
-  }
 }

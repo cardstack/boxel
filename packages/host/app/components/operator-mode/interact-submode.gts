@@ -16,8 +16,8 @@ import get from 'lodash/get';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import { Tooltip } from '@cardstack/boxel-ui/components';
-import { cn, eq, lt, gt, and } from '@cardstack/boxel-ui/helpers';
-import { Download } from '@cardstack/boxel-ui/icons';
+import { cn, eq, lt, gt, and, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { Download, IconCode } from '@cardstack/boxel-ui/icons';
 
 import {
   CardContextName,
@@ -62,6 +62,9 @@ import DeleteModal from './delete-modal';
 import OperatorModeStack from './stack';
 import { CardDefOrId } from './stack-item';
 import SubmodeLayout from './submode-layout';
+
+import type { FileType } from './create-file-modal';
+import type { NewFileOptions } from './new-file-button';
 
 import type { StackItemComponentAPI } from './stack-item';
 
@@ -650,6 +653,41 @@ export default class InteractSubmode extends Component {
     openSearchCallback();
   }
 
+  private get menuItems(): MenuItem[] {
+    return [
+      new MenuItem('Open Code Mode', 'action', {
+        action: () =>
+          this.onSelectFileType({
+            id: 'card-definition',
+            displayName: 'Card Definition',
+          }),
+        icon: IconCode,
+      }),
+    ];
+  }
+
+  private onSelectFileType = (fileType: FileType) => {
+    this.createFile.perform(fileType);
+  };
+
+  private get newFileOptions(): NewFileOptions {
+    return {
+      onSelect: (fileType: FileType) => this.createFile.perform(fileType),
+      menuItems: this.menuItems,
+    };
+  }
+
+  private createFile = dropTask(async (fileType: FileType) => {
+    if (fileType.id !== 'card-instance') {
+      this.operatorModeStateService.setNewFileDropdownOpen();
+      await this.operatorModeStateService.updateSubmode('code');
+      return;
+    }
+
+    // TODO
+    return;
+  });
+
   @provide(CardContextName)
   // @ts-ignore "cardContext is declared but not used"
   private get cardContext(): Omit<
@@ -672,6 +710,7 @@ export default class InteractSubmode extends Component {
       class='interact-submode-layout'
       @onSearchSheetClosed={{this.clearSearchSheetTrigger}}
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
+      @newFileOptions={{this.newFileOptions}}
       as |search|
     >
       <div class='interact-submode' style={{this.backgroundImageStyle}}>
