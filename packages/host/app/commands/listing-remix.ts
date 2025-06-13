@@ -1,11 +1,8 @@
 import { service } from '@ember/service';
 
 import { timeout } from 'ember-concurrency';
-import window from 'ember-window-mock';
 
 import { isResolvedCodeRef, RealmPaths } from '@cardstack/runtime-common';
-
-import { ModuleInspectorSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import * as CardAPI from 'https://cardstack.com/base/card-api';
 import * as BaseCommandModule from 'https://cardstack.com/base/command';
