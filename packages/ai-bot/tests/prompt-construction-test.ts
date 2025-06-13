@@ -236,21 +236,21 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(result[0].role, 'system');
     assert.equal(result[1].role, 'system');
     assert.equal(result[2].role, 'user');
-    assert.equal(result[2].content, 'Hey');
+    assert.true(
+      result[2].content?.startsWith('Hey'),
+      'message body should be in the user prompt',
+    );
     if (
       history[0].type === 'm.room.message' &&
       history[0].content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
     ) {
       assert.true(
-        result[1].content?.includes(
-          JSON.stringify(
-            history[0].content.data.attachedCards![0].content
-              ? JSON.parse(history[0].content.data.attachedCards![0].content)
-                  .data
-              : '',
-          ),
-        ),
-        'attached card should be in the system context message',
+        result[2].content?.includes(`"firstName": "Terry"`),
+        'attached card should be in the message that it was sent with 1',
+      );
+      assert.true(
+        result[2].content?.includes(`"lastName": "Pratchett"`),
+        'attached card should be in the message that it was sent with 2',
       );
       assert.true(
         result[1].content?.includes('Room ID: room1'),
@@ -526,7 +526,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(attachedCards.length, 0);
   });
 
-  test('downloads attached files', async () => {
+  test('downloads most recent version of attached files', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -671,10 +671,20 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
 
+    let userMessages = prompt.filter((message) => message.role === 'user');
     assert.ok(
-      prompt[prompt.length - 2].content?.includes(
+      userMessages[0]?.content?.includes(
         `
-Attached files:
+Attached Files (files with newer versions don't show their content):
+[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
+[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt)
+      `.trim(),
+      ),
+    );
+    assert.ok(
+      userMessages[1]?.content?.includes(
+        `
+Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts): this is the content of the spaghetti-recipe.gts file
 [best-friends.txt](http://test-realm-server/my-realm/best-friends.txt): this is the content of the best-friends.txt file
 [file-that-does-not-exist.txt](http://test.com/my-realm/file-that-does-not-exist.txt): Error loading attached file: HTTP error. Status: 404
@@ -852,7 +862,7 @@ Attached files:
     assert.equal(attachedCards.length, 2);
   });
 
-  test('Gets multiple uploaded cards in the system context message', async () => {
+  test('Handles multiple uploaded cards across user messages', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -861,7 +871,7 @@ Attached files:
         content: {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
-          body: 'Hey',
+          body: 'Hey 1',
           data: {
             attachedCards: [
               {
@@ -910,9 +920,31 @@ Attached files:
         content: {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
-          body: 'Hey',
+          body: 'Hey again with a newer version of the card plus a second card',
           data: {
             attachedCards: [
+              {
+                sourceUrl: 'http://localhost:4201/experiments/Author/1',
+                url: 'http://localhost:4201/experiments/Author/1',
+                name: 'Author',
+                contentType: 'application/json',
+                content: JSON.stringify({
+                  data: {
+                    type: 'card',
+                    id: 'http://localhost:4201/experiments/Author/1',
+                    attributes: {
+                      firstName: 'Newer Terry',
+                      lastName: 'Pratchett',
+                    },
+                    meta: {
+                      adoptsFrom: {
+                        module: '../author',
+                        name: 'Author',
+                      },
+                    },
+                  },
+                }),
+              },
               {
                 sourceUrl: 'http://localhost:4201/experiments/Author/2',
                 url: 'http://localhost:4201/experiments/Author/2',
@@ -960,16 +992,28 @@ Attached files:
       undefined,
       fakeMatrixClient,
     );
-    const systemContextMessage = fullPrompt.findLast(
-      (message) => message.role === 'system',
+    const userMessages = fullPrompt.filter(
+      (message) => message.role === 'user',
     );
     assert.true(
-      systemContextMessage?.content?.includes(
+      userMessages[0]?.content?.includes(
+        'http://localhost:4201/experiments/Author/1',
+      ),
+    );
+    assert.false(
+      userMessages[0]?.content?.includes('"firstName": "Terry"'),
+      'should not include the contents of the first version of the card in the first user message',
+    );
+    assert.true(
+      userMessages[1]?.content?.includes(
         'http://localhost:4201/experiments/Author/1',
       ),
     );
     assert.true(
-      systemContextMessage?.content?.includes(
+      userMessages[1]?.content?.includes('"firstName": "Newer Terry"'),
+    );
+    assert.true(
+      userMessages[1]?.content?.includes(
         'http://localhost:4201/experiments/Author/2',
       ),
     );
@@ -1339,11 +1383,11 @@ Attached files:
     let nonEditableCardsMessage =
       'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
 
+    let userContextMessage = messages?.[messages.length - 2];
     assert.ok(
-      messages?.[messages.length - 2].content?.includes(
-        nonEditableCardsMessage,
-      ),
-      'System context message should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files',
+      userContextMessage?.content?.includes(nonEditableCardsMessage),
+      'System context message should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files, but was ' +
+        userContextMessage?.content,
     );
 
     // Now add a tool
@@ -1677,9 +1721,6 @@ Attached files:
       await getPromptParts(eventList, '@aibot:localhost', fakeMatrixClient)
     ).messages!;
 
-    const { attachedCards } = getRelevantCards(eventList, '@aibot:localhost');
-    assert.equal(attachedCards.length, 1);
-
     assert.equal(result[0].role, 'system');
     assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.true(
@@ -1692,11 +1733,12 @@ Attached files:
       result[0].content?.includes('Use pirate colloquialism when responding.'),
       'skill card instructions included in the system message',
     );
+    assert.equal(result[2].role, 'user');
     assert.true(
-      result![1].content?.includes(
-        'attributes":{"appTitle":"Radio Episode Tracker for Nerds"',
+      result![2].content?.includes(
+        '"appTitle": "Radio Episode Tracker for Nerds"',
       ),
-      'attached card details included in the system context message',
+      'attached card details included in the user message',
     );
   });
 
@@ -3065,7 +3107,7 @@ Attached files:
       'patchCardInstance',
       'Should have patchCardInstance tool call',
     );
-    assert.true(messages![9].content!.includes('Business Card V2'));
+    assert.true(messages![6].content!.includes('Business Card V2'));
   });
 
   test('Responds to completion of lone code patch', async function () {
@@ -3400,6 +3442,16 @@ Attached files:
         messages![3].content,
     );
   });
+
+  // test('tool call messages include attached files when command result does', async () => {});
+
+  // test('tool call messages include attached cards when command result does', async () => {
+  // });
+
+  // test('code patch messages include attached files when code patch result does', async () => {
+  // });
+
+  // test('code patch messages include attached cards when code patch result does', async () => {});
 });
 
 module('set model in prompt', (hooks) => {

@@ -11,6 +11,7 @@ import {
   baseRealm,
   codeRefWithAbsoluteURL,
   getClass,
+  SupportedMimeType,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -191,7 +192,7 @@ export default class FileDefManagerImpl implements FileDefManager {
         let fileDef = this.fileAPI.createFileDef({
           sourceUrl: entry.card.id,
           name: entry.card.title,
-          contentType: 'text/plain',
+          contentType: SupportedMimeType.CardJson,
           contentHash,
         });
         fileDef.url = await this.uploadContent(content, fileDef.contentType);

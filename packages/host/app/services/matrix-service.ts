@@ -73,6 +73,10 @@ import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
 import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import {
+  CardForAttachmentCard,
+  FileForAttachmentCard,
+} from 'https://cardstack.com/base/command';
 import type * as FileAPI from 'https://cardstack.com/base/file-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 import type {
@@ -782,6 +786,24 @@ export default class MatrixService extends Service {
       attachedCards,
       attachedFiles,
     );
+    if ((resultCard as FileForAttachmentCard)?.fileForAttachment) {
+      contentData.attachedFiles.push(
+        (
+          (resultCard as FileForAttachmentCard)!
+            .fileForAttachment as unknown as FileDef
+        ).serialize(),
+      );
+      resultCardFileDef = undefined; // don't send the card as a result if the file is attached
+    }
+    if ((resultCard as CardForAttachmentCard)?.cardForAttachment) {
+      contentData.attachedCards.push(
+        (
+          (resultCard as CardForAttachmentCard)!
+            .cardForAttachment as unknown as FileDef
+        ).serialize(),
+      );
+      resultCardFileDef = undefined; // don't send the card as a result if the card is attached
+    }
     let content:
       | CommandResultWithNoOutputContent
       | CommandResultWithOutputContent;

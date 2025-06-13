@@ -8,15 +8,16 @@ import {
 } from '@cardstack/runtime-common';
 import { ToolChoice } from '@cardstack/runtime-common/helpers/ai';
 import type {
-  MatrixEvent as DiscreteMatrixEvent,
   ActiveLLMEvent,
   CardMessageContent,
   CardMessageEvent,
+  CodePatchResultEvent,
   CommandResultEvent,
   EncodedCommandRequest,
+  MatrixEvent as DiscreteMatrixEvent,
+  MatrixEventWithBoxelContext,
   SkillsConfigEvent,
   Tool,
-  CodePatchResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
@@ -36,7 +37,6 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
-  SerializedFileDef,
   downloadFile,
   MatrixClient,
   isCommandOrCodePatchResult,
@@ -45,6 +45,7 @@ import {
 import { constructHistory } from './lib/history';
 import { isRecognisedDebugCommand } from './lib/debug';
 import { APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE } from '../runtime-common/matrix-constants';
+import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
 
 let log = logger('ai-bot');
 
@@ -292,6 +293,114 @@ export function getRelevantCards(
   };
 }
 
+export function hasSomeAttachedCards(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): boolean {
+  for (let event of history) {
+    if (event.type !== 'm.room.message') {
+      continue;
+    }
+
+    if (event.sender !== aiBotUserId) {
+      let { content } = event;
+      let attachedCards = (content as CardMessageContent).data?.attachedCards
+        ?.map((attachedCard: SerializedFileDef) =>
+          attachedCard.content
+            ? (JSON.parse(attachedCard.content) as LooseSingleCardDocument)
+            : undefined,
+        )
+        .filter((card) => card !== undefined);
+      if (attachedCards?.length) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+export function getAttachedCards(
+  matrixEvent: MatrixEventWithBoxelContext,
+  history: DiscreteMatrixEvent[],
+) {
+  let attachedCards = matrixEvent.content?.data?.attachedCards ?? [];
+  return (
+    attachedCards
+      .map((attachedCard: SerializedFileDef) => {
+        // If the file is attached later in the history, we should not include the content here
+        let shouldIncludeContent = !history
+          .slice(history.indexOf(matrixEvent) + 1)
+          .some((event) => {
+            // event is not always MatrixEventWithBoxelContext but casting lets us safely check attachedCards
+            return (
+              event as MatrixEventWithBoxelContext
+            ).content?.data?.attachedCards?.some(
+              (cardAttachment: SerializedFileDef) =>
+                cardAttachment.url === attachedCard.url,
+            );
+          });
+        let result: SerializedFileDef = {
+          url: attachedCard.url,
+          sourceUrl: attachedCard.sourceUrl ?? '',
+          name: attachedCard.name,
+          contentType: attachedCard.contentType,
+        };
+        if (shouldIncludeContent) {
+          result.content = attachedCard.content
+            ? JSON.parse(attachedCard.content).data
+            : undefined;
+        }
+        return result;
+      })
+      ?.filter((cardFileDef) => cardFileDef?.url) // Only include cards with valid urls
+      ?.sort((a, b) => String(a!.url!).localeCompare(String(b!.url!))) ?? []
+  );
+}
+
+export async function getAttachedFiles(
+  client: MatrixClient,
+  matrixEvent: MatrixEventWithBoxelContext,
+  history: DiscreteMatrixEvent[],
+): Promise<SerializedFileDef[]> {
+  let attachedFiles = matrixEvent.content?.data?.attachedFiles ?? [];
+  return Promise.all(
+    attachedFiles.map(async (attachedFile: SerializedFileDef) => {
+      // If the file is attached later in the history, we should not include the content here
+      let shouldIncludeContent = !history
+        .slice(history.indexOf(matrixEvent) + 1)
+        .some((event) => {
+          // event is not always MatrixEventWithBoxelContext but casting lets us safely check attachedFiles
+          return (
+            event as MatrixEventWithBoxelContext
+          ).content?.data?.attachedFiles?.some(
+            (file: SerializedFileDef) => file.url === attachedFile.url,
+          );
+        });
+
+      let result: SerializedFileDef = {
+        url: attachedFile.url,
+        sourceUrl: attachedFile.sourceUrl ?? '',
+        name: attachedFile.name,
+        contentType: attachedFile.contentType,
+      };
+      if (shouldIncludeContent) {
+        try {
+          result.content = await downloadFile(client, attachedFile);
+        } catch (error) {
+          log.error(`Failed to fetch file ${attachedFile.url}:`, error);
+          Sentry.captureException(error, {
+            extra: { fileUrl: attachedFile.url, fileName: attachedFile.name },
+          });
+          result.error = `Error loading attached file: ${(error as Error).message}`;
+          result.content = undefined;
+        }
+      }
+      return result;
+    }),
+  );
+}
+
 export async function loadCurrentlySerializedFileDefs(
   client: MatrixClient,
   history: DiscreteMatrixEvent[],
@@ -369,7 +478,11 @@ export function attachedFilesToMessage(
         return `${hyperlink}: ${f.error}`;
       }
 
-      return `${hyperlink}: ${f.content}`;
+      if (f.content) {
+        return `${hyperlink}: ${f.content}`;
+      } else {
+        return `${hyperlink}`;
+      }
     })
     .join('\n');
 }
@@ -637,11 +750,19 @@ export async function getModifyPrompt(
         codePatchResults,
       ).forEach((message) => historicalMessages.push(message));
     }
-    if (body && event.sender !== aiBotUserId) {
-      historicalMessages.push({
-        role: 'user',
-        content: body,
-      });
+    if (event.sender !== aiBotUserId) {
+      let attachments = await buildAttachmentsMessagePart(
+        client,
+        event as CardMessageEvent,
+        history,
+      );
+      let content = [body, attachments].filter(Boolean).join('\n\n');
+      if (content) {
+        historicalMessages.push({
+          role: 'user',
+          content,
+        });
+      }
     }
   }
   let systemMessage = `${MODIFY_SYSTEM_MESSAGE}\n`;
@@ -689,16 +810,29 @@ export async function getModifyPrompt(
   return messages;
 }
 
+export const buildAttachmentsMessagePart = async (
+  client: MatrixClient,
+  matrixEvent: MatrixEventWithBoxelContext,
+  history: DiscreteMatrixEvent[],
+) => {
+  let attachedCards = getAttachedCards(matrixEvent, history);
+  let result = '';
+  if (attachedCards.length > 0) {
+    result += `Attached Cards:\n${JSON.stringify(attachedCards, null, 2)}\n`;
+  }
+  let attachedFiles = await getAttachedFiles(client, matrixEvent, history);
+  if (attachedFiles.length > 0) {
+    result += `Attached Files:\n${attachedFilesToMessage(attachedFiles)}\n`;
+  }
+  return result;
+};
+
 export const buildContextMessage = async (
   client: MatrixClient,
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   tools: Tool[],
 ): Promise<string> => {
-  let { mostRecentlyAttachedCard, attachedCards } = getRelevantCards(
-    history,
-    aiBotUserId,
-  );
   let result = '';
 
   let attachedFiles = await loadCurrentlySerializedFileDefs(
@@ -757,11 +891,11 @@ export const buildContextMessage = async (
     result += `The user has no open cards.\n`;
   }
   result += `\nCurrent date and time: ${new Date().toISOString()}\n`;
-  if (attachedCards.length > 0 || attachedFiles.length > 0) {
+  if (attachedFiles.length > 0) {
     result += `The user currently has given you the following data to work with:\n\n`;
-    if (attachedCards.length > 0) {
-      result += `Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}\n\n`;
-    }
+    // if (attachedCards.length > 0) {
+    //   result += `Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}\n\n`;
+    // }
     if (attachedFiles.length > 0) {
       result += `\n\nAttached files:\n${attachedFilesToMessage(attachedFiles)}`;
     }
@@ -771,7 +905,11 @@ export const buildContextMessage = async (
     (tool) => tool.function.name === 'patchCardInstance',
   );
 
-  if (attachedFiles.length == 0 && attachedCards.length > 0 && !cardPatchTool) {
+  if (
+    attachedFiles.length == 0 &&
+    !cardPatchTool &&
+    hasSomeAttachedCards(history, aiBotUserId)
+  ) {
     result +=
       'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
   }
