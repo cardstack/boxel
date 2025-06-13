@@ -1,4 +1,4 @@
-import { TemplateOnlyComponent } from '@ember/component/template-only';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -26,7 +26,12 @@ import {
   MenuItem,
   MenuDivider,
 } from '@cardstack/boxel-ui/helpers';
-import { Download, IconCode, IconSearch } from '@cardstack/boxel-ui/icons';
+import {
+  Download,
+  IconCode,
+  IconSearch,
+  type Icon,
+} from '@cardstack/boxel-ui/icons';
 
 import {
   CardContextName,
@@ -34,8 +39,12 @@ import {
   GetCardsContextName,
   GetCardCollectionContextName,
   Deferred,
+  cardTypeDisplayName,
+  cardTypeIcon,
   codeRefWithAbsoluteURL,
+  identifyCard,
   isCardInstance,
+  isResolvedCodeRef,
   CardError,
   loadCardDef,
   localId as localIdSymbol,
@@ -49,6 +58,7 @@ import {
   type CodeRef,
   type LooseSingleCardDocument,
   type LocalPath,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
@@ -56,6 +66,7 @@ import CopyCardCommand from '@cardstack/host/commands/copy-card';
 import config from '@cardstack/host/config/environment';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
+// import { getCardCollection as getCollection } from '@cardstack/host/resources/card-collection';
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -82,6 +93,7 @@ import type CommandService from '../../services/command-service';
 import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type Realm from '../../services/realm';
+import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
 
 import type { Submode } from '../submode-switcher';
@@ -192,10 +204,15 @@ export default class InteractSubmode extends Component {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare store: StoreService;
   @service private declare realm: Realm;
+  @service private declare recentCardsService: RecentCardsService;
   @service private declare loaderService: LoaderService;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked private cardToDelete: CardToDelete | undefined = undefined;
+  // @tracked private recentCards = getCollection(
+  //   this,
+  //   () => this.recentCardsService.recentCards,
+  // );
 
   get stacks() {
     return this.operatorModeStateService.state?.stacks ?? [];
@@ -677,8 +694,42 @@ export default class InteractSubmode extends Component {
     openSearchCallback();
   }
 
-  private get menuItems(): (MenuItem | MenuDivider)[] {
+  private get createNewMenuItems(): (MenuItem | MenuDivider)[] {
+    const cardsGridId = `${this.operatorModeStateService.realmURL.href}index`;
+    let cardIds = this.recentCardsService.recentCards
+      .map((item) => item.cardId)
+      .filter((id) => id && id !== cardsGridId);
+
+    let items: { name: string; icon: Icon; ref: ResolvedCodeRef }[] = [];
+    cardIds.map((id) => {
+      let maybeCard = this.store.peek(id);
+      if (maybeCard && isCardInstance(maybeCard)) {
+        let ref = identifyCard(maybeCard.constructor);
+        if (isResolvedCodeRef(ref)) {
+          items.push({
+            name: cardTypeDisplayName(maybeCard),
+            icon: cardTypeIcon(maybeCard) as Icon,
+            ref,
+          });
+        }
+      }
+    });
+    let cardTypes = [...new Set(items)].slice(0, 2);
+    console.log(cardTypes);
+    let menuItems: (MenuItem | MenuDivider)[] = [];
+    if (cardTypes.length) {
+      cardTypes.map(({ name, icon }) => {
+        menuItems.push(
+          new MenuItem(name, 'action', {
+            action: () => {},
+            icon,
+          }),
+        );
+      });
+    }
+
     return [
+      ...menuItems,
       new MenuItem('Choose a card type...', 'action', {
         action: () => this.createInstance.perform(),
         icon: IconSearch,
@@ -703,7 +754,7 @@ export default class InteractSubmode extends Component {
   private get newFileOptions(): NewFileOptions {
     return {
       onSelect: (fileType: FileType) => this.createFile.perform(fileType),
-      menuItems: this.menuItems,
+      menuItems: this.createNewMenuItems,
     };
   }
 
