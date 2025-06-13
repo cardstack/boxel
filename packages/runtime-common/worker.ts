@@ -310,7 +310,7 @@ export class Worker {
   }
 
   private lintSource = async (args: LintArgs & { jobInfo?: JobInfo }) => {
-    let { source: remove, ...displayableArgs } = args;
+    let { source: _remove, ...displayableArgs } = args;
     this.#log.debug(
       `${jobIdentity(args.jobInfo)} starting lint-source for job: ${JSON.stringify(displayableArgs)}`,
     );

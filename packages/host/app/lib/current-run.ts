@@ -485,18 +485,15 @@ export class CurrentRun {
     url: string,
     resource: LooseCardResource,
   ) {
-    if (this.#reportStatus) {
-      this.#reportStatus?.({
-        status,
-        jobId: this.#jobInfo?.jobId ? String(this.#jobInfo.jobId) : undefined,
-        url,
-        realm: this.#realmURL.href,
-        deps: [
-          new URL((resource.meta.adoptsFrom as ResolvedCodeRef).module, url)
-            .href,
-        ],
-      });
-    }
+    this.#reportStatus?.({
+      status,
+      jobId: this.#jobInfo?.jobId ? String(this.#jobInfo.jobId) : undefined,
+      url,
+      realm: this.#realmURL.href,
+      deps: [
+        new URL((resource.meta.adoptsFrom as ResolvedCodeRef).module, url).href,
+      ],
+    });
   }
 
   private async indexCard({
