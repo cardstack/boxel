@@ -33,9 +33,9 @@ export type DropdownAPI = Dropdown;
 interface Signature {
   Args: {
     contentClass?: string;
+    initiallyOpened?: boolean;
     onClose?: () => void;
     registerAPI?: (publicAPI: Dropdown) => void;
-    initiallyOpened?: boolean;
   };
   Blocks: {
     content: [{ close: () => void }];

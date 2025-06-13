@@ -1,4 +1,5 @@
 import { helper } from '@ember/component/helper';
+import type { ComponentLike } from '@glint/template';
 import type { Link } from 'ember-link';
 
 import type { Icon } from '../icons/types.ts';
@@ -18,6 +19,7 @@ interface MenuItemOptions {
   postscript?: string;
   selected: boolean;
   subtext?: string;
+  subtextComponent?: ComponentLike;
   tabindex: number | string;
   url: string;
 }
@@ -37,6 +39,7 @@ export class MenuItem {
   id?: string;
   subtext?: string;
   postscript?: string;
+  subtextComponent?: ComponentLike;
 
   constructor(text: string, type: string, options: Partial<MenuItemOptions>) {
     this.text = text;
@@ -51,8 +54,9 @@ export class MenuItem {
     this.iconURL = options.iconURL || undefined;
     this.inactive = options.inactive;
     this.tabindex = options.tabindex || 0;
-    this.subtext = options.subtext ?? undefined;
-    this.postscript = options.postscript ?? undefined;
+    this.subtext = options.subtext;
+    this.postscript = options.postscript;
+    this.subtextComponent = options.subtextComponent;
   }
 }
 

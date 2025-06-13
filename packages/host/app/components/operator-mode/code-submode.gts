@@ -86,7 +86,10 @@ import CreateFileModal, {
 } from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
+
 import SubmodeLayout from './submode-layout';
+
+import type { NewFileOptions } from './new-file-button';
 
 interface Signature {
   Args: {

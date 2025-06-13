@@ -1,3 +1,4 @@
+import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -16,8 +17,16 @@ import get from 'lodash/get';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import { Tooltip } from '@cardstack/boxel-ui/components';
-import { cn, eq, lt, gt, and, MenuItem } from '@cardstack/boxel-ui/helpers';
-import { Download, IconCode } from '@cardstack/boxel-ui/icons';
+import {
+  cn,
+  eq,
+  lt,
+  gt,
+  and,
+  MenuItem,
+  MenuDivider,
+} from '@cardstack/boxel-ui/helpers';
+import { Download, IconCode, IconSearch } from '@cardstack/boxel-ui/icons';
 
 import {
   CardContextName,
@@ -150,6 +159,21 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
     </style>
   </template>
 }
+
+const CodeSubmodeNewFileOptions: TemplateOnlyComponent = <template>
+  <ul class='code-mode-file-options'>
+    <li>Card Definition .GTS</li>
+    <li>Field Definition .GTS</li>
+    <li>Card Instance .JSON</li>
+  </ul>
+  <style scoped>
+    .code-mode-file-options {
+      list-style-type: disc;
+      padding-left: var(--boxel-sp);
+      line-height: calc(18 / 11);
+    }
+  </style>
+</template>;
 
 interface CardToDelete {
   id: string;
@@ -653,14 +677,20 @@ export default class InteractSubmode extends Component {
     openSearchCallback();
   }
 
-  private get menuItems(): MenuItem[] {
+  private get menuItems(): (MenuItem | MenuDivider)[] {
     return [
+      new MenuItem('Choose a card type...', 'action', {
+        action: () => this.createInstance.perform(),
+        icon: IconSearch,
+      }),
+      new MenuDivider(),
       new MenuItem('Open Code Mode', 'action', {
         action: () =>
           this.onSelectFileType({
             id: 'card-definition',
             displayName: 'Card Definition',
           }),
+        subtextComponent: CodeSubmodeNewFileOptions,
         icon: IconCode,
       }),
     ];
@@ -686,6 +716,10 @@ export default class InteractSubmode extends Component {
 
     // TODO
     return;
+  });
+
+  private createInstance = dropTask(async () => {
+    // TODO
   });
 
   @provide(CardContextName)
