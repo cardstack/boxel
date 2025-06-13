@@ -35,6 +35,8 @@ import {
   type TextFileRef,
   type LastModifiedTimes,
   type JobInfo,
+  type StatusArgs,
+  ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import {
@@ -95,6 +97,7 @@ export class CurrentRun {
   #realmURL: URL;
   #realmInfo?: RealmInfo;
   #jobInfo?: JobInfo;
+  #reportStatus: ((args: StatusArgs) => void) | undefined;
   readonly stats: Stats = {
     instancesIndexed: 0,
     modulesIndexed: 0,
@@ -113,6 +116,7 @@ export class CurrentRun {
     renderCard,
     render,
     jobInfo,
+    reportStatus,
   }: {
     realmURL: URL;
     reader: Reader;
@@ -121,6 +125,7 @@ export class CurrentRun {
     renderCard: RenderCard;
     render: Render;
     jobInfo?: JobInfo;
+    reportStatus?: (args: StatusArgs) => void;
   }) {
     this.#indexWriter = indexWriter;
     this.#realmPaths = new RealmPaths(realmURL);
@@ -130,6 +135,7 @@ export class CurrentRun {
     this.#renderCard = renderCard;
     this.#render = render;
     this.#jobInfo = jobInfo;
+    this.#reportStatus = reportStatus;
   }
 
   static async fromScratch(current: CurrentRun): Promise<IndexResults> {
@@ -474,6 +480,22 @@ export class CurrentRun {
     this.stats.modulesIndexed++;
   }
 
+  private reportStatus(
+    status: 'start' | 'finish',
+    url: string,
+    resource: LooseCardResource,
+  ) {
+    this.#reportStatus?.({
+      status,
+      jobId: this.#jobInfo?.jobId ? String(this.#jobInfo.jobId) : undefined,
+      url,
+      realm: this.#realmURL.href,
+      deps: [
+        new URL((resource.meta.adoptsFrom as ResolvedCodeRef).module, url).href,
+      ],
+    });
+  }
+
   private async indexCard({
     path,
     source,
@@ -490,231 +512,236 @@ export class CurrentRun {
     identityContext: IdentityContextWithErrors;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
-    let indexingInstance = this.#indexingInstances.get(fileURL);
-    if (indexingInstance) {
-      return await indexingInstance;
-    }
-    let deferred = new Deferred<void>();
-    this.#indexingInstances.set(fileURL, deferred.promise);
-    let instanceURL = new URL(
-      this.#realmPaths.fileURL(path).href.replace(/\.json$/, ''),
-    );
-
-    let moduleDeps = getModuleDeps(resource, instanceURL);
-    let typesMaybeError: TypesWithErrors | undefined;
-    let uncaughtError: Error | undefined;
-    let doc: SingleCardDocument | undefined;
-    let searchData: Record<string, any> | undefined;
-    let cardType: typeof CardDef | undefined;
-    let isolatedHtml: string | undefined;
-    let atomHtml: string | undefined;
-    let iconHTML: string | undefined;
-    let card: CardDef | undefined;
-    let embeddedHtml: Record<string, string> | undefined;
-    let fittedHtml: Record<string, string> | undefined;
+    this.reportStatus('start', fileURL, resource);
     try {
-      let api = await this.loaderService.loader.import<typeof CardAPI>(
-        `${baseRealm.url}card-api`,
-      );
-
-      if (!this.#realmInfo) {
-        let realmInfoResponse = await this.network.authedFetch(
-          `${this.realmURL}_info`,
-          { headers: { Accept: SupportedMimeType.RealmInfo } },
-        );
-        this.#realmInfo = (await realmInfoResponse.json())?.data?.attributes;
+      let indexingInstance = this.#indexingInstances.get(fileURL);
+      if (indexingInstance) {
+        return await indexingInstance;
       }
+      let deferred = new Deferred<void>();
+      this.#indexingInstances.set(fileURL, deferred.promise);
+      let instanceURL = new URL(
+        this.#realmPaths.fileURL(path).href.replace(/\.json$/, ''),
+      );
 
-      let adjustedResource: CardResource = {
-        ...resource,
-        ...{ id: instanceURL.href, type: 'card' },
-      };
-      //Realm info may be used by a card to render field values.
-      //Example: spec-card
-      merge(adjustedResource, {
-        meta: {
-          lastModified,
-          resourceCreatedAt,
-          realmInfo: { ...this.#realmInfo },
-          realmURL: this.realmURL.href,
-        },
-      });
-      card = await api.createFromSerialized<typeof CardDef>(
-        adjustedResource,
-        { data: adjustedResource },
-        new URL(fileURL),
-        {
-          identityContext,
-          // we'll deal with broken links during rendering
-          ignoreBrokenLinks: true,
-        },
-      );
-      await api.flushLogs();
-      isolatedHtml = unwrap(
-        sanitizeHTML(
-          await this.renderCard({
-            card,
-            format: 'isolated',
-            visit: this.visitFile.bind(this),
-            identityContext,
-            realmPath: this.#realmPaths,
-          }),
-        ),
-      );
-      atomHtml = unwrap(
-        sanitizeHTML(
-          await this.renderCard({
-            card,
-            format: 'atom',
-            visit: this.visitFile.bind(this),
-            identityContext,
-            realmPath: this.#realmPaths,
-          }),
-        ),
-      );
-      iconHTML = unwrap(sanitizeHTML(this.#render(cardTypeIcon(card))));
-      cardType = Reflect.getPrototypeOf(card)?.constructor as typeof CardDef;
-      let data = api.serializeCard(card, { includeComputeds: true });
-      // prepare the document for index serialization
-      Object.values(data.data.relationships ?? {}).forEach(
-        (rel) => delete (rel as Relationship).data,
-      );
-      //Add again realm info and realm URL here
-      //since we won't get it from serializeCard.
-      doc = merge(data, {
-        data: {
-          id: instanceURL.href,
+      let moduleDeps = getModuleDeps(resource, instanceURL);
+      let typesMaybeError: TypesWithErrors | undefined;
+      let uncaughtError: Error | undefined;
+      let doc: SingleCardDocument | undefined;
+      let searchData: Record<string, any> | undefined;
+      let cardType: typeof CardDef | undefined;
+      let isolatedHtml: string | undefined;
+      let atomHtml: string | undefined;
+      let iconHTML: string | undefined;
+      let card: CardDef | undefined;
+      let embeddedHtml: Record<string, string> | undefined;
+      let fittedHtml: Record<string, string> | undefined;
+      try {
+        let api = await this.loaderService.loader.import<typeof CardAPI>(
+          `${baseRealm.url}card-api`,
+        );
+
+        if (!this.#realmInfo) {
+          let realmInfoResponse = await this.network.authedFetch(
+            `${this.realmURL}_info`,
+            { headers: { Accept: SupportedMimeType.RealmInfo } },
+          );
+          this.#realmInfo = (await realmInfoResponse.json())?.data?.attributes;
+        }
+
+        let adjustedResource: CardResource = {
+          ...resource,
+          ...{ id: instanceURL.href, type: 'card' },
+        };
+        //Realm info may be used by a card to render field values.
+        //Example: spec-card
+        merge(adjustedResource, {
           meta: {
             lastModified,
             resourceCreatedAt,
-            realmInfo: this.#realmInfo,
+            realmInfo: { ...this.#realmInfo },
             realmURL: this.realmURL.href,
           },
-        },
-      }) as SingleCardDocument;
-      searchData = await api.searchDoc(card);
-
-      if (!searchData) {
-        throw new Error(
-          `bug: could not derive search doc for instance ${instanceURL.href}`,
+        });
+        card = await api.createFromSerialized<typeof CardDef>(
+          adjustedResource,
+          { data: adjustedResource },
+          new URL(fileURL),
+          {
+            identityContext,
+            // we'll deal with broken links during rendering
+            ignoreBrokenLinks: true,
+          },
         );
-      }
-
-      // Add a "pseudo field" to the search doc for the card type. We use the
-      // "_" prefix to make a decent attempt to not pollute the userland
-      // namespace for cards
-      searchData._cardType = getDisplayName(cardType);
-      typesMaybeError = await this.getTypes(cardType);
-      if (card && typesMaybeError?.type === 'types') {
-        embeddedHtml = await this.buildCardHtml(
-          card,
-          typesMaybeError.types,
-          'embedded',
-          identityContext,
+        await api.flushLogs();
+        isolatedHtml = unwrap(
+          sanitizeHTML(
+            await this.renderCard({
+              card,
+              format: 'isolated',
+              visit: this.visitFile.bind(this),
+              identityContext,
+              realmPath: this.#realmPaths,
+            }),
+          ),
         );
-      }
-      if (card && typesMaybeError?.type === 'types') {
-        fittedHtml = await this.buildCardHtml(
-          card,
-          typesMaybeError.types,
-          'fitted',
-          identityContext,
+        atomHtml = unwrap(
+          sanitizeHTML(
+            await this.renderCard({
+              card,
+              format: 'atom',
+              visit: this.visitFile.bind(this),
+              identityContext,
+              realmPath: this.#realmPaths,
+            }),
+          ),
         );
-      }
-    } catch (err: any) {
-      uncaughtError = err;
+        iconHTML = unwrap(sanitizeHTML(this.#render(cardTypeIcon(card))));
+        cardType = Reflect.getPrototypeOf(card)?.constructor as typeof CardDef;
+        let data = api.serializeCard(card, { includeComputeds: true });
+        // prepare the document for index serialization
+        Object.values(data.data.relationships ?? {}).forEach(
+          (rel) => delete (rel as Relationship).data,
+        );
+        //Add again realm info and realm URL here
+        //since we won't get it from serializeCard.
+        doc = merge(data, {
+          data: {
+            id: instanceURL.href,
+            meta: {
+              lastModified,
+              resourceCreatedAt,
+              realmInfo: this.#realmInfo,
+              realmURL: this.realmURL.href,
+            },
+          },
+        }) as SingleCardDocument;
+        searchData = await api.searchDoc(card);
 
-      // even when there is an error, do our best to try loading card type
-      // directly, this will help better populate the index card with error
-      // instances when there is no last known good state
-      if (!typesMaybeError) {
-        try {
-          let cardType = (await loadCardDef(resource.meta.adoptsFrom, {
-            loader: this.loaderService.loader,
-            relativeTo: instanceURL,
-          })) as typeof CardDef;
-          typesMaybeError = await this.getTypes(cardType);
-          searchData = searchData ?? {};
-          searchData._cardType = getDisplayName(cardType);
-        } catch (cardTypeErr: any) {
-          // the enclosing exception above should have captured this error already
+        if (!searchData) {
+          throw new Error(
+            `bug: could not derive search doc for instance ${instanceURL.href}`,
+          );
+        }
+
+        // Add a "pseudo field" to the search doc for the card type. We use the
+        // "_" prefix to make a decent attempt to not pollute the userland
+        // namespace for cards
+        searchData._cardType = getDisplayName(cardType);
+        typesMaybeError = await this.getTypes(cardType);
+        if (card && typesMaybeError?.type === 'types') {
+          embeddedHtml = await this.buildCardHtml(
+            card,
+            typesMaybeError.types,
+            'embedded',
+            identityContext,
+          );
+        }
+        if (card && typesMaybeError?.type === 'types') {
+          fittedHtml = await this.buildCardHtml(
+            card,
+            typesMaybeError.types,
+            'fitted',
+            identityContext,
+          );
+        }
+      } catch (err: any) {
+        uncaughtError = err;
+
+        // even when there is an error, do our best to try loading card type
+        // directly, this will help better populate the index card with error
+        // instances when there is no last known good state
+        if (!typesMaybeError) {
+          try {
+            let cardType = (await loadCardDef(resource.meta.adoptsFrom, {
+              loader: this.loaderService.loader,
+              relativeTo: instanceURL,
+            })) as typeof CardDef;
+            typesMaybeError = await this.getTypes(cardType);
+            searchData = searchData ?? {};
+            searchData._cardType = getDisplayName(cardType);
+          } catch (cardTypeErr: any) {
+            // the enclosing exception above should have captured this error already
+          }
         }
       }
-    }
 
-    try {
-      if (uncaughtError || typesMaybeError?.type === 'error') {
-        let error: ErrorEntry | undefined;
-        identityContext.errors.add(instanceURL.href);
-        if (uncaughtError) {
-          error = {
-            type: 'error',
+      try {
+        if (uncaughtError || typesMaybeError?.type === 'error') {
+          let error: ErrorEntry | undefined;
+          identityContext.errors.add(instanceURL.href);
+          if (uncaughtError) {
+            error = {
+              type: 'error',
+              searchData,
+              types:
+                typesMaybeError?.type != 'error'
+                  ? typesMaybeError?.types.map(({ refURL }) => refURL)
+                  : undefined,
+              error:
+                uncaughtError instanceof CardError
+                  ? serializableError(uncaughtError)
+                  : { message: `${uncaughtError.message}` },
+            };
+            error.error.deps = [
+              ...new Set([
+                ...moduleDeps,
+                ...(uncaughtError instanceof CardError
+                  ? (uncaughtError.deps ?? [])
+                  : []),
+              ]),
+            ];
+          } else if (typesMaybeError?.type === 'error') {
+            error = { type: 'error', error: typesMaybeError.error };
+          } else {
+            log.error(
+              `${jobIdentity(this.#jobInfo)} bug: should never get here when indexing instance ${path} and handling an error`,
+            );
+            return;
+          }
+          log.warn(
+            `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${error?.error.message}`,
+          );
+          await this.updateEntry(instanceURL, error);
+        } else if (searchData && doc && typesMaybeError?.type === 'types') {
+          await this.updateEntry(instanceURL, {
+            type: 'instance',
+            source,
+            resource: doc.data,
             searchData,
-            types:
-              typesMaybeError?.type != 'error'
-                ? typesMaybeError?.types.map(({ refURL }) => refURL)
-                : undefined,
-            error:
-              uncaughtError instanceof CardError
-                ? serializableError(uncaughtError)
-                : { message: `${uncaughtError.message}` },
-          };
-          error.error.deps = [
-            ...new Set([
+            isolatedHtml,
+            atomHtml,
+            embeddedHtml,
+            fittedHtml,
+            iconHTML,
+            lastModified,
+            resourceCreatedAt,
+            types: typesMaybeError.types.map(({ refURL }) => refURL),
+            displayNames: typesMaybeError.types.map(
+              ({ displayName }) => displayName,
+            ),
+            deps: new Set([
               ...moduleDeps,
-              ...(uncaughtError instanceof CardError
-                ? (uncaughtError.deps ?? [])
-                : []),
+              ...(
+                await Promise.all(
+                  moduleDeps.map((moduleDep) =>
+                    this.loaderService.loader.getConsumedModules(moduleDep),
+                  ),
+                )
+              ).flat(),
             ]),
-          ];
-        } else if (typesMaybeError?.type === 'error') {
-          error = { type: 'error', error: typesMaybeError.error };
+          });
         } else {
           log.error(
-            `${jobIdentity(this.#jobInfo)} bug: should never get here when indexing instance ${path} and handling an error`,
+            `${jobIdentity(this.#jobInfo)} bug: should never get here when indexing instance ${path} no entry nor error doc could be generated`,
           );
           return;
         }
-        log.warn(
-          `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${error?.error.message}`,
-        );
-        await this.updateEntry(instanceURL, error);
-      } else if (searchData && doc && typesMaybeError?.type === 'types') {
-        await this.updateEntry(instanceURL, {
-          type: 'instance',
-          source,
-          resource: doc.data,
-          searchData,
-          isolatedHtml,
-          atomHtml,
-          embeddedHtml,
-          fittedHtml,
-          iconHTML,
-          lastModified,
-          resourceCreatedAt,
-          types: typesMaybeError.types.map(({ refURL }) => refURL),
-          displayNames: typesMaybeError.types.map(
-            ({ displayName }) => displayName,
-          ),
-          deps: new Set([
-            ...moduleDeps,
-            ...(
-              await Promise.all(
-                moduleDeps.map((moduleDep) =>
-                  this.loaderService.loader.getConsumedModules(moduleDep),
-                ),
-              )
-            ).flat(),
-          ]),
-        });
-      } else {
-        log.error(
-          `${jobIdentity(this.#jobInfo)} bug: should never get here when indexing instance ${path} no entry nor error doc could be generated`,
-        );
-        return;
+      } finally {
+        deferred.fulfill();
       }
     } finally {
-      deferred.fulfill();
+      this.reportStatus('finish', fileURL, resource);
     }
   }
 

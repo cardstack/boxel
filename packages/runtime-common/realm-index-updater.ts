@@ -122,8 +122,7 @@ export class RealmIndexUpdater {
         )}`,
       );
     } catch (e: any) {
-      this.#indexingDeferred.reject(e);
-      throw e;
+      this.#log.error(`Error running from-scratch-index: ${e.message}`);
     } finally {
       this.#indexingDeferred.fulfill();
     }
