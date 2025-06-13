@@ -35,6 +35,7 @@ interface Signature {
     autoClose?: boolean;
     contentClass?: string;
     matchTriggerWidth?: boolean;
+    initiallyOpened?: boolean;
     onClose?: () => void;
     registerAPI?: (publicAPI: Dropdown) => void;
   };
@@ -76,6 +77,7 @@ class BoxelDropdown extends Component<Signature> {
       @registerAPI={{this.registerAPI}}
       @onClose={{@onClose}}
       @matchTriggerWidth={{@matchTriggerWidth}}
+      @initiallyOpened={{@initiallyOpened}}
       as |dd|
     >
       {{#let

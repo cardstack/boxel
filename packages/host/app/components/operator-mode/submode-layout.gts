@@ -15,9 +15,12 @@ import { modifier } from 'ember-modifier';
 
 import { TrackedObject } from 'tracked-built-ins';
 
-import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import { Avatar, IconButton } from '@cardstack/boxel-ui/components';
-import { cn, not } from '@cardstack/boxel-ui/helpers';
+import {
+  Avatar,
+  IconButton,
+  ResizablePanelGroup,
+} from '@cardstack/boxel-ui/components';
+import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
 
 import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 
@@ -43,10 +46,8 @@ import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 
 import AskAiContainer from './ask-ai-container';
 
-import NewFileButton from './new-file-button';
+import NewFileButton, { type NewFileOptions } from './new-file-button';
 import WorkspaceChooser from './workspace-chooser';
-
-import type { FileType } from './create-file-modal';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
 import type CommandService from '../../services/command-service';
@@ -61,10 +62,7 @@ interface Signature {
     onSearchSheetClosed?: () => void;
     onCardSelectFromSearch: (cardId: string) => void;
     selectedCardRef?: ResolvedCodeRef | undefined;
-    newFileOptions?: {
-      onSelect: (fileType: FileType) => void;
-      isCreateModalOpen: boolean;
-    };
+    newFileOptions?: NewFileOptions;
   };
   Blocks: {
     default: [
@@ -295,8 +293,10 @@ export default class SubmodeLayout extends Component<Signature> {
               {{#if @newFileOptions}}
                 <NewFileButton
                   class='new-file-button'
-                  @onSelectNewFileType={{@newFileOptions.onSelect}}
-                  @isCreateModalShown={{@newFileOptions.isCreateModalOpen}}
+                  @dropdownOptions={{@newFileOptions}}
+                  @initiallyOpened={{bool
+                    this.operatorModeStateService.state.newFileDropdownOpen
+                  }}
                 />
               {{/if}}
             {{/if}}

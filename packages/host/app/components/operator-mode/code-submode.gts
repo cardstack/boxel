@@ -3,6 +3,7 @@ import { hash } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { capitalize } from '@ember/string';
 import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
@@ -18,11 +19,14 @@ import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { consume, provide } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
+import flatMap from 'lodash/flatMap';
+import startCase from 'lodash/startCase';
+
 import {
   LoadingIndicator,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { not, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -76,10 +80,16 @@ import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
-import CreateFileModal, { type FileType } from './create-file-modal';
+import CreateFileModal, {
+  type FileType,
+  newFileTypes,
+} from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
+
 import SubmodeLayout from './submode-layout';
+
+import type { NewFileOptions } from './new-file-button';
 
 interface Signature {
   Args: {
@@ -452,10 +462,28 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
-  private get newFileOptions() {
+  private get menuItems(): MenuItem[] {
+    return flatMap(newFileTypes, ({ id, icon, description, extension }) => {
+      if (id === 'duplicate-instance' || id === 'spec-instance') {
+        return [];
+      }
+      let displayName = capitalize(startCase(id));
+      return [
+        new MenuItem(displayName, 'action', {
+          action: () => this.createFile.perform({ id, displayName }),
+          subtext: description,
+          icon,
+          postscript: extension,
+        }),
+      ];
+    });
+  }
+
+  private get newFileOptions(): NewFileOptions {
     return {
-      onSelect: (fileType: FileType) => this.createFile.perform(fileType),
-      isCreateModalOpen: this.isCreateModalOpen,
+      menuItems: this.menuItems,
+      isDisabled: this.isCreateModalOpen,
+      onClose: this.operatorModeStateService.setNewFileDropdownClosed,
     };
   }
 

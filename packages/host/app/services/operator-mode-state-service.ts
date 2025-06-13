@@ -78,6 +78,7 @@ export interface OperatorModeState {
   codeSelection?: string;
   fieldSelection?: string;
   moduleInspector?: ModuleInspectorView;
+  newFileDropdownOpen?: boolean;
 }
 
 interface CardItem {
@@ -116,6 +117,7 @@ export default class OperatorModeStateService extends Service {
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
     aiAssistantOpen: false,
+    newFileDropdownOpen: false,
   });
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
@@ -160,6 +162,7 @@ export default class OperatorModeStateService extends Service {
       fieldSelection: this._state.fieldSelection,
       aiAssistantOpen: this._state.aiAssistantOpen,
       moduleInspector: this._state.moduleInspector,
+      newFileDropdownOpen: this._state.newFileDropdownOpen,
     } as const;
   }
 
@@ -177,6 +180,15 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   };
 
+  setNewFileDropdownOpen = () => {
+    this._state.newFileDropdownOpen = true;
+    this.schedulePersist();
+  };
+  setNewFileDropdownClosed = () => {
+    this._state.newFileDropdownOpen = false;
+    this.schedulePersist();
+  };
+
   resetState() {
     this._state = new TrackedObject({
       stacks: new TrackedArray([]),
@@ -185,6 +197,7 @@ export default class OperatorModeStateService extends Service {
       openDirs: new TrackedMap<string, string[]>(),
       aiAssistantOpen: false,
       moduleInspector: DEFAULT_MODULE_INSPECTOR_VIEW,
+      newFileDropdownOpen: false,
     });
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
