@@ -290,11 +290,7 @@ module(basename(__filename), function () {
             'true',
             'realm is public readable',
           );
-          assert.strictEqual(
-            response.text.trim(),
-            '',
-            'no body in HEAD response',
-          );
+          assert.notOk(response.text, 'no body in HEAD response');
         });
 
         test('serves a card-source HEAD request that results in redirect', async function (assert) {
