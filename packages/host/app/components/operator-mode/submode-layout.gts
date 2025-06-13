@@ -298,6 +298,7 @@ export default class SubmodeLayout extends Component<Signature> {
                   @menuItems={{@newFileOptions.menuItems}}
                   @initiallyOpened={{this.operatorModeStateService.state.newFileDropdownOpen}}
                   @onClose={{@newFileOptions.onClose}}
+                  @onOpen={{@newFileOptions.onOpen}}
                 />
               {{/if}}
             {{/if}}

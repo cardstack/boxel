@@ -8,9 +8,10 @@ import { type FileType } from './create-file-modal';
 
 export interface NewFileOptions {
   onSelect: (fileType: FileType) => void;
-  menuItems: (MenuItem | MenuDivider)[];
+  menuItems?: (MenuItem | MenuDivider)[];
   isDisabled?: boolean;
   initiallyOpened?: boolean;
+  onOpen?: () => void;
   onClose?: () => void;
 }
 
@@ -22,6 +23,7 @@ interface Signature {
 const NewFileButton: TemplateOnlyComponent<Signature> = <template>
   <BoxelDropdown
     @initiallyOpened={{@initiallyOpened}}
+    @onOpen={{@onOpen}}
     @onClose={{@onClose}}
     @contentClass='gap-above'
   >

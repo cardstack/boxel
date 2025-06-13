@@ -209,10 +209,6 @@ export default class InteractSubmode extends Component {
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked private cardToDelete: CardToDelete | undefined = undefined;
-  // @tracked private recentCards = getCollection(
-  //   this,
-  //   () => this.recentCardsService.recentCards,
-  // );
 
   get stacks() {
     return this.operatorModeStateService.state?.stacks ?? [];
@@ -694,42 +690,16 @@ export default class InteractSubmode extends Component {
     openSearchCallback();
   }
 
-  private get createNewMenuItems(): (MenuItem | MenuDivider)[] {
+  private recentCardInfo = () => {
     const cardsGridId = `${this.operatorModeStateService.realmURL.href}index`;
-    let cardIds = this.recentCardsService.recentCards
-      .map((item) => item.cardId)
-      .filter((id) => id && id !== cardsGridId);
+    let _recentCards = this.cardContext
+      .getCardCollection(this, () => this.recentCardsService.recentCardIds)
+      .cards.filter((card) => card.id !== cardsGridId);
+    // let [card1, card2] = [...new Set(recentCards)];
+  };
 
-    let items: { name: string; icon: Icon; ref: ResolvedCodeRef }[] = [];
-    cardIds.map((id) => {
-      let maybeCard = this.store.peek(id);
-      if (maybeCard && isCardInstance(maybeCard)) {
-        let ref = identifyCard(maybeCard.constructor);
-        if (isResolvedCodeRef(ref)) {
-          items.push({
-            name: cardTypeDisplayName(maybeCard),
-            icon: cardTypeIcon(maybeCard) as Icon,
-            ref,
-          });
-        }
-      }
-    });
-    let cardTypes = [...new Set(items)].slice(0, 2);
-    console.log(cardTypes);
-    let menuItems: (MenuItem | MenuDivider)[] = [];
-    if (cardTypes.length) {
-      cardTypes.map(({ name, icon }) => {
-        menuItems.push(
-          new MenuItem(name, 'action', {
-            action: () => {},
-            icon,
-          }),
-        );
-      });
-    }
-
+  private get createNewMenuItems() {
     return [
-      ...menuItems,
       new MenuItem('Choose a card type...', 'action', {
         action: () => this.createInstance.perform(),
         icon: IconSearch,
@@ -754,6 +724,7 @@ export default class InteractSubmode extends Component {
   private get newFileOptions(): NewFileOptions {
     return {
       onSelect: (fileType: FileType) => this.createFile.perform(fileType),
+      onClose: this.recentCardInfo,
       menuItems: this.createNewMenuItems,
     };
   }
