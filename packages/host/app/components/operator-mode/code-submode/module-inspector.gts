@@ -57,9 +57,8 @@ import {
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 
-import { DEFAULT_MODULE_INSPECTOR_VIEW } from '@cardstack/host/services/operator-mode-state-service';
-
 import type LoaderService from '@cardstack/host/services/loader-service';
+import { DEFAULT_MODULE_INSPECTOR_VIEW } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { ModuleInspectorView } from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
