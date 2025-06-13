@@ -88,7 +88,7 @@ export default class CardURLBar extends Component<Signature> {
         align-items: center;
 
         background-color: var(--boxel-dark);
-        border-radius: var(--boxel-border-radius-xxl);
+        border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
 
         width: var(--card-url-bar-width);

@@ -111,7 +111,19 @@ export default class Menu extends Component<Signature> {
                       />
                     {{/if}}
                     {{menuItem.text}}
+                    {{#if menuItem.subtext}}
+                      <span class='subtext'>
+                        {{menuItem.subtext}}
+                      </span>
+                    {{else if menuItem.subtextComponent}}
+                      <span class='subtext'>
+                        <menuItem.subtextComponent />
+                      </span>
+                    {{/if}}
                   </span>
+                  {{#if menuItem.postscript}}
+                    <span class='postscript'>{{menuItem.postscript}}</span>
+                  {{/if}}
                   <span
                     class={{cn
                       'check-icon'

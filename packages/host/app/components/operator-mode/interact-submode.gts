@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -16,8 +17,21 @@ import get from 'lodash/get';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import { Tooltip } from '@cardstack/boxel-ui/components';
-import { cn, eq, lt, gt, and } from '@cardstack/boxel-ui/helpers';
-import { Download } from '@cardstack/boxel-ui/icons';
+import {
+  cn,
+  eq,
+  lt,
+  gt,
+  and,
+  MenuItem,
+  MenuDivider,
+} from '@cardstack/boxel-ui/helpers';
+import {
+  Download,
+  IconCode,
+  IconSearch,
+  type Icon,
+} from '@cardstack/boxel-ui/icons';
 
 import {
   CardContextName,
@@ -25,8 +39,12 @@ import {
   GetCardsContextName,
   GetCardCollectionContextName,
   Deferred,
+  cardTypeDisplayName,
+  cardTypeIcon,
   codeRefWithAbsoluteURL,
+  identifyCard,
   isCardInstance,
+  isResolvedCodeRef,
   CardError,
   loadCardDef,
   localId as localIdSymbol,
@@ -40,6 +58,7 @@ import {
   type CodeRef,
   type LooseSingleCardDocument,
   type LocalPath,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
@@ -47,6 +66,7 @@ import CopyCardCommand from '@cardstack/host/commands/copy-card';
 import config from '@cardstack/host/config/environment';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
+// import { getCardCollection as getCollection } from '@cardstack/host/resources/card-collection';
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -63,6 +83,9 @@ import OperatorModeStack from './stack';
 import { CardDefOrId } from './stack-item';
 import SubmodeLayout from './submode-layout';
 
+import type { FileType } from './create-file-modal';
+import type { NewFileOptions } from './new-file-button';
+
 import type { StackItemComponentAPI } from './stack-item';
 
 import type CardService from '../../services/card-service';
@@ -70,6 +93,7 @@ import type CommandService from '../../services/command-service';
 import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type Realm from '../../services/realm';
+import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
 
 import type { Submode } from '../submode-switcher';
@@ -129,15 +153,14 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
         height: var(--container-button-size);
         padding: 0;
         border-radius: 50%;
-        background-color: var(--boxel-light-100);
-        border-color: transparent;
+        background-color: var(--boxel-700);
+        border: var(--boxel-border-flexible);
         box-shadow: var(--boxel-deep-box-shadow);
         z-index: var(--boxel-layer-floating-button);
       }
       .add-card-to-neighbor-stack:hover,
       .add-card-to-neighbor-stack--active {
         --icon-color: var(--boxel-highlight);
-        background-color: var(--boxel-light);
       }
       .add-card-to-neighbor-stack--left {
         margin-left: var(--operator-mode-spacing);
@@ -148,6 +171,21 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
     </style>
   </template>
 }
+
+const CodeSubmodeNewFileOptions: TemplateOnlyComponent = <template>
+  <ul class='code-mode-file-options'>
+    <li>Card Definition .GTS</li>
+    <li>Field Definition .GTS</li>
+    <li>Card Instance .JSON</li>
+  </ul>
+  <style scoped>
+    .code-mode-file-options {
+      list-style-type: disc;
+      padding-left: var(--boxel-sp);
+      line-height: calc(18 / 11);
+    }
+  </style>
+</template>;
 
 interface CardToDelete {
   id: string;
@@ -166,6 +204,7 @@ export default class InteractSubmode extends Component {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare store: StoreService;
   @service private declare realm: Realm;
+  @service private declare recentCardsService: RecentCardsService;
   @service private declare loaderService: LoaderService;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
@@ -651,6 +690,60 @@ export default class InteractSubmode extends Component {
     openSearchCallback();
   }
 
+  private recentCardInfo = () => {
+    const cardsGridId = `${this.operatorModeStateService.realmURL.href}index`;
+    let _recentCards = this.cardContext
+      .getCardCollection(this, () => this.recentCardsService.recentCardIds)
+      .cards.filter((card) => card.id !== cardsGridId);
+    // let [card1, card2] = [...new Set(recentCards)];
+  };
+
+  private get createNewMenuItems() {
+    return [
+      new MenuItem('Choose a card type...', 'action', {
+        action: () => this.createInstance.perform(),
+        icon: IconSearch,
+      }),
+      new MenuDivider(),
+      new MenuItem('Open Code Mode', 'action', {
+        action: () =>
+          this.onSelectFileType({
+            id: 'card-definition',
+            displayName: 'Card Definition',
+          }),
+        subtextComponent: CodeSubmodeNewFileOptions,
+        icon: IconCode,
+      }),
+    ];
+  }
+
+  private onSelectFileType = (fileType: FileType) => {
+    this.createFile.perform(fileType);
+  };
+
+  private get newFileOptions(): NewFileOptions {
+    return {
+      onSelect: (fileType: FileType) => this.createFile.perform(fileType),
+      onClose: this.recentCardInfo,
+      menuItems: this.createNewMenuItems,
+    };
+  }
+
+  private createFile = dropTask(async (fileType: FileType) => {
+    if (fileType.id !== 'card-instance') {
+      this.operatorModeStateService.setNewFileDropdownOpen();
+      await this.operatorModeStateService.updateSubmode('code');
+      return;
+    }
+
+    // TODO
+    return;
+  });
+
+  private createInstance = dropTask(async () => {
+    // TODO
+  });
+
   @provide(CardContextName)
   // @ts-ignore "cardContext is declared but not used"
   private get cardContext(): Omit<
@@ -670,8 +763,10 @@ export default class InteractSubmode extends Component {
 
   <template>
     <SubmodeLayout
+      class='interact-submode-layout'
       @onSearchSheetClosed={{this.clearSearchSheetTrigger}}
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
+      @newFileOptions={{this.newFileOptions}}
       as |search|
     >
       <div class='interact-submode' style={{this.backgroundImageStyle}}>
@@ -774,6 +869,10 @@ export default class InteractSubmode extends Component {
     </SubmodeLayout>
 
     <style scoped>
+      .interact-submode-layout {
+        --submode-bar-item-outline: var(--boxel-border-flexible);
+        --submode-bar-item-box-shadow: var(--boxel-deep-box-shadow);
+      }
       .interact-submode {
         display: flex;
         justify-content: center;

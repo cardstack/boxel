@@ -3,6 +3,7 @@ import { hash } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { capitalize } from '@ember/string';
 import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
@@ -18,11 +19,14 @@ import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { consume, provide } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
+import flatMap from 'lodash/flatMap';
+import startCase from 'lodash/startCase';
+
 import {
   LoadingIndicator,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
-import { not, bool } from '@cardstack/boxel-ui/helpers';
+import { not, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -76,11 +80,16 @@ import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
-import CreateFileModal, { type FileType } from './create-file-modal';
+import CreateFileModal, {
+  type FileType,
+  newFileTypes,
+} from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
-import NewFileButton from './new-file-button';
+
 import SubmodeLayout from './submode-layout';
+
+import type { NewFileOptions } from './new-file-button';
 
 interface Signature {
   Args: {
@@ -453,10 +462,36 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
-  @action
-  private onSelectNewFileType(fileType: FileType) {
-    this.createFile.perform(fileType);
+  private get menuItems(): MenuItem[] {
+    return flatMap(newFileTypes, ({ id, icon, description, extension }) => {
+      if (id === 'duplicate-instance' || id === 'spec-instance') {
+        return [];
+      }
+      let displayName = capitalize(startCase(id));
+      return [
+        new MenuItem(displayName, 'action', {
+          action: () => this.onSelectFileType({ id, displayName }),
+          subtext: description,
+          icon,
+          postscript: extension,
+        }),
+      ];
+    });
   }
+
+  private get newFileOptions(): NewFileOptions {
+    return {
+      onSelect: this.onSelectFileType,
+      menuItems: this.menuItems,
+      isDisabled: this.isCreateModalOpen,
+      initiallyOpened: false,
+      onClose: this.operatorModeStateService.setNewFileDropdownClosed,
+    };
+  }
+
+  private onSelectFileType = ({ id, displayName }: FileType) => {
+    this.createFile.perform({ id, displayName });
+  };
 
   onStateChange(state: FileResource['state']) {
     this.userHasDismissedURLError = false;
@@ -648,8 +683,10 @@ export default class CodeSubmode extends Component<Signature> {
       ></div>
     {{/let}}
     <SubmodeLayout
+      class='code-submode-layout'
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
       @selectedCardRef={{this.selectedCodeRef}}
+      @newFileOptions={{this.newFileOptions}}
       as |search|
     >
       <div
@@ -664,10 +701,6 @@ export default class CodeSubmode extends Component<Signature> {
             @userHasDismissedError={{this.userHasDismissedURLError}}
             @dismissURLError={{this.dismissURLError}}
             @realmURL={{this.realmURL}}
-          />
-          <NewFileButton
-            @onSelectNewFileType={{this.onSelectNewFileType}}
-            @isCreateModalShown={{bool this.isCreateModalOpen}}
           />
         </div>
         <ResizablePanelGroup
@@ -854,6 +887,11 @@ export default class CodeSubmode extends Component<Signature> {
         --monaco-readonly-background: #606060;
       }
 
+      .code-submode-layout {
+        --submode-bar-item-outline: 2px solid transparent;
+        --submode-bar-item-box-shadow: none;
+      }
+
       .code-mode {
         height: 100%;
         max-height: 100vh;
@@ -909,17 +947,18 @@ export default class CodeSubmode extends Component<Signature> {
       }
 
       .code-mode-top-bar {
-        --code-mode-top-bar-left-offset: calc(
-          var(--operator-mode-left-column) - var(--operator-mode-spacing)
-        ); /* subtract additional padding */
-
         position: absolute;
         top: 0;
         right: 0;
-        left: var(--code-mode-top-bar-left-offset);
-        padding: var(--operator-mode-spacing);
+        left: var(--operator-mode-left-column);
+        padding-block: var(--operator-mode-spacing);
+        padding-right: var(--operator-mode-spacing);
         display: flex;
         z-index: 1;
+      }
+      .code-mode-top-bar
+        > :deep(* + *:not(.ember-basic-dropdown-content-wormhole-origin)) {
+        margin-left: var(--operator-mode-spacing);
       }
 
       .loading {
@@ -930,11 +969,6 @@ export default class CodeSubmode extends Component<Signature> {
         background-color: var(--boxel-light-100);
         align-items: center;
         justify-content: center;
-      }
-
-      :deep(.boxel-panel, .separator-vertical, .separator-horizontal) {
-        box-shadow: var(--boxel-deep-box-shadow);
-        border-radius: var(--boxel-border-radius-xl);
       }
 
       .loading-indicator {

@@ -33,6 +33,8 @@ export type DropdownAPI = Dropdown;
 interface Signature {
   Args: {
     contentClass?: string;
+    initiallyOpened?: boolean;
+    onOpen?: () => void;
     onClose?: () => void;
     registerAPI?: (publicAPI: Dropdown) => void;
   };
@@ -67,6 +69,8 @@ class BoxelDropdown extends Component<Signature> {
     <BasicDropdown
       @registerAPI={{this.registerAPI}}
       @onClose={{@onClose}}
+      @onOpen={{@onOpen}}
+      @initiallyOpened={{@initiallyOpened}}
       as |dd|
     >
       {{#let
@@ -105,6 +109,9 @@ class BoxelDropdown extends Component<Signature> {
           --boxel-dropdown-content-border-radius: var(--boxel-border-radius);
           border-radius: var(--boxel-dropdown-content-border-radius);
           box-shadow: 0 5px 15px 0 rgb(0 0 0 / 25%);
+        }
+        .ember-basic-dropdown-content--below.gap-above {
+          margin-top: 4px;
         }
 
         @media (prefers-reduced-motion: no-preference) {
