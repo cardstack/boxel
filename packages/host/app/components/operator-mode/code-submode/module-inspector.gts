@@ -197,23 +197,10 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       this.operatorModeStateService.state.moduleInspector ??
       DEFAULT_MODULE_INSPECTOR_VIEW
     );
-    // let selection = this.panelSelections[this.args.readyFile.url];
-    // let activePanel = this.operatorModeStateService.moduleInspectorForCodePath;
-    // console.log('activePanel:');
-    // console.log('selection:', selection);
-    // console.log('activePanel:', activePanel);
-    // console.log('result:', selection ?? activePanel ?? 'schema');
-    // return selection ?? activePanel ?? 'schema';
   }
 
   @action private setActivePanel(item: ModuleInspectorView) {
-    // this.panelSelections[this.args.readyFile.url] = item;
     this.operatorModeStateService.updateModuleInspectorView(item);
-    // persist in local storage
-    // window.localStorage.setItem(
-    //   ModuleInspectorSelections,
-    //   JSON.stringify(this.panelSelections),
-    // );
   }
 
   private updatePlaygroundSelectionsFromSpec = (spec: Spec) => {
