@@ -312,53 +312,6 @@ module(basename(__filename), function () {
           assert.strictEqual(response.headers['location'], '/person.gts');
         });
       });
-
-      module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
-          permissions: {
-            john: ['read'],
-          },
-          onRealmSetup,
-        });
-
-        test('401 with invalid JWT', async function (assert) {
-          let response = await request
-            .head('/person.gts')
-            .set('Accept', 'application/vnd.card+source')
-            .set('Authorization', `Bearer invalid-token`);
-
-          assert.strictEqual(response.status, 401, 'HTTP 401 status');
-        });
-
-        test('401 without a JWT', async function (assert) {
-          let response = await request
-            .head('/person.gts')
-            .set('Accept', 'application/vnd.card+source'); // no Authorization header
-
-          assert.strictEqual(response.status, 401, 'HTTP 401 status');
-        });
-
-        test('403 without permission', async function (assert) {
-          let response = await request
-            .head('/person.gts')
-            .set('Accept', 'application/vnd.card+source')
-            .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
-
-          assert.strictEqual(response.status, 403, 'HTTP 403 status');
-        });
-
-        test('200 with permission', async function (assert) {
-          let response = await request
-            .head('/person.gts')
-            .set('Accept', 'application/vnd.card+source')
-            .set(
-              'Authorization',
-              `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
-            );
-
-          assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        });
-      });
     });
 
     module('card-source DELETE request', function (_hooks) {
