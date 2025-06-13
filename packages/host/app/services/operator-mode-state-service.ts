@@ -487,7 +487,7 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
 
     let moduleInspectorView =
-      this.moduleInspectorHistory[codePath?.href ?? ''] ?? 'schema';
+      this.moduleInspectorHistory[canonicalCodePath?.href ?? ''] ?? 'schema';
 
     this.updateModuleInspectorView(moduleInspectorView);
 
