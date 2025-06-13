@@ -494,7 +494,7 @@ export default class OperatorModeStateService extends Service {
     this.specPanelService.setSelection(null);
   }
 
-  private persistModuleInspectorView(
+  persistModuleInspectorView(
     codePath: string | null,
     moduleInspector: ModuleInspectorView,
   ) {
