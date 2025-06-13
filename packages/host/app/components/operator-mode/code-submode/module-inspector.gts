@@ -57,6 +57,8 @@ import {
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 
+import { DEFAULT_MODULE_INSPECTOR_VIEW } from '@cardstack/host/services/operator-mode-state-service';
+
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { ModuleInspectorView } from '@cardstack/host/services/operator-mode-state-service';
@@ -191,7 +193,10 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   private get activePanel(): ModuleInspectorView {
-    return this.operatorModeStateService.state.moduleInspector ?? 'schema';
+    return (
+      this.operatorModeStateService.state.moduleInspector ??
+      DEFAULT_MODULE_INSPECTOR_VIEW
+    );
     // let selection = this.panelSelections[this.args.readyFile.url];
     // let activePanel = this.operatorModeStateService.moduleInspectorForCodePath;
     // console.log('activePanel:');

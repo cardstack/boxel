@@ -107,6 +107,7 @@ interface OpenFileSubscriber {
 }
 
 export type ModuleInspectorView = 'schema' | 'spec' | 'preview';
+export const DEFAULT_MODULE_INSPECTOR_VIEW: ModuleInspectorView = 'schema';
 
 export default class OperatorModeStateService extends Service {
   @tracked private _state: OperatorModeState = new TrackedObject({
@@ -183,7 +184,7 @@ export default class OperatorModeStateService extends Service {
       codePath: null,
       openDirs: new TrackedMap<string, string[]>(),
       aiAssistantOpen: false,
-      moduleInspector: 'schema' as ModuleInspectorView, // FIXME duplicate?
+      moduleInspector: DEFAULT_MODULE_INSPECTOR_VIEW,
     });
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
@@ -487,7 +488,8 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
 
     let moduleInspectorView =
-      this.moduleInspectorHistory[canonicalCodePath?.href ?? ''] ?? 'schema';
+      this.moduleInspectorHistory[canonicalCodePath?.href ?? ''] ??
+      DEFAULT_MODULE_INSPECTOR_VIEW;
 
     this.updateModuleInspectorView(moduleInspectorView);
 
@@ -712,7 +714,8 @@ export default class OperatorModeStateService extends Service {
       codeSelection: rawState.codeSelection,
       fieldSelection: rawState.fieldSelection,
       aiAssistantOpen: rawState.aiAssistantOpen ?? false,
-      moduleInspector: rawState.moduleInspector ?? 'schema', // FIXME this is defined elsewhere?
+      moduleInspector:
+        rawState.moduleInspector ?? DEFAULT_MODULE_INSPECTOR_VIEW,
     });
 
     if (rawState.codePath && rawState.moduleInspector) {
@@ -904,7 +907,7 @@ export default class OperatorModeStateService extends Service {
     return (
       JSON.parse(
         window.localStorage.getItem(ModuleInspectorSelections) ?? '{}',
-      )[this.codePathString ?? ''] ?? 'schema'
+      )[this.codePathString ?? ''] ?? DEFAULT_MODULE_INSPECTOR_VIEW
     );
   }
 
