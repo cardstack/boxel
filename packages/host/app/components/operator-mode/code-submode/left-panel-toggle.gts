@@ -77,19 +77,19 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
         data-test-file-view-header
       >
         <ToggleButton
+          @isActive={{this.isFileTreeShowing}}
+          {{on 'click' (fn this.setFileView 'browser')}}
+          data-test-file-browser-toggle
+        >
+          File Tree
+        </ToggleButton>
+        <ToggleButton
           @disabled={{not @isFileOpen}}
           @isActive={{not this.isFileTreeShowing}}
           {{on 'click' (fn this.setFileView 'inspector')}}
           data-test-inspector-toggle
         >
           Inspector
-        </ToggleButton>
-        <ToggleButton
-          @isActive={{this.isFileTreeShowing}}
-          {{on 'click' (fn this.setFileView 'browser')}}
-          data-test-file-browser-toggle
-        >
-          File Tree
         </ToggleButton>
       </header>
       <InnerContainerContent
