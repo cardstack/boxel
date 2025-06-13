@@ -120,7 +120,7 @@ export default class OperatorModeStateService extends Service {
   private openFileSubscribers: OpenFileSubscriber[] = [];
   private cardTitles = new TrackedMap<string, string>();
 
-  private panelSelections: Record<string, ModuleInspectorView>;
+  private moduleInspectorHistory: Record<string, ModuleInspectorView>;
 
   @service declare private cardService: CardService;
   @service declare private loaderService: LoaderService;
@@ -140,11 +140,11 @@ export default class OperatorModeStateService extends Service {
     super(owner);
     this.reset.register(this);
 
-    let panelSelections = window.localStorage.getItem(
+    let moduleInspectorHistory = window.localStorage.getItem(
       ModuleInspectorSelections,
     );
-    this.panelSelections = new TrackedObject(
-      panelSelections ? JSON.parse(panelSelections) : {},
+    this.moduleInspectorHistory = new TrackedObject(
+      moduleInspectorHistory ? JSON.parse(moduleInspectorHistory) : {},
     );
   }
 
@@ -409,10 +409,10 @@ export default class OperatorModeStateService extends Service {
 
   async updateModuleInspectorView(view: ModuleInspectorView) {
     this._state.moduleInspector = view;
-    this.panelSelections[this.state.codePath?.href ?? ''] = view;
+    this.moduleInspectorHistory[this.state.codePath?.href ?? ''] = view;
     window.localStorage.setItem(
       ModuleInspectorSelections,
-      JSON.stringify(this.panelSelections),
+      JSON.stringify(this.moduleInspectorHistory),
     );
     this.schedulePersist();
   }
@@ -487,7 +487,7 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
 
     let moduleInspectorView =
-      this.panelSelections[codePath?.href ?? ''] ?? 'schema';
+      this.moduleInspectorHistory[codePath?.href ?? ''] ?? 'schema';
 
     this.updateModuleInspectorView(moduleInspectorView);
 
@@ -499,10 +499,10 @@ export default class OperatorModeStateService extends Service {
     moduleInspector: ModuleInspectorView,
   ) {
     if (codePath) {
-      this.panelSelections[codePath] = moduleInspector;
+      this.moduleInspectorHistory[codePath] = moduleInspector;
       window.localStorage.setItem(
         ModuleInspectorSelections,
-        JSON.stringify(this.panelSelections),
+        JSON.stringify(this.moduleInspectorHistory),
       );
     }
   }
