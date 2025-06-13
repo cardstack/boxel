@@ -73,6 +73,10 @@ import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
 import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import {
+  CardForAttachmentCard,
+  FileForAttachmentCard,
+} from 'https://cardstack.com/base/command';
 import type * as FileAPI from 'https://cardstack.com/base/file-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 import type {
@@ -116,10 +120,6 @@ import type ResetService from './reset';
 import type StoreService from './store';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
-import {
-  CardForAttachmentCard,
-  FileForAttachmentCard,
-} from 'https://cardstack.com/base/command';
 
 const { matrixURL } = ENV;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];

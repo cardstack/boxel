@@ -23,6 +23,7 @@ import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/b
 import { MatrixEvent } from 'matrix-js-sdk';
 import { PromptParts, mxcUrlToHttp } from '../../helpers';
 import { encodeUri } from 'matrix-js-sdk/lib/utils';
+import { SerializedFileDef } from 'https://cardstack.com/base/file-api';
 
 let log = logger('ai-bot');
 
@@ -277,7 +278,7 @@ export async function downloadFile(
     );
   }
 
-  const cachedEntry = fileCache.get(attachedFile.url);
+  const cachedEntry = fileCache.get(attachedFile.url!);
   if (cachedEntry) {
     cachedEntry.timestamp = Date.now();
     return cachedEntry.content;
@@ -295,7 +296,7 @@ export async function downloadFile(
 
   const content = await response.text();
 
-  fileCache.set(attachedFile.url, {
+  fileCache.set(attachedFile.url!, {
     content,
     timestamp: Date.now(),
   });

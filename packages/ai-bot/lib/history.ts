@@ -21,7 +21,8 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import { SerializedFileDef, downloadFile, MatrixClient } from './matrix/util';
+import { downloadFile, MatrixClient } from './matrix/util';
+import { SerializedFileDef } from 'https://cardstack.com/base/file-api';
 
 let log = logger('ai-bot:history');
 
