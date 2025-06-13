@@ -106,25 +106,6 @@ module(basename(__filename), function () {
           );
         });
 
-        test('serves a card-source HEAD request that results in redirect', async function (assert) {
-          let response = await request
-            .head('/person')
-            .set('Accept', 'application/vnd.card+source');
-
-          assert.strictEqual(response.status, 302, 'HTTP 302 status');
-          assert.strictEqual(
-            response.get('X-boxel-realm-url'),
-            testRealmHref,
-            'realm url header is correct',
-          );
-          assert.strictEqual(
-            response.get('X-boxel-realm-public-readable'),
-            'true',
-            'realm is public readable',
-          );
-          assert.strictEqual(response.headers['location'], '/person.gts');
-        });
-
         test('serves a card-source GET request that results in redirect', async function (assert) {
           let response = await request
             .get('/person')
@@ -273,6 +254,106 @@ module(basename(__filename), function () {
         test('200 with permission', async function (assert) {
           let response = await request
             .get('/person.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
+            );
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        });
+      });
+    });
+
+    module('card source HEAD request', function (_hooks) {
+      module('public readable realm', function (hooks) {
+        setupPermissionedRealm(hooks, {
+          permissions: {
+            '*': ['read'],
+          },
+          onRealmSetup,
+        });
+
+        test('serves the request', async function (assert) {
+          let response = await request
+            .head('/person.gts')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'realm url header is correct',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'realm is public readable',
+          );
+          assert.strictEqual(
+            response.text.trim(),
+            '',
+            'no body in HEAD response',
+          );
+        });
+
+        test('serves a card-source HEAD request that results in redirect', async function (assert) {
+          let response = await request
+            .head('/person')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 302, 'HTTP 302 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'realm url header is correct',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'realm is public readable',
+          );
+          assert.strictEqual(response.headers['location'], '/person.gts');
+        });
+      });
+
+      module('permissioned realm', function (hooks) {
+        setupPermissionedRealm(hooks, {
+          permissions: {
+            john: ['read'],
+          },
+          onRealmSetup,
+        });
+
+        test('401 with invalid JWT', async function (assert) {
+          let response = await request
+            .head('/person.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .set('Authorization', `Bearer invalid-token`);
+
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+        });
+
+        test('401 without a JWT', async function (assert) {
+          let response = await request
+            .head('/person.gts')
+            .set('Accept', 'application/vnd.card+source'); // no Authorization header
+
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+        });
+
+        test('403 without permission', async function (assert) {
+          let response = await request
+            .head('/person.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
+
+          assert.strictEqual(response.status, 403, 'HTTP 403 status');
+        });
+
+        test('200 with permission', async function (assert) {
+          let response = await request
+            .head('/person.gts')
             .set('Accept', 'application/vnd.card+source')
             .set(
               'Authorization',
