@@ -15,11 +15,11 @@ interface MenuItemOptions {
   iconURL: string;
   id?: string;
   inactive: boolean;
+  postscript?: string;
   selected: boolean;
+  subtext?: string;
   tabindex: number | string;
   url: string;
-  subtext?: string;
-  postscript?: string;
 }
 export class MenuItem {
   text: string;
