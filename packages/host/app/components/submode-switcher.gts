@@ -82,7 +82,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
         --submode-switcher-dropdown-content-border-radius: 0 0
           var(--boxel-border-radius) var(--boxel-border-radius);
         --submode-switcher-dropdown-content-bg-color: rgba(0, 0, 0, 0.5);
-        --submode-switcher-width: 10.25rem; /* 164px */
+        --submode-switcher-width: 10.5rem; /* 168px */
         --submode-switcher-height: var(--operator-mode-top-bar-item-height);
       }
       .submode-switcher-dropdown-trigger {

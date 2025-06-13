@@ -107,7 +107,7 @@ export default class NewFileButton extends Component<Signature> {
       .new-file-menu :deep(.postscript) {
         color: var(--boxel-450);
         font: 500 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp);
+        letter-spacing: var(--boxel-lsp-xl);
         text-transform: uppercase;
       }
       .new-file-menu :deep(.check-icon) {

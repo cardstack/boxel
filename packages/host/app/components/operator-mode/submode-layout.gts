@@ -42,9 +42,11 @@ import SearchSheet, {
 import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 
 import AskAiContainer from './ask-ai-container';
-import type { FileType } from './create-file-modal';
+
 import NewFileButton from './new-file-button';
 import WorkspaceChooser from './workspace-chooser';
+
+import type { FileType } from './create-file-modal';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
 import type CommandService from '../../services/command-service';

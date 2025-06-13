@@ -937,11 +937,6 @@ export default class CodeSubmode extends Component<Signature> {
         justify-content: center;
       }
 
-      :deep(.boxel-panel, .separator-vertical, .separator-horizontal) {
-        box-shadow: var(--boxel-deep-box-shadow);
-        border-radius: var(--boxel-border-radius-xl);
-      }
-
       .loading-indicator {
         height: 100%;
         width: 100%;

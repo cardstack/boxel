@@ -338,6 +338,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
     <style scoped>
       .boxel-pills {
         --boxel-add-button-pill-font: var(--boxel-font-sm);
+        --pill-border-radius: var(--boxel-border-radius-sm);
         display: flex;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
@@ -362,6 +363,9 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
       .item-pill:has(button:hover) {
         color: var(--boxel-600);
         border-color: var(--boxel-600);
+      }
+      .add-new {
+        border-radius: var(--pill-border-radius);
       }
     </style>
   </template>
