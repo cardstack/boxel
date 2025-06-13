@@ -8,15 +8,16 @@ import {
 } from '@cardstack/runtime-common';
 import { ToolChoice } from '@cardstack/runtime-common/helpers/ai';
 import type {
-  MatrixEvent as DiscreteMatrixEvent,
   ActiveLLMEvent,
   CardMessageContent,
   CardMessageEvent,
+  CodePatchResultEvent,
   CommandResultEvent,
   EncodedCommandRequest,
+  MatrixEvent as DiscreteMatrixEvent,
+  MatrixEventWithBoxelContext,
   SkillsConfigEvent,
   Tool,
-  CodePatchResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
@@ -320,26 +321,25 @@ export function hasSomeAttachedCards(
 }
 
 export function getAttachedCards(
-  messageEvent: CardMessageEvent,
+  matrixEvent: MatrixEventWithBoxelContext,
   history: DiscreteMatrixEvent[],
 ) {
-  let attachedCards = messageEvent.content?.data?.attachedCards ?? [];
+  let attachedCards = matrixEvent.content?.data?.attachedCards ?? [];
   return (
     attachedCards
       .map((attachedCard: SerializedFileDef) => {
         // If the file is attached later in the history, we should not include the content here
         let shouldIncludeContent = !history
-          .slice(history.indexOf(messageEvent) + 1)
-          .some(
-            (event) =>
-              event.type === 'm.room.message' &&
-              event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
-              event.content?.data?.attachedCards?.some(
-                (cardAttachment: SerializedFileDef) =>
-                  cardAttachment.url === attachedCard.url,
-              ),
-          );
-
+          .slice(history.indexOf(matrixEvent) + 1)
+          .some((event) => {
+            // event is not always MatrixEventWithBoxelContext but casting lets us safely check attachedCards
+            return (
+              event as MatrixEventWithBoxelContext
+            ).content?.data?.attachedCards?.some(
+              (cardAttachment: SerializedFileDef) =>
+                cardAttachment.url === attachedCard.url,
+            );
+          });
         let result: SerializedFileDef = {
           url: attachedCard.url,
           sourceUrl: attachedCard.sourceUrl ?? '',
@@ -360,23 +360,23 @@ export function getAttachedCards(
 
 export async function getAttachedFiles(
   client: MatrixClient,
-  messageEvent: CardMessageEvent,
+  matrixEvent: MatrixEventWithBoxelContext,
   history: DiscreteMatrixEvent[],
 ): Promise<SerializedFileDef[]> {
-  let attachedFiles = messageEvent.content?.data?.attachedFiles ?? [];
+  let attachedFiles = matrixEvent.content?.data?.attachedFiles ?? [];
   return Promise.all(
     attachedFiles.map(async (attachedFile: SerializedFileDef) => {
       // If the file is attached later in the history, we should not include the content here
       let shouldIncludeContent = !history
-        .slice(history.indexOf(messageEvent) + 1)
-        .some(
-          (event) =>
-            event.type === 'm.room.message' &&
-            event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
-            event.content?.data?.attachedFiles?.some(
-              (file: SerializedFileDef) => file.url === attachedFile.url,
-            ),
-        );
+        .slice(history.indexOf(matrixEvent) + 1)
+        .some((event) => {
+          // event is not always MatrixEventWithBoxelContext but casting lets us safely check attachedFiles
+          return (
+            event as MatrixEventWithBoxelContext
+          ).content?.data?.attachedFiles?.some(
+            (file: SerializedFileDef) => file.url === attachedFile.url,
+          );
+        });
 
       let result: SerializedFileDef = {
         url: attachedFile.url,
@@ -812,15 +812,15 @@ export async function getModifyPrompt(
 
 export const buildAttachmentsMessagePart = async (
   client: MatrixClient,
-  messageEvent: CardMessageEvent,
+  matrixEvent: MatrixEventWithBoxelContext,
   history: DiscreteMatrixEvent[],
 ) => {
-  let attachedCards = getAttachedCards(messageEvent, history);
+  let attachedCards = getAttachedCards(matrixEvent, history);
   let result = '';
   if (attachedCards.length > 0) {
     result += `Attached Cards:\n${JSON.stringify(attachedCards, null, 2)}\n`;
   }
-  let attachedFiles = await getAttachedFiles(client, messageEvent, history);
+  let attachedFiles = await getAttachedFiles(client, matrixEvent, history);
   if (attachedFiles.length > 0) {
     result += `Attached Files:\n${attachedFilesToMessage(attachedFiles)}\n`;
   }

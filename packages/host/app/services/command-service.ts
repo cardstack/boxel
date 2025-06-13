@@ -247,35 +247,14 @@ export default class CommandService extends Service {
       );
       let userContextForAiBot =
         this.operatorModeStateService.getSummaryForAIBot();
-      let cardIds = [
-        ...new Set([
-          ...(userContextForAiBot.openCardIds ?? []),
-          payload?.attributes?.cardId,
-          ...(payload?.attributes?.cardIds ?? []),
-        ]),
-      ].filter(Boolean);
-      let cardsToAttach = (
-        await Promise.all(cardIds.map((id) => this.store.get(id)))
-      )
-        .filter(Boolean)
-        .filter(isCardInstance) as CardDef[];
 
-      let filesToAttach: FileDef[] = [];
-      if (userContextForAiBot.codeMode?.currentFile) {
-        filesToAttach.push(
-          this.matrixService.fileAPI.createFileDef({
-            sourceUrl: userContextForAiBot.codeMode.currentFile,
-            name: userContextForAiBot.codeMode.currentFile.split('/').pop(),
-          }),
-        );
-      }
       await this.matrixService.sendCommandResultEvent(
         command.message.roomId,
         eventId,
         commandRequestId!,
         resultCard,
-        cardsToAttach,
-        filesToAttach,
+        [],
+        [],
         userContextForAiBot,
       );
     } catch (e) {

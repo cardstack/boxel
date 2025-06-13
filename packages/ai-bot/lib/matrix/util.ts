@@ -54,15 +54,6 @@ export interface MatrixClient {
   getAccessToken(): string | null;
 }
 
-export interface SerializedFileDef {
-  url: string;
-  sourceUrl: string;
-  name: string;
-  contentType: string;
-  content?: string;
-  error?: string;
-}
-
 export async function sendMatrixEvent(
   client: MatrixClient,
   roomId: string,

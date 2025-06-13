@@ -38,6 +38,20 @@
             "module": "@cardstack/boxel-host/commands/transform-cards"
           },
           "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "module": "@cardstack/boxel-host/commands/read-card-for-ai-assistant",
+            "name": "default"
+          },
+          "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "module": "@cardstack/boxel-host/commands/read-file-for-ai-assistant",
+            "name": "default"
+          },
+          "requiresApproval": false
         }
       ],
       "title": "Boxel Environment",
