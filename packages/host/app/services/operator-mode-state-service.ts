@@ -19,6 +19,7 @@ import {
   type ResolvedCodeRef,
   internalKeyFor,
   isLocalId,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
@@ -33,6 +34,7 @@ import { maybe } from '@cardstack/host/resources/maybe';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import { PlaygroundSelection } from '@cardstack/host/services/playground-panel-service';
 import type Realm from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
@@ -44,6 +46,11 @@ import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 import { type Stack } from '../components/operator-mode/interact-submode';
 
 import { removeFileExtension } from '../components/search-sheet/utils';
+
+import {
+  CodeModePanelSelections,
+  PlaygroundSelections,
+} from '../utils/local-storage-keys';
 
 import MatrixService from './matrix-service';
 import NetworkService from './network';
@@ -384,7 +391,7 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
-  updateCodePathWithSelection({
+  async updateCodePathWithSelection({
     codeRef,
     localName,
     fieldName,
@@ -399,7 +406,7 @@ export default class OperatorModeStateService extends Service {
     if (codeRef && isResolvedCodeRef(codeRef)) {
       //(possibly) in a different module
       this._state.codeSelection = codeRef.name;
-      this.updateCodePath(new URL(codeRef.module));
+      await this.updateCodePath(new URL(codeRef.module));
     } else if (
       codeRef &&
       'type' in codeRef &&
@@ -409,7 +416,7 @@ export default class OperatorModeStateService extends Service {
     ) {
       this._state.fieldSelection = codeRef.field;
       this._state.codeSelection = codeRef.card.name;
-      this.updateCodePath(new URL(codeRef.card.module));
+      await this.updateCodePath(new URL(codeRef.card.module));
     } else if (localName && onLocalSelection) {
       //in the same module
       this._state.codeSelection = localName;
@@ -442,16 +449,39 @@ export default class OperatorModeStateService extends Service {
     return this._state.codePath?.toString();
   }
 
-  onFileSelected = (entryPath: LocalPath) => {
+  onFileSelected = async (entryPath: LocalPath) => {
     let fileUrl = new RealmPaths(this.realmURL).fileURL(entryPath);
-    this.updateCodePath(fileUrl);
+    await this.updateCodePath(fileUrl);
   };
 
-  updateCodePath(codePath: URL | null) {
-    this._state.codePath = codePath;
+  async updateCodePath(codePath: URL | null) {
+    let canonicalCodePath = await this.determineCanonicalCodePath(codePath);
+    this._state.codePath = canonicalCodePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
     this.specPanelService.setSelection(null);
+  }
+
+  private async determineCanonicalCodePath(codePath: URL | null) {
+    if (!codePath) {
+      return codePath;
+    }
+
+    let response;
+    try {
+      // TODO Change to HEAD in CS-8846
+      response = await this.network.authedFetch(codePath, {
+        headers: { Accept: SupportedMimeType.CardSource },
+      });
+
+      if (response.ok) {
+        return new URL(response.url);
+      }
+
+      return codePath;
+    } catch (_e) {
+      return codePath;
+    }
   }
 
   replaceCodePath(codePath: URL | null) {
@@ -775,7 +805,7 @@ export default class OperatorModeStateService extends Service {
     this.updateSubmode(Submodes.Interact);
   }
 
-  openWorkspace = (realmUrl: string) => {
+  openWorkspace = async (realmUrl: string) => {
     let id = `${realmUrl}index`;
     let stackItem = new StackItem({
       id,
@@ -788,7 +818,7 @@ export default class OperatorModeStateService extends Service {
     let lastOpenedFile = this.recentFilesService.recentFiles.find(
       (file: RecentFile) => file.realmURL.href === realmUrl,
     );
-    this.updateCodePath(
+    await this.updateCodePath(
       lastOpenedFile
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
         : new URL(id),
@@ -814,21 +844,51 @@ export default class OperatorModeStateService extends Service {
     return controller;
   }
 
+  get moduleInspectorPanel() {
+    return (
+      JSON.parse(window.localStorage.getItem(CodeModePanelSelections) ?? '{}')[
+        this.codePathString ?? ''
+      ] ?? 'schema'
+    );
+  }
+
+  get playgroundPanelSelection(): PlaygroundSelection | undefined {
+    if (this.moduleInspectorPanel === 'preview') {
+      let playgroundSelections = JSON.parse(
+        window.localStorage.getItem(PlaygroundSelections) ?? '{}',
+      );
+      let playgroundPanelSelection = Object.values(playgroundSelections).find(
+        (selection: any) => selection.url === this.codePathString,
+      );
+      return playgroundPanelSelection as PlaygroundSelection | undefined;
+    }
+    return undefined;
+  }
+
   getSummaryForAIBot(
     openCardIds: Set<string> = new Set([...this.getOpenCardIds()]),
   ): BoxelContext {
+    let codeMode =
+      this._state.submode === Submodes.Code
+        ? {
+            currentFile: this.codePathString,
+            moduleInspectorPanel: this.moduleInspectorPanel,
+            previewPanelSelection: this.playgroundPanelSelection
+              ? {
+                  cardId: this.playgroundPanelSelection.cardId,
+                  format: this.playgroundPanelSelection.format,
+                }
+              : undefined,
+          }
+        : undefined;
+
     return {
       agentId: this.matrixService.agentId,
       submode: this._state.submode,
       debug: this.operatorModeController.debug,
       openCardIds: this.makeRemoteIdsList([...openCardIds]),
       realmUrl: this.realmURL.href,
-      codeMode:
-        this._state.submode === Submodes.Code
-          ? {
-              currentFile: this.codePathString,
-            }
-          : undefined,
+      codeMode,
     };
   }
 

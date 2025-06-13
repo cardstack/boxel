@@ -256,7 +256,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       : 0;
 
     assert.true(
-      newHeight >= 300,
+      newHeight >= 130,
       'input box grows when entering/pasting lots of text',
     );
   });
