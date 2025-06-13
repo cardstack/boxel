@@ -164,7 +164,7 @@ export default class Room extends Component<Signature> {
             {{#if this.displayActionBar}}
               <AiAssistantActionBar
                 @acceptAll={{perform this.executeAllReadyActionsTask}}
-                @cancel={{this.cancelActionChin}}
+                @cancel={{this.cancelActionBar}}
                 @acceptingAll={{this.executeAllReadyActionsTask.isRunning}}
               />
             {{/if}}
@@ -957,8 +957,9 @@ export default class Room extends Component<Signature> {
     }
     let lastMessage = this.messages[this.messages.length - 1];
     if (
-      this.lastCanceledActionMessageId &&
-      lastMessage?.eventId === this.lastCanceledActionMessageId
+      (this.lastCanceledActionMessageId &&
+        lastMessage?.eventId === this.lastCanceledActionMessageId) ||
+      !lastMessage?.isStreamingOfEventFinished
     ) {
       return false;
     }
@@ -994,7 +995,7 @@ export default class Room extends Component<Signature> {
   });
 
   @action
-  private cancelActionChin() {
+  private cancelActionBar() {
     let lastMessage = this.messages[this.messages.length - 1];
     if (lastMessage) {
       this.lastCanceledActionMessageId = lastMessage.eventId;

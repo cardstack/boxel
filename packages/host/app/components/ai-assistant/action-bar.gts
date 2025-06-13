@@ -15,14 +15,15 @@ const AiAssistantActionBar: TemplateOnlyComponent<Signature> = <template>
   <div class='ai-assistant-action-bar' data-test-ai-assistant-action-bar>
     <BoxelButton
       @kind='primary'
-      class='action-btn'
-      data-test-accept-all
       @disabled={{@acceptingAll}}
       @loading={{@acceptingAll}}
+      class='action-btn'
+      data-test-accept-all
       {{on 'click' @acceptAll}}
     >Accept All</BoxelButton>
     <BoxelButton
       @kind='secondary-dark'
+      @disabled={{@acceptingAll}}
       class='action-btn cancel-btn'
       data-test-cancel
       {{on 'click' @cancel}}
