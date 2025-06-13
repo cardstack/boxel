@@ -1,14 +1,10 @@
 import { array } from '@ember/helper';
 import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-
-import { dropTask } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
 
 import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
 
@@ -36,7 +32,6 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
-import ApplyButton from './apply-button';
 import CodeBlock from './code-block';
 
 interface FormattedAiBotMessageSignature {
@@ -60,28 +55,9 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
   @service private declare loaderService: LoaderService;
   @service private declare commandService: CommandService;
 
-  @tracked applyAllCodePatchTasksState:
-    | 'ready'
-    | 'applying'
-    | 'applied'
-    | 'failed' = 'ready';
-
   private isLastHtmlGroup = (index: number) => {
     return index === (this.args.htmlParts?.length ?? 0) - 1;
   };
-
-  private get isApplyAllButtonDisplayed() {
-    if (this.args.isStreaming) {
-      return false;
-    }
-    if (!this.args.isLastAssistantMessage) {
-      return false;
-    }
-    return (
-      this.codeDataItems.filter((codeData) => !!codeData.searchReplaceBlock)
-        .length > 1
-    );
-  }
 
   private get codeDataItems() {
     return (this.args.htmlParts ?? [])
@@ -93,49 +69,6 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
       })
       .filter((codeData): codeData is CodeData => !!codeData);
   }
-
-  get applyAllCodePatchesButtonState() {
-    let { codeDataItems } = this;
-    let states = codeDataItems.map((codeData) =>
-      this.commandService.getCodePatchStatus(codeData),
-    );
-    if (states.some((state) => state === 'applying')) {
-      return 'applying';
-    } else if (states.every((state) => state === 'applied')) {
-      return 'applied';
-    } else {
-      return 'ready';
-    }
-  }
-
-  private applyAllCodePatchTasks = dropTask(async () => {
-    this.applyAllCodePatchTasksState = 'applying';
-    let unappliedCodeDataItems = this.codeDataItems.filter(
-      (codeData) =>
-        this.commandService.getCodePatchStatus(codeData) !== 'applied',
-    );
-
-    let codeDataItemsGroupedByFileUrl = unappliedCodeDataItems.reduce(
-      (acc, codeDataItem) => {
-        acc[codeDataItem.fileUrl!] = [
-          ...(acc[codeDataItem.fileUrl!] || []),
-          codeDataItem,
-        ];
-        return acc;
-      },
-      {} as Record<string, CodeData[]>,
-    );
-
-    // TODO: Handle possible errors (fetching source, patching, saving source)
-    // Handle in CS-8369
-    for (let fileUrl in codeDataItemsGroupedByFileUrl) {
-      await this.commandService.patchCode(
-        codeDataItemsGroupedByFileUrl[fileUrl][0].roomId,
-        fileUrl,
-        codeDataItemsGroupedByFileUrl[fileUrl],
-      );
-    }
-  });
 
   private preTagGroupIndex = (htmlPartIndex: number) => {
     return this.args
@@ -185,28 +118,9 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
           {{/if}}
         {{/if}}
       {{/each}}
-
-      {{#if this.isApplyAllButtonDisplayed}}
-        <div class='code-patch-actions'>
-          <ApplyButton
-            {{on 'click' (perform this.applyAllCodePatchTasks)}}
-            @state={{this.applyAllCodePatchesButtonState}}
-            data-test-apply-all-code-patches-button
-          >
-            Accept All
-          </ApplyButton>
-        </div>
-      {{/if}}
     </div>
 
     <style scoped>
-      .code-patch-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--boxel-sp-xs);
-        margin-top: var(--boxel-sp);
-      }
-
       .message > :deep(*:first-child) {
         margin-top: 0;
       }
