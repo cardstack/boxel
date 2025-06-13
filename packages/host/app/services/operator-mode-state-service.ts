@@ -469,8 +469,8 @@ export default class OperatorModeStateService extends Service {
 
     let response;
     try {
-      // TODO Change to HEAD in CS-8846
       response = await this.network.authedFetch(codePath, {
+        method: 'HEAD',
         headers: { Accept: SupportedMimeType.CardSource },
       });
 
