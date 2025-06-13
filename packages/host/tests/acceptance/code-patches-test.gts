@@ -113,12 +113,14 @@ ${REPLACE_MARKER}\n\`\`\``;
       1,
       'code patch result event is dispatched',
     );
+
     assert.deepEqual(
       JSON.parse(codePatchResultEvents[0].content?.data ?? '{}').context,
       {
         agentId: getService('matrix-service').agentId,
         codeMode: {
           currentFile: 'http://test-realm/test/hello.txt',
+          moduleInspectorPanel: 'schema',
         },
         submode: 'code',
         debug: false,

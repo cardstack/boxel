@@ -30,8 +30,6 @@ import {
 import CardService from '@cardstack/host/services/card-service';
 import MonacoService from '@cardstack/host/services/monaco-service';
 
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -40,13 +38,13 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
 
   let monacoService: MonacoService;
   let cardService: CardService;
-  let operatorModeStateService: OperatorModeStateService;
+
   let roomId = '!abcd';
   let eventId = '1234';
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     monacoService = getService('monaco-service');
-    operatorModeStateService = getService('operator-mode-state-service');
+
     cardService = getService('card-service');
 
     cardService.getSource = async () => {
@@ -55,10 +53,6 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
         content: 'let a = 1;\nlet b = 2;',
       });
     };
-
-    (operatorModeStateService as any).cachedRealmURL = new URL(
-      'https://example.com/',
-    );
   });
 
   async function renderFormattedAiBotMessage(testScenario: any) {
