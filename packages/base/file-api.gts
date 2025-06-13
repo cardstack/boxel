@@ -48,18 +48,22 @@ export class FileDef extends BaseDef {
   }
 }
 
+export interface SerializedFileDef {
+  url?: string;
+  sourceUrl: string;
+  name?: string;
+  contentHash?: string;
+  contentType?: string;
+  content?: string;
+  error?: string;
+}
+
 export function createFileDef({
   url,
   sourceUrl,
   name,
   contentType,
   contentHash,
-}: {
-  url?: string;
-  sourceUrl: string;
-  name?: string;
-  contentType?: string;
-  contentHash?: string;
-}) {
+}: SerializedFileDef) {
   return new FileDef({ url, sourceUrl, name, contentType, contentHash });
 }

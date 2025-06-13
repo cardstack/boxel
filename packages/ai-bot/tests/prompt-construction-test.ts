@@ -636,7 +636,7 @@ module('getModifyPrompt', (hooks) => {
     assert.ok(
       userMessages[0]?.content?.includes(
         `
-Attached Files:
+Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
 [best-friends.txt](http://test-realm-server/my-realm/best-friends.txt)
       `.trim(),
@@ -645,7 +645,7 @@ Attached Files:
     assert.ok(
       userMessages[1]?.content?.includes(
         `
-Attached Files:
+Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts): this is the content of the spaghetti-recipe.gts file
 [best-friends.txt](http://test-realm-server/my-realm/best-friends.txt): this is the content of the best-friends.txt file
 [file-that-does-not-exist.txt](http://test.com/my-realm/file-that-does-not-exist.txt): Error loading attached file: HTTP error. Status: 404
@@ -3403,6 +3403,16 @@ Attached Files:
         messages![3].content,
     );
   });
+
+  // test('tool call messages include attached files when command result does', async () => {});
+
+  // test('tool call messages include attached cards when command result does', async () => {
+  // });
+
+  // test('code patch messages include attached files when code patch result does', async () => {
+  // });
+
+  // test('code patch messages include attached cards when code patch result does', async () => {});
 });
 
 module('set model in prompt', (hooks) => {
