@@ -10,8 +10,8 @@ interface Signature {
   };
 }
 
-const AiAssistantActionChin: TemplateOnlyComponent<Signature> = <template>
-  <div class='ai-assistant-action-chin' data-test-ai-assistant-action-chin>
+const AiAssistantActionBar: TemplateOnlyComponent<Signature> = <template>
+  <div class='ai-assistant-action-bar' data-test-ai-assistant-action-bar>
     <BoxelButton
       @kind='primary'
       class='action-btn'
@@ -27,7 +27,7 @@ const AiAssistantActionChin: TemplateOnlyComponent<Signature> = <template>
   </div>
 
   <style scoped>
-    .ai-assistant-action-chin {
+    .ai-assistant-action-bar {
       background-color: #3b394b;
       display: flex;
       gap: var(--boxel-sp-sm);
@@ -50,4 +50,4 @@ const AiAssistantActionChin: TemplateOnlyComponent<Signature> = <template>
   </style>
 </template>;
 
-export default AiAssistantActionChin;
+export default AiAssistantActionBar;

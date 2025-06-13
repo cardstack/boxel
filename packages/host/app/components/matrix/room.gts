@@ -61,7 +61,7 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 import type { Skill } from 'https://cardstack.com/base/skill';
 
-import AiAssistantActionChin from '../ai-assistant/action-chin';
+import AiAssistantActionBar from '../ai-assistant/action-bar';
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
 import LLMSelect from '../ai-assistant/llm-select';
@@ -162,7 +162,7 @@ export default class Room extends Component<Signature> {
             as |AttachedItems AttachButton|
           >
             {{#if this.displayActionChin}}
-              <AiAssistantActionChin
+              <AiAssistantActionBar
                 @acceptAll={{perform this.executeAllReadyActionsTask}}
                 @cancel={{this.cancelActionChin}}
               />
@@ -180,7 +180,7 @@ export default class Room extends Component<Signature> {
                 <AttachedItems />
               {{/if}}
 
-              <div class='chat-input-area__actions'>
+              <div class='chat-input-area__bottom-actions'>
                 {{#if this.displaySkillMenu}}
                   <AiAssistantSkillMenu
                     class='skill-menu'
@@ -189,8 +189,8 @@ export default class Room extends Component<Signature> {
                     @onUpdateSkillIsActive={{perform
                       this.updateSkillIsActiveTask
                     }}
-                    @onExpand={{fn this.setSelectedAction 'skill-menu'}}
-                    @onCollapse={{fn this.setSelectedAction undefined}}
+                    @onExpand={{fn this.setSelectedBottomAction 'skill-menu'}}
+                    @onCollapse={{fn this.setSelectedBottomAction undefined}}
                     data-test-skill-menu
                   />
                 {{/if}}
@@ -201,8 +201,8 @@ export default class Room extends Component<Signature> {
                     @onChange={{perform @roomResource.activateLLMTask}}
                     @options={{this.llmsForSelectMenu}}
                     @disabled={{@roomResource.isActivatingLLM}}
-                    @onExpand={{fn this.setSelectedAction 'llm-select'}}
-                    @onCollapse={{fn this.setSelectedAction undefined}}
+                    @onExpand={{fn this.setSelectedBottomAction 'llm-select'}}
+                    @onCollapse={{fn this.setSelectedBottomAction undefined}}
                   />
                 {{/if}}
               </div>
@@ -237,7 +237,7 @@ export default class Room extends Component<Signature> {
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
       }
-      .chat-input-area__actions {
+      .chat-input-area__bottom-actions {
         display: flex;
         padding: var(--boxel-sp-sm);
         gap: var(--boxel-sp-sm);
@@ -268,7 +268,10 @@ export default class Room extends Component<Signature> {
   </template>
 
   @consume(GetCardContextName) private declare getCard: getCard;
-  @tracked private selectedAction: 'skill-menu' | 'llm-select' | undefined;
+  @tracked private selectedBottomAction:
+    | 'skill-menu'
+    | 'llm-select'
+    | undefined;
   @tracked lastCanceledActionMessageId: string | undefined;
 
   @service private declare store: StoreService;
@@ -893,16 +896,22 @@ export default class Room extends Component<Signature> {
   });
 
   @action
-  private setSelectedAction(action: 'skill-menu' | 'llm-select' | undefined) {
-    this.selectedAction = action;
+  private setSelectedBottomAction(
+    action: 'skill-menu' | 'llm-select' | undefined,
+  ) {
+    this.selectedBottomAction = action;
   }
 
   private get displaySkillMenu() {
-    return !this.selectedAction || this.selectedAction === 'skill-menu';
+    return (
+      !this.selectedBottomAction || this.selectedBottomAction === 'skill-menu'
+    );
   }
 
   private get displayLLMSelect() {
-    return !this.selectedAction || this.selectedAction === 'llm-select';
+    return (
+      !this.selectedBottomAction || this.selectedBottomAction === 'llm-select'
+    );
   }
 
   private get displayAttachedItems() {

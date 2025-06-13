@@ -59,17 +59,6 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
     return index === (this.args.htmlParts?.length ?? 0) - 1;
   };
 
-  private get codeDataItems() {
-    return (this.args.htmlParts ?? [])
-      .map((htmlPart) => {
-        if (isHtmlPreTagGroup(htmlPart)) {
-          return htmlPart.codeData;
-        }
-        return null;
-      })
-      .filter((codeData): codeData is CodeData => !!codeData);
-  }
-
   private preTagGroupIndex = (htmlPartIndex: number) => {
     return this.args
       .htmlParts!.slice(0, htmlPartIndex)
