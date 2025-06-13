@@ -284,4 +284,120 @@ module(basename(__filename), function () {
       );
     });
   });
+
+  module(
+    'queue - high priority worker and all priority worker',
+    function (hooks) {
+      let publisher: QueuePublisher;
+      let allPriorityRunner: QueueRunner;
+      let highPriorityRunner: QueueRunner;
+      let adapter: PgAdapter;
+      let adapter2: PgAdapter;
+
+      hooks.beforeEach(async function () {
+        prepareTestDB();
+        adapter = new PgAdapter({ autoMigrate: true });
+        adapter2 = new PgAdapter({ autoMigrate: true });
+        publisher = new PgQueuePublisher(adapter);
+        allPriorityRunner = new PgQueueRunner({
+          adapter,
+          workerId: 'q1',
+          maxTimeoutSec: 1,
+          priority: 0,
+        });
+        highPriorityRunner = new PgQueueRunner({
+          adapter: adapter2,
+          workerId: 'hp1',
+          priority: 100,
+        });
+        await allPriorityRunner.start();
+        await highPriorityRunner.start();
+
+        // Because we need tight timing control for this test, we don't want any
+        // concurrent migrations and their retries altering the timing. This
+        // ensures both adapters have gotten fully past that and are quiescent.
+        await adapter.execute('select 1');
+        await adapter2.execute('select 1');
+      });
+
+      hooks.afterEach(async function () {
+        await allPriorityRunner.destroy();
+        await highPriorityRunner.destroy();
+        await publisher.destroy();
+        await adapter.close();
+        await adapter2.close();
+      });
+
+      test('concurrency group enforces concurrency against running jobs', async function (assert) {
+        // Emulate realm server start up with full indexing competing with
+        // incremental indexing. make slow jobs with low priority so the
+        // concurrency group we are testing is waiting on a low priority worker.
+        // make another job with high priority worker that runs while the low
+        // priority job with same concurrency group is still waiting.
+
+        let events: string[] = [];
+
+        let slowLogJob = async (jobNum: number) => {
+          events.push(`job${jobNum} start`);
+          await new Promise((r) => setTimeout(r, 500));
+          events.push(`job${jobNum} finish`);
+        };
+        let fastLogJob = async (jobNum: number) => {
+          events.push(`job${jobNum} start`);
+          await new Promise((r) => setTimeout(r, 10));
+          events.push(`job${jobNum} finish`);
+        };
+
+        allPriorityRunner.register('slowLogJob', slowLogJob);
+        allPriorityRunner.register('fastLogJob', fastLogJob);
+        highPriorityRunner.register('fastLogJob', fastLogJob);
+
+        let promiseForSlowJob1 = publisher.publish({
+          jobType: 'slowLogJob',
+          concurrencyGroup: 'other-group',
+          timeout: 5000,
+          priority: 0,
+          args: 1,
+        });
+        // start the 2nd slow job before the first job finishes
+        await new Promise((r) => setTimeout(r, 100));
+        let promiseForSlowJob2 = publisher.publish({
+          jobType: 'slowLogJob',
+          concurrencyGroup: 'log-group', // same concurrency group as the fast job
+          timeout: 5000,
+          priority: 0,
+          args: 2,
+        });
+        // start the fast job after the 2nd slow job is published but before the
+        // first job finishes
+        await new Promise((r) => setTimeout(r, 100));
+        let promiseForFastJob3 = publisher.publish({
+          jobType: 'fastLogJob',
+          concurrencyGroup: 'log-group', // same concurrency group as the waiting slow job
+          timeout: 5000,
+          priority: 100, // this is a high priority job so it should be picked up by the idle high priority runner immediately
+          args: 3,
+        });
+
+        let [slowJob1, slowJob2, fastJob3] = await Promise.all([
+          promiseForSlowJob1,
+          promiseForSlowJob2,
+          promiseForFastJob3,
+        ]);
+        await Promise.all([slowJob1.done, slowJob2.done, fastJob3.done]);
+
+        assert.deepEqual(events, [
+          'job1 start',
+          // job 3 is a high priority job and it should not be blocked because
+          // job 2 is waiting--concurrency group is based on running jobs not
+          // waiting jobs
+          'job3 start',
+          'job3 finish',
+          'job1 finish',
+          'job2 start',
+          'job2 finish',
+        ]);
+      });
+    },
+  );
 });
