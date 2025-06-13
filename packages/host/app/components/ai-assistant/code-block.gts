@@ -13,7 +13,7 @@ import { restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 
-import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
+import { Copy as CopyIcon, IconCode } from '@cardstack/boxel-ui/icons';
 
 import {
   type CodeData,
@@ -32,7 +32,7 @@ import ApplyButton from '../ai-assistant/apply-button';
 import type { ComponentLike } from '@glint/template';
 import type * as _MonacoSDK from 'monaco-editor';
 
-import { menuDivider, menuItem } from '@cardstack/boxel-ui/helpers';
+import { menuItem } from '@cardstack/boxel-ui/helpers';
 
 import { ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 
@@ -100,6 +100,7 @@ interface CodeBlockHeaderSignature {
       linesRemoved: number;
       linesAdded: number;
     } | null;
+    finalFileUrlAfterCodePatching?: string | null;
   };
 }
 
@@ -510,15 +511,18 @@ class CodeBlockDiffEditor extends Component<Signature> {
 
 class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
-  get fileName() {
-    let realmUrl = this.operatorModeStateService.realmURL.href;
-    let fileUrl = this.args.codeData.fileUrl;
+  get fileUrl() {
+    return (
+      this.args.finalFileUrlAfterCodePatching ?? this.args.codeData.fileUrl
+    );
+  }
 
-    return fileUrl?.replace(realmUrl, '');
+  get fileName() {
+    return new URL(this.fileUrl ?? '').pathname.split('/').pop() || '';
   }
 
   openInCodeMode = () => {
-    console.log('openInCodeMode');
+    this.operatorModeStateService.updateCodePath(new URL(this.fileUrl));
   };
 
   <template>
@@ -540,25 +544,35 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
         display: flex;
         align-items: center;
         gap: 8px;
+        flex: 1;
+        min-width: 0;
       }
 
-      .file-info {
+      .code-block-diff-header .file-info {
         padding: 4px 8px;
         border: 1px solid;
         border-radius: 5px;
         border-color: #5c5d5e;
         background: transparent;
         color: #f7f7f7;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: fit-content;
+        max-width: 100%;
+        min-width: 0;
       }
 
       .file-info:hover {
         border-color: #ffffff;
       }
 
-      .code-block-diff-header .file-info {
-        display: flex;
-        align-items: center;
-        gap: 8px;
+      .code-block-diff-header .file-info .filename {
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 300px;
       }
 
       .code-block-diff-header .file-info .edit-icon {
@@ -567,10 +581,6 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
         padding: 2px 6px;
         font-weight: bold;
         color: #ffffff;
-      }
-
-      .code-block-diff-header .file-info .filename {
-        font-weight: 600;
       }
 
       .code-block-diff-header .file-info .more-options {
@@ -645,7 +655,7 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
             <Menu
               class='context-menu-list'
               @items={{array
-                (menuItem 'Open in Code Mode' this.openInCodeMode)
+                (menuItem 'Open in Code Mode' this.openInCodeMode icon=IconCode)
               }}
               @closeMenu={{dd.close}}
             />

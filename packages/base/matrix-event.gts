@@ -294,6 +294,7 @@ export interface CodePatchResultContent {
   };
   msgtype: typeof APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE;
   codeBlockIndex: number;
+  finalFileUrlAfterCodePatching: string;
   data: {
     context?: BoxelContext;
     attachedFiles?: (SerializedFile & { content?: string; error?: string })[];

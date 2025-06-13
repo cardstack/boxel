@@ -164,7 +164,7 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
         {{#if (isHtmlPreTagGroup htmlPart)}}
           <HtmlGroupCodeBlock
             @codeData={{htmlPart.codeData}}
-            @codePatchStatus={{this.commandService.getCodePatchStatus
+            @codePatchResult={{this.commandService.getCodePatchResult
               htmlPart.codeData
             }}
             @onPatchCode={{fn
@@ -325,6 +325,16 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
     this.diffEditorStats = stats;
   };
 
+  private get codePatchStatus() {
+    return this.args.codePatchResult?.status ?? 'ready';
+  }
+
+  private get codePatchfinalFileUrlAfterCodePatching() {
+    return this.codePatchStatus === 'applied'
+      ? this.args.codePatchResult?.finalFileUrlAfterCodePatching
+      : null;
+  }
+
   <template>
     <CodeBlock
       @monacoSDK={{@monacoSDK}}
@@ -339,17 +349,18 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
             <codeBlock.editorHeader
               @codeData={{@codeData}}
               @diffEditorStats={{null}}
+              @finalFileUrlAfterCodePatching={{this.codePatchfinalFileUrlAfterCodePatching}}
             />
             <codeBlock.editor @code={{this.codeForEditor}} @dimmed={{true}} />
             <codeBlock.actions as |actions|>
               <actions.copyCode
                 @code={{this.extractReplaceCode @codeData.searchReplaceBlock}}
               />
-              {{#if (eq @codePatchStatus 'applied')}}
+              {{#if (eq this.codePatchStatus 'applied')}}
                 {{! This is just to show the ✅ icon to signalize that the code patch has been applied }}
                 <actions.applyCodePatch
                   @codeData={{@codeData}}
-                  @patchCodeStatus={{@codePatchStatus}}
+                  @patchCodeStatus={{this.codePatchStatus}}
                 />
               {{/if}}
             </codeBlock.actions>

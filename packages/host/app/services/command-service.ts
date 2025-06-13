@@ -347,12 +347,13 @@ export default class CommandService extends Service {
     }
     try {
       let patchCodeCommand = new PatchCodeCommand(this.commandContext);
-      await patchCodeCommand.execute({
+      let { finalFileUrl } = await patchCodeCommand.execute({
         fileUrl,
         codeBlocks: codeDataItems.map(
           (codeData) => codeData.searchReplaceBlock!,
         ),
       });
+
       for (const codeBlock of codeDataItems) {
         this.executedCommandRequestIds.add(
           `${codeBlock.eventId}:${codeBlock.codeBlockIndex}`,
@@ -360,7 +361,7 @@ export default class CommandService extends Service {
       }
       await this.matrixService.updateSkillsAndCommandsIfNeeded(roomId);
       let fileDef = this.matrixService.fileAPI.createFileDef({
-        sourceUrl: fileUrl,
+        sourceUrl: finalFileUrl,
         name: fileUrl.split('/').pop(),
       });
 
@@ -408,11 +409,11 @@ export default class CommandService extends Service {
     );
   }
 
-  private getCodePatchResult(codeData: {
+  private getCodePatchResult = (codeData: {
     roomId: string;
     eventId: string;
     codeBlockIndex: number;
-  }): MessageCodePatchResult | undefined {
+  }): MessageCodePatchResult | undefined => {
     let roomResource = this.matrixService.roomResources.get(codeData.roomId);
     if (!roomResource) {
       return undefined;
@@ -423,20 +424,6 @@ export default class CommandService extends Service {
     return message?.codePatchResults?.find(
       (c) => c.index === codeData.codeBlockIndex,
     );
-  }
-
-  getCodePatchStatus = (codeData: {
-    roomId: string;
-    eventId: string;
-    codeBlockIndex: number;
-  }): CodePatchStatus | 'applying' | 'ready' => {
-    if (this.isCodeBlockApplying(codeData)) {
-      return 'applying';
-    }
-    if (this.isCodeBlockRecentlyApplied(codeData)) {
-      return 'applied';
-    }
-    return this.getCodePatchResult(codeData)?.status ?? 'ready';
   };
 }
 

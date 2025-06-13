@@ -34,9 +34,10 @@ export default class PatchCodeCommand extends HostBaseCommand<
     return PatchCodeInput;
   }
 
-  protected async run(
-    input: BaseCommandModule.PatchCodeInput,
-  ): Promise<BaseCommandModule.LintAndFixResult> {
+  protected async run(input: BaseCommandModule.PatchCodeInput): Promise<{
+    lintResult: BaseCommandModule.LintAndFixResult;
+    finalFileUrl: string;
+  }> {
     let { fileUrl, codeBlocks } = input;
 
     let fileInfo = await this.getFileInfo(fileUrl);
@@ -56,7 +57,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
       'bot-patch',
     );
 
-    return lintResult;
+    return { lintResult, finalFileUrl };
   }
 
   private async getFileInfo(fileUrl: string): Promise<FileInfo> {
