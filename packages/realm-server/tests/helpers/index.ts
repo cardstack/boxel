@@ -722,6 +722,7 @@ export function setupPermissionedRealm(
     fileSystem,
     onRealmSetup,
     subscribeToRealmEvents = false,
+    mode = 'beforeEach',
   }: {
     permissions: RealmPermissions;
     fileSystem?: Record<string, string | LooseSingleCardDocument>;
@@ -734,6 +735,7 @@ export function setupPermissionedRealm(
       dir: DirResult;
     }) => void;
     subscribeToRealmEvents?: boolean;
+    mode?: 'beforeEach' | 'before';
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -741,7 +743,11 @@ export function setupPermissionedRealm(
   setGracefulCleanup();
 
   setupDB(hooks, {
-    beforeEach: async (dbAdapter, publisher, runner) => {
+    [mode]: async (
+      dbAdapter: PgAdapter,
+      publisher: QueuePublisher,
+      runner: QueueRunner,
+    ) => {
       let dir = dirSync();
       let testRealmDir = join(dir.name, 'realm_server_1', 'test');
 
@@ -781,7 +787,7 @@ export function setupPermissionedRealm(
     },
   });
 
-  hooks.afterEach(async function () {
+  hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
     testRealmServer.testRealm.unsubscribe();
     await closeServer(testRealmServer.testRealmHttpServer);
     resetCatalogRealms();
