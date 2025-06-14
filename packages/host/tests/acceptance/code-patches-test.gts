@@ -8,6 +8,7 @@ import {
   SEARCH_MARKER,
   SEPARATOR_MARKER,
   baseRealm,
+  skillCardRef,
 } from '@cardstack/runtime-common';
 
 import {
@@ -16,6 +17,7 @@ import {
   APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -69,6 +71,44 @@ module('Acceptance | Code patches tests', function (hooks) {
         },
         'hello.txt': 'Hello, world!',
         'hi.txt': 'Hi, world!\nHow are you?',
+        'Skill/useful-commands.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              instructions:
+                'Here are few commands you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode. * get-boxel-ui-state: find out what mode you are in currently, and what cards are open. * search-cards-by-type-and-title: search for cards by name or description.',
+              commands: [
+                {
+                  codeRef: {
+                    name: 'default',
+                    module: '@cardstack/boxel-host/commands/get-boxel-ui-state',
+                  },
+                  requiresApproval: true,
+                },
+                {
+                  codeRef: {
+                    name: 'SearchCardsByTypeAndTitleCommand',
+                    module: '@cardstack/boxel-host/commands/search-cards',
+                  },
+                  requiresApproval: true,
+                },
+                {
+                  codeRef: {
+                    name: 'default',
+                    module: '@cardstack/boxel-host/commands/switch-submode',
+                  },
+                  requiresApproval: true,
+                },
+              ],
+              title: 'Useful Commands',
+              description: null,
+              thumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: skillCardRef,
+            },
+          },
+        },
       },
     });
   });
@@ -143,7 +183,140 @@ ${REPLACE_MARKER}\n\`\`\``;
     );
   });
 
-  test('can patch code when there are multiple patches using "Accept All" button', async function (assert) {
+  test('can patch code and execute command using "Accept All" button', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+
+    // open skill menu
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+
+    // add useful-commands skill, which includes the switch-submode command
+    await click(
+      `[data-test-card-catalog-item="${testRealmURL}Skill/useful-commands"]`,
+    );
+    await click('[data-test-card-catalog-go-button]');
+
+    // there are 3 patches in the message
+    // 1. hello.txt: Hello, world! -> Hi, world!
+    // 2. hi.txt: Hi, world! -> Greetings, world!
+    // 3. hi.txt: How are you? -> We are one!
+
+    let codeBlock = `\`\`\`
+http://test-realm/test/hello.txt
+${SEARCH_MARKER}
+Hello, world!
+${SEPARATOR_MARKER}
+Hi, world!
+${REPLACE_MARKER}
+\`\`\`
+
+I will also update the second file per your request.
+
+ \`\`\`
+http://test-realm/test/hi.txt
+${SEARCH_MARKER}
+Hi, world!
+${SEPARATOR_MARKER}
+Greetings, world!
+${REPLACE_MARKER}
+\`\`\`
+
+\`\`\`
+http://test-realm/test/hi.txt
+${SEARCH_MARKER}
+How are you?
+${SEPARATOR_MARKER}
+We are one!
+${REPLACE_MARKER}
+\`\`\``;
+
+    let roomId = getRoomIds().pop()!;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'abc123',
+          name: 'switch-submode_dd88',
+          arguments: JSON.stringify({
+            description: 'Switching to code submode',
+            attributes: {
+              submode: 'code',
+            },
+          }),
+        },
+      ],
+    });
+
+    await waitFor(
+      '[data-test-ai-assistant-action-bar] [data-test-accept-all]',
+      {
+        timeout: 4000,
+      },
+    );
+    // Intentionally not using await here to test the loading state of the button
+    click('[data-test-ai-assistant-action-bar] [data-test-accept-all]');
+    await waitFor(
+      '[data-test-ai-assistant-action-bar] [data-test-accept-all] [data-test-boxel-button-loading-indicator]',
+    );
+    await waitUntil(
+      () => findAll('[data-test-apply-state="applied"]').length === 3,
+      {
+        timeout: 3000,
+        timeoutMessage:
+          'timed out waiting for Accept All button to be in applied state',
+      },
+    );
+    await waitFor('[data-test-code-mode]');
+    assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).doesNotExist();
+    await click('[data-test-file-browser-toggle]');
+    await click('[data-test-file="hello.txt"]');
+
+    assert.strictEqual(
+      getMonacoContent(),
+      'Hi, world!',
+      'hello.txt should be patched',
+    );
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hi.txt`,
+    });
+
+    // We can see content that is the result of 2 patches made to this file (hi.txt)
+    await waitUntil(
+      () => getMonacoContent() === 'Greetings, world!\nWe are one!',
+    );
+
+    let codePatchResultEvents = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE &&
+        event.content['m.relates_to']?.key === 'applied',
+    );
+    assert.equal(
+      codePatchResultEvents.length,
+      3,
+      'code patch result events are dispatched',
+    );
+  });
+
+  test('action bar disappears when "Cancel" button is clicked', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}hello.txt`,
@@ -192,45 +365,12 @@ ${REPLACE_MARKER}
       isStreamingFinished: true,
     });
 
-    await waitFor('[data-test-apply-all-code-patches-button]', {
+    await waitFor('[data-test-ai-assistant-action-bar] [data-test-cancel]', {
       timeout: 4000,
     });
-    click('[data-test-apply-all-code-patches-button]');
-    await waitFor('.code-patch-actions [data-test-apply-state="applying"]');
-    await waitFor('.code-patch-actions [data-test-apply-state="applied"]', {
-      timeout: 3000,
-      timeoutMessage:
-        'timed out waiting for Accept All button to be in applied state',
-    });
-    assert.dom('[data-test-apply-state="applied"]').exists({ count: 4 }); // 3 patches + 1 for "Accept All" button
-
-    assert.strictEqual(
-      getMonacoContent(),
-      'Hi, world!',
-      'hello.txt should be patched',
-    );
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}hi.txt`,
-    });
-
-    // We can see content that is the result of 2 patches made to this file (hi.txt)
-    await waitUntil(
-      () => getMonacoContent() === 'Greetings, world!\nWe are one!',
-    );
-
-    let codePatchResultEvents = getRoomEvents(roomId).filter(
-      (event) =>
-        event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
-        event.content['m.relates_to']?.rel_type ===
-          APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE &&
-        event.content['m.relates_to']?.key === 'applied',
-    );
-    assert.equal(
-      codePatchResultEvents.length,
-      3,
-      'code patch result events are dispatched',
-    );
+    assert.dom('[data-test-ai-assistant-action-bar]').exists();
+    await click('[data-test-ai-assistant-action-bar] [data-test-cancel]');
+    assert.dom('[data-test-ai-assistant-action-bar]').doesNotExist();
   });
 
   test('previously applied code patches show the correct applied state', async function (assert) {
@@ -302,7 +442,7 @@ ${REPLACE_MARKER}
       codePath: `${testRealmURL}hello.txt`,
     });
     await click('[data-test-open-ai-assistant]');
-    await waitUntil(() => findAll('[data-test-apply-state]').length === 4);
+    await waitUntil(() => findAll('[data-test-apply-state]').length === 3);
     assert
       .dom('[data-test-apply-state="applied"]')
       .exists({ count: 1 }, 'one patch is applied');
@@ -365,7 +505,7 @@ ${REPLACE_MARKER}
 
     assert.dom('.code-block-diff').exists({ count: 3 });
     await click('[data-test-file-browser-toggle]'); // open file tree
-    await waitFor('[data-test-apply-all-code-patches-button]');
+    await waitFor('[data-test-ai-assistant-action-bar] [data-test-accept-all]');
 
     // file1.gts and file2.gts should not exist yet because we haven't applied the patches yet
     assert.dom('[data-test-file="file1.gts"]').doesNotExist();
@@ -379,7 +519,7 @@ ${REPLACE_MARKER}
     await waitFor('[data-test-file="file1.gts"]');
 
     // click the "Accept All" button, which will apply the remaining 2 patches (we already applied the first one)
-    await click('[data-test-apply-all-code-patches-button]');
+    await click('[data-test-ai-assistant-action-bar] [data-test-accept-all]');
     await waitFor('[data-test-file="file2.gts"]');
 
     // assert that file2 got created, but for hi.txt, it got a suffix because there already exists a file with the same name
