@@ -445,6 +445,10 @@ export default class SubmodeLayout extends Component<Signature> {
         margin-left: var(--operator-mode-spacing);
       }
 
+      .code-submode-layout .top-left-menu {
+        background-color: #74707d;
+      }
+
       .boxel-title {
         color: var(--boxel-light);
         font: 900 var(--boxel-font-size-med) 'Rustica';

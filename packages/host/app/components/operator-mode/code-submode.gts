@@ -905,6 +905,7 @@ export default class CodeSubmode extends Component<Signature> {
         padding-right: var(--operator-mode-spacing);
         display: flex;
         z-index: 1;
+        background-color: #74707d;
       }
       .code-mode-top-bar
         > :deep(* + *:not(.ember-basic-dropdown-content-wormhole-origin)) {
