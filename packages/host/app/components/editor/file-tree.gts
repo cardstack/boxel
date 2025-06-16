@@ -27,7 +27,7 @@ interface Signature {
     realmURL: URL;
     selectedFile?: LocalPath;
     openDirs?: LocalPath[];
-    onFileSelected?: (entryPath: LocalPath) => void;
+    onFileSelected?: (entryPath: LocalPath) => Promise<void>;
     onDirectorySelected?: (entryPath: LocalPath) => void;
     scrollPositionKey?: LocalPath;
     hideRealmInfo?: boolean;

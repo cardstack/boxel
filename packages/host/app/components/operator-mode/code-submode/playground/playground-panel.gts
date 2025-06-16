@@ -181,8 +181,8 @@ export default class PlaygroundPanel extends Component<Signature> {
         disabled: !cardId,
       }),
       new MenuItem('Open in Code Mode', 'action', {
-        action: () =>
-          this.operatorModeStateService.updateCodePath(
+        action: async () =>
+          await this.operatorModeStateService.updateCodePath(
             cardId ? new URL(cardId) : null,
           ),
         icon: IconCode,

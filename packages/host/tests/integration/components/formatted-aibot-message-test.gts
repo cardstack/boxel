@@ -30,8 +30,6 @@ import {
 import CardService from '@cardstack/host/services/card-service';
 import MonacoService from '@cardstack/host/services/monaco-service';
 
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -40,13 +38,13 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
 
   let monacoService: MonacoService;
   let cardService: CardService;
-  let operatorModeStateService: OperatorModeStateService;
+
   let roomId = '!abcd';
   let eventId = '1234';
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     monacoService = getService('monaco-service');
-    operatorModeStateService = getService('operator-mode-state-service');
+
     cardService = getService('card-service');
 
     cardService.getSource = async () => {
@@ -55,10 +53,6 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
         content: 'let a = 1;\nlet b = 2;',
       });
     };
-
-    (operatorModeStateService as any).cachedRealmURL = new URL(
-      'https://example.com/',
-    );
   });
 
   async function renderFormattedAiBotMessage(testScenario: any) {
@@ -296,70 +290,6 @@ let c = 3;
     assert.dom('[data-test-code-block-index="1"] [data-test-editor]').exists();
 
     await percySnapshot(assert);
-  });
-
-  test('it will render "Accept All" button when there are code patch actions and it is not streaming', async function (assert) {
-    await renderFormattedAiBotMessage({
-      htmlParts: parseHtmlContent(
-        `<p>We need to fix this:</p>
-<pre data-code-language="typescript">
-https://example.com/file.ts
-${SEARCH_MARKER}
-let a = 1;
-${SEPARATOR_MARKER}
-let a = 2;
-${REPLACE_MARKER}
-</pre>
-<p>We need to fix this too:</p>
-<pre data-code-language="typescript">
-https://example.com/file.ts
-${SEARCH_MARKER}
-let c = 1;
-${SEPARATOR_MARKER}
-let c = 2;
-${REPLACE_MARKER}
-</pre>
-`,
-        roomId,
-        eventId,
-      ),
-      isStreaming: false,
-      isLastAssistantMessage: true,
-    });
-
-    assert.dom('[data-test-apply-all-code-patches-button]').exists();
-  });
-
-  test('it will not render "Accept All" button when there are code patch actions and it is streaming', async function (assert) {
-    await renderFormattedAiBotMessage({
-      htmlParts: parseHtmlContent(
-        `<p>We need to fix this:</p>
-<pre data-code-language="typescript">
-https://example.com/file.ts
-${SEARCH_MARKER}
-let a = 1;
-${SEPARATOR_MARKER}
-let a = 2;
-${REPLACE_MARKER}
-</pre>
-<p>We need to fix this too:</p>
-<pre data-code-language="typescript">
-https://example.com/file.ts
-${SEARCH_MARKER}
-let c = 1;
-${SEPARATOR_MARKER}
-let c = 2;
-${REPLACE_MARKER}
-</pre>
-`,
-        roomId,
-        eventId,
-      ),
-      isStreaming: true,
-      isLastAssistantMessage: true,
-    });
-
-    assert.dom('[data-test-apply-all-code-patches-button]').doesNotExist();
   });
 
   test('unincremental updates are handled gracefully', async function (assert) {

@@ -17,6 +17,8 @@ import {
   type Format,
 } from 'https://cardstack.com/base/card-api';
 
+import OperatorModeStateService from './operator-mode-state-service';
+
 import type CardService from './card-service';
 import type StoreService from './store';
 
@@ -27,11 +29,13 @@ export interface PlaygroundSelection {
   /* fieldIndex `undefined` means we are previewing a card instances. fields MUST have a corresponding index
       based on their position on their spec's containedExamples field. otherwise, it means that we are previewing
       a spec instance on playground instead of the field. */
+  url?: string;
 }
 
 export default class PlaygroundPanelService extends Service {
   @service declare private cardService: CardService;
   @service declare private store: StoreService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   private playgroundSelections: Record<string, PlaygroundSelection>; // TrackedObject<moduleId, PlaygroundSelection>
   private selectionsForNewInstances = new Map<
     string,
@@ -39,6 +43,7 @@ export default class PlaygroundPanelService extends Service {
       moduleId: string;
       format: Format;
       fieldIndex: number | undefined;
+      url?: string;
     }
   >();
   constructor(owner: Owner) {
@@ -56,7 +61,14 @@ export default class PlaygroundPanelService extends Service {
     format: Format,
     fieldIndex: number | undefined,
   ) => {
-    this.playgroundSelections[moduleId] = { cardId, format, fieldIndex };
+    let url = this.operatorModeStateService.codePathString;
+
+    this.playgroundSelections[moduleId] = {
+      cardId,
+      format,
+      fieldIndex,
+      url,
+    };
     if (isLocalId(cardId)) {
       this.storeWhenIdAssignedTask.perform(
         moduleId,
@@ -103,6 +115,7 @@ export default class PlaygroundPanelService extends Service {
           moduleId,
           format,
           fieldIndex,
+          url: this.operatorModeStateService.codePathString,
         });
         api.subscribeToChanges(instance, this.listenForCardId);
       }

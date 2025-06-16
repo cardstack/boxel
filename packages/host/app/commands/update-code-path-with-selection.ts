@@ -29,7 +29,7 @@ export default class UpdateCodePathWithSelectionCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.UpdateCodePathWithSelectionInput,
   ): Promise<undefined> {
-    this.operatorModeStateService.updateCodePathWithSelection({
+    await this.operatorModeStateService.updateCodePathWithSelection({
       codeRef: input.codeRef,
       localName: input.localName,
       fieldName: input.fieldName,
