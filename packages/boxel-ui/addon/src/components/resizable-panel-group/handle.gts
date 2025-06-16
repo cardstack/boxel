@@ -25,7 +25,6 @@ type RegisterResizeHandleResult = {
 interface Signature {
   Args: {
     groupId: string;
-    hide?: boolean;
     orientation: Orientation;
     registerResizeHandle: (handle: Handle) => RegisterResizeHandleResult;
   };
@@ -50,10 +49,7 @@ export default class Handle extends Component<Signature> {
       ...attributes
     >
       <div
-        class='resize-handle
-          {{@orientation}}
-          {{if this.isHover "hover"}}
-          {{if @hide "hidden"}}'
+        class='resize-handle {{@orientation}} {{if this.isHover "hover"}}'
         aria-label='Resize handle'
         data-test-resize-handle
       />
@@ -110,10 +106,6 @@ export default class Handle extends Component<Signature> {
         background-color: var(
           --boxel-panel-resize-handle-hover-background-color
         );
-      }
-
-      .resize-handle.hidden {
-        visibility: hidden;
       }
     </style>
   </template>

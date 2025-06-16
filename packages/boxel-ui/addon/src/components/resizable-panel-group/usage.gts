@@ -26,7 +26,6 @@ export default class ResizablePanelUsage extends Component {
   @tracked horizontalPanel3MinSize = undefined;
   @tracked horizontalPanel3MaxSize = undefined;
   @tracked horizontalPanel3Collapsible = true;
-  // FIXME hidden is no longer applicable?
   @tracked horizontalPanel3IsHidden = false;
 
   @tracked verticalReverseCollapse = true;
