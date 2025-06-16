@@ -860,6 +860,7 @@ export default class CodeSubmode extends Component<Signature> {
         padding-top: var(--code-mode-padding-top);
         overflow: auto;
         flex: 1;
+        background-color: var(--boxel-dark);
       }
 
       .columns {
