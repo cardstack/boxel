@@ -82,7 +82,7 @@ let moveResizePanelHandle = async function ({
   orientation,
   moveDelta, // A negative indicates movement to the left in a horizontal orientation and upward in a vertical orientation."
   hitAreaMargin = 0,
-  moveWithSeparator = false, // Use the separator parent elemnt of the handle to move
+  moveWithSeparator = false, // Use the separator parent element of the handle to move
 }: {
   panelIndex: number;
   orientation: string;
