@@ -77,7 +77,11 @@ export default class FileTree extends Component<Signature> {
       {{#if (not @hideRealmInfo)}}
         <BoxelDropdown @matchTriggerWidth={{true}}>
           <:trigger as |bindings|>
-            <button class='realm-info' {{bindings}}>
+            <button
+              data-test-file-tree-realm-dropdown-button
+              class='realm-info'
+              {{bindings}}
+            >
               <RealmIcon @realmInfo={{realm.info}} />
               {{#let (concat 'In ' realm.info.name) as |realmTitle|}}
                 <Label
@@ -158,6 +162,8 @@ export default class FileTree extends Component<Signature> {
         color: #777;
         font: var(--boxel-font-size-xs);
         font-weight: 500;
+        overflow: hidden;
+        white-space: nowrap;
       }
       .realm-info-right {
         display: flex;
