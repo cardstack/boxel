@@ -63,7 +63,7 @@ export default class Handle extends Component<Signature> {
         display: flex;
         align-items: center;
         --boxel-panel-resize-handle-height: 100px;
-        --boxel-panel-resize-handle-width: 5px;
+        --boxel-panel-resize-handle-width: 4px;
         --boxel-panel-resize-handle-background-color: var(--boxel-450);
         --boxel-panel-resize-handle-hover-background-color: var(
           --boxel-highlight
@@ -76,7 +76,7 @@ export default class Handle extends Component<Signature> {
         display: flex;
         justify-content: center;
         --boxel-panel-resize-handle-width: 100px;
-        --boxel-panel-resize-handle-height: 5px;
+        --boxel-panel-resize-handle-height: 4px;
         --boxel-panel-resize-handle-background-color: var(--boxel-450);
         --boxel-panel-resize-handle-hover-background-color: var(
           --boxel-highlight
