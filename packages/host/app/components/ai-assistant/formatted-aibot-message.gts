@@ -19,6 +19,8 @@ import {
   CodeData,
 } from '@cardstack/host/lib/formatted-message/utils';
 
+import type MessageCodePatchResult from '@cardstack/host/lib/matrix-classes/message-code-patch-result';
+
 import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
 
 import {
@@ -29,8 +31,6 @@ import type CardService from '@cardstack/host/services/card-service';
 import CommandService from '@cardstack/host/services/command-service';
 import LoaderService from '@cardstack/host/services/loader-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
-
-import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import CodeBlock from './code-block';
 
@@ -156,11 +156,11 @@ interface HtmlGroupCodeBlockSignature {
   Element: HTMLDivElement;
   Args: {
     codeData: CodeData;
-    codePatchStatus: CodePatchStatus | 'ready' | 'applying';
     onPatchCode: (codeData: CodeData) => void;
     monacoSDK: MonacoSDK;
     isLastAssistantMessage: boolean;
     index: number;
+    codePatchResult: MessageCodePatchResult | undefined;
   };
 }
 
@@ -216,8 +216,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   private get isAppliedOrIgnoredCodePatch() {
     // Ignored means the user moved on to the next message
     return (
-      this.args.codePatchStatus === 'applied' ||
-      !this.args.isLastAssistantMessage
+      this.codePatchStatus === 'applied' || !this.args.isLastAssistantMessage
     );
   }
 
@@ -297,7 +296,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               <actions.applyCodePatch
                 @codeData={{@codeData}}
                 @performPatch={{fn @onPatchCode @codeData}}
-                @patchCodeStatus={{@codePatchStatus}}
+                @patchCodeStatus={{this.codePatchStatus}}
                 @originalCode={{this.codeDiffResource.originalCode}}
                 @modifiedCode={{this.codeDiffResource.modifiedCode}}
               />

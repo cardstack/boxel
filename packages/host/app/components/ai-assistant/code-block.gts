@@ -1,7 +1,7 @@
 import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { registerDestructor } from '@ember/destroyable';
-import { fn } from '@ember/helper';
-import { hash } from '@ember/helper';
+import { array, hash, fn } from '@ember/helper';
+
 import { on } from '@ember/modifier';
 
 import { service } from '@ember/service';
@@ -11,9 +11,22 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+
 import Modifier from 'ember-modifier';
 
-import { Copy as CopyIcon, IconCode } from '@cardstack/boxel-ui/icons';
+import {
+  Copy as CopyIcon,
+  IconCode,
+  ThreeDotsHorizontal,
+} from '@cardstack/boxel-ui/icons';
+
+import {
+  BoxelDropdown,
+  IconButton,
+  Menu,
+} from '@cardstack/boxel-ui/components';
+
+import { menuItem } from '@cardstack/boxel-ui/helpers';
 
 import {
   type CodeData,
@@ -31,17 +44,6 @@ import ApplyButton from '../ai-assistant/apply-button';
 
 import type { ComponentLike } from '@glint/template';
 import type * as _MonacoSDK from 'monaco-editor';
-
-import { menuItem } from '@cardstack/boxel-ui/helpers';
-
-import { ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
-
-import {
-  BoxelDropdown,
-  IconButton,
-  Menu,
-} from '@cardstack/boxel-ui/components';
-import { array } from '@ember/helper';
 
 interface CopyCodeButtonSignature {
   Args: {
@@ -522,7 +524,7 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
   }
 
   openInCodeMode = () => {
-    this.operatorModeStateService.updateCodePath(new URL(this.fileUrl));
+    this.operatorModeStateService.updateCodePath(new URL(this.fileUrl!));
   };
 
   <template>
@@ -647,6 +649,7 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
                 class='context-menu-trigger'
                 @icon={{ThreeDotsHorizontal}}
                 aria-label='field options'
+                {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
                 ...attributes
               />
             </button>

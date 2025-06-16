@@ -409,7 +409,21 @@ export default class CommandService extends Service {
     );
   }
 
-  private getCodePatchResult = (codeData: {
+  getCodePatchStatus = (codeData: {
+    roomId: string;
+    eventId: string;
+    codeBlockIndex: number;
+  }): CodePatchStatus | 'applying' | 'ready' => {
+    if (this.isCodeBlockApplying(codeData)) {
+      return 'applying';
+    }
+    if (this.isCodeBlockRecentlyApplied(codeData)) {
+      return 'applied';
+    }
+    return this.getCodePatchResult(codeData)?.status ?? 'ready';
+  };
+
+  getCodePatchResult = (codeData: {
     roomId: string;
     eventId: string;
     codeBlockIndex: number;

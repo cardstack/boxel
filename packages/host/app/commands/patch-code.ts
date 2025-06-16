@@ -20,7 +20,7 @@ interface FileInfo {
 
 export default class PatchCodeCommand extends HostBaseCommand<
   typeof BaseCommandModule.PatchCodeInput,
-  typeof BaseCommandModule.LintAndFixResult
+  typeof BaseCommandModule.PatchCodeCommandResult
 > {
   @service declare private cardService: CardService;
   @service declare private realm: RealmService;
@@ -34,10 +34,9 @@ export default class PatchCodeCommand extends HostBaseCommand<
     return PatchCodeInput;
   }
 
-  protected async run(input: BaseCommandModule.PatchCodeInput): Promise<{
-    lintResult: BaseCommandModule.LintAndFixResult;
-    finalFileUrl: string;
-  }> {
+  protected async run(
+    input: BaseCommandModule.PatchCodeInput,
+  ): Promise<BaseCommandModule.PatchCodeCommandResult> {
     let { fileUrl, codeBlocks } = input;
 
     let fileInfo = await this.getFileInfo(fileUrl);
@@ -57,7 +56,13 @@ export default class PatchCodeCommand extends HostBaseCommand<
       'bot-patch',
     );
 
-    return { lintResult, finalFileUrl };
+    let commandModule = await this.loadCommandModule();
+    const { PatchCodeCommandResult } = commandModule;
+
+    return new PatchCodeCommandResult({
+      patchedContent: lintResult.output,
+      finalFileUrl,
+    });
   }
 
   private async getFileInfo(fileUrl: string): Promise<FileInfo> {
