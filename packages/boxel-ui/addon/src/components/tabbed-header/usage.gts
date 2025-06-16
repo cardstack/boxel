@@ -4,8 +4,8 @@ import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import Icon from '../../icons/sparkle.gts';
-import TabbedHeader from './index.gts';
 import BoxelInput from '../input/index.gts';
+import TabbedHeader from './index.gts';
 
 export default class TabbedHeaderUsage extends Component {
   @tracked tabs = [
