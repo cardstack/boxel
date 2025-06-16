@@ -15,18 +15,18 @@ import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 
 import {
-  Copy as CopyIcon,
-  IconCode,
-  ThreeDotsHorizontal,
-} from '@cardstack/boxel-ui/icons';
-
-import {
   BoxelDropdown,
   IconButton,
   Menu,
 } from '@cardstack/boxel-ui/components';
 
 import { menuItem } from '@cardstack/boxel-ui/helpers';
+
+import {
+  Copy as CopyIcon,
+  IconCode,
+  ThreeDotsHorizontal,
+} from '@cardstack/boxel-ui/icons';
 
 import {
   type CodeData,
@@ -642,9 +642,16 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
         </div>
         <BoxelDropdown @contentClass=''>
           <:trigger as |bindings|>
-            <button class='file-info' data-test-file-name {{bindings}}>
+            <button
+              class='file-info'
+              data-code-patch-dropdown-button={{this.fileName}}
+              {{bindings}}
+            >
 
-              <span class='filename'>{{this.fileName}}</span>
+              <span
+                class='filename'
+                data-test-file-name
+              >{{this.fileName}}</span>
               <IconButton
                 class='context-menu-trigger'
                 @icon={{ThreeDotsHorizontal}}
