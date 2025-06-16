@@ -1,5 +1,7 @@
 import { service } from '@ember/service';
 
+import { isCardInstance } from '@cardstack/runtime-common';
+
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
@@ -30,10 +32,17 @@ export default class ReadCardForAssistantCommand extends HostBaseCommand<
     let { matrixService } = this;
 
     await matrixService.ready;
-    let card = await this.store.get<CardDef>(input.cardId);
-    let cardFileDef = (await matrixService.uploadCards([card]))[0] as FileDef;
-    let commandModule = await this.loadCommandModule();
-    const { CardForAttachmentCard } = commandModule;
-    return new CardForAttachmentCard({ cardForAttachment: cardFileDef });
+    let maybeCard = await this.store.get<CardDef>(input.cardId);
+    if (isCardInstance(maybeCard)) {
+      let cardFileDef = (
+        await matrixService.uploadCards([maybeCard])
+      )[0] as FileDef;
+      let commandModule = await this.loadCommandModule();
+      const { CardForAttachmentCard } = commandModule;
+      return new CardForAttachmentCard({ cardForAttachment: cardFileDef });
+    } else {
+      console.error(`Failed to read card for AI assistant: ${maybeCard}`);
+      throw new Error(maybeCard.message);
+    }
   }
 }

@@ -4,6 +4,8 @@ import { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common';
+
 import ReadCardForAiAssistantCommand from '@cardstack/host/commands/read-card-for-ai-assistant';
 
 import RealmService from '@cardstack/host/services/realm';
@@ -17,7 +19,6 @@ import {
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
-import { SupportedMimeType } from '@cardstack/runtime-common';
 
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {

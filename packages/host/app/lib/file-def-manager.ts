@@ -341,7 +341,10 @@ export default class FileDefManagerImpl implements FileDefManager {
   async downloadCardFileDef(
     serializedFile: SerializedFile,
   ): Promise<LooseSingleCardDocument> {
-    if (!serializedFile?.contentType?.includes('text/')) {
+    if (
+      !serializedFile?.contentType?.includes('text/') &&
+      !serializedFile.contentType?.includes('application/vnd.card+json')
+    ) {
       throw new Error(`Unsupported file type: ${serializedFile.contentType}`);
     }
 

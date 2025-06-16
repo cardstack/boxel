@@ -272,7 +272,10 @@ export async function downloadFile(
   client: MatrixClient,
   attachedFile: SerializedFileDef,
 ): Promise<string> {
-  if (!attachedFile?.contentType?.includes('text/')) {
+  if (
+    !attachedFile?.contentType?.includes('text/') &&
+    !attachedFile.contentType?.includes('application/vnd.card+json')
+  ) {
     throw new Error(
       `Unsupported file type: ${attachedFile.contentType}. For now, only text files are supported.`,
     );

@@ -822,7 +822,7 @@ export const buildAttachmentsMessagePart = async (
   }
   let attachedFiles = await getAttachedFiles(client, matrixEvent, history);
   if (attachedFiles.length > 0) {
-    result += `Attached Files:\n${attachedFilesToMessage(attachedFiles)}\n`;
+    result += `Attached Files (files with newer versions don't show their content):\n${attachedFilesToMessage(attachedFiles)}\n`;
   }
   return result;
 };

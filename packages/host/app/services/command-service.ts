@@ -17,7 +17,6 @@ import {
   delay,
   getClass,
   identifyCard,
-  isCardInstance,
   type PatchData,
 } from '@cardstack/runtime-common';
 
@@ -27,7 +26,6 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import { FileDef } from 'https://cardstack.com/base/file-api';
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import { shortenUuid } from '../utils/uuid';

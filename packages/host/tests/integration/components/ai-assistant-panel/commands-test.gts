@@ -1,4 +1,4 @@
-import { find, waitFor, waitUntil, click, fillIn } from '@ember/test-helpers';
+import { waitFor, click, fillIn } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
@@ -571,17 +571,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         realmUrl: 'http://test-realm/test/',
       },
       'command result event contains the context',
-    );
-    assert.deepEqual(
-      JSON.parse(commandResultEvents[0].content.data).attachedCards[0].name,
-      'Evie',
-      'command result event contains cards whose ID was reference in the input of the command as attached cards 1',
-    );
-    assert.deepEqual(
-      JSON.parse(commandResultEvents[0].content.data).attachedCards[0]
-        .sourceUrl,
-      'http://test-realm/test/Person/fadhlan',
-      'command result event contains cards whose ID was reference in the input of the command as attached cards 2',
     );
   });
 
