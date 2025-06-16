@@ -32,24 +32,24 @@ interface Signature {
   Blocks: {
     default: [];
   };
-  Element: HTMLDivElement;
+  Element: HTMLButtonElement;
 }
 
 let manageHandleRegistration = modifier((element, [handle]: [Handle]) => {
-  handle.element = element as HTMLDivElement;
+  handle.element = element as HTMLButtonElement;
   handle.registerHandle();
 });
 
 export default class Handle extends Component<Signature> {
   <template>
-    <div
-      class='separator-{{@orientation}}'
+    <button
+      class='separator separator-{{@orientation}}'
       data-boxel-panel-group-id={{@groupId}}
       data-boxel-panel-resize-handle-id={{this.id}}
       {{manageHandleRegistration this}}
       ...attributes
     >
-      <button
+      <div
         class='resize-handle
           {{@orientation}}
           {{if this.isHover "hover"}}
@@ -57,33 +57,34 @@ export default class Handle extends Component<Signature> {
         aria-label='Resize handle'
         data-test-resize-handle
       />
-    </div>
+    </button>
     <style scoped>
-      .separator-horizontal {
-        display: flex;
-        align-items: center;
-        --boxel-panel-resize-handle-height: 100px;
-        --boxel-panel-resize-handle-width: 4px;
+      .separator {
         --boxel-panel-resize-handle-background-color: var(--boxel-450);
         --boxel-panel-resize-handle-hover-background-color: var(
           --boxel-highlight
         );
 
+        display: flex;
+
+        background: transparent;
+        border: none;
         padding: 2px;
+      }
+
+      .separator-horizontal {
+        --boxel-panel-resize-handle-height: 100px;
+        --boxel-panel-resize-handle-width: 4px;
+
+        align-items: center;
         cursor: col-resize;
       }
 
       .separator-vertical {
-        display: flex;
-        justify-content: center;
         --boxel-panel-resize-handle-width: 100px;
         --boxel-panel-resize-handle-height: 4px;
-        --boxel-panel-resize-handle-background-color: var(--boxel-450);
-        --boxel-panel-resize-handle-hover-background-color: var(
-          --boxel-highlight
-        );
 
-        padding: 2px;
+        justify-content: center;
         cursor: row-resize;
       }
 
@@ -100,9 +101,7 @@ export default class Handle extends Component<Signature> {
         opacity: 0;
       }
 
-      .separator-horizontal:hover .resize-handle,
-      .separator-vertical:hover .resize-handle,
-      .resize-handle.hover {
+      .separator:hover .resize-handle {
         opacity: 1;
       }
 
@@ -119,7 +118,7 @@ export default class Handle extends Component<Signature> {
     </style>
   </template>
 
-  element!: HTMLDivElement;
+  element!: HTMLButtonElement;
   private _id = guidFor(this);
 
   @tracked private state: ResizeHandleState = 'inactive';
