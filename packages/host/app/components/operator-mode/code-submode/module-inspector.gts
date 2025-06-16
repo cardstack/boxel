@@ -537,6 +537,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs);
         border-bottom: var(--boxel-border);
+        background-color: var(--code-mode-top-bar-background-color);
       }
 
       .module-inspector-content {

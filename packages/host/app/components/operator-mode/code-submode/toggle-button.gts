@@ -29,6 +29,7 @@ const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
       --boxel-button-letter-spacing: var(--boxel-lsp-xs);
       --boxel-button-min-width: 4rem;
       --boxel-button-padding: 0;
+      --boxel-button-color: var(--boxel-light);
       border-radius: var(--boxel-border-radius);
       flex: 1;
     }
@@ -37,6 +38,7 @@ const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
     }
     .toggle-button.active {
       border-color: var(--boxel-dark);
+      --boxel-button-color: var(--boxel-dark);
       --boxel-button-text-color: var(--boxel-highlight);
     }
   </style>

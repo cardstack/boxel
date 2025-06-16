@@ -121,6 +121,7 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs);
         border-bottom: var(--boxel-border);
+        background-color: var(--code-mode-top-bar-background-color);
       }
       .file-browser .content {
         background-color: var(--boxel-light);
