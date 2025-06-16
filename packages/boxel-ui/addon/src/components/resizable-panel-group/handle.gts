@@ -69,7 +69,7 @@ export default class Handle extends Component<Signature> {
           --boxel-highlight
         );
 
-        padding: var(--boxel-sp-xxxs);
+        padding: 2px;
       }
 
       .separator-vertical {
@@ -82,7 +82,7 @@ export default class Handle extends Component<Signature> {
           --boxel-highlight
         );
 
-        padding: var(--boxel-sp-xxxs);
+        padding: 2px;
       }
 
       .resize-handle {
