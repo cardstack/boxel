@@ -10,6 +10,7 @@ export default async function visitOperatorMode({
   codePath,
   fileView,
   openDirs,
+  moduleInspector,
 }: Partial<SerializedState>) {
   let operatorModeState = {
     stacks: stacks || [],
@@ -17,6 +18,7 @@ export default async function visitOperatorMode({
     ...(codePath ? { codePath } : {}),
     ...(fileView ? { fileView } : {}),
     ...(openDirs ? { openDirs } : {}),
+    ...(moduleInspector ? { moduleInspector } : {}),
   };
 
   let operatorModeStateParam = stringify(operatorModeState)!;
