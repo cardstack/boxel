@@ -16,7 +16,7 @@ import get from 'lodash/get';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import { Tooltip } from '@cardstack/boxel-ui/components';
-import { cn, eq, lt, gt, and } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, gte } from '@cardstack/boxel-ui/helpers';
 import { Download } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -706,10 +706,8 @@ export default class InteractSubmode extends Component {
                 data-test-operator-mode-stack={{stackIndex}}
                 class={{cn
                   stack-with-bg-image=backgroundImageURLSpecificToThisStack
-                  stack-medium-padding-top=(and
-                    (gt stack.length 1) (lt stack.length 3)
-                  )
-                  stack-small-padding-top=(gt stack.length 2)
+                  stack-medium-padding-top=(eq stack.length 2)
+                  stack-small-padding-top=(gte stack.length 3)
                 }}
                 style={{if
                   backgroundImageURLSpecificToThisStack
