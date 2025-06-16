@@ -43,6 +43,7 @@ export default class Handle extends Component<Signature> {
   <template>
     <button
       class='separator separator-{{@orientation}}'
+      aria-label='Resize handle'
       data-boxel-panel-group-id={{@groupId}}
       data-boxel-panel-resize-handle-id={{this.id}}
       {{manageHandleRegistration this}}
@@ -50,7 +51,6 @@ export default class Handle extends Component<Signature> {
     >
       <div
         class='resize-handle {{@orientation}} {{if this.isHover "hover"}}'
-        aria-label='Resize handle'
         data-test-resize-handle
       />
     </button>
