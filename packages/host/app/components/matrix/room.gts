@@ -166,6 +166,7 @@ export default class Room extends Component<Signature> {
                 @acceptAll={{perform this.executeAllReadyActionsTask}}
                 @cancel={{this.cancelActionBar}}
                 @acceptingAll={{this.executeAllReadyActionsTask.isRunning}}
+                @generatingResults={{this.generatingResults}}
               />
             {{/if}}
             <div class='chat-input-area' data-test-chat-input-area>
@@ -950,20 +951,28 @@ export default class Room extends Component<Signature> {
     return result;
   }
 
+  private get generatingResults() {
+    return (
+      this.messages[this.messages.length - 1] &&
+      !this.messages[this.messages.length - 1].isStreamingFinished
+    );
+  }
+
   @cached
   private get displayActionBar() {
-    if (this.executeAllReadyActionsTask.isRunning) {
-      return true;
-    }
     let lastMessage = this.messages[this.messages.length - 1];
     if (
-      (this.lastCanceledActionMessageId &&
-        lastMessage?.eventId === this.lastCanceledActionMessageId) ||
-      !lastMessage?.isStreamingOfEventFinished
+      this.lastCanceledActionMessageId &&
+      lastMessage?.eventId === this.lastCanceledActionMessageId
     ) {
       return false;
     }
-    return this.readyCommands.length > 0 || this.readyCodePatches.length > 0;
+    return (
+      this.generatingResults ||
+      this.readyCommands.length > 0 ||
+      this.readyCodePatches.length > 0 ||
+      this.executeAllReadyActionsTask.isRunning
+    );
   }
 
   private async executeReadyCommands() {
