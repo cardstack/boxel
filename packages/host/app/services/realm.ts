@@ -51,6 +51,7 @@ const log = logger('service:realm');
 export type EnhancedRealmInfo = RealmInfo & {
   isIndexing: boolean;
   isPublic: boolean;
+  url: string;
 };
 
 type AuthStatus =

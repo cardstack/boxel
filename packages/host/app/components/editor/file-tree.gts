@@ -1,14 +1,21 @@
 import { concat } from '@ember/helper';
 import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
+
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
 
-import { Label, RealmIcon, Tooltip } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import {
+  Label,
+  RealmIcon,
+  Tooltip,
+  BoxelDropdown,
+  Menu as BoxelMenu,
+} from '@cardstack/boxel-ui/components';
+import { not, MenuItem } from '@cardstack/boxel-ui/helpers';
 import {
   IconPencilNotCrossedOut,
   IconPencilCrossedOut,
@@ -16,7 +23,10 @@ import {
 
 import { type LocalPath } from '@cardstack/runtime-common';
 
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
 import RealmService from '@cardstack/host/services/realm';
+import { type EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
 import WithLoadedRealm from '../with-loaded-realm';
 
@@ -35,51 +45,80 @@ interface Signature {
 }
 
 export default class FileTree extends Component<Signature> {
+  get allRealms() {
+    const options = Object.entries(this.realm.allRealmsInfo).map((realm) => {
+      const [, realmInfo] = realm;
+      return new MenuItem(realmInfo.info.name, 'action', {
+        iconURL: realmInfo.info.iconURL ?? '/default-realm-icon.png',
+        action: () => this.switchRealm(realmInfo.info),
+      });
+    });
+    return options;
+  }
+
+  switchRealm(realmInfo: EnhancedRealmInfo) {
+    this.operatorModeStateService.updateCodePath(
+      new URL('./index.json', realmInfo.url),
+    );
+  }
+
   <template>
     <WithLoadedRealm @realmURL={{@realmURL.href}} as |realm|>
       {{#if (not @hideRealmInfo)}}
-        <div class='realm-info'>
-          <RealmIcon @realmInfo={{realm.info}} />
-          {{#let (concat 'In ' realm.info.name) as |realmTitle|}}
-            <Label
-              @ellipsize={{true}}
-              title={{realmTitle}}
-              data-test-realm-name={{realm.info.name}}
-            >
-              {{realmTitle}}
-            </Label>
-          {{/let}}
+        <BoxelDropdown>
+          <:trigger as |bindings|>
+            <button class='realm-info' {{bindings}}>
+              <RealmIcon @realmInfo={{realm.info}} />
+              {{#let (concat 'In ' realm.info.name) as |realmTitle|}}
+                <Label
+                  @ellipsize={{true}}
+                  title={{realmTitle}}
+                  data-test-realm-name={{realm.info.name}}
+                >
+                  {{realmTitle}}
+                </Label>
+              {{/let}}
 
-          {{#if realm.canWrite}}
-            <Tooltip @placement='top' class='editability-icon'>
-              <:trigger>
-                <IconPencilNotCrossedOut
-                  width='18px'
-                  height='18px'
-                  aria-label='Can edit files in this workspace'
-                  data-test-realm-writable
-                />
-              </:trigger>
-              <:content>
-                Can edit files in this workspace
-              </:content>
-            </Tooltip>
-          {{else}}
-            <Tooltip @placement='top' class='editability-icon'>
-              <:trigger>
-                <IconPencilCrossedOut
-                  width='18px'
-                  height='18px'
-                  aria-label='Cannot edit files in this workspace'
-                  data-test-realm-not-writable
-                />
-              </:trigger>
-              <:content>
-                Cannot edit files in this workspace
-              </:content>
-            </Tooltip>
-          {{/if}}
-        </div>
+              {{#if realm.canWrite}}
+                <Tooltip @placement='top' class='editability-icon'>
+                  <:trigger>
+                    <IconPencilNotCrossedOut
+                      width='18px'
+                      height='18px'
+                      aria-label='Can edit files in this workspace'
+                      data-test-realm-writable
+                    />
+                  </:trigger>
+                  <:content>
+                    Can edit files in this workspace
+                  </:content>
+                </Tooltip>
+              {{else}}
+                <Tooltip @placement='top' class='editability-icon'>
+                  <:trigger>
+                    <IconPencilCrossedOut
+                      width='18px'
+                      height='18px'
+                      aria-label='Cannot edit files in this workspace'
+                      data-test-realm-not-writable
+                    />
+                  </:trigger>
+                  <:content>
+                    Cannot edit files in this workspace
+                  </:content>
+                </Tooltip>
+              {{/if}}
+            </button>
+          </:trigger>
+          <:content as |dd|>
+            <BoxelMenu
+              class='realm-dropdown-menu'
+              @closeMenu={{dd.close}}
+              @items={{this.allRealms}}
+              data-test-file-tree-realm-dropdown
+            />
+          </:content>
+        </BoxelDropdown>
       {{/if}}
       <nav>
         <Directory
@@ -110,6 +149,10 @@ export default class FileTree extends Component<Signature> {
         position: relative;
       }
       .realm-info {
+        border: 0;
+        width: calc(100% + var(--boxel-sp-xs) * 2);
+        text-align: inherit;
+
         position: sticky;
         top: calc(var(--boxel-sp-xs) * -1);
         left: calc(var(--boxel-sp-xs) * -1);
@@ -125,6 +168,13 @@ export default class FileTree extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-xxxs);
       }
+      .realm-dropdown-menu {
+        --boxel-menu-item-content-padding: var(--boxel-sp-xs);
+        --boxel-menu-item-gap: var(--boxel-sp-xs);
+        min-width: calc(100% + var(--boxel-sp-xl));
+        max-height: 13rem;
+        overflow-y: scroll;
+      }
       .editability-icon {
         display: flex;
       }
@@ -133,6 +183,7 @@ export default class FileTree extends Component<Signature> {
 
   @service private declare router: RouterService;
   @service private declare realm: RealmService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
 
   @tracked private showMask = true;
 
