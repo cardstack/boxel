@@ -165,7 +165,7 @@ export default class Handle extends Component<Signature> {
 
     registerResizeHandle(
       this.id,
-      this.element.children[0]! as HTMLElement,
+      this.element,
       this.args.orientation,
       {
         coarse: 15,
