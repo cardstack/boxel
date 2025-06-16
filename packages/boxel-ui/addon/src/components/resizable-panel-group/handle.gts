@@ -70,6 +70,7 @@ export default class Handle extends Component<Signature> {
         );
 
         padding: 2px;
+        cursor: col-resize;
       }
 
       .separator-vertical {
@@ -83,6 +84,7 @@ export default class Handle extends Component<Signature> {
         );
 
         padding: 2px;
+        cursor: row-resize;
       }
 
       .resize-handle {
@@ -109,14 +111,6 @@ export default class Handle extends Component<Signature> {
         background-color: var(
           --boxel-panel-resize-handle-hover-background-color
         );
-      }
-
-      .resize-handle.horizontal {
-        cursor: col-resize;
-      }
-
-      .resize-handle.vertical {
-        cursor: row-resize;
       }
 
       .resize-handle.hidden {
