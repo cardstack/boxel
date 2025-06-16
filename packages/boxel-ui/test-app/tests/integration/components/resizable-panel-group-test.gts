@@ -7,7 +7,7 @@ import { not } from '@cardstack/boxel-ui/helpers';
 import { tracked } from '@glimmer/tracking';
 import { triggerEvent } from '@ember/test-helpers';
 
-const RESIZE_HANDLE_WIDTH = 15.126;
+const RESIZE_HANDLE_WIDTH = 8;
 const PANEL_INDEX_1_MIN_SIZE = 15;
 
 class PanelProperties {
