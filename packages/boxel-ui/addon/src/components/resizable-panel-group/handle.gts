@@ -95,6 +95,13 @@ export default class Handle extends Component<Signature> {
         background-color: var(--boxel-panel-resize-handle-background-color);
 
         position: relative;
+        opacity: 0;
+      }
+
+      .separator-horizontal:hover .resize-handle,
+      .separator-vertical:hover .resize-handle,
+      .resize-handle.hover {
+        opacity: 1;
       }
 
       .resize-handle:hover,
