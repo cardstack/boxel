@@ -642,12 +642,6 @@ export default class CodeSubmode extends Component<Signature> {
   <template>
     {{consumeContext this.makeCardResource}}
     <AttachFileModal />
-    {{#let (this.realm.info this.realmURL.href) as |realmInfo|}}
-      <div
-        class='code-mode-background'
-        style={{this.backgroundURLStyle realmInfo.backgroundURL}}
-      ></div>
-    {{/let}}
     <SubmodeLayout
       class='code-submode-layout'
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
@@ -866,17 +860,6 @@ export default class CodeSubmode extends Component<Signature> {
         padding-top: var(--code-mode-padding-top);
         overflow: auto;
         flex: 1;
-      }
-
-      .code-mode-background {
-        position: fixed;
-        left: 0;
-        right: 0;
-        display: block;
-        width: 100%;
-        height: 100%;
-        filter: blur(15px);
-        background-size: cover;
       }
 
       .columns {
