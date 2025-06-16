@@ -118,6 +118,13 @@ export default class RecentFilesService extends Service {
     return existingIndex > -1 ? this.recentFiles[existingIndex] : undefined;
   }
 
+  findRecentFileByRealmURL(url: string) {
+    return this.recentFiles.find((recentFile) => {
+      const realmUrl = new RealmPaths(new URL(url)).url;
+      return realmUrl === recentFile.realmURL.href;
+    });
+  }
+
   updateCursorPositionByURL(
     urlString: string,
     cursorPosition?: CursorPosition,

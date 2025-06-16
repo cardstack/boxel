@@ -27,6 +27,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import RealmService from '@cardstack/host/services/realm';
 import { type EnhancedRealmInfo } from '@cardstack/host/services/realm';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import WithLoadedRealm from '../with-loaded-realm';
 
@@ -57,9 +58,20 @@ export default class FileTree extends Component<Signature> {
   }
 
   switchRealm(realmInfo: EnhancedRealmInfo) {
-    this.operatorModeStateService.updateCodePath(
-      new URL('./index.json', realmInfo.url),
-    );
+    if (realmInfo.url) {
+      const recentFile = this.recentFilesService.findRecentFileByRealmURL(
+        realmInfo.url,
+      );
+      if (recentFile) {
+        this.operatorModeStateService.updateCodePath(
+          new URL(`${realmInfo.url}${recentFile.filePath}`),
+        );
+        return;
+      }
+      this.operatorModeStateService.updateCodePath(
+        new URL('./index.json', realmInfo.url),
+      );
+    }
   }
 
   <template>
@@ -184,6 +196,7 @@ export default class FileTree extends Component<Signature> {
   @service private declare router: RouterService;
   @service private declare realm: RealmService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare recentFilesService: RecentFilesService;
 
   @tracked private showMask = true;
 
