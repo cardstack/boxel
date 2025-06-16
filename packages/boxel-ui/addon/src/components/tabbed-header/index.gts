@@ -20,6 +20,7 @@ interface Signature {
   Blocks: {
     default: [];
     headerIcon: [];
+    searchInput: [];
   };
   Element: HTMLElement;
 }
@@ -41,23 +42,32 @@ export default class TabbedHeader extends Component<Signature> {
         {{/if}}
         <h1 class='app-title'>{{@headerTitle}}</h1>
       </div>
-      <nav class='app-nav'>
-        <ul class='app-tab-list'>
-          {{#each @tabs as |tab|}}
-            <li>
-              <a
-                href='#{{tab.tabId}}'
-                {{on 'click' (fn @setActiveTab tab.tabId)}}
-                class={{if (eq @activeTabId tab.tabId) 'active'}}
-                data-tab-label={{tab.displayName}}
-                {{! do not remove data-tab-label attribute }}
-              >
-                {{tab.displayName}}
-              </a>
-            </li>
-          {{/each}}
-        </ul>
-      </nav>
+
+      <div class='app-content'>
+        <nav class='app-nav'>
+          <ul class='app-tab-list'>
+            {{#each @tabs as |tab|}}
+              <li>
+                <a
+                  href='#{{tab.tabId}}'
+                  {{on 'click' (fn @setActiveTab tab.tabId)}}
+                  class={{if (eq @activeTabId tab.tabId) 'active'}}
+                  data-tab-label={{tab.displayName}}
+                  {{! do not remove data-tab-label attribute }}
+                >
+                  {{tab.displayName}}
+                </a>
+              </li>
+            {{/each}}
+          </ul>
+        </nav>
+
+        <div class='app-search'>
+          {{#if (has-block 'searchInput')}}
+            {{yield to='searchInput'}}
+          {{/if}}
+        </div>
+      </div>
     </header>
     <style scoped>
       .app-header {
@@ -77,9 +87,17 @@ export default class TabbedHeader extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xl);
         text-transform: uppercase;
       }
+      .app-content {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: var(--boxel-sp-lg);
+      }
       .app-nav {
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-sm);
+        flex: 1;
       }
       .app-tab-list {
         list-style-type: none;
@@ -115,6 +133,9 @@ export default class TabbedHeader extends Component<Signature> {
         user-select: none;
         pointer-events: none;
         font-weight: 600;
+      }
+      .app-search {
+        margin: var(--boxel-sp-xs) 0;
       }
     </style>
   </template>
