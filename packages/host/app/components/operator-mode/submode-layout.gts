@@ -446,7 +446,7 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .code-submode-layout .top-left-menu {
-        background-color: #74707d;
+        background-color: var(--code-mode-top-bar-background-color);
       }
 
       .boxel-title {

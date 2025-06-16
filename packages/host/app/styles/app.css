@@ -13,6 +13,8 @@
   --host-search-sheet-z-index: 300;
 
   --host-workspace-chooser-z-index: 200;
+
+  --code-mode-top-bar-background: #74707d;
 }
 
 .error {
