@@ -114,7 +114,6 @@ const CodeSubmodeInnerContainer: TemplateOnlyComponent<Signature> = <template>
       display: flex;
       flex-direction: column;
       background-color: var(--boxel-light);
-      border-radius: var(--boxel-border-radius-xl);
       overflow: hidden;
     }
   </style>
