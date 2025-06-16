@@ -563,6 +563,7 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
         width: fit-content;
         max-width: 100%;
         min-width: 0;
+        margin-right: var(--boxel-sp-xs);
       }
 
       .file-info:hover {
