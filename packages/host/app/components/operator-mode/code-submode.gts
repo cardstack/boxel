@@ -861,6 +861,7 @@ export default class CodeSubmode extends Component<Signature> {
         overflow: auto;
         flex: 1;
         background-color: var(--boxel-dark);
+        border-top: 1px solid var(--boxel-dark);
       }
 
       .columns {
