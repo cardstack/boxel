@@ -60,6 +60,7 @@ export default class ResizablePanelUsage extends Component {
           }}
           as |ResizablePanel ResizeHandle|
         >
+          {{! FIXME panels probably need a background as handles are invisible until gutter hover}}
           <ResizablePanel
             @defaultSize={{this.horizontalPanel1DefaultSize}}
             @minSize={{this.horizontalPanel1MinSize}}
