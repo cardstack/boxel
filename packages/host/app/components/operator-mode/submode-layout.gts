@@ -146,13 +146,13 @@ export default class SubmodeLayout extends Component<Signature> {
     return this.operatorModeStateService.state.stacks.length === 0;
   }
 
-  @action private updateSubmode(submode: Submode) {
+  @action private async updateSubmode(submode: Submode) {
     switch (submode) {
       case Submodes.Interact:
-        this.operatorModeStateService.updateCodePath(null);
+        await this.operatorModeStateService.updateCodePath(null);
         break;
       case Submodes.Code:
-        this.operatorModeStateService.updateCodePath(
+        await this.operatorModeStateService.updateCodePath(
           this.lastCardIdInRightMostStack
             ? new URL(this.lastCardIdInRightMostStack + '.json')
             : null,

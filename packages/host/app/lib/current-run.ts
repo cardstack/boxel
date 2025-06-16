@@ -641,71 +641,81 @@ export class CurrentRun {
         }
       }
     }
-    if (searchData && doc && typesMaybeError?.type === 'types') {
-      await this.updateEntry(instanceURL, {
-        type: 'instance',
-        source,
-        resource: doc.data,
-        searchData,
-        isolatedHtml,
-        atomHtml,
-        embeddedHtml,
-        fittedHtml,
-        iconHTML,
-        lastModified,
-        resourceCreatedAt,
-        types: typesMaybeError.types.map(({ refURL }) => refURL),
-        displayNames: typesMaybeError.types.map(
-          ({ displayName }) => displayName,
-        ),
-        deps: new Set([
-          ...moduleDeps,
-          ...(
-            await Promise.all(
-              moduleDeps.map((moduleDep) =>
-                this.loaderService.loader.getConsumedModules(moduleDep),
-              ),
-            )
-          ).flat(),
-        ]),
-      });
-    } else if (uncaughtError || typesMaybeError?.type === 'error') {
-      let error: ErrorEntry;
-      identityContext.errors.add(instanceURL.href);
-      if (uncaughtError) {
-        error = {
-          type: 'error',
+
+    try {
+      if (uncaughtError || typesMaybeError?.type === 'error') {
+        let error: ErrorEntry | undefined;
+        identityContext.errors.add(instanceURL.href);
+        if (uncaughtError) {
+          error = {
+            type: 'error',
+            searchData,
+            types:
+              typesMaybeError?.type != 'error'
+                ? typesMaybeError?.types.map(({ refURL }) => refURL)
+                : undefined,
+            error:
+              uncaughtError instanceof CardError
+                ? serializableError(uncaughtError)
+                : { message: `${uncaughtError.message}` },
+          };
+          error.error.deps = [
+            ...new Set([
+              ...moduleDeps,
+              ...(uncaughtError instanceof CardError
+                ? (uncaughtError.deps ?? [])
+                : []),
+            ]),
+          ];
+        } else if (typesMaybeError?.type === 'error') {
+          error = { type: 'error', error: typesMaybeError.error };
+        } else {
+          log.error(
+            `${jobIdentity(this.#jobInfo)} bug: should never get here when indexing instance ${path} and handling an error`,
+          );
+          return;
+        }
+        log.warn(
+          `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${error?.error.message}`,
+        );
+        await this.updateEntry(instanceURL, error);
+      } else if (searchData && doc && typesMaybeError?.type === 'types') {
+        await this.updateEntry(instanceURL, {
+          type: 'instance',
+          source,
+          resource: doc.data,
           searchData,
-          types:
-            typesMaybeError?.type != 'error'
-              ? typesMaybeError?.types.map(({ refURL }) => refURL)
-              : undefined,
-          error:
-            uncaughtError instanceof CardError
-              ? serializableError(uncaughtError)
-              : { message: `${uncaughtError.message}` },
-        };
-        error.error.deps = [
-          ...new Set([
+          isolatedHtml,
+          atomHtml,
+          embeddedHtml,
+          fittedHtml,
+          iconHTML,
+          lastModified,
+          resourceCreatedAt,
+          types: typesMaybeError.types.map(({ refURL }) => refURL),
+          displayNames: typesMaybeError.types.map(
+            ({ displayName }) => displayName,
+          ),
+          deps: new Set([
             ...moduleDeps,
-            ...(uncaughtError instanceof CardError
-              ? (uncaughtError.deps ?? [])
-              : []),
+            ...(
+              await Promise.all(
+                moduleDeps.map((moduleDep) =>
+                  this.loaderService.loader.getConsumedModules(moduleDep),
+                ),
+              )
+            ).flat(),
           ]),
-        ];
-      } else if (typesMaybeError?.type === 'error') {
-        error = { type: 'error', error: typesMaybeError.error };
+        });
       } else {
-        let err = new Error(`bug: should never get here`);
-        deferred.reject(err);
-        throw err;
+        log.error(
+          `${jobIdentity(this.#jobInfo)} bug: should never get here when indexing instance ${path} no entry nor error doc could be generated`,
+        );
+        return;
       }
-      log.warn(
-        `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${error.error.message}`,
-      );
-      await this.updateEntry(instanceURL, error);
+    } finally {
+      deferred.fulfill();
     }
-    deferred.fulfill();
   }
 
   private async renderCard(args: RenderCardParams) {

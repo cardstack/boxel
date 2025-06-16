@@ -60,11 +60,14 @@ export default class AiAssistantCardPickerUsage extends Component {
           @removeCard={{this.removeCard}}
           @chooseFile={{this.chooseFile}}
           @removeFile={{this.removeFile}}
-          @maxNumberOfItemsToAttach={{this.maxNumberOfCards}}
           @autoAttachedFile={{this.autoAttachedFile}}
           @filesToAttach={{this.filesToAttach}}
           @submode='interact'
-        />
+          as |AttachedItems AttachButton|
+        >
+          <AttachedItems />
+          <AttachButton />
+        </AiAssistantAttachmentPicker>
         <CardCatalogModal />
       </:example>
       <:api as |Args|>

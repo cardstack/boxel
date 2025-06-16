@@ -367,7 +367,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert
       .dom('[data-test-llm-select-item="anthropic/claude-3.7-sonnet"]')
       .hasText('anthropic/claude-3.7-sonnet');
-    await click('[data-test-llm-select-item="anthropic/claude-3.7-sonnet"]');
+    await click(
+      '[data-test-llm-select-item="anthropic/claude-3.7-sonnet"] button',
+    );
+    await click('[data-test-pill-menu-button]');
     assert.dom('[data-test-llm-select-selected]').hasText('claude-3.7-sonnet');
 
     let roomState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
@@ -523,7 +526,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
-    assert.dom('[data-test-choose-file-btn]').hasText('Attach File');
 
     await click('[data-test-choose-file-btn]');
     assert.dom('[data-test-attach-file-modal]').exists();
@@ -588,8 +590,6 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     });
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
-    assert.dom('[data-test-choose-file-btn]').hasText('Attach File');
-
     await click('[data-test-file="person.gts"]');
     assert.dom('[data-test-autoattached-file]').exists();
     assert.dom(`[data-test-autoattached-file]`).hasText('person.gts');

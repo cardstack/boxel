@@ -81,7 +81,7 @@ export default class MissingTemplate extends GlimmerComponent<{
   </template>
 
   @action
-  openCodeSubmode() {
+  async openCodeSubmode() {
     let ref = identifyCard(this.args.cardOrField);
     if (!ref) {
       return;

@@ -369,6 +369,11 @@ export class Realm {
         SupportedMimeType.CardSource,
         this.upsertCardSource.bind(this),
       )
+      .head(
+        '/.*',
+        SupportedMimeType.CardSource,
+        this.getSourceOrRedirect.bind(this),
+      )
       .get(
         '/.*',
         SupportedMimeType.CardSource,
@@ -386,10 +391,12 @@ export class Realm {
       );
 
     Object.values(SupportedMimeType).forEach((mimeType) => {
-      this.#router.head('/.*', mimeType as SupportedMimeType, async () => {
-        let requestContext = await this.createRequestContext();
-        return createResponse({ init: { status: 200 }, requestContext });
-      });
+      if (mimeType !== SupportedMimeType.CardSource) {
+        this.#router.head('/.*', mimeType as SupportedMimeType, async () => {
+          let requestContext = await this.createRequestContext();
+          return createResponse({ init: { status: 200 }, requestContext });
+        });
+      }
     });
   }
 
