@@ -90,7 +90,7 @@ export default class FileTree extends Component<Signature> {
               {{/let}}
               <div class='realm-info-right'>
                 {{#if (not realm.canWrite)}}
-                  <span class='read-only'>READ ONLY</span>
+                  <span class='read-only' data-test-realm-read-only>READ ONLY</span>
                 {{/if}}
                 <DropdownArrowDown class='caret' width='12' height='12' />
               </div>

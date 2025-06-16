@@ -349,7 +349,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       .dom('[data-test-realm-name]')
       .hasText(`In ${realmInfo.name}`)
       .hasAttribute('title', `In ${realmInfo.name}`);
-    assert.dom('[data-test-realm-writable]').exists();
+    assert.dom('[data-test-realm-read-only]').doesNotExist();
 
     await waitFor('[data-test-file="pet-person.gts"]');
 
@@ -386,7 +386,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
       await waitForCodeEditor();
       await waitFor('[data-test-realm-name]');
-      assert.dom('[data-test-realm-not-writable]').exists();
+      assert.dom('[data-test-realm-read-only]').exists();
     });
   });
 

@@ -15,8 +15,8 @@ interface MenuItemOptions {
   iconURL: string;
   id?: string;
   inactive: boolean;
-  selected: boolean;
   secondaryText?: string;
+  selected: boolean;
   tabindex: number | string;
   url: string;
 }
