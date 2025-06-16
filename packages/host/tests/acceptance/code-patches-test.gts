@@ -272,8 +272,9 @@ ${REPLACE_MARKER}
     // Intentionally not using await here to test the loading state of the button
     click('[data-test-ai-assistant-action-bar] [data-test-accept-all]');
     await waitFor(
-      '[data-test-ai-assistant-action-bar] [data-test-accept-all] [data-test-boxel-button-loading-indicator]',
+      '[data-test-ai-assistant-action-bar] [data-test-loading-indicator]',
     );
+    assert.dom('[data-test-ai-assistant-action-bar]').hasText('Apply Diff');
     await waitUntil(
       () => findAll('[data-test-apply-state="applied"]').length === 3,
       {
