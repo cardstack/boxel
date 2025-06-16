@@ -33,6 +33,7 @@ export type DropdownAPI = Dropdown;
 interface Signature {
   Args: {
     contentClass?: string;
+    matchTriggerWidth?: boolean;
     onClose?: () => void;
     registerAPI?: (publicAPI: Dropdown) => void;
   };
@@ -67,6 +68,7 @@ class BoxelDropdown extends Component<Signature> {
     <BasicDropdown
       @registerAPI={{this.registerAPI}}
       @onClose={{@onClose}}
+      @matchTriggerWidth={{@matchTriggerWidth}}
       as |dd|
     >
       {{#let

@@ -11,15 +11,11 @@ import { restartableTask, timeout } from 'ember-concurrency';
 import {
   Label,
   RealmIcon,
-  Tooltip,
   BoxelDropdown,
   Menu as BoxelMenu,
 } from '@cardstack/boxel-ui/components';
 import { not, MenuItem } from '@cardstack/boxel-ui/helpers';
-import {
-  IconPencilNotCrossedOut,
-  IconPencilCrossedOut,
-} from '@cardstack/boxel-ui/icons';
+import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
 import { type LocalPath } from '@cardstack/runtime-common';
 
@@ -52,6 +48,8 @@ export default class FileTree extends Component<Signature> {
       return new MenuItem(realmInfo.info.name, 'action', {
         iconURL: realmInfo.info.iconURL ?? '/default-realm-icon.png',
         action: () => this.switchRealm(realmInfo.info),
+        secondaryText: !realmInfo.canWrite ? 'READ ONLY' : undefined,
+        selected: realmInfo.info.url === this.args.realmURL.href,
       });
     });
     return options;
@@ -77,7 +75,7 @@ export default class FileTree extends Component<Signature> {
   <template>
     <WithLoadedRealm @realmURL={{@realmURL.href}} as |realm|>
       {{#if (not @hideRealmInfo)}}
-        <BoxelDropdown>
+        <BoxelDropdown @matchTriggerWidth={{true}}>
           <:trigger as |bindings|>
             <button class='realm-info' {{bindings}}>
               <RealmIcon @realmInfo={{realm.info}} />
@@ -90,36 +88,12 @@ export default class FileTree extends Component<Signature> {
                   {{realmTitle}}
                 </Label>
               {{/let}}
-
-              {{#if realm.canWrite}}
-                <Tooltip @placement='top' class='editability-icon'>
-                  <:trigger>
-                    <IconPencilNotCrossedOut
-                      width='18px'
-                      height='18px'
-                      aria-label='Can edit files in this workspace'
-                      data-test-realm-writable
-                    />
-                  </:trigger>
-                  <:content>
-                    Can edit files in this workspace
-                  </:content>
-                </Tooltip>
-              {{else}}
-                <Tooltip @placement='top' class='editability-icon'>
-                  <:trigger>
-                    <IconPencilCrossedOut
-                      width='18px'
-                      height='18px'
-                      aria-label='Cannot edit files in this workspace'
-                      data-test-realm-not-writable
-                    />
-                  </:trigger>
-                  <:content>
-                    Cannot edit files in this workspace
-                  </:content>
-                </Tooltip>
-              {{/if}}
+              <div class='realm-info-right'>
+                {{#if (not realm.canWrite)}}
+                  <span class='read-only'>READ ONLY</span>
+                {{/if}}
+                <DropdownArrowDown class='caret' width='12' height='12' />
+              </div>
             </button>
           </:trigger>
           <:content as |dd|>
@@ -170,7 +144,7 @@ export default class FileTree extends Component<Signature> {
         left: calc(var(--boxel-sp-xs) * -1);
         margin: calc(var(--boxel-sp-xs) * -1) calc(var(--boxel-sp-xs) * -1) 0
           calc(var(--boxel-sp-xs) * -1);
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-xs);
         background-color: var(--boxel-light);
         box-shadow: var(--boxel-box-shadow);
         z-index: 1;
@@ -180,10 +154,19 @@ export default class FileTree extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-xxxs);
       }
+      .realm-info .read-only {
+        color: #777;
+        font: var(--boxel-font-size-xs);
+        font-weight: 500;
+      }
+      .realm-info-right {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+      }
       .realm-dropdown-menu {
         --boxel-menu-item-content-padding: var(--boxel-sp-xs);
         --boxel-menu-item-gap: var(--boxel-sp-xs);
-        min-width: calc(100% + var(--boxel-sp-xl));
         max-height: 13rem;
         overflow-y: scroll;
       }

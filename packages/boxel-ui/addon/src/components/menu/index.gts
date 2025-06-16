@@ -111,6 +111,11 @@ export default class Menu extends Component<Signature> {
                       />
                     {{/if}}
                     {{menuItem.text}}
+                    {{#if menuItem.secondaryText}}
+                      <span class='menu-item__secondary-text'>
+                        {{menuItem.secondaryText}}
+                      </span>
+                    {{/if}}
                   </span>
                   <span
                     class={{cn
@@ -220,6 +225,7 @@ export default class Menu extends Component<Signature> {
         }
 
         .menu-item {
+          width: 100%;
           display: flex;
           align-items: center;
           gap: var(--boxel-menu-item-gap);
@@ -232,6 +238,13 @@ export default class Menu extends Component<Signature> {
           background-position: center;
           background-repeat: no-repeat;
           background-size: contain;
+        }
+
+        .menu-item__secondary-text {
+          margin-left: auto;
+          font: var(--boxel-font-size-xs);
+          font-weight: 500;
+          color: var(--boxel-secondary-text-color, #777);
         }
 
         .check-icon {
