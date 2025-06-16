@@ -59,8 +59,8 @@ export default class ResizablePanelUsage extends Component {
           }}
           as |ResizablePanel ResizeHandle|
         >
-          {{! FIXME panels probably need a background as handles are invisible until gutter hover}}
           <ResizablePanel
+            class='panel'
             @defaultSize={{this.horizontalPanel1DefaultSize}}
             @minSize={{this.horizontalPanel1MinSize}}
             @maxSize={{this.horizontalPanel1MaxSize}}
@@ -70,6 +70,7 @@ export default class ResizablePanelUsage extends Component {
           </ResizablePanel>
           <ResizeHandle />
           <ResizablePanel
+            class='panel'
             @defaultSize={{this.horizontalPanel2DefaultSize}}
             @minSize={{this.horizontalPanel2MinSize}}
             @maxSize={{this.horizontalPanel2MaxSize}}
@@ -80,6 +81,7 @@ export default class ResizablePanelUsage extends Component {
           {{#if (not this.horizontalPanel3IsHidden)}}
             <ResizeHandle />
             <ResizablePanel
+              class='panel'
               @defaultSize={{this.horizontalPanel3DefaultSize}}
               @minSize={{this.horizontalPanel3MinSize}}
               @maxSize={{this.horizontalPanel3MaxSize}}
@@ -225,6 +227,7 @@ export default class ResizablePanelUsage extends Component {
             as |ResizablePanel ResizeHandle|
           >
             <ResizablePanel
+              class='panel'
               @defaultSize={{this.verticalPanel1DefaultSize}}
               @minSize={{this.verticalPanel1MinSize}}
               @maxSize={{this.verticalPanel1MaxSize}}
@@ -234,6 +237,7 @@ export default class ResizablePanelUsage extends Component {
             </ResizablePanel>
             <ResizeHandle />
             <ResizablePanel
+              class='panel'
               @defaultSize={{this.verticalPanel2DefaultSize}}
               @minSize={{this.verticalPanel2MinSize}}
               @maxSize={{this.verticalPanel2MaxSize}}
@@ -334,6 +338,10 @@ export default class ResizablePanelUsage extends Component {
       </:cssVars>
     </FreestyleUsage>
     <style scoped>
+      .panel {
+        background-color: var(--boxel-200);
+      }
+
       .vertical-container {
         height: 30rem;
       }
