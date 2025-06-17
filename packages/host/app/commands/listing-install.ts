@@ -51,15 +51,12 @@ function planModuleInstall(
   spec: Spec,
   sourceRealm: string,
   targetRealm: string,
-  dirName: string,
+  targetDirName?: string,
 ): CopyMeta {
-  if (!spec.id) {
-    throw new Error('Missing spec id');
-  }
   let absoluteModulePath = spec.moduleHref;
-  let realmPath = new RealmPaths(new URL(sourceRealm));
-  let localPath = realmPath.local(new URL(absoluteModulePath));
-  let targetModule = targetRealm + join(dirName, localPath);
+  let sourceFolderPath = new RealmPaths(new URL(sourceRealm));
+  let localPath = sourceFolderPath.local(new URL(absoluteModulePath));
+  let targetModule = targetRealm + join(targetDirName ?? '', localPath);
   return {
     sourceCodeRef: {
       name: spec.ref.name,
@@ -72,14 +69,31 @@ function planModuleInstall(
   };
 }
 
+interface InstallOpts {
+  targetDirName?: string; //install into a directory with a name
+  sourceDir?: string;
+}
+
 export function planInstall(
   specs: Spec[],
   sourceRealm: string,
   targetRealm: string,
-  dirName: string,
+  opts: InstallOpts = {},
 ): CopyMeta[] {
+  let continueSplat = false;
+  if (opts.sourceDir) {
+    let sourceFolderPath = new RealmPaths(new URL(opts.sourceDir));
+    continueSplat = specs.every((spec) => {
+      return sourceFolderPath.inRealm(new URL(spec.moduleHref));
+    });
+  }
   return specs.map((spec) =>
-    planModuleInstall(spec, sourceRealm, targetRealm, dirName),
+    planModuleInstall(
+      spec,
+      continueSplat && opts.sourceDir ? opts.sourceDir : sourceRealm,
+      targetRealm,
+      opts.targetDirName,
+    ),
   );
 }
 
