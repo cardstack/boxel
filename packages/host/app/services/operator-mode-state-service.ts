@@ -7,6 +7,7 @@ import Service, { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
 
 import { task, restartableTask } from 'ember-concurrency';
+import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
@@ -19,6 +20,7 @@ import {
   type ResolvedCodeRef,
   internalKeyFor,
   isLocalId,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
@@ -33,6 +35,7 @@ import { maybe } from '@cardstack/host/resources/maybe';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import { PlaygroundSelection } from '@cardstack/host/services/playground-panel-service';
 import type Realm from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
@@ -44,6 +47,11 @@ import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 import { type Stack } from '../components/operator-mode/interact-submode';
 
 import { removeFileExtension } from '../components/search-sheet/utils';
+
+import {
+  ModuleInspectorSelections,
+  PlaygroundSelections,
+} from '../utils/local-storage-keys';
 
 import MatrixService from './matrix-service';
 import NetworkService from './network';
@@ -69,6 +77,7 @@ export interface OperatorModeState {
   openDirs: Map<string, string[]>;
   codeSelection?: string;
   fieldSelection?: string;
+  moduleInspector?: ModuleInspectorView;
 }
 
 interface CardItem {
@@ -90,11 +99,15 @@ export type SerializedState = {
   codeSelection?: string;
   fieldSelection?: string;
   aiAssistantOpen?: boolean;
+  moduleInspector?: ModuleInspectorView;
 };
 
 interface OpenFileSubscriber {
   onStateChange: (state: FileResource['state']) => void;
 }
+
+export type ModuleInspectorView = 'schema' | 'spec' | 'preview';
+export const DEFAULT_MODULE_INSPECTOR_VIEW: ModuleInspectorView = 'schema';
 
 export default class OperatorModeStateService extends Service {
   @tracked private _state: OperatorModeState = new TrackedObject({
@@ -107,6 +120,8 @@ export default class OperatorModeStateService extends Service {
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
   private cardTitles = new TrackedMap<string, string>();
+
+  private moduleInspectorHistory: Record<string, ModuleInspectorView>;
 
   @service declare private cardService: CardService;
   @service declare private loaderService: LoaderService;
@@ -125,6 +140,13 @@ export default class OperatorModeStateService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.reset.register(this);
+
+    let moduleInspectorHistory = window.localStorage.getItem(
+      ModuleInspectorSelections,
+    );
+    this.moduleInspectorHistory = new TrackedObject(
+      moduleInspectorHistory ? JSON.parse(moduleInspectorHistory) : {},
+    );
   }
 
   get state() {
@@ -137,6 +159,7 @@ export default class OperatorModeStateService extends Service {
       codeSelection: this._state.codeSelection,
       fieldSelection: this._state.fieldSelection,
       aiAssistantOpen: this._state.aiAssistantOpen,
+      moduleInspector: this._state.moduleInspector,
     } as const;
   }
 
@@ -161,6 +184,7 @@ export default class OperatorModeStateService extends Service {
       codePath: null,
       openDirs: new TrackedMap<string, string[]>(),
       aiAssistantOpen: false,
+      moduleInspector: DEFAULT_MODULE_INSPECTOR_VIEW,
     });
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
@@ -384,7 +408,17 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
-  updateCodePathWithSelection({
+  async updateModuleInspectorView(view: ModuleInspectorView) {
+    this._state.moduleInspector = view;
+    this.moduleInspectorHistory[this.state.codePath?.href ?? ''] = view;
+    window.localStorage.setItem(
+      ModuleInspectorSelections,
+      JSON.stringify(this.moduleInspectorHistory),
+    );
+    this.schedulePersist();
+  }
+
+  async updateCodePathWithSelection({
     codeRef,
     localName,
     fieldName,
@@ -399,7 +433,7 @@ export default class OperatorModeStateService extends Service {
     if (codeRef && isResolvedCodeRef(codeRef)) {
       //(possibly) in a different module
       this._state.codeSelection = codeRef.name;
-      this.updateCodePath(new URL(codeRef.module));
+      await this.updateCodePath(new URL(codeRef.module));
     } else if (
       codeRef &&
       'type' in codeRef &&
@@ -409,7 +443,7 @@ export default class OperatorModeStateService extends Service {
     ) {
       this._state.fieldSelection = codeRef.field;
       this._state.codeSelection = codeRef.card.name;
-      this.updateCodePath(new URL(codeRef.card.module));
+      await this.updateCodePath(new URL(codeRef.card.module));
     } else if (localName && onLocalSelection) {
       //in the same module
       this._state.codeSelection = localName;
@@ -442,16 +476,59 @@ export default class OperatorModeStateService extends Service {
     return this._state.codePath?.toString();
   }
 
-  onFileSelected = (entryPath: LocalPath) => {
+  onFileSelected = async (entryPath: LocalPath) => {
     let fileUrl = new RealmPaths(this.realmURL).fileURL(entryPath);
-    this.updateCodePath(fileUrl);
+    await this.updateCodePath(fileUrl);
   };
 
-  updateCodePath(codePath: URL | null) {
-    this._state.codePath = codePath;
+  async updateCodePath(codePath: URL | null) {
+    let canonicalCodePath = await this.determineCanonicalCodePath(codePath);
+    this._state.codePath = canonicalCodePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
+
+    let moduleInspectorView =
+      this.moduleInspectorHistory[canonicalCodePath?.href ?? ''] ??
+      DEFAULT_MODULE_INSPECTOR_VIEW;
+
+    this.updateModuleInspectorView(moduleInspectorView);
+
     this.specPanelService.setSelection(null);
+  }
+
+  persistModuleInspectorView(
+    codePath: string | null,
+    moduleInspector: ModuleInspectorView,
+  ) {
+    if (codePath) {
+      this.moduleInspectorHistory[codePath] = moduleInspector;
+      window.localStorage.setItem(
+        ModuleInspectorSelections,
+        JSON.stringify(this.moduleInspectorHistory),
+      );
+    }
+  }
+
+  private async determineCanonicalCodePath(codePath: URL | null) {
+    if (!codePath) {
+      return codePath;
+    }
+
+    let response;
+    try {
+      response = await this.network.authedFetch(codePath, {
+        method: 'HEAD',
+        headers: { Accept: SupportedMimeType.CardSource },
+      });
+
+      if (response.ok) {
+        return new URL(response.url);
+      }
+
+      return codePath;
+    } catch (_e) {
+      return codePath;
+    }
   }
 
   replaceCodePath(codePath: URL | null) {
@@ -573,6 +650,7 @@ export default class OperatorModeStateService extends Service {
       codeSelection: this._state.codeSelection,
       fieldSelection: this._state.fieldSelection,
       aiAssistantOpen: this._state.aiAssistantOpen,
+      moduleInspector: this._state.moduleInspector,
     };
 
     for (let stack of this._state.stacks) {
@@ -625,6 +703,8 @@ export default class OperatorModeStateService extends Service {
       ]),
     );
 
+    console.log('in deserialise', rawState.codePath, rawState.moduleInspector);
+
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submodes.Interact,
@@ -634,7 +714,16 @@ export default class OperatorModeStateService extends Service {
       codeSelection: rawState.codeSelection,
       fieldSelection: rawState.fieldSelection,
       aiAssistantOpen: rawState.aiAssistantOpen ?? false,
+      moduleInspector:
+        rawState.moduleInspector ?? DEFAULT_MODULE_INSPECTOR_VIEW,
     });
+
+    if (rawState.codePath && rawState.moduleInspector) {
+      this.persistModuleInspectorView(
+        rawState.codePath,
+        rawState.moduleInspector,
+      );
+    }
 
     let stackIndex = 0;
     for (let stack of rawState.stacks) {
@@ -775,7 +864,7 @@ export default class OperatorModeStateService extends Service {
     this.updateSubmode(Submodes.Interact);
   }
 
-  openWorkspace = (realmUrl: string) => {
+  openWorkspace = async (realmUrl: string) => {
     let id = `${realmUrl}index`;
     let stackItem = new StackItem({
       id,
@@ -788,11 +877,12 @@ export default class OperatorModeStateService extends Service {
     let lastOpenedFile = this.recentFilesService.recentFiles.find(
       (file: RecentFile) => file.realmURL.href === realmUrl,
     );
-    this.updateCodePath(
+    await this.updateCodePath(
       lastOpenedFile
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
         : new URL(id),
     );
+    this.updateSubmode(Submodes.Interact);
 
     this.operatorModeController.workspaceChooserOpened = false;
   };
@@ -814,21 +904,51 @@ export default class OperatorModeStateService extends Service {
     return controller;
   }
 
+  get moduleInspectorPanel() {
+    return (
+      JSON.parse(
+        window.localStorage.getItem(ModuleInspectorSelections) ?? '{}',
+      )[this.codePathString ?? ''] ?? DEFAULT_MODULE_INSPECTOR_VIEW
+    );
+  }
+
+  get playgroundPanelSelection(): PlaygroundSelection | undefined {
+    if (this.moduleInspectorPanel === 'preview') {
+      let playgroundSelections = JSON.parse(
+        window.localStorage.getItem(PlaygroundSelections) ?? '{}',
+      );
+      let playgroundPanelSelection = Object.values(playgroundSelections).find(
+        (selection: any) => selection.url === this.codePathString,
+      );
+      return playgroundPanelSelection as PlaygroundSelection | undefined;
+    }
+    return undefined;
+  }
+
   getSummaryForAIBot(
     openCardIds: Set<string> = new Set([...this.getOpenCardIds()]),
   ): BoxelContext {
+    let codeMode =
+      this._state.submode === Submodes.Code
+        ? {
+            currentFile: this.codePathString,
+            moduleInspectorPanel: this.moduleInspectorPanel,
+            previewPanelSelection: this.playgroundPanelSelection
+              ? {
+                  cardId: this.playgroundPanelSelection.cardId,
+                  format: this.playgroundPanelSelection.format,
+                }
+              : undefined,
+          }
+        : undefined;
+
     return {
       agentId: this.matrixService.agentId,
       submode: this._state.submode,
       debug: this.operatorModeController.debug,
       openCardIds: this.makeRemoteIdsList([...openCardIds]),
       realmUrl: this.realmURL.href,
-      codeMode:
-        this._state.submode === Submodes.Code
-          ? {
-              currentFile: this.codePathString,
-            }
-          : undefined,
+      codeMode,
     };
   }
 

@@ -111,6 +111,11 @@ export class LintAndFixResult extends CardDef {
   @field output = contains(StringField);
 }
 
+export class PatchCodeCommandResult extends CardDef {
+  @field patchedContent = contains(StringField);
+  @field finalFileUrl = contains(StringField);
+}
+
 export class PatchCodeInput extends CardDef {
   @field fileUrl = contains(StringField);
   @field codeBlocks = containsMany(StringField);

@@ -1,14 +1,10 @@
 import { array } from '@ember/helper';
 import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-
-import { dropTask } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
 
 import { Alert } from '@cardstack/boxel-ui/components';
 import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
@@ -22,6 +18,8 @@ import {
   CodeData,
 } from '@cardstack/host/lib/formatted-message/utils';
 
+import type MessageCodePatchResult from '@cardstack/host/lib/matrix-classes/message-code-patch-result';
+
 import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
 
 import {
@@ -33,9 +31,6 @@ import CommandService from '@cardstack/host/services/command-service';
 import LoaderService from '@cardstack/host/services/loader-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
-import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
-
-import ApplyButton from './apply-button';
 import CodeBlock from './code-block';
 
 interface FormattedAiBotMessageSignature {
@@ -59,82 +54,9 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
   @service private declare loaderService: LoaderService;
   @service private declare commandService: CommandService;
 
-  @tracked applyAllCodePatchTasksState:
-    | 'ready'
-    | 'applying'
-    | 'applied'
-    | 'failed' = 'ready';
-
   private isLastHtmlGroup = (index: number) => {
     return index === (this.args.htmlParts?.length ?? 0) - 1;
   };
-
-  private get isApplyAllButtonDisplayed() {
-    if (this.args.isStreaming) {
-      return false;
-    }
-    if (!this.args.isLastAssistantMessage) {
-      return false;
-    }
-    return (
-      this.codeDataItems.filter((codeData) => !!codeData.searchReplaceBlock)
-        .length > 1
-    );
-  }
-
-  private get codeDataItems() {
-    return (this.args.htmlParts ?? [])
-      .map((htmlPart) => {
-        if (isHtmlPreTagGroup(htmlPart)) {
-          return htmlPart.codeData;
-        }
-        return null;
-      })
-      .filter((codeData): codeData is CodeData => !!codeData);
-  }
-
-  get applyAllCodePatchesButtonState() {
-    let { codeDataItems } = this;
-    let states = codeDataItems.map((codeData) =>
-      this.commandService.getCodePatchStatus(codeData),
-    );
-    if (states.some((state) => state === 'applying')) {
-      return 'applying';
-    } else if (states.every((state) => state === 'applied')) {
-      return 'applied';
-    } else {
-      return 'ready';
-    }
-  }
-
-  private applyAllCodePatchTasks = dropTask(async () => {
-    this.applyAllCodePatchTasksState = 'applying';
-    let unappliedCodeDataItems = this.codeDataItems.filter(
-      (codeData) =>
-        this.commandService.getCodePatchStatus(codeData) !== 'applied',
-    );
-
-    let codeDataItemsGroupedByFileUrl = unappliedCodeDataItems.reduce(
-      (acc, codeDataItem) => {
-        acc[codeDataItem.fileUrl!] = [
-          ...(acc[codeDataItem.fileUrl!] || []),
-          codeDataItem,
-        ];
-        return acc;
-      },
-      {} as Record<string, CodeData[]>,
-    );
-
-    // TODO: Handle possible errors (fetching source, patching, saving source)
-    // Handle in CS-8369
-    for (let fileUrl in codeDataItemsGroupedByFileUrl) {
-      await this.commandService.patchCode(
-        codeDataItemsGroupedByFileUrl[fileUrl][0].roomId,
-        fileUrl,
-        codeDataItemsGroupedByFileUrl[fileUrl],
-      );
-    }
-  });
 
   private preTagGroupIndex = (htmlPartIndex: number) => {
     return this.args
@@ -163,7 +85,7 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
         {{#if (isHtmlPreTagGroup htmlPart)}}
           <HtmlGroupCodeBlock
             @codeData={{htmlPart.codeData}}
-            @codePatchStatus={{this.commandService.getCodePatchStatus
+            @codePatchResult={{this.commandService.getCodePatchResult
               htmlPart.codeData
             }}
             @onPatchCode={{fn
@@ -184,28 +106,9 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
           {{/if}}
         {{/if}}
       {{/each}}
-
-      {{#if this.isApplyAllButtonDisplayed}}
-        <div class='code-patch-actions'>
-          <ApplyButton
-            {{on 'click' (perform this.applyAllCodePatchTasks)}}
-            @state={{this.applyAllCodePatchesButtonState}}
-            data-test-apply-all-code-patches-button
-          >
-            Accept All
-          </ApplyButton>
-        </div>
-      {{/if}}
     </div>
 
     <style scoped>
-      .code-patch-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--boxel-sp-xs);
-        margin-top: var(--boxel-sp);
-      }
-
       .message > :deep(*:first-child) {
         margin-top: 0;
       }
@@ -252,11 +155,11 @@ interface HtmlGroupCodeBlockSignature {
   Element: HTMLDivElement;
   Args: {
     codeData: CodeData;
-    codePatchStatus: CodePatchStatus | 'ready' | 'applying';
     onPatchCode: (codeData: CodeData) => void;
     monacoSDK: MonacoSDK;
     isLastAssistantMessage: boolean;
     index: number;
+    codePatchResult: MessageCodePatchResult | undefined;
   };
 }
 
@@ -316,8 +219,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   private get isAppliedOrIgnoredCodePatch() {
     // Ignored means the user moved on to the next message
     return (
-      this.args.codePatchStatus === 'applied' ||
-      !this.args.isLastAssistantMessage
+      this.codePatchStatus === 'applied' || !this.args.isLastAssistantMessage
     );
   }
 
@@ -327,6 +229,16 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   }) => {
     this.diffEditorStats = stats;
   };
+
+  private get codePatchStatus() {
+    return this.args.codePatchResult?.status ?? 'ready';
+  }
+
+  private get codePatchfinalFileUrlAfterCodePatching() {
+    return this.codePatchStatus === 'applied'
+      ? this.args.codePatchResult?.finalFileUrlAfterCodePatching
+      : null;
+  }
 
   <template>
     <CodeBlock
@@ -342,17 +254,18 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
             <codeBlock.editorHeader
               @codeData={{@codeData}}
               @diffEditorStats={{null}}
+              @finalFileUrlAfterCodePatching={{this.codePatchfinalFileUrlAfterCodePatching}}
             />
             <codeBlock.editor @code={{this.codeForEditor}} @dimmed={{true}} />
             <codeBlock.actions as |actions|>
               <actions.copyCode
                 @code={{this.extractReplaceCode @codeData.searchReplaceBlock}}
               />
-              {{#if (eq @codePatchStatus 'applied')}}
+              {{#if (eq this.codePatchStatus 'applied')}}
                 {{! This is just to show the ✅ icon to signalize that the code patch has been applied }}
                 <actions.applyCodePatch
                   @codeData={{@codeData}}
-                  @patchCodeStatus={{@codePatchStatus}}
+                  @patchCodeStatus={{this.codePatchStatus}}
                 />
               {{/if}}
             </codeBlock.actions>
@@ -383,7 +296,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               <actions.applyCodePatch
                 @codeData={{@codeData}}
                 @performPatch={{fn @onPatchCode @codeData}}
-                @patchCodeStatus={{@codePatchStatus}}
+                @patchCodeStatus={{this.codePatchStatus}}
                 @originalCode={{this.codeDiffResource.originalCode}}
                 @modifiedCode={{this.codeDiffResource.modifiedCode}}
               />

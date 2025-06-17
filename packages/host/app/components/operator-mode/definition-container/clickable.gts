@@ -8,7 +8,7 @@ export interface ClickableArgs {
   goToDefinition: (
     codeRef: ResolvedCodeRef | undefined,
     localName: string | undefined,
-  ) => void;
+  ) => Promise<void>;
   codeRef?: ResolvedCodeRef;
   localName?: string;
 }
@@ -23,8 +23,8 @@ interface ClickableSignature {
 
 export class Clickable extends Component<ClickableSignature> {
   @action
-  handleClick() {
-    this.args.goToDefinition(this.args.codeRef, this.args.localName);
+  async handleClick() {
+    await this.args.goToDefinition(this.args.codeRef, this.args.localName);
   }
   <template>
     <button

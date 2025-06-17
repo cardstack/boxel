@@ -201,6 +201,54 @@ module(basename(__filename), function () {
               }
             }
           `,
+            'atom-boom.gts': `
+            import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+
+            export class Boom extends CardDef {
+              @field firstName = contains(StringField);
+              static atom = class Atom extends Component<typeof this> {
+                <template>
+                  <h1><@fields.firstName/>{{this.boom}}</h1>
+                </template>
+                get boom() {
+                  throw new Error('intentional error');
+                }
+              }
+            }
+          `,
+            'embedded-boom.gts': `
+            import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+
+            export class Boom extends CardDef {
+              @field firstName = contains(StringField);
+              static embedded = class Embedded extends Component<typeof this> {
+                <template>
+                  <h1><@fields.firstName/>{{this.boom}}</h1>
+                </template>
+                get boom() {
+                  throw new Error('intentional error');
+                }
+              }
+            }
+          `,
+            'fitted-boom.gts': `
+            import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+
+            export class Boom extends CardDef {
+              @field firstName = contains(StringField);
+              static fitted = class Fitted extends Component<typeof this> {
+                <template>
+                  <h1><@fields.firstName/>{{this.boom}}</h1>
+                </template>
+                get boom() {
+                  throw new Error('intentional error');
+                }
+              }
+            }
+          `,
             'mango.json': {
               data: {
                 attributes: {
@@ -323,6 +371,45 @@ module(basename(__filename), function () {
                 },
               },
             },
+            'atom-boom.json': {
+              data: {
+                attributes: {
+                  firstName: 'Boom!',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './atom-boom',
+                    name: 'Boom',
+                  },
+                },
+              },
+            },
+            'embedded-boom.json': {
+              data: {
+                attributes: {
+                  firstName: 'Boom!',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './embedded-boom',
+                    name: 'Boom',
+                  },
+                },
+              },
+            },
+            'fitted-boom.json': {
+              data: {
+                attributes: {
+                  firstName: 'Boom!',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './fitted-boom',
+                    name: 'Boom',
+                  },
+                },
+              },
+            },
             'empty.json': {
               data: {
                 attributes: {},
@@ -374,6 +461,57 @@ module(basename(__filename), function () {
         );
       } else {
         assert.ok(false, 'expected index entry not to be an error');
+      }
+    });
+
+    test('can store error doc in the index when atom view throws error', async function (assert) {
+      let entry = await realm.realmIndexQueryEngine.cardDocument(
+        new URL(`${testRealm}atom-boom`),
+      );
+      if (entry?.type === 'error') {
+        assert.strictEqual(
+          entry.error.errorDetail.message,
+          'Encountered error rendering HTML for card: intentional error',
+        );
+        assert.deepEqual(entry.error.errorDetail.deps, [
+          `${testRealm}atom-boom`,
+        ]);
+      } else {
+        assert.ok(false, 'expected index entry to be an error');
+      }
+    });
+
+    test('can store error doc in the index when embedded view throws error', async function (assert) {
+      let entry = await realm.realmIndexQueryEngine.cardDocument(
+        new URL(`${testRealm}embedded-boom`),
+      );
+      if (entry?.type === 'error') {
+        assert.strictEqual(
+          entry.error.errorDetail.message,
+          'Encountered error rendering HTML for card: intentional error',
+        );
+        assert.deepEqual(entry.error.errorDetail.deps, [
+          `${testRealm}embedded-boom`,
+        ]);
+      } else {
+        assert.ok(false, 'expected index entry to be an error');
+      }
+    });
+
+    test('can store error doc in the index when fitted view throws error', async function (assert) {
+      let entry = await realm.realmIndexQueryEngine.cardDocument(
+        new URL(`${testRealm}fitted-boom`),
+      );
+      if (entry?.type === 'error') {
+        assert.strictEqual(
+          entry.error.errorDetail.message,
+          'Encountered error rendering HTML for card: intentional error',
+        );
+        assert.deepEqual(entry.error.errorDetail.deps, [
+          `${testRealm}fitted-boom`,
+        ]);
+      } else {
+        assert.ok(false, 'expected index entry to be an error');
       }
     });
 
@@ -499,7 +637,7 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          totalIndexEntries: 13,
+          totalIndexEntries: 16,
         },
         'indexed correct number of files',
       );
@@ -527,7 +665,7 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          totalIndexEntries: 9,
+          totalIndexEntries: 12,
         },
         'indexed correct number of files',
       );
@@ -546,7 +684,7 @@ module(basename(__filename), function () {
           instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
           moduleErrors: 3, // post, fancy person, person
           modulesIndexed: 0,
-          totalIndexEntries: 3,
+          totalIndexEntries: 6,
         },
         'indexed correct number of files',
       );
@@ -579,7 +717,7 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          totalIndexEntries: 9,
+          totalIndexEntries: 12,
         },
         'indexed correct number of files',
       );
@@ -617,7 +755,7 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          totalIndexEntries: 9,
+          totalIndexEntries: 12,
         },
         'indexed correct number of files',
       );
@@ -652,7 +790,7 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          totalIndexEntries: 13,
+          totalIndexEntries: 16,
         },
         'indexed correct number of files',
       );
@@ -691,7 +829,7 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          totalIndexEntries: 9,
+          totalIndexEntries: 12,
         },
         'instance and module are in error state before dependency is available',
       );
@@ -769,7 +907,7 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          totalIndexEntries: 12,
+          totalIndexEntries: 15,
         },
         'index did not touch any files',
       );
@@ -810,7 +948,7 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 1,
-          totalIndexEntries: 13,
+          totalIndexEntries: 16,
         },
         'indexed correct number of files',
       );
@@ -852,7 +990,7 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          totalIndexEntries: 13,
+          totalIndexEntries: 16,
         },
         'indexed correct number of files',
       );
@@ -903,7 +1041,7 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 0,
           modulesIndexed: 0,
-          totalIndexEntries: 11,
+          totalIndexEntries: 14,
         },
         'indexed correct number of files',
       );
@@ -944,7 +1082,7 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 1,
-          totalIndexEntries: 13,
+          totalIndexEntries: 16,
         },
         'indexed correct number of files',
       );
@@ -1015,10 +1153,10 @@ module(basename(__filename), function () {
         { ...realm.realmIndexUpdater.stats },
         {
           moduleErrors: 0,
-          instanceErrors: 3,
-          modulesIndexed: 7,
+          instanceErrors: 6,
+          modulesIndexed: 10,
           instancesIndexed: 6,
-          totalIndexEntries: 13,
+          totalIndexEntries: 16,
         },
         'indexed correct number of files',
       );

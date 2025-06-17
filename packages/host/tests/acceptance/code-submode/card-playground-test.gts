@@ -1031,6 +1031,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         {
           cardId: authorId,
           format: 'atom',
+          url: `${testRealmURL}author.gts`,
         },
         'local storage is updated',
       );
@@ -1044,11 +1045,13 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await click('[data-option-index="1"]'); // change selected instance
       assert.dom('[data-test-selected-item]').containsText('Future Tech');
       assertCardExists(assert, categoryId2, 'embedded');
+
       assert.deepEqual(
         getPlaygroundSelections()?.[categoryModuleId],
         {
           cardId: categoryId2,
           format: 'embedded',
+          url: `${testRealmURL}blog-post.gts`,
         },
         'local storage is updated',
       );
@@ -1060,6 +1063,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.deepEqual(getPlaygroundSelections()?.[blogPostModuleId], {
         cardId: blogPostId1,
         format: 'fitted',
+        url: `${testRealmURL}blog-post.gts`,
       });
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="1"]'); // change selected instance
@@ -1067,6 +1071,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.deepEqual(getPlaygroundSelections()?.[blogPostModuleId], {
         cardId: blogPostId2,
         format: 'fitted',
+        url: `${testRealmURL}blog-post.gts`,
       });
 
       assert.strictEqual(
@@ -1075,14 +1080,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           [`${authorModuleId}`]: {
             cardId: authorId,
             format: 'atom',
+            url: `${testRealmURL}author.gts`,
           },
           [`${categoryModuleId}`]: {
             cardId: categoryId2,
             format: 'embedded',
+            url: `${testRealmURL}blog-post.gts`,
           },
           [`${blogPostModuleId}`]: {
             cardId: blogPostId2,
             format: 'fitted',
+            url: `${testRealmURL}blog-post.gts`,
           },
         }),
       );
@@ -1466,6 +1474,13 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         }
       }
     `;
+    const syntaxError = `
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      // missing StringField import
+      export class Boom extends CardDef {
+        @field firstName = contains(StringField);
+      }
+    `;
 
     hooks.beforeEach(async function () {
       matrixRoomId = createAndJoinRoom({
@@ -1484,6 +1499,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           'boom-pet.gts': boomPet,
           'person.gts': personCard,
           'boom-person.gts': boomPerson,
+          'syntax-error.gts': syntaxError,
           'Person/delilah.json': {
             data: {
               attributes: { title: 'Delilah' },
@@ -1497,6 +1513,20 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
         },
       }));
+    });
+
+    test('it renders a module error', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}syntax-error.gts`,
+      });
+
+      assert
+        .dom('[data-test-syntax-error] [data-test-error-stack]')
+        .containsText(
+          `{ "additionalErrors": null, "message": "encountered error loading module \\"${testRealmURL}syntax-error.gts\\": StringField is not defined", "status": 500 }`,
+          'error message is correct (and contains no "deps" field)',
+        );
     });
 
     test('it renders a playground instance with an error that has does not have a last known good state', async function (assert) {

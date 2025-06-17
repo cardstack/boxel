@@ -16,7 +16,7 @@ import get from 'lodash/get';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import { Tooltip } from '@cardstack/boxel-ui/components';
-import { cn, eq, lt, gt, and } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, gte } from '@cardstack/boxel-ui/helpers';
 import { Download } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -129,15 +129,14 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
         height: var(--container-button-size);
         padding: 0;
         border-radius: 50%;
-        background-color: var(--boxel-light-100);
-        border-color: transparent;
+        background-color: var(--boxel-700);
+        border: var(--boxel-border-flexible);
         box-shadow: var(--boxel-deep-box-shadow);
         z-index: var(--boxel-layer-floating-button);
       }
       .add-card-to-neighbor-stack:hover,
       .add-card-to-neighbor-stack--active {
         --icon-color: var(--boxel-highlight);
-        background-color: var(--boxel-light);
       }
       .add-card-to-neighbor-stack--left {
         margin-left: var(--operator-mode-spacing);
@@ -329,8 +328,11 @@ export default class InteractSubmode extends Component {
         }
         await changeSizeCallback();
       },
-      changeSubmode: (url: URL, submode: Submode = 'code'): void => {
-        here.operatorModeStateService.updateCodePath(url);
+      changeSubmode: async (
+        url: URL,
+        submode: Submode = 'code',
+      ): Promise<void> => {
+        await here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
       },
     };
@@ -667,6 +669,7 @@ export default class InteractSubmode extends Component {
 
   <template>
     <SubmodeLayout
+      class='interact-submode-layout'
       @onSearchSheetClosed={{this.clearSearchSheetTrigger}}
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
       as |search|
@@ -703,10 +706,8 @@ export default class InteractSubmode extends Component {
                 data-test-operator-mode-stack={{stackIndex}}
                 class={{cn
                   stack-with-bg-image=backgroundImageURLSpecificToThisStack
-                  stack-medium-padding-top=(and
-                    (gt stack.length 1) (lt stack.length 3)
-                  )
-                  stack-small-padding-top=(gt stack.length 2)
+                  stack-medium-padding-top=(eq stack.length 2)
+                  stack-small-padding-top=(gte stack.length 3)
                 }}
                 style={{if
                   backgroundImageURLSpecificToThisStack
@@ -771,6 +772,10 @@ export default class InteractSubmode extends Component {
     </SubmodeLayout>
 
     <style scoped>
+      .interact-submode-layout {
+        --submode-bar-item-outline: var(--boxel-border-flexible);
+        --submode-bar-item-box-shadow: var(--boxel-deep-box-shadow);
+      }
       .interact-submode {
         display: flex;
         justify-content: center;
