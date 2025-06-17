@@ -128,7 +128,7 @@
     "ember-provide-consume-context": "^0.7.0",
     "ember-qunit": "catalog:",
     "ember-resolver": "^11.0.1",
-    "ember-resources": "^7.0.2",
+    "ember-resources": "catalog:",
     "ember-route-template": "^1.0.3",
     "ember-source": "~5.4.0",
     "ember-template-imports": "^4.1.1",

@@ -18,7 +18,7 @@
     "ember-concurrency": "catalog:",
     "ember-css-url": "^1.0.0",
     "ember-modifier": "^3.2.1",
-    "ember-resources": "^6.5.1",
+    "ember-resources": "catalog:",
     "ember-template-lint": "catalog:",
     "ethers": "catalog:",
     "matrix-js-sdk": "catalog:",
