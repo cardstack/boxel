@@ -53,10 +53,10 @@ function planModuleInstall(
   targetRealm: string,
   targetDirName?: string,
 ): CopyMeta {
-  let absoluteModulePath = spec.moduleHref;
-  let sourceFolderPath = new RealmPaths(new URL(sourceRealm));
-  let localPath = sourceFolderPath.local(new URL(absoluteModulePath));
+  let sourcePaths = new RealmPaths(new URL(sourceRealm));
+  let localPath = sourcePaths.local(new URL(spec.moduleHref));
   let targetModule = targetRealm + join(targetDirName ?? '', localPath);
+
   return {
     sourceCodeRef: {
       name: spec.ref.name,
@@ -80,20 +80,18 @@ export function planInstall(
   targetRealm: string,
   opts: InstallOpts = {},
 ): CopyMeta[] {
-  let continueSplat = false;
+  let sourceDir = sourceRealm;
+
   if (opts.sourceDir) {
-    let sourceFolderPath = new RealmPaths(new URL(opts.sourceDir));
-    continueSplat = specs.every((spec) => {
-      return sourceFolderPath.inRealm(new URL(spec.moduleHref));
-    });
+    const sourceDirPath = new RealmPaths(new URL(opts.sourceDir));
+    const allInDir = specs.every((spec) =>
+      sourceDirPath.inRealm(new URL(spec.moduleHref)),
+    );
+    if (allInDir) sourceDir = opts.sourceDir;
   }
+
   return specs.map((spec) =>
-    planModuleInstall(
-      spec,
-      continueSplat && opts.sourceDir ? opts.sourceDir : sourceRealm,
-      targetRealm,
-      opts.targetDirName,
-    ),
+    planModuleInstall(spec, sourceDir, targetRealm, opts.targetDirName),
   );
 }
 

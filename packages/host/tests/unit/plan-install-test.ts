@@ -21,7 +21,7 @@ module('Unit | Listing Installer', function () {
       },
     ];
     const res = planInstall(specs, sourceRealmURL, targetRealmURL, {
-      dirName: 'some-uuid',
+      targetDirName: 'some-uuid',
     });
 
     assert.strictEqual(res.length, 3);
@@ -95,7 +95,7 @@ module('Unit | Listing Installer', function () {
       },
     ];
     const res = planInstall(specs, sourceRealmURL, targetRealmURL, {
-      dirName: 'some-uuid',
+      targetDirName: 'some-uuid',
     });
 
     assert.strictEqual(res.length, 1);
@@ -122,7 +122,7 @@ module('Unit | Listing Installer', function () {
       },
     ];
     const res = planInstall(specs, sourceRealmURL, targetRealmURL, {
-      dirName: 'some-uuid',
+      targetDirName: 'some-uuid',
       sourceDir: `${sourceRealmURL}some-folder/`,
     });
 
@@ -196,7 +196,7 @@ module('Unit | Listing Installer', function () {
       },
     ];
     const res = planInstall(specs, sourceRealmURL, targetRealmURL, {
-      dirName: 'some-uuid',
+      targetDirName: 'some-uuid',
       sourceDir: `${sourceRealmURL}some-folder/`,
     });
 
