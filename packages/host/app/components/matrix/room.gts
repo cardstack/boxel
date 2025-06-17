@@ -61,6 +61,7 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 import type { Skill } from 'https://cardstack.com/base/skill';
 
+import AiAssistantActionBar from '../ai-assistant/action-bar';
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
 import LLMSelect from '../ai-assistant/llm-select';
@@ -143,61 +144,71 @@ export default class Room extends Component<Signature> {
         </AiAssistantConversation>
 
         <footer class='room-actions'>
-          <div class='chat-input-area' data-test-chat-input-area>
-            <AiAssistantChatInput
-              @value={{this.messageToSend}}
-              @onInput={{this.setMessage}}
-              @onSend={{this.sendMessage}}
-              @canSend={{this.canSend}}
-              data-test-message-field={{@roomId}}
-            />
-            {{! TODO: Remove this bottom section after we move the attachment picker to chat input 
-                  and llm chooser to area__actions }}
-            <div class='chat-input-area__bottom-section'>
-              <AiAssistantAttachmentPicker
-                @autoAttachedCardIds={{this.autoAttachedCardIds}}
-                @cardIdsToAttach={{this.cardIdsToAttach}}
-                @chooseCard={{this.chooseCard}}
-                @removeCard={{this.removeCard}}
-                @chooseFile={{this.chooseFile}}
-                @removeFile={{this.removeFile}}
-                @submode={{this.operatorModeStateService.state.submode}}
-                @autoAttachedFile={{this.autoAttachedFile}}
-                @filesToAttach={{this.filesToAttach}}
-                @autoAttachedCardTooltipMessage={{if
-                  (eq this.operatorModeStateService.state.submode Submodes.Code)
-                  'Current card is shared automatically'
-                  'Topmost card is shared automatically'
-                }}
+          <AiAssistantAttachmentPicker
+            @autoAttachedCardIds={{this.autoAttachedCardIds}}
+            @cardIdsToAttach={{this.cardIdsToAttach}}
+            @chooseCard={{this.chooseCard}}
+            @removeCard={{this.removeCard}}
+            @chooseFile={{this.chooseFile}}
+            @removeFile={{this.removeFile}}
+            @submode={{this.operatorModeStateService.state.submode}}
+            @autoAttachedFile={{this.autoAttachedFile}}
+            @filesToAttach={{this.filesToAttach}}
+            @autoAttachedCardTooltipMessage={{if
+              (eq this.operatorModeStateService.state.submode Submodes.Code)
+              'Current card is shared automatically'
+              'Topmost card is shared automatically'
+            }}
+            as |AttachedItems AttachButton|
+          >
+            {{#if this.displayActionBar}}
+              <AiAssistantActionBar
+                @acceptAll={{perform this.executeAllReadyActionsTask}}
+                @cancel={{this.cancelActionBar}}
+                @acceptingAll={{this.executeAllReadyActionsTask.isRunning}}
               />
-            </div>
-            <div class='chat-input-area__actions'>
-              {{#if this.displaySkillMenu}}
-                <AiAssistantSkillMenu
-                  class='skill-menu'
-                  @skills={{this.sortedSkills}}
-                  @onChooseCard={{perform this.attachSkillTask}}
-                  @onUpdateSkillIsActive={{perform
-                    this.updateSkillIsActiveTask
-                  }}
-                  @onExpand={{fn this.setSelectedAction 'skill-menu'}}
-                  @onCollapse={{fn this.setSelectedAction undefined}}
-                  data-test-skill-menu
-                />
+            {{/if}}
+            <div class='chat-input-area' data-test-chat-input-area>
+              <AiAssistantChatInput
+                @attachButton={{AttachButton}}
+                @value={{this.messageToSend}}
+                @onInput={{this.setMessage}}
+                @onSend={{this.sendMessage}}
+                @canSend={{this.canSend}}
+                data-test-message-field={{@roomId}}
+              />
+              {{#if this.displayAttachedItems}}
+                <AttachedItems />
               {{/if}}
-              {{#if this.displayLLMSelect}}
-                <LLMSelect
-                  class='llm-select'
-                  @selected={{@roomResource.activeLLM}}
-                  @onChange={{perform @roomResource.activateLLMTask}}
-                  @options={{this.llmsForSelectMenu}}
-                  @disabled={{@roomResource.isActivatingLLM}}
-                  @onExpand={{fn this.setSelectedAction 'llm-select'}}
-                  @onCollapse={{fn this.setSelectedAction undefined}}
-                />
-              {{/if}}
+
+              <div class='chat-input-area__bottom-actions'>
+                {{#if this.displaySkillMenu}}
+                  <AiAssistantSkillMenu
+                    class='skill-menu'
+                    @skills={{this.sortedSkills}}
+                    @onChooseCard={{perform this.attachSkillTask}}
+                    @onUpdateSkillIsActive={{perform
+                      this.updateSkillIsActiveTask
+                    }}
+                    @onExpand={{fn this.setSelectedBottomAction 'skill-menu'}}
+                    @onCollapse={{fn this.setSelectedBottomAction undefined}}
+                    data-test-skill-menu
+                  />
+                {{/if}}
+                {{#if this.displayLLMSelect}}
+                  <LLMSelect
+                    class='llm-select'
+                    @selected={{@roomResource.activeLLM}}
+                    @onChange={{perform @roomResource.activateLLMTask}}
+                    @options={{this.llmsForSelectMenu}}
+                    @disabled={{@roomResource.isActivatingLLM}}
+                    @onExpand={{fn this.setSelectedBottomAction 'llm-select'}}
+                    @onCollapse={{fn this.setSelectedBottomAction undefined}}
+                  />
+                {{/if}}
+              </div>
             </div>
-          </div>
+          </AiAssistantAttachmentPicker>
         </footer>
       </section>
     {{/if}}
@@ -227,17 +238,7 @@ export default class Room extends Component<Signature> {
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
       }
-      .chat-input-area__bottom-section {
-        display: flex;
-        justify-content: space-between;
-        padding-right: var(--boxel-sp-xxs);
-        gap: var(--boxel-sp-xxl);
-      }
-      .chat-input-area__bottom-section
-        :deep(.ember-basic-dropdown-content-wormhole-origin) {
-        position: absolute; /* This prevents layout shift when menu opens */
-      }
-      .chat-input-area__actions {
+      .chat-input-area__bottom-actions {
         display: flex;
         padding: var(--boxel-sp-sm);
         gap: var(--boxel-sp-sm);
@@ -268,7 +269,11 @@ export default class Room extends Component<Signature> {
   </template>
 
   @consume(GetCardContextName) private declare getCard: getCard;
-  @tracked private selectedAction: 'skill-menu' | 'llm-select' | undefined;
+  @tracked private selectedBottomAction:
+    | 'skill-menu'
+    | 'llm-select'
+    | undefined;
+  @tracked lastCanceledActionMessageId: string | undefined;
 
   @service private declare store: StoreService;
   @service private declare cardService: CardService;
@@ -512,9 +517,9 @@ export default class Room extends Component<Signature> {
     return !this.userHasScrolled || this.isScrolledToBottom;
   }
 
-  // For efficiency, read receipts are implemented using “up to” markers. This
-  // marker indicates that the acknowledgement applies to all events “up to and
-  // including” the event specified. For example, marking an event as “read” would
+  // For efficiency, read receipts are implemented using "up to" markers. This
+  // marker indicates that the acknowledgement applies to all events "up to and
+  // including" the event specified. For example, marking an event as "read" would
   // indicate that the user had read all events up to the referenced event.
   @cached private get lastReadMessageIndex() {
     let readReceiptIndicies: number[] = [];
@@ -892,16 +897,109 @@ export default class Room extends Component<Signature> {
   });
 
   @action
-  private setSelectedAction(action: 'skill-menu' | 'llm-select' | undefined) {
-    this.selectedAction = action;
+  private setSelectedBottomAction(
+    action: 'skill-menu' | 'llm-select' | undefined,
+  ) {
+    this.selectedBottomAction = action;
   }
 
   private get displaySkillMenu() {
-    return !this.selectedAction || this.selectedAction === 'skill-menu';
+    return (
+      !this.selectedBottomAction || this.selectedBottomAction === 'skill-menu'
+    );
   }
 
   private get displayLLMSelect() {
-    return !this.selectedAction || this.selectedAction === 'llm-select';
+    return (
+      !this.selectedBottomAction || this.selectedBottomAction === 'llm-select'
+    );
+  }
+
+  private get displayAttachedItems() {
+    return (
+      this.filesToAttach?.length ||
+      this.cardIdsToAttach?.length ||
+      this.autoAttachedFile ||
+      this.autoAttachedCardIds?.size
+    );
+  }
+
+  @cached
+  private get readyCommands() {
+    let lastMessage = this.messages[this.messages.length - 1];
+    if (!lastMessage || !lastMessage.commands) return [];
+    return lastMessage.commands.filter(
+      (command) => command.status === 'ready' || command.status === undefined,
+    );
+  }
+
+  @cached
+  private get readyCodePatches() {
+    let lastMessage = this.messages[this.messages.length - 1];
+    if (!lastMessage || !lastMessage.htmlParts) return [];
+    let result = [];
+    for (let i = 0; i < lastMessage.htmlParts.length; i++) {
+      let htmlPart = lastMessage.htmlParts[i];
+      let codeData = htmlPart.codeData;
+      if (!codeData) continue;
+      let status = this.commandService.getCodePatchStatus(codeData);
+      if (status === 'ready') {
+        result.push(codeData);
+      }
+    }
+    return result;
+  }
+
+  @cached
+  private get displayActionBar() {
+    if (this.executeAllReadyActionsTask.isRunning) {
+      return true;
+    }
+    let lastMessage = this.messages[this.messages.length - 1];
+    if (
+      (this.lastCanceledActionMessageId &&
+        lastMessage?.eventId === this.lastCanceledActionMessageId) ||
+      !lastMessage?.isStreamingOfEventFinished
+    ) {
+      return false;
+    }
+    return this.readyCommands.length > 0 || this.readyCodePatches.length > 0;
+  }
+
+  private async executeReadyCommands() {
+    for (let command of this.readyCommands) {
+      await this.commandService.run.unlinked().perform(command);
+    }
+  }
+
+  private async executeReadyCodePatches() {
+    // Group code patches by fileUrl
+    let grouped: Record<string, typeof this.readyCodePatches> = {};
+    for (let codeData of this.readyCodePatches) {
+      if (!codeData.fileUrl) continue;
+      if (!grouped[codeData.fileUrl]) grouped[codeData.fileUrl] = [];
+      grouped[codeData.fileUrl].push(codeData);
+    }
+    for (let [fileUrl, codeDataItems] of Object.entries(grouped)) {
+      await this.commandService.patchCode(
+        codeDataItems[0].roomId,
+        fileUrl,
+        codeDataItems,
+      );
+    }
+  }
+
+  executeAllReadyActionsTask = task(async () => {
+    await this.executeReadyCodePatches();
+    await this.executeReadyCommands();
+  });
+
+  @action
+  private cancelActionBar() {
+    let lastMessage = this.messages[this.messages.length - 1];
+    if (lastMessage) {
+      this.lastCanceledActionMessageId = lastMessage.eventId;
+    }
   }
 }
 

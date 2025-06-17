@@ -7,6 +7,7 @@ import Service, { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
 
 import { task, restartableTask } from 'ember-concurrency';
+import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
@@ -48,7 +49,7 @@ import { type Stack } from '../components/operator-mode/interact-submode';
 import { removeFileExtension } from '../components/search-sheet/utils';
 
 import {
-  CodeModePanelSelections,
+  ModuleInspectorSelections,
   PlaygroundSelections,
 } from '../utils/local-storage-keys';
 
@@ -76,6 +77,7 @@ export interface OperatorModeState {
   openDirs: Map<string, string[]>;
   codeSelection?: string;
   fieldSelection?: string;
+  moduleInspector?: ModuleInspectorView;
 }
 
 interface CardItem {
@@ -97,11 +99,15 @@ export type SerializedState = {
   codeSelection?: string;
   fieldSelection?: string;
   aiAssistantOpen?: boolean;
+  moduleInspector?: ModuleInspectorView;
 };
 
 interface OpenFileSubscriber {
   onStateChange: (state: FileResource['state']) => void;
 }
+
+export type ModuleInspectorView = 'schema' | 'spec' | 'preview';
+export const DEFAULT_MODULE_INSPECTOR_VIEW: ModuleInspectorView = 'schema';
 
 export default class OperatorModeStateService extends Service {
   @tracked private _state: OperatorModeState = new TrackedObject({
@@ -114,6 +120,8 @@ export default class OperatorModeStateService extends Service {
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
   private cardTitles = new TrackedMap<string, string>();
+
+  private moduleInspectorHistory: Record<string, ModuleInspectorView>;
 
   @service declare private cardService: CardService;
   @service declare private loaderService: LoaderService;
@@ -132,6 +140,13 @@ export default class OperatorModeStateService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.reset.register(this);
+
+    let moduleInspectorHistory = window.localStorage.getItem(
+      ModuleInspectorSelections,
+    );
+    this.moduleInspectorHistory = new TrackedObject(
+      moduleInspectorHistory ? JSON.parse(moduleInspectorHistory) : {},
+    );
   }
 
   get state() {
@@ -144,6 +159,7 @@ export default class OperatorModeStateService extends Service {
       codeSelection: this._state.codeSelection,
       fieldSelection: this._state.fieldSelection,
       aiAssistantOpen: this._state.aiAssistantOpen,
+      moduleInspector: this._state.moduleInspector,
     } as const;
   }
 
@@ -168,6 +184,7 @@ export default class OperatorModeStateService extends Service {
       codePath: null,
       openDirs: new TrackedMap<string, string[]>(),
       aiAssistantOpen: false,
+      moduleInspector: DEFAULT_MODULE_INSPECTOR_VIEW,
     });
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
@@ -391,6 +408,16 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
+  async updateModuleInspectorView(view: ModuleInspectorView) {
+    this._state.moduleInspector = view;
+    this.moduleInspectorHistory[this.state.codePath?.href ?? ''] = view;
+    window.localStorage.setItem(
+      ModuleInspectorSelections,
+      JSON.stringify(this.moduleInspectorHistory),
+    );
+    this.schedulePersist();
+  }
+
   async updateCodePathWithSelection({
     codeRef,
     localName,
@@ -459,7 +486,27 @@ export default class OperatorModeStateService extends Service {
     this._state.codePath = canonicalCodePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
+
+    let moduleInspectorView =
+      this.moduleInspectorHistory[canonicalCodePath?.href ?? ''] ??
+      DEFAULT_MODULE_INSPECTOR_VIEW;
+
+    this.updateModuleInspectorView(moduleInspectorView);
+
     this.specPanelService.setSelection(null);
+  }
+
+  persistModuleInspectorView(
+    codePath: string | null,
+    moduleInspector: ModuleInspectorView,
+  ) {
+    if (codePath) {
+      this.moduleInspectorHistory[codePath] = moduleInspector;
+      window.localStorage.setItem(
+        ModuleInspectorSelections,
+        JSON.stringify(this.moduleInspectorHistory),
+      );
+    }
   }
 
   private async determineCanonicalCodePath(codePath: URL | null) {
@@ -469,8 +516,8 @@ export default class OperatorModeStateService extends Service {
 
     let response;
     try {
-      // TODO Change to HEAD in CS-8846
       response = await this.network.authedFetch(codePath, {
+        method: 'HEAD',
         headers: { Accept: SupportedMimeType.CardSource },
       });
 
@@ -603,6 +650,7 @@ export default class OperatorModeStateService extends Service {
       codeSelection: this._state.codeSelection,
       fieldSelection: this._state.fieldSelection,
       aiAssistantOpen: this._state.aiAssistantOpen,
+      moduleInspector: this._state.moduleInspector,
     };
 
     for (let stack of this._state.stacks) {
@@ -655,6 +703,8 @@ export default class OperatorModeStateService extends Service {
       ]),
     );
 
+    console.log('in deserialise', rawState.codePath, rawState.moduleInspector);
+
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submodes.Interact,
@@ -664,7 +714,16 @@ export default class OperatorModeStateService extends Service {
       codeSelection: rawState.codeSelection,
       fieldSelection: rawState.fieldSelection,
       aiAssistantOpen: rawState.aiAssistantOpen ?? false,
+      moduleInspector:
+        rawState.moduleInspector ?? DEFAULT_MODULE_INSPECTOR_VIEW,
     });
+
+    if (rawState.codePath && rawState.moduleInspector) {
+      this.persistModuleInspectorView(
+        rawState.codePath,
+        rawState.moduleInspector,
+      );
+    }
 
     let stackIndex = 0;
     for (let stack of rawState.stacks) {
@@ -846,9 +905,9 @@ export default class OperatorModeStateService extends Service {
 
   get moduleInspectorPanel() {
     return (
-      JSON.parse(window.localStorage.getItem(CodeModePanelSelections) ?? '{}')[
-        this.codePathString ?? ''
-      ] ?? 'schema'
+      JSON.parse(
+        window.localStorage.getItem(ModuleInspectorSelections) ?? '{}',
+      )[this.codePathString ?? ''] ?? DEFAULT_MODULE_INSPECTOR_VIEW
     );
   }
 

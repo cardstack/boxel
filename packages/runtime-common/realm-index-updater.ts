@@ -106,7 +106,7 @@ export class RealmIndexUpdater {
       let job = await this.#queue.publish<FromScratchResult>({
         jobType: `from-scratch-index`,
         concurrencyGroup: `indexing:${this.#realm.url}`,
-        timeout: 5 * 60,
+        timeout: 3 * 60,
         priority: systemInitiatedPriority,
         args,
       });
@@ -122,8 +122,7 @@ export class RealmIndexUpdater {
         )}`,
       );
     } catch (e: any) {
-      this.#indexingDeferred.reject(e);
-      throw e;
+      this.#log.error(`Error running from-scratch-index: ${e.message}`);
     } finally {
       this.#indexingDeferred.fulfill();
     }
