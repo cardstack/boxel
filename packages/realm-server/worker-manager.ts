@@ -238,27 +238,22 @@ async function monitorWorker(workerId: string, worker: ChildProcess) {
     log.error(`detected stuck jobs for worker ${workerId}`);
     for (let { id, job_id: jobId } of stuckJobs) {
       log.info(`marking job ${jobId} as timed-out for worker ${workerId}`);
-      await query([
-        `UPDATE jobs SET `,
-        ...separatedByCommas([
-          [
-            `result =`,
-            param({
-              status: 500,
-              message: `Timed-out. Worker manager killed unresponsive worker ${workerId} for job reservation ${id}`,
-            }),
-          ],
-          [`status = 'rejected'`],
-          [`finished_at = NOW()`],
-        ]),
-        'WHERE id =',
-        param(jobId),
-      ] as Expression);
-      await query([
-        `UPDATE job_reservations SET completed_at = NOW() WHERE id =`,
-        param(id),
-      ]);
-      await query([`NOTIFY jobs_finished`]);
+      let currentState =
+        ((worker as any).__boxelIndexState as IndexState | undefined) ?? {};
+      let { url, realm, deps } = currentState;
+      if (url && realm && deps) {
+        await markFailedIndexEntry({
+          url,
+          realm,
+          deps,
+          message: `worker time-out encountered while indexing ${url}`,
+        });
+      }
+      await markFailedJob(
+        workerId,
+        jobId,
+        `Timed-out. Worker manager killed unresponsive worker ${workerId} for job reservation ${id}`,
+      );
     }
     log.info(`killing worker ${workerId} due to stuck jobs`);
     worker.kill();
@@ -363,14 +358,7 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
 
   let watchdog: NodeJS.Timeout;
   let workerId: string | undefined;
-  let currentState:
-    | {
-        jobId?: string;
-        url?: string;
-        realm?: string;
-        deps?: string[];
-      }
-    | undefined;
+  let currentState: IndexState | undefined;
 
   worker.on('exit', () => {
     clearInterval(watchdog);
@@ -434,6 +422,7 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
               realm,
               deps,
             };
+            (worker as any).__boxelIndexState = currentState;
           } else {
             currentState = undefined;
           }
@@ -452,4 +441,11 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
 
 async function query(expression: Expression) {
   return await _query(adapter, expression);
+}
+
+interface IndexState {
+  jobId?: string;
+  url?: string;
+  realm?: string;
+  deps?: string[];
 }
