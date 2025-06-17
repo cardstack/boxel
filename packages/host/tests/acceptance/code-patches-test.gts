@@ -272,7 +272,17 @@ ${REPLACE_MARKER}
     // Intentionally not using await here to test the loading state of the button
     click('[data-test-ai-assistant-action-bar] [data-test-accept-all]');
     await waitFor(
-      '[data-test-ai-assistant-action-bar] [data-test-accept-all] [data-test-boxel-button-loading-indicator]',
+      '[data-test-ai-assistant-action-bar] [data-test-loading-indicator]',
+    );
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-ai-assistant-action-bar]')
+        ?.textContent?.includes('Apply Diff'),
+    );
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-ai-assistant-action-bar]')
+        ?.textContent?.includes('Switch'),
     );
 
     await waitUntil(
