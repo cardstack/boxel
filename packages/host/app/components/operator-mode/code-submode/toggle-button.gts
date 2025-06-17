@@ -48,7 +48,6 @@ const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
       border-radius: var(--boxel-border-radius);
       flex: 1;
       justify-content: space-between;
-      margin: -2px 0;
     }
     .toggle-button:hover:not(:disabled) {
       border-color: var(--boxel-dark);
@@ -63,6 +62,7 @@ const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
       display: flex;
       align-items: center;
       gap: var(--boxel-sp-xs);
+      margin: -2px 0;
     }
 
     .icon {
