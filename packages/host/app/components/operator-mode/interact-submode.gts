@@ -803,13 +803,19 @@ export default class InteractSubmode extends Component {
       return;
     }
 
-    let spec = this.store.peek<Spec>(specId);
+    let spec = await this.store.get<Spec>(specId);
 
-    if (spec && isCardInstance<Spec>(spec)) {
-      await this.cardContext.actions?.createCard?.(spec.ref, new URL(specId), {
-        realmURL: this.writableRealmURL,
-      });
+    if (!spec) {
+      throw new Error(`Could not find spec "${specId}" in the store`);
     }
+    if (!isCardInstance<Spec>(spec)) {
+      console.error(spec);
+      throw new Error(`"${specId}" is not a card instance.`);
+    }
+
+    await this.cardContext.actions?.createCard?.(spec.ref, new URL(specId), {
+      realmURL: this.writableRealmURL,
+    });
   });
 
   private createNewFromRecentType = restartableTask(
@@ -826,8 +832,11 @@ export default class InteractSubmode extends Component {
     CardContext,
     'prerenderedCardSearchComponent'
   > {
+    // assumption: take actions in the right-most stack
+    let stackCount = this.operatorModeStateService.numberOfStacks();
+    let rightMostStackIndex = stackCount > 0 ? stackCount - 1 : 0;
     return {
-      actions: this.publicAPI(this, 0),
+      actions: this.publicAPI(this, rightMostStackIndex),
       getCard: this.getCard,
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
@@ -844,6 +853,7 @@ export default class InteractSubmode extends Component {
       @onSearchSheetClosed={{this.clearSearchSheetTrigger}}
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
       @newFileOptions={{this.newFileOptions}}
+      data-test-interact-submode
       as |search|
     >
       <div class='interact-submode' style={{this.backgroundImageStyle}}>

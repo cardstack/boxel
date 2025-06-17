@@ -681,6 +681,7 @@ export default class CodeSubmode extends Component<Signature> {
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
       @selectedCardRef={{this.selectedCodeRef}}
       @newFileOptions={{this.newFileOptions}}
+      data-test-code-submode
       as |search|
     >
       <div
