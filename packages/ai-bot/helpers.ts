@@ -178,7 +178,7 @@ export async function getPromptParts(
   let skills = await getEnabledSkills(eventList, client);
   let tools = await getTools(eventList, skills, aiBotUserId, client);
   let toolChoice = getToolChoice(history, aiBotUserId);
-  let messages = await getModifyPrompt(
+  let messages = await buildPromptForModel(
     history,
     aiBotUserId,
     tools,
@@ -790,7 +790,7 @@ async function toResultMessages(
   return [...commandResultMessages, ...codePatchResultMessages];
 }
 
-export async function getModifyPrompt(
+export async function buildPromptForModel(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   tools: Tool[] = [],

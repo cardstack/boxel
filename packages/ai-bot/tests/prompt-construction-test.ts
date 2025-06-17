@@ -2,7 +2,7 @@ import { module, test, assert } from 'qunit';
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 
 import {
-  getModifyPrompt,
+  buildPromptForModel,
   getPromptParts,
   getRelevantCards,
   getTools,
@@ -59,7 +59,7 @@ function oldPatchTool(card: CardDef, properties: any): Tool {
   };
 }
 
-module('getModifyPrompt', (hooks) => {
+module('buildPromptForModel', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
   let mockResponses: Map<string, { ok: boolean; text: string }>;
   let originalFetch: any;
@@ -136,7 +136,7 @@ module('getModifyPrompt', (hooks) => {
       },
     ];
 
-    const result = await getModifyPrompt(
+    const result = await buildPromptForModel(
       history,
       '@aibot:localhost',
       undefined,
@@ -223,7 +223,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       },
     ];
 
-    const result = await getModifyPrompt(
+    const result = await buildPromptForModel(
       history,
       '@aibot:localhost',
       undefined,
@@ -303,7 +303,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     ];
 
     try {
-      await getModifyPrompt(
+      await buildPromptForModel(
         history,
         '@aibot@localhost',
         undefined,
@@ -663,7 +663,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       text: 'Not found',
     });
 
-    let prompt = await getModifyPrompt(
+    let prompt = await buildPromptForModel(
       history,
       '@aibot:localhost',
       undefined,
@@ -985,7 +985,7 @@ Attached Files (files with newer versions don't show their content):
         status: EventStatus.SENT,
       },
     ];
-    const fullPrompt = await getModifyPrompt(
+    const fullPrompt = await buildPromptForModel(
       history,
       '@aibot:localhost',
       undefined,
@@ -2299,7 +2299,7 @@ Attached Files (files with newer versions don't show their content):
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    const result = await getModifyPrompt(
+    const result = await buildPromptForModel(
       history,
       '@aibot:localhost',
       tools,
