@@ -67,7 +67,7 @@ const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
 
     .icon {
       transform: scale(0.75);
-      margin: 2px -5px 0 4px;
+      margin: 2px -6px 0 4px;
     }
   </style>
 </template>;
