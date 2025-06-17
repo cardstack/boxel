@@ -701,7 +701,7 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
     <style scoped>
       .stage {
         width: 100%;
-        height: 100%;
+        height: auto;
         background: hsl(0 0% 98%);
         font-family:
           ui-sans-serif,
