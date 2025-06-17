@@ -15,18 +15,21 @@ import { Message } from './message';
 export default class MessageCodePatchResult {
   @tracked index: number;
   @tracked status: CodePatchStatus;
+  @tracked finalFileUrlAfterCodePatching: string;
 
   constructor(
     public message: Message,
     public codePatchEventId: string,
     status: CodePatchStatus,
     index: number,
+    finalFileUrlAfterCodePatching: string,
     owner: Owner,
   ) {
     setOwner(this, owner);
 
     this.index = index;
     this.status = status;
+    this.finalFileUrlAfterCodePatching = finalFileUrlAfterCodePatching;
   }
 
   @service declare commandService: CommandService;

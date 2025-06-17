@@ -1,6 +1,7 @@
 import { array, fn } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import menuItem from '../../helpers/menu-item.ts';
@@ -9,6 +10,8 @@ import BoxelMenu from '../menu/index.gts';
 import BoxelDropdown from './index.gts';
 
 export default class BoxelDropdownUsage extends Component {
+  @tracked shouldDropdownAutoClose = false;
+
   @action log(string: string): void {
     console.log(string);
   }
@@ -27,7 +30,7 @@ export default class BoxelDropdownUsage extends Component {
         open.
       </:description>
       <:example>
-        <BoxelDropdown>
+        <BoxelDropdown @autoClose={{this.shouldDropdownAutoClose}}>
           <:trigger as |bindings|>
             <BoxelButton {{bindings}}>
               Trigger
@@ -75,6 +78,13 @@ export default class BoxelDropdownUsage extends Component {
         <Args.Action
           @name='onClose'
           @description='Action called when the dropdown is closing'
+        />
+        <Args.Bool
+          @name='autoClose'
+          @optional={{true}}
+          @description='Whether the dropdown should automatically close when mouse leaves the dropdown content'
+          @value={{this.shouldDropdownAutoClose}}
+          @onInput={{fn (mut this.shouldDropdownAutoClose)}}
         />
         <Args.Yield
           @name='trigger'

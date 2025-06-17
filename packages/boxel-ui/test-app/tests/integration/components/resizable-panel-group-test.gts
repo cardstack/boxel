@@ -1,13 +1,18 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
-import { doubleClick, render, RenderingTestContext } from '@ember/test-helpers';
+import {
+  find,
+  doubleClick,
+  render,
+  RenderingTestContext,
+} from '@ember/test-helpers';
 import { htmlSafe } from '@ember/template';
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { tracked } from '@glimmer/tracking';
 import { triggerEvent } from '@ember/test-helpers';
 
-const RESIZE_HANDLE_WIDTH = 15.126;
+const RESIZE_HANDLE_WIDTH = 8;
 const PANEL_INDEX_1_MIN_SIZE = 15;
 
 class PanelProperties {
@@ -77,11 +82,13 @@ let moveResizePanelHandle = async function ({
   orientation,
   moveDelta, // A negative indicates movement to the left in a horizontal orientation and upward in a vertical orientation."
   hitAreaMargin = 0,
+  moveWithSeparator = false, // Use the separator parent element of the handle to move
 }: {
   panelIndex: number;
   orientation: string;
   moveDelta: number;
   hitAreaMargin?: number;
+  moveWithSeparator?: boolean;
 }) {
   let groupEl = document.querySelector('[data-boxel-panel-group]');
   if (!groupEl) {
@@ -103,8 +110,17 @@ let moveResizePanelHandle = async function ({
   let resizeHandleRect =
     resizePanelHandles[panelIndex].children[0]!.getBoundingClientRect();
   let moveDeltaInPixels = (groupSizeInPixels * moveDelta) / 100;
-  await triggerEvent(
+
+  let elementToMove = find(
     `[data-boxel-panel-resize-handle-id="${resizeHandleId}"]`,
+  );
+
+  if (moveWithSeparator) {
+    elementToMove = elementToMove!.parentElement;
+  }
+
+  await triggerEvent(
+    elementToMove!,
     'pointerdown',
     orientation === 'horizontal'
       ? {
@@ -117,7 +133,7 @@ let moveResizePanelHandle = async function ({
         },
   );
   await triggerEvent(
-    `[data-boxel-panel-resize-handle-id="${resizeHandleId}"]`,
+    elementToMove!,
     'pointermove',
     orientation === 'horizontal'
       ? {
@@ -129,10 +145,7 @@ let moveResizePanelHandle = async function ({
           clientY: resizeHandleRect.y + moveDeltaInPixels + hitAreaMargin,
         },
   );
-  await triggerEvent(
-    `[data-boxel-panel-resize-handle-id="${resizeHandleId}"]`,
-    'pointerup',
-  );
+  await triggerEvent(elementToMove!, 'pointerup');
   await waitForRerender();
 };
 
@@ -308,6 +321,27 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
           assert,
           orientation: orientationProperties.orientation,
           panelSizesInPixels: ['420px', '180px'],
+        });
+      });
+
+      test<MyTestContext>(`it can handle dragging via the separator in ${orientationProperties.orientation} orientation`, async function (assert) {
+        let containerSize = 300 + RESIZE_HANDLE_WIDTH;
+        this.renderController.containerStyle = `
+          ${orientationProperties.dimension}: ${containerSize}px;
+        `;
+
+        await renderResizablePanelGroup(this.renderController);
+
+        await moveResizePanelHandle({
+          panelIndex: 0,
+          orientation: orientationProperties.orientation,
+          moveDelta: -10,
+          moveWithSeparator: true,
+        });
+        assertPanels({
+          assert,
+          orientation: orientationProperties.orientation,
+          panelSizesInPixels: ['150px', '150px'],
         });
       });
 
