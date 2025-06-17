@@ -1,4 +1,4 @@
-import { concat, hash } from '@ember/helper';
+import { concat, fn, hash } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import BasicDropdown, {
@@ -32,6 +32,7 @@ export type DropdownAPI = Dropdown;
 
 interface Signature {
   Args: {
+    autoClose?: boolean;
     contentClass?: string;
     onClose?: () => void;
     registerAPI?: (publicAPI: Dropdown) => void;
@@ -56,6 +57,12 @@ interface Signature {
 class BoxelDropdown extends Component<Signature> {
   @action registerAPI(publicAPI: DropdownAPI) {
     this.args.registerAPI?.(publicAPI);
+  }
+
+  @action onMouseLeave(dropdown?: Dropdown) {
+    if (this.args.autoClose && dropdown) {
+      dropdown.actions.close();
+    }
   }
 
   <template>
@@ -83,6 +90,7 @@ class BoxelDropdown extends Component<Signature> {
       {{/let}}
 
       <dd.Content
+        @onMouseLeave={{fn this.onMouseLeave dd}}
         data-test-boxel-dropdown-content
         class={{cn 'boxel-dropdown__content' @contentClass}}
         {{focusTrap
@@ -95,11 +103,11 @@ class BoxelDropdown extends Component<Signature> {
             allowOutsideClick=true
           )
         }}
-        {{this.autoCloseOnOutsidePointer dd}}
       >
         {{yield (hash close=dd.actions.close) to='content'}}
       </dd.Content>
     </BasicDropdown>
+
     <style scoped>
       @layer {
         .boxel-dropdown__content {
@@ -219,57 +227,6 @@ class BoxelDropdown extends Component<Signature> {
       );
     };
   });
-
-  autoCloseOnOutsidePointer = createModifier(
-    (_element: HTMLElement, [dropdown]: [Dropdown]) => {
-      let closeTimeout: number | undefined;
-
-      let handleMouseMove = (event: MouseEvent) => {
-        const dropdownContent = document.querySelector(
-          '.boxel-dropdown__content',
-        ) as HTMLElement;
-
-        if (!dropdownContent) return;
-
-        const rect = dropdownContent.getBoundingClientRect();
-        const isOutside =
-          event.clientX < rect.left ||
-          event.clientX > rect.right ||
-          event.clientY < rect.top ||
-          event.clientY > rect.bottom;
-
-        if (isOutside) {
-          // Clear any existing timeout
-          if (closeTimeout) {
-            window.clearTimeout(closeTimeout);
-          }
-
-          // Add a small delay before closing to allow for interactions
-          closeTimeout = window.setTimeout(() => {
-            // Only close if the dropdown is still open
-            if (dropdown.isOpen) {
-              dropdown.actions.close();
-            }
-          }, 200);
-        } else {
-          // Clear timeout if mouse is inside
-          if (closeTimeout) {
-            window.clearTimeout(closeTimeout);
-            closeTimeout = undefined;
-          }
-        }
-      };
-
-      window.addEventListener('mousemove', handleMouseMove);
-
-      return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        if (closeTimeout) {
-          window.clearTimeout(closeTimeout);
-        }
-      };
-    },
-  );
 }
 
 declare module '@glint/environment-ember-loose/registry' {
