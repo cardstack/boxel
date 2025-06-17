@@ -10,6 +10,9 @@ import {
   RealmPaths,
 } from '@cardstack/runtime-common';
 
+import { join } from '@cardstack/runtime-common/paths';
+
+import { Spec } from 'https://cardstack.com/base';
 import * as CardAPI from 'https://cardstack.com/base/card-api';
 import * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -42,6 +45,42 @@ interface InstallListingResult {
   shouldPersistPlaygroundSelection: boolean;
   firstExampleCardId?: string;
   skillCardIds?: string[];
+}
+
+function planModuleInstall(
+  spec: Spec,
+  sourceRealm: string,
+  targetRealm: string,
+  dirName: string,
+): CopyMeta {
+  if (!spec.id) {
+    throw new Error('Missing spec id');
+  }
+  let absoluteModulePath = spec.moduleHref;
+  let realmPath = new RealmPaths(new URL(sourceRealm));
+  let localPath = realmPath.local(new URL(absoluteModulePath));
+  let targetModule = targetRealm + join(dirName, localPath);
+  return {
+    sourceCodeRef: {
+      name: spec.ref.name,
+      module: spec.moduleHref,
+    },
+    targetCodeRef: {
+      name: spec.ref.name,
+      module: targetModule,
+    },
+  };
+}
+
+export function planInstall(
+  specs: Spec[],
+  sourceRealm: string,
+  targetRealm: string,
+  dirName: string,
+): CopyMeta[] {
+  return specs.map((spec) =>
+    planModuleInstall(spec, sourceRealm, targetRealm, dirName),
+  );
 }
 
 export async function installListing({
