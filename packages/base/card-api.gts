@@ -166,7 +166,10 @@ function isNotLoadedValue(val: any): val is NotLoadedValue {
     return false;
   }
   let { type, reference } = val;
-  if (typeof type !== 'string' || typeof reference !== 'string') {
+  if (
+    typeof type !== 'string' ||
+    (typeof reference !== 'string' && !Array.isArray(reference))
+  ) {
     return false;
   }
   return type === 'not-loaded';
