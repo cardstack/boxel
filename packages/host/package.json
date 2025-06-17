@@ -182,6 +182,10 @@
     "wait-for-localhost-cli": "catalog:",
     "webpack": "catalog:"
   },
+  "dependencies": {
+    "reactiveweb": "catalog:",
+    "ember-modify-based-class-resource": "catalog:"
+  },
   "engines": {
     "node": ">= 20"
   },
@@ -195,9 +199,5 @@
     "paths": [
       "lib/setup-ast-transforms"
     ]
-  },
-  "dependencies": {
-    "reactiveweb": "catalog:",
-    "ember-modify-based-class-resource": "catalog:"
   }
 }
