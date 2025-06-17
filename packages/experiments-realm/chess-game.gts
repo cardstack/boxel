@@ -40,7 +40,7 @@ import {
 } from 'https://cdn.jsdelivr.net/npm/cm-chessboard@8.7.3/src/extensions/markers/Markers.js/+esm';
 
 import Modifier from 'ember-modifier';
-import { Resource } from 'ember-modify-class-based-resource';
+import { Resource } from 'ember-modify-based-class-resource';
 
 import BooleanField from 'https://cardstack.com/base/boolean';
 import { tracked } from '@glimmer/tracking';

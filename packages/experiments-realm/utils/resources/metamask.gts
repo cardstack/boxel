@@ -1,6 +1,6 @@
 import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
-import { Resource } from 'ember-modify-class-based-resource';
+import { Resource } from 'ember-modify-based-class-resource';
 // @ts-ignore
 import { enqueueTask, restartableTask } from 'ember-concurrency';
 // @ts-ignore
