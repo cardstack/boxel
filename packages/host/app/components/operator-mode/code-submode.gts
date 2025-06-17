@@ -3,7 +3,6 @@ import { hash } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
