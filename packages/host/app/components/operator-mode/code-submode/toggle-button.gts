@@ -1,8 +1,9 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import type { ComponentLike } from '@glint/template';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
+
+import type { ComponentLike } from '@glint/template';
 
 interface ToggleButtonSignature {
   Args: {
