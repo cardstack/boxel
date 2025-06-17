@@ -6,7 +6,7 @@ import { service } from '@ember/service';
 import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
 
-import { use, resource } from 'ember-resources'
+import { use, resource } from 'ember-resources';
 
 import startCase from 'lodash/startCase';
 
