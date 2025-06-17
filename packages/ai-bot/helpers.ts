@@ -710,7 +710,7 @@ async function toResultMessages(
   codePatchResults: CodePatchResultEvent[] = [],
   client: MatrixClient,
   history: DiscreteMatrixEvent[],
-): OpenAIPromptMessage[] {
+): Promise<OpenAIPromptMessage[]> {
   const messageContent = event.content as CardMessageContent;
   let commandResultMessages = await Promise.all(
     (messageContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(

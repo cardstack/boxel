@@ -3466,18 +3466,18 @@ Attached Files (files with newer versions don't show their content):
       (message) => message.role === 'tool',
     );
     assert.ok(toolCallMessage, 'Should have a tool call message');
-    assert.ok(
+    assert.true(
       toolCallMessage!.content!.includes('executed'),
       'Tool call result should reflect that the tool was executed',
     );
-    assert.ok(
+    assert.true(
       toolCallMessage!.content!.includes(
         `
 Attached Files (files with newer versions don't show their content):
 [postcard.gts](http://test-realm-server/user/test-realm/postcard.gts): export default Postcard extends CardDef {}
       `.trim(),
-        'Tool call result should include attached files',
       ),
+      'Tool call result should include attached files',
     );
   });
 
@@ -3503,11 +3503,11 @@ Attached Files (files with newer versions don't show their content):
       (message) => message.role === 'tool',
     );
     assert.ok(toolCallMessage, 'Should have a tool call message');
-    assert.ok(
+    assert.true(
       toolCallMessage!.content!.includes('executed'),
       'Tool call result should reflect that the tool was executed',
     );
-    assert.ok(
+    assert.true(
       toolCallMessage!.content!.includes(
         `
 Attached Cards (cards with newer versions don't show their content):
@@ -3521,8 +3521,8 @@ Attached Cards (cards with newer versions don't show their content):
   }
 ]
       `.trim(),
-        'Tool call result should include attached cards',
       ),
+      'Tool call result should include attached cards',
     );
   });
 
@@ -3566,8 +3566,8 @@ Attached Cards (cards with newer versions don't show their content):
 Attached Files (files with newer versions don't show their content):
 [postcard.gts](http://test-realm-server/user/test-realm/postcard.gts): export default Postcard extends CardDef { /* after */ }
       `.trim(),
-        'Code patch result should include attached files',
       ),
+      'Code patch result should include attached files',
     );
   });
 });
