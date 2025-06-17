@@ -175,6 +175,11 @@ export interface BoxelContext {
   submode?: string;
   codeMode?: {
     currentFile?: string;
+    moduleInspectorPanel?: string;
+    previewPanelSelection?: {
+      cardId: string;
+      format: string;
+    };
   };
   debug?: boolean;
   requireToolCall?: boolean;

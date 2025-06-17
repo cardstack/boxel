@@ -86,6 +86,7 @@ export * from './index-query-engine';
 export * from './index-writer';
 export * from './index-structure';
 export * from './db';
+export * from './lint';
 export * from './worker';
 export * from './stream';
 export * from './realm';
@@ -435,7 +436,10 @@ export interface CardActions {
     card: CardDef,
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
-  changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
+  changeSubmode: (
+    url: URL,
+    submode: 'code' | 'interact',
+  ) => Promise<void> | void;
 }
 
 export interface CopyCardsWithCodeRef {

@@ -218,7 +218,6 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #disableModuleCaching = false;
-  #copiedFromRealm: URL | undefined;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -273,7 +272,6 @@ export class Realm {
       seed: secretSeed,
     });
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
-    this.#copiedFromRealm = opts?.copiedFromRealm;
     let fetch = fetcher(virtualNetwork.fetch, [
       async (req, next) => {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
@@ -371,6 +369,11 @@ export class Realm {
         SupportedMimeType.CardSource,
         this.upsertCardSource.bind(this),
       )
+      .head(
+        '/.*',
+        SupportedMimeType.CardSource,
+        this.getSourceOrRedirect.bind(this),
+      )
       .get(
         '/.*',
         SupportedMimeType.CardSource,
@@ -388,10 +391,12 @@ export class Realm {
       );
 
     Object.values(SupportedMimeType).forEach((mimeType) => {
-      this.#router.head('/.*', mimeType as SupportedMimeType, async () => {
-        let requestContext = await this.createRequestContext();
-        return createResponse({ init: { status: 200 }, requestContext });
-      });
+      if (mimeType !== SupportedMimeType.CardSource) {
+        this.#router.head('/.*', mimeType as SupportedMimeType, async () => {
+          let requestContext = await this.createRequestContext();
+          return createResponse({ init: { status: 200 }, requestContext });
+        });
+      }
     });
   }
 
@@ -600,25 +605,16 @@ export class Realm {
   async #startup() {
     await Promise.resolve();
     let startTime = Date.now();
-    if (this.#copiedFromRealm) {
-      await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
-      this.broadcastRealmEvent({
-        eventName: 'index',
-        indexType: 'copy',
-        sourceRealmURL: this.#copiedFromRealm.href,
-      });
-    } else {
-      let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-      let promise = this.#realmIndexUpdater.run();
-      if (isNewIndex) {
-        // we only await the full indexing at boot if this is a brand new index
-        await promise;
-      }
-      this.broadcastRealmEvent({
-        eventName: 'index',
-        indexType: 'full',
-      });
+    let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
+    let promise = this.#realmIndexUpdater.run();
+    if (isNewIndex) {
+      // we only await the full indexing at boot if this is a brand new index
+      await promise;
     }
+    this.broadcastRealmEvent({
+      eventName: 'index',
+      indexType: 'full',
+    });
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
     );
@@ -2143,11 +2139,9 @@ export class Realm {
     let api = await this.loader.import<typeof CardAPI>(
       'https://cardstack.com/base/card-api',
     );
-    let card = (await api.createFromSerialized(
-      doc.data,
-      doc,
-      relativeTo,
-    )) as CardDef;
+    let card = (await api.createFromSerialized(doc.data, doc, relativeTo, {
+      ignoreBrokenLinks: true,
+    })) as CardDef;
     await api.flushLogs();
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
     delete data.data.id; // the ID is derived from the filename, so we don't serialize it on disk

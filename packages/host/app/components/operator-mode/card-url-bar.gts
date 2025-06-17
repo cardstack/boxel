@@ -88,7 +88,7 @@ export default class CardURLBar extends Component<Signature> {
         align-items: center;
 
         background-color: var(--boxel-dark);
-        border-radius: var(--boxel-border-radius-xxl);
+        border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
 
         width: var(--card-url-bar-width);
@@ -185,8 +185,8 @@ export default class CardURLBar extends Component<Signature> {
 
   private urlBar: URLBarResource = urlBarResource(this, () => ({
     getValue: () => (this.codePath ? decodeURI(this.codePath) : ''),
-    setValue: (url: string) => {
-      this.operatorModeStateService.updateCodePath(new URL(url));
+    setValue: async (url: string) => {
+      await this.operatorModeStateService.updateCodePath(new URL(url));
     },
     setValueError: this.args.loadFileError,
     resetValueError: this.args.resetLoadFileError,

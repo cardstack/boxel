@@ -9,6 +9,8 @@ import ArrowTopLeft from './icons/arrow-top-left.gts';
 import BoxelIcon from './icons/boxel-icon.gts';
 import Card from './icons/card.gts';
 import CardbotLg from './icons/cardbot-lg.gts';
+import CardDefinition from './icons/card-definition.gts';
+import CardInstance from './icons/card-instance.gts';
 import CaretDown from './icons/caret-down.gts';
 import CheckMark from './icons/check-mark.gts';
 import ChevronRight from './icons/chevron-right.gts';
@@ -22,8 +24,10 @@ import Exclamation from './icons/exclamation.gts';
 import ExclamationCircle from './icons/exclamation-circle.gts';
 import Eye from './icons/eye.gts';
 import FailureBordered from './icons/failure-bordered.gts';
+import Field from './icons/field.gts';
 import File from './icons/file.gts';
 import FileAlert from './icons/file-alert.gts';
+import Folder from './icons/folder.gts';
 import FourLines from './icons/four-lines.gts';
 import Grid3x3 from './icons/grid-3x3.gts';
 import Group from './icons/group.gts';
@@ -73,6 +77,8 @@ export const ALL_ICON_COMPONENTS = [
   BoxelIcon,
   Card,
   CardbotLg,
+  CardDefinition,
+  CardInstance,
   CaretDown,
   CheckMark,
   ChevronRight,
@@ -86,8 +92,10 @@ export const ALL_ICON_COMPONENTS = [
   ExclamationCircle,
   Eye,
   FailureBordered,
+  Field,
   File,
   FileAlert,
+  Folder,
   FourLines,
   Grid3x3,
   Group,
@@ -138,6 +146,8 @@ export {
   BoxelIcon,
   Card,
   CardbotLg,
+  CardDefinition,
+  CardInstance,
   CaretDown,
   CheckMark,
   ChevronRight,
@@ -151,8 +161,10 @@ export {
   ExclamationCircle,
   Eye,
   FailureBordered,
+  Field,
   File,
   FileAlert,
+  Folder,
   FourLines,
   Grid3x3,
   Group,

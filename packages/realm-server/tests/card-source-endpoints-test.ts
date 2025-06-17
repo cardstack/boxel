@@ -265,6 +265,55 @@ module(basename(__filename), function () {
       });
     });
 
+    module('card source HEAD request', function (_hooks) {
+      module('public readable realm', function (hooks) {
+        setupPermissionedRealm(hooks, {
+          permissions: {
+            '*': ['read'],
+          },
+          onRealmSetup,
+        });
+
+        test('serves the request', async function (assert) {
+          let response = await request
+            .head('/person.gts')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'realm url header is correct',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'realm is public readable',
+          );
+          assert.notOk(response.text, 'no body in HEAD response');
+        });
+
+        test('serves a card-source HEAD request that results in redirect', async function (assert) {
+          let response = await request
+            .head('/person')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 302, 'HTTP 302 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'realm url header is correct',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'realm is public readable',
+          );
+          assert.strictEqual(response.headers['location'], '/person.gts');
+        });
+      });
+    });
+
     module('card-source DELETE request', function (_hooks) {
       module('public writable realm', function (hooks) {
         setupPermissionedRealm(hooks, {

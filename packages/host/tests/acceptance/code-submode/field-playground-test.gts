@@ -4,9 +4,11 @@ import { module, test } from 'qunit';
 
 import { specRef, type Realm } from '@cardstack/runtime-common';
 
+import { BULK_GENERATED_ITEM_COUNT } from '@cardstack/host/components/operator-mode/code-submode/playground/instance-chooser-dropdown';
 import ENV from '@cardstack/host/config/environment';
 
 import {
+  assertMessages,
   percySnapshot,
   setupAcceptanceTestRealm,
   setupLocalIndexing,
@@ -628,6 +630,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: `${testRealmURL}Spec/comment-1`,
         format: 'embedded',
         fieldIndex: 0,
+        url: `${testRealmURL}blog-post.gts`,
       });
 
       await toggleSpecPanel();
@@ -666,6 +669,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: `${testRealmURL}Spec/comment-2`,
         format: 'embedded',
         fieldIndex: 0,
+        url: `${testRealmURL}blog-post.gts`,
       });
     });
 
@@ -685,6 +689,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: `${testRealmURL}Spec/comment-1`,
         format: 'embedded',
         fieldIndex: 0,
+        url: `${testRealmURL}blog-post.gts`,
       });
 
       await chooseAnotherInstance();
@@ -708,6 +713,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: `${testRealmURL}Spec/comment-1`,
         format: 'embedded',
         fieldIndex: 1,
+        url: `${testRealmURL}blog-post.gts`,
       });
     });
 
@@ -818,6 +824,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: `${testRealmURL}Spec/comment-1`,
         format: 'embedded',
         fieldIndex: 0,
+        url: `${testRealmURL}blog-post.gts`,
       });
 
       await createNewInstance();
@@ -830,6 +837,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: `${testRealmURL}Spec/comment-1`,
         format: 'edit',
         fieldIndex: 2,
+        url: `${testRealmURL}blog-post.gts`,
       });
 
       await toggleSpecPanel();
@@ -896,6 +904,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: `${testRealmURL}Spec/full-name`,
         format: 'edit',
         fieldIndex: 0,
+        url: `${testRealmURL}author.gts`,
       });
     });
 
@@ -946,6 +955,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
           cardId: specId,
           fieldIndex: 0,
           format: 'embedded',
+          url: `${testRealmURL}pet.gts`,
         },
       };
       assert.deepEqual(
@@ -998,6 +1008,50 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       await settled();
       assertFieldExists(assert, 'embedded');
       assert.dom('[data-test-embedded-comment-title]').doesNotExist();
+    });
+
+    test('can request AI assistant to fill in sample data', async function (assert) {
+      const prompt = `Fill in sample data for this example on the card's spec.`;
+      const menuItem = 'Fill in sample data with AI';
+      const commandMessage = {
+        from: 'testuser',
+        message: prompt,
+        cards: [{ id: `${testRealmURL}Spec/toy` }],
+        files: [{ name: 'pet.gts', sourceUrl: `${testRealmURL}pet.gts` }],
+      };
+      await openFileInPlayground('pet.gts', testRealmURL, {
+        declaration: 'ToyField',
+      });
+      assert
+        .dom('[data-test-instance-chooser]')
+        .containsText('Toy - Example 1');
+      assertFieldExists(assert, 'embedded');
+
+      await click('[data-test-instance-chooser]');
+      await click(`[data-test-boxel-menu-item-text="${menuItem}"]`);
+      assertMessages(assert, [commandMessage]);
+    });
+
+    test('can request AI assistant to bulk generate samples', async function (assert) {
+      const prompt = `Generate ${BULK_GENERATED_ITEM_COUNT} additional examples on this card's spec.`;
+      const menuItem = `Generate ${BULK_GENERATED_ITEM_COUNT} examples with AI`;
+      const commandMessage = {
+        from: 'testuser',
+        message: prompt,
+        cards: [{ id: `${testRealmURL}Spec/toy` }],
+        files: [{ name: 'pet.gts', sourceUrl: `${testRealmURL}pet.gts` }],
+      };
+      await openFileInPlayground('pet.gts', testRealmURL, {
+        declaration: 'ToyField',
+      });
+      assert
+        .dom('[data-test-instance-chooser]')
+        .containsText('Toy - Example 1');
+      assertFieldExists(assert, 'embedded');
+
+      await click('[data-test-instance-chooser]');
+      await click(`[data-test-boxel-menu-item-text="${menuItem}"]`);
+      assertMessages(assert, [commandMessage]);
     });
   });
 
@@ -1184,6 +1238,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: `${additionalRealmURL}Spec/toy`,
         format: 'atom',
         fieldIndex: 0,
+        url: `${additionalRealmURL}pet.gts`,
       });
 
       await createNewInstance();
@@ -1196,6 +1251,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: `${additionalRealmURL}Spec/toy`,
         format: 'edit',
         fieldIndex: 1,
+        url: `${additionalRealmURL}pet.gts`,
       });
 
       await toggleSpecPanel();
@@ -1266,6 +1322,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: `${additionalRealmURL}Spec/full-name`,
         format: 'edit',
         fieldIndex: 0,
+        url: `${additionalRealmURL}author.gts`,
       });
     });
   });

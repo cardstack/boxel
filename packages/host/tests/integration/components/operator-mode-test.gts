@@ -551,6 +551,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           } as LooseSingleCardDocument,
           'grid.json': new CardsGrid(),
+          'index.json': new CardsGrid(),
           'Spec/publishing-packet.json': new Spec({
             title: 'Publishing Packet',
             description: 'Spec for PublishingPacket',
@@ -2717,7 +2718,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}BlogPost/1.json`);
 
-    operatorModeStateService.updateCodePath(
+    await operatorModeStateService.updateCodePath(
       new URL(`${testRealmURL}person.gts`),
     );
 
@@ -2765,7 +2766,7 @@ module('Integration | operator-mode', function (hooks) {
     let someRandomText = 'I am still typing a url';
     await typeIn('[data-test-card-url-bar-input]', someRandomText);
 
-    operatorModeStateService.updateCodePath(
+    await operatorModeStateService.updateCodePath(
       new URL(`${testRealmURL}person.gts`),
     );
 
@@ -2968,7 +2969,8 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-boxel-menu-item-text="Open in Interact Mode"]`);
 
     await waitFor(`[data-test-stack-card]`);
-    assert.dom(`[data-test-stack-card]`).exists({ count: 1 });
+    assert.dom(`[data-test-stack-card]`).exists({ count: 2 });
+    assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
     assert.dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`).exists();
   });
 

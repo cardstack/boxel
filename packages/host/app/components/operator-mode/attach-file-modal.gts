@@ -100,7 +100,7 @@ export default class AttachFileModal extends Component<Signature> {
   }
 
   @action
-  private selectFile(file: LocalPath) {
+  private async selectFile(file: LocalPath) {
     this.selectedFile = file;
   }
 

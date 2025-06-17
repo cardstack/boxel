@@ -5,7 +5,7 @@ import { Resource } from 'ember-resources';
 interface Args {
   named: {
     getValue: () => string | null;
-    setValue: (val: string) => void;
+    setValue: (val: string) => Promise<void>;
     setValueError: string | null;
     resetValueError: () => void;
   };
@@ -17,7 +17,7 @@ export default class URLBarResource extends Resource<Args> {
   @tracked isEditing = false;
   @tracked isFocused = false;
 
-  setValue?: (val: string) => void;
+  setValue?: (val: string) => Promise<void>;
   setValueError?: string | null;
   resetValueError?: () => void;
 
@@ -49,11 +49,11 @@ export default class URLBarResource extends Resource<Args> {
     return;
   }
 
-  onKeyPress(event: KeyboardEvent) {
+  async onKeyPress(event: KeyboardEvent) {
     if (event.key !== 'Enter' || !this.lastEditedValue) {
       return;
     }
-    this.setURL(this.lastEditedValue);
+    await this.setURL(this.lastEditedValue);
   }
 
   onInput(newURL: string) {
@@ -84,10 +84,10 @@ export default class URLBarResource extends Resource<Args> {
     }
   }
 
-  setURL(newURL: string) {
+  async setURL(newURL: string) {
     if (this.validate(this.lastEditedValue)) {
       if (this.setValue) {
-        this.setValue(newURL);
+        await this.setValue(newURL);
       }
       this.value = newURL;
       this.isEditing = false;

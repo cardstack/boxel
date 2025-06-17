@@ -25,7 +25,7 @@ import { Realm } from '@cardstack/runtime-common/realm';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
-import { CodeModePanelSelections } from '@cardstack/host/utils/local-storage-keys';
+import { ModuleInspectorSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import {
   getMonacoContent,
@@ -1819,6 +1819,24 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-create-file-modal]').doesNotExist();
     });
 
+    test('restores and remembers module inspector view from operator mode state', async function (assert) {
+      await visitOperatorMode({
+        stacks: [],
+        submode: 'code',
+        codePath: `${testRealmURL}pet.gts`,
+        moduleInspector: 'preview',
+      });
+
+      assert.dom('[data-test-active-module-inspector-view="preview"]').exists();
+
+      assert.strictEqual(
+        window.localStorage.getItem(ModuleInspectorSelections),
+        JSON.stringify({
+          [`${testRealmURL}pet.gts`]: 'preview',
+        }),
+      );
+    });
+
     test('remembers open module inspector panel via local storage', async function (assert) {
       let accordionSelections = {
         [`${testRealmURL}address.gts`]: 'spec',
@@ -1827,7 +1845,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         [`${testRealmURL}pet-person.gts`]: 'preview',
       };
       window.localStorage.setItem(
-        CodeModePanelSelections,
+        ModuleInspectorSelections,
         JSON.stringify(accordionSelections),
       );
 
@@ -1862,18 +1880,36 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-active-module-inspector-view="spec"]').exists();
 
       let currentSelections = window.localStorage.getItem(
-        CodeModePanelSelections,
+        ModuleInspectorSelections,
       );
       assert.strictEqual(
         currentSelections,
         JSON.stringify({
           [`${testRealmURL}address.gts`]: 'spec',
-          [`${testRealmURL}country.gts`]: null,
+          [`${testRealmURL}country.gts`]: 'schema',
           [`${testRealmURL}person.gts`]: 'schema',
           [`${testRealmURL}pet-person.gts`]: 'spec',
           [`${testRealmURL}pet.gts`]: 'preview',
         }),
       );
+    });
+
+    test('module inspector query parameter takes precendence over local storage when loading', async function (assert) {
+      window.localStorage.setItem(
+        ModuleInspectorSelections,
+        JSON.stringify({
+          [`${testRealmURL}address.gts`]: 'spec',
+        }),
+      );
+
+      await visitOperatorMode({
+        stacks: [],
+        submode: 'code',
+        codePath: `${testRealmURL}address.gts`,
+        moduleInspector: 'preview',
+      });
+
+      assert.dom('[data-test-active-module-inspector-view="preview"]').exists();
     });
   });
 });

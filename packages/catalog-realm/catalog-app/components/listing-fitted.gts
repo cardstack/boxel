@@ -2,6 +2,7 @@ import {
   Component,
   CardDef,
   CardContext,
+  realmURL,
 } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
 
@@ -347,14 +348,16 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
   }
 
   get remixRealmOptions() {
-    return this.writableRealms.map((realm) => {
-      return new MenuItem(realm.name, 'action', {
-        action: () => {
-          this.remix(realm.url);
-        },
-        iconURL: realm.iconURL ?? '/default-realm-icon.png',
+    return this.writableRealms
+      .filter((realm) => realm.url !== this.args.model[realmURL]?.href)
+      .map((realm) => {
+        return new MenuItem(realm.name, 'action', {
+          action: () => {
+            this.remix(realm.url);
+          },
+          iconURL: realm.iconURL ?? '/default-realm-icon.png',
+        });
       });
-    });
   }
 
   get firstImage() {
