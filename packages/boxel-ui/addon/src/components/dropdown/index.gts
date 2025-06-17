@@ -108,6 +108,9 @@ class BoxelDropdown extends Component<Signature> {
           border-radius: var(--boxel-dropdown-content-border-radius);
           box-shadow: 0 5px 15px 0 rgb(0 0 0 / 25%);
         }
+        .ember-basic-dropdown-content--below.gap-above {
+          margin-top: 4px;
+        }
 
         @media (prefers-reduced-motion: no-preference) {
           .boxel-dropdown__content.ember-basic-dropdown-content--below.ember-basic-dropdown--transitioned-in {
