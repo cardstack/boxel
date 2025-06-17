@@ -6,9 +6,8 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { Alert } from '@cardstack/boxel-ui/components';
 import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
-
-import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
@@ -198,6 +197,10 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
     return this._codeDiffResource;
   }
 
+  errorMessage(errorMessage: string) {
+    return 'Code could not be displayed: ' + errorMessage;
+  }
+
   private extractReplaceCode(searchReplaceBlock: string | null | undefined) {
     if (!searchReplaceBlock) {
       return null;
@@ -269,16 +272,13 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
           </div>
         {{else}}
           {{#if this.codeDiffResource.errorMessage}}
-            <div
-              class='error-message'
+            <Alert
               data-test-error-message={{this.codeDiffResource.errorMessage}}
-            >
-              <FailureBordered class='error-icon' />
-              <div class='error-message-content'>
-                <b>Code could not be displayed: </b>
-                {{this.codeDiffResource.errorMessage}}
-              </div>
-            </div>
+              @type='error'
+              @messages={{array
+                (this.errorMessage this.codeDiffResource.errorMessage)
+              }}
+            />
           {{/if}}
           {{#if this.codeDiffResource.isDataLoaded}}
             <codeBlock.editorHeader
@@ -318,23 +318,8 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
     </CodeBlock>
 
     <style scoped>
-      .error-message {
-        background-color: var(--boxel-danger);
-        color: var(--boxel-light);
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        display: flex;
-        gap: var(--boxel-sp-xs);
+      .error-container {
         margin-bottom: var(--boxel-sp-xs);
-      }
-
-      .error-message > svg {
-        margin-top: 0px;
-      }
-
-      .error-icon {
-        --icon-background-color: var(--boxel-light);
-        --icon-color: var(--boxel-danger);
-        margin-top: var(--boxel-sp-5xs);
       }
 
       .code-block {
