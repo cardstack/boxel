@@ -197,7 +197,7 @@
     ]
   },
   "dependencies": {
-    "reactiveweb": "^1.3.0",
-    "ember-modify-based-class-resource": "^1.1.0"
+    "reactiveweb": "catalog:",
+    "ember-modify-based-class-resource": "catalog:"
   }
 }
