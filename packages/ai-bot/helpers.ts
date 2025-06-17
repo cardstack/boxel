@@ -379,42 +379,59 @@ export function hasSomeAttachedCards(
   return false;
 }
 
-export function getAttachedCards(
+export async function getAttachedCards(
+  client: MatrixClient,
   matrixEvent: MatrixEventWithBoxelContext,
   history: DiscreteMatrixEvent[],
 ) {
   let attachedCards = matrixEvent.content?.data?.attachedCards ?? [];
-  return (
-    attachedCards
-      .map((attachedCard: SerializedFileDef) => {
-        // If the file is attached later in the history, we should not include the content here
-        let shouldIncludeContent = !history
-          .slice(history.indexOf(matrixEvent) + 1)
-          .some((event) => {
-            // event is not always MatrixEventWithBoxelContext but casting lets us safely check attachedCards
-            return (
-              event as MatrixEventWithBoxelContext
-            ).content?.data?.attachedCards?.some(
-              (cardAttachment: SerializedFileDef) =>
-                cardAttachment.url === attachedCard.url,
-            );
-          });
-        let result: SerializedFileDef = {
-          url: attachedCard.url,
-          sourceUrl: attachedCard.sourceUrl ?? '',
-          name: attachedCard.name,
-          contentType: attachedCard.contentType,
-        };
-        if (shouldIncludeContent) {
-          result.content = attachedCard.content
-            ? JSON.parse(attachedCard.content).data
-            : undefined;
+  let results = await Promise.all(
+    attachedCards.map(async (attachedCard: SerializedFileDef) => {
+      // If the file is attached later in the history, we should not include the content here
+      let shouldIncludeContent = !history
+        .slice(history.indexOf(matrixEvent) + 1)
+        .some((event) => {
+          // event is not always MatrixEventWithBoxelContext but casting lets us safely check attachedCards
+          return (
+            event as MatrixEventWithBoxelContext
+          ).content?.data?.attachedCards?.some(
+            (cardAttachment: SerializedFileDef) =>
+              cardAttachment.url === attachedCard.url,
+          );
+        });
+      let result: SerializedFileDef = {
+        url: attachedCard.url,
+        sourceUrl: attachedCard.sourceUrl ?? '',
+        name: attachedCard.name,
+        contentType: attachedCard.contentType,
+      };
+      if (shouldIncludeContent) {
+        if (attachedCard.content) {
+          result.content = JSON.parse(attachedCard.content);
+        } else {
+          try {
+            result.content = await downloadFile(client, attachedCard);
+          } catch (error) {
+            log.error(`Failed to fetch file ${attachedCard.url}:`, error);
+            Sentry.captureException(error, {
+              extra: {
+                fileUrl: attachedCard.url,
+                fileName: attachedCard.name,
+              },
+            });
+            result.error = `Error loading attached card: ${(error as Error).message}`;
+            result.content = undefined;
+          }
         }
-        return result;
-      })
-      ?.filter((cardFileDef) => cardFileDef?.url) // Only include cards with valid urls
-      ?.sort((a, b) => String(a!.url!).localeCompare(String(b!.url!))) ?? []
+      }
+      return result;
+    }),
   );
+  results =
+    results
+      ?.filter((cardFileDef) => cardFileDef?.url) // Only include cards with valid urls
+      ?.sort((a, b) => String(a!.url!).localeCompare(String(b!.url!))) ?? [];
+  return results;
 }
 
 export async function getAttachedFiles(
@@ -687,66 +704,84 @@ function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
   );
 }
 
-function toResultMessages(
+async function toResultMessages(
   event: CardMessageEvent,
   commandResults: CommandResultEvent[] = [],
   codePatchResults: CodePatchResultEvent[] = [],
+  client: MatrixClient,
+  history: DiscreteMatrixEvent[],
 ): OpenAIPromptMessage[] {
   const messageContent = event.content as CardMessageContent;
-  let commandResultMessages = (
-    messageContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []
-  ).map((commandRequest: Partial<EncodedCommandRequest>) => {
-    let content = 'pending';
-    let commandResult = commandResults.find(
-      (commandResult) =>
-        (commandResult.content.msgtype ===
-          APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
-          commandResult.content.msgtype ===
-            APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
-        commandResult.content.commandRequestId === commandRequest.id,
-    );
-    if (commandResult) {
-      let status = commandResult.content['m.relates_to']?.key;
-      if (
-        commandResult.content.msgtype ===
-          APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE &&
-        commandResult.content.data.card
-      ) {
-        let cardContent =
-          commandResult.content.data.card.content ??
-          commandResult.content.data.card.error;
-        content = `Tool call ${status == 'applied' ? 'executed' : status}, with result card: ${cardContent}.\n`;
-      } else {
-        content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
-      }
-    }
-    return {
-      role: 'tool',
-      tool_call_id: commandRequest.id,
-      content,
-    } as OpenAIPromptMessage;
-  });
+  let commandResultMessages = await Promise.all(
+    (messageContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
+      async (commandRequest: Partial<EncodedCommandRequest>) => {
+        let content = 'pending';
+        let commandResult = commandResults.find(
+          (commandResult) =>
+            (commandResult.content.msgtype ===
+              APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
+              commandResult.content.msgtype ===
+                APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
+            commandResult.content.commandRequestId === commandRequest.id,
+        );
+        if (commandResult) {
+          let status = commandResult.content['m.relates_to']?.key;
+          if (
+            commandResult.content.msgtype ===
+              APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE &&
+            commandResult.content.data.card
+          ) {
+            let cardContent =
+              commandResult.content.data.card.content ??
+              commandResult.content.data.card.error;
+            content = `Tool call ${status == 'applied' ? 'executed' : status}, with result card: ${cardContent}.\n`;
+          } else {
+            content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
+          }
+          let attachments = await buildAttachmentsMessagePart(
+            client,
+            commandResult,
+            history,
+          );
+          content = [content, attachments].filter(Boolean).join('\n\n');
+        }
+        return {
+          role: 'tool',
+          tool_call_id: commandRequest.id,
+          content,
+        } as OpenAIPromptMessage;
+      },
+    ),
+  );
   let codePatchBlocks = extractCodePatchBlocks(messageContent.body);
   let codePatchResultMessages: OpenAIPromptMessage[] = [];
   if (codePatchBlocks.length) {
-    let codePatchResultsContent = codePatchBlocks
-      .map((_codePatchBlock, codeBlockIndex) => {
-        let codePatchResultEvent = codePatchResults.find(
-          (codePatchResultEvent) =>
-            codePatchResultEvent.content.codeBlockIndex === codeBlockIndex,
-        );
-        let content = `(The user has not applied code patch ${codeBlockIndex + 1}/.)`;
-        if (codePatchResultEvent) {
-          let status = codePatchResultEvent.content['m.relates_to']?.key;
-          if (status === 'applied') {
-            content = `(The user has successfully applied code patch ${codeBlockIndex + 1}.)`;
-          } else if (status === 'failed') {
-            content = `(The user tried to apply code patch ${codeBlockIndex + 1} but it failed to apply.)`;
+    let codePatchResultsContent = (
+      await Promise.all(
+        codePatchBlocks.map(async (_codePatchBlock, codeBlockIndex) => {
+          let codePatchResultEvent = codePatchResults.find(
+            (codePatchResultEvent) =>
+              codePatchResultEvent.content.codeBlockIndex === codeBlockIndex,
+          );
+          let content = `(The user has not applied code patch ${codeBlockIndex + 1}/.)`;
+          if (codePatchResultEvent) {
+            let status = codePatchResultEvent.content['m.relates_to']?.key;
+            if (status === 'applied') {
+              content = `(The user has successfully applied code patch ${codeBlockIndex + 1}.)`;
+            } else if (status === 'failed') {
+              content = `(The user tried to apply code patch ${codeBlockIndex + 1} but it failed to apply.)`;
+            }
+            let attachments = await buildAttachmentsMessagePart(
+              client,
+              codePatchResultEvent,
+              history,
+            );
+            content = [content, attachments].filter(Boolean).join('\n\n');
           }
-        }
-        return content;
-      })
-      .join('\n');
+          return content;
+        }),
+      )
+    ).join('\n');
     codePatchResultMessages.push({
       role: 'user',
       content: codePatchResultsContent,
@@ -803,10 +838,14 @@ export async function getModifyPrompt(
         event as CardMessageEvent,
         history,
       );
-      toResultMessages(
-        event as CardMessageEvent,
-        commandResults,
-        codePatchResults,
+      (
+        await toResultMessages(
+          event as CardMessageEvent,
+          commandResults,
+          codePatchResults,
+          client,
+          history,
+        )
       ).forEach((message) => historicalMessages.push(message));
     }
     if (event.sender !== aiBotUserId) {
@@ -874,10 +913,10 @@ export const buildAttachmentsMessagePart = async (
   matrixEvent: MatrixEventWithBoxelContext,
   history: DiscreteMatrixEvent[],
 ) => {
-  let attachedCards = getAttachedCards(matrixEvent, history);
+  let attachedCards = await getAttachedCards(client, matrixEvent, history);
   let result = '';
   if (attachedCards.length > 0) {
-    result += `Attached Cards:\n${JSON.stringify(attachedCards, null, 2)}\n`;
+    result += `Attached Cards (cards with newer versions don't show their content):\n${JSON.stringify(attachedCards, null, 2)}\n`;
   }
   let attachedFiles = await getAttachedFiles(client, matrixEvent, history);
   if (attachedFiles.length > 0) {
@@ -950,15 +989,6 @@ export const buildContextMessage = async (
     result += `The user has no open cards.\n`;
   }
   result += `\nCurrent date and time: ${new Date().toISOString()}\n`;
-  if (attachedFiles.length > 0) {
-    result += `The user currently has given you the following data to work with:\n\n`;
-    // if (attachedCards.length > 0) {
-    //   result += `Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}\n\n`;
-    // }
-    if (attachedFiles.length > 0) {
-      result += `\n\nAttached files:\n${attachedFilesToMessage(attachedFiles)}`;
-    }
-  }
 
   let cardPatchTool = tools.find(
     (tool) => tool.function.name === 'patchCardInstance',

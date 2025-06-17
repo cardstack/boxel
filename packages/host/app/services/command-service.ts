@@ -350,7 +350,7 @@ export default class CommandService extends Service {
             codeData.eventId,
             codeData.codeBlockIndex,
             'applied',
-            [], // TODO: this should show be what is open in playground, if anything
+            [],
             [fileDef],
             context,
           ),

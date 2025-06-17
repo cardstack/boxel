@@ -3443,15 +3443,133 @@ Attached Files (files with newer versions don't show their content):
     );
   });
 
-  // test('tool call messages include attached files when command result does', async () => {});
+  test('tool call messages include attached files when command result does', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/read-gts-file.json'),
+        'utf-8',
+      ),
+    );
 
-  // test('tool call messages include attached cards when command result does', async () => {
-  // });
+    mockResponses.set('mxc://mock-server/postcard', {
+      ok: true,
+      text: `export default Postcard extends CardDef {}
+      `,
+    });
 
-  // test('code patch messages include attached files when code patch result does', async () => {
-  // });
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    const toolCallMessage = messages!.findLast(
+      (message) => message.role === 'tool',
+    );
+    assert.ok(toolCallMessage, 'Should have a tool call message');
+    assert.ok(
+      toolCallMessage!.content!.includes('executed'),
+      'Tool call result should reflect that the tool was executed',
+    );
+    assert.ok(
+      toolCallMessage!.content!.includes(
+        `
+Attached Files (files with newer versions don't show their content):
+[postcard.gts](http://test-realm-server/user/test-realm/postcard.gts): export default Postcard extends CardDef {}
+      `.trim(),
+        'Tool call result should include attached files',
+      ),
+    );
+  });
 
-  // test('code patch messages include attached cards when code patch result does', async () => {});
+  test('tool call messages include attached cards when command result does', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/read-card.json'),
+        'utf-8',
+      ),
+    );
+
+    mockResponses.set('mxc://mock-server/nashville', {
+      ok: true,
+      text: `{"data":{"type":"card","attributes":{"recipientName":"Jennifer Martinez","recipientAddress":{"streetAddress":"789 Pine Ridge Drive","city":"Austin","state":"TX","postalCode":"78701","country":"USA"},"postageAmount":0.68,"message":"# Howdy from the Music Capital!\n\nSpent the day on South by Southwest - so many amazing bands and food trucks! Had the best BBQ brisket of my life and caught three live shows. The energy here is infectious.\n\n**Keep it weird!**  \n*Jake*","title":"Nashville","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../postcard","name":"Postcard"}}}}`,
+    });
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    const toolCallMessage = messages!.findLast(
+      (message) => message.role === 'tool',
+    );
+    assert.ok(toolCallMessage, 'Should have a tool call message');
+    assert.ok(
+      toolCallMessage!.content!.includes('executed'),
+      'Tool call result should reflect that the tool was executed',
+    );
+    assert.ok(
+      toolCallMessage!.content!.includes(
+        `
+Attached Cards (cards with newer versions don't show their content):
+[
+  {
+    "url": "mxc://mock-server/nashville",
+    "sourceUrl": "http://test-realm-server/user/test-realm/Postcard/46268158-2eb9-4025-804d-45c299017e8f",
+    "name": "Nashville",
+    "contentType": "application/vnd.card+json",
+    "content": "{\\"data\\":{\\"type\\":\\"card\\",\\"attributes\\":{\\"recipientName\\":\\"Jennifer Martinez\\",\\"recipientAddress\\":{\\"streetAddress\\":\\"789 Pine Ridge Drive\\",\\"city\\":\\"Austin\\",\\"state\\":\\"TX\\",\\"postalCode\\":\\"78701\\",\\"country\\":\\"USA\\"},\\"postageAmount\\":0.68,\\"message\\":\\"# Howdy from the Music Capital!\\n\\nSpent the day on South by Southwest - so many amazing bands and food trucks! Had the best BBQ brisket of my life and caught three live shows. The energy here is infectious.\\n\\n**Keep it weird!**  \\n*Jake*\\",\\"title\\":\\"Nashville\\",\\"description\\":null,\\"thumbnailURL\\":null},\\"meta\\":{\\"adoptsFrom\\":{\\"module\\":\\"../postcard\\",\\"name\\":\\"Postcard\\"}}}}"
+  }
+]
+      `.trim(),
+        'Tool call result should include attached cards',
+      ),
+    );
+  });
+
+  test('code patch messages include attached files when code patch result does', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/patched-gts.json'),
+        'utf-8',
+      ),
+    );
+
+    mockResponses.set('mxc://mock-server/postcard-before-patch.gts', {
+      ok: true,
+      text: `export default Postcard extends CardDef { /* before *}
+      `,
+    });
+    mockResponses.set('mxc://mock-server/postcard-after-patch.gts', {
+      ok: true,
+      text: `export default Postcard extends CardDef { /* after */ }
+      `,
+    });
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    const lastUserMessage = messages!.findLast(
+      (message) => message.role === 'user',
+    );
+    assert.ok(lastUserMessage, 'Should have a code patch result message');
+    assert.ok(
+      lastUserMessage!.content!.includes(
+        'The user has successfully applied code patch 1.',
+      ),
+      'Code patch result should reflect that the code patch was applied',
+    );
+    assert.ok(
+      lastUserMessage!.content!.includes(
+        `
+Attached Files (files with newer versions don't show their content):
+[postcard.gts](http://test-realm-server/user/test-realm/postcard.gts): export default Postcard extends CardDef { /* after */ }
+      `.trim(),
+        'Code patch result should include attached files',
+      ),
+    );
+  });
 });
 
 module('set model in prompt', (hooks) => {

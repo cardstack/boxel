@@ -1,0 +1,160 @@
+[
+  {
+    "type": "m.room.message",
+    "room_id": "!FjOlOQLemcYndncNug:localhost",
+    "sender": "@user:localhost",
+    "content": {
+      "msgtype": "app.boxel.message",
+      "body": "Find the Nashville card and read the contents of the card instance",
+      "format": "org.matrix.custom.html",
+      "clientGeneratedId": "93612c25-5c3a-45af-8b3c-47b460ddd7e5",
+      "data": {
+        "attachedFiles": [],
+        "attachedCards": [],
+        "context": {
+          "agentId": "4508c929-889c-4b47-a396-b0820fc159de",
+          "submode": "interact",
+          "debug": true,
+          "openCardIds": [],
+          "realmUrl": "http://test-realm-server/user/test-realm/",
+          "tools": [],
+          "functions": []
+        }
+      }
+    },
+    "origin_server_ts": 1750177070468,
+    "unsigned": { "membership": "join", "age": 54935 },
+    "event_id": "$dHLHyjK-k6PVlkiNmraR1r-7Lo9901YhLgMv9BYwijY",
+    "user_id": "@user:localhost",
+    "age": 54935
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!FjOlOQLemcYndncNug:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "I'll help you find the Nashville card and read its contents. Let me search for it first.",
+      "msgtype": "app.boxel.message",
+      "format": "org.matrix.custom.html",
+      "app.boxel.reasoning": "",
+      "app.boxel.commandRequests": [
+        {
+          "id": "toolu_vrtx_01SMtjQSbTbK2FcKMr9NLbPV",
+          "name": "SearchCardsByQueryCommand_847d",
+          "arguments": "{\"attributes\":{\"query\":{\"filter\":{\"contains\":{\"title\":\"Nashville\"}}},\"description\":\"Searching for cards with 'Nashville' in the title\"}}"
+        }
+      ],
+      "isStreamingFinished": true,
+      "data": {
+        "context": { "agentId": "4508c929-889c-4b47-a396-b0820fc159de" }
+      }
+    },
+    "origin_server_ts": 1750177077466,
+    "unsigned": { "age": 47937, "transaction_id": "m1750177077446.310" },
+    "event_id": "$UhAbe7x4XMPKA_RIlug8cstQrGY65FA_OKapukHNXuU",
+    "user_id": "@aibot:localhost",
+    "age": 47937
+  },
+  {
+    "type": "app.boxel.commandResult",
+    "room_id": "!FjOlOQLemcYndncNug:localhost",
+    "sender": "@user:localhost",
+    "content": {
+      "msgtype": "app.boxel.commandResultWithOutput",
+      "m.relates_to": {
+        "event_id": "$UhAbe7x4XMPKA_RIlug8cstQrGY65FA_OKapukHNXuU",
+        "key": "applied",
+        "rel_type": "app.boxel.commandAnnotation"
+      },
+      "commandRequestId": "toolu_vrtx_01SMtjQSbTbK2FcKMr9NLbPV",
+      "data": {
+        "context": {
+          "agentId": "4508c929-889c-4b47-a396-b0820fc159de",
+          "submode": "interact",
+          "debug": true,
+          "openCardIds": ["http://test-realm-server/user/test-realm/index"],
+          "realmUrl": "http://test-realm-server/user/test-realm/"
+        },
+        "attachedCards": [],
+        "attachedFiles": [],
+        "card": {
+          "url": "http://mock-server/_matrix/client/v1/media/download/localhost/AhBYJVVsSZttFKkcJpVVvait",
+          "name": "Search Results",
+          "contentType": "application/vnd.card+json",
+          "contentHash": "2f111846167f5ffe476ec32f9daa09db",
+          "content": "{\"data\":{\"type\":\"card\",\"lid\":\"95197459-f975-4224-b4fa-35c965cc976d\",\"attributes\":{\"cardIds\":[\"http://test-realm-server/user/test-realm/Postcard/46268158-2eb9-4025-804d-45c299017e8f\"],\"title\":\"Search Results\",\"description\":\"Query: {\\n  \\\"contains\\\": {\\n    \\\"title\\\": \\\"Nashville\\\"\\n  }\\n}\",\"thumbnailURL\":null},\"meta\":{\"adoptsFrom\":{\"module\":\"https://cardstack.com/base/commands/search-card-result\",\"name\":\"SearchCardsResult\"}}}}"
+        }
+      }
+    },
+    "origin_server_ts": 1750177082395,
+    "unsigned": { "membership": "join", "age": 43008 },
+    "event_id": "$8VUbrnS6QbddkNzd3L_7PQSEWsUNqJ_M9W2JSeQblEM",
+    "user_id": "@user:localhost",
+    "age": 43008
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!FjOlOQLemcYndncNug:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Great! I found a Nashville card. Let me read its contents now.",
+      "msgtype": "app.boxel.message",
+      "format": "org.matrix.custom.html",
+      "app.boxel.reasoning": "",
+      "app.boxel.commandRequests": [
+        {
+          "id": "toolu_vrtx_01HWJnEZ8x1oWeKQCjxuXzbi",
+          "name": "read-card-for-ai-assistant_dd38",
+          "arguments": "{\"attributes\":{\"cardId\":\"http://test-realm-server/user/test-realm/Postcard/46268158-2eb9-4025-804d-45c299017e8f\",\"description\":\"Reading the Nashville postcard contents\"}}"
+        }
+      ],
+      "isStreamingFinished": true,
+      "data": {
+        "context": { "agentId": "4508c929-889c-4b47-a396-b0820fc159de" }
+      }
+    },
+    "origin_server_ts": 1750177088290,
+    "unsigned": { "age": 37113, "transaction_id": "m1750177088267.317" },
+    "event_id": "$O1wK5-Oh2IBlm3C9V8LDOrsnE9hQ4w7Z1XZoffSC6pY",
+    "user_id": "@aibot:localhost",
+    "age": 37113
+  },
+  {
+    "type": "app.boxel.commandResult",
+    "room_id": "!FjOlOQLemcYndncNug:localhost",
+    "sender": "@user:localhost",
+    "content": {
+      "msgtype": "app.boxel.commandResultWithNoOutput",
+      "commandRequestId": "toolu_vrtx_01HWJnEZ8x1oWeKQCjxuXzbi",
+      "m.relates_to": {
+        "event_id": "$O1wK5-Oh2IBlm3C9V8LDOrsnE9hQ4w7Z1XZoffSC6pY",
+        "key": "applied",
+        "rel_type": "app.boxel.commandAnnotation"
+      },
+      "data": {
+        "context": {
+          "agentId": "4508c929-889c-4b47-a396-b0820fc159de",
+          "submode": "interact",
+          "debug": true,
+          "openCardIds": ["http://test-realm-server/user/test-realm/index"],
+          "realmUrl": "http://test-realm-server/user/test-realm/"
+        },
+        "attachedCards": [
+          {
+            "sourceUrl": "http://test-realm-server/user/test-realm/Postcard/46268158-2eb9-4025-804d-45c299017e8f",
+            "url": "mxc://mock-server/nashville",
+            "name": "Nashville",
+            "contentType": "application/vnd.card+json",
+            "contentHash": "2ed4d747cf58ab3848a8de3cbb3b2d12"
+          }
+        ],
+        "attachedFiles": []
+      }
+    },
+    "origin_server_ts": 1750177125124,
+    "unsigned": { "membership": "join", "age": 279 },
+    "event_id": "$OzKMwklIqCOsl4jM41k9seeOgUIBAodlXvlHxhjrGyE",
+    "user_id": "@user:localhost",
+    "age": 279
+  }
+]
