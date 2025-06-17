@@ -473,7 +473,328 @@ class EmbeddedStory extends Component<typeof Story> {
   </template>
 }
 
-// ⁶³ Story card definition included directly
+// Isolated story card definition
+class IsolatedStory extends Component<typeof Story> {
+  @tracked userVote: 'up' | 'down' | null = null;
+  @tracked isDiggAnimating = false;
+  @tracked isBuryAnimating = false;
+
+  get timeAgo() {
+    if (!this.args.model?.submittedAt) return 'just now';
+    const now = Date.now();
+    const submitted = new Date(this.args.model.submittedAt).getTime();
+    const diffHours = Math.floor((now - submitted) / (1000 * 60 * 60));
+
+    if (diffHours < 1) return 'just now';
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
+  }
+
+  get hostname() {
+    try {
+      const url = this.args.model?.url;
+      if (!url) return '';
+      return new URL(url).hostname.replace('www.', '');
+    } catch {
+      return '';
+    }
+  }
+
+  @action upvote() {
+    if (!this.args.model) return;
+
+    const triggerTransition = () => {
+      this.isDiggAnimating = true;
+      setTimeout(() => (this.isDiggAnimating = false), 600);
+
+      const currentUpvotes = this.args.model.upvotes ?? 0;
+      const currentDownvotes = this.args.model.downvotes ?? 0;
+
+      if (this.userVote === 'up') {
+        this.args.model.upvotes = Math.max(0, currentUpvotes - 1);
+        this.userVote = null;
+      } else {
+        if (this.userVote === 'down') {
+          this.args.model.downvotes = Math.max(0, currentDownvotes - 1);
+        }
+        this.args.model.upvotes = currentUpvotes + 1;
+        this.userVote = 'up';
+      }
+    };
+
+    if (typeof document !== 'undefined' && 'startViewTransition' in document) {
+      (document as any).startViewTransition(triggerTransition);
+    } else {
+      triggerTransition();
+    }
+  }
+
+  @action downvote() {
+    if (!this.args.model) return;
+
+    const triggerTransition = () => {
+      this.isBuryAnimating = true;
+      setTimeout(() => (this.isBuryAnimating = false), 600);
+
+      const currentDownvotes = this.args.model.downvotes ?? 0;
+      const currentUpvotes = this.args.model.upvotes ?? 0;
+
+      if (this.userVote === 'down') {
+        this.args.model.downvotes = Math.max(0, currentDownvotes - 1);
+        this.userVote = null;
+      } else {
+        if (this.userVote === 'up') {
+          this.args.model.upvotes = Math.max(0, currentUpvotes - 1);
+        }
+        this.args.model.downvotes = currentDownvotes + 1;
+        this.userVote = 'down';
+      }
+    };
+
+    if (typeof document !== 'undefined' && 'startViewTransition' in document) {
+      (document as any).startViewTransition(triggerTransition);
+    } else {
+      triggerTransition();
+    }
+  }
+
+  <template>
+    <div class='isolated-story'>
+      <div class='story-header'>
+        <h1 class='story-title'>
+          {{#if @model.url}}
+            <a href={{@model.url}} target='_blank' rel='noopener noreferrer'>
+              {{if @model.title @model.title 'Untitled Story'}}
+              <ExternalLinkIcon width='16' height='16' class='external-icon' />
+            </a>
+          {{else}}
+            <span class='story-title-text'>
+              {{if @model.title @model.title 'Untitled Story'}}
+            </span>
+          {{/if}}
+        </h1>
+
+        <div class='story-meta'>
+          <span class='hostname'>{{if
+              this.hostname
+              (concat '(' this.hostname ')')
+              '-'
+            }}</span>
+          <span class='author'>by
+            {{if @model.author @model.author 'anonymous'}}</span>
+          <span class='time'>{{this.timeAgo}}</span>
+        </div>
+      </div>
+
+      <div class='story-content'>
+        {{#if @model.description}}
+          <div class='story-description'>
+            {{@model.description}}
+          </div>
+        {{/if}}
+
+        <div class='story-voting'>
+          <div
+            class='vote-box
+              {{if (eq this.userVote "up") "vote-active" ""}}
+              {{if this.isDiggAnimating "vote-animation" ""}}'
+          >
+            <button type='button' class='vote-btn' {{on 'click' this.upvote}}>
+              <TrendingUpIcon width='20' height='20' />
+              <span>Upvote</span>
+            </button>
+            <span class='vote-count'>{{@model.points}}</span>
+          </div>
+
+          <div
+            class='vote-box
+              {{if (eq this.userVote "down") "vote-active" ""}}
+              {{if this.isBuryAnimating "vote-animation" ""}}'
+          >
+            <button type='button' class='vote-btn' {{on 'click' this.downvote}}>
+              <TrendingUpIcon width='20' height='20' class='rotate-180' />
+              <span>Downvote</span>
+            </button>
+          </div>
+        </div>
+
+        {{#if @model.commentUrl}}
+          <a
+            href={{@model.commentUrl}}
+            target='_blank'
+            rel='noopener noreferrer'
+            class='comments-link'
+          >
+            <MessageSquareIcon width='16' height='16' />
+            <span>{{@model.commentCount}} comments</span>
+          </a>
+        {{else}}
+          <div class='comments-link'>
+            <MessageSquareIcon width='16' height='16' />
+            <span>{{@model.commentCount}} comments</span>
+          </div>
+        {{/if}}
+      </div>
+    </div>
+
+    <style scoped>
+      .isolated-story {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 32px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+
+      .story-header {
+        margin-bottom: 24px;
+      }
+
+      .story-title {
+        font-size: 28px;
+        font-weight: 600;
+        margin: 0 0 12px 0;
+        line-height: 1.3;
+      }
+
+      .story-title a {
+        color: #135cae;
+        text-decoration: none;
+      }
+
+      .story-title a:hover {
+        color: #ff6600;
+      }
+
+      .story-meta {
+        display: flex;
+        gap: 12px;
+        color: #666;
+        font-size: 14px;
+      }
+
+      .hostname {
+        color: #777;
+      }
+
+      .author {
+        color: #135cae;
+      }
+
+      .time {
+        color: #999;
+      }
+
+      .story-content {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+
+      .story-description {
+        font-size: 16px;
+        line-height: 1.6;
+        color: #333;
+      }
+
+      .story-voting {
+        display: flex;
+        gap: 16px;
+        margin: 16px 0;
+      }
+
+      .vote-box {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background: #f8f8f8;
+        border-radius: 8px;
+        padding: 8px;
+        min-width: 100px;
+      }
+
+      .vote-box.vote-active {
+        background: #ff6600;
+      }
+
+      .vote-btn {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        background: none;
+        border: none;
+        padding: 8px;
+        cursor: pointer;
+        color: #666;
+        font-size: 13px;
+        font-weight: 500;
+      }
+
+      .vote-box.vote-active .vote-btn {
+        color: white;
+      }
+
+      .vote-count {
+        font-size: 16px;
+        font-weight: 600;
+        color: #333;
+        margin-top: 4px;
+      }
+
+      .vote-box.vote-active .vote-count {
+        color: white;
+      }
+
+      .rotate-180 {
+        transform: rotate(180deg);
+      }
+
+      .comments-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: #666;
+        text-decoration: none;
+        font-size: 14px;
+        padding: 8px 16px;
+        border-radius: 6px;
+        background: #f8f8f8;
+        transition: all 0.2s ease;
+      }
+
+      .comments-link:hover {
+        background: #f0f0f0;
+        color: #ff6600;
+      }
+
+      .external-icon {
+        margin-left: 8px;
+        opacity: 0.5;
+      }
+
+      @keyframes vote-bounce {
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.15);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      .vote-box.vote-animation {
+        animation: vote-bounce 0.6s ease-out;
+      }
+    </style>
+  </template>
+}
+
+// Story card definition included directly
 export class Story extends CardDef {
   static displayName = 'Story';
   static icon = MessageSquareIcon;
@@ -496,6 +817,7 @@ export class Story extends CardDef {
     },
   });
 
+  static isolated = IsolatedStory;
   static embedded = EmbeddedStory;
 }
 
