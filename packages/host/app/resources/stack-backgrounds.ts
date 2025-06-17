@@ -1,7 +1,7 @@
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
-import { Resource } from 'ember-resources';
+import { Resource } from 'ember-modify-based-class-resource';
 
 import { isCardInstance } from '@cardstack/runtime-common';
 

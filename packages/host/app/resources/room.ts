@@ -4,7 +4,7 @@ import { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
 
 import { TaskInstance, restartableTask, timeout } from 'ember-concurrency';
-import { Resource } from 'ember-resources';
+import { Resource } from 'ember-modify-based-class-resource';
 
 import difference from 'lodash/difference';
 
