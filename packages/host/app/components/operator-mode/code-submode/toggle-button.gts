@@ -1,12 +1,12 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import type Component from '@glimmer/component';
+import type { ComponentLike } from '@glint/template';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 
 interface ToggleButtonSignature {
   Args: {
-    icon: Component;
+    icon: ComponentLike;
     disabled?: boolean;
     isActive: boolean;
   };
