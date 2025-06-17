@@ -232,13 +232,6 @@ export default class CodeSubmode extends Component<Signature> {
       : undefined;
   }
 
-  private backgroundURLStyle(backgroundURL: string | null) {
-    let possibleStyle = backgroundURL
-      ? `background-image: url(${backgroundURL});`
-      : '';
-    return htmlSafe(possibleStyle);
-  }
-
   @action setFileView(view: FileView) {
     this.operatorModeStateService.updateFileView(view);
   }
