@@ -1,15 +1,20 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import type { Component } from '@glimmer/component';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 
 interface ToggleButtonSignature {
   Args: {
+    icon: Component;
     disabled?: boolean;
     isActive: boolean;
   };
   Element: typeof Button.Element;
-  Blocks: typeof Button.Blocks;
+  Blocks: {
+    default: [];
+    annotation: [];
+  };
 }
 
 const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
@@ -20,7 +25,17 @@ const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
     class={{cn 'toggle-button' active=@isActive}}
     ...attributes
   >
-    {{yield}}
+
+    <span class='content'>
+      {{#if @icon}}
+        <figure
+          class='icon'
+          aria-hidden='true'
+        >{{@icon}}</figure>{{/if}}{{yield}}</span>
+
+    {{#if (has-block 'annotation')}}
+      <span class='annotation'>{{yield to='annotation'}}</span>
+    {{/if}}
   </Button>
   <style scoped>
     .toggle-button {
@@ -30,8 +45,10 @@ const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
       --boxel-button-min-width: 4rem;
       --boxel-button-padding: 0;
       --boxel-button-color: var(--boxel-light);
-      border-radius: var(--boxel-border-radius-sm);
+      border-radius: var(--boxel-border-radius);
       flex: 1;
+      justify-content: space-between;
+      margin: -2px 0;
     }
     .toggle-button:hover:not(:disabled) {
       border-color: var(--boxel-dark);
@@ -40,6 +57,17 @@ const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
       border-color: var(--boxel-dark);
       --boxel-button-color: var(--boxel-dark);
       --boxel-button-text-color: var(--boxel-highlight);
+    }
+
+    .content {
+      display: flex;
+      align-items: center;
+      gap: var(--boxel-sp-xs);
+    }
+
+    .icon {
+      transform: scale(0.75);
+      margin: 2px -5px 0 4px;
     }
   </style>
 </template>;

@@ -11,6 +11,10 @@ import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
+import Eye from '@cardstack/boxel-icons/eye';
+import FileCog from '@cardstack/boxel-icons/file-cog';
+import Schema from '@cardstack/boxel-icons/schema';
+
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -414,6 +418,17 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     );
   }
 
+  private iconForView(view: ModuleInspectorView) {
+    switch (view) {
+      case 'schema':
+        return Schema;
+      case 'preview':
+        return Eye;
+      case 'spec':
+        return FileCog;
+    }
+  }
+
   <template>
     {{#if this.isCardPreviewError}}
       {{! this is here to make TS happy, this is always true }}
@@ -455,22 +470,25 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           {{#each moduleInspectorPanels as |moduleInspectorView|}}
             <ToggleButton
               class='toggle-button'
+              @icon={{this.iconForView moduleInspectorView}}
               @isActive={{eq this.activePanel moduleInspectorView}}
               {{on 'click' (fn this.setActivePanel moduleInspectorView)}}
               data-test-module-inspector-view={{moduleInspectorView}}
             >
-              {{capitalize moduleInspectorView}}
-              {{#if (eq moduleInspectorView 'spec')}}
-                <SpecPreviewBadge
-                  @spec={{this.activeSpec}}
-                  @showCreateSpec={{this.showCreateSpec}}
-                  @createSpec={{this.createSpec}}
-                  @isCreateSpecInstanceRunning={{this.createSpecTask.isRunning}}
-                  @numberOfInstances={{this.specsForSelectedDefinition.length}}
-                />
-              {{else if (eq moduleInspectorView 'schema')}}
-                <SchemaEditorBadge />
-              {{/if}}
+              <:default>{{capitalize moduleInspectorView}}</:default>
+              <:annotation>
+                {{#if (eq moduleInspectorView 'spec')}}
+                  <SpecPreviewBadge
+                    @spec={{this.activeSpec}}
+                    @showCreateSpec={{this.showCreateSpec}}
+                    @createSpec={{this.createSpec}}
+                    @isCreateSpecInstanceRunning={{this.createSpecTask.isRunning}}
+                    @numberOfInstances={{this.specsForSelectedDefinition.length}}
+                  />
+                {{else if (eq moduleInspectorView 'schema')}}
+                  <SchemaEditorBadge />
+                {{/if}}
+              </:annotation>
             </ToggleButton>
           {{/each}}
         </header>
@@ -546,8 +564,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       }
 
       .toggle-button {
-        justify-content: space-between;
-        padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp);
+        padding-right: var(--boxel-sp-xxxs);
       }
 
       .file-incompatible-message {

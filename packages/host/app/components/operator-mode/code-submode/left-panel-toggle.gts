@@ -3,6 +3,9 @@ import { on } from '@ember/modifier';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import FileCheck from '@cardstack/boxel-icons/file-check';
+import FolderTree from '@cardstack/boxel-icons/folder-tree';
+
 import { cn, not } from '@cardstack/boxel-ui/helpers';
 
 import RestoreScrollPosition from '@cardstack/host/modifiers/restore-scroll-position';
@@ -77,6 +80,7 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
         data-test-file-view-header
       >
         <ToggleButton
+          @icon={{FolderTree}}
           @isActive={{this.isFileTreeShowing}}
           {{on 'click' (fn this.setFileView 'browser')}}
           data-test-file-browser-toggle
@@ -84,6 +88,7 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
           File Tree
         </ToggleButton>
         <ToggleButton
+          @icon={{FileCheck}}
           @disabled={{not @isFileOpen}}
           @isActive={{not this.isFileTreeShowing}}
           {{on 'click' (fn this.setFileView 'inspector')}}
