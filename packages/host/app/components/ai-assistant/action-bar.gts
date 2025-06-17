@@ -8,6 +8,7 @@ interface Signature {
     acceptAll: () => void;
     cancel: () => void;
     acceptingAll?: boolean;
+    acceptingAllLabel?: string;
     generatingResults?: boolean;
   };
 }
@@ -23,7 +24,7 @@ const AiAssistantActionBar: TemplateOnlyComponent<Signature> = <template>
     {{else if @acceptingAll}}
       <span class='accepting-all'>
         <LoadingIndicator />
-        Apply Diff
+        {{if @acceptingAllLabel @acceptingAllLabel 'Apply Diff'}}
       </span>
     {{else}}
       <BoxelButton

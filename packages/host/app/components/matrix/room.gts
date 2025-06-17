@@ -166,6 +166,7 @@ export default class Room extends Component<Signature> {
                 @acceptAll={{perform this.executeAllReadyActionsTask}}
                 @cancel={{this.cancelActionBar}}
                 @acceptingAll={{this.executeAllReadyActionsTask.isRunning}}
+                @acceptingAllLabel={{this.acceptingAllLabel}}
                 @generatingResults={{this.generatingResults}}
               />
             {{/if}}
@@ -275,6 +276,7 @@ export default class Room extends Component<Signature> {
     | 'llm-select'
     | undefined;
   @tracked lastCanceledActionMessageId: string | undefined;
+  @tracked acceptingAllLabel: string | undefined;
 
   @service private declare store: StoreService;
   @service private declare cardService: CardService;
@@ -930,7 +932,12 @@ export default class Room extends Component<Signature> {
     let lastMessage = this.messages[this.messages.length - 1];
     if (!lastMessage || !lastMessage.commands) return [];
     return lastMessage.commands.filter(
-      (command) => command.status === 'ready' || command.status === undefined,
+      (command) =>
+        (command.status === 'ready' || command.status === undefined) &&
+        !this.commandService.currentlyExecutingCommandRequestIds.has(
+          command.id!,
+        ) &&
+        !this.commandService.executedCommandRequestIds.has(command.id!),
     );
   }
 
@@ -944,7 +951,7 @@ export default class Room extends Component<Signature> {
       let codeData = htmlPart.codeData;
       if (!codeData) continue;
       let status = this.commandService.getCodePatchStatus(codeData);
-      if (status === 'ready') {
+      if (status && status === 'ready') {
         result.push(codeData);
       }
     }
@@ -977,7 +984,9 @@ export default class Room extends Component<Signature> {
 
   private async executeReadyCommands() {
     for (let command of this.readyCommands) {
+      this.acceptingAllLabel = command.actionVerb;
       await this.commandService.run.unlinked().perform(command);
+      this.acceptingAllLabel = undefined;
     }
   }
 

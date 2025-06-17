@@ -274,7 +274,16 @@ ${REPLACE_MARKER}
     await waitFor(
       '[data-test-ai-assistant-action-bar] [data-test-loading-indicator]',
     );
-    assert.dom('[data-test-ai-assistant-action-bar]').hasText('Apply Diff');
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-ai-assistant-action-bar]')
+        ?.textContent?.includes('Apply Diff'),
+    );
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-ai-assistant-action-bar]')
+        ?.textContent?.includes('Switch'),
+    );
     await waitUntil(
       () => findAll('[data-test-apply-state="applied"]').length === 3,
       {
