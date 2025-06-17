@@ -9,21 +9,21 @@
             "name": "default",
             "module": "@cardstack/boxel-host/commands/listing-use"
           },
-          "requiresApproval": false
+          "requiresApproval": true
         },
         {
           "codeRef": {
             "name": "default",
             "module": "@cardstack/boxel-host/commands/listing-install"
           },
-          "requiresApproval": false
+          "requiresApproval": true
         },
         {
           "codeRef": {
             "name": "default",
             "module": "@cardstack/boxel-host/commands/listing-remix"
           },
-          "requiresApproval": false
+          "requiresApproval": true
         }
       ],
       "title": "Catalog Listing",
