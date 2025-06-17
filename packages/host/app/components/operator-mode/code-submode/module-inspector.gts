@@ -6,14 +6,14 @@ import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import Eye from '@cardstack/boxel-icons/eye';
+import FileCog from '@cardstack/boxel-icons/file-cog';
+import Schema from '@cardstack/boxel-icons/schema';
+
 import { task } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
-
-import Eye from '@cardstack/boxel-icons/eye';
-import FileCog from '@cardstack/boxel-icons/file-cog';
-import Schema from '@cardstack/boxel-icons/schema';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
