@@ -441,6 +441,7 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
             (worker as any).__boxelIndexState = currentState;
           } else {
             currentState = undefined;
+            (worker as any).__boxelIndexState = undefined;
           }
         }
       });
