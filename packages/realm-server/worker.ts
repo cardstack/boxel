@@ -6,6 +6,7 @@ import {
   logger,
   RunnerOptionsManager,
   IndexWriter,
+  type StatusArgs,
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import { makeFastBootIndexRunner } from './fastboot';
@@ -99,6 +100,14 @@ let dist: URL = new URL(distURL);
 let autoMigrate = migrateDB || undefined;
 
 (async () => {
+  function reportStatus({ jobId, status, realm, url, deps }: StatusArgs) {
+    if (process.send) {
+      process.send(
+        `status|${JSON.stringify({ jobId, status, realm, url, deps })}`,
+      );
+    }
+  }
+
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueueRunner({ adapter: dbAdapter, workerId, priority });
   let manager = new RunnerOptionsManager();
@@ -114,6 +123,7 @@ let autoMigrate = migrateDB || undefined;
     matrixURL: new URL(matrixURL),
     secretSeed: REALM_SECRET_SEED,
     indexRunner: getRunner,
+    reportStatus,
   });
 
   await worker.run();

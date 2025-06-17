@@ -15,7 +15,9 @@ interface MenuItemOptions {
   iconURL: string;
   id?: string;
   inactive: boolean;
+  postscript?: string;
   selected: boolean;
+  subtext?: string;
   tabindex: number | string;
   url: string;
 }
@@ -33,6 +35,8 @@ export class MenuItem {
   inactive: boolean | undefined;
   tabindex: number | string | undefined;
   id?: string;
+  subtext?: string;
+  postscript?: string;
 
   constructor(text: string, type: string, options: Partial<MenuItemOptions>) {
     this.text = text;
@@ -47,6 +51,8 @@ export class MenuItem {
     this.iconURL = options.iconURL || undefined;
     this.inactive = options.inactive;
     this.tabindex = options.tabindex || 0;
+    this.subtext = options.subtext ?? undefined;
+    this.postscript = options.postscript ?? undefined;
   }
 }
 

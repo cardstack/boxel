@@ -12,6 +12,7 @@ import {
   type IndexResults,
   type Reader,
   type RunnerOpts,
+  type StatusArgs,
 } from '@cardstack/runtime-common/worker';
 
 import { CurrentRun } from '../lib/current-run';
@@ -102,7 +103,8 @@ export default class CardPrerender extends Component {
   });
 
   private doFromScratch = enqueueTask(async (realmURL: URL) => {
-    let { reader, indexWriter, jobInfo } = this.getRunnerParams(realmURL);
+    let { reader, indexWriter, jobInfo, reportStatus } =
+      this.getRunnerParams(realmURL);
     let currentRun = new CurrentRun({
       realmURL,
       reader,
@@ -110,6 +112,7 @@ export default class CardPrerender extends Component {
       jobInfo,
       renderCard: this.renderService.renderCard,
       render: this.renderService.render,
+      reportStatus,
     });
     setOwner(currentRun, getOwner(this)!);
 
@@ -125,7 +128,8 @@ export default class CardPrerender extends Component {
       operation: 'delete' | 'update',
       ignoreData: Record<string, string>,
     ) => {
-      let { reader, indexWriter, jobInfo } = this.getRunnerParams(realmURL);
+      let { reader, indexWriter, jobInfo, reportStatus } =
+        this.getRunnerParams(realmURL);
       let currentRun = new CurrentRun({
         realmURL,
         reader,
@@ -134,6 +138,7 @@ export default class CardPrerender extends Component {
         ignoreData: { ...ignoreData },
         renderCard: this.renderService.renderCard,
         render: this.renderService.render,
+        reportStatus,
       });
       setOwner(currentRun, getOwner(this)!);
       let current = await CurrentRun.incremental(currentRun, {
@@ -149,17 +154,20 @@ export default class CardPrerender extends Component {
     reader: Reader;
     indexWriter: IndexWriter;
     jobInfo?: JobInfo;
+    reportStatus?: (args: StatusArgs) => void;
   } {
     if (this.fastboot.isFastBoot) {
       let optsId = (globalThis as any).runnerOptsId;
       if (optsId == null) {
         throw new Error(`Runner Options Identifier was not set`);
       }
-      let { reader, indexWriter, jobInfo } = getRunnerOpts(optsId);
+      let { reader, indexWriter, jobInfo, reportStatus } =
+        getRunnerOpts(optsId);
       return {
         reader,
         indexWriter,
         jobInfo,
+        reportStatus,
       };
     } else {
       return {

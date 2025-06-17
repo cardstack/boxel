@@ -86,6 +86,7 @@ export * from './index-query-engine';
 export * from './index-writer';
 export * from './index-structure';
 export * from './db';
+export * from './lint';
 export * from './worker';
 export * from './stream';
 export * from './realm';
