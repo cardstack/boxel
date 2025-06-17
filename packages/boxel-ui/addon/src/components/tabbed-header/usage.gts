@@ -55,14 +55,14 @@ export default class TabbedHeaderUsage extends Component {
           <:headerIcon>
             <Icon width='25' height='25' role='presentation' />
           </:headerIcon>
-          <:searchInput>
+          <:sideContent>
             <BoxelInput
               @type='search'
               @value={{this.searchValue}}
               @onInput={{fn (mut this.searchValue)}}
               placeholder='Search...'
             />
-          </:searchInput>
+          </:sideContent>
         </TabbedHeader>
       </:example>
       <:api as |Args|>

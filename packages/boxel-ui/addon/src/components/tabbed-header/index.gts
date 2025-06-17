@@ -20,7 +20,7 @@ interface Signature {
   Blocks: {
     default: [];
     headerIcon: [];
-    searchInput: [];
+    sideContent: [];
   };
   Element: HTMLElement;
 }
@@ -62,9 +62,9 @@ export default class TabbedHeader extends Component<Signature> {
           </ul>
         </nav>
 
-        <div class='app-search'>
-          {{#if (has-block 'searchInput')}}
-            {{yield to='searchInput'}}
+        <div class='app-side-content'>
+          {{#if (has-block 'sideContent')}}
+            {{yield to='sideContent'}}
           {{/if}}
         </div>
       </div>
@@ -134,7 +134,7 @@ export default class TabbedHeader extends Component<Signature> {
         pointer-events: none;
         font-weight: 600;
       }
-      .app-search {
+      .app-side-content {
         margin: var(--boxel-sp-xs) 0;
       }
     </style>
