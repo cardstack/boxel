@@ -1,5 +1,6 @@
 import Accordion from './components/accordion/index.gts';
 import AddButton from './components/add-button/index.gts';
+import Alert from './components/alert/index.gts';
 import Avatar from './components/avatar/index.gts';
 import BasicFitted from './components/basic-fitted/index.gts';
 import Button from './components/button/index.gts';
@@ -71,6 +72,7 @@ export {
   type ViewItem,
   Accordion,
   AddButton,
+  Alert,
   Avatar,
   BasicFitted,
   BoxelButton,
