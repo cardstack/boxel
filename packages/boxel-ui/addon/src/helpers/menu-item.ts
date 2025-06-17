@@ -23,7 +23,6 @@ interface MenuItemOptions {
 }
 export class MenuItem {
   text: string;
-  secondaryText: string | undefined;
   type: string;
   dangerous: boolean;
   selected: boolean;
@@ -44,7 +43,6 @@ export class MenuItem {
     this.type = type;
     this.action = options.action;
     this.id = options.id;
-    this.secondaryText = options.secondaryText || undefined;
     this.dangerous = options.dangerous || false;
     this.selected = options.selected || false;
     this.disabled = options.disabled || false;

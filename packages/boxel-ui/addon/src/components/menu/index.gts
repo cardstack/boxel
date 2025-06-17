@@ -239,13 +239,6 @@ export default class Menu extends Component<Signature> {
           background-size: contain;
         }
 
-        .menu-item__secondary-text {
-          margin-left: auto;
-          font: var(--boxel-font-size-xs);
-          font-weight: 500;
-          color: var(--boxel-secondary-text-color, #777);
-        }
-
         .check-icon {
           --icon-color: var(--boxel-highlight);
           visibility: collapse;

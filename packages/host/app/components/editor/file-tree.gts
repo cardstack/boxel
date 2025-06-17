@@ -48,7 +48,7 @@ export default class FileTree extends Component<Signature> {
       return new MenuItem(realmInfo.info.name, 'action', {
         iconURL: realmInfo.info.iconURL ?? '/default-realm-icon.png',
         action: () => this.switchRealm(realmInfo.info),
-        secondaryText: !realmInfo.canWrite ? 'READ ONLY' : undefined,
+        subtext: !realmInfo.canWrite ? 'READ ONLY' : undefined,
         selected: realmInfo.info.url === this.args.realmURL.href,
       });
     });
@@ -175,6 +175,12 @@ export default class FileTree extends Component<Signature> {
         --boxel-menu-item-gap: var(--boxel-sp-xs);
         max-height: 13rem;
         overflow-y: scroll;
+      }
+      .realm-dropdown-menu :deep(.menu-item .subtext) {
+        margin-left: auto;
+        font: var(--boxel-font-size-xs);
+        font-weight: 500;
+        color: var(--boxel-secondary-text-color, #777);
       }
       .editability-icon {
         display: flex;
