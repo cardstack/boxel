@@ -274,12 +274,16 @@ ${REPLACE_MARKER}
     await waitFor(
       '[data-test-ai-assistant-action-bar] [data-test-accept-all] [data-test-boxel-button-loading-indicator]',
     );
+
     await waitUntil(
-      () => findAll('[data-test-apply-state="applied"]').length === 3,
+      () =>
+        findAll(
+          '[data-test-code-block-index] [data-test-apply-state="applied"]',
+        ).length === 3,
       {
         timeout: 3000,
         timeoutMessage:
-          'timed out waiting for Accept All button to be in applied state',
+          'timed out waiting for code patches to be in applied state',
       },
     );
     await waitFor('[data-test-code-mode]');
@@ -431,6 +435,14 @@ ${REPLACE_MARKER}
           key: 'applied',
         },
         codeBlockIndex: 1,
+        data: {
+          attachedFiles: [
+            {
+              name: 'hi.txt',
+              sourceUrl: 'http://test-realm/test/hi.txt',
+            },
+          ],
+        },
       },
       {
         type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
@@ -526,18 +538,38 @@ ${REPLACE_MARKER}
     assert.dom('[data-test-file="file2.gts"]').exists();
     assert.dom('[data-test-file="hi.txt"]').exists();
 
-    // hi-1.txt got created because hi.txt already exists
-    assert.dom('[data-test-file="hi-1.txt"]').exists();
+    // hi-1.txt (file with suffix) got created because hi.txt already exists
+    assert
+      .dom('[data-test-file="hi-1.txt"]')
+      .exists('File hi-1.txt exists in file tree');
 
-    await click('[data-test-file="hi-1.txt"]');
+    assert.dom('[data-code-patch-dropdown-button]').exists({ count: 3 });
+    assert.dom('[data-code-patch-dropdown-button="file1.gts"]').exists();
+    assert.dom('[data-code-patch-dropdown-button="file2.gts"]').exists();
+    assert.dom('[data-code-patch-dropdown-button="hi-1.txt"]').exists();
 
-    assert.equal(
-      (
-        document.getElementsByClassName('view-lines')[0] as HTMLElement
-      ).innerText
-        .replace(/\s+/g, ' ')
-        .trim(),
+    await click('[data-code-patch-dropdown-button="file1.gts"]');
+    await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
+    assert.strictEqual(
+      getMonacoContent(),
+      'I am a newly created file1',
+      'file1.gts should be opened in code mode and the content should be the new file content',
+    );
+
+    await click('[data-code-patch-dropdown-button="file2.gts"]');
+    await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
+    assert.strictEqual(
+      getMonacoContent(),
+      'I am a newly created file2',
+      'file2.gts should be opened in code mode and the content should be the new file content',
+    );
+
+    await click('[data-code-patch-dropdown-button="hi-1.txt"]');
+    await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
+    assert.strictEqual(
+      getMonacoContent(),
       'This file will be created with a suffix because hi.txt already exists',
+      'hi-1.txt should be opened in code mode and the content should be the new file content',
     );
   });
 
