@@ -8,7 +8,7 @@ import { cached } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
 
-import { resource, use } from 'ember-resources';
+import { resource, use } from 'ember-resources'
 
 import { TrackedObject } from 'tracked-built-ins';
 

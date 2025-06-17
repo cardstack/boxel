@@ -6,7 +6,7 @@ import Component from '@glimmer/component';
 import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
 
 import { didCancel, restartableTask } from 'ember-concurrency';
-import { trackedFunction } from 'ember-resources/util/function';
+import { trackedFunction } from 'reactiveweb/function';
 import { flatMap, isEqual } from 'lodash';
 
 import { TrackedSet } from 'tracked-built-ins';

@@ -6,7 +6,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { parse } from 'date-fns';
 import { restartableTask } from 'ember-concurrency';
-import { Resource } from 'ember-resources';
+import { Resource } from 'ember-modify-based-class-resource';
 
 import { SupportedMimeType, logger } from '@cardstack/runtime-common';
 

@@ -1,7 +1,7 @@
 import { service } from '@ember/service';
 
 import { restartableTask } from 'ember-concurrency';
-import { Resource } from 'ember-resources';
+import { Resource } from 'ember-modify-based-class-resource';
 
 import { TrackedSet } from 'tracked-built-ins';
 

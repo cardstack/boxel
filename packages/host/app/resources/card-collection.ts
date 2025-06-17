@@ -6,7 +6,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
-import { Resource } from 'ember-resources';
+import { Resource } from 'ember-modify-based-class-resource';
 
 import difference from 'lodash/difference';
 import isEqual from 'lodash/isEqual';

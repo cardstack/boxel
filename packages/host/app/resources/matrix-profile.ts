@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, all } from 'ember-concurrency';
-import { Resource } from 'ember-resources';
+import { Resource } from 'ember-modify-based-class-resource';
 
 import MatrixService from '@cardstack/host/services/matrix-service';
 

@@ -4,7 +4,7 @@ import { isTesting } from '@embroider/macros';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
-import { Resource } from 'ember-resources';
+import { Resource } from 'ember-modify-based-class-resource';
 
 import { logger } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
