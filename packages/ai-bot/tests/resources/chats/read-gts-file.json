@@ -1,0 +1,230 @@
+[
+  {
+    "type": "m.room.message",
+    "room_id": "!FADJsbIEWsXdxbjWKZ:localhost",
+    "sender": "@user:localhost",
+    "content": {
+      "msgtype": "app.boxel.message",
+      "body": "Make the address area yellow",
+      "format": "org.matrix.custom.html",
+      "clientGeneratedId": "0d984480-dc71-4e6d-ad55-33a5080deb2a",
+      "data": {
+        "attachedFiles": [],
+        "attachedCards": [
+          {
+            "sourceUrl": "http://test-realm-server/user/test-realm/Postcard/46268158-2eb9-4025-804d-45c299017e8f",
+            "url": "http://localhost:8008/_matrix/client/v1/media/download/localhost/pYPMMtPyhcEPZkTNqbqFtoLw",
+            "name": "Nashville",
+            "contentType": "application/vnd.card+json",
+            "contentHash": "2ed4d747cf58ab3848a8de3cbb3b2d12",
+            "content": "{\"data\":{\"type\":\"card\",\"id\":\"http://test-realm-server/user/test-realm/Postcard/46268158-2eb9-4025-804d-45c299017e8f\",\"attributes\":{\"recipientName\":\"Jennifer Martinez\",\"recipientAddress\":{\"streetAddress\":\"789 Pine Ridge Drive\",\"city\":\"Austin\",\"state\":\"TX\",\"postalCode\":\"78701\",\"country\":\"USA\"},\"postageAmount\":0.68,\"message\":\"# Howdy from the Music Capital!\\n\\nSpent the day on South by Southwest - so many amazing bands and food trucks! Had the best BBQ brisket of my life and caught three live shows. The energy here is infectious.\\n\\n**Keep it weird!**  \\n*Jake*\",\"title\":\"Nashville\",\"description\":null,\"thumbnailURL\":null},\"meta\":{\"adoptsFrom\":{\"module\":\"http://test-realm-server/user/test-realm/postcard\",\"name\":\"Postcard\"},\"realmURL\":\"http://test-realm-server/user/test-realm/\"}}}"
+          }
+        ],
+        "context": {
+          "agentId": "4508c929-889c-4b47-a396-b0820fc159de",
+          "submode": "interact",
+          "debug": true,
+          "openCardIds": [
+            "http://test-realm-server/user/test-realm/Postcard/46268158-2eb9-4025-804d-45c299017e8f"
+          ],
+          "realmUrl": "http://test-realm-server/user/test-realm/",
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "patchCardInstance",
+                "description": "Propose a patch to an existing card instance to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "description": { "type": "string" },
+                    "attributes": {
+                      "type": "object",
+                      "properties": {
+                        "cardId": {
+                          "type": "string",
+                          "const": "http://test-realm-server/user/test-realm/Postcard/46268158-2eb9-4025-804d-45c299017e8f"
+                        },
+                        "patch": {
+                          "type": "object",
+                          "properties": {
+                            "attributes": {
+                              "type": "object",
+                              "properties": {
+                                "recipientName": { "type": "string" },
+                                "recipientAddress": {
+                                  "type": "object",
+                                  "properties": {
+                                    "streetAddress": { "type": "string" },
+                                    "city": { "type": "string" },
+                                    "state": { "type": "string" },
+                                    "postalCode": { "type": "string" },
+                                    "country": { "type": "string" }
+                                  }
+                                },
+                                "postageAmount": { "type": "number" },
+                                "message": { "type": "string" },
+                                "title": { "type": "string" },
+                                "description": { "type": "string" },
+                                "thumbnailURL": { "type": "string" }
+                              }
+                            },
+                            "relationships": {
+                              "type": "object",
+                              "properties": {}
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "required": ["attributes", "description"]
+                }
+              }
+            }
+          ],
+          "functions": []
+        }
+      }
+    },
+    "origin_server_ts": 1750175345961,
+    "unsigned": { "membership": "join", "age": 68515 },
+    "event_id": "$3-ZaTgtrkGS7JrgUUQ_zSkhVSzWGtH-fORcyZBxzybk",
+    "user_id": "@user:localhost",
+    "age": 68515
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!FADJsbIEWsXdxbjWKZ:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "",
+      "msgtype": "app.boxel.message",
+      "format": "org.matrix.custom.html",
+      "app.boxel.reasoning": "",
+      "app.boxel.commandRequests": [
+        {
+          "id": "call_AfSOBIBgLmNu6EweaWcLmu8c",
+          "name": "switch-submode_dd88",
+          "arguments": "{\"description\":\"Switching to code mode to update the postcard appearance and highlight the address area in yellow.\",\"attributes\":{\"submode\":\"code\"}}"
+        }
+      ],
+      "isStreamingFinished": true,
+      "data": {
+        "context": { "agentId": "4508c929-889c-4b47-a396-b0820fc159de" }
+      }
+    },
+    "origin_server_ts": 1750175349220,
+    "unsigned": { "age": 65256, "transaction_id": "m1750175349197.242" },
+    "event_id": "$SZ21gxLaI4yLAP72oUlR4bWDYXvsR-GkVV1lUsS84C0",
+    "user_id": "@aibot:localhost",
+    "age": 65256
+  },
+  {
+    "type": "app.boxel.commandResult",
+    "room_id": "!FADJsbIEWsXdxbjWKZ:localhost",
+    "sender": "@user:localhost",
+    "content": {
+      "msgtype": "app.boxel.commandResultWithNoOutput",
+      "commandRequestId": "call_AfSOBIBgLmNu6EweaWcLmu8c",
+      "m.relates_to": {
+        "event_id": "$SZ21gxLaI4yLAP72oUlR4bWDYXvsR-GkVV1lUsS84C0",
+        "key": "applied",
+        "rel_type": "app.boxel.commandAnnotation"
+      },
+      "data": {
+        "context": {
+          "agentId": "4508c929-889c-4b47-a396-b0820fc159de",
+          "submode": "code",
+          "debug": true,
+          "openCardIds": [
+            "http://test-realm-server/user/test-realm/Postcard/46268158-2eb9-4025-804d-45c299017e8f"
+          ],
+          "realmUrl": "http://test-realm-server/user/test-realm/",
+          "codeMode": {
+            "currentFile": "http://test-realm-server/user/test-realm/Postcard/46268158-2eb9-4025-804d-45c299017e8f.json",
+            "moduleInspectorPanel": "schema"
+          }
+        },
+        "attachedCards": [],
+        "attachedFiles": []
+      }
+    },
+    "origin_server_ts": 1750175356027,
+    "unsigned": { "membership": "join", "age": 58449 },
+    "event_id": "$LEZ43xbUrd7f4MjMUdNnzItICa4TQ8a8eyU1Bz_80DM",
+    "user_id": "@user:localhost",
+    "age": 58449
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!FADJsbIEWsXdxbjWKZ:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "",
+      "msgtype": "app.boxel.message",
+      "format": "org.matrix.custom.html",
+      "app.boxel.reasoning": "",
+      "app.boxel.commandRequests": [
+        {
+          "id": "toolu_vrtx_01MyEHsrjxrvtUjpyEBjD1Df",
+          "name": "read-file-for-ai-assistant_a831",
+          "arguments": "{\"description\":\"Reading the postcard card definition to add yellow styling to the address area.\",\"attributes\":{\"fileUrl\":\"http://test-realm-server/user/test-realm/postcard.gts\"}}"
+        }
+      ],
+      "isStreamingFinished": true,
+      "data": {
+        "context": { "agentId": "4508c929-889c-4b47-a396-b0820fc159de" }
+      }
+    },
+    "origin_server_ts": 1750175361439,
+    "unsigned": { "age": 53037, "transaction_id": "m1750175361420.249" },
+    "event_id": "$PXaPE_60w0jghdYOXy6Rn0-dkwXXktnj4NFOsDWjmHM",
+    "user_id": "@aibot:localhost",
+    "age": 53037
+  },
+  {
+    "type": "app.boxel.commandResult",
+    "room_id": "!FADJsbIEWsXdxbjWKZ:localhost",
+    "sender": "@user:localhost",
+    "content": {
+      "msgtype": "app.boxel.commandResultWithNoOutput",
+      "commandRequestId": "toolu_vrtx_01MyEHsrjxrvtUjpyEBjD1Df",
+      "m.relates_to": {
+        "event_id": "$PXaPE_60w0jghdYOXy6Rn0-dkwXXktnj4NFOsDWjmHM",
+        "key": "applied",
+        "rel_type": "app.boxel.commandAnnotation"
+      },
+      "data": {
+        "context": {
+          "agentId": "4508c929-889c-4b47-a396-b0820fc159de",
+          "submode": "code",
+          "debug": true,
+          "openCardIds": [
+            "http://test-realm-server/user/test-realm/Postcard/46268158-2eb9-4025-804d-45c299017e8f"
+          ],
+          "realmUrl": "http://test-realm-server/user/test-realm/",
+          "codeMode": {
+            "currentFile": "http://test-realm-server/user/test-realm/Postcard/46268158-2eb9-4025-804d-45c299017e8f.json",
+            "moduleInspectorPanel": "schema"
+          }
+        },
+        "attachedCards": [],
+        "attachedFiles": [
+          {
+            "sourceUrl": "http://test-realm-server/user/test-realm/postcard.gts",
+            "url": "mxc://mock-server/postcard",
+            "name": "postcard.gts",
+            "contentType": "text/plain;charset=UTF-8",
+            "contentHash": "e7829494a3dc16d958139d0ab2f3b62f"
+          }
+        ]
+      }
+    },
+    "origin_server_ts": 1750175414161,
+    "unsigned": { "membership": "join", "age": 315 },
+    "event_id": "$36Ocig4ceyARlRjzVvC5MtdjWYkYsFMCiyLrBQG3Bs0",
+    "user_id": "@user:localhost",
+    "age": 315
+  }
+]
