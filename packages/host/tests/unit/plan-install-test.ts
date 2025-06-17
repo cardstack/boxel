@@ -2,6 +2,8 @@ import { module, test } from 'qunit';
 
 import { planInstall } from '@cardstack/host/commands/listing-install';
 
+import { Spec } from 'https://cardstack.com/base/spec';
+
 module('Unit | Listing Installer', function () {
   test('base example', function (assert) {
     const sourceRealmURL = 'http://localhost:4201/catalog/';
@@ -20,7 +22,7 @@ module('Unit | Listing Installer', function () {
         moduleHref: `${sourceRealmURL}some-2.gts`,
       },
     ];
-    const res = planInstall(specs, sourceRealmURL, targetRealmURL, {
+    const res = planInstall(specs as Spec[], sourceRealmURL, targetRealmURL, {
       targetDirName: 'some-uuid',
     });
 
@@ -69,7 +71,7 @@ module('Unit | Listing Installer', function () {
         moduleHref: `${sourceRealmURL}some-folder/some.gts`,
       },
     ];
-    const res = planInstall(specs, sourceRealmURL, targetRealmURL);
+    const res = planInstall(specs as Spec[], sourceRealmURL, targetRealmURL);
 
     assert.strictEqual(res.length, 1);
 
@@ -94,7 +96,7 @@ module('Unit | Listing Installer', function () {
         moduleHref: `${sourceRealmURL}some-folder/some.gts`,
       },
     ];
-    const res = planInstall(specs, sourceRealmURL, targetRealmURL, {
+    const res = planInstall(specs as Spec[], sourceRealmURL, targetRealmURL, {
       targetDirName: 'some-uuid',
     });
 
@@ -121,7 +123,7 @@ module('Unit | Listing Installer', function () {
         moduleHref: `${sourceRealmURL}some-folder/some.gts`,
       },
     ];
-    const res = planInstall(specs, sourceRealmURL, targetRealmURL, {
+    const res = planInstall(specs as Spec[], sourceRealmURL, targetRealmURL, {
       targetDirName: 'some-uuid',
       sourceDir: `${sourceRealmURL}some-folder/`,
     });
@@ -153,7 +155,7 @@ module('Unit | Listing Installer', function () {
         moduleHref: `${sourceRealmURL}some-other-folder/some-needs-this.gts`,
       },
     ];
-    const res = planInstall(specs, sourceRealmURL, targetRealmURL, {
+    const res = planInstall(specs as Spec[], sourceRealmURL, targetRealmURL, {
       sourceDir: `${sourceRealmURL}some-folder/`,
     });
 
@@ -195,7 +197,7 @@ module('Unit | Listing Installer', function () {
         moduleHref: `${sourceRealmURL}some-other-folder/some-needs-this.gts`,
       },
     ];
-    const res = planInstall(specs, sourceRealmURL, targetRealmURL, {
+    const res = planInstall(specs as Spec[], sourceRealmURL, targetRealmURL, {
       targetDirName: 'some-uuid',
       sourceDir: `${sourceRealmURL}some-folder/`,
     });

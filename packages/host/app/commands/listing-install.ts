@@ -12,11 +12,11 @@ import {
 
 import { join } from '@cardstack/runtime-common/paths';
 
-import { Spec } from 'https://cardstack.com/base';
 import * as CardAPI from 'https://cardstack.com/base/card-api';
 import * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import type { Skill } from 'https://cardstack.com/base/skill';
+import { Spec } from 'https://cardstack.com/base/spec';
 
 import HostBaseCommand from '../lib/host-base-command';
 
