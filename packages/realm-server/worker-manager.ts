@@ -249,11 +249,12 @@ async function monitorWorker(workerId: string, worker: ChildProcess) {
           message: `worker time-out encountered while indexing ${url}`,
         });
       }
-      await markFailedJob(
+      await markFailedJob({
+        reservationId: id,
         workerId,
         jobId,
-        `Timed-out. Worker manager killed unresponsive worker ${workerId} for job reservation ${id}`,
-      );
+        message: `Timed-out. Worker manager killed unresponsive worker ${workerId} for job reservation ${id}`,
+      });
     }
     log.info(`killing worker ${workerId} due to stuck jobs`);
     worker.kill();
@@ -289,22 +290,33 @@ async function markFailedIndexEntry({
   await batch.done();
 }
 
-async function markFailedJob(
-  workerId: string | undefined,
-  jobId: string,
-  message: string,
-) {
+async function markFailedJob({
+  workerId,
+  jobId,
+  reservationId,
+  message,
+}: {
+  workerId: string | undefined;
+  jobId: string;
+  message: string;
+  reservationId?: string;
+}) {
   log.info(`marking job ${jobId} as failed for worker ${workerId}`);
-  let [{ id }] = (await query([
-    `SELECT id FROM job_reservations WHERE job_id=`,
-    param(jobId),
-    `AND completed_at IS NULL`,
-  ])) as { id: string }[];
-  if (!id) {
-    log.error(
-      `Cannot determine job_reservation id for failed job ${jobId} of worker ${workerId}`,
-    );
-    return;
+  let id: string;
+  if (!reservationId) {
+    [{ id }] = (await query([
+      `SELECT id FROM job_reservations WHERE job_id=`,
+      param(jobId),
+      `AND completed_at IS NULL`,
+    ])) as { id: string }[];
+    if (!id) {
+      log.error(
+        `Cannot determine job_reservation id for failed job ${jobId} of worker ${workerId}`,
+      );
+      return;
+    }
+  } else {
+    id = reservationId;
   }
 
   await query([
@@ -385,7 +397,11 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
             await markFailedIndexEntry({ url, realm, deps, message });
           }
           if (workerId && currentState?.jobId) {
-            await markFailedJob(workerId, currentState.jobId, message);
+            await markFailedJob({
+              workerId,
+              jobId: currentState.jobId,
+              message,
+            });
           }
         })().catch((e) => {
           Sentry.captureException(e);
