@@ -30,7 +30,7 @@ const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
       --boxel-button-min-width: 4rem;
       --boxel-button-padding: 0;
       --boxel-button-color: var(--boxel-light);
-      border-radius: var(--boxel-border-radius);
+      border-radius: var(--boxel-border-radius-sm);
       flex: 1;
     }
     .toggle-button:hover:not(:disabled) {
