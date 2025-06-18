@@ -1,12 +1,14 @@
 import {
   CardDef,
   Component,
+  FieldDef,
   StringField,
   contains,
   containsMany,
   field,
   linksTo,
   linksToMany,
+  primitive,
 } from './card-api';
 import CodeRefField from './code-ref';
 import BooleanField from './boolean';
@@ -19,6 +21,11 @@ import {
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
 } from './commands/search-card-result';
+import { SerializedFileDef } from './file-api';
+
+export class FileDefField extends FieldDef {
+  static [primitive]: SerializedFileDef;
+}
 
 export type CommandStatus = 'applied' | 'ready' | 'applying';
 
@@ -52,6 +59,10 @@ export class PatchCardInput extends CardDef {
 
 export class CardIdCard extends CardDef {
   @field cardId = contains(StringField);
+}
+
+export class FileUrlCard extends CardDef {
+  @field fileUrl = contains(StringField);
 }
 
 export class ReadTextFileInput extends CardDef {
@@ -109,6 +120,11 @@ export class LintAndFixInput extends CardDef {
 
 export class LintAndFixResult extends CardDef {
   @field output = contains(StringField);
+}
+
+export class PatchCodeCommandResult extends CardDef {
+  @field patchedContent = contains(StringField);
+  @field finalFileUrl = contains(StringField);
 }
 
 export class PatchCodeInput extends CardDef {
@@ -231,6 +247,14 @@ export class VisitCardsInput extends CardDef {
 
 export class JsonCard extends CardDef {
   @field json = contains(JsonField);
+}
+
+export class FileForAttachmentCard extends CardDef {
+  @field fileForAttachment = contains(JsonField);
+}
+
+export class CardForAttachmentCard extends CardDef {
+  @field cardForAttachment = contains(JsonField);
 }
 
 export {

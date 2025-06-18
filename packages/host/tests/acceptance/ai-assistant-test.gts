@@ -11,6 +11,7 @@ import { baseRealm } from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_MESSAGE_MSGTYPE,
   DEFAULT_LLM,
   DEFAULT_LLM_LIST,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -70,7 +71,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     ],
   });
 
-  let { createAndJoinRoom, getRoomState } = mockMatrixUtils;
+  let { createAndJoinRoom, getRoomState, simulateRemoteMessage } =
+    mockMatrixUtils;
 
   setupBaseRealm(hooks);
 
@@ -821,5 +823,52 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert
       .dom(`[data-test-attached-card="${testRealmURL}Country/indonesia"]`)
       .doesNotExist();
+  });
+
+  test('displays "Generating results..." when streaming"', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      codePath: `${testRealmURL}index.json`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    // In interact mode, auto-attached cards must be the top most cards in the stack
+    // unless the card is manually chosen
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    let eventId = simulateRemoteMessage(matrixRoomId, '@aibot:localhost', {
+      body: 'Streaming...',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+    });
+
+    await waitFor('[data-test-ai-assistant-action-bar]');
+    assert
+      .dom('[data-test-ai-assistant-action-bar]')
+      .hasText('Generating results...');
+
+    simulateRemoteMessage(matrixRoomId, '@aibot:localhost', {
+      body: 'Streaming finished',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      'm.relates_to': {
+        event_id: eventId,
+        rel_type: 'm.replace',
+      },
+    });
+    await waitUntil(
+      () => !document.querySelector('[data-test-ai-assistant-action-bar]'),
+    );
   });
 });

@@ -11,7 +11,7 @@ import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
-import { trackedFunction } from 'ember-resources/util/function';
+import { trackedFunction } from 'reactiveweb/function';
 
 import {
   Button,

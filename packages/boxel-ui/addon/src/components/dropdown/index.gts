@@ -1,4 +1,4 @@
-import { concat, hash } from '@ember/helper';
+import { concat, fn, hash } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import BasicDropdown, {
@@ -32,6 +32,7 @@ export type DropdownAPI = Dropdown;
 
 interface Signature {
   Args: {
+    autoClose?: boolean;
     contentClass?: string;
     matchTriggerWidth?: boolean;
     onClose?: () => void;
@@ -57,6 +58,12 @@ interface Signature {
 class BoxelDropdown extends Component<Signature> {
   @action registerAPI(publicAPI: DropdownAPI) {
     this.args.registerAPI?.(publicAPI);
+  }
+
+  @action onMouseLeave(dropdown?: Dropdown) {
+    if (this.args.autoClose && dropdown) {
+      dropdown.actions.close();
+    }
   }
 
   <template>
@@ -85,6 +92,7 @@ class BoxelDropdown extends Component<Signature> {
       {{/let}}
 
       <dd.Content
+        @onMouseLeave={{fn this.onMouseLeave dd}}
         data-test-boxel-dropdown-content
         class={{cn 'boxel-dropdown__content' @contentClass}}
         {{focusTrap
@@ -101,6 +109,7 @@ class BoxelDropdown extends Component<Signature> {
         {{yield (hash close=dd.actions.close) to='content'}}
       </dd.Content>
     </BasicDropdown>
+
     <style scoped>
       @layer {
         .boxel-dropdown__content {

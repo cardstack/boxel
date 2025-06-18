@@ -3,6 +3,7 @@
 
 import AccordionUsage from './components/accordion/usage.gts';
 import AddButtonUsage from './components/add-button/usage.gts';
+import AlertUsage from './components/alert/usage.gts';
 import AvatarUsage from './components/avatar/usage.gts';
 import BasicFittedUsage from './components/basic-fitted/usage.gts';
 import ButtonUsage from './components/button/usage.gts';
@@ -48,6 +49,7 @@ import ViewSelectorUsage from './components/view-selector/usage.gts';
 export const ALL_USAGE_COMPONENTS = [
   ['Accordion', AccordionUsage],
   ['AddButton', AddButtonUsage],
+  ['Alert', AlertUsage],
   ['Avatar', AvatarUsage],
   ['BasicFitted', BasicFittedUsage],
   ['Button', ButtonUsage],

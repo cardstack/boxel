@@ -15,6 +15,9 @@
     "ember-template-lint": "catalog:",
     "tracked-built-ins": "^3.3.0"
   },
+  "dependencies": {
+    "ember-modify-based-class-resource": "catalog:"
+  },
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:hbs": "ember-template-lint .",

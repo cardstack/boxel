@@ -14,6 +14,8 @@ import * as ListingUseCommandModule from './listing-use';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
 import * as PatchCardInstanceCommandModule from './patch-card-instance';
 import * as PatchCodeCommandModule from './patch-code';
+import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assistant';
+import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assistant';
 import * as SaveCardCommandModule from './save-card';
 import * as SearchCardsCommandModule from './search-cards';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
@@ -78,6 +80,14 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/patch-code',
     PatchCodeCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/read-card-for-ai-assistant',
+    ReadCardForAiAssistantCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
+    ReadFileForAiAssistantCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/save-card',

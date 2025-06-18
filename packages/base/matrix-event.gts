@@ -375,6 +375,11 @@ export interface FileRemovedEventContent {
   removed: string;
 }
 
+export type MatrixEventWithBoxelContext =
+  | CardMessageEvent
+  | CommandResultEvent
+  | CodePatchResultEvent;
+
 export type MatrixEvent =
   | ActiveLLMEvent
   | CardMessageEvent

@@ -11,9 +11,8 @@ import { format as formatDate, formatISO } from 'date-fns';
 import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
-import { Button } from '@cardstack/boxel-ui/components';
+import { Alert } from '@cardstack/boxel-ui/components';
 import { and, cn, eq } from '@cardstack/boxel-ui/helpers';
-import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 import {
   type getCardCollection,
@@ -176,6 +175,10 @@ function isPresent(val: SafeString | string | null | undefined) {
   return val ? val !== '' : false;
 }
 
+function collectionResourceError(id: string | null | undefined) {
+  return 'Cannot render ' + id;
+}
+
 export default class AiAssistantMessage extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare matrixService: MatrixService;
@@ -221,7 +224,6 @@ export default class AiAssistantMessage extends Component<Signature> {
         'ai-assistant-message'
         is-from-assistant=@isFromAssistant
         is-pending=@isPending
-        is-error=@errorMessage
       }}
       {{MessageScroller index=@index registerScroller=@registerScroller}}
       data-test-ai-assistant-message
@@ -241,27 +243,6 @@ export default class AiAssistantMessage extends Component<Signature> {
         </time>
       </div>
       <div class='content-container'>
-        {{#if @errorMessage}}
-          <div class='error-container'>
-            <FailureBordered class='error-icon' />
-            <div class='error-message' data-test-card-error>
-              {{@errorMessage}}
-            </div>
-
-            {{#if @retryAction}}
-              <Button
-                {{on 'click' @retryAction}}
-                class='retry-button'
-                @size='small'
-                @kind='secondary-dark'
-                data-test-ai-bot-retry-button
-              >
-                Retry
-              </Button>
-            {{/if}}
-          </div>
-        {{/if}}
-
         <div class='content' data-test-ai-message-content>
           {{#if @reasoningContent}}
             <div class='reasoning-content'>
@@ -315,16 +296,15 @@ export default class AiAssistantMessage extends Component<Signature> {
             </div>
           {{/if}}
 
-          {{#if @collectionResource.cardErrors.length}}
-            <div class='error-container error-footer'>
-              {{#each @collectionResource.cardErrors as |error|}}
-                <FailureBordered class='error-icon' />
-                <div class='error-message' data-test-card-error>
-                  <div>Cannot render {{error.id}}</div>
-                </div>
-              {{/each}}
-            </div>
-          {{/if}}
+          <div class='error-footer'>
+            {{#if this.errorMessages.length}}
+              <Alert
+                @type='error'
+                @messages={{this.errorMessages}}
+                @retryAction={{@retryAction}}
+              />
+            {{/if}}
+          </div>
         </div>
       </div>
     </div>
@@ -404,7 +384,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
 
       .is-from-assistant .content {
-        background-color: var(--ai-bot-message-background-color);
+        background-color: transparent;
         color: var(--boxel-light);
         /* the below font-smoothing options are only recommended for light-colored
           text on dark background (otherwise not good for accessibility) */
@@ -425,15 +405,6 @@ export default class AiAssistantMessage extends Component<Signature> {
       .is-pending .content .items > :deep(.card-pill .boxel-card-container) {
         background: var(--boxel-200);
         color: var(--boxel-500);
-      }
-
-      .is-error .content,
-      .is-error .content .items > :deep(.card-pill),
-      .is-error .content .items > :deep(.card-pill .boxel-card-container) {
-        background: var(--boxel-200);
-        color: var(--boxel-500);
-        max-height: 300px;
-        overflow: auto;
       }
 
       .content :deep(span.streaming-text:after) {
@@ -470,23 +441,13 @@ export default class AiAssistantMessage extends Component<Signature> {
       .reasoning-content summary {
         cursor: pointer;
       }
-
-      .error-container {
-        display: grid;
-        grid-template-columns: auto 1fr auto;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        background-color: var(--boxel-danger);
-        color: var(--boxel-light);
-        font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp);
-      }
       .error-footer {
         --fill-container-spacing: calc(
           -1 * var(--ai-assistant-message-padding)
         );
         margin-inline: var(--fill-container-spacing);
         margin-bottom: var(--fill-container-spacing);
+        padding: var(--boxel-sp-xs);
       }
       .error-icon {
         --icon-background-color: var(--boxel-light);
@@ -532,6 +493,15 @@ export default class AiAssistantMessage extends Component<Signature> {
     return [
       ...(this.args.collectionResource ? [this.args.collectionResource] : []),
       ...(this.args.files ?? []),
+    ];
+  }
+
+  private get errorMessages() {
+    return [
+      ...(this.args.errorMessage ? [this.args.errorMessage] : []),
+      ...(this.args.collectionResource?.cardErrors.map((error) =>
+        collectionResourceError(error.id),
+      ) ?? []),
     ];
   }
 }

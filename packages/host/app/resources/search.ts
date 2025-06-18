@@ -5,7 +5,7 @@ import { buildWaiter } from '@ember/test-waiters';
 import { tracked, cached } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
-import { Resource } from 'ember-resources';
+import { Resource } from 'ember-modify-based-class-resource';
 
 import difference from 'lodash/difference';
 import flatMap from 'lodash/flatMap';

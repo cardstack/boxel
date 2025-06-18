@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Revolutionary Brain-Computer Interface Allows Paralyzed Patient to Control Robotic Arm with 99% Accuracy",
+      "url": "https://www.nature.com/articles/neuroscience-bci-breakthrough-2025",
+      "description": "In a groundbreaking medical milestone, researchers at Stanford University have successfully enabled a paralyzed patient to control a robotic arm with unprecedented precision using a next-generation brain-computer interface. The patient, who lost mobility below the neck in a diving accident, can now perform complex tasks like writing, eating, and even playing chess through direct neural signals. The system achieved 99% accuracy in translating brain intentions to robotic movements, marking a quantum leap in neuroprosthetics technology.",
+      "author": "Dr. Sarah Chen, Neuroscience Research Lead",
+      "upvotes": 851,
+      "downvotes": 12,
+      "commentUrl": "https://news.ycombinator.com/item?id=39284751",
+      "commentCount": 156,
+      "submittedAt": "2025-01-16T14:22:00.000Z",
+      "thumbnailURL": "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=400&h=300&fit=crop"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../story-board",
+        "name": "Story"
+      }
+    }
+  }
+}
