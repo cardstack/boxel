@@ -32,6 +32,10 @@ import {
   type QueueRunner,
   type IndexRunner,
 } from '@cardstack/runtime-common';
+import {
+  testRealmServerMatrixUsername,
+  testRealmServerMatrixUserId,
+} from '@cardstack/runtime-common/helpers/const';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
@@ -284,6 +288,7 @@ export async function createRealm({
       virtualNetwork,
       matrixURL: matrixConfig.url,
       secretSeed: realmSecretSeed,
+      realmServerMatrixUsername: testRealmServerMatrixUsername,
     });
   }
   let realm = new Realm({
@@ -294,6 +299,7 @@ export async function createRealm({
     virtualNetwork,
     dbAdapter,
     queue: publisher,
+    realmServerMatrixUserId: testRealmServerMatrixUserId,
   });
   if (worker) {
     virtualNetwork.mount(realm.handle);
@@ -347,6 +353,7 @@ export async function runBaseRealmServer(
     virtualNetwork,
     matrixURL,
     secretSeed: realmSecretSeed,
+    realmServerMatrixUsername: testRealmServerMatrixUsername,
   });
   let testBaseRealm = await createRealm({
     dir: basePath,
@@ -418,6 +425,7 @@ export async function runTestRealmServer({
     virtualNetwork,
     matrixURL,
     secretSeed: realmSecretSeed,
+    realmServerMatrixUsername: testRealmServerMatrixUsername,
   });
   await worker.run();
   let testRealm = await createRealm({

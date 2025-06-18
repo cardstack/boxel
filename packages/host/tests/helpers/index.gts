@@ -58,6 +58,10 @@ import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
 
 import type { MockUtils } from './mock-matrix/_utils';
+import {
+  testRealmServerMatrixUsername,
+  testRealmServerMatrixUserId,
+} from '@cardstack/runtime-common/helpers/const';
 
 export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
 export * from '@cardstack/runtime-common/helpers';
@@ -413,6 +417,7 @@ async function setupTestRealm({
     virtualNetwork,
     matrixURL: baseTestMatrix.url,
     secretSeed: testRealmSecretSeed,
+    realmServerMatrixUsername: testRealmServerMatrixUsername,
   });
 
   realm = new Realm({
@@ -426,6 +431,7 @@ async function setupTestRealm({
     virtualNetwork,
     dbAdapter,
     queue,
+    realmServerMatrixUserId: testRealmServerMatrixUserId,
   });
 
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
