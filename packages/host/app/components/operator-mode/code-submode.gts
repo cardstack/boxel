@@ -673,6 +673,7 @@ export default class CodeSubmode extends Component<Signature> {
                   @defaultSize={{this.defaultPanelHeights.filePanel}}
                 >
                   <CodeSubmodeLeftPanelToggle
+                    @realmURL={{this.realmURL}}
                     @fileView={{this.fileView}}
                     @setFileView={{this.setFileView}}
                     @isFileOpen={{this.isFileOpen}}

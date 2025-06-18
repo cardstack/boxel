@@ -23,6 +23,7 @@ import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/b
 import { MatrixEvent } from 'matrix-js-sdk';
 import { PromptParts, mxcUrlToHttp } from '../../helpers';
 import { encodeUri } from 'matrix-js-sdk/lib/utils';
+import { SerializedFileDef } from 'https://cardstack.com/base/file-api';
 
 let log = logger('ai-bot');
 
@@ -52,15 +53,6 @@ export interface MatrixClient {
   setRoomName(roomId: string, title: string): Promise<{ event_id: string }>;
 
   getAccessToken(): string | null;
-}
-
-export interface SerializedFileDef {
-  url: string;
-  sourceUrl: string;
-  name: string;
-  contentType: string;
-  content?: string;
-  error?: string;
 }
 
 export async function sendMatrixEvent(
@@ -280,13 +272,16 @@ export async function downloadFile(
   client: MatrixClient,
   attachedFile: SerializedFileDef,
 ): Promise<string> {
-  if (!attachedFile?.contentType?.includes('text/')) {
+  if (
+    !attachedFile?.contentType?.includes('text/') &&
+    !attachedFile.contentType?.includes('application/vnd.card+json')
+  ) {
     throw new Error(
       `Unsupported file type: ${attachedFile.contentType}. For now, only text files are supported.`,
     );
   }
 
-  const cachedEntry = fileCache.get(attachedFile.url);
+  const cachedEntry = fileCache.get(attachedFile.url!);
   if (cachedEntry) {
     cachedEntry.timestamp = Date.now();
     return cachedEntry.content;
@@ -304,7 +299,7 @@ export async function downloadFile(
 
   const content = await response.text();
 
-  fileCache.set(attachedFile.url, {
+  fileCache.set(attachedFile.url!, {
     content,
     timestamp: Date.now(),
   });

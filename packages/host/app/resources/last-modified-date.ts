@@ -2,7 +2,7 @@ import { registerDestructor } from '@ember/destroyable';
 import { tracked } from '@glimmer/tracking';
 
 import { formatDistanceToNow } from 'date-fns';
-import { Resource } from 'ember-resources';
+import { Resource } from 'ember-modify-based-class-resource';
 
 import { Ready as ReadyFile } from '@cardstack/host/resources/file';
 

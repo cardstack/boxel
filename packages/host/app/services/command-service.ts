@@ -17,7 +17,6 @@ import {
   delay,
   getClass,
   identifyCard,
-  isCardInstance,
   type PatchData,
 } from '@cardstack/runtime-common';
 
@@ -27,7 +26,6 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import { FileDef } from 'https://cardstack.com/base/file-api';
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import { shortenUuid } from '../utils/uuid';
@@ -247,35 +245,14 @@ export default class CommandService extends Service {
       );
       let userContextForAiBot =
         this.operatorModeStateService.getSummaryForAIBot();
-      let cardIds = [
-        ...new Set([
-          ...(userContextForAiBot.openCardIds ?? []),
-          payload?.attributes?.cardId,
-          ...(payload?.attributes?.cardIds ?? []),
-        ]),
-      ].filter(Boolean);
-      let cardsToAttach = (
-        await Promise.all(cardIds.map((id) => this.store.get(id)))
-      )
-        .filter(Boolean)
-        .filter(isCardInstance) as CardDef[];
 
-      let filesToAttach: FileDef[] = [];
-      if (userContextForAiBot.codeMode?.currentFile) {
-        filesToAttach.push(
-          this.matrixService.fileAPI.createFileDef({
-            sourceUrl: userContextForAiBot.codeMode.currentFile,
-            name: userContextForAiBot.codeMode.currentFile.split('/').pop(),
-          }),
-        );
-      }
       await this.matrixService.sendCommandResultEvent(
         command.message.roomId,
         eventId,
         commandRequestId!,
         resultCard,
-        cardsToAttach,
-        filesToAttach,
+        [],
+        [],
         userContextForAiBot,
       );
     } catch (e) {
@@ -374,7 +351,7 @@ export default class CommandService extends Service {
             codeData.eventId,
             codeData.codeBlockIndex,
             'applied',
-            [], // TODO: this should show be what is open in playground, if anything
+            [],
             [fileDef],
             context,
           ),

@@ -3,7 +3,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 
-import { Resource } from 'ember-resources';
+import { Resource } from 'ember-modify-based-class-resource';
 
 import { getAncestor, getField, isBaseDef } from '@cardstack/runtime-common';
 

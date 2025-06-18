@@ -2,7 +2,7 @@ import { module, test, assert } from 'qunit';
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 
 import {
-  getModifyPrompt,
+  buildPromptForModel,
   getPromptParts,
   getRelevantCards,
   getTools,
@@ -59,7 +59,7 @@ function oldPatchTool(card: CardDef, properties: any): Tool {
   };
 }
 
-module('getModifyPrompt', (hooks) => {
+module('buildPromptForModel', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
   let mockResponses: Map<string, { ok: boolean; text: string }>;
   let originalFetch: any;
@@ -136,7 +136,7 @@ module('getModifyPrompt', (hooks) => {
       },
     ];
 
-    const result = await getModifyPrompt(
+    const result = await buildPromptForModel(
       history,
       '@aibot:localhost',
       undefined,
@@ -223,7 +223,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       },
     ];
 
-    const result = await getModifyPrompt(
+    const result = await buildPromptForModel(
       history,
       '@aibot:localhost',
       undefined,
@@ -236,21 +236,21 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(result[0].role, 'system');
     assert.equal(result[1].role, 'system');
     assert.equal(result[2].role, 'user');
-    assert.equal(result[2].content, 'Hey');
+    assert.true(
+      result[2].content?.startsWith('Hey'),
+      'message body should be in the user prompt',
+    );
     if (
       history[0].type === 'm.room.message' &&
       history[0].content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
     ) {
       assert.true(
-        result[1].content?.includes(
-          JSON.stringify(
-            history[0].content.data.attachedCards![0].content
-              ? JSON.parse(history[0].content.data.attachedCards![0].content)
-                  .data
-              : '',
-          ),
-        ),
-        'attached card should be in the system context message',
+        result[2].content?.includes(`"firstName": "Terry"`),
+        'attached card should be in the message that it was sent with 1',
+      );
+      assert.true(
+        result[2].content?.includes(`"lastName": "Pratchett"`),
+        'attached card should be in the message that it was sent with 2',
       );
       assert.true(
         result[1].content?.includes('Room ID: room1'),
@@ -303,7 +303,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     ];
 
     try {
-      await getModifyPrompt(
+      await buildPromptForModel(
         history,
         '@aibot@localhost',
         undefined,
@@ -526,7 +526,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(attachedCards.length, 0);
   });
 
-  test('downloads attached files', async () => {
+  test('downloads most recent version of attached files', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -663,7 +663,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       text: 'Not found',
     });
 
-    let prompt = await getModifyPrompt(
+    let prompt = await buildPromptForModel(
       history,
       '@aibot:localhost',
       undefined,
@@ -671,10 +671,20 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
 
+    let userMessages = prompt.filter((message) => message.role === 'user');
     assert.ok(
-      prompt[prompt.length - 2].content?.includes(
+      userMessages[0]?.content?.includes(
         `
-Attached files:
+Attached Files (files with newer versions don't show their content):
+[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
+[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt)
+      `.trim(),
+      ),
+    );
+    assert.ok(
+      userMessages[1]?.content?.includes(
+        `
+Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts): this is the content of the spaghetti-recipe.gts file
 [best-friends.txt](http://test-realm-server/my-realm/best-friends.txt): this is the content of the best-friends.txt file
 [file-that-does-not-exist.txt](http://test.com/my-realm/file-that-does-not-exist.txt): Error loading attached file: HTTP error. Status: 404
@@ -852,7 +862,7 @@ Attached files:
     assert.equal(attachedCards.length, 2);
   });
 
-  test('Gets multiple uploaded cards in the system context message', async () => {
+  test('Handles multiple uploaded cards across user messages', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -861,7 +871,7 @@ Attached files:
         content: {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
-          body: 'Hey',
+          body: 'Hey 1',
           data: {
             attachedCards: [
               {
@@ -910,9 +920,31 @@ Attached files:
         content: {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
-          body: 'Hey',
+          body: 'Hey again with a newer version of the card plus a second card',
           data: {
             attachedCards: [
+              {
+                sourceUrl: 'http://localhost:4201/experiments/Author/1',
+                url: 'http://localhost:4201/experiments/Author/1',
+                name: 'Author',
+                contentType: 'application/json',
+                content: JSON.stringify({
+                  data: {
+                    type: 'card',
+                    id: 'http://localhost:4201/experiments/Author/1',
+                    attributes: {
+                      firstName: 'Newer Terry',
+                      lastName: 'Pratchett',
+                    },
+                    meta: {
+                      adoptsFrom: {
+                        module: '../author',
+                        name: 'Author',
+                      },
+                    },
+                  },
+                }),
+              },
               {
                 sourceUrl: 'http://localhost:4201/experiments/Author/2',
                 url: 'http://localhost:4201/experiments/Author/2',
@@ -953,23 +985,35 @@ Attached files:
         status: EventStatus.SENT,
       },
     ];
-    const fullPrompt = await getModifyPrompt(
+    const fullPrompt = await buildPromptForModel(
       history,
       '@aibot:localhost',
       undefined,
       undefined,
       fakeMatrixClient,
     );
-    const systemContextMessage = fullPrompt.findLast(
-      (message) => message.role === 'system',
+    const userMessages = fullPrompt.filter(
+      (message) => message.role === 'user',
     );
     assert.true(
-      systemContextMessage?.content?.includes(
+      userMessages[0]?.content?.includes(
+        'http://localhost:4201/experiments/Author/1',
+      ),
+    );
+    assert.false(
+      userMessages[0]?.content?.includes('"firstName": "Terry"'),
+      'should not include the contents of the first version of the card in the first user message',
+    );
+    assert.true(
+      userMessages[1]?.content?.includes(
         'http://localhost:4201/experiments/Author/1',
       ),
     );
     assert.true(
-      systemContextMessage?.content?.includes(
+      userMessages[1]?.content?.includes('"firstName": "Newer Terry"'),
+    );
+    assert.true(
+      userMessages[1]?.content?.includes(
         'http://localhost:4201/experiments/Author/2',
       ),
     );
@@ -1339,11 +1383,11 @@ Attached files:
     let nonEditableCardsMessage =
       'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
 
+    let userContextMessage = messages?.[messages.length - 2];
     assert.ok(
-      messages?.[messages.length - 2].content?.includes(
-        nonEditableCardsMessage,
-      ),
-      'System context message should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files',
+      userContextMessage?.content?.includes(nonEditableCardsMessage),
+      'System context message should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files, but was ' +
+        userContextMessage?.content,
     );
 
     // Now add a tool
@@ -1677,9 +1721,6 @@ Attached files:
       await getPromptParts(eventList, '@aibot:localhost', fakeMatrixClient)
     ).messages!;
 
-    const { attachedCards } = getRelevantCards(eventList, '@aibot:localhost');
-    assert.equal(attachedCards.length, 1);
-
     assert.equal(result[0].role, 'system');
     assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.true(
@@ -1692,11 +1733,12 @@ Attached files:
       result[0].content?.includes('Use pirate colloquialism when responding.'),
       'skill card instructions included in the system message',
     );
+    assert.equal(result[2].role, 'user');
     assert.true(
-      result![1].content?.includes(
-        'attributes":{"appTitle":"Radio Episode Tracker for Nerds"',
+      result![2].content?.includes(
+        '"appTitle": "Radio Episode Tracker for Nerds"',
       ),
-      'attached card details included in the system context message',
+      'attached card details included in the user message',
     );
   });
 
@@ -2257,7 +2299,7 @@ Attached files:
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    const result = await getModifyPrompt(
+    const result = await buildPromptForModel(
       history,
       '@aibot:localhost',
       tools,
@@ -3065,7 +3107,7 @@ Attached files:
       'patchCardInstance',
       'Should have patchCardInstance tool call',
     );
-    assert.true(messages![9].content!.includes('Business Card V2'));
+    assert.true(messages![6].content!.includes('Business Card V2'));
   });
 
   test('Responds to completion of lone code patch', async function () {
@@ -3398,6 +3440,134 @@ Attached files:
       ),
       'Context message should contain the current date and time but was ' +
         messages![3].content,
+    );
+  });
+
+  test('tool call messages include attached files when command result does', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/read-gts-file.json'),
+        'utf-8',
+      ),
+    );
+
+    mockResponses.set('mxc://mock-server/postcard', {
+      ok: true,
+      text: `export default Postcard extends CardDef {}
+      `,
+    });
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    const toolCallMessage = messages!.findLast(
+      (message) => message.role === 'tool',
+    );
+    assert.ok(toolCallMessage, 'Should have a tool call message');
+    assert.true(
+      toolCallMessage!.content!.includes('executed'),
+      'Tool call result should reflect that the tool was executed',
+    );
+    assert.true(
+      toolCallMessage!.content!.includes(
+        `
+Attached Files (files with newer versions don't show their content):
+[postcard.gts](http://test-realm-server/user/test-realm/postcard.gts): export default Postcard extends CardDef {}
+      `.trim(),
+      ),
+      'Tool call result should include attached files',
+    );
+  });
+
+  test('tool call messages include attached cards when command result does', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/read-card.json'),
+        'utf-8',
+      ),
+    );
+
+    mockResponses.set('mxc://mock-server/nashville', {
+      ok: true,
+      text: `{"data":{"type":"card","attributes":{"recipientName":"Jennifer Martinez","recipientAddress":{"streetAddress":"789 Pine Ridge Drive","city":"Austin","state":"TX","postalCode":"78701","country":"USA"},"postageAmount":0.68,"message":"# Howdy from the Music Capital!\n\nSpent the day on South by Southwest - so many amazing bands and food trucks! Had the best BBQ brisket of my life and caught three live shows. The energy here is infectious.\n\n**Keep it weird!**  \n*Jake*","title":"Nashville","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../postcard","name":"Postcard"}}}}`,
+    });
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    const toolCallMessage = messages!.findLast(
+      (message) => message.role === 'tool',
+    );
+    assert.ok(toolCallMessage, 'Should have a tool call message');
+    assert.true(
+      toolCallMessage!.content!.includes('executed'),
+      'Tool call result should reflect that the tool was executed',
+    );
+    assert.true(
+      toolCallMessage!.content!.includes(
+        `
+Attached Cards (cards with newer versions don't show their content):
+[
+  {
+    "url": "mxc://mock-server/nashville",
+    "sourceUrl": "http://test-realm-server/user/test-realm/Postcard/46268158-2eb9-4025-804d-45c299017e8f",
+    "name": "Nashville",
+    "contentType": "application/vnd.card+json",
+    "content": "{\\"data\\":{\\"type\\":\\"card\\",\\"attributes\\":{\\"recipientName\\":\\"Jennifer Martinez\\",\\"recipientAddress\\":{\\"streetAddress\\":\\"789 Pine Ridge Drive\\",\\"city\\":\\"Austin\\",\\"state\\":\\"TX\\",\\"postalCode\\":\\"78701\\",\\"country\\":\\"USA\\"},\\"postageAmount\\":0.68,\\"message\\":\\"# Howdy from the Music Capital!\\n\\nSpent the day on South by Southwest - so many amazing bands and food trucks! Had the best BBQ brisket of my life and caught three live shows. The energy here is infectious.\\n\\n**Keep it weird!**  \\n*Jake*\\",\\"title\\":\\"Nashville\\",\\"description\\":null,\\"thumbnailURL\\":null},\\"meta\\":{\\"adoptsFrom\\":{\\"module\\":\\"../postcard\\",\\"name\\":\\"Postcard\\"}}}}"
+  }
+]
+      `.trim(),
+      ),
+      'Tool call result should include attached cards',
+    );
+  });
+
+  test('code patch messages include attached files when code patch result does', async () => {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/patched-gts.json'),
+        'utf-8',
+      ),
+    );
+
+    mockResponses.set('mxc://mock-server/postcard-before-patch.gts', {
+      ok: true,
+      text: `export default Postcard extends CardDef { /* before *}
+      `,
+    });
+    mockResponses.set('mxc://mock-server/postcard-after-patch.gts', {
+      ok: true,
+      text: `export default Postcard extends CardDef { /* after */ }
+      `,
+    });
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    const lastUserMessage = messages!.findLast(
+      (message) => message.role === 'user',
+    );
+    assert.ok(lastUserMessage, 'Should have a code patch result message');
+    assert.ok(
+      lastUserMessage!.content!.includes(
+        'The user has successfully applied code patch 1.',
+      ),
+      'Code patch result should reflect that the code patch was applied',
+    );
+    assert.ok(
+      lastUserMessage!.content!.includes(
+        `
+Attached Files (files with newer versions don't show their content):
+[postcard.gts](http://test-realm-server/user/test-realm/postcard.gts): export default Postcard extends CardDef { /* after */ }
+      `.trim(),
+      ),
+      'Code patch result should include attached files',
     );
   });
 });

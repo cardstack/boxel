@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "AI System Discovers New Class of Antibiotics, Defeating Drug-Resistant Bacteria",
+      "url": "https://www.nature.com/articles/ai-antibiotics-discovery-2025",
+      "description": "A revolutionary AI system has identified a new class of antibiotics capable of combating previously untreatable drug-resistant bacteria. The system, developed by DeepMind and MIT, analyzed over 100 million protein structures and predicted novel compounds that could effectively target bacterial cell walls. Initial clinical trials show 95% effectiveness against MRSA and other superbugs, offering hope in the fight against antibiotic resistance. The discovery process, which would have taken decades using traditional methods, was completed in just 18 months.",
+      "author": "Dr. James Wilson, MIT AI Research",
+      "upvotes": 894,
+      "downvotes": 15,
+      "commentUrl": "https://news.ycombinator.com/item?id=39284753",
+      "commentCount": 234,
+      "submittedAt": "2025-01-17T11:15:00.000Z",
+      "thumbnailURL": "https://images.unsplash.com/photo-1581093458791-9d15482442f6?w=400&h=300&fit=crop"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../story-board",
+        "name": "Story"
+      }
+    }
+  }
+}
