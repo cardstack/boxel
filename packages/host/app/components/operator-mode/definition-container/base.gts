@@ -79,6 +79,7 @@ export const BaseContainer: TemplateOnlyComponent<BaseContainerSignature> =
         overflow-wrap: break-word;
       }
       .base-container.active {
+        border: 1px solid var(--boxel-400);
         box-shadow: var(--code-mode-active-box-shadow);
       }
     </style>
