@@ -4,7 +4,11 @@ import { fn, concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
-import { Pill, FilterList } from '@cardstack/boxel-ui/components';
+import {
+  Pill,
+  FilterList,
+  SkeletonPlaceholder,
+} from '@cardstack/boxel-ui/components';
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
 export type FilterItem = {
@@ -30,7 +34,7 @@ export class FilterCategoryGroup extends GlimmerComponent<FilterCategoryGroupArg
   <template>
     <FilterGroupWrapper @title={{@title}} ...attributes>
       {{#if @isLoading}}
-        Loading...
+        <SkeletonPlaceholder class='skeleton-placeholder-filter-list' />
       {{else}}
         <FilterList
           @filters={{@categories}}
@@ -47,6 +51,10 @@ export class FilterCategoryGroup extends GlimmerComponent<FilterCategoryGroupArg
       }
       .filter-category-list :deep(.list-item-buttons:hover) {
         background-color: var(--boxel-300);
+      }
+      .skeleton-placeholder-filter-list {
+        height: 20px;
+        width: 100%;
       }
     </style>
   </template>
@@ -80,7 +88,9 @@ export class FilterTagGroup extends GlimmerComponent<FilterTagGroupArgs> {
   <template>
     <FilterGroupWrapper @title={{@title}} ...attributes>
       {{#if @isLoading}}
-        Loading...
+        <div class='filter-list'>
+          <SkeletonPlaceholder class='skeleton-placeholder-filter-list' />
+        </div>
       {{else}}
         <div class='filter-list'>
           {{#if this.noItems}}
@@ -113,7 +123,8 @@ export class FilterTagGroup extends GlimmerComponent<FilterTagGroupArgs> {
           display: flex;
           flex-wrap: wrap;
           gap: var(--boxel-sp-xs);
-          padding: var(--boxel-sp-sm);
+          padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm) var(--boxel-sp-sm)
+            var(--boxel-sp-sm);
         }
         .tag-filter-pill.selected {
           background: var(--boxel-dark);
@@ -121,6 +132,10 @@ export class FilterTagGroup extends GlimmerComponent<FilterTagGroupArgs> {
         }
         .tag-filter-pill:not(.selected):hover {
           background: var(--boxel-300);
+        }
+        .skeleton-placeholder-filter-list {
+          height: 20px;
+          width: 100%;
         }
       }
     </style>
@@ -163,6 +178,60 @@ class FilterGroupWrapper extends GlimmerComponent<FilterGroupWrapperArgs> {
           margin: 0;
           padding: var(--boxel-sp-xs);
         }
+      }
+    </style>
+  </template>
+}
+
+// Filter Sidebar Component - Grouped Filters
+interface FilterSidebarArgs {
+  Args: {
+    categoryItems: FilterItem[];
+    activeCategory: FilterItem | undefined;
+    onCategorySelect: (category: FilterItem) => void;
+    categoryIsLoading?: boolean;
+    tagItems: FilterItem[];
+    activeTagIds: string[];
+    onTagSelect: (tag: FilterItem) => void;
+    tagIsLoading?: boolean;
+  };
+}
+
+export default class FilterSidebar extends GlimmerComponent<FilterSidebarArgs> {
+  <template>
+    <div
+      role='complementary'
+      aria-label='Filters'
+      class='filters-container info-box'
+    >
+      <FilterCategoryGroup
+        @title='Categories'
+        @categories={{@categoryItems}}
+        @activeCategory={{@activeCategory}}
+        @onCategorySelect={{@onCategorySelect}}
+        @isLoading={{@categoryIsLoading}}
+        class='filter-category-group'
+      />
+      <FilterTagGroup
+        @title='Tags'
+        @tags={{@tagItems}}
+        @activeTagIds={{@activeTagIds}}
+        @onTagSelect={{@onTagSelect}}
+        @isLoading={{@tagIsLoading}}
+      />
+    </div>
+
+    <style scoped>
+      .filters-container {
+        background-color: transparent;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+        margin-top: var(--boxel-sp);
+      }
+
+      .filter-category-group {
+        --filter-group-background-color: transparent;
       }
     </style>
   </template>

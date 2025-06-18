@@ -23,11 +23,7 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import GlimmerComponent from '@glimmer/component';
 
-import {
-  FilterCategoryGroup,
-  FilterTagGroup,
-  type FilterItem,
-} from './components/filter-section';
+import FilterSidebar, { type FilterItem } from './components/filter-section';
 import CardsDisplaySection, {
   CardsIntancesGrid,
 } from './components/cards-display-section';
@@ -40,7 +36,6 @@ import type IconComponent from '@cardstack/boxel-icons/captions';
 import BuildingBank from '@cardstack/boxel-icons/building-bank';
 import BuildingIcon from '@cardstack/boxel-icons/building';
 import HealthRecognition from '@cardstack/boxel-icons/health-recognition';
-import Home from '@cardstack/boxel-icons/home';
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import ShipWheelIcon from '@cardstack/boxel-icons/ship-wheel';
 import UsersIcon from '@cardstack/boxel-icons/users';
@@ -76,6 +71,11 @@ interface ShowcaseViewArgs {
 class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
   <template>
     <header class='showcase-header'>
+      <img
+        src='https://boxel-images.boxel.ai/icons/icon_catalog_rounded.png'
+        alt='Catalog Icon'
+        class='catalog-icon'
+      />
       <h1 class='showcase-header-title'>
         Cardstack Catalog: Discover & Remix the Best
       </h1>
@@ -101,6 +101,8 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
           </:content>
         </CardsDisplaySection>
 
+        <hr class='showcase-divider' />
+
         <CardsDisplaySection class='new-this-week-cards-display'>
           <:intro>
             <h2 class='intro-title'>Editor's Picks – What's Hot This Week</h2>
@@ -113,6 +115,8 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
             <CardsIntancesGrid @cards={{@newListings}} @context={{@context}} />
           </:content>
         </CardsDisplaySection>
+
+        <hr class='showcase-divider' />
 
         <CardsDisplaySection class='featured-cards-display'>
           <:intro>
@@ -134,19 +138,28 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
       .showcase-header {
         position: relative;
         overflow: hidden;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+      .catalog-icon {
+        width: 2rem;
+        height: 2rem;
+        flex-shrink: 0;
       }
       .showcase-header-title {
-        font: 600 var(--boxel-font-xl);
+        font-size: 1.5rem;
+        font-weight: 600;
         line-height: 1.2;
         margin-block: 0;
-        margin-bottom: 1rem;
       }
 
       .showcase-divider {
         border: none;
         height: 1px;
         background-color: #999999;
-        margin: var(--boxel-sp-lg) 0;
+        margin: var(--boxel-sp-xl) 0;
       }
 
       .showcase-center-div {
@@ -158,12 +171,9 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
       .showcase-display-container {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-xxxl);
+        gap: var(--boxel-sp-lg);
         container-name: showcase-display-container;
         container-type: inline-size;
-      }
-      .showcase-display-container > * + * {
-        border-top: 1px solid #999999;
       }
       .showcase-cards-display :deep(.cards.grid-view),
       .featured-cards-display :deep(.cards.grid-view) {
@@ -177,6 +187,7 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
 
       .intro-title {
         font: 600 var(--boxel-font-lg);
+        margin-block: 0;
         color: var(--boxel-dark);
       }
       .intro-description {
@@ -261,6 +272,7 @@ class CatalogListView extends GlimmerComponent<CatalogListViewArgs> {
         align-items: center;
         justify-content: space-between;
         gap: var(--boxel-sp-sm);
+        margin-bottom: var(--boxel-sp-sm);
       }
       .catalog-list-view-selector {
         margin-left: auto;
@@ -295,12 +307,10 @@ class Isolated extends Component<typeof Catalog> {
   ];
 
   @tracked activeTabId: string = this.tabFilterOptions[0].tabId;
-  @tracked isNavigationActive: boolean = false;
 
   @action
   setActiveTab(tabId: string) {
     this.activeTabId = tabId;
-    this.isNavigationActive = false;
   }
 
   @tracked activeCategoryId: string | undefined =
@@ -475,7 +485,6 @@ class Isolated extends Component<typeof Catalog> {
   // end of listing query filter values
 
   @action navigateToHome() {
-    this.isNavigationActive = true;
     this.resetFilters();
   }
 
@@ -543,64 +552,33 @@ class Isolated extends Component<typeof Catalog> {
         </TabbedHeader>
       </:header>
       <:sidebar>
-        {{#if (this.shouldShowTab 'showcase')}}
-          <div class='sidebar-content'>
+        <div class='sidebar-content'>
+          {{#if (this.shouldShowTab 'showcase')}}
             <button
               class='navigation-button {{if this.isShowcaseView "is-selected"}}'
               {{on 'click' this.navigateToHome}}
               data-test-showcase-tab-button
             >
-              <Home width='16' height='16' role='presentation' />
+              <img
+                src='https://boxel-images.boxel.ai/icons/icon_catalog_rounded.png'
+                alt='Catalog Icon'
+                class='catalog-icon'
+              />
               <span class='button-text'>Catalog Home</span>
             </button>
+          {{/if}}
 
-            <div
-              role='complementary'
-              aria-label='Filters'
-              class='filters-container info-box'
-            >
-              <FilterCategoryGroup
-                @title='Categories'
-                @categories={{this.categoryItems}}
-                @activeCategory={{this.activeCategory}}
-                @onCategorySelect={{this.handleCategorySelect}}
-                @isLoading={{this.categorySearch.isLoading}}
-                class='filter-category-group'
-              />
-              <FilterTagGroup
-                @title='Tags'
-                @tags={{this.tagItems}}
-                @activeTagIds={{this.activeTagIds}}
-                @onTagSelect={{this.handleTagSelect}}
-                @isLoading={{this.tagSearch.isLoading}}
-              />
-            </div>
-          </div>
-        {{else}}
-          <div class='sidebar-content'>
-            <div
-              role='complementary'
-              aria-label='Filters'
-              class='filters-container info-box'
-            >
-              <FilterCategoryGroup
-                @title='Categories'
-                @categories={{this.categoryItems}}
-                @activeCategory={{this.activeCategory}}
-                @onCategorySelect={{this.handleCategorySelect}}
-                @isLoading={{this.categorySearch.isLoading}}
-                class='filter-category-group'
-              />
-              <FilterTagGroup
-                @title='Tags'
-                @tags={{this.tagItems}}
-                @activeTagIds={{this.activeTagIds}}
-                @onTagSelect={{this.handleTagSelect}}
-                @isLoading={{this.tagSearch.isLoading}}
-              />
-            </div>
-          </div>
-        {{/if}}
+          <FilterSidebar
+            @categoryItems={{this.categoryItems}}
+            @activeCategory={{this.activeCategory}}
+            @onCategorySelect={{this.handleCategorySelect}}
+            @categoryIsLoading={{this.categorySearch.isLoading}}
+            @tagItems={{this.tagItems}}
+            @activeTagIds={{this.activeTagIds}}
+            @onTagSelect={{this.handleTagSelect}}
+            @tagIsLoading={{this.tagSearch.isLoading}}
+          />
+        </div>
       </:sidebar>
       <:content>
         <div class='content-area-container {{this.activeTabId}}'>
@@ -657,6 +635,7 @@ class Isolated extends Component<typeof Catalog> {
 
       /* Layout */
       .catalog-layout {
+        --layout-theme-color: #a66efa;
         --layout-container-background-color: #eeedf7;
         --layout-sidebar-background-color: #eeedf7;
         --layout-content-padding: var(--boxel-sp-xl);
@@ -713,23 +692,17 @@ class Isolated extends Component<typeof Catalog> {
         background-color: var(--boxel-300);
       }
       .navigation-button.is-selected {
-        filter: invert(1);
+        background-color: var(--boxel-dark);
+        color: var(--boxel-light);
+      }
+      .catalog-icon {
+        width: 16px;
+        height: 16px;
       }
       .button-text {
         white-space: nowrap;
         text-overflow: ellipsis;
         overflow: hidden;
-      }
-
-      .filters-container {
-        background-color: transparent;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-lg);
-      }
-
-      .filter-category-group {
-        --filter-group-background-color: transparent;
       }
 
       .operator-mode .buried .cards,
