@@ -708,7 +708,7 @@ export default class CodeSubmode extends Component<Signature> {
                     </:browser>
                   </CodeSubmodeLeftPanelToggle>
                 </VerticallyResizablePanel>
-                <VerticallyResizeHandle />
+                <VerticallyResizeHandle class='handle' />
                 <VerticallyResizablePanel
                   @defaultSize={{this.defaultPanelHeights.recentPanel}}
                   @minSize={{20}}
@@ -728,7 +728,7 @@ export default class CodeSubmode extends Component<Signature> {
               </ResizablePanelGroup>
             </div>
           </ResizablePanel>
-          <ResizeHandle />
+          <ResizeHandle class='handle' />
           {{#if this.codePath}}
             <ResizablePanel
               @defaultSize={{this.defaultPanelWidths.codeEditorPanel}}
@@ -756,13 +756,13 @@ export default class CodeSubmode extends Component<Signature> {
                 {{/if}}
               </InnerContainer>
             </ResizablePanel>
-            <ResizeHandle />
+            <ResizeHandle class='handle' />
             <ResizablePanel
               @defaultSize={{this.defaultPanelWidths.rightPanel}}
               {{! TODO in CS-8713: make this have a minimum width }}
               @collapsible={{false}}
             >
-              <InnerContainer>
+              <InnerContainer class='module-inspector-container'>
                 {{#if this.isReady}}
                   <ModuleInspector
                     @card={{this.card}}
@@ -853,8 +853,7 @@ export default class CodeSubmode extends Component<Signature> {
         padding-top: var(--code-mode-padding-top);
         overflow: auto;
         flex: 1;
-        background-color: var(--boxel-dark);
-        border-top: 1px solid var(--boxel-dark);
+        background-color: #74707d;
       }
 
       .columns {
@@ -862,6 +861,7 @@ export default class CodeSubmode extends Component<Signature> {
         flex-direction: row;
         flex-shrink: 0;
         height: 100%;
+        border-top: 1px solid var(--boxel-dark);
       }
 
       .column {
@@ -869,6 +869,10 @@ export default class CodeSubmode extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp);
         height: 100%;
+      }
+
+      .handle {
+        --boxel-panel-resize-separator-background-color: var(--boxel-dark);
       }
 
       .recent-files-panel {
@@ -899,11 +903,14 @@ export default class CodeSubmode extends Component<Signature> {
         padding-right: var(--operator-mode-spacing);
         display: flex;
         z-index: 1;
-        background-color: var(--code-mode-top-bar-background-color);
       }
       .code-mode-top-bar
         > :deep(* + *:not(.ember-basic-dropdown-content-wormhole-origin)) {
         margin-left: var(--operator-mode-spacing);
+      }
+
+      .module-inspector-container {
+        background-color: transparent;
       }
 
       .loading {

@@ -200,7 +200,7 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
 
     <style scoped>
       .left-panel {
-        background-color: var(--code-mode-panel-background-color);
+        background-color: transparent;
       }
       .left-panel-header {
         display: flex;
@@ -208,7 +208,6 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs);
         border-bottom: var(--boxel-border);
-        background-color: var(--code-mode-top-bar-background-color);
       }
       .file-browser .content {
         background-color: var(--boxel-light);
