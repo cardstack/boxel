@@ -22,9 +22,9 @@ const FileDefinitionContainer: TemplateOnlyComponent<FileSignature> = <template>
     data-test-file-definition
   >
     <:activeContent>
-      <Active @actions={{@actions}} @infoText={{@infoText}} />
     </:activeContent>
   </BaseDefinitionContainer>
+  <Active @actions={{@actions}} @infoText={{@infoText}} />
 </template>;
 
 interface ModuleArgs extends BaseArgs, ActiveArgs {}
@@ -44,9 +44,9 @@ const ModuleDefinitionContainer: TemplateOnlyComponent<ModSig> = <template>
     data-test-card-module-definition
   >
     <:activeContent>
-      <Active @actions={{@actions}} @infoText={{@infoText}} />
     </:activeContent>
   </BaseDefinitionContainer>
+  <Active @actions={{@actions}} @infoText={{@infoText}} />
 </template>;
 
 interface InstanceArgs
@@ -68,9 +68,9 @@ const InstanceDefinitionContainer: TemplateOnlyComponent<InstSig> = <template>
     data-test-card-instance-definition
   >
     <:activeContent>
-      <Active @actions={{@actions}} @infoText={{@infoText}} />
     </:activeContent>
   </BaseDefinitionContainer>
+  <Active @actions={{@actions}} @infoText={{@infoText}} />
 </template>;
 
 interface ClickableModuleArgs
