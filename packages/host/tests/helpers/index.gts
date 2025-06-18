@@ -59,9 +59,9 @@ import visitOperatorMode from './visit-operator-mode';
 
 import type { MockUtils } from './mock-matrix/_utils';
 import {
-  testRealmServerMatrixUsername,
   testRealmServerMatrixUserId,
-} from '@cardstack/runtime-common/helpers/const';
+  testRealmServerMatrixUsername,
+} from './mock-matrix';
 
 export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
 export * from '@cardstack/runtime-common/helpers';

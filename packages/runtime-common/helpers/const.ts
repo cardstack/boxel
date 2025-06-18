@@ -1,9 +1,6 @@
 import { type RealmInfo } from '../index';
 export const testRealmURL = `http://test-realm/test/`;
 
-export const testRealmServerMatrixUsername = 'realm_server';
-export const testRealmServerMatrixUserId = `@${testRealmServerMatrixUsername}:localhost`;
-
 export function testRealmURLToUsername(realmURLString: string) {
   let realmURL = new URL(realmURLString);
   let realmUsername = `@realm/${realmURL.host}${realmURL.pathname

@@ -220,7 +220,7 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #disableModuleCaching = false;
-  #serverMatrixUserId: string;
+  realmServerMatrixUserId: string;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -271,7 +271,7 @@ export class Realm {
     this.paths = new RealmPaths(new URL(url));
     let { username, url: matrixURL } = matrix;
     this.#realmSecretSeed = secretSeed;
-    this.#serverMatrixUserId = realmServerMatrixUserId;
+    this.realmServerMatrixUserId = realmServerMatrixUserId;
     this.#matrixClient = new MatrixClient({
       matrixURL,
       username,
@@ -994,11 +994,13 @@ export class Realm {
 
       let user = token.user;
       let assumedUser = request.headers.get('X-Boxel-Assume-User');
+      let didAssumeUser = false;
       if (
         assumedUser &&
         (await realmPermissionChecker.can(user, 'assume-user'))
       ) {
         user = assumedUser;
+        didAssumeUser = true;
       }
 
       // if the client is the realm matrix user then we permit all actions
@@ -1008,8 +1010,9 @@ export class Realm {
 
       let userPermissions = await realmPermissionChecker.for(user);
       if (
+        !didAssumeUser &&
         JSON.stringify(token.permissions?.sort()) !==
-        JSON.stringify(userPermissions.sort())
+          JSON.stringify(userPermissions.sort())
       ) {
         throw new AuthenticationError(
           AuthenticationErrorMessages.PermissionMismatch,
@@ -2227,7 +2230,7 @@ export class Realm {
 
   private async createRequestContext(): Promise<RequestContext> {
     let permissions = {
-      [this.#serverMatrixUserId]: ['assume-user'] as RealmAction[],
+      [this.realmServerMatrixUserId]: ['assume-user'] as RealmAction[],
       ...(await fetchUserPermissions(this.#dbAdapter, new URL(this.url))),
     };
     return {

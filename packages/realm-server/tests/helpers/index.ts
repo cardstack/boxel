@@ -32,10 +32,6 @@ import {
   type QueueRunner,
   type IndexRunner,
 } from '@cardstack/runtime-common';
-import {
-  testRealmServerMatrixUsername,
-  testRealmServerMatrixUserId,
-} from '@cardstack/runtime-common/helpers/const';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
@@ -62,6 +58,9 @@ import type {
 
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
+
+export const testRealmServerMatrixUsername = 'node-test_realm-server';
+export const testRealmServerMatrixUserId = `@${testRealmServerMatrixUsername}:localhost`;
 
 export { testRealmHref, testRealmURL };
 
