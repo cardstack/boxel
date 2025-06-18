@@ -53,15 +53,15 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 import { TestRealmAdapter } from './adapter';
+import {
+  testRealmServerMatrixUserId,
+  testRealmServerMatrixUsername,
+} from './mock-matrix';
 import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
 
 import type { MockUtils } from './mock-matrix/_utils';
-import {
-  testRealmServerMatrixUserId,
-  testRealmServerMatrixUsername,
-} from './mock-matrix';
 
 export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
 export * from '@cardstack/runtime-common/helpers';
