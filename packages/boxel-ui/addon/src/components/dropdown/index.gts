@@ -103,7 +103,6 @@ class BoxelDropdown extends Component<Signature> {
             allowOutsideClick=true
           )
         }}
-        {{this.autoCloseOnOutsidePointer dd}}
       >
         {{yield (hash close=dd.actions.close) to='content'}}
       </dd.Content>
@@ -228,57 +227,6 @@ class BoxelDropdown extends Component<Signature> {
       );
     };
   });
-
-  autoCloseOnOutsidePointer = createModifier(
-    (_element: HTMLElement, [dropdown]: [Dropdown]) => {
-      let closeTimeout: number | undefined;
-
-      let handleMouseMove = (event: MouseEvent) => {
-        const dropdownContent = document.querySelector(
-          '.boxel-dropdown__content',
-        ) as HTMLElement;
-
-        if (!dropdownContent) return;
-
-        const rect = dropdownContent.getBoundingClientRect();
-        const isOutside =
-          event.clientX < rect.left ||
-          event.clientX > rect.right ||
-          event.clientY < rect.top ||
-          event.clientY > rect.bottom;
-
-        if (isOutside) {
-          // Clear any existing timeout
-          if (closeTimeout) {
-            window.clearTimeout(closeTimeout);
-          }
-
-          // Add a small delay before closing to allow for interactions
-          closeTimeout = window.setTimeout(() => {
-            // Only close if the dropdown is still open
-            if (dropdown.isOpen) {
-              dropdown.actions.close();
-            }
-          }, 200);
-        } else {
-          // Clear timeout if mouse is inside
-          if (closeTimeout) {
-            window.clearTimeout(closeTimeout);
-            closeTimeout = undefined;
-          }
-        }
-      };
-
-      window.addEventListener('mousemove', handleMouseMove);
-
-      return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        if (closeTimeout) {
-          window.clearTimeout(closeTimeout);
-        }
-      };
-    },
-  );
 }
 
 declare module '@glint/environment-ember-loose/registry' {
