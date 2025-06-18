@@ -1,10 +1,8 @@
 import { module, test } from 'qunit';
 
-import { planInstall } from '@cardstack/host/commands/listing-install';
+import { planInstall, realmURL } from '@cardstack/runtime-common';
 
-import { Spec } from 'https://cardstack.com/base/spec';
-
-module('Unit | Listing Installer', function () {
+module('Unit | Listing Plan Installer', function () {
   test('base example', function (assert) {
     const sourceRealmURL = 'http://localhost:4201/catalog/';
     const targetRealmURL = 'http://localhost:4201/experiments/';
@@ -12,20 +10,20 @@ module('Unit | Listing Installer', function () {
       {
         ref: { name: 'Some Ref Name' },
         moduleHref: `${sourceRealmURL}some`,
-        realm: sourceRealmURL,
+        [realmURL]: new URL(sourceRealmURL),
       },
       {
         ref: { name: 'Some Ref Name 2' },
         moduleHref: `${sourceRealmURL}some-2`,
-        realm: sourceRealmURL,
+        [realmURL]: new URL(sourceRealmURL),
       },
       {
         ref: { name: 'Some Ref Name 3' },
         moduleHref: `${sourceRealmURL}some-2`,
-        realm: sourceRealmURL,
+        [realmURL]: new URL(sourceRealmURL),
       },
-    ];
-    const res = planInstall(specs as Spec[], targetRealmURL, {
+    ] as any[];
+    const res = planInstall(targetRealmURL, specs, {
       targetDirName: 'some-uuid',
     });
 
@@ -63,10 +61,10 @@ module('Unit | Listing Installer', function () {
       {
         ref: { name: 'Some Ref Name' },
         moduleHref: `${sourceRealmURL}some-folder/some`,
-        realm: sourceRealmURL,
+        [realmURL]: new URL(sourceRealmURL),
       },
-    ];
-    const res = planInstall(specs as Spec[], targetRealmURL);
+    ] as any[];
+    const res = planInstall(targetRealmURL, specs);
 
     assert.strictEqual(res.length, 1);
 
@@ -89,10 +87,10 @@ module('Unit | Listing Installer', function () {
       {
         ref: { name: 'Some Ref Name' },
         moduleHref: `${sourceRealmURL}some-folder/some`,
-        realm: sourceRealmURL,
+        [realmURL]: new URL(sourceRealmURL),
       },
-    ];
-    const res = planInstall(specs as Spec[], targetRealmURL, {
+    ] as any[];
+    const res = planInstall(targetRealmURL, specs, {
       targetDirName: 'some-uuid',
     });
 
@@ -117,10 +115,10 @@ module('Unit | Listing Installer', function () {
       {
         ref: { name: 'Some Ref Name' },
         moduleHref: `${sourceRealmURL}some-folder/some`,
-        realm: sourceRealmURL,
+        [realmURL]: new URL(sourceRealmURL),
       },
-    ];
-    const res = planInstall(specs as Spec[], targetRealmURL, {
+    ] as any[];
+    const res = planInstall(targetRealmURL, specs, {
       targetDirName: 'some-uuid',
       sourceDir: `${sourceRealmURL}some-folder/`,
     });
@@ -146,15 +144,15 @@ module('Unit | Listing Installer', function () {
       {
         ref: { name: 'Some Ref Name' },
         moduleHref: `${sourceRealmURL}some-folder/some`,
-        realm: sourceRealmURL,
+        [realmURL]: new URL(sourceRealmURL),
       },
       {
         ref: { name: 'Some Ref Name 2' },
         moduleHref: `${sourceRealmURL}some-other-folder/some-needs-this`,
-        realm: sourceRealmURL,
+        [realmURL]: new URL(sourceRealmURL),
       },
-    ];
-    const res = planInstall(specs as Spec[], targetRealmURL, {
+    ] as any[];
+    const res = planInstall(targetRealmURL, specs, {
       sourceDir: `${sourceRealmURL}some-folder/`,
     });
 
@@ -190,15 +188,15 @@ module('Unit | Listing Installer', function () {
       {
         ref: { name: 'Some Ref Name' },
         moduleHref: `${sourceRealmURL}some-folder/some`,
-        realm: sourceRealmURL,
+        [realmURL]: new URL(sourceRealmURL),
       },
       {
         ref: { name: 'Some Ref Name 2' },
         moduleHref: `${sourceRealmURL}some-other-folder/some-needs-this`,
-        realm: sourceRealmURL,
+        [realmURL]: new URL(sourceRealmURL),
       },
-    ];
-    const res = planInstall(specs as Spec[], targetRealmURL, {
+    ] as any[];
+    const res = planInstall(targetRealmURL, specs, {
       targetDirName: 'some-uuid',
       sourceDir: `${sourceRealmURL}some-folder/`,
     });

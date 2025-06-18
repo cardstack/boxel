@@ -7,16 +7,16 @@ import {
   type CopyCardsWithCodeRef,
   type Command,
   listingNameWithUuid,
+  planInstall,
+  guessSourceRealm,
+  toKebabCase,
   RealmPaths,
 } from '@cardstack/runtime-common';
-
-import { join } from '@cardstack/runtime-common/paths';
 
 import * as CardAPI from 'https://cardstack.com/base/card-api';
 import * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import type { Skill } from 'https://cardstack.com/base/skill';
-import { Spec } from 'https://cardstack.com/base/spec';
 
 import HostBaseCommand from '../lib/host-base-command';
 
@@ -25,11 +25,6 @@ import CopySourceCommand from './copy-source';
 
 import type RealmServerService from '../services/realm-server';
 import type { Listing } from '@cardstack/catalog/listing/listing';
-
-interface CopyMeta {
-  sourceCodeRef: ResolvedCodeRef;
-  targetCodeRef: ResolvedCodeRef;
-}
 
 interface InstallListingInput {
   realmUrl: string;
@@ -47,77 +42,32 @@ interface InstallListingResult {
   skillCardIds?: string[];
 }
 
-function planModuleInstall(
-  spec: Spec,
-  sourceRealm: RealmPaths,
-  targetRealm: string,
-  targetDirName?: string,
-): CopyMeta {
-  let sourcePaths = new RealmPaths(new URL(sourceRealm));
-  let localPath = sourcePaths.local(new URL(spec.moduleHref));
-  let targetModule =
-    targetRealm + join(targetDirName ?? '', localPath + '.gts'); //we assume .gts extension for now
-
-  return {
-    sourceCodeRef: {
-      name: spec.ref.name,
-      module: spec.moduleHref, //its annoying that this doesn't have an extension
-    },
-    targetCodeRef: {
-      name: spec.ref.name,
-      module: targetModule,
-    },
-  };
-}
-
-interface InstallOpts {
-  targetDirName?: string; //install into a directory with a name
-  sourceDir?: string;
-}
-
-export function planInstall(
-  specs: Spec[],
-  targetRealm: string,
-  opts: InstallOpts = {},
-): CopyMeta[] {
-  if (specs.length == 0) {
-    throw new Error('There are no specs to install');
-  }
-  let realmPath = new RealmPaths(specs[0].realm);
-  const allSpecsFromSameRealm = specs.every((spec) =>
-    realmPath.inRealm(spec.realm),
-  );
-  if (!allSpecsFromSameRealm) {
-    throw new Error('Cannot install listing. Specs are from different realm');
-  }
-  if (opts.sourceDir) {
-    const sourceDirPath = new RealmPaths(new URL(opts.sourceDir));
-    const allInDir = specs.every((spec) =>
-      sourceDirPath.inRealm(new URL(spec.moduleHref)),
-    );
-    if (allInDir) realmPath = sourceDirPath.url;
-  }
-
-  return specs.map((spec) =>
-    planModuleInstall(spec, realmPath, targetRealm, opts.targetDirName),
-  );
-}
-
 export async function installListing({
   realmUrl,
   listing,
   commandContext,
   cardAPI,
 }: InstallListingInput): Promise<InstallListingResult> {
-  const { uuidName: localDir, name } = listingNameWithUuid(listing.name);
+  const sourceDirName = toKebabCase(listing.name);
+  const localDir = listingNameWithUuid(listing.name);
+
+  if (listing.specs.length == 0) {
+    throw new Error('No specs exist on listing');
+  }
+
+  let sourceRealm = guessSourceRealm(listing.specs);
+  if (!sourceRealm) {
+    throw new Error('Cannot derive realm from listing');
+  }
+  // this checks if the listing is wrapped in a directory
+  let sourceDir = `${sourceRealm}${sourceDirName}/`;
 
   // first spec as the selected code ref with new url
   // if there are examples, take the first example's code ref
   let shouldPersistPlaygroundSelection = false;
   let firstExampleCardId;
 
-  let sourceDir = listing.specs[0].realm + name + '/';
-  let copyMetas = planInstall(listing.specs, realmUrl, {
+  let copyMetas = planInstall(realmUrl, listing.specs, {
     targetDirName: localDir,
     sourceDir: sourceDir,
   });
