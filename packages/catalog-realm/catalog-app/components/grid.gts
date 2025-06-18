@@ -33,10 +33,6 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
   @tracked hydratedCardId: string | undefined;
   cardResource = this.args.context?.getCard(this, () => this.hydratedCardId);
 
-  get mockSkeletonCards() {
-    return Array.from({ length: 4 });
-  }
-
   @action
   async hydrateCard(card: PrerenderedCardLike | undefined) {
     if (!card) {
@@ -72,13 +68,11 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
       >
         <:loading>
           <ul class='cards {{@selectedView}}-view' ...attributes>
-            {{#each this.mockSkeletonCards}}
-              <li class='{{@selectedView}}-view-container'>
-                <CardContainer class='card' @displayBoundaries={{true}}>
-                  <ListingFittedSkeleton />
-                </CardContainer>
-              </li>
-            {{/each}}
+            <li class='{{@selectedView}}-view-container'>
+              <CardContainer class='card' @displayBoundaries={{true}}>
+                <ListingFittedSkeleton />
+              </CardContainer>
+            </li>
           </ul>
         </:loading>
         <:response as |cards|>
