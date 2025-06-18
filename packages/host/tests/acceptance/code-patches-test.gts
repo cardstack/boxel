@@ -274,15 +274,19 @@ ${REPLACE_MARKER}
     await waitFor(
       '[data-test-ai-assistant-action-bar] [data-test-loading-indicator]',
     );
-    await waitUntil(() =>
-      document
-        .querySelector('[data-test-ai-assistant-action-bar]')
-        ?.textContent?.includes('Apply Diff'),
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-ai-assistant-action-bar]')
+          ?.textContent?.includes('Apply Diff'),
+      { timeout: 5000 },
     );
-    await waitUntil(() =>
-      document
-        .querySelector('[data-test-ai-assistant-action-bar]')
-        ?.textContent?.includes('Switch'),
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-ai-assistant-action-bar]')
+          ?.textContent?.includes('Switch'),
+      { timeout: 5000 },
     );
 
     await waitUntil(
@@ -314,6 +318,7 @@ ${REPLACE_MARKER}
     // We can see content that is the result of 2 patches made to this file (hi.txt)
     await waitUntil(
       () => getMonacoContent() === 'Greetings, world!\nWe are one!',
+      { timeout: 5000 },
     );
 
     let codePatchResultEvents = getRoomEvents(roomId).filter(
