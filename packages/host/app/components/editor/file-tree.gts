@@ -22,7 +22,6 @@ import { type LocalPath } from '@cardstack/runtime-common';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import RealmService from '@cardstack/host/services/realm';
-import { type EnhancedRealmInfo } from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import WithLoadedRealm from '../with-loaded-realm';
@@ -44,30 +43,29 @@ interface Signature {
 export default class FileTree extends Component<Signature> {
   get allRealms() {
     const options = Object.entries(this.realm.allRealmsInfo).map((realm) => {
-      const [, realmInfo] = realm;
+      const [realmUrl, realmInfo] = realm;
       return new MenuItem(realmInfo.info.name, 'action', {
         iconURL: realmInfo.info.iconURL ?? '/default-realm-icon.png',
-        action: () => this.switchRealm(realmInfo.info),
+        action: () => this.switchRealm(realmUrl),
         subtext: !realmInfo.canWrite ? 'READ ONLY' : undefined,
-        selected: realmInfo.info.url === this.args.realmURL.href,
+        selected: realmUrl === this.args.realmURL.href,
       });
     });
     return options;
   }
 
-  switchRealm(realmInfo: EnhancedRealmInfo) {
-    if (realmInfo.url) {
-      const recentFile = this.recentFilesService.findRecentFileByRealmURL(
-        realmInfo.url,
-      );
+  switchRealm(realmUrl: string) {
+    if (realmUrl) {
+      const recentFile =
+        this.recentFilesService.findRecentFileByRealmURL(realmUrl);
       if (recentFile) {
         this.operatorModeStateService.updateCodePath(
-          new URL(`${realmInfo.url}${recentFile.filePath}`),
+          new URL(`${realmUrl}${recentFile.filePath}`),
         );
         return;
       }
       this.operatorModeStateService.updateCodePath(
-        new URL('./index.json', realmInfo.url),
+        new URL('./index.json', realmUrl),
       );
     }
   }
