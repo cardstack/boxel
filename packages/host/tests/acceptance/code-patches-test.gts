@@ -1,7 +1,7 @@
 import { click, waitFor, findAll, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { module, skip, test } from 'qunit';
+import { module, test } from 'qunit';
 
 import {
   REPLACE_MARKER,
@@ -183,8 +183,7 @@ ${REPLACE_MARKER}\n\`\`\``;
     );
   });
 
-  // TODO: restore in CS-8901
-  skip('can patch code and execute command using "Accept All" button', async function (assert) {
+  test('can patch code and execute command using "Accept All" button', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
