@@ -20,10 +20,7 @@ const FileDefinitionContainer: TemplateOnlyComponent<FileSignature> = <template>
     @isActive={{true}}
     @fileURL={{@fileURL}}
     data-test-file-definition
-  >
-    <:activeContent>
-    </:activeContent>
-  </BaseDefinitionContainer>
+  />
   <Active @actions={{@actions}} @infoText={{@infoText}} />
 </template>;
 
@@ -42,10 +39,7 @@ const ModuleDefinitionContainer: TemplateOnlyComponent<ModSig> = <template>
     @isActive={{@isActive}}
     @fileURL={{@fileURL}}
     data-test-card-module-definition
-  >
-    <:activeContent>
-    </:activeContent>
-  </BaseDefinitionContainer>
+  />
   <Active @actions={{@actions}} @infoText={{@infoText}} />
 </template>;
 
@@ -66,10 +60,7 @@ const InstanceDefinitionContainer: TemplateOnlyComponent<InstSig> = <template>
     @isActive={{true}}
     @fileURL={{@fileURL}}
     data-test-card-instance-definition
-  >
-    <:activeContent>
-    </:activeContent>
-  </BaseDefinitionContainer>
+  />
   <Active @actions={{@actions}} @infoText={{@infoText}} />
 </template>;
 

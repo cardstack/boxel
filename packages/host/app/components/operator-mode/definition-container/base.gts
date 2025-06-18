@@ -100,9 +100,7 @@ export interface BaseArgs {
 interface BaseSignature {
   Element: HTMLElement;
   Args: BaseArgs;
-  Blocks: {
-    activeContent: [];
-  };
+  Blocks: {};
 }
 
 class BaseDefinitionContainer extends Component<BaseSignature> {
@@ -137,9 +135,6 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
           <div data-test-definition-name class='definition-name'>{{@name}}</div>
 
         </div>
-        {{#if @isActive}}
-          {{yield to='activeContent'}}
-        {{/if}}
       </div>
     </BaseContainer>
 
