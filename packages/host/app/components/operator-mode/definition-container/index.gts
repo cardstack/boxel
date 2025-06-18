@@ -40,7 +40,9 @@ const ModuleDefinitionContainer: TemplateOnlyComponent<ModSig> = <template>
     @fileURL={{@fileURL}}
     data-test-card-module-definition
   />
-  <Active @actions={{@actions}} @infoText={{@infoText}} />
+  {{#if @isActive}}
+    <Active @actions={{@actions}} @infoText={{@infoText}} />
+  {{/if}}
 </template>;
 
 interface InstanceArgs
