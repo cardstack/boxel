@@ -485,7 +485,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
       stacks: [
         [
           { id: `${testRealmURL}index`, format: 'isolated' },
-          { id: `${userRealm.url}Garden/edible-garden`, format: 'isolated' },
+          { id: `${userRealm}Garden/edible-garden`, format: 'isolated' },
         ],
         [
           { id: `${baseRealm.url}index`, format: 'isolated' },
