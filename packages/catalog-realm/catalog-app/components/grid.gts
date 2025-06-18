@@ -72,7 +72,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
       >
         <:loading>
           <ul class='cards {{@selectedView}}-view' ...attributes>
-            {{#each this.mockSkeletonCards as |_card|}}
+            {{#each this.mockSkeletonCards}}
               <li class='{{@selectedView}}-view-container'>
                 <CardContainer class='card' @displayBoundaries={{true}}>
                   <ListingFittedSkeleton />

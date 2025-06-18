@@ -23,6 +23,8 @@ export default class ListingFittedSkeleton extends GlimmerComponent<Signature> {
       </div>
     </div>
 
+    {{! template-lint-disable no-whitespace-for-layout  }}
+    {{! ignore the above error because ember-template-lint complains about the whitespace in the multi-line comment below }}
     <style scoped>
       @layer {
         .fitted-skeleton {
