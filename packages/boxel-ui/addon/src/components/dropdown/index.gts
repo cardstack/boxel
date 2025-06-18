@@ -34,8 +34,8 @@ interface Signature {
   Args: {
     autoClose?: boolean;
     contentClass?: string;
-    matchTriggerWidth?: boolean;
     initiallyOpened?: boolean;
+    matchTriggerWidth?: boolean;
     onClose?: () => void;
     registerAPI?: (publicAPI: Dropdown) => void;
   };

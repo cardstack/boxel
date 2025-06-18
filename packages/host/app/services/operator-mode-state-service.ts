@@ -807,12 +807,11 @@ export default class OperatorModeStateService extends Service {
     return isReady(this.openFile.current);
   }
 
-  get realmURL() {
-    if (this.state.submode === 'code') {
+  get realmURL(): URL {
+    let { submode } = this._state;
+    if (submode === Submodes.Code) {
       if (isReady(this.openFile.current)) {
         return new URL(this.readyFile.realmURL);
-      } else if (this.cachedRealmURL) {
-        return this.cachedRealmURL;
       }
     }
 
@@ -820,24 +819,57 @@ export default class OperatorModeStateService extends Service {
     // realm background that you see in interact mode is the realm of the
     // bottom-most card in the stack. however you can have cards of differing
     // realms in the same stack and keep in mind you can have multiple stacks...
-    else if (this.state.submode === 'interact') {
-      // Assumption: always use the right-most stack's realm
-      let rightmostStackBottomCardId = this.rightMostStack()?.[0]?.id;
-      if (!rightmostStackBottomCardId) {
-        // TODO: ?
-      } else {
-        let maybeKnownRealm = this.realmServer.availableRealmURLs.find(
-          (path: string) => rightmostStackBottomCardId?.startsWith(path),
-        );
-        if (maybeKnownRealm) {
-          return new URL(maybeKnownRealm);
+    if (submode === Submodes.Interact) {
+      // Precedence rules for determining "current realm" for READ purposes:
+      // 1. cardURL of the index card to determine current realm
+      // 2. If no index card available, the realm of the top-most card
+      let stack = this.rightMostStack(); // using right-most stack
+      if (stack) {
+        let cardId =
+          stack[0]?.id &&
+          this.realmServer.availableRealmIndexCardIds.includes(stack[0]?.id)
+            ? stack[0].id
+            : stack[stack.length - 1]?.id;
+        if (cardId) {
+          let realm = this.realm.url(cardId);
+          if (realm) {
+            return new URL(realm);
+          }
         }
-        // TODO: further refine this logic
       }
+    }
+
+    if (this.cachedRealmURL) {
+      return this.cachedRealmURL;
     }
 
     return new URL(this.realm.defaultReadableRealm.path);
   }
+
+  getWritableRealmURL = (preferredURLs: string[] = []) => {
+    // Optional `preferredURLs` argument with highest priority with fallback options below
+    // Precedence rules for determining "current realm" for WRITE purposes:
+    // 1. cardURL of the index card to determine current realm
+    // 2. If no index card available, the realm of the top-most card if the realm is writable.
+    // 3. Otherwise, fallback to the last opened writable realm, especially if the opening click is from dashboard.
+    let urlsToCheck = [
+      ...preferredURLs,
+      this.realmURL.href,
+      this.cachedRealmURL?.href,
+    ].filter(Boolean) as string[];
+
+    let foundURL = urlsToCheck.find((url) => this.realm.canWrite(url));
+
+    if (foundURL) {
+      return new URL(this.realm.url(foundURL)!);
+    }
+
+    if (this.realm.defaultWritableRealm) {
+      return new URL(this.realm.defaultWritableRealm.path);
+    }
+
+    return undefined; // no writable realm found
+  };
 
   subscribeToOpenFileStateChanges(subscriber: OpenFileSubscriber) {
     this.openFileSubscribers.push(subscriber);
@@ -917,6 +949,7 @@ export default class OperatorModeStateService extends Service {
     this.updateSubmode(Submodes.Interact);
 
     this.operatorModeController.workspaceChooserOpened = false;
+    this.cachedRealmURL = new URL(realmUrl);
   };
 
   get workspaceChooserOpened() {

@@ -711,13 +711,10 @@ export default class InteractSubmode extends Component {
     }
 
     let items: { name: string; icon: Icon; ref: ResolvedCodeRef }[] = [];
-    const excludedCardIds = [
-      ...this.realmServer.availableRealmURLs.map((url) => `${url}index`),
-      ...this.realmServer.catalogRealmURLs.map((url) => `${url}grid`),
-    ];
+    const excludedCardIds = this.realmServer.availableRealmIndexCardIds;
 
     recentCards
-      .filter((card) => !excludedCardIds.includes(card.id)) // filter out index-grid and catalog-grid cards
+      .filter((card) => !excludedCardIds.includes(card.id)) // filter out realm index cards
       .map((card) => {
         let ref = identifyCard(card.constructor);
         let name = cardTypeDisplayName(card);
@@ -781,18 +778,6 @@ export default class InteractSubmode extends Component {
     this.operatorModeStateService.updateSubmode('code');
   };
 
-  private get writableRealmURL(): URL | undefined {
-    let currentRealmURL = this.operatorModeStateService.realmURL;
-    let canWriteCurrentRealm = this.realm.canWrite(currentRealmURL.href);
-    if (canWriteCurrentRealm) {
-      return currentRealmURL;
-    } else if (this.realm.defaultWritableRealm?.path) {
-      return new URL(this.realm.defaultWritableRealm.path);
-    } else {
-      return undefined;
-    }
-  }
-
   private createCardInstance = restartableTask(async () => {
     let specFilter: Filter = {
       on: specRef,
@@ -814,7 +799,7 @@ export default class InteractSubmode extends Component {
     }
 
     await this.cardContext.actions?.createCard?.(spec.ref, new URL(specId), {
-      realmURL: this.writableRealmURL,
+      realmURL: this.operatorModeStateService.getWritableRealmURL(),
     });
   });
 
@@ -822,7 +807,7 @@ export default class InteractSubmode extends Component {
     async (codeRef: ResolvedCodeRef) => {
       // TODO: creating instance from non-exported card-def?
       this.cardContext.actions?.createCard(codeRef, undefined, {
-        realmURL: this.writableRealmURL,
+        realmURL: this.operatorModeStateService.getWritableRealmURL(),
       });
     },
   );
