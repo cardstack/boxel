@@ -4,7 +4,7 @@ export const CurrentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
 export const NewSessionIdPersistenceKey = 'aiPanelNewSessionId';
 export const CodeModePanelWidths = 'code-mode-panel-widths';
 export const CodeModePanelHeights = 'code-mode-panel-heights';
-export const CodeModePanelSelections = 'code-mode-panel-selections';
+export const ModuleInspectorSelections = 'code-mode-panel-selections';
 export const SessionLocalStorageKey = 'boxel-session';
 export const PlaygroundSelections = 'playground-selections';
 export const SpecSelection = 'spec-selection';
@@ -17,7 +17,7 @@ export function clearLocalStorage() {
   window.localStorage.removeItem(NewSessionIdPersistenceKey);
   window.localStorage.removeItem(CodeModePanelWidths);
   window.localStorage.removeItem(CodeModePanelHeights);
-  window.localStorage.removeItem(CodeModePanelSelections);
+  window.localStorage.removeItem(ModuleInspectorSelections);
   window.localStorage.removeItem(PlaygroundSelections);
   window.localStorage.removeItem(RecentCards);
   window.localStorage.removeItem(RecentFiles);

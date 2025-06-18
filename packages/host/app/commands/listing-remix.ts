@@ -1,7 +1,6 @@
 import { service } from '@ember/service';
 
 import { timeout } from 'ember-concurrency';
-import window from 'ember-window-mock';
 
 import { isResolvedCodeRef, RealmPaths } from '@cardstack/runtime-common';
 
@@ -15,12 +14,14 @@ import SwitchSubmodeCommand from './switch-submode';
 import UpdateCodePathWithSelectionCommand from './update-code-path-with-selection';
 import UpdatePlaygroundSelectionCommand from './update-playground-selection';
 
+import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmServerService from '../services/realm-server';
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
 export default class RemixCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInput
 > {
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realmServer: RealmServerService;
 
   static actionVerb = 'Remix';
@@ -87,11 +88,9 @@ export default class RemixCommand extends HostBaseCommand<
           },
         );
 
-        await window.localStorage.setItem(
-          'code-mode-panel-selections',
-          JSON.stringify({
-            [codePath]: 'preview',
-          }),
+        this.operatorModeStateService.persistModuleInspectorView(
+          codePath,
+          'preview',
         );
       }
 

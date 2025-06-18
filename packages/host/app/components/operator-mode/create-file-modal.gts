@@ -22,6 +22,12 @@ import {
   RealmIcon,
 } from '@cardstack/boxel-ui/components';
 import { not, eq, or } from '@cardstack/boxel-ui/helpers';
+import {
+  type Icon,
+  CardDefinition,
+  CardInstance,
+  Field,
+} from '@cardstack/boxel-ui/icons';
 
 import {
   specRef,
@@ -70,12 +76,35 @@ export type NewFileType =
   | 'field-definition'
   | 'spec-instance';
 
-export const newFileTypes: NewFileType[] = [
-  'duplicate-instance',
-  'card-instance',
-  'card-definition',
-  'field-definition',
-  'spec-instance',
+export const newFileTypes: {
+  id: NewFileType;
+  icon?: Icon;
+  description?: string;
+  extension?: string;
+}[] = [
+  {
+    id: 'duplicate-instance',
+    extension: '.json',
+  },
+  {
+    id: 'card-definition',
+    icon: CardDefinition,
+    description: 'For making apps or templates',
+    extension: '.gts',
+  },
+  {
+    id: 'field-definition',
+    icon: Field,
+    description: 'For structuring data input',
+    extension: '.gts',
+  },
+  {
+    id: 'card-instance',
+    icon: CardInstance,
+    description: 'For storing data or content',
+    extension: '.json',
+  },
+  { id: 'spec-instance', extension: '.json' },
 ];
 
 export interface FileType {

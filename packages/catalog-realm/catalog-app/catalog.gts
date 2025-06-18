@@ -26,7 +26,6 @@ import GlimmerComponent from '@glimmer/component';
 import {
   FilterCategoryGroup,
   FilterTagGroup,
-  FilterSearch,
   type FilterItem,
 } from './components/filter-section';
 import CardsDisplaySection, {
@@ -52,7 +51,7 @@ import {
 } from '@cardstack/boxel-ui/icons';
 import {
   TabbedHeader,
-  BoxelButton,
+  BoxelInput,
   ViewSelector,
   type ViewItem,
 } from '@cardstack/boxel-ui/components';
@@ -486,14 +485,6 @@ class Isolated extends Component<typeof Catalog> {
     this.activeTagIds = [];
   }
 
-  @action viewGrid() {
-    if (!this.args.context?.actions?.viewCard) {
-      throw new Error('viewCard action is not available');
-    }
-    let gridUrl = new URL('grid.json', this.args.model[realmURL]!.href);
-    this.args.context?.actions?.viewCard(gridUrl);
-  }
-
   get shouldShowTab() {
     return (tabId: string) => {
       return this.activeTabId === tabId;
@@ -538,7 +529,18 @@ class Isolated extends Component<typeof Catalog> {
           @activeTabId={{this.activeTabId}}
           @headerBackgroundColor={{this.headerColor}}
           class='catalog-tab-header'
-        />
+        >
+          <:sideContent>
+            <BoxelInput
+              @type='search'
+              @value={{this.searchValue}}
+              @onInput={{this.handleSearch}}
+              placeholder='Search by Title'
+              data-test-filter-search-input
+              class='catalog-search-input'
+            />
+          </:sideContent>
+        </TabbedHeader>
       </:header>
       <:sidebar>
         {{#if (this.shouldShowTab 'showcase')}}
@@ -575,15 +577,7 @@ class Isolated extends Component<typeof Catalog> {
             </div>
           </div>
         {{else}}
-          <!-- Existing Sidebar for other tabs -->
           <div class='sidebar-content'>
-            <BoxelButton
-              class='go-to-grid'
-              @kind='primary'
-              {{on 'click' this.viewGrid}}
-            >
-              View Grid
-            </BoxelButton>
             <div
               role='complementary'
               aria-label='Filters'
@@ -596,12 +590,6 @@ class Isolated extends Component<typeof Catalog> {
                 @onCategorySelect={{this.handleCategorySelect}}
                 @isLoading={{this.categorySearch.isLoading}}
                 class='filter-category-group'
-              />
-              <FilterSearch
-                @title='Search'
-                @placeholder='Enter Keywords'
-                @searchValue={{this.searchValue}}
-                @onSearch={{this.handleSearch}}
               />
               <FilterTagGroup
                 @title='Tags'
@@ -646,9 +634,18 @@ class Isolated extends Component<typeof Catalog> {
         top: 0;
         z-index: 10;
         --header-text-color: var(--boxel-light) !important;
+        container-name: catalog-tab-header;
+        container-type: inline-size;
       }
       .catalog-tab-header :deep(.app-title-group) {
         display: none;
+      }
+      .catalog-tab-header :deep(.app-content) {
+        gap: var(--boxel-sp-xxs);
+      }
+      .catalog-search-input {
+        width: 300px;
+        outline: 1px solid var(--boxel-light);
       }
 
       .info-box {
@@ -761,6 +758,12 @@ class Isolated extends Component<typeof Catalog> {
       .go-to-grid {
         font-weight: 600;
         width: 100%;
+      }
+
+      @container catalog-tab-header (inline-size <= 500px) {
+        .catalog-search-input {
+          width: 100cqw;
+        }
       }
 
       @container content-area-container (inline-size <= 768px) {

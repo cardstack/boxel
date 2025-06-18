@@ -10,75 +10,68 @@ import { MenuItem } from '@cardstack/boxel-ui/helpers';
 module('Integration | Component | dropdown', function (hooks) {
   setupRenderingTest(hooks);
 
-  test('dropdown auto-close behavior with pointer', async function (assert) {
+  test('dropdown auto-close behavior: auto-close when enabled, stays open when disabled', async function (assert) {
     const menuOptions = [
       new MenuItem('Option 1', 'action', { action: () => {} }),
       new MenuItem('Option 2', 'action', { action: () => {} }),
       new MenuItem('Option 3', 'action', { action: () => {} }),
     ];
 
+    // Scenario 1
+    // Test with autoClose enabled
     await render(<template>
-      <BoxelDropdown>
+      <BoxelDropdown @autoClose={{true}}>
         <:trigger as |dd|>
-          <button data-test-dropdown-trigger {{dd}}>Open</button>
+          <button data-test-dropdown-trigger-1 {{dd}}>Open</button>
         </:trigger>
         <:content as |dd|>
-          <div data-test-boxel-dropdown-content class='boxel-dropdown__content'>
+          <div
+            data-test-boxel-dropdown-content-1
+            class='boxel-dropdown__content'
+          >
             <BoxelMenu @closeMenu={{dd.close}} @items={{menuOptions}} />
           </div>
         </:content>
       </BoxelDropdown>
     </template>);
 
-    await click('[data-test-dropdown-trigger]');
-    await waitFor('[data-test-boxel-dropdown-content]');
+    await click('[data-test-dropdown-trigger-1]');
+    await waitFor('[data-test-boxel-dropdown-content-1]');
 
-    // Get the dropdown content element's position
-    const dropdownContent = document.querySelector('.boxel-dropdown__content');
-    assert.ok(dropdownContent, 'dropdown content element should exist');
-    const rect = dropdownContent!.getBoundingClientRect();
+    // Test mouse leave - should close
+    await triggerEvent('[data-test-boxel-dropdown-content-1]', 'mouseleave');
 
-    // Test mouse inside - should stay open
-    await triggerEvent(window, 'mousemove', {
-      clientX: rect.left + 10,
-      clientY: rect.top + 10,
-    });
+    await waitFor('[data-test-boxel-dropdown-content-1]', { count: 0 });
     assert
-      .dom('[data-test-boxel-dropdown-content]')
-      .exists('dropdown should stay open when mouse is inside');
+      .dom('[data-test-boxel-dropdown-content-1]')
+      .doesNotExist('dropdown should close when mouse leaves the content');
 
-    // Test mouse outside - should close after 200ms delay
-    await triggerEvent(window, 'mousemove', {
-      clientX: rect.right + 100,
-      clientY: rect.bottom + 100,
-    });
+    // Scenario 2
+    // Test with autoClose disabled
+    await render(<template>
+      <BoxelDropdown @autoClose={{false}}>
+        <:trigger as |dd|>
+          <button data-test-dropdown-trigger-2 {{dd}}>Open</button>
+        </:trigger>
+        <:content as |dd|>
+          <div
+            data-test-boxel-dropdown-content-2
+            class='boxel-dropdown__content'
+          >
+            <BoxelMenu @closeMenu={{dd.close}} @items={{menuOptions}} />
+          </div>
+        </:content>
+      </BoxelDropdown>
+    </template>);
 
-    // Wait for all pending operations to complete
-    await waitFor('[data-test-boxel-dropdown-content]', { count: 0 });
+    await click('[data-test-dropdown-trigger-2]');
+    await waitFor('[data-test-boxel-dropdown-content-2]');
+
+    // Test mouse leave - should stay open when autoClose is false
+    await triggerEvent('[data-test-boxel-dropdown-content-2]', 'mouseleave');
+
     assert
-      .dom('[data-test-boxel-dropdown-content]')
-      .doesNotExist('dropdown should close when mouse is outside');
-
-    // Test quick movement with timeout clearing
-    await click('[data-test-dropdown-trigger]');
-    await waitFor('[data-test-boxel-dropdown-content]');
-
-    // Move outside
-    await triggerEvent(window, 'mousemove', {
-      clientX: rect.right + 100,
-      clientY: rect.bottom + 100,
-    });
-
-    // Quickly move back inside before timeout
-    await triggerEvent(window, 'mousemove', {
-      clientX: rect.left + 10,
-      clientY: rect.top + 10,
-    });
-
-    // Wait for all pending operations to complete
-    await waitFor('[data-test-boxel-dropdown-content]');
-    assert
-      .dom('[data-test-boxel-dropdown-content]')
-      .exists('dropdown should stay open when mouse moves back inside quickly');
+      .dom('[data-test-boxel-dropdown-content-2]')
+      .exists('dropdown should stay open when autoClose is false');
   });
 });

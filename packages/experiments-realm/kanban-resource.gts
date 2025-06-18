@@ -2,7 +2,7 @@ import { tracked } from '@glimmer/tracking';
 import { DndColumn } from '@cardstack/boxel-ui/components';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { Resource } from 'ember-resources';
+import { Resource } from 'ember-modify-based-class-resource';
 
 interface Args {
   named: {

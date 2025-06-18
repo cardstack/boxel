@@ -166,7 +166,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 Preview
               </BoxelButton>
             {{/if}}
-            <BoxelDropdown>
+            <BoxelDropdown @autoClose={{true}}>
               <:trigger as |bindings|>
                 <BoxelButton
                   class='action-button'

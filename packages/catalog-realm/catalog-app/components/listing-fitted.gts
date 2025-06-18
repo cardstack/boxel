@@ -427,7 +427,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           {{#if this.hasTags}}
             <span class='card-tags'># {{this.firstTagName}}</span>
           {{/if}}
-          <BoxelDropdown>
+          <BoxelDropdown @autoClose={{true}}>
             <:trigger as |bindings|>
               <BoxelButton
                 data-test-catalog-listing-fitted-remix-button

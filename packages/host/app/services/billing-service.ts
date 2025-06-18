@@ -3,7 +3,7 @@ import Service from '@ember/service';
 import { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { trackedFunction } from 'ember-resources/util/function';
+import { trackedFunction } from 'reactiveweb/function';
 
 import {
   SupportedMimeType,

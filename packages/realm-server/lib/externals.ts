@@ -77,9 +77,12 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@ember/modifier', {
     on() {},
   });
+  // import * as emberModifyClassBasedResource from 'ember-modify-based-class-resource';
+  virtualNetwork.shimModule('ember-modify-based-class-resource', {
+    Resource: class {},
+  });
   // import * as emberResources from 'ember-resources';
   virtualNetwork.shimModule('ember-resources', {
-    Resource: class {},
     useResource() {},
   });
   // import * as emberConcurrency from 'ember-concurrency';

@@ -346,12 +346,22 @@ export default class MessageBuilder {
 
     let codePatchResults = new TrackedArray<MessageCodePatchResult>();
     for (let codePatchResultEvent of codePatchResultEvents) {
+      let finalFileUrlAfterCodePatching =
+        codePatchResultEvent.content.data.attachedFiles?.[0]?.sourceUrl;
+      if (!finalFileUrlAfterCodePatching) {
+        console.error(
+          'Bug: no final file url found for code patch result event - it should have been set',
+          codePatchResultEvent,
+        );
+        continue;
+      }
       codePatchResults.push(
         new MessageCodePatchResult(
           message,
           this.builderContext.effectiveEventId,
           codePatchResultEvent.content['m.relates_to'].key,
           codePatchResultEvent.content.codeBlockIndex,
+          finalFileUrlAfterCodePatching,
           getOwner(this)!,
         ),
       );

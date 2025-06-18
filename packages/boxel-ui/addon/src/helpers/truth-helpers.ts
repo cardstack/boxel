@@ -6,8 +6,16 @@ export function lt<T>(a: T, b: T): boolean {
   return a < b;
 }
 
+export function lte<T>(a: T, b: T): boolean {
+  return a <= b;
+}
+
 export function gt<T>(a: T, b: T): boolean {
   return a > b;
+}
+
+export function gte<T>(a: T, b: T): boolean {
+  return a >= b;
 }
 
 export function and<T>(...args: [T, T, ...T[]]): boolean {
