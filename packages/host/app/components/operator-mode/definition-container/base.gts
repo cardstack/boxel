@@ -47,7 +47,7 @@ const BaseContainerHeader: TemplateOnlyComponent<BaseContainerHeaderSignature> =
         --boxel-header-text-transform: uppercase;
         --boxel-header-letter-spacing: var(--boxel-lsp-xl);
         --boxel-header-detail-max-width: none;
-        --boxel-header-background-color: var(--boxel-100);
+        --boxel-header-background-color: var(--boxel-300);
         --boxel-header-text-color: var(--boxel-dark);
         --boxel-header-detail-max-width: 100%;
         height: var(
