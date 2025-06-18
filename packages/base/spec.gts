@@ -10,6 +10,7 @@ import {
   getCardMeta,
   type CardOrFieldTypeIcon,
   BaseDef,
+  realmURL,
 } from './card-api';
 import StringField from './string';
 import BooleanField from './boolean';
@@ -920,6 +921,11 @@ export class Spec extends CardDef {
         return undefined;
       }
       return new URL(this.ref.module, this.id ?? this[relativeTo]).href;
+    },
+  });
+  @field realm = contains(StringField, {
+    computeVia: function (this: Spec) {
+      return new URL(this[realmURL]).href;
     },
   });
   @field linkedExamples = linksToMany(CardDef);

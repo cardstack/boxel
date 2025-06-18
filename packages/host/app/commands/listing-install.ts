@@ -49,18 +49,19 @@ interface InstallListingResult {
 
 function planModuleInstall(
   spec: Spec,
-  sourceRealm: string,
+  sourceRealm: RealmPaths,
   targetRealm: string,
   targetDirName?: string,
 ): CopyMeta {
   let sourcePaths = new RealmPaths(new URL(sourceRealm));
   let localPath = sourcePaths.local(new URL(spec.moduleHref));
-  let targetModule = targetRealm + join(targetDirName ?? '', localPath);
+  let targetModule =
+    targetRealm + join(targetDirName ?? '', localPath + '.gts'); //we assume .gts extension for now
 
   return {
     sourceCodeRef: {
       name: spec.ref.name,
-      module: spec.moduleHref,
+      module: spec.moduleHref, //its annoying that this doesn't have an extension
     },
     targetCodeRef: {
       name: spec.ref.name,
@@ -76,22 +77,29 @@ interface InstallOpts {
 
 export function planInstall(
   specs: Spec[],
-  sourceRealm: string,
   targetRealm: string,
   opts: InstallOpts = {},
 ): CopyMeta[] {
-  let sourceDir = sourceRealm;
-
+  if (specs.length == 0) {
+    throw new Error('There are no specs to install');
+  }
+  let realmPath = new RealmPaths(specs[0].realm);
+  const allSpecsFromSameRealm = specs.every((spec) =>
+    realmPath.inRealm(spec.realm),
+  );
+  if (!allSpecsFromSameRealm) {
+    throw new Error('Cannot install listing. Specs are from different realm');
+  }
   if (opts.sourceDir) {
     const sourceDirPath = new RealmPaths(new URL(opts.sourceDir));
     const allInDir = specs.every((spec) =>
       sourceDirPath.inRealm(new URL(spec.moduleHref)),
     );
-    if (allInDir) sourceDir = opts.sourceDir;
+    if (allInDir) realmPath = sourceDirPath.url;
   }
 
   return specs.map((spec) =>
-    planModuleInstall(spec, sourceDir, targetRealm, opts.targetDirName),
+    planModuleInstall(spec, realmPath, targetRealm, opts.targetDirName),
   );
 }
 
@@ -101,47 +109,24 @@ export async function installListing({
   commandContext,
   cardAPI,
 }: InstallListingInput): Promise<InstallListingResult> {
-  const copyMeta: CopyMeta[] = [];
-
-  const localDir = listingNameWithUuid(listing.name);
+  const { uuidName: localDir, name } = listingNameWithUuid(listing.name);
 
   // first spec as the selected code ref with new url
   // if there are examples, take the first example's code ref
-  let selectedCodeRef;
   let shouldPersistPlaygroundSelection = false;
   let firstExampleCardId;
 
-  // Copy the gts file based on the attached spec's moduleHref
-  for (const spec of listing.specs ?? []) {
-    const absoluteModulePath = spec.moduleHref;
-    const relativeModulePath = spec.ref.module;
-    const normalizedPath = relativeModulePath.split('/').slice(2).join('/');
-    const newPath = localDir.concat('/').concat(normalizedPath);
-    const fileTargetUrl = new URL(newPath, realmUrl).href;
-    const targetFilePath = fileTargetUrl.concat('.gts');
-
+  let sourceDir = listing.specs[0].realm + name + '/';
+  let copyMetas = planInstall(listing.specs, realmUrl, {
+    targetDirName: localDir,
+    sourceDir: sourceDir,
+  });
+  let selectedCodeRef = copyMetas[0].targetCodeRef;
+  for (const { sourceCodeRef, targetCodeRef } of copyMetas) {
     await new CopySourceCommand(commandContext).execute({
-      fromRealmUrl: absoluteModulePath,
-      toRealmUrl: targetFilePath,
+      fromRealmUrl: sourceCodeRef.module,
+      toRealmUrl: targetCodeRef.module,
     });
-
-    copyMeta.push({
-      sourceCodeRef: {
-        module: absoluteModulePath,
-        name: spec.ref.name,
-      },
-      targetCodeRef: {
-        module: fileTargetUrl,
-        name: spec.ref.name,
-      },
-    });
-
-    if (!selectedCodeRef) {
-      selectedCodeRef = {
-        module: fileTargetUrl,
-        name: spec.ref.name,
-      };
-    }
   }
 
   if (listing.examples) {
@@ -157,7 +142,7 @@ export async function installListing({
       if (!isResolvedCodeRef(exampleCodeRef)) {
         throw new Error('exampleCodeRef is NOT resolved');
       }
-      let maybeCopyMeta = copyMeta.find(
+      let maybeCopyMeta = copyMetas.find(
         (meta) =>
           meta.sourceCodeRef.module ===
             (exampleCodeRef as ResolvedCodeRef).module &&

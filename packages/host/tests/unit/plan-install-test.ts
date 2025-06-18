@@ -11,28 +11,28 @@ module('Unit | Listing Installer', function () {
     const specs = [
       {
         ref: { name: 'Some Ref Name' },
-        moduleHref: `${sourceRealmURL}some.gts`,
+        moduleHref: `${sourceRealmURL}some`,
+        realm: sourceRealmURL,
       },
       {
         ref: { name: 'Some Ref Name 2' },
-        moduleHref: `${sourceRealmURL}some-2.gts`,
+        moduleHref: `${sourceRealmURL}some-2`,
+        realm: sourceRealmURL,
       },
       {
         ref: { name: 'Some Ref Name 3' },
-        moduleHref: `${sourceRealmURL}some-2.gts`,
+        moduleHref: `${sourceRealmURL}some-2`,
+        realm: sourceRealmURL,
       },
     ];
-    const res = planInstall(specs as Spec[], sourceRealmURL, targetRealmURL, {
+    const res = planInstall(specs as Spec[], targetRealmURL, {
       targetDirName: 'some-uuid',
     });
 
     assert.strictEqual(res.length, 3);
 
     assert.strictEqual(res[0].sourceCodeRef.name, 'Some Ref Name');
-    assert.strictEqual(
-      res[0].sourceCodeRef.module,
-      `${sourceRealmURL}some.gts`,
-    );
+    assert.strictEqual(res[0].sourceCodeRef.module, `${sourceRealmURL}some`);
     assert.strictEqual(res[0].targetCodeRef.name, 'Some Ref Name');
     assert.strictEqual(
       res[0].targetCodeRef.module,
@@ -40,10 +40,7 @@ module('Unit | Listing Installer', function () {
     );
 
     assert.strictEqual(res[1].sourceCodeRef.name, 'Some Ref Name 2');
-    assert.strictEqual(
-      res[1].sourceCodeRef.module,
-      `${sourceRealmURL}some-2.gts`,
-    );
+    assert.strictEqual(res[1].sourceCodeRef.module, `${sourceRealmURL}some-2`);
     assert.strictEqual(res[1].targetCodeRef.name, 'Some Ref Name 2');
     assert.strictEqual(
       res[1].targetCodeRef.module,
@@ -51,10 +48,7 @@ module('Unit | Listing Installer', function () {
     );
 
     assert.strictEqual(res[2].sourceCodeRef.name, 'Some Ref Name 3');
-    assert.strictEqual(
-      res[2].sourceCodeRef.module,
-      `${sourceRealmURL}some-2.gts`,
-    );
+    assert.strictEqual(res[2].sourceCodeRef.module, `${sourceRealmURL}some-2`);
     assert.strictEqual(res[2].targetCodeRef.name, 'Some Ref Name 3');
     assert.strictEqual(
       res[2].targetCodeRef.module,
@@ -68,17 +62,18 @@ module('Unit | Listing Installer', function () {
     const specs = [
       {
         ref: { name: 'Some Ref Name' },
-        moduleHref: `${sourceRealmURL}some-folder/some.gts`,
+        moduleHref: `${sourceRealmURL}some-folder/some`,
+        realm: sourceRealmURL,
       },
     ];
-    const res = planInstall(specs as Spec[], sourceRealmURL, targetRealmURL);
+    const res = planInstall(specs as Spec[], targetRealmURL);
 
     assert.strictEqual(res.length, 1);
 
     assert.strictEqual(res[0].sourceCodeRef.name, 'Some Ref Name');
     assert.strictEqual(
       res[0].sourceCodeRef.module,
-      `${sourceRealmURL}some-folder/some.gts`,
+      `${sourceRealmURL}some-folder/some`,
     );
     assert.strictEqual(res[0].targetCodeRef.name, 'Some Ref Name');
     assert.strictEqual(
@@ -93,10 +88,11 @@ module('Unit | Listing Installer', function () {
     const specs = [
       {
         ref: { name: 'Some Ref Name' },
-        moduleHref: `${sourceRealmURL}some-folder/some.gts`,
+        moduleHref: `${sourceRealmURL}some-folder/some`,
+        realm: sourceRealmURL,
       },
     ];
-    const res = planInstall(specs as Spec[], sourceRealmURL, targetRealmURL, {
+    const res = planInstall(specs as Spec[], targetRealmURL, {
       targetDirName: 'some-uuid',
     });
 
@@ -105,7 +101,7 @@ module('Unit | Listing Installer', function () {
     assert.strictEqual(res[0].sourceCodeRef.name, 'Some Ref Name');
     assert.strictEqual(
       res[0].sourceCodeRef.module,
-      `${sourceRealmURL}some-folder/some.gts`,
+      `${sourceRealmURL}some-folder/some`,
     );
     assert.strictEqual(res[0].targetCodeRef.name, 'Some Ref Name');
     assert.strictEqual(
@@ -120,10 +116,11 @@ module('Unit | Listing Installer', function () {
     const specs = [
       {
         ref: { name: 'Some Ref Name' },
-        moduleHref: `${sourceRealmURL}some-folder/some.gts`,
+        moduleHref: `${sourceRealmURL}some-folder/some`,
+        realm: sourceRealmURL,
       },
     ];
-    const res = planInstall(specs as Spec[], sourceRealmURL, targetRealmURL, {
+    const res = planInstall(specs as Spec[], targetRealmURL, {
       targetDirName: 'some-uuid',
       sourceDir: `${sourceRealmURL}some-folder/`,
     });
@@ -133,7 +130,7 @@ module('Unit | Listing Installer', function () {
     assert.strictEqual(res[0].sourceCodeRef.name, 'Some Ref Name');
     assert.strictEqual(
       res[0].sourceCodeRef.module,
-      `${sourceRealmURL}some-folder/some.gts`,
+      `${sourceRealmURL}some-folder/some`,
     );
     assert.strictEqual(res[0].targetCodeRef.name, 'Some Ref Name');
     assert.strictEqual(
@@ -148,14 +145,16 @@ module('Unit | Listing Installer', function () {
     const specs = [
       {
         ref: { name: 'Some Ref Name' },
-        moduleHref: `${sourceRealmURL}some-folder/some.gts`,
+        moduleHref: `${sourceRealmURL}some-folder/some`,
+        realm: sourceRealmURL,
       },
       {
         ref: { name: 'Some Ref Name 2' },
-        moduleHref: `${sourceRealmURL}some-other-folder/some-needs-this.gts`,
+        moduleHref: `${sourceRealmURL}some-other-folder/some-needs-this`,
+        realm: sourceRealmURL,
       },
     ];
-    const res = planInstall(specs as Spec[], sourceRealmURL, targetRealmURL, {
+    const res = planInstall(specs as Spec[], targetRealmURL, {
       sourceDir: `${sourceRealmURL}some-folder/`,
     });
 
@@ -164,7 +163,7 @@ module('Unit | Listing Installer', function () {
     assert.strictEqual(res[0].sourceCodeRef.name, 'Some Ref Name');
     assert.strictEqual(
       res[0].sourceCodeRef.module,
-      `${sourceRealmURL}some-folder/some.gts`,
+      `${sourceRealmURL}some-folder/some`,
     );
     assert.strictEqual(res[0].targetCodeRef.name, 'Some Ref Name');
     assert.strictEqual(
@@ -175,7 +174,7 @@ module('Unit | Listing Installer', function () {
     assert.strictEqual(res[1].sourceCodeRef.name, 'Some Ref Name 2');
     assert.strictEqual(
       res[1].sourceCodeRef.module,
-      `${sourceRealmURL}some-other-folder/some-needs-this.gts`,
+      `${sourceRealmURL}some-other-folder/some-needs-this`,
     );
     assert.strictEqual(res[1].targetCodeRef.name, 'Some Ref Name 2');
     assert.strictEqual(
@@ -190,14 +189,16 @@ module('Unit | Listing Installer', function () {
     const specs = [
       {
         ref: { name: 'Some Ref Name' },
-        moduleHref: `${sourceRealmURL}some-folder/some.gts`,
+        moduleHref: `${sourceRealmURL}some-folder/some`,
+        realm: sourceRealmURL,
       },
       {
         ref: { name: 'Some Ref Name 2' },
-        moduleHref: `${sourceRealmURL}some-other-folder/some-needs-this.gts`,
+        moduleHref: `${sourceRealmURL}some-other-folder/some-needs-this`,
+        realm: sourceRealmURL,
       },
     ];
-    const res = planInstall(specs as Spec[], sourceRealmURL, targetRealmURL, {
+    const res = planInstall(specs as Spec[], targetRealmURL, {
       targetDirName: 'some-uuid',
       sourceDir: `${sourceRealmURL}some-folder/`,
     });
@@ -207,7 +208,7 @@ module('Unit | Listing Installer', function () {
     assert.strictEqual(res[0].sourceCodeRef.name, 'Some Ref Name');
     assert.strictEqual(
       res[0].sourceCodeRef.module,
-      `${sourceRealmURL}some-folder/some.gts`,
+      `${sourceRealmURL}some-folder/some`,
     );
     assert.strictEqual(res[0].targetCodeRef.name, 'Some Ref Name');
     assert.strictEqual(
@@ -218,7 +219,7 @@ module('Unit | Listing Installer', function () {
     assert.strictEqual(res[1].sourceCodeRef.name, 'Some Ref Name 2');
     assert.strictEqual(
       res[1].sourceCodeRef.module,
-      `${sourceRealmURL}some-other-folder/some-needs-this.gts`,
+      `${sourceRealmURL}some-other-folder/some-needs-this`,
     );
     assert.strictEqual(res[1].targetCodeRef.name, 'Some Ref Name 2');
     assert.strictEqual(

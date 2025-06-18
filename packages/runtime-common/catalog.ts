@@ -6,9 +6,9 @@ export function listingNameWithUuid(listingName?: string) {
     return '';
   }
   // sanitize the listing name, eg: Blog App -> blog-app
-  const sanitizedListingName = deburr(listingName.toLocaleLowerCase())
+  const name = deburr(listingName.toLocaleLowerCase())
     .replace(/ /g, '-')
     .replace(/'/g, '');
-  const newPackageName = `${sanitizedListingName}-${uuidv4()}`;
-  return newPackageName;
+  const uuidName = `${name}-${uuidv4()}`;
+  return { uuidName, name };
 }
