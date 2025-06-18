@@ -4,7 +4,7 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
-import type { ComponentLike } from '@glint/template';
+
 import { tracked } from '@glimmer/tracking';
 
 import Eye from '@cardstack/boxel-icons/eye';
@@ -76,6 +76,8 @@ import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
+
+import type { ComponentLike } from '@glint/template';
 
 const moduleInspectorPanels: Record<ModuleInspectorView, ComponentLike> = {
   schema: Schema,
