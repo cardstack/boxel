@@ -316,15 +316,6 @@ class Isolated extends Component<typeof Catalog> {
   @tracked activeCategoryId: string | undefined =
     this.activeTabId !== 'showcase' ? 'all' : undefined;
 
-  // TODO: Remove this after we get the real tags from query
-  mockTags = [
-    { id: 'ai', name: 'AI' },
-    { id: 'bundled', name: 'Bundled' },
-    { id: 'official', name: 'Official' },
-    { id: 'userContributed', name: 'User Contributed' },
-    { id: 'solo', name: 'Solo' },
-  ];
-
   @tracked activeTagIds: string[] = [];
 
   @action
