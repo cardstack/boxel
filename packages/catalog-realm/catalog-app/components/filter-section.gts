@@ -5,7 +5,7 @@ import { on } from '@ember/modifier';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { action } from '@ember/object';
 
-import { Pill, BoxelInput } from '@cardstack/boxel-ui/components';
+import { Pill } from '@cardstack/boxel-ui/components';
 
 export type FilterItem = { id: string; name: string };
 
@@ -150,16 +150,6 @@ export class FilterTagGroup extends GlimmerComponent<FilterTagGroupArgs> {
       }
     </style>
   </template>
-}
-
-interface FilterSearchArgs {
-  Args: {
-    title: string;
-    placeholder?: string;
-    searchValue?: string;
-    onSearch: (searchValue: string) => void;
-  };
-  Element: HTMLElement;
 }
 
 // FilterGroupWrapper

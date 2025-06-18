@@ -1,6 +1,5 @@
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { on } from '@ember/modifier';
 
 import {
   contains,
@@ -44,7 +43,6 @@ import {
 } from '@cardstack/boxel-ui/icons';
 import {
   TabbedHeader,
-  BoxelButton,
   BoxelInput,
   ViewSelector,
   type ViewItem,
