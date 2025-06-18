@@ -214,7 +214,13 @@ ${REPLACE_MARKER}\n\`\`\``;
     // 2. hi.txt: Hi, world! -> Greetings, world!
     // 3. hi.txt: How are you? -> We are one!
 
-    let codeBlock = `\`\`\`
+    let codeBlock = `\`\`\`ruby
+def hello
+  "I am just a simple code block, not a code patch. Even if I am here, it should not affect the 'Accept All' functionality related to code patches."
+end
+\`\`\`
+
+\`\`\`
 http://test-realm/test/hello.txt
 ${SEARCH_MARKER}
 Hello, world!
