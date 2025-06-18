@@ -219,7 +219,6 @@ export default class AttachFileModal extends Component<Signature> {
             @tag='div'
           >
             <FileTree
-              @hideRealmInfo={{true}}
               @realmURL={{this.selectedRealm.url}}
               @onFileSelected={{this.selectFile}}
             />
