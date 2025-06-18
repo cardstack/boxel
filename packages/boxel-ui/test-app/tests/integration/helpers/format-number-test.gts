@@ -86,11 +86,13 @@ module('Integration | helpers | formatNumber', function (hooks) {
 
   test('invalid number handling', async function (assert) {
     await render(<template>
+      {{! @glint-expect-error: invalid input type }}
       {{formatNumber 'not-a-number' fallback='Invalid number'}}
     </template>);
     assert.dom().hasText('Invalid number', 'handles non-numeric strings');
 
     await render(<template>
+      {{! @glint-expect-error: invalid input type }}
       {{formatNumber (array 1 2 3) fallback='Array input'}}
     </template>);
     assert.dom().hasText('Array input', 'handles array input');

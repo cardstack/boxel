@@ -99,6 +99,7 @@ module('Integration | helpers | formatOrdinal', function (hooks) {
 
   test('invalid number handling', async function (assert) {
     await render(<template>
+      {{! @glint-expect-error: invalid input type }}
       {{formatOrdinal 'not-a-number' fallback='Invalid ordinal'}}
     </template>);
     assert.dom().hasText('Invalid ordinal', 'handles non-numeric input');
@@ -108,9 +109,9 @@ module('Integration | helpers | formatOrdinal', function (hooks) {
     </template>);
     assert.dom().hasText('Decimal ordinal', 'handles decimal numbers');
 
-    let Infinity = Number.POSITIVE_INFINITY;
+    let PosInfinity = Number.POSITIVE_INFINITY;
     await render(<template>
-      {{formatOrdinal Infinity fallback='Infinite ordinal'}}
+      {{formatOrdinal PosInfinity fallback='Infinite ordinal'}}
     </template>);
     assert.dom().hasText('Infinite ordinal', 'handles infinity');
   });

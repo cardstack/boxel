@@ -95,11 +95,13 @@ module('Integration | helpers | formatList', function (hooks) {
     const nestedArray = [['nested'], 'item'];
 
     await render(<template>
+      {{! @glint-expect-error: invalid input type }}
       {{formatList nestedArray fallback='Invalid list'}}
     </template>);
     assert.dom().hasText('Invalid list', 'handles nested arrays');
 
     await render(<template>
+      {{! @glint-expect-error: invalid input type }}
       {{formatList 'not-an-array' fallback='Not an array'}}
     </template>);
     assert.dom().hasText('Not an array', 'handles non-array input');

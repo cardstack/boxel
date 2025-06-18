@@ -80,9 +80,9 @@ module('Integration | helpers | formatCurrency', function (hooks) {
   });
 
   test('currency with invalid inputs', async function (assert) {
-    let Infinity = Number.POSITIVE_INFINITY;
+    let PosInfinity = Number.POSITIVE_INFINITY;
     await render(<template>
-      {{formatCurrency Infinity fallback='Invalid amount'}}
+      {{formatCurrency PosInfinity fallback='Invalid amount'}}
     </template>);
     assert.dom().hasText('Invalid amount', 'handles Infinity input');
 

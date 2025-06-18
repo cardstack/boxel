@@ -86,6 +86,7 @@ module('Integration | helpers | formatDuration', function (hooks) {
 
   test('invalid duration handling', async function (assert) {
     await render(<template>
+      {{! @glint-expect-error: invalid input type }}
       {{formatDuration 'not-a-number' fallback='Invalid duration'}}
     </template>);
     assert.dom().hasText('Invalid duration', 'handles non-numeric input');
@@ -96,16 +97,19 @@ module('Integration | helpers | formatDuration', function (hooks) {
 
   test('format options edge cases', async function (assert) {
     await render(<template>
+      {{! @glint-expect-error: invalid format }}
       {{formatDuration 3600 format='invalid' fallback='Invalid format'}}
     </template>);
     assert.dom().hasText('Invalid format', 'handles invalid format option');
 
     await render(<template>
+      {{! @glint-expect-error: invalid unit }}
       {{formatDuration 3600 unit='invalid' fallback='Invalid unit'}}
     </template>);
     assert.dom().hasText('Invalid unit', 'handles invalid unit option');
 
     await render(<template>
+      {{! @glint-expect-error: invalid format }}
       {{formatDuration 3600 format=123 fallback='Numeric format'}}
     </template>);
     assert.dom().hasText('Numeric format', 'handles numeric format option');

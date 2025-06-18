@@ -80,6 +80,7 @@ module('Integration | helpers | formatFileSize', function (hooks) {
 
   test('invalid size handling', async function (assert) {
     await render(<template>
+      {{! @glint-expect-error: invalid input type }}
       {{formatFileSize 'not-a-number' fallback='Invalid size'}}
     </template>);
     assert.dom().hasText('Invalid size', 'handles non-numeric input');
