@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Commercial Fusion Power Plant Achieves Net Energy Gain for 100 Days",
+      "url": "https://www.nature.com/articles/fusion-power-commercial-2025",
+      "description": "The world's first commercial fusion power plant has successfully maintained continuous net energy gain for 100 days, producing 500 megawatts of clean electricity. Located in southern France, the plant uses an innovative magnetic confinement system that has overcome previous stability challenges. The achievement marks a turning point in the global energy transition, with plans already underway for 20 similar plants worldwide. Energy experts predict this breakthrough could eliminate fossil fuel dependency within the next decade.",
+      "author": "Dr. Elena Rodriguez, ITER Director",
+      "upvotes": 958,
+      "downvotes": 39,
+      "commentUrl": "https://news.ycombinator.com/item?id=39284754",
+      "commentCount": 312,
+      "submittedAt": "2025-06-16T16:45:00.000Z",
+      "thumbnailURL": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400&h=300&fit=crop"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../story-board",
+        "name": "Story"
+      }
+    }
+  }
+}
