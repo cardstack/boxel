@@ -4,6 +4,7 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
+import type { ComponentLike } from '@glint/template';
 import { tracked } from '@glimmer/tracking';
 
 import Eye from '@cardstack/boxel-icons/eye';
@@ -76,11 +77,11 @@ import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
-const moduleInspectorPanels: ModuleInspectorView[] = [
-  'schema',
-  'preview',
-  'spec',
-];
+const moduleInspectorPanels: Record<ModuleInspectorView, ComponentLike> = {
+  schema: Schema,
+  preview: Eye,
+  spec: FileCog,
+};
 
 interface ModuleInspectorSignature {
   Args: {
@@ -418,17 +419,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     );
   }
 
-  private iconForView(view: ModuleInspectorView) {
-    switch (view) {
-      case 'schema':
-        return Schema;
-      case 'preview':
-        return Eye;
-      case 'spec':
-        return FileCog;
-    }
-  }
-
   <template>
     {{#if this.isCardPreviewError}}
       {{! this is here to make TS happy, this is always true }}
@@ -467,10 +457,10 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           }}
           data-test-preview-panel-header
         >
-          {{#each moduleInspectorPanels as |moduleInspectorView|}}
+          {{#each-in moduleInspectorPanels as |moduleInspectorView icon|}}
             <ToggleButton
               class='toggle-button'
-              @icon={{this.iconForView moduleInspectorView}}
+              @icon={{icon}}
               @isActive={{eq this.activePanel moduleInspectorView}}
               {{on 'click' (fn this.setActivePanel moduleInspectorView)}}
               data-test-module-inspector-view={{moduleInspectorView}}
@@ -490,7 +480,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
                 {{/if}}
               </:annotation>
             </ToggleButton>
-          {{/each}}
+          {{/each-in}}
         </header>
 
         <section
