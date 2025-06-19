@@ -14,6 +14,7 @@ import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
+import WriteTextFileCommand from '@cardstack/host/commands/write-text-file';
 import { ScrollPositions } from '@cardstack/host/utils/local-storage-keys';
 
 import {
@@ -27,8 +28,6 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
-import WriteTextFileCommand from '@cardstack/host/commands/write-text-file';
-import { pauseTest } from 'ember-testing/lib/helpers/pause_test';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -1015,8 +1014,11 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       realm: testRealmURL,
     });
     await settled();
-    await this.pauseTest();
     assert.dom(`[data-test-directory="${newDirName}/"]`).exists();
+    assert
+      .dom(`[data-test-directory="${newDirName}/"] .icon`)
+      .hasClass('closed');
+    await click(`[data-test-directory="${newDirName}/"]`);
     assert.dom(`[data-test-directory="${newDirName}/"] .icon`).hasClass('open');
     assert.dom(`[data-test-file="${newDirName}/${newFileName}"]`).exists();
     assert
