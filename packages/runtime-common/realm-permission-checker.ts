@@ -1,5 +1,5 @@
 import { MatrixClient } from './matrix-client';
-import { RealmPermissions } from './realm';
+import { type RealmPermissions, type RealmAction } from './realm';
 
 export default class RealmPermissionChecker {
   private realmPermissions: RealmPermissions = {};
@@ -27,7 +27,7 @@ export default class RealmPermissionChecker {
     );
   }
 
-  async can(username: string, action: 'read' | 'write' | 'realm-owner') {
+  async can(username: string, action: RealmAction) {
     let userPermissions = await this.for(username);
     return userPermissions.includes(action);
   }
