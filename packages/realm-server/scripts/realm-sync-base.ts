@@ -13,6 +13,7 @@ export interface SyncOptions {
 export abstract class RealmSyncBase {
   protected matrixClient: MatrixClient;
   protected realmAuthClient: RealmAuthClient;
+  protected normalizedRealmUrl: string;
 
   constructor(
     protected options: SyncOptions,
@@ -26,8 +27,11 @@ export abstract class RealmSyncBase {
       password,
     });
 
+    // Normalize the realm URL once at construction
+    this.normalizedRealmUrl = this.normalizeRealmUrl(options.realmUrl);
+
     this.realmAuthClient = new RealmAuthClient(
-      new URL(options.realmUrl),
+      new URL(this.normalizedRealmUrl),
       this.matrixClient,
       globalThis.fetch,
     );
@@ -39,35 +43,39 @@ export abstract class RealmSyncBase {
     console.log('Matrix login successful');
   }
 
-  protected normalizeUrlPath(basePath: string): string {
-    // Ensure the path ends with a single slash for directory requests
-    return basePath.replace(/\/+$/, '') + '/';
+  private normalizeRealmUrl(url: string): string {
+    // Ensure the realm URL is properly formatted
+    try {
+      const urlObj = new URL(url);
+      // Ensure it ends with a single slash for consistency
+      return urlObj.href.replace(/\/+$/, '') + '/';
+    } catch (error) {
+      throw new Error(`Invalid realm URL: ${url}`);
+    }
   }
 
-  protected joinUrlPath(base: string, ...parts: string[]): string {
-    // Join URL parts, avoiding double slashes
-    const cleanParts = parts.filter(Boolean).map(
-      (part) => part.replace(/^\/+|\/+$/g, ''), // Remove leading/trailing slashes
-    );
-
-    const baseClean = base.replace(/\/+$/, ''); // Remove trailing slashes from base
-
-    if (cleanParts.length === 0) {
-      return baseClean;
+  protected buildDirectoryUrl(dir: string = ''): string {
+    // For directory listings, we need trailing slashes
+    if (!dir) {
+      return this.normalizedRealmUrl; // Already has trailing slash
     }
 
-    return baseClean + '/' + cleanParts.join('/');
+    // Remove leading/trailing slashes from dir and add trailing slash
+    const cleanDir = dir.replace(/^\/+|\/+$/g, '');
+    return `${this.normalizedRealmUrl}${cleanDir}/`;
+  }
+
+  protected buildFileUrl(relativePath: string): string {
+    // For file operations, we don't want trailing slashes
+    const cleanPath = relativePath.replace(/^\/+/, ''); // Remove leading slashes only
+    return `${this.normalizedRealmUrl}${cleanPath}`;
   }
 
   protected async getRemoteFileList(dir = ''): Promise<Map<string, boolean>> {
     const files = new Map<string, boolean>();
 
     try {
-      // Construct the URL properly
-      const url = dir
-        ? this.normalizeUrlPath(this.joinUrlPath(this.options.realmUrl, dir))
-        : this.normalizeUrlPath(this.options.realmUrl);
-
+      const url = this.buildDirectoryUrl(dir);
       const jwt = await this.realmAuthClient.getJWT();
 
       const response = await fetch(url, {
@@ -175,8 +183,7 @@ export abstract class RealmSyncBase {
     }
 
     const content = fs.readFileSync(localPath, 'utf8');
-    // Use proper URL construction
-    const url = this.joinUrlPath(this.options.realmUrl, relativePath);
+    const url = this.buildFileUrl(relativePath);
     const jwt = await this.realmAuthClient.getJWT();
 
     const response = await fetch(url, {
@@ -206,8 +213,7 @@ export abstract class RealmSyncBase {
       return;
     }
 
-    // Use proper URL construction
-    const url = this.joinUrlPath(this.options.realmUrl, relativePath);
+    const url = this.buildFileUrl(relativePath);
     const jwt = await this.realmAuthClient.getJWT();
 
     const response = await fetch(url, {
@@ -243,8 +249,7 @@ export abstract class RealmSyncBase {
       return;
     }
 
-    // Use proper URL construction
-    const url = this.joinUrlPath(this.options.realmUrl, relativePath);
+    const url = this.buildFileUrl(relativePath);
     const jwt = await this.realmAuthClient.getJWT();
 
     const response = await fetch(url, {
