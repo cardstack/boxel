@@ -88,6 +88,9 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: ./.github/actions/init
+      - name: Build boxel-icons
+        run: pnpm build
+        working-directory: packages/boxel-icons
       - name: Build boxel-ui
         run: pnpm build
         working-directory: packages/boxel-ui/addon
