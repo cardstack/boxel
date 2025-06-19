@@ -425,7 +425,9 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     {{#if this.isCardPreviewError}}
       {{! this is here to make TS happy, this is always true }}
       {{#if @cardError}}
-        <CardError @error={{@cardError}} />
+        <section class='module-inspector-content error'>
+          <CardError @error={{@cardError}} />
+        </section>
       {{/if}}
     {{else if this.isEmptyFile}}
       <SyntaxErrorDisplay @syntaxErrors='File is empty' />
@@ -553,6 +555,21 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       .module-inspector-content {
         overflow: scroll;
         height: 100%;
+        background-color: #74707d;
+      }
+
+      .module-inspector-content.error {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        background-color: var(--boxel-light);
+        color: var(--boxel-dark);
+      }
+
+      .module-inspector-content.error :deep(.error-header) {
+        width: 100%;
       }
 
       .toggle-button {

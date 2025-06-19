@@ -32,6 +32,7 @@ class InnerContainerContent extends Component<ContentSignature> {
         padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-sm);
         overflow-y: auto;
         height: 100%;
+        background-color: var(--boxel-light);
       }
       .inner-container__header + .inner-container__content {
         padding-top: 0;
