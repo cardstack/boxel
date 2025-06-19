@@ -200,8 +200,6 @@ let autoMigrate = migrateDB || undefined;
     await waitForWorkerManager(workerManagerPort);
   }
 
-  let realmServerMatrixUserId = `@${REALM_SERVER_MATRIX_USERNAME}:${new URL(MATRIX_URL).hostname}`;
-
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
 
@@ -225,7 +223,6 @@ let autoMigrate = migrateDB || undefined;
         virtualNetwork,
         dbAdapter,
         queue,
-        realmServerMatrixUserId,
       },
       {
         ...(process.env.DISABLE_MODULE_CACHING === 'true'

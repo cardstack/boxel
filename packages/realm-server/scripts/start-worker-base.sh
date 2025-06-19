@@ -9,7 +9,6 @@ NODE_ENV=development \
   PGPORT=5435 \
   PGDATABASE=boxel_base \
   REALM_SECRET_SEED="shhh! it's a secret" \
-  REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \
   --transpileOnly worker-manager \
   --port=4213 \
