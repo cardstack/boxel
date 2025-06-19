@@ -12,7 +12,7 @@ import {
 import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
 import * as MonacoSDK from 'monaco-editor';
-import { module, skip, test } from 'qunit';
+import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
 
@@ -1455,7 +1455,7 @@ module('Acceptance | code submode tests', function (_hooks) {
     });
 
     // TODO: restore in CS-8200
-    skip('updates values in preview panel must be represented in editor panel', async function (assert) {
+    test('updates values in preview panel must be represented in editor panel', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
         codePath: `${testRealmURL}Person/fadhlan.json`,
@@ -1485,6 +1485,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
       await waitFor(
         `[data-test-select="${testRealmURL}Country/united-states"]`,
+        { timeout: 5_000 },
       );
       await click(`[data-test-select="${testRealmURL}Country/united-states"]`);
       await click(`[data-test-card-catalog-go-button]`);
