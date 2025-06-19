@@ -3,6 +3,7 @@ import { hash } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { capitalize } from '@ember/string';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
@@ -17,11 +18,13 @@ import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { consume, provide } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
+import startCase from 'lodash/startCase';
+
 import {
   LoadingIndicator,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { not, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -75,10 +78,16 @@ import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
-import CreateFileModal, { type FileType } from './create-file-modal';
+import CreateFileModal, {
+  type FileType,
+  newFileTypes,
+} from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
+
 import SubmodeLayout from './submode-layout';
+
+import type { NewFileOptions } from './new-file-button';
 
 interface Signature {
   Args: {
@@ -444,10 +453,28 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
-  private get newFileOptions() {
+  private get menuItems(): MenuItem[] {
+    return newFileTypes.flatMap(({ id, icon, description, extension }) => {
+      if (id === 'duplicate-instance' || id === 'spec-instance') {
+        return [];
+      }
+      let displayName = capitalize(startCase(id));
+      return [
+        new MenuItem(displayName, 'action', {
+          action: () => this.createFile.perform({ id, displayName }),
+          subtext: description,
+          icon,
+          postscript: extension,
+        }),
+      ];
+    });
+  }
+
+  private get newFileOptions(): NewFileOptions {
     return {
-      onSelect: (fileType: FileType) => this.createFile.perform(fileType),
-      isCreateModalOpen: this.isCreateModalOpen,
+      menuItems: this.menuItems,
+      isDisabled: this.isCreateModalOpen,
+      onClose: this.operatorModeStateService.setNewFileDropdownClosed,
     };
   }
 
@@ -541,22 +568,13 @@ export default class CodeSubmode extends Component<Signature> {
         throw new Error(`bug: CreateFileModal not instantiated`);
       }
 
-      let destinationRealm: string | undefined;
+      let sourceURLs = [
+        sourceInstance?.id,
+        definitionClass?.ref?.module,
+      ].filter(Boolean) as string[] | [];
 
-      if (sourceInstance && this.realm.canWrite(sourceInstance.id)) {
-        destinationRealm = this.realm.url(sourceInstance.id);
-      } else if (
-        definitionClass?.ref &&
-        this.realm.canWrite(definitionClass.ref.module)
-      ) {
-        destinationRealm = this.realm.url(definitionClass.ref.module);
-      } else if (
-        this.realm.canWrite(this.operatorModeStateService.realmURL.href)
-      ) {
-        destinationRealm = this.operatorModeStateService.realmURL.href;
-      } else if (this.realm.defaultWritableRealm) {
-        destinationRealm = this.realm.defaultWritableRealm.path;
-      }
+      let destinationRealm =
+        this.operatorModeStateService.getWritableRealmURL(sourceURLs);
 
       if (!destinationRealm) {
         throw new Error('No writable realm found');
@@ -639,6 +657,7 @@ export default class CodeSubmode extends Component<Signature> {
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
       @selectedCardRef={{this.selectedCodeRef}}
       @newFileOptions={{this.newFileOptions}}
+      data-test-code-submode
       as |search|
     >
       <div
