@@ -1,8 +1,5 @@
 import { build } from 'esbuild';
-import { readFileSync, mkdirSync, chmodSync } from 'fs';
-import { join } from 'path';
-
-const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
+import { mkdirSync, chmodSync } from 'fs';
 
 // Node.js built-in modules that should remain external
 const nodeBuiltins = [

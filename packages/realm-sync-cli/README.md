@@ -150,12 +150,62 @@ This allows fine-grained control over what gets synced to realms while maintaini
 # Build bundled executables
 pnpm build
 
-# Build with TypeScript declarations
-pnpm build:all
+# Build with watch mode for development
+pnpm build:watch
 
-# Development mode (from package directory)
+# Clean build artifacts
+pnpm clean
+
+# Clean rebuild
+pnpm rebuild
+
+# Analyze bundle size and dependencies
+pnpm build:analyze
+```
+
+### Development Scripts
+
+```bash
 pnpm push <LOCAL_DIR> <REALM_URL> [OPTIONS]
 pnpm pull <REALM_URL> <LOCAL_DIR> [OPTIONS]
+```
+
+### Testing
+
+```bash
+# Run all tests (lint + build)
+pnpm test
+
+# Test built executables
+pnpm test:built
+
+# Test global installation
+pnpm test:install
+
+# Type checking
+pnpm type-check
+pnpm type-check:watch
+```
+
+### Code Quality
+
+```bash
+# Linting
+pnpm lint
+pnpm lint:fix
+```
+
+### Publishing
+
+```bash
+# Version bumping
+pnpm version:patch  # 0.1.0 -> 0.1.1
+pnpm version:minor  # 0.1.0 -> 0.2.0
+pnpm version:major  # 0.1.0 -> 1.0.0
+
+# Publishing
+pnpm publish:dry    # Dry run to see what would be published
+pnpm publish:npm    # Publish to npm registry
 ```
 
 ### Testing Built Version
@@ -170,13 +220,6 @@ node dist/pull.js --help
 npm pack
 npm install -g ./cardstack-realm-sync-cli-0.1.0.tgz
 realm-push --help
-```
-
-### Linting
-
-```bash
-pnpm lint
-pnpm lint:fix
 ```
 
 ## Features
