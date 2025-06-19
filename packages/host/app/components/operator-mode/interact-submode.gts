@@ -805,7 +805,6 @@ export default class InteractSubmode extends Component {
 
   private createNewFromRecentType = restartableTask(
     async (codeRef: ResolvedCodeRef) => {
-      // TODO: creating instance from non-exported card-def?
       this.cardContext.actions?.createCard(codeRef, undefined, {
         realmURL: this.operatorModeStateService.getWritableRealmURL(),
       });
