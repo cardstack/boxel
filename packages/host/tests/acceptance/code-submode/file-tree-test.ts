@@ -8,6 +8,7 @@ import {
   triggerEvent,
 } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
@@ -26,6 +27,8 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
+import WriteTextFileCommand from '@cardstack/host/commands/write-text-file';
+import { pauseTest } from 'ember-testing/lib/helpers/pause_test';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -44,6 +47,7 @@ const indexCardSource = `
 const personCardSource = `
   import { contains, containsMany, field, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
   import StringField from "https://cardstack.com/base/string";
+import WriteTextFileCommand from '../../../app/commands/write-text-file';
   import { Friend } from './friend';
 
   export class Person extends CardDef {
@@ -945,5 +949,78 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     }
 
     assert.strictEqual(scrollablePanel?.scrollTop, expectedScrollTop);
+  });
+
+  test('new directory appears in the file tree when a new file is created within it via dialog', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
+
+    let newDirName = 'new-dir';
+    let newFileName = 'new-file';
+
+    await click('[data-test-new-file-button]');
+    await click('[data-test-boxel-menu-item-text="Card Definition"]');
+    await fillIn('[data-test-display-name-field]', 'New File');
+    await fillIn('[data-test-file-name-field]', `${newDirName}/${newFileName}`);
+    await click('[data-test-create-definition]');
+
+    assert.dom(`[data-test-directory="${newDirName}/"]`).exists();
+    assert.dom(`[data-test-directory="${newDirName}/"] .icon`).hasClass('open');
+    assert.dom(`[data-test-file="${newDirName}/${newFileName}.gts"]`).exists();
+  });
+
+  test('new directory appears in the file tree when a new file is created within it via command', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
+
+    let newDirName = 'new-dir';
+    let newFileName = 'new-file.gts';
+
+    let commandService = getService('command-service');
+    let writeTextFileCommand = new WriteTextFileCommand(
+      commandService.commandContext,
+    );
+    await writeTextFileCommand.execute({
+      path: `${newDirName}/${newFileName}`,
+      content:
+        'import { CardDef, Component } from "https://cardstack.com/base/card-api";\n\nexport class NewFile extends CardDef {\n  static isolated = class Isolated extends Component<typeof this> {\n    <template>\n      <div data-test-new-file>New File Content</div>\n    </template>\n  };\n}',
+      realm: testRealmURL,
+    });
+    await settled();
+    await this.pauseTest();
+    assert.dom(`[data-test-directory="${newDirName}/"]`).exists();
+    assert.dom(`[data-test-directory="${newDirName}/"] .icon`).hasClass('open');
+    assert.dom(`[data-test-file="${newDirName}/${newFileName}"]`).exists();
+    assert
+      .dom(`[data-test-file="${newDirName}/${newFileName}"]`)
+      .hasText(newFileName, 'New file is created with the correct name');
   });
 });
