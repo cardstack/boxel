@@ -3,6 +3,7 @@ import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 import * as fs from 'fs';
 import * as path from 'path';
 import { SupportedMimeType } from '@cardstack/runtime-common/router';
+import ignore, { type Ignore } from 'ignore';
 
 export interface SyncOptions {
   realmUrl: string;
@@ -14,6 +15,7 @@ export abstract class RealmSyncBase {
   protected matrixClient: MatrixClient;
   protected realmAuthClient: RealmAuthClient;
   protected normalizedRealmUrl: string;
+  private ignoreCache = new Map<string, Ignore>();
 
   constructor(
     protected options: SyncOptions,
@@ -99,7 +101,11 @@ export abstract class RealmSyncBase {
         );
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as {
+        data?: {
+          relationships?: Record<string, { meta: { kind: string } }>;
+        };
+      };
 
       if (data.data && data.data.relationships) {
         for (const [name, info] of Object.entries(data.data.relationships)) {
@@ -150,15 +156,15 @@ export abstract class RealmSyncBase {
     const entries = fs.readdirSync(fullDir);
 
     for (const entry of entries) {
-      // Skip hidden files and directories
-      if (entry.startsWith('.')) {
-        continue;
-      }
-
       const fullPath = path.join(fullDir, entry);
       // Use path.posix.join for consistent forward slashes (URLs use forward slashes)
       const relativePath = dir ? path.posix.join(dir, entry) : entry;
       const stats = fs.statSync(fullPath);
+
+      // Apply filtering for dotfiles and gitignore patterns
+      if (this.shouldIgnoreFile(relativePath, fullPath)) {
+        continue;
+      }
 
       if (stats.isFile()) {
         files.set(relativePath, fullPath);
@@ -281,6 +287,58 @@ export abstract class RealmSyncBase {
       fs.unlinkSync(localPath);
       console.log(`✓ Deleted local file: ${localPath}`);
     }
+  }
+
+  private getIgnoreInstance(dirPath: string): Ignore {
+    if (this.ignoreCache.has(dirPath)) {
+      return this.ignoreCache.get(dirPath)!;
+    }
+
+    const ig = ignore();
+
+    // Find all .gitignore files in the path hierarchy
+    let currentPath = dirPath;
+    const rootPath = this.options.localDir;
+
+    while (currentPath.startsWith(rootPath)) {
+      const gitignorePath = path.join(currentPath, '.gitignore');
+      if (fs.existsSync(gitignorePath)) {
+        try {
+          const gitignoreContent = fs.readFileSync(gitignorePath, 'utf8');
+          ig.add(gitignoreContent);
+        } catch (error) {
+          console.warn(
+            `Warning: Could not read .gitignore file at ${gitignorePath}:`,
+            error,
+          );
+        }
+      }
+
+      // Move up one directory
+      const parentPath = path.dirname(currentPath);
+      if (parentPath === currentPath) break; // Reached filesystem root
+      currentPath = parentPath;
+    }
+
+    this.ignoreCache.set(dirPath, ig);
+    return ig;
+  }
+
+  private shouldIgnoreFile(relativePath: string, fullPath: string): boolean {
+    // Always ignore files that start with a dot
+    const fileName = path.basename(relativePath);
+    if (fileName.startsWith('.')) {
+      return true;
+    }
+
+    // Check against gitignore patterns
+    const dirPath = path.dirname(fullPath);
+    const ig = this.getIgnoreInstance(dirPath);
+
+    // Use forward slashes for ignore patterns (gitignore standard)
+    const normalizedPath = relativePath.replace(/\\/g, '/');
+
+    return ig.ignores(normalizedPath);
   }
 
   abstract sync(): Promise<void>;
