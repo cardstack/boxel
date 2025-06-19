@@ -4,7 +4,12 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
+
 import { tracked } from '@glimmer/tracking';
+
+import Eye from '@cardstack/boxel-icons/eye';
+import FileCog from '@cardstack/boxel-icons/file-cog';
+import Schema from '@cardstack/boxel-icons/schema';
 
 import { task } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
@@ -72,11 +77,13 @@ import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
-const moduleInspectorPanels: ModuleInspectorView[] = [
-  'schema',
-  'preview',
-  'spec',
-];
+import type { ComponentLike } from '@glint/template';
+
+const moduleInspectorPanels: Record<ModuleInspectorView, ComponentLike> = {
+  schema: Schema,
+  preview: Eye,
+  spec: FileCog,
+};
 
 interface ModuleInspectorSignature {
   Args: {
@@ -418,7 +425,9 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     {{#if this.isCardPreviewError}}
       {{! this is here to make TS happy, this is always true }}
       {{#if @cardError}}
-        <CardError @error={{@cardError}} />
+        <section class='module-inspector-content error'>
+          <CardError @error={{@cardError}} />
+        </section>
       {{/if}}
     {{else if this.isEmptyFile}}
       <SyntaxErrorDisplay @syntaxErrors='File is empty' />
@@ -452,27 +461,30 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           }}
           data-test-preview-panel-header
         >
-          {{#each moduleInspectorPanels as |moduleInspectorView|}}
+          {{#each-in moduleInspectorPanels as |moduleInspectorView icon|}}
             <ToggleButton
               class='toggle-button'
+              @icon={{icon}}
               @isActive={{eq this.activePanel moduleInspectorView}}
               {{on 'click' (fn this.setActivePanel moduleInspectorView)}}
               data-test-module-inspector-view={{moduleInspectorView}}
             >
-              {{capitalize moduleInspectorView}}
-              {{#if (eq moduleInspectorView 'spec')}}
-                <SpecPreviewBadge
-                  @spec={{this.activeSpec}}
-                  @showCreateSpec={{this.showCreateSpec}}
-                  @createSpec={{this.createSpec}}
-                  @isCreateSpecInstanceRunning={{this.createSpecTask.isRunning}}
-                  @numberOfInstances={{this.specsForSelectedDefinition.length}}
-                />
-              {{else if (eq moduleInspectorView 'schema')}}
-                <SchemaEditorBadge />
-              {{/if}}
+              <:default>{{capitalize moduleInspectorView}}</:default>
+              <:annotation>
+                {{#if (eq moduleInspectorView 'spec')}}
+                  <SpecPreviewBadge
+                    @spec={{this.activeSpec}}
+                    @showCreateSpec={{this.showCreateSpec}}
+                    @createSpec={{this.createSpec}}
+                    @isCreateSpecInstanceRunning={{this.createSpecTask.isRunning}}
+                    @numberOfInstances={{this.specsForSelectedDefinition.length}}
+                  />
+                {{else if (eq moduleInspectorView 'schema')}}
+                  <SchemaEditorBadge />
+                {{/if}}
+              </:annotation>
             </ToggleButton>
-          {{/each}}
+          {{/each-in}}
         </header>
 
         <section
@@ -537,16 +549,30 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs);
         border-bottom: var(--boxel-border);
+        background-color: transparent;
       }
 
       .module-inspector-content {
         overflow: scroll;
         height: 100%;
+        background-color: var(--boxel-light);
+      }
+
+      .module-inspector-content.error {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: var(--boxel-dark);
+      }
+
+      .module-inspector-content.error :deep(.error-header) {
+        width: 100%;
       }
 
       .toggle-button {
-        justify-content: space-between;
-        padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp);
+        padding-right: var(--boxel-sp-xxxs);
       }
 
       .file-incompatible-message {
