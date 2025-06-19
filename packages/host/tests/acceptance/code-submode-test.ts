@@ -1454,7 +1454,6 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
     });
 
-    // TODO: restore in CS-8200
     test('updates values in preview panel must be represented in editor panel', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
