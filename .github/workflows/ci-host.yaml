@@ -75,17 +75,3 @@ jobs:
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
         working-directory: packages/host
-      - name: Upload realm server log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
-        with:
-          name: realm-server-log-${{ matrix.shardIndex }}
-          path: /tmp/server.log
-          retention-days: 30
-      - name: Upload icon server log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
-        with:
-          name: icon-server-log-${{ matrix.shardIndex }}
-          path: /tmp/icon-server.log
-          retention-days: 30
