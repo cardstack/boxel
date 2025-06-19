@@ -65,7 +65,7 @@ export function removeRecentFiles() {
 
 // RecentCards
 export function getRecentCards():
-  | { cardId: string; timestamp: number }[]
+  | { cardId: string; timestamp?: number }[]
   | null {
   let cards = window.localStorage.getItem(RecentCards);
   if (!cards) {
@@ -74,7 +74,7 @@ export function getRecentCards():
   return JSON.parse(cards);
 }
 
-export function setRecentCards(cards: [string, number][]) {
+export function setRecentCards(cards: ([string, number] | [string])[]) {
   let recentCards = cards.map(([cardId, timestamp]) => ({ cardId, timestamp }));
   window.localStorage.setItem(RecentCards, JSON.stringify(recentCards));
 }
