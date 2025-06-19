@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { RealmSyncBase, validateMatrixEnvVars } from './realm-sync-base';
 import * as fs from 'fs';
 import * as path from 'path';
