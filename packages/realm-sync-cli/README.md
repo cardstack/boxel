@@ -91,6 +91,57 @@ realm-pull https://demo.cardstack.com/demo/ ./my-cards
 realm-pull https://demo.cardstack.com/demo/ ./my-cards --delete --dry-run
 ```
 
+## File Filtering
+
+The sync commands automatically filter files based on several criteria to avoid syncing unwanted content:
+
+### Automatic Filtering
+
+- **Dotfiles**: All files and directories starting with a dot (`.`) are automatically ignored
+  - Examples: `.DS_Store`, `.env`, `.git/`, `.vscode/`
+
+### Gitignore Support
+
+- **`.gitignore` files**: Standard gitignore patterns are respected
+- **Hierarchical**: Checks for `.gitignore` files in current directory and all parent directories
+- **Standard patterns**: Supports all gitignore pattern syntax (wildcards, negation, etc.)
+
+### Boxelignore Support
+
+- **`.boxelignore` files**: Realm-specific ignore patterns (same syntax as `.gitignore`)
+- **Use case**: Exclude files from realm sync while keeping them in git
+- **Priority**: Applied in addition to `.gitignore` patterns
+- **Hierarchical**: Works the same way as `.gitignore` files
+
+### Example Ignore Files
+
+**`.gitignore`** (standard git ignoring):
+
+```
+node_modules/
+*.log
+.env
+```
+
+**`.boxelignore`** (realm-specific ignoring):
+
+```
+# Keep in git but exclude from realm
+docs/
+test-data/
+*.draft.gts
+development-cards/
+```
+
+### Filtering Behavior
+
+1. Files starting with `.` are always ignored
+2. Files matching any pattern in `.gitignore` are ignored
+3. Files matching any pattern in `.boxelignore` are ignored
+4. Remaining files are synced
+
+This allows fine-grained control over what gets synced to realms while maintaining your git repository structure.
+
 ## Development
 
 ### Building
@@ -134,7 +185,7 @@ pnpm lint:fix
 - **Zero dependencies** - No need to install additional packages
 - **Cross-platform** - Works on Windows, macOS, and Linux
 - **Recursive directory syncing** - Handles nested folder structures
-- **Smart file filtering** - Skips hidden files and directories (starting with `.`)
+- **Smart file filtering** - Respects `.gitignore` and `.boxelignore` patterns, skips dotfiles
 - **Safe authentication** - Tests realm access before destructive operations
 - **Detailed logging** - Clear feedback on all operations
 - **Dry-run mode** - Preview changes without making them

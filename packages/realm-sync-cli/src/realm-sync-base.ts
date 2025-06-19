@@ -296,11 +296,12 @@ export abstract class RealmSyncBase {
 
     const ig = ignore();
 
-    // Find all .gitignore files in the path hierarchy
+    // Find all .gitignore and .boxelignore files in the path hierarchy
     let currentPath = dirPath;
     const rootPath = this.options.localDir;
 
     while (currentPath.startsWith(rootPath)) {
+      // Check for .gitignore file
       const gitignorePath = path.join(currentPath, '.gitignore');
       if (fs.existsSync(gitignorePath)) {
         try {
@@ -309,6 +310,20 @@ export abstract class RealmSyncBase {
         } catch (error) {
           console.warn(
             `Warning: Could not read .gitignore file at ${gitignorePath}:`,
+            error,
+          );
+        }
+      }
+
+      // Check for .boxelignore file
+      const boxelignorePath = path.join(currentPath, '.boxelignore');
+      if (fs.existsSync(boxelignorePath)) {
+        try {
+          const boxelignoreContent = fs.readFileSync(boxelignorePath, 'utf8');
+          ig.add(boxelignoreContent);
+        } catch (error) {
+          console.warn(
+            `Warning: Could not read .boxelignore file at ${boxelignorePath}:`,
             error,
           );
         }

@@ -110,6 +110,12 @@ Environment Variables (required):
   MATRIX_USERNAME  Your Matrix username  
   MATRIX_PASSWORD  Your Matrix password
 
+File Filtering:
+  - Files starting with a dot (.) are always ignored
+  - Files matching patterns in .gitignore are ignored
+  - Files matching patterns in .boxelignore are ignored (realm-specific)
+  - .boxelignore allows you to exclude files from realm sync while keeping them in git
+
 Examples:
   realm-push ./my-cards https://demo.cardstack.com/demo/
   realm-push ./my-cards https://demo.cardstack.com/demo/ --delete --dry-run
