@@ -88,22 +88,25 @@ export default class CardList extends Component<Signature> {
           {{/if}}
         </:loading>
         <:response as |cards|>
-          {{#if (eq cards.length 0)}}
-            {{#if (has-block 'emptyState')}}
-              {{yield to='emptyState'}}
+          <ul
+            class={{cn
+              'boxel-card-list'
+              grid-view=(eq @viewOption 'grid')
+              strip-view=(eq @viewOption 'strip')
+              card-view=(eq @viewOption 'card')
+              single-column-view=(eq cards.length 0)
+            }}
+            ...attributes
+          >
+            {{#if (eq cards.length 0)}}
+              <li class='empty-state-container'>
+                {{#if (has-block 'emptyState')}}
+                  {{yield to='emptyState'}}
+                {{else}}
+                  <p>No results were found</p>
+                {{/if}}
+              </li>
             {{else}}
-              <p>No results were found</p>
-            {{/if}}
-          {{else}}
-            <ul
-              class={{cn
-                'boxel-card-list'
-                grid-view=(eq @viewOption 'grid')
-                strip-view=(eq @viewOption 'strip')
-                card-view=(eq @viewOption 'card')
-              }}
-              ...attributes
-            >
               {{#each cards key='url' as |card|}}
                 {{! 
                   Hydrated Card Rendering (Interactive)
@@ -185,8 +188,8 @@ export default class CardList extends Component<Signature> {
                   </li>
                 {{/if}}
               {{/each}}
-            </ul>
-          {{/if}}
+            {{/if}}
+          </ul>
         </:response>
       </@context.prerenderedCardSearchComponent>
     {{else if @cards}}
@@ -233,6 +236,9 @@ export default class CardList extends Component<Signature> {
       }
       .card-view {
         --item-height: auto;
+      }
+      .single-column-view {
+        grid-template-columns: 1fr;
       }
       .boxel-card-list-item {
         max-width: 100%;

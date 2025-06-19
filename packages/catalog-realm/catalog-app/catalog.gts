@@ -304,7 +304,7 @@ class CatalogListView extends GlimmerComponent<CatalogListViewArgs> {
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        height: 30cqh;
+        height: 18.75rem;
         background: var(--boxel-100);
         border-radius: var(--boxel-border-radius);
         border: 1px solid var(--boxel-border-color);
