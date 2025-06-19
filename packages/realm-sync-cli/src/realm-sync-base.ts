@@ -6,7 +6,7 @@ import { SupportedMimeType } from '@cardstack/runtime-common/router';
 import ignore, { type Ignore } from 'ignore';
 
 export interface SyncOptions {
-  realmUrl: string;
+  workspaceUrl: string;
   localDir: string;
   dryRun?: boolean;
 }
@@ -30,7 +30,7 @@ export abstract class RealmSyncBase {
     });
 
     // Normalize the realm URL once at construction
-    this.normalizedRealmUrl = this.normalizeRealmUrl(options.realmUrl);
+    this.normalizedRealmUrl = this.normalizeRealmUrl(options.workspaceUrl);
 
     this.realmAuthClient = new RealmAuthClient(
       new URL(this.normalizedRealmUrl),
@@ -46,13 +46,13 @@ export abstract class RealmSyncBase {
   }
 
   private normalizeRealmUrl(url: string): string {
-    // Ensure the realm URL is properly formatted
+    // Ensure the workspace URL is properly formatted
     try {
       const urlObj = new URL(url);
       // Ensure it ends with a single slash for consistency
       return urlObj.href.replace(/\/+$/, '') + '/';
     } catch (error) {
-      throw new Error(`Invalid realm URL: ${url}`);
+      throw new Error(`Invalid workspace URL: ${url}`);
     }
   }
 
@@ -93,7 +93,7 @@ export abstract class RealmSyncBase {
         }
         if (response.status === 401 || response.status === 403) {
           throw new Error(
-            `Authentication failed (${response.status}): Cannot access realm. Check your Matrix credentials and realm permissions.`,
+            `Authentication failed (${response.status}): Cannot access workspace. Check your Matrix credentials and workspace permissions.`,
           );
         }
         throw new Error(
@@ -131,7 +131,7 @@ export abstract class RealmSyncBase {
       if (error instanceof Error) {
         if (
           error.message.includes('Authentication failed') ||
-          error.message.includes('Cannot access realm') ||
+          error.message.includes('Cannot access workspace') ||
           error.message.includes('401') ||
           error.message.includes('403')
         ) {

@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 interface PullOptions {
-  realmUrl: string;
+  workspaceUrl: string;
   localDir: string;
   deleteLocal?: boolean;
   dryRun?: boolean;
@@ -21,25 +21,25 @@ class RealmPuller extends RealmSyncBase {
 
   async sync() {
     console.log(
-      `Starting pull from ${this.options.realmUrl} to ${this.options.localDir}`,
+      `Starting pull from ${this.options.workspaceUrl} to ${this.options.localDir}`,
     );
 
-    // Test authentication by trying to access the realm root first
-    console.log('Testing realm access...');
+    // Test authentication by trying to access the workspace root first
+    console.log('Testing workspace access...');
     try {
       await this.getRemoteFileList(''); // Test with empty path (root)
     } catch (error) {
-      console.error('Failed to access realm:', error);
+      console.error('Failed to access workspace:', error);
       throw new Error(
         'Cannot proceed with pull: Authentication or access failed. ' +
-          'Please check your Matrix credentials and realm permissions.',
+          'Please check your Matrix credentials and workspace permissions.',
       );
     }
-    console.log('Realm access verified');
+    console.log('Workspace access verified');
 
     // Get current remote file listing
     const remoteFiles = await this.getRemoteFileList();
-    console.log(`Found ${remoteFiles.size} files in remote realm`);
+    console.log(`Found ${remoteFiles.size} files in remote workspace`);
 
     // Get local file listing
     const localFiles = await this.getLocalFileList();
@@ -81,7 +81,7 @@ class RealmPuller extends RealmSyncBase {
 
       if (filesToDelete.size > 0) {
         console.log(
-          `Will delete ${filesToDelete.size} local files that don't exist in realm`,
+          `Will delete ${filesToDelete.size} local files that don't exist in workspace`,
         );
       }
 
@@ -107,7 +107,7 @@ class RealmPuller extends RealmSyncBase {
 }
 
 function parseArgs(): {
-  realmUrl: string;
+  workspaceUrl: string;
   localDir: string;
   deleteLocal: boolean;
   dryRun: boolean;
@@ -116,14 +116,14 @@ function parseArgs(): {
 
   if (args.includes('--help') || args.includes('-h')) {
     console.log(`
-Usage: realm-pull <REALM_URL> <LOCAL_DIR> [OPTIONS]
+Usage: workspace-pull <WORKSPACE_URL> <LOCAL_DIR> [OPTIONS]
 
 Arguments:
-  REALM_URL   The URL of the source realm (e.g., https://demo.cardstack.com/demo/)
-  LOCAL_DIR   The local directory to sync files to
+  WORKSPACE_URL The URL of the source workspace (e.g., https://demo.cardstack.com/demo/)
+  LOCAL_DIR     The local directory to sync files to
 
 Options:
-  --delete    Delete local files that don't exist in the realm
+  --delete    Delete local files that don't exist in the workspace
   --dry-run   Show what would be done without making changes
   --help, -h  Show this help message
 
@@ -135,40 +135,40 @@ Environment Variables (required):
 File Filtering:
   - Files starting with a dot (.) are always ignored
   - Files matching patterns in .gitignore are ignored
-  - Files matching patterns in .boxelignore are ignored (realm-specific)
-  - .boxelignore allows you to exclude files from realm sync while keeping them in git
+  - Files matching patterns in .boxelignore are ignored (workspace-specific)
+  - .boxelignore allows you to exclude files from workspace sync while keeping them in git
 
 Examples:
-  realm-pull https://demo.cardstack.com/demo/ ./my-cards
-  realm-pull https://demo.cardstack.com/demo/ ./my-cards --delete --dry-run
+  workspace-pull https://demo.cardstack.com/demo/ ./my-cards
+  workspace-pull https://demo.cardstack.com/demo/ ./my-cards --delete --dry-run
 `);
     process.exit(0);
   }
 
   if (args.length < 2) {
-    console.error('Error: REALM_URL and LOCAL_DIR are required arguments');
+    console.error('Error: WORKSPACE_URL and LOCAL_DIR are required arguments');
     console.error('Run with --help for usage information');
     process.exit(1);
   }
 
-  const realmUrl = args[0];
+  const workspaceUrl = args[0];
   const localDir = args[1];
   const deleteLocal = args.includes('--delete');
   const dryRun = args.includes('--dry-run');
 
-  return { realmUrl, localDir, deleteLocal, dryRun };
+  return { workspaceUrl, localDir, deleteLocal, dryRun };
 }
 
 async function main() {
   // Parse command line arguments
-  const { realmUrl, localDir, deleteLocal, dryRun } = parseArgs();
+  const { workspaceUrl, localDir, deleteLocal, dryRun } = parseArgs();
 
   // Get environment variables for Matrix authentication
   const { matrixUrl, username, password } = validateMatrixEnvVars();
 
   try {
     const puller = new RealmPuller(
-      { realmUrl, localDir, deleteLocal, dryRun },
+      { workspaceUrl, localDir, deleteLocal, dryRun },
       matrixUrl,
       username,
       password,

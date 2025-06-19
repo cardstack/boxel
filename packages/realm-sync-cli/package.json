@@ -1,12 +1,12 @@
 {
-  "name": "@cardstack/realm-sync-cli",
+  "name": "@cardstack/workspace-sync-cli",
   "version": "0.1.0",
   "license": "MIT",
-  "description": "CLI tools for syncing files between local directories and Boxel realms",
+  "description": "CLI tools for syncing files between local directories and Boxel workspaces",
   "main": "./dist/index.js",
   "bin": {
-    "realm-push": "./dist/push.js",
-    "realm-pull": "./dist/pull.js"
+    "workspace-push": "./dist/push.js",
+    "workspace-pull": "./dist/pull.js"
   },
   "files": [
     "dist/**/*",
@@ -17,7 +17,7 @@
   },
   "keywords": [
     "boxel",
-    "realm",
+    "workspace",
     "sync",
     "cli",
     "cardstack"

@@ -2,7 +2,7 @@ import { RealmSyncBase, validateMatrixEnvVars } from './realm-sync-base';
 import * as fs from 'fs';
 
 interface PushOptions {
-  realmUrl: string;
+  workspaceUrl: string;
   localDir: string;
   deleteRemote?: boolean;
   dryRun?: boolean;
@@ -20,25 +20,25 @@ class RealmPusher extends RealmSyncBase {
 
   async sync() {
     console.log(
-      `Starting push from ${this.options.localDir} to ${this.options.realmUrl}`,
+      `Starting push from ${this.options.localDir} to ${this.options.workspaceUrl}`,
     );
 
-    // Test authentication by trying to access the realm root first
-    console.log('Testing realm access...');
+    // Test authentication by trying to access the workspace root first
+    console.log('Testing workspace access...');
     try {
       await this.getRemoteFileList(''); // Test with empty path (root)
     } catch (error) {
-      console.error('Failed to access realm:', error);
+      console.error('Failed to access workspace:', error);
       throw new Error(
         'Cannot proceed with push: Authentication or access failed. ' +
-          'Please check your Matrix credentials and realm permissions.',
+          'Please check your Matrix credentials and workspace permissions.',
       );
     }
-    console.log('Realm access verified');
+    console.log('Workspace access verified');
 
     // Get current remote file listing
     const remoteFiles = await this.getRemoteFileList();
-    console.log(`Found ${remoteFiles.size} files in remote realm`);
+    console.log(`Found ${remoteFiles.size} files in remote workspace`);
 
     // Get local file listing
     const localFiles = await this.getLocalFileList();
@@ -85,7 +85,7 @@ class RealmPusher extends RealmSyncBase {
 }
 
 function parseArgs(): {
-  realmUrl: string;
+  workspaceUrl: string;
   localDir: string;
   deleteRemote: boolean;
   dryRun: boolean;
@@ -94,11 +94,11 @@ function parseArgs(): {
 
   if (args.includes('--help') || args.includes('-h')) {
     console.log(`
-Usage: realm-push <LOCAL_DIR> <REALM_URL> [OPTIONS]
+Usage: workspace-push <LOCAL_DIR> <WORKSPACE_URL> [OPTIONS]
 
 Arguments:
-  LOCAL_DIR   The local directory containing files to sync
-  REALM_URL   The URL of the target realm (e.g., https://demo.cardstack.com/demo/)
+  LOCAL_DIR     The local directory containing files to sync
+  WORKSPACE_URL The URL of the target workspace (e.g., https://demo.cardstack.com/demo/)
 
 Options:
   --delete    Delete remote files that don't exist locally
@@ -113,33 +113,33 @@ Environment Variables (required):
 File Filtering:
   - Files starting with a dot (.) are always ignored
   - Files matching patterns in .gitignore are ignored
-  - Files matching patterns in .boxelignore are ignored (realm-specific)
-  - .boxelignore allows you to exclude files from realm sync while keeping them in git
+  - Files matching patterns in .boxelignore are ignored (workspace-specific)
+  - .boxelignore allows you to exclude files from workspace sync while keeping them in git
 
 Examples:
-  realm-push ./my-cards https://demo.cardstack.com/demo/
-  realm-push ./my-cards https://demo.cardstack.com/demo/ --delete --dry-run
+  workspace-push ./my-cards https://demo.cardstack.com/demo/
+  workspace-push ./my-cards https://demo.cardstack.com/demo/ --delete --dry-run
 `);
     process.exit(0);
   }
 
   if (args.length < 2) {
-    console.error('Error: LOCAL_DIR and REALM_URL are required arguments');
+    console.error('Error: LOCAL_DIR and WORKSPACE_URL are required arguments');
     console.error('Run with --help for usage information');
     process.exit(1);
   }
 
   const localDir = args[0];
-  const realmUrl = args[1];
+  const workspaceUrl = args[1];
   const deleteRemote = args.includes('--delete');
   const dryRun = args.includes('--dry-run');
 
-  return { realmUrl, localDir, deleteRemote, dryRun };
+  return { workspaceUrl, localDir, deleteRemote, dryRun };
 }
 
 async function main() {
   // Parse command line arguments
-  const { realmUrl, localDir, deleteRemote, dryRun } = parseArgs();
+  const { workspaceUrl, localDir, deleteRemote, dryRun } = parseArgs();
 
   // Get environment variables for Matrix authentication
   const { matrixUrl, username, password } = validateMatrixEnvVars();
@@ -151,7 +151,7 @@ async function main() {
 
   try {
     const pusher = new RealmPusher(
-      { realmUrl, localDir, deleteRemote, dryRun },
+      { workspaceUrl, localDir, deleteRemote, dryRun },
       matrixUrl,
       username,
       password,

@@ -1,21 +1,21 @@
-# Realm Sync CLI
+# Workspace Sync CLI
 
-CLI tools for syncing files between local directories and Boxel realms.
+CLI tools for syncing files between local directories and Boxel workspaces.
 
 ## Installation
 
 ### Global Installation (Recommended)
 
 ```bash
-npm install -g @cardstack/realm-sync-cli
+npm install -g @cardstack/workspace-sync-cli
 ```
 
 ### Per-project Installation
 
 ```bash
-npm install @cardstack/realm-sync-cli
-npx realm-push --help
-npx realm-pull --help
+npm install @cardstack/workspace-sync-cli
+npx workspace-push --help
+npx workspace-pull --help
 ```
 
 ### Development Installation
@@ -29,7 +29,7 @@ pnpm build
 
 ## Authentication
 
-Both commands require Matrix credentials to authenticate with the realm:
+Both commands require Matrix credentials to authenticate with the workspace:
 
 ```bash
 export MATRIX_URL="https://matrix.cardstack.com"
@@ -39,18 +39,18 @@ export MATRIX_PASSWORD="your-password"
 
 ## Usage
 
-### Push (Local → Realm)
+### Push (Local → Workspace)
 
-Uploads files from a local directory to a realm.
+Uploads files from a local directory to a workspace.
 
 ```bash
-realm-push <LOCAL_DIR> <REALM_URL> [OPTIONS]
+workspace-push <LOCAL_DIR> <WORKSPACE_URL> [OPTIONS]
 ```
 
 **Arguments:**
 
 - `LOCAL_DIR` - The local directory containing files to sync
-- `REALM_URL` - The URL of the target realm (e.g., https://demo.cardstack.com/demo/)
+- `WORKSPACE_URL` - The URL of the target workspace (e.g., https://demo.cardstack.com/demo/)
 
 **Options:**
 
@@ -61,34 +61,34 @@ realm-push <LOCAL_DIR> <REALM_URL> [OPTIONS]
 **Examples:**
 
 ```bash
-realm-push ./my-cards https://demo.cardstack.com/demo/
-realm-push ./my-cards https://demo.cardstack.com/demo/ --delete --dry-run
+workspace-push ./my-cards https://demo.cardstack.com/demo/
+workspace-push ./my-cards https://demo.cardstack.com/demo/ --delete --dry-run
 ```
 
-### Pull (Realm → Local)
+### Pull (Workspace → Local)
 
-Downloads files from a realm to a local directory.
+Downloads files from a workspace to a local directory.
 
 ```bash
-realm-pull <REALM_URL> <LOCAL_DIR> [OPTIONS]
+workspace-pull <WORKSPACE_URL> <LOCAL_DIR> [OPTIONS]
 ```
 
 **Arguments:**
 
-- `REALM_URL` - The URL of the source realm (e.g., https://demo.cardstack.com/demo/)
+- `WORKSPACE_URL` - The URL of the source workspace (e.g., https://demo.cardstack.com/demo/)
 - `LOCAL_DIR` - The local directory to sync files to
 
 **Options:**
 
-- `--delete` - Delete local files that don't exist in the realm
+- `--delete` - Delete local files that don't exist in the workspace
 - `--dry-run` - Show what would be done without making changes
 - `--help, -h` - Show help message
 
 **Examples:**
 
 ```bash
-realm-pull https://demo.cardstack.com/demo/ ./my-cards
-realm-pull https://demo.cardstack.com/demo/ ./my-cards --delete --dry-run
+workspace-pull https://demo.cardstack.com/demo/ ./my-cards
+workspace-pull https://demo.cardstack.com/demo/ ./my-cards --delete --dry-run
 ```
 
 ## File Filtering
@@ -108,8 +108,8 @@ The sync commands automatically filter files based on several criteria to avoid 
 
 ### Boxelignore Support
 
-- **`.boxelignore` files**: Realm-specific ignore patterns (same syntax as `.gitignore`)
-- **Use case**: Exclude files from realm sync while keeping them in git
+- **`.boxelignore` files**: Workspace-specific ignore patterns (same syntax as `.gitignore`)
+- **Use case**: Exclude files from workspace sync while keeping them in git
 - **Priority**: Applied in addition to `.gitignore` patterns
 - **Hierarchical**: Works the same way as `.gitignore` files
 
@@ -123,10 +123,10 @@ node_modules/
 .env
 ```
 
-**`.boxelignore`** (realm-specific ignoring):
+**`.boxelignore`** (workspace-specific ignoring):
 
 ```
-# Keep in git but exclude from realm
+# Keep in git but exclude from workspace
 docs/
 test-data/
 *.draft.gts
@@ -140,7 +140,7 @@ development-cards/
 3. Files matching any pattern in `.boxelignore` are ignored
 4. Remaining files are synced
 
-This allows fine-grained control over what gets synced to realms while maintaining your git repository structure.
+This allows fine-grained control over what gets synced to workspaces while maintaining your git repository structure.
 
 ## Development
 
@@ -166,25 +166,8 @@ pnpm build:analyze
 ### Development Scripts
 
 ```bash
-pnpm push <LOCAL_DIR> <REALM_URL> [OPTIONS]
-pnpm pull <REALM_URL> <LOCAL_DIR> [OPTIONS]
-```
-
-### Testing
-
-```bash
-# Run all tests (lint + build)
-pnpm test
-
-# Test built executables
-pnpm test:built
-
-# Test global installation
-pnpm test:install
-
-# Type checking
-pnpm type-check
-pnpm type-check:watch
+pnpm push <LOCAL_DIR> <WORKSPACE_URL> [OPTIONS]
+pnpm pull <WORKSPACE_URL> <LOCAL_DIR> [OPTIONS]
 ```
 
 ### Code Quality
@@ -219,41 +202,39 @@ node dist/pull.js --help
 # Test as installed package
 npm pack
 npm install -g ./cardstack-realm-sync-cli-0.1.0.tgz
-realm-push --help
+workspace-push --help
 ```
 
 ## Features
 
 - **Bundled executables** - Single-file binaries with all dependencies included
 - **Zero dependencies** - No need to install additional packages
-- **Cross-platform** - Works on Windows, macOS, and Linux
 - **Recursive directory syncing** - Handles nested folder structures
 - **Smart file filtering** - Respects `.gitignore` and `.boxelignore` patterns, skips dotfiles
-- **Safe authentication** - Tests realm access before destructive operations
+- **Safe authentication** - Tests workspace access before destructive operations
 - **Detailed logging** - Clear feedback on all operations
 - **Dry-run mode** - Preview changes without making them
-- **Robust URL handling** - Works with or without trailing slashes
 
 ## Architecture
 
 The package uses esbuild to create standalone executables that bundle all dependencies:
 
-- **`realm-push`** - Standalone executable for uploading files to realms
-- **`realm-pull`** - Standalone executable for downloading files from realms
-- **Library API** - Programmatic access via `@cardstack/realm-sync-cli`
+- **`workspace-push`** - Standalone executable for uploading files to workspaces
+- **`workspace-pull`** - Standalone executable for downloading files from workspaces
+- **Library API** - Programmatic access via `@cardstack/workspace-sync-cli`
 
 ### Components
 
-- `RealmSyncBase` - Abstract base class with common sync functionality
-- `RealmPusher` - Implements push (local → realm) synchronization
-- `RealmPuller` - Implements pull (realm → local) synchronization
+- `WorkspaceSyncBase` - Abstract base class with common sync functionality
+- `WorkspacePusher` - Implements push (local → workspace) synchronization
+- `WorkspacePuller` - Implements pull (workspace → local) synchronization
 
 Authentication is handled through the bundled `@cardstack/runtime-common` package using Matrix credentials.
 
 ## Requirements
 
 - Node.js 18 or higher
-- Matrix account with realm access permissions
+- Matrix account with workspace access permissions
 
 ## License
 
