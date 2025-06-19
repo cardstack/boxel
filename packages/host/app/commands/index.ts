@@ -6,7 +6,6 @@ import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-bl
 import * as CopyCardCommandModule from './copy-card';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
-import * as GetBoxelUiStateModule from './get-boxel-ui-state';
 import * as ListingInitCommandModule from './listing-action-init';
 import * as ListingInstallCommandModule from './listing-install';
 import * as ListingRemixCommandModule from './listing-remix';
@@ -52,10 +51,6 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-ai-assistant-room',
     CreateAIAssistantRoomCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-boxel-ui-state',
-    GetBoxelUiStateModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/listing-action-init',

@@ -76,15 +76,8 @@ module('Acceptance | Code patches tests', function (hooks) {
             type: 'card',
             attributes: {
               instructions:
-                'Here are few commands you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode. * get-boxel-ui-state: find out what mode you are in currently, and what cards are open. * search-cards-by-type-and-title: search for cards by name or description.',
+                'Here are few commands you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode. * search-cards-by-type-and-title: search for cards by name or description.',
               commands: [
-                {
-                  codeRef: {
-                    name: 'default',
-                    module: '@cardstack/boxel-host/commands/get-boxel-ui-state',
-                  },
-                  requiresApproval: true,
-                },
                 {
                   codeRef: {
                     name: 'SearchCardsByTypeAndTitleCommand',
