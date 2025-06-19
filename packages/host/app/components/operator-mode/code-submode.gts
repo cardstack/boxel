@@ -4,7 +4,6 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { capitalize } from '@ember/string';
-import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
@@ -240,13 +239,6 @@ export default class CodeSubmode extends Component<Signature> {
     return this.cardResource?.cardError?.meta
       ? this.cardResource?.cardError
       : undefined;
-  }
-
-  private backgroundURLStyle(backgroundURL: string | null) {
-    let possibleStyle = backgroundURL
-      ? `background-image: url(${backgroundURL});`
-      : '';
-    return htmlSafe(possibleStyle);
   }
 
   @action setFileView(view: FileView) {
@@ -661,12 +653,6 @@ export default class CodeSubmode extends Component<Signature> {
   <template>
     {{consumeContext this.makeCardResource}}
     <AttachFileModal />
-    {{#let (this.realm.info this.realmURL.href) as |realmInfo|}}
-      <div
-        class='code-mode-background'
-        style={{this.backgroundURLStyle realmInfo.backgroundURL}}
-      ></div>
-    {{/let}}
     <SubmodeLayout
       class='code-submode-layout'
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
@@ -742,7 +728,7 @@ export default class CodeSubmode extends Component<Signature> {
                     </:browser>
                   </CodeSubmodeLeftPanelToggle>
                 </VerticallyResizablePanel>
-                <VerticallyResizeHandle />
+                <VerticallyResizeHandle class='handle' />
                 <VerticallyResizablePanel
                   @defaultSize={{this.defaultPanelHeights.recentPanel}}
                   @minSize={{20}}
@@ -762,7 +748,7 @@ export default class CodeSubmode extends Component<Signature> {
               </ResizablePanelGroup>
             </div>
           </ResizablePanel>
-          <ResizeHandle />
+          <ResizeHandle class='handle' />
           {{#if this.codePath}}
             <ResizablePanel
               @defaultSize={{this.defaultPanelWidths.codeEditorPanel}}
@@ -790,13 +776,13 @@ export default class CodeSubmode extends Component<Signature> {
                 {{/if}}
               </InnerContainer>
             </ResizablePanel>
-            <ResizeHandle />
+            <ResizeHandle class='handle' />
             <ResizablePanel
               @defaultSize={{this.defaultPanelWidths.rightPanel}}
               {{! TODO in CS-8713: make this have a minimum width }}
               @collapsible={{false}}
             >
-              <InnerContainer>
+              <InnerContainer class='module-inspector-container'>
                 {{#if this.isReady}}
                   <ModuleInspector
                     @card={{this.card}}
@@ -865,7 +851,7 @@ export default class CodeSubmode extends Component<Signature> {
         --code-mode-panel-background-color: #ebeaed;
         --code-mode-container-border-radius: 10px;
         --code-mode-realm-icon-size: 1.125rem;
-        --code-mode-active-box-shadow: 0 3px 5px 0 rgba(0, 0, 0, 0.35);
+        --code-mode-active-box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.16);
         --code-mode-padding-top: calc(
           var(--operator-mode-top-bar-item-height) +
             (2 * (var(--operator-mode-spacing)))
@@ -887,17 +873,7 @@ export default class CodeSubmode extends Component<Signature> {
         padding-top: var(--code-mode-padding-top);
         overflow: auto;
         flex: 1;
-      }
-
-      .code-mode-background {
-        position: fixed;
-        left: 0;
-        right: 0;
-        display: block;
-        width: 100%;
-        height: 100%;
-        filter: blur(15px);
-        background-size: cover;
+        background-color: #74707d;
       }
 
       .columns {
@@ -905,6 +881,7 @@ export default class CodeSubmode extends Component<Signature> {
         flex-direction: row;
         flex-shrink: 0;
         height: 100%;
+        border-top: 1px solid var(--boxel-dark);
       }
 
       .column {
@@ -912,6 +889,10 @@ export default class CodeSubmode extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp);
         height: 100%;
+      }
+
+      .handle {
+        --boxel-panel-resize-separator-background-color: var(--boxel-dark);
       }
 
       .recent-files-panel {
@@ -946,6 +927,10 @@ export default class CodeSubmode extends Component<Signature> {
       .code-mode-top-bar
         > :deep(* + *:not(.ember-basic-dropdown-content-wormhole-origin)) {
         margin-left: var(--operator-mode-spacing);
+      }
+
+      .module-inspector-container {
+        background-color: transparent;
       }
 
       .loading {

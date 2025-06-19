@@ -603,9 +603,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       )
       .includesText('Test Workspace B');
     assert
-      .dom(
-        '[data-test-card-instance-definition] [data-test-definition-info-text]',
-      )
+      .dom('[data-test-definition-info-text]')
       .includesText('Last saved just now');
     assert
       .dom('[data-test-card-instance-definition] [data-test-definition-header]')

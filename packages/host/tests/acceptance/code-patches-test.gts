@@ -99,6 +99,13 @@ module('Acceptance | Code patches tests', function (hooks) {
                   },
                   requiresApproval: true,
                 },
+                {
+                  codeRef: {
+                    name: 'default',
+                    module: '@cardstack/boxel-host/commands/show-card',
+                  },
+                  requiresApproval: true,
+                },
               ],
               title: 'Useful Commands',
               description: null,
@@ -252,11 +259,11 @@ ${REPLACE_MARKER}
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: 'abc123',
-          name: 'switch-submode_dd88',
+          name: 'show-card_566f',
           arguments: JSON.stringify({
-            description: 'Switching to code submode',
+            description: 'Showing skill card',
             attributes: {
-              submode: 'code',
+              cardId: `${testRealmURL}Skill/useful-commands`,
             },
           }),
         },
@@ -274,17 +281,18 @@ ${REPLACE_MARKER}
     await waitFor(
       '[data-test-ai-assistant-action-bar] [data-test-loading-indicator]',
     );
-    await waitUntil(() =>
-      document
-        .querySelector('[data-test-ai-assistant-action-bar]')
-        ?.textContent?.includes('Apply Diff'),
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-ai-assistant-action-bar]')
+          ?.textContent?.includes('Apply Diff'),
+      { timeout: 5000 },
     );
     await waitUntil(() =>
       document
         .querySelector('[data-test-ai-assistant-action-bar]')
-        ?.textContent?.includes('Switch'),
+        ?.textContent?.includes('Show Card'),
     );
-
     await waitUntil(
       () =>
         findAll(
@@ -296,24 +304,26 @@ ${REPLACE_MARKER}
           'timed out waiting for code patches to be in applied state',
       },
     );
-    await waitFor('[data-test-code-mode]');
-    assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).doesNotExist();
-    await click('[data-test-file-browser-toggle]');
-    await click('[data-test-file="hello.txt"]');
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Skill/useful-commands"]`)
+      .exists();
 
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
     assert.strictEqual(
       getMonacoContent(),
       'Hi, world!',
       'hello.txt should be patched',
     );
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}hi.txt`,
-    });
+    await click('[data-test-file-browser-toggle]');
+    await click('[data-test-file="hi.txt"]');
 
     // We can see content that is the result of 2 patches made to this file (hi.txt)
     await waitUntil(
       () => getMonacoContent() === 'Greetings, world!\nWe are one!',
+      { timeout: 5000 },
     );
 
     let codePatchResultEvents = getRoomEvents(roomId).filter(
