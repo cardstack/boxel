@@ -7,6 +7,7 @@ import {
   SupportedMimeType,
   insertPermissions,
   Deferred,
+  userIdFromUsername,
   type VirtualNetwork,
   type DBAdapter,
   type QueuePublisher,
@@ -105,7 +106,11 @@ export class RealmServer {
     detectRealmCollision(realms);
     ensureDirSync(realmsRootPath);
 
-    this.matrixUserId = `@${matrixClient.username}:${matrixClient.matrixURL.hostname}`;
+    this.matrixUserId = userIdFromUsername(
+      matrixClient.username,
+      matrixClient.matrixURL.href,
+    );
+
     this.serverURL = serverURL;
     this.virtualNetwork = virtualNetwork;
     this.matrixClient = matrixClient;

@@ -80,6 +80,7 @@ export * from './catalog';
 export * from './commands';
 export * from './constants';
 export * from './matrix-constants';
+export * from './matrix-client';
 export * from './queue';
 export * from './expression';
 export * from './index-query-engine';
