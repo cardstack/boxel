@@ -378,6 +378,8 @@ export async function waitForMatrixMessage(
 }
 
 export function userIdFromUsername(username: string, matrixURL: string) {
-  let host = new URL(matrixURL).hostname.replace('matrix.boxel.ai', 'boxel.ai');
+  let host = new URL(matrixURL).hostname
+    .replace('matrix.boxel.ai', 'boxel.ai')
+    .replace('matrix-staging.stack.cards', 'stack.cards');
   return `@${username}:${host}`;
 }
