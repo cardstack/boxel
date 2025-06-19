@@ -10,7 +10,6 @@ NODE_ENV=development \
   PGDATABASE=boxel \
   LOG_LEVELS='*=info' \
   REALM_SECRET_SEED="shhh! it's a secret" \
-  REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \
   --transpileOnly worker-manager \
   --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
