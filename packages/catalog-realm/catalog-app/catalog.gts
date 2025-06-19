@@ -316,15 +316,13 @@ class Isolated extends Component<typeof Catalog> {
   @tracked activeCategoryId: string | undefined =
     this.activeTabId !== 'showcase' ? 'all' : undefined;
 
-  @tracked activeTagIds: string[] = [];
+  @tracked activeTags: FilterItem[] = [];
 
   @action
   handleTagSelect(item: FilterItem) {
-    if (this.activeTagIds.includes(item.id)) {
-      this.activeTagIds = this.activeTagIds.filter((id) => id !== item.id);
-    } else {
-      this.activeTagIds = [...this.activeTagIds, item.id];
-    }
+    this.activeTags = this.activeTags.some((t) => t.id === item.id)
+      ? this.activeTags.filter((t) => t.id !== item.id)
+      : [...this.activeTags, item];
   }
 
   // Filter Search
@@ -452,13 +450,13 @@ class Isolated extends Component<typeof Catalog> {
   }
 
   get tagFilter(): AnyFilter | undefined {
-    if (this.activeTagIds.length === 0) {
+    if (this.activeTags.length === 0) {
       return;
     }
     return {
-      any: this.activeTagIds.map((id) => ({
+      any: this.activeTags.map((tag) => ({
         eq: {
-          'tags.id': id,
+          'tags.id': tag.id,
         },
       })),
     };
@@ -482,7 +480,7 @@ class Isolated extends Component<typeof Catalog> {
   @action resetFilters() {
     this.activeCategory = undefined;
     this.searchValue = undefined;
-    this.activeTagIds = [];
+    this.activeTags = [];
   }
 
   get shouldShowTab() {
@@ -495,7 +493,7 @@ class Isolated extends Component<typeof Catalog> {
     return (
       this.activeCategory !== undefined ||
       this.searchValue !== undefined ||
-      this.activeTagIds.length > 0
+      this.activeTags.length > 0
     );
   }
 
@@ -565,7 +563,7 @@ class Isolated extends Component<typeof Catalog> {
             @onCategorySelect={{this.handleCategorySelect}}
             @categoryIsLoading={{this.categorySearch.isLoading}}
             @tagItems={{this.tagItems}}
-            @activeTagIds={{this.activeTagIds}}
+            @activeTags={{this.activeTags}}
             @onTagSelect={{this.handleTagSelect}}
             @tagIsLoading={{this.tagSearch.isLoading}}
           />
