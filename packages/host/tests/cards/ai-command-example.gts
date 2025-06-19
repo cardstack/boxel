@@ -6,7 +6,7 @@ import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-a
 import { Button } from '@cardstack/boxel-ui/components';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 
-import { Command } from '@cardstack/runtime-common';
+// import { Command } from '@cardstack/runtime-common';
 
 import {
   CardDef,
@@ -25,24 +25,24 @@ export class WeatherReport extends CardDef {
   @field conditions = contains(StringField);
 }
 
-class GetWeatherCommand extends Command<
-  typeof WeatherLocationInput,
-  typeof WeatherReport
-> {
-  static actionVerb = 'Retrieve';
-  inputType = WeatherLocationInput;
+// class GetWeatherCommand extends Command<
+//   typeof WeatherLocationInput,
+//   typeof WeatherReport
+// > {
+//   static actionVerb = 'Retrieve';
+//   inputType = WeatherLocationInput;
 
-  async getInputType() {
-    return WeatherLocationInput;
-  }
+//   async getInputType() {
+//     return WeatherLocationInput;
+//   }
 
-  protected async run(_input: WeatherLocationInput): Promise<WeatherReport> {
-    return new WeatherReport({
-      temperature: '25 C',
-      conditions: 'Sunny',
-    });
-  }
-}
+//   protected async run(_input: WeatherLocationInput): Promise<WeatherReport> {
+//     return new WeatherReport({
+//       temperature: '25 C',
+//       conditions: 'Sunny',
+//     });
+//   }
+// }
 
 export class AiCommandExample extends CardDef {
   static displayName = 'AI Command Example';
@@ -56,7 +56,7 @@ export class AiCommandExample extends CardDef {
         throw new Error('No command context found');
       }
 
-      let getWeatherCommand = new GetWeatherCommand(commandContext);
+      // let getWeatherCommand = new GetWeatherCommand(commandContext);
 
       let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
         commandContext,
@@ -72,7 +72,8 @@ export class AiCommandExample extends CardDef {
       await sendMessageCommand.execute({
         roomId,
         prompt: `What is the weather in ${this.args.model.location}?`,
-        commands: [{ command: getWeatherCommand, autoExecute: true }],
+        // TODO: use a skill instead?
+        // commands: [{ command: getWeatherCommand, autoExecute: true }],
       });
     };
 
