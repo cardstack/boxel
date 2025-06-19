@@ -59,6 +59,7 @@ import {
   DEFAULT_LLM_LIST,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -766,6 +767,14 @@ export default class MatrixService extends Service {
 
   async cacheContentHashIfNeeded(event: DiscreteMatrixEvent) {
     await this.client.cacheContentHashIfNeeded(event);
+  }
+
+  async sendStopGeneratingEvent(roomId: string) {
+    return await this.client.sendEvent(
+      roomId,
+      APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+      {},
+    );
   }
 
   async sendCommandResultEvent(

@@ -22,6 +22,7 @@ import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
 } from '@cardstack/runtime-common';
 import { type SerializedFile } from './file-api';
 
@@ -120,6 +121,7 @@ export interface MessageEvent extends BaseMatrixEvent {
     format: 'org.matrix.custom.html';
     body: string;
     isStreamingFinished: boolean;
+    isCancelled?: boolean;
     errorMessage?: string;
   };
   unsigned: {
@@ -195,6 +197,7 @@ export interface CardMessageContent {
   format: 'org.matrix.custom.html';
   body: string;
   isStreamingFinished?: boolean;
+  isCancelled?: boolean;
   [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]?: boolean;
   [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]?: string; // event_id of the message we are continuing
   [APP_BOXEL_REASONING_CONTENT_KEY]?: string;
@@ -373,6 +376,10 @@ export interface FileUpdatedEventContent {
 export interface FileRemovedEventContent {
   eventName: 'update';
   removed: string;
+}
+
+export interface StopGeneratingEvent extends BaseMatrixEvent {
+  type: typeof APP_BOXEL_STOP_GENERATING_EVENT_TYPE;
 }
 
 export type MatrixEventWithBoxelContext =

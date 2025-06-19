@@ -168,6 +168,8 @@ export default class Room extends Component<Signature> {
                 @acceptingAll={{this.executeAllReadyActionsTask.isRunning}}
                 @acceptingAllLabel={{this.acceptingAllLabel}}
                 @generatingResults={{this.generatingResults}}
+                @stop={{perform this.stopGeneratingTask}}
+                @stopping={{this.stopGeneratingTask.isRunning}}
               />
             {{/if}}
             <div class='chat-input-area' data-test-chat-input-area>
@@ -1007,7 +1009,7 @@ export default class Room extends Component<Signature> {
     }
   }
 
-  executeAllReadyActionsTask = task(async () => {
+  private executeAllReadyActionsTask = task(async () => {
     await this.executeReadyCodePatches();
     await this.executeReadyCommands();
   });
@@ -1019,6 +1021,10 @@ export default class Room extends Component<Signature> {
       this.lastCanceledActionMessageId = lastMessage.eventId;
     }
   }
+
+  private stopGeneratingTask = task(async () => {
+    await this.matrixService.sendStopGeneratingEvent(this.args.roomId);
+  });
 }
 
 declare module '@glint/environment-ember-loose/registry' {

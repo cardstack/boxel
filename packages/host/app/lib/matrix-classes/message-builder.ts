@@ -157,6 +157,7 @@ export default class MessageBuilder {
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
       message.clientGeneratedId = this.clientGeneratedId;
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
+      message.setIsCancelled(!!event.content.isStreamingFinished);
       message.attachedCardIds = this.attachedCardIds;
       if (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY]) {
         message.setCommands(await this.buildMessageCommands(message));
@@ -164,6 +165,7 @@ export default class MessageBuilder {
       message.codePatchResults = this.buildMessageCodePatchResults(message);
     } else if (event.content.msgtype === 'm.text') {
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
+      message.setIsCancelled(!!event.content.isCancelled);
     }
     if (event.type === APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE) {
       message.isDebugMessage = true;
@@ -187,6 +189,11 @@ export default class MessageBuilder {
     message.setIsStreamingFinished(
       'isStreamingFinished' in this.event.content
         ? this.event.content.isStreamingFinished
+        : undefined,
+    );
+    message.setIsCancelled(
+      'isCancelled' in this.event.content
+        ? this.event.content.isCancelled
         : undefined,
     );
     message.hasContinuation = hasContinuation(this.event);

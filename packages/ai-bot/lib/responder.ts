@@ -136,6 +136,9 @@ export class Responder {
 
   async onError(error: OpenAIError | string) {
     Sentry.captureException(error);
+    if (this.responseState.isStreamingFinished) {
+      return;
+    }
     return await this.matrixResponsePublisher.sendError(error);
   }
 
@@ -158,7 +161,7 @@ export class Responder {
     }
   }
   isFinalized = false;
-  async finalize() {
+  async finalize(isCancelled = false) {
     if (this.isFinalized) {
       return;
     }
@@ -166,6 +169,7 @@ export class Responder {
 
     let isStreamingFinishedChanged =
       this.responseState.updateIsStreamingFinished(true);
+    this.responseState.isCancelled = isCancelled;
     log.debug('finalize', {
       isStreamingFinishedChanged,
     });

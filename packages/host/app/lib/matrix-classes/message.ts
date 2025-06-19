@@ -59,6 +59,7 @@ export class Message implements RoomMessageInterface {
   @tracked codePatchResults: TrackedArray<MessageCodePatchResult>;
   @tracked created: Date;
   @tracked _isStreamingFinished?: boolean;
+  @tracked _isCancelled?: boolean;
   @tracked hasContinuation?: boolean;
   @tracked continuedInMessage?: Message | null;
   continuationOf?: string | null;
@@ -126,7 +127,11 @@ export class Message implements RoomMessageInterface {
   }
 
   get body(): string {
-    return [this._body, this.continuedBody].filter(Boolean).join('');
+    let body = [this._body, this.continuedBody].filter(Boolean).join('');
+    if (this._isCancelled) {
+      body = body + '\n\n{Generation Cancelled}';
+    }
+    return body;
   }
 
   setBody(body: string) {
@@ -156,6 +161,12 @@ export class Message implements RoomMessageInterface {
   setIsStreamingFinished(isStreamingFinished: boolean | undefined) {
     if (this._isStreamingFinished !== isStreamingFinished) {
       this._isStreamingFinished = isStreamingFinished;
+    }
+  }
+
+  setIsCancelled(isCancelled: boolean | undefined) {
+    if (this._isCancelled !== isCancelled) {
+      this._isCancelled = isCancelled;
     }
   }
 

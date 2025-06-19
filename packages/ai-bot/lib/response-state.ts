@@ -8,6 +8,7 @@ export default class ResponseState {
   toolCalls: ChatCompletionSnapshot.Choice.Message.ToolCall[] = [];
   private toolCallsJson: string | undefined;
   isStreamingFinished = false;
+  isCancelled = false;
 
   update(
     newReasoning: string | undefined,
@@ -80,6 +81,7 @@ export default class ResponseState {
       content: this.latestContent,
       toolCalls: this.toolCalls,
       isStreamingFinished: this.isStreamingFinished,
+      isCancelled: this.isCancelled,
     };
   }
 }
