@@ -18,7 +18,6 @@ import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { consume, provide } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
-import flatMap from 'lodash/flatMap';
 import startCase from 'lodash/startCase';
 
 import {
@@ -455,7 +454,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get menuItems(): MenuItem[] {
-    return flatMap(newFileTypes, ({ id, icon, description, extension }) => {
+    return newFileTypes.flatMap(({ id, icon, description, extension }) => {
       if (id === 'duplicate-instance' || id === 'spec-instance') {
         return [];
       }
