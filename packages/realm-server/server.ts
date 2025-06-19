@@ -64,6 +64,7 @@ export class RealmServer {
     | (() => Promise<string | undefined>)
     | undefined;
   private enableFileWatcher: boolean;
+  private matrixUserId: string;
 
   constructor({
     serverURL,
@@ -104,6 +105,7 @@ export class RealmServer {
     detectRealmCollision(realms);
     ensureDirSync(realmsRootPath);
 
+    this.matrixUserId = `@${matrixClient.username}:${matrixClient.matrixURL.hostname}`;
     this.serverURL = serverURL;
     this.virtualNetwork = virtualNetwork;
     this.matrixClient = matrixClient;
@@ -129,7 +131,7 @@ export class RealmServer {
         cors({
           origin: '*',
           allowHeaders:
-            'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Building-Index, X-HTTP-Method-Override',
+            'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Building-Index, X-Boxel-Assume-User, X-HTTP-Method-Override',
         }),
       )
       .use(async (ctx, next) => {
@@ -364,6 +366,7 @@ export class RealmServer {
         url: this.matrixClient.matrixURL,
         username,
       },
+      realmServerMatrixUserId: this.matrixUserId,
     });
     this.realms.push(realm);
     this.virtualNetwork.mount(realm.handle);
@@ -416,6 +419,7 @@ export class RealmServer {
               url: this.matrixClient.matrixURL,
               username,
             },
+            realmServerMatrixUserId: this.matrixUserId,
           });
           this.virtualNetwork.mount(realm.handle);
           realms.push(realm);
