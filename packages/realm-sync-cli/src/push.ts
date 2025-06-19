@@ -1,4 +1,5 @@
-import '../setup-logger';
+#!/usr/bin/env node
+
 import { RealmSyncBase, validateMatrixEnvVars } from './realm-sync-base';
 import * as fs from 'fs';
 
@@ -95,7 +96,7 @@ function parseArgs(): {
 
   if (args.includes('--help') || args.includes('-h')) {
     console.log(`
-Usage: pnpm push <LOCAL_DIR> <REALM_URL> [OPTIONS]
+Usage: realm-push <LOCAL_DIR> <REALM_URL> [OPTIONS]
 
 Arguments:
   LOCAL_DIR   The local directory containing files to sync
@@ -112,8 +113,8 @@ Environment Variables (required):
   MATRIX_PASSWORD  Your Matrix password
 
 Examples:
-  pnpm push ./my-cards https://demo.cardstack.com/demo/
-  pnpm push ./my-cards https://demo.cardstack.com/demo/ --delete --dry-run
+  realm-push ./my-cards https://demo.cardstack.com/demo/
+  realm-push ./my-cards https://demo.cardstack.com/demo/ --delete --dry-run
 `);
     process.exit(0);
   }

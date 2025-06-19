@@ -1,4 +1,5 @@
-import '../setup-logger';
+#!/usr/bin/env node
+
 import { RealmSyncBase, validateMatrixEnvVars } from './realm-sync-base';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -117,7 +118,7 @@ function parseArgs(): {
 
   if (args.includes('--help') || args.includes('-h')) {
     console.log(`
-Usage: pnpm pull <REALM_URL> <LOCAL_DIR> [OPTIONS]
+Usage: realm-pull <REALM_URL> <LOCAL_DIR> [OPTIONS]
 
 Arguments:
   REALM_URL   The URL of the source realm (e.g., https://demo.cardstack.com/demo/)
@@ -134,8 +135,8 @@ Environment Variables (required):
   MATRIX_PASSWORD  Your Matrix password
 
 Examples:
-  pnpm pull https://demo.cardstack.com/demo/ ./my-cards
-  pnpm pull https://demo.cardstack.com/demo/ ./my-cards --delete --dry-run
+  realm-pull https://demo.cardstack.com/demo/ ./my-cards
+  realm-pull https://demo.cardstack.com/demo/ ./my-cards --delete --dry-run
 `);
     process.exit(0);
   }

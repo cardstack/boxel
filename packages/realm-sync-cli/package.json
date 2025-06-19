@@ -1,0 +1,26 @@
+{
+  "name": "@cardstack/realm-sync-cli",
+  "version": "0.0.0",
+  "license": "MIT",
+  "description": "CLI tools for syncing files between local directories and Boxel realms",
+  "dependencies": {
+    "@cardstack/runtime-common": "workspace:*",
+    "@types/node": "^18.18.5",
+    "ts-node": "^10.9.1",
+    "typescript": "~5.1.6"
+  },
+  "devDependencies": {
+    "concurrently": "catalog:"
+  },
+  "scripts": {
+    "push": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/push.ts",
+    "pull": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/pull.ts",
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
+    "lint:js": "eslint . --report-unused-disable-directives --cache",
+    "lint:js:fix": "eslint . --report-unused-disable-directives --fix"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}

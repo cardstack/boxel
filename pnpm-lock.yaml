@@ -2701,6 +2701,25 @@ importers:
         specifier: 'catalog:'
         version: 17.7.2
 
+  packages/realm-sync-cli:
+    dependencies:
+      '@cardstack/runtime-common':
+        specifier: workspace:*
+        version: link:../runtime-common
+      '@types/node':
+        specifier: ^18.18.5
+        version: 18.19.54
+      ts-node:
+        specifier: ^10.9.1
+        version: 10.9.2(@types/node@18.19.54)(typescript@5.1.6)
+      typescript:
+        specifier: ~5.1.6
+        version: 5.1.6
+    devDependencies:
+      concurrently:
+        specifier: 'catalog:'
+        version: 8.2.2
+
   packages/runtime-common:
     dependencies:
       '@aws-crypto/sha256-js':
