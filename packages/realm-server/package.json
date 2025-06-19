@@ -111,6 +111,8 @@
     "lint:test-shards": "ts-node --transpileOnly scripts/lint-test-shards.ts",
     "full-reset": "./scripts/full-reset.sh",
     "sync-stripe-products": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 ts-node --transpileOnly scripts/sync-stripe-products.ts",
+    "push": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/push.ts",
+    "pull": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/pull.ts",
     "stripe": "docker run --rm --add-host=host.docker.internal:host-gateway -it stripe/stripe-cli:latest"
   },
   "volta": {
