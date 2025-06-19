@@ -216,13 +216,11 @@ export class RealmIndexUpdater {
       this.#dbAdapter,
       this.realmURL,
     );
-    let owners = Object.entries(permissions)
+    let [realmUserId] = Object.entries(permissions)
       .filter(([_, permissions]) => permissions?.includes('realm-owner'))
-      .map(([userId]) => userId);
-    let realmUserId =
-      owners.length === 1
-        ? owners[0]
-        : owners.find((userId) => userId.startsWith('@realm/'));
+      .map(([userId]) => userId)
+      // we want to use the realm's human owner for the realm and not the bot
+      .filter((userId) => !userId.startsWith('@realm/'));
     // real matrix user ID's always start with an '@', if it doesn't that
     // means we are testing
     if (realmUserId?.startsWith('@')) {

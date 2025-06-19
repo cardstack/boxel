@@ -220,7 +220,7 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #disableModuleCaching = false;
-  realmServerMatrixUserId: string;
+  #realmServerMatrixUserId: string;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -271,7 +271,7 @@ export class Realm {
     this.paths = new RealmPaths(new URL(url));
     let { username, url: matrixURL } = matrix;
     this.#realmSecretSeed = secretSeed;
-    this.realmServerMatrixUserId = realmServerMatrixUserId;
+    this.#realmServerMatrixUserId = realmServerMatrixUserId;
     this.#matrixClient = new MatrixClient({
       matrixURL,
       username,
@@ -2233,7 +2233,7 @@ export class Realm {
 
   private async createRequestContext(): Promise<RequestContext> {
     let permissions = {
-      [this.realmServerMatrixUserId]: ['assume-user'] as RealmAction[],
+      [this.#realmServerMatrixUserId]: ['assume-user'] as RealmAction[],
       ...(await fetchUserPermissions(this.#dbAdapter, new URL(this.url))),
     };
     return {
