@@ -555,7 +555,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       .module-inspector-content {
         overflow: scroll;
         height: 100%;
-        background-color: #74707d;
+        background-color: var(--boxel-light);
       }
 
       .module-inspector-content.error {
@@ -564,7 +564,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         align-items: center;
         justify-content: center;
         height: 100%;
-        background-color: var(--boxel-light);
         color: var(--boxel-dark);
       }
 
