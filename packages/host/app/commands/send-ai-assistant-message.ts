@@ -56,41 +56,12 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.SendAiAssistantMessageInput,
   ): Promise<BaseCommandModule.SendAiAssistantMessageResult> {
-    let {
-      commandService,
-      loaderService,
-      matrixService,
-      operatorModeStateService,
-    } = this;
+    let { loaderService, matrixService, operatorModeStateService } = this;
     let roomId = input.roomId;
     let mappings = await basicMappings(loaderService.loader);
     let tools: Tool[] = [];
     let requireToolCall = input.requireCommandCall ?? false;
-    if (requireToolCall && input.commands?.length > 1) {
-      throw new Error('Cannot require tool call and have multiple commands');
-    }
     let cardAPI = await this.loadCardAPI();
-    for (let { command, autoExecute } of input.commands ?? []) {
-      // get a registered name for the command
-      let name = commandService.registerCommand(command, autoExecute);
-      tools.push({
-        type: 'function',
-        function: {
-          name,
-          description: command.description,
-          parameters: {
-            type: 'object',
-            properties: {
-              description: {
-                type: 'string',
-              },
-              ...(await command.getInputJsonSchema(cardAPI, mappings)),
-            },
-            required: ['attributes', 'description'],
-          },
-        },
-      });
-    }
 
     let attachedOpenCards: CardAPI.CardDef[] = [];
     if (input.openCardIds) {

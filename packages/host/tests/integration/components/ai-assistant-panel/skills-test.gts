@@ -209,6 +209,20 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
               }
             }
         `,
+        'placeholder-command.ts': `
+            import { Command } from '@cardstack/runtime-common';
+
+            export default class PlaceholderCommand extends Command<undefined, undefined> {
+              static displayName = 'PlaceholderCommand';
+              static actionVerb = 'Placeholder';
+              async getInputType() {
+                return undefined;
+              }
+              protected async run(): Promise<undefined> {
+                return undefined;
+              }
+            }
+        `,
         'Skill/example.json': {
           data: {
             attributes: {
@@ -247,7 +261,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
                 {
                   codeRef: {
                     name: 'default',
-                    module: `@cardstack/boxel-host/commands/get-boxel-ui-state`,
+                    module: `${testRealmURL}placeholder-command`,
                   },
                   requiresApproval: true,
                 },
@@ -931,10 +945,10 @@ ${REPLACE_MARKER}
     );
     assert.strictEqual(
       initialRoomStateSkillsJson.commandDefinitions.filter((cmd: any) =>
-        cmd.name.includes('get-boxel-ui-state'),
+        cmd.name.includes('placeholder'),
       ).length,
       0,
-      'get-boxel-ui-state is not present',
+      'placeholder is not present',
     );
     // Attach the second skill card
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
@@ -955,10 +969,10 @@ ${REPLACE_MARKER}
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.commandDefinitions.filter((cmd: any) =>
-        cmd.name.includes('get-boxel-ui-state'),
+        cmd.name.includes('placeholder'),
       ).length,
       1,
-      'get-boxel-ui-state is now present',
+      'placeholder is now present',
     );
   });
 });
