@@ -1020,6 +1020,9 @@ export class Realm {
       }
 
       if (!(await realmPermissionChecker.can(user, requiredPermission))) {
+        console.error(
+          `encountered insufficient permissions: token user=${token.user}, assumedUser=${assumedUser}, realm permissions: ${JSON.stringify(realmPermissions, null, 2)}`,
+        );
         throw new AuthorizationError(
           'Insufficient permissions to perform this action',
         );

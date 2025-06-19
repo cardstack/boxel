@@ -14,6 +14,7 @@ import {
   unixTime,
   logger,
   jobIdentity,
+  userIdFromUsername,
   type QueueRunner,
   type TextFileRef,
   type VirtualNetwork,
@@ -239,7 +240,10 @@ export class Worker {
       realmAuthDataSource = new RealmAuthDataSource(matrixClient, getFetch);
       this.#realmAuthCache.set(matrixClient, realmAuthDataSource);
     }
-    let realmUserId = `@${args.realmUsername}:${new URL(this.#matrixURL).hostname}`;
+    let realmUserId = userIdFromUsername(
+      args.realmUsername,
+      this.#matrixURL.href,
+    );
     _fetch = fetcher(this.#virtualNetwork.fetch, [
       async (req, next) => {
         req.headers.set('X-Boxel-Building-Index', 'true');
