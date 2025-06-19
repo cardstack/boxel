@@ -24,7 +24,8 @@ npx workspace-pull --help
 git clone https://github.com/cardstack/boxel.git
 cd boxel/packages/realm-sync-cli
 pnpm install
-pnpm build
+pnpm package
+npm install -g ...
 ```
 
 ## Authentication
@@ -32,7 +33,7 @@ pnpm build
 Both commands require Matrix credentials to authenticate with the workspace:
 
 ```bash
-export MATRIX_URL="https://matrix.cardstack.com"
+export MATRIX_URL="https://matrix.boxel.ai"
 export MATRIX_USERNAME="your-username"
 export MATRIX_PASSWORD="your-password"
 ```
@@ -50,7 +51,7 @@ workspace-push <LOCAL_DIR> <WORKSPACE_URL> [OPTIONS]
 **Arguments:**
 
 - `LOCAL_DIR` - The local directory containing files to sync
-- `WORKSPACE_URL` - The URL of the target workspace (e.g., https://demo.cardstack.com/demo/)
+- `WORKSPACE_URL` - The URL of the target workspace (e.g., https://app.boxel.ai/demo/)
 
 **Options:**
 
@@ -61,8 +62,8 @@ workspace-push <LOCAL_DIR> <WORKSPACE_URL> [OPTIONS]
 **Examples:**
 
 ```bash
-workspace-push ./my-cards https://demo.cardstack.com/demo/
-workspace-push ./my-cards https://demo.cardstack.com/demo/ --delete --dry-run
+workspace-push ./my-cards https://app.boxel.ai/demo/
+workspace-push ./my-cards https://app.boxel.ai/demo/ --delete --dry-run
 ```
 
 ### Pull (Workspace → Local)
@@ -75,7 +76,7 @@ workspace-pull <WORKSPACE_URL> <LOCAL_DIR> [OPTIONS]
 
 **Arguments:**
 
-- `WORKSPACE_URL` - The URL of the source workspace (e.g., https://demo.cardstack.com/demo/)
+- `WORKSPACE_URL` - The URL of the source workspace (e.g., https://app.boxel.ai/demo/)
 - `LOCAL_DIR` - The local directory to sync files to
 
 **Options:**
@@ -87,8 +88,8 @@ workspace-pull <WORKSPACE_URL> <LOCAL_DIR> [OPTIONS]
 **Examples:**
 
 ```bash
-workspace-pull https://demo.cardstack.com/demo/ ./my-cards
-workspace-pull https://demo.cardstack.com/demo/ ./my-cards --delete --dry-run
+workspace-pull https://app.boxel.ai/demo/ ./my-cards
+workspace-pull https://app.boxel.ai/demo/ ./my-cards --delete --dry-run
 ```
 
 ## File Filtering
@@ -99,9 +100,6 @@ The sync commands automatically filter files based on several criteria to avoid 
 
 - **Dotfiles**: All files and directories starting with a dot (`.`) are automatically ignored
   - Examples: `.DS_Store`, `.env`, `.git/`, `.vscode/`
-
-### Gitignore Support
-
 - **`.gitignore` files**: Standard gitignore patterns are respected
 - **Hierarchical**: Checks for `.gitignore` files in current directory and all parent directories
 - **Standard patterns**: Supports all gitignore pattern syntax (wildcards, negation, etc.)
@@ -132,15 +130,6 @@ test-data/
 *.draft.gts
 development-cards/
 ```
-
-### Filtering Behavior
-
-1. Files starting with `.` are always ignored
-2. Files matching any pattern in `.gitignore` are ignored
-3. Files matching any pattern in `.boxelignore` are ignored
-4. Remaining files are synced
-
-This allows fine-grained control over what gets synced to workspaces while maintaining your git repository structure.
 
 ## Development
 
