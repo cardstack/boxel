@@ -392,6 +392,63 @@ ${REPLACE_MARKER}
     assert.dom('[data-test-ai-assistant-action-bar]').doesNotExist();
   });
 
+  test('does not display the action bar when the streaming is cancelled', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+
+    // there are 3 patches in the message
+    // 1. hello.txt: Hello, world! -> Hi, world!
+    // 2. hi.txt: Hi, world! -> Greetings, world!
+    // 3. hi.txt: How are you? -> We are one!
+
+    let codeBlock = `\`\`\`
+http://test-realm/test/hello.txt
+${SEARCH_MARKER}
+Hello, world!
+${SEPARATOR_MARKER}
+Hi, world!
+${REPLACE_MARKER}
+\`\`\`
+
+I will also update the second file per your request.
+
+ \`\`\`
+http://test-realm/test/hi.txt
+${SEARCH_MARKER}
+Hi, world!
+${SEPARATOR_MARKER}
+Greetings, world!
+${REPLACE_MARKER}
+\`\`\`
+
+\`\`\`
+http://test-realm/test/hi.txt
+${SEARCH_MARKER}
+How are you?
+${SEPARATOR_MARKER}
+We are one!
+${REPLACE_MARKER}
+\`\`\``;
+
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      isCancelled: true,
+    });
+
+    assert.dom('[data-test-ai-assistant-action-bar]').doesNotExist();
+    await waitFor('[data-test-ai-assistant-message]');
+    assert
+      .dom('[data-test-ai-message-content]')
+      .containsText('{Generation Cancelled}');
+  });
+
   test('previously applied code patches show the correct applied state', async function (assert) {
     // there are 3 patches in the message
     // 1. hello.txt: Hello, world! -> Hi, world!

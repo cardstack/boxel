@@ -825,7 +825,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .doesNotExist();
   });
 
-  test('displays "Generating results..." when streaming"', async function (assert) {
+  test('displays "Generating results..." when streaming', async function (assert) {
     await visitOperatorMode({
       submode: 'interact',
       codePath: `${testRealmURL}index.json`,
@@ -855,7 +855,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor('[data-test-ai-assistant-action-bar]');
     assert
       .dom('[data-test-ai-assistant-action-bar]')
-      .hasText('Generating results...');
+      .containsText('Generating results...');
+    assert.dom('[data-test-stop-generating]').exists();
 
     simulateRemoteMessage(matrixRoomId, '@aibot:localhost', {
       body: 'Streaming finished',
@@ -870,5 +871,41 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitUntil(
       () => !document.querySelector('[data-test-ai-assistant-action-bar]'),
     );
+  });
+
+  test('displays "Generation Cancelled" in the bottom of the message', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      codePath: `${testRealmURL}index.json`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    // In interact mode, auto-attached cards must be the top most cards in the stack
+    // unless the card is manually chosen
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    simulateRemoteMessage(matrixRoomId, '@aibot:localhost', {
+      body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      isCancelled: true,
+    });
+
+    await waitFor('[data-test-ai-assistant-message]');
+    assert
+      .dom('[data-test-ai-message-content]')
+      .hasText(
+        'Lorem ipsum dolor sit amet, consectetur adipiscing elit. {Generation Cancelled}',
+      );
   });
 });

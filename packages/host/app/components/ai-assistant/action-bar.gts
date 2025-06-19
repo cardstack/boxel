@@ -36,6 +36,7 @@ export default class AiAssistantActionBar extends Component<Signature> {
             @disabled={{@stopping}}
             class='stop-btn'
             {{on 'click' this.stop}}
+            data-test-stop-generating
           >Stop</BoxelButton>
         </div>
       {{else if @acceptingAll}}

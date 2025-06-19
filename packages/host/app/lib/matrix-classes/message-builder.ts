@@ -157,7 +157,7 @@ export default class MessageBuilder {
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
       message.clientGeneratedId = this.clientGeneratedId;
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
-      message.setIsCancelled(!!event.content.isStreamingFinished);
+      message.setIsCancelled(!!event.content.isCancelled);
       message.attachedCardIds = this.attachedCardIds;
       if (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY]) {
         message.setCommands(await this.buildMessageCommands(message));

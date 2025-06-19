@@ -127,11 +127,7 @@ export class Message implements RoomMessageInterface {
   }
 
   get body(): string {
-    let body = [this._body, this.continuedBody].filter(Boolean).join('');
-    if (this._isCancelled) {
-      body = body + '\n\n{Generation Cancelled}';
-    }
-    return body;
+    return [this._body, this.continuedBody].filter(Boolean).join('');
   }
 
   setBody(body: string) {
@@ -168,6 +164,10 @@ export class Message implements RoomMessageInterface {
     if (this._isCancelled !== isCancelled) {
       this._isCancelled = isCancelled;
     }
+  }
+
+  get isCancelled(): boolean {
+    return this._isCancelled ?? false;
   }
 
   get isStreamingFinished(): boolean | undefined {
@@ -221,6 +221,14 @@ export class Message implements RoomMessageInterface {
   */
   @cached
   get htmlParts(): HtmlTagGroup[] {
-    return parseHtmlContent(this.bodyHTML, this.roomId, this.eventId);
+    let htmlParts = parseHtmlContent(this.bodyHTML, this.roomId, this.eventId);
+    if (this._isCancelled) {
+      htmlParts.push({
+        type: 'non_pre_tag',
+        content: '<p style="font-weight: bold;">{Generation Cancelled}</p>',
+        codeData: null,
+      });
+    }
+    return htmlParts;
   }
 }

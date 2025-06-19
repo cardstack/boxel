@@ -971,8 +971,9 @@ export default class Room extends Component<Signature> {
   private get displayActionBar() {
     let lastMessage = this.messages[this.messages.length - 1];
     if (
-      this.lastCanceledActionMessageId &&
-      lastMessage?.eventId === this.lastCanceledActionMessageId
+      (this.lastCanceledActionMessageId &&
+        lastMessage?.eventId === this.lastCanceledActionMessageId) ||
+      lastMessage?.isCancelled
     ) {
       return false;
     }

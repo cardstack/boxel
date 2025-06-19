@@ -233,6 +233,12 @@ Common issues are:
         ) {
           activeGeneration.runner.abort();
           await activeGeneration.responder.finalize(true);
+          if (activeGeneration.lastGeneratedChunkId) {
+            await assistant.trackAiUsageCost(
+              senderMatrixUserId,
+              activeGeneration.lastGeneratedChunkId,
+            );
+          }
           activeGenerations.delete(room.roomId);
         }
 
