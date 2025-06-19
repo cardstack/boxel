@@ -71,6 +71,11 @@ export default class BoxelDropdownUsage extends Component {
           @description='CSS Class to apply to the dropdown content div'
           @hideControls={{true}}
         />
+        <Args.Bool
+          @name='matchTriggerWidth'
+          @description='Whether to match the width of the trigger'
+          @hideControls={{true}}
+        />
         <Args.Action
           @name='registerAPI'
           @description='Action called when the publicAPI changes, passing the publicAPI object.'

@@ -224,6 +224,7 @@ export default class Menu extends Component<Signature> {
         }
 
         .menu-item {
+          width: 100%;
           display: flex;
           align-items: center;
           gap: var(--boxel-menu-item-gap);

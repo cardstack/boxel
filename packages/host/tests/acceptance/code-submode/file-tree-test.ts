@@ -349,7 +349,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       .dom('[data-test-realm-name]')
       .hasText(`In ${realmInfo.name}`)
       .hasAttribute('title', `In ${realmInfo.name}`);
-    assert.dom('[data-test-realm-writable]').exists();
+    assert.dom('[data-test-realm-read-only]').doesNotExist();
 
     await waitFor('[data-test-file="pet-person.gts"]');
 
@@ -386,8 +386,82 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
       await waitForCodeEditor();
       await waitFor('[data-test-realm-name]');
-      assert.dom('[data-test-realm-not-writable]').exists();
+      assert.dom('[data-test-realm-read-only]').exists();
     });
+  });
+
+  test('can switch realms', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-realm-name="Test Workspace B"]');
+    assert.dom('[data-test-realm-name]').hasText('In Test Workspace B');
+
+    await waitFor('[data-test-file-tree-realm-dropdown-button]');
+    await click('[data-test-file-tree-realm-dropdown-button]');
+
+    assert.dom('[data-test-boxel-menu-item-text="Base Workspace"]').exists();
+    await click('[data-test-boxel-menu-item-text="Base Workspace"]');
+
+    await waitFor('[data-test-realm-name="Base Workspace"]');
+    assert.dom('[data-test-realm-name]').hasText('In Base Workspace');
+    assert.dom('[data-test-realm-read-only]').exists();
+  });
+
+  test('switch realm with recent file exists should open the recent file', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-realm-name]');
+    assert.dom('[data-test-realm-name]').hasText('In Test Workspace B');
+
+    // go to a file with different realm
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `http://localhost:4202/test/mango.png`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+
+    await waitFor('[data-test-file-tree-realm-dropdown-button]');
+    await click('[data-test-file-tree-realm-dropdown-button]');
+
+    assert.dom('[data-test-boxel-menu-item-text="Test Workspace B"]').exists();
+    await click('[data-test-boxel-menu-item-text="Test Workspace B"]');
+
+    await waitFor('[data-test-realm-name="Test Workspace B"]');
+    assert.dom('[data-test-realm-name]').hasText('In Test Workspace B');
+    assert.dom('[data-test-realm-read-only]').doesNotExist();
+
+    await waitFor('[data-test-file="Person/1.json"]');
+    assert.dom('[data-test-file="Person/1.json"]').hasClass('selected');
   });
 
   test('navigating to a file in a different realm causes it to become active in the file tree', async function (assert) {
