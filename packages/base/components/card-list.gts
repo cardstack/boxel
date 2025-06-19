@@ -1,15 +1,20 @@
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import { action } from '@ember/object';
+import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
 
 import {
   CardContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq, and } from '@cardstack/boxel-ui/helpers';
 
 import { removeFileExtension, type Query } from '@cardstack/runtime-common';
 
-import type { CardContext, BoxComponent, Format } from '../card-api';
+import type { CardContext, BoxComponent, Format, BaseDef } from '../card-api';
+import type { PrerenderedCardLike } from '@cardstack/runtime-common';
 
 interface Signature {
   Args: {
@@ -20,66 +25,187 @@ interface Signature {
     format: Format;
     cards?: BoxComponent & BoxComponent[];
     viewOption?: string;
+    enableHydration?: boolean;
+  };
+  Blocks: {
+    loading: [];
+    emptyState: [];
   };
   Element: HTMLElement;
 }
 
 export default class CardList extends Component<Signature> {
+  @tracked hydratedCardId: string | undefined;
+  cardResource = this.args.context?.getCard(this, () => this.hydratedCardId);
+
+  get enableHydration() {
+    return this.args.enableHydration ?? false;
+  }
+
+  @action
+  async hydrateCard(card: PrerenderedCardLike | undefined) {
+    if (!this.enableHydration) return;
+
+    if (!card) {
+      this.hydratedCardId = undefined;
+      return;
+    }
+    const cardId = removeFileExtension(card.url);
+    this.hydratedCardId = cardId;
+  }
+
+  @action
+  viewCard(card: PrerenderedCardLike) {
+    if (!this.args.context?.actions?.viewCard) {
+      throw new Error('viewCard action is not available');
+    }
+    this.args.context?.actions?.viewCard?.(new URL(card.url), 'isolated');
+  }
+
+  @action
+  isHydrated(cardUrl: string): boolean {
+    return removeFileExtension(cardUrl) === this.hydratedCardId;
+  }
+
+  @action
+  getComponent(card: BaseDef) {
+    return card.constructor.getComponent(card);
+  }
+
   <template>
-    <ul
-      class={{cn
-        'boxel-card-list'
-        grid-view=(eq @viewOption 'grid')
-        strip-view=(eq @viewOption 'strip')
-        card-view=(eq @viewOption 'card')
-      }}
-      ...attributes
-    >
-      {{#if @query}}
-        <@context.prerenderedCardSearchComponent
-          @query={{@query}}
-          @format={{@format}}
-          @realms={{@realms}}
-          @isLive={{@isLive}}
-        >
-          <:loading>
+    {{#if @query}}
+      <@context.prerenderedCardSearchComponent
+        @query={{@query}}
+        @format={{@format}}
+        @realms={{@realms}}
+        @isLive={{@isLive}}
+      >
+        <:loading>
+          {{#if (has-block 'loading')}}
+            {{yield to='loading'}}
+          {{else}}
             <LoadingIndicator />
-          </:loading>
-          <:response as |cards|>
-            {{#each cards key='url' as |card|}}
-              <li
-                class={{cn 'boxel-card-list-item' instance-error=card.isError}}
-                {{@context.cardComponentModifier
-                  cardId=card.url
-                  format='data'
-                  fieldType=undefined
-                  fieldName=undefined
-                }}
-                data-test-instance-error={{card.isError}}
-                data-test-cards-grid-item={{removeFileExtension card.url}}
-                {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
-                data-cards-grid-item={{removeFileExtension card.url}}
-              >
-                <CardContainer
-                  class='card-item {{@format}}-card-item'
-                  @displayBoundaries={{true}}
-                >
-                  <card.component />
-                </CardContainer>
-              </li>
+          {{/if}}
+        </:loading>
+        <:response as |cards|>
+          {{#if (eq cards.length 0)}}
+            {{#if (has-block 'emptyState')}}
+              {{yield to='emptyState'}}
             {{else}}
               <p>No results were found</p>
-            {{/each}}
-          </:response>
-        </@context.prerenderedCardSearchComponent>
-      {{else if @cards}}
+            {{/if}}
+          {{else}}
+            <ul
+              class={{cn
+                'boxel-card-list'
+                grid-view=(eq @viewOption 'grid')
+                strip-view=(eq @viewOption 'strip')
+                card-view=(eq @viewOption 'card')
+              }}
+              ...attributes
+            >
+              {{#each cards key='url' as |card|}}
+                {{! 
+                  Hydrated Card Rendering (Interactive)
+                  When enableHydration is true, cards can be dynamically loaded and become interactive
+                }}
+                {{#if this.enableHydration}}
+                  <li
+                    class={{cn
+                      'boxel-card-list-item'
+                      instance-error=card.isError
+                    }}
+                    data-test-instance-error={{card.isError}}
+                    data-test-cards-grid-item={{removeFileExtension card.url}}
+                    data-cards-grid-item={{removeFileExtension card.url}}
+                  >
+                    {{! 
+                      Check if this specific card is hydrated (loaded and ready for interaction)
+                      and if the card resource has finished loading
+                    }}
+                    {{#if
+                      (and
+                        (this.isHydrated card.url) this.cardResource.isLoaded
+                      )
+                    }}
+                      {{#if this.cardResource.card}}
+                        {{#let
+                          (this.getComponent this.cardResource.card)
+                          as |Component|
+                        }}
+                          <CardContainer
+                            class='card-item {{@format}}-card-item'
+                            @displayBoundaries={{true}}
+                            {{on 'click' (fn this.viewCard card)}}
+                          >
+                            <Component />
+                          </CardContainer>
+                        {{/let}}
+                      {{/if}}
+                    {{else}}
+                      {{! 
+                        Render the static card preview with hover-to-hydrate behavior
+                      }}
+                      <CardContainer
+                        class='card-item {{@format}}-card-item'
+                        @displayBoundaries={{true}}
+                        {{on 'mouseenter' (fn this.hydrateCard card)}}
+                        {{on 'mouseleave' (fn this.hydrateCard undefined)}}
+                      >
+                        <card.component />
+                      </CardContainer>
+                    {{/if}}
+                  </li>
+                {{else}}
+                  <li
+                    class={{cn
+                      'boxel-card-list-item'
+                      instance-error=card.isError
+                    }}
+                    {{@context.cardComponentModifier
+                      cardId=card.url
+                      format='data'
+                      fieldType=undefined
+                      fieldName=undefined
+                    }}
+                    data-test-instance-error={{card.isError}}
+                    data-test-cards-grid-item={{removeFileExtension card.url}}
+                    {{! 
+                      In order to support scrolling cards into view we use a selector 
+                      that is not pruned out in production builds 
+                    }}
+                    data-cards-grid-item={{removeFileExtension card.url}}
+                  >
+                    <CardContainer
+                      class='card-item {{@format}}-card-item'
+                      @displayBoundaries={{true}}
+                    >
+                      <card.component />
+                    </CardContainer>
+                  </li>
+                {{/if}}
+              {{/each}}
+            </ul>
+          {{/if}}
+        </:response>
+      </@context.prerenderedCardSearchComponent>
+    {{else if @cards}}
+      <ul
+        class={{cn
+          'boxel-card-list'
+          grid-view=(eq @viewOption 'grid')
+          strip-view=(eq @viewOption 'strip')
+          card-view=(eq @viewOption 'card')
+        }}
+        ...attributes
+      >
         {{#each @cards key='id' as |Card|}}
           <li class='boxel-card-list-item'>
             <Card @format={{@format}} class='card-item {{@format}}-card-item' />
           </li>
         {{/each}}
-      {{/if}}
-    </ul>
+      </ul>
+    {{/if}}
 
     <style scoped>
       .boxel-card-list {
@@ -116,11 +242,15 @@ export default class CardList extends Component<Signature> {
         width: var(--item-width);
         height: var(--item-height);
       }
+
       .boxel-card-list-item > :deep(.fitted-card-item) {
         container-name: fitted-card;
         container-type: size;
         height: 100%;
         width: 100%;
+      }
+      .boxel-card-list-item > :deep(.fitted-card-item .fitted-format) {
+        height: 100%;
       }
       .boxel-card-list-item > :deep(.atom-card-item) {
         width: fit-content;
@@ -131,6 +261,16 @@ export default class CardList extends Component<Signature> {
         height: auto;
         max-width: var(--embedded-card-max-width);
         min-height: var(--embedded-card-min-height);
+      }
+      .boxel-card-list-item > :deep(.card-item) {
+        container-name: fitted-card;
+        container-type: size;
+        transition: ease 0.2s;
+      }
+      .boxel-card-list-item > :deep(.card-item:hover) {
+        cursor: pointer;
+        border: 1px solid var(--boxel-purple);
+        transform: translateY(-1px);
       }
       .instance-error {
         position: relative;

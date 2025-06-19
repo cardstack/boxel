@@ -28,7 +28,7 @@ import CardsDisplaySection, {
   CardsIntancesGrid,
 } from './components/cards-display-section';
 
-import { CardsGrid } from './components/grid';
+import CardList from 'https://cardstack.com/base/components/card-list';
 
 import CatalogLayout from './layouts/catalog-layout';
 
@@ -37,6 +37,7 @@ import BuildingBank from '@cardstack/boxel-icons/building-bank';
 import BuildingIcon from '@cardstack/boxel-icons/building';
 import HealthRecognition from '@cardstack/boxel-icons/health-recognition';
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
+import SearchOff from '@cardstack/boxel-icons/search-off';
 import ShipWheelIcon from '@cardstack/boxel-icons/ship-wheel';
 import UsersIcon from '@cardstack/boxel-icons/users';
 import WorldIcon from '@cardstack/boxel-icons/world';
@@ -240,7 +241,7 @@ class CatalogListView extends GlimmerComponent<CatalogListViewArgs> {
   }
 
   <template>
-    <CardsDisplaySection>
+    <CardsDisplaySection class='catalog-list'>
       <:intro>
         <header class='catalog-list-header'>
           <ViewSelector
@@ -252,12 +253,26 @@ class CatalogListView extends GlimmerComponent<CatalogListViewArgs> {
         </header>
       </:intro>
       <:content>
-        <CardsGrid
+        <CardList
           @query={{@query}}
           @realms={{@realms}}
-          @selectedView={{this.selectedView}}
+          @viewOption={{this.selectedView}}
           @context={{@context}}
-        />
+          @format='fitted'
+          @isLive={{true}}
+          @enableHydration={{true}}
+        >
+          <:emptyState>
+            <div class='no-results'>
+              <SearchOff class='no-results-icon' />
+              <h3 class='no-results-title'>No results found</h3>
+              <p class='no-results-description'>
+                Try adjusting your search terms or filters to find what you're
+                looking for.
+              </p>
+            </div>
+          </:emptyState>
+        </CardList>
       </:content>
     </CardsDisplaySection>
 
@@ -276,6 +291,43 @@ class CatalogListView extends GlimmerComponent<CatalogListViewArgs> {
       }
       .catalog-list-view-selector {
         margin-left: auto;
+      }
+      .catalog-list {
+        --boxel-card-list-padding: 0;
+      }
+      .catalog-list :deep(.grid-view) {
+        --item-width: 15.625rem;
+        --item-height: 18.75rem;
+      }
+      .no-results {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 30cqh;
+        background: var(--boxel-100);
+        border-radius: var(--boxel-border-radius);
+        border: 1px solid var(--boxel-border-color);
+        padding: var(--boxel-sp-xl);
+        text-align: center;
+      }
+      .no-results-icon {
+        width: 64px;
+        height: 64px;
+        color: var(--layout-theme-color);
+        margin-bottom: var(--boxel-sp-lg);
+      }
+      .no-results-title {
+        font: 600 var(--boxel-font);
+        color: var(--boxel-dark);
+        margin: 0 0 var(--boxel-sp-sm) 0;
+      }
+      .no-results-description {
+        font: 400 var(--boxel-font-sm);
+        color: var(--boxel-500);
+        margin: 0;
+        max-width: 400px;
+        line-height: 1.5;
       }
     </style>
   </template>
