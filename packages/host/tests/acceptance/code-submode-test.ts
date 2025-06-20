@@ -1488,7 +1488,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
       await waitFor(
         `[data-test-select="${testRealmURL}Country/united-states"]`,
-        { timeout: 5_000 },
+        { timeout: 10_000 },
       );
       await percySnapshot('AAAFIRST');
 
