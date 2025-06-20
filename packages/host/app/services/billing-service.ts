@@ -5,12 +5,12 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import { trackedFunction } from 'reactiveweb/function';
 
+import { formatNumber } from '@cardstack/boxel-ui/helpers';
+
 import {
   SupportedMimeType,
   encodeWebSafeBase64,
 } from '@cardstack/runtime-common';
-
-import { formatNumber } from '../helpers/format-number';
 
 import NetworkService from './network';
 import RealmServerService from './realm-server';

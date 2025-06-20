@@ -84,7 +84,7 @@ export class DirectoryResource extends Resource<Args> {
             let segments = updatedFile.split('/');
             segments.pop();
             let updatedDir = segments.join('/').replace(/([^/])$/, '$1/'); // directories always end in '/'
-            if (updatedDir === this.directoryURL.href) {
+            if (updatedDir.startsWith(this.directoryURL.href)) {
               this.readdir.perform();
             }
           },
