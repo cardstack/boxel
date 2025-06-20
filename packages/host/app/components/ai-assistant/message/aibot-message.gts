@@ -298,7 +298,6 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
     <CodeBlock
       @monacoSDK={{@monacoSDK}}
       @codeData={{@codeData}}
-      class='code-block'
       data-test-code-block-index={{@index}}
       as |codeBlock|
     >
@@ -370,19 +369,5 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
         </codeBlock.actions>
       {{/if}}
     </CodeBlock>
-
-    <style scoped>
-      .error-container {
-        margin-bottom: var(--boxel-sp-xs);
-      }
-
-      .code-block {
-        margin-top: 0;
-      }
-
-      .code-block + .code-block {
-        margin-top: 1rem;
-      }
-    </style>
   </template>
 }

@@ -987,10 +987,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await waitFor('[data-test-room-name="test room 1"]');
     assert
       .dom('[data-test-ai-message-content] [data-test-editor]')
-      .doesNotExist('View Code panel should not yet be open');
-    await click('[data-test-view-code-button]');
-    assert
-      .dom('[data-test-ai-message-content] [data-test-editor]')
       .exists('View Code panel should be open');
 
     await fillIn(
