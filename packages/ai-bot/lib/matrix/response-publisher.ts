@@ -135,6 +135,7 @@ export default class MatrixResponsePublisher {
 
       let extraData: any = {
         isStreamingFinished: responseStateSnapshot.isStreamingFinished,
+        isCanceled: responseStateSnapshot.isCanceled,
         data: {
           context: {
             agentId: this.agentId,

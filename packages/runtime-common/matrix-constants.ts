@@ -1,3 +1,4 @@
+export const APP_BOXEL_STOP_GENERATING_EVENT_TYPE = 'app.boxel.stopGenerating';
 export const APP_BOXEL_MESSAGE_MSGTYPE = 'app.boxel.message';
 export const APP_BOXEL_CARD_FORMAT = 'app.boxel.card';
 export const APP_BOXEL_COMMAND_REQUESTS_KEY = 'app.boxel.commandRequests';
