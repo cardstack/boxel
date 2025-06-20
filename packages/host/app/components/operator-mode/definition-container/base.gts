@@ -47,7 +47,7 @@ const BaseContainerHeader: TemplateOnlyComponent<BaseContainerHeaderSignature> =
         --boxel-header-text-transform: uppercase;
         --boxel-header-letter-spacing: var(--boxel-lsp-xl);
         --boxel-header-detail-max-width: none;
-        --boxel-header-background-color: var(--boxel-100);
+        --boxel-header-background-color: var(--boxel-300);
         --boxel-header-text-color: var(--boxel-dark);
         --boxel-header-detail-max-width: 100%;
         height: var(
@@ -79,6 +79,7 @@ export const BaseContainer: TemplateOnlyComponent<BaseContainerSignature> =
         overflow-wrap: break-word;
       }
       .base-container.active {
+        border: 1px solid var(--boxel-400);
         box-shadow: var(--code-mode-active-box-shadow);
       }
     </style>
@@ -100,9 +101,7 @@ export interface BaseArgs {
 interface BaseSignature {
   Element: HTMLElement;
   Args: BaseArgs;
-  Blocks: {
-    activeContent: [];
-  };
+  Blocks: {};
 }
 
 class BaseDefinitionContainer extends Component<BaseSignature> {
@@ -137,9 +136,6 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
           <div data-test-definition-name class='definition-name'>{{@name}}</div>
 
         </div>
-        {{#if @isActive}}
-          {{yield to='activeContent'}}
-        {{/if}}
       </div>
     </BaseContainer>
 

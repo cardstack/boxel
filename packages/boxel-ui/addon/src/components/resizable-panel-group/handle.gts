@@ -60,7 +60,10 @@ export default class Handle extends Component<Signature> {
 
         display: flex;
 
-        background: transparent;
+        background: var(
+          --boxel-panel-resize-separator-background-color,
+          transparent
+        );
         border: none;
         padding: 2px;
       }
