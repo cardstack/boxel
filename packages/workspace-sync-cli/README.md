@@ -136,20 +136,8 @@ development-cards/
 ### Building
 
 ```bash
-# Build bundled executables
+# Clean and build bundled executables
 pnpm build
-
-# Build with watch mode for development
-pnpm build:watch
-
-# Clean build artifacts
-pnpm clean
-
-# Clean rebuild
-pnpm rebuild
-
-# Analyze bundle size and dependencies
-pnpm build:analyze
 ```
 
 ### Development Scripts
@@ -197,7 +185,6 @@ workspace-push --help
 ## Features
 
 - **Bundled executables** - Single-file binaries with all dependencies included
-- **Zero dependencies** - No need to install additional packages
 - **Recursive directory syncing** - Handles nested folder structures
 - **Smart file filtering** - Respects `.gitignore` and `.boxelignore` patterns, skips dotfiles
 - **Safe authentication** - Tests workspace access before destructive operations

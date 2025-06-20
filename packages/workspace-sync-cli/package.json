@@ -40,12 +40,8 @@
     "ignore": "^5.3.0"
   },
   "scripts": {
-    "build": "tsx scripts/build.ts",
-    "build:watch": "tsx scripts/build.ts --watch",
+    "build": "pnpm clean && tsx scripts/build.ts",
     "clean": "rm -rf dist/*",
-    "rebuild": "pnpm clean && pnpm build",
-    "prepublishOnly": "pnpm rebuild",
-    "prepack": "pnpm build",
     "push": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/push.ts",
     "pull": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/pull.ts",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
