@@ -150,7 +150,7 @@ export class Worker {
   #virtualNetwork: VirtualNetwork;
   #matrixURL: URL;
   #matrixClientCache: Map<string, MatrixClient> = new Map();
-  #realmAuthCache: WeakMap<MatrixClient, RealmAuthDataSource> = new WeakMap();
+  #realmAuthCache: Map<string, RealmAuthDataSource> = new Map();
   #secretSeed: string;
   #fromScratch:
     | ((realmURL: URL, boom?: true) => Promise<IndexResults>)
@@ -235,10 +235,10 @@ export class Worker {
     function getFetch() {
       return _fetch!;
     }
-    let realmAuthDataSource = this.#realmAuthCache.get(matrixClient);
+    let realmAuthDataSource = this.#realmAuthCache.get(args.realmURL);
     if (!realmAuthDataSource) {
       realmAuthDataSource = new RealmAuthDataSource(matrixClient, getFetch);
-      this.#realmAuthCache.set(matrixClient, realmAuthDataSource);
+      this.#realmAuthCache.set(args.realmURL, realmAuthDataSource);
     }
     let realmUserId = userIdFromUsername(
       args.realmUsername,
