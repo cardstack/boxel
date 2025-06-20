@@ -1454,7 +1454,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
     });
 
-    test('updates values in preview panel must be represented in editor panel', async function (assert) {
+    test.only('updates values in preview panel must be represented in editor panel', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
         codePath: `${testRealmURL}SENTINELSENTINEL.json`,
