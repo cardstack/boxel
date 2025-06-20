@@ -42,6 +42,9 @@ export class FilterCategoryGroup extends GlimmerComponent<FilterCategoryGroupArg
     </FilterGroupWrapper>
 
     <style scoped>
+      .filter-category-list :deep(.filter-list) {
+        padding-inline-start: var(--boxel-sp-xs);
+      }
       .filter-category-list :deep(.list-item-buttons) {
         background-color: var(--layout-container-background-color);
       }

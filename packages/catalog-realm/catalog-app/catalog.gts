@@ -390,15 +390,23 @@ class Isolated extends Component<typeof Catalog> {
       'Travel and Lifestyle': ShipWheelIcon,
     };
 
+    // Create nested structure with "All" as parent
+    const nestedCategories = instances.map((instance) => {
+      return {
+        id: instance.id,
+        displayName: instance.name,
+        icon: iconMap[instance.name] || LayoutGridPlusIcon,
+      };
+    });
+
     return [
-      { id: 'all', displayName: 'All', icon: iconMap['All'] },
-      ...instances.map((instance) => {
-        return {
-          id: instance.id,
-          displayName: instance.name,
-          icon: iconMap[instance.name] || LayoutGridPlusIcon,
-        };
-      }),
+      {
+        id: 'all',
+        displayName: 'All',
+        icon: iconMap['All'],
+        filters: nestedCategories,
+        isExpanded: true,
+      },
     ];
   }
 
