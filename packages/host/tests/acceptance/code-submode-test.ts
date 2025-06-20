@@ -1457,6 +1457,10 @@ module('Acceptance | code submode tests', function (_hooks) {
     test('updates values in preview panel must be represented in editor panel', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
+        codePath: `${testRealmURL}SENTINELSENTINEL.json`,
+      });
+      await visitOperatorMode({
+        submode: 'code',
         codePath: `${testRealmURL}Person/fadhlan.json`,
       });
       await waitForCodeEditor();
@@ -1486,12 +1490,16 @@ module('Acceptance | code submode tests', function (_hooks) {
         `[data-test-select="${testRealmURL}Country/united-states"]`,
         { timeout: 5_000 },
       );
+      await percySnapshot('AAAFIRST');
+
       await click(`[data-test-select="${testRealmURL}Country/united-states"]`);
       await click(`[data-test-card-catalog-go-button]`);
 
       await waitFor('[data-test-saved]');
       await waitFor('[data-test-save-idle]');
       await settled();
+
+      await percySnapshot('AAASECOND');
 
       let content = getMonacoContent();
       await waitUntil(() => content.includes('Ridhwanallah'));
@@ -1510,6 +1518,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         content.includes(`${testRealmURL}Country/united-states`),
         'content includes Country/united-states',
       );
+      await percySnapshot('AAATHIRD');
     });
 
     test('monaco editor live updates when index changes', async function (assert) {
