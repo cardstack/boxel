@@ -7,6 +7,9 @@ import {
   type CopyCardsWithCodeRef,
   type Command,
   listingNameWithUuid,
+  planInstall,
+  guessSourceRealm,
+  toKebabCase,
   RealmPaths,
 } from '@cardstack/runtime-common';
 
@@ -22,11 +25,6 @@ import CopySourceCommand from './copy-source';
 
 import type RealmServerService from '../services/realm-server';
 import type { Listing } from '@cardstack/catalog/listing/listing';
-
-interface CopyMeta {
-  sourceCodeRef: ResolvedCodeRef;
-  targetCodeRef: ResolvedCodeRef;
-}
 
 interface InstallListingInput {
   realmUrl: string;
@@ -50,47 +48,35 @@ export async function installListing({
   commandContext,
   cardAPI,
 }: InstallListingInput): Promise<InstallListingResult> {
-  const copyMeta: CopyMeta[] = [];
-
+  const sourceDirName = toKebabCase(listing.name);
   const localDir = listingNameWithUuid(listing.name);
+
+  if (listing.specs.length == 0) {
+    throw new Error('No specs exist on listing');
+  }
+
+  let sourceRealm = guessSourceRealm(listing.specs);
+  if (!sourceRealm) {
+    throw new Error('Cannot derive realm from listing');
+  }
+  // this checks if the listing is wrapped in a directory
+  let sourceDir = `${sourceRealm}${sourceDirName}/`;
 
   // first spec as the selected code ref with new url
   // if there are examples, take the first example's code ref
-  let selectedCodeRef;
   let shouldPersistPlaygroundSelection = false;
   let firstExampleCardId;
 
-  // Copy the gts file based on the attached spec's moduleHref
-  for (const spec of listing.specs ?? []) {
-    const absoluteModulePath = spec.moduleHref;
-    const relativeModulePath = spec.ref.module;
-    const normalizedPath = relativeModulePath.split('/').slice(2).join('/');
-    const newPath = localDir.concat('/').concat(normalizedPath);
-    const fileTargetUrl = new URL(newPath, realmUrl).href;
-    const targetFilePath = fileTargetUrl.concat('.gts');
-
+  let copyMetas = planInstall(realmUrl, listing.specs, {
+    targetDirName: localDir,
+    sourceDir: sourceDir,
+  });
+  let selectedCodeRef = copyMetas[0].targetCodeRef;
+  for (const { sourceCodeRef, targetCodeRef } of copyMetas) {
     await new CopySourceCommand(commandContext).execute({
-      fromRealmUrl: absoluteModulePath,
-      toRealmUrl: targetFilePath,
+      fromRealmUrl: sourceCodeRef.module,
+      toRealmUrl: targetCodeRef.module,
     });
-
-    copyMeta.push({
-      sourceCodeRef: {
-        module: absoluteModulePath,
-        name: spec.ref.name,
-      },
-      targetCodeRef: {
-        module: fileTargetUrl,
-        name: spec.ref.name,
-      },
-    });
-
-    if (!selectedCodeRef) {
-      selectedCodeRef = {
-        module: fileTargetUrl,
-        name: spec.ref.name,
-      };
-    }
   }
 
   if (listing.examples) {
@@ -106,7 +92,7 @@ export async function installListing({
       if (!isResolvedCodeRef(exampleCodeRef)) {
         throw new Error('exampleCodeRef is NOT resolved');
       }
-      let maybeCopyMeta = copyMeta.find(
+      let maybeCopyMeta = copyMetas.find(
         (meta) =>
           meta.sourceCodeRef.module ===
             (exampleCodeRef as ResolvedCodeRef).module &&

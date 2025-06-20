@@ -74,7 +74,7 @@ export default class RemixCommand extends HostBaseCommand<
       cardAPI,
     });
     if (selectedCodeRef && isResolvedCodeRef(selectedCodeRef)) {
-      const codePath = selectedCodeRef.module.concat('.gts');
+      const codePath = selectedCodeRef.module;
       if (shouldPersistPlaygroundSelection && firstExampleCardId) {
         const moduleId = [selectedCodeRef.module, selectedCodeRef.name].join(
           '/',
