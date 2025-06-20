@@ -1,16 +1,15 @@
-import { array } from '@ember/helper';
-import { fn } from '@ember/helper';
+import { array, fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { service } from '@ember/service';
-import type { SafeString } from '@ember/template';
-import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { Alert } from '@cardstack/boxel-ui/components';
 import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
 
-import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
+import { markdownToHtml } from '@cardstack/runtime-common';
 
+import { sanitizedHtml } from '@cardstack/host/helpers/sanitized-html';
 import {
   type HtmlTagGroup,
   wrapLastTextNodeInStreamingTextSpan,
@@ -31,25 +30,27 @@ import CommandService from '@cardstack/host/services/command-service';
 import LoaderService from '@cardstack/host/services/loader-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
-import CodeBlock from './code-block';
+import CodeBlock from '../code-block';
 
-interface FormattedAiBotMessageSignature {
+interface Signature {
   Element: HTMLDivElement;
   Args: {
+    messageHtml?: string;
     htmlParts?: HtmlTagGroup[];
     roomId: string;
     eventId: string;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
     isLastAssistantMessage: boolean;
+    reasoning?: {
+      content: string | null;
+      isExpanded: boolean;
+      updateExpanded: (ev: MouseEvent | KeyboardEvent) => void;
+    };
   };
 }
 
-function sanitize(html: string): SafeString {
-  return htmlSafe(sanitizeHtml(html));
-}
-
-export default class FormattedAiBotMessage extends Component<FormattedAiBotMessageSignature> {
+export default class AiBotMessage extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare commandService: CommandService;
@@ -65,7 +66,24 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
   };
 
   <template>
-    <div class='message'>
+    <div class='ai-bot-message'>
+      {{#if @reasoning}}
+        <div class='reasoning-content'>
+          {{#if (eq 'Thinking...' @reasoning.content)}}
+            Thinking...
+          {{else}}
+            <details open={{@reasoning.isExpanded}} data-test-reasoning>
+              {{! template-lint-disable no-invalid-interactive }}
+              {{! template-lint-disable no-nested-interactive }}
+              <summary {{on 'click' @reasoning.updateExpanded}}>
+                Thinking...
+              </summary>
+              {{sanitizedHtml (markdownToHtml @reasoning.content)}}
+            </details>
+          {{/if}}
+        </div>
+      {{/if}}
+
       {{! We are splitting the html into parts so that we can target the
       code blocks (<pre> tags) and apply Monaco editor to them. Here is an
       example of the html argument:
@@ -83,6 +101,7 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
       }}
       {{#each @htmlParts key='@index' as |htmlPart index|}}
         {{#if (isHtmlPreTagGroup htmlPart)}}
+
           <HtmlGroupCodeBlock
             @codeData={{htmlPart.codeData}}
             @codePatchResult={{this.commandService.getCodePatchResult
@@ -100,17 +119,30 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
           />
         {{else}}
           {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
-            {{wrapLastTextNodeInStreamingTextSpan (sanitize htmlPart.content)}}
+            {{wrapLastTextNodeInStreamingTextSpan
+              (sanitizedHtml htmlPart.content)
+            }}
           {{else}}
-            {{sanitize htmlPart.content}}
+            {{sanitizedHtml htmlPart.content}}
           {{/if}}
         {{/if}}
       {{/each}}
     </div>
 
     <style scoped>
-      .message > :deep(*:first-child) {
-        margin-top: 0;
+      .ai-bot-message {
+        position: relative;
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 400;
+        line-height: 1.5em;
+        letter-spacing: var(--boxel-lsp-xs);
+        text-wrap: pretty;
+      }
+      .ai-bot-message > :deep(*) {
+        margin-block: 0;
+      }
+      .ai-bot-message > :deep(* + *) {
+        margin-block-start: var(--boxel-sp-sm);
       }
 
       .ai-assistant-code-block-actions {
@@ -140,6 +172,28 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
       /* this improves inserted-line legibility by reducing green background overlay opacity */
       :global(.code-block .monaco-editor .line-insert) {
         opacity: 0.4;
+      }
+
+      .reasoning-content {
+        color: var(--boxel-300);
+        font-style: italic;
+      }
+
+      .reasoning-content summary {
+        cursor: pointer;
+      }
+
+      :deep(span.streaming-text:after) {
+        content: '';
+        width: 8px;
+        height: 8px;
+        background: currentColor;
+        border-radius: 50%;
+        display: inline-block;
+        font-family: system-ui, sans-serif;
+        line-height: normal;
+        vertical-align: baseline;
+        margin-left: 5px;
       }
     </style>
   </template>
