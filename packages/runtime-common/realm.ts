@@ -1002,6 +1002,9 @@ export class Realm {
         user = assumedUser;
         didAssumeUser = true;
       }
+      this.#log.error(
+        `check permissions: token user=${token.user}, assumedUser=${assumedUser}, effective user=${user} realm permissions: ${JSON.stringify(realmPermissions, null, 2)}`,
+      );
 
       // if the client is the realm matrix user then we permit all actions
       if (user === this.#matrixClient.getUserId()) {
@@ -1020,7 +1023,7 @@ export class Realm {
       }
 
       if (!(await realmPermissionChecker.can(user, requiredPermission))) {
-        console.error(
+        this.#log.error(
           `encountered insufficient permissions: token user=${token.user}, assumedUser=${assumedUser}, effective user=${user} realm permissions: ${JSON.stringify(realmPermissions, null, 2)}`,
         );
         throw new AuthorizationError(
