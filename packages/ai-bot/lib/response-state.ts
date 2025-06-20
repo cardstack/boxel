@@ -8,7 +8,7 @@ export default class ResponseState {
   toolCalls: ChatCompletionSnapshot.Choice.Message.ToolCall[] = [];
   private toolCallsJson: string | undefined;
   isStreamingFinished = false;
-  isCancelled = false;
+  isCanceled = false;
 
   update(
     newReasoning: string | undefined,
@@ -75,13 +75,21 @@ export default class ResponseState {
     return false;
   }
 
+  updateIsCanceled(isCanceled: boolean) {
+    if (this.isCanceled !== isCanceled) {
+      this.isCanceled = isCanceled;
+      return true;
+    }
+    return false;
+  }
+
   snapshot() {
     return {
       reasoning: this.latestReasoning,
       content: this.latestContent,
       toolCalls: this.toolCalls,
       isStreamingFinished: this.isStreamingFinished,
-      isCancelled: this.isCancelled,
+      isCanceled: this.isCanceled,
     };
   }
 }

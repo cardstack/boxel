@@ -59,7 +59,7 @@ export class Message implements RoomMessageInterface {
   @tracked codePatchResults: TrackedArray<MessageCodePatchResult>;
   @tracked created: Date;
   @tracked _isStreamingFinished?: boolean;
-  @tracked _isCancelled?: boolean;
+  @tracked _isCanceled?: boolean;
   @tracked hasContinuation?: boolean;
   @tracked continuedInMessage?: Message | null;
   continuationOf?: string | null;
@@ -160,14 +160,14 @@ export class Message implements RoomMessageInterface {
     }
   }
 
-  setIsCancelled(isCancelled: boolean | undefined) {
-    if (this._isCancelled !== isCancelled) {
-      this._isCancelled = isCancelled;
+  setIsCanceled(isCanceled: boolean | undefined) {
+    if (this._isCanceled !== isCanceled) {
+      this._isCanceled = isCanceled;
     }
   }
 
-  get isCancelled(): boolean {
-    return this._isCancelled ?? false;
+  get isCanceled(): boolean {
+    return this._isCanceled ?? false;
   }
 
   get isStreamingFinished(): boolean | undefined {
@@ -222,7 +222,7 @@ export class Message implements RoomMessageInterface {
   @cached
   get htmlParts(): HtmlTagGroup[] {
     let htmlParts = parseHtmlContent(this.bodyHTML, this.roomId, this.eventId);
-    if (this._isCancelled) {
+    if (this._isCanceled) {
       htmlParts.push({
         type: 'non_pre_tag',
         content: '<p style="font-weight: bold;">{Generation Cancelled}</p>',

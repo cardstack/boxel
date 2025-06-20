@@ -121,7 +121,7 @@ export interface MessageEvent extends BaseMatrixEvent {
     format: 'org.matrix.custom.html';
     body: string;
     isStreamingFinished: boolean;
-    isCancelled?: boolean;
+    isCanceled?: boolean;
     errorMessage?: string;
   };
   unsigned: {
@@ -197,7 +197,7 @@ export interface CardMessageContent {
   format: 'org.matrix.custom.html';
   body: string;
   isStreamingFinished?: boolean;
-  isCancelled?: boolean;
+  isCanceled?: boolean;
   [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]?: boolean;
   [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]?: string; // event_id of the message we are continuing
   [APP_BOXEL_REASONING_CONTENT_KEY]?: string;

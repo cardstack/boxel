@@ -439,7 +439,7 @@ ${REPLACE_MARKER}
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
-      isCancelled: true,
+      isCanceled: true,
     });
 
     assert.dom('[data-test-ai-assistant-action-bar]').doesNotExist();

@@ -973,7 +973,7 @@ export default class Room extends Component<Signature> {
     if (
       (this.lastCanceledActionMessageId &&
         lastMessage?.eventId === this.lastCanceledActionMessageId) ||
-      lastMessage?.isCancelled
+      lastMessage?.isCanceled
     ) {
       return false;
     }

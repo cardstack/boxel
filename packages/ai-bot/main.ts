@@ -232,7 +232,9 @@ Common issues are:
             event.getType() === 'm.room.message')
         ) {
           activeGeneration.runner.abort();
-          await activeGeneration.responder.finalize(true);
+          await activeGeneration.responder.finalize({
+            isCanceled: true,
+          });
           if (activeGeneration.lastGeneratedChunkId) {
             await assistant.trackAiUsageCost(
               senderMatrixUserId,
