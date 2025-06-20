@@ -75,6 +75,7 @@ export default class AttachButton extends Component<Signature> {
       @dropdownClass='attach-button__dropdown'
       @triggerComponent={{component AttachButtonTrigger}}
       class='attach-button'
+      data-test-attach-button
       as |option|
     >
       {{#if (eq option 'Attach a Card')}}
@@ -94,6 +95,7 @@ export default class AttachButton extends Component<Signature> {
     <style scoped>
       .attach-button {
         border: none;
+        padding-top: var(--boxel-sp-4xs);
       }
       .attach-button[aria-expanded='true'] :deep(.attach-button__trigger) {
         background-color: var(--boxel-dark);
