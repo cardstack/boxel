@@ -650,12 +650,6 @@ export default class CodeSubmode extends Component<Signature> {
 
   <template>
     {{consumeContext this.makeCardResource}}
-    {{#let (this.realm.info this.realmURL.href) as |realmInfo|}}
-      <div
-        class='code-mode-background'
-        style={{this.backgroundURLStyle realmInfo.backgroundURL}}
-      ></div>
-    {{/let}}
     <SubmodeLayout
       class='code-submode-layout'
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
