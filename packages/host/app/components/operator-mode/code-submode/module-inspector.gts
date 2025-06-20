@@ -553,7 +553,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       }
 
       .module-inspector-content {
-        overflow: scroll;
+        overflow: auto;
         height: 100%;
         background-color: var(--boxel-light);
       }
