@@ -668,6 +668,36 @@ module('Acceptance | code submode tests', function (_hooks) {
               },
             },
           },
+          'Person/AXAXAXAXAX.json': {
+            data: {
+              attributes: {
+                firstName: 'AXAXAXAXAX',
+                address: [
+                  {
+                    city: 'AXAXAXAXAX',
+                    country: 'AXAXAXAXAX',
+                    shippingInfo: {
+                      preferredCarrier: 'AXAXAXAXAX',
+                      remarks: `AXAXAXAXAX`,
+                    },
+                  },
+                ],
+              },
+              relationships: {
+                pet: {
+                  links: {
+                    self: `${testRealmURL}Pet/mango`,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}person`,
+                  name: 'Person',
+                },
+              },
+            },
+          },
           'Person/1.json': {
             data: {
               type: 'card',
@@ -1457,8 +1487,9 @@ module('Acceptance | code submode tests', function (_hooks) {
     test('updates values in preview panel must be represented in editor panel', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
-        codePath: `${testRealmURL}SENTINELSENTINEL.json`,
+        codePath: `${testRealmURL}Person/AXAXAXAXAX.json`,
       });
+      await waitForCodeEditor();
       await visitOperatorMode({
         submode: 'code',
         codePath: `${testRealmURL}Person/fadhlan.json`,
