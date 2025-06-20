@@ -240,6 +240,10 @@ export class ListingInput extends CardDef {
   @field listing = linksTo(CardDef);
 }
 
+export class ListingRemixResult extends CardDef {
+  @field codePath = contains(StringField);
+}
+
 export class VisitCardsInput extends CardDef {
   @field query = contains(QueryField);
   @field commandRef = contains(CodeRefField);

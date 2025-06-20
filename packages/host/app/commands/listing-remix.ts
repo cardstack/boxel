@@ -1,7 +1,5 @@
 import { service } from '@ember/service';
 
-import { timeout } from 'ember-concurrency';
-
 import { isResolvedCodeRef, RealmPaths } from '@cardstack/runtime-common';
 
 import * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -19,7 +17,8 @@ import type RealmServerService from '../services/realm-server';
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
 export default class RemixCommand extends HostBaseCommand<
-  typeof BaseCommandModule.ListingInput
+  typeof BaseCommandModule.ListingInput,
+  typeof BaseCommandModule.ListingRemixResult | undefined
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realmServer: RealmServerService;
@@ -48,7 +47,7 @@ export default class RemixCommand extends HostBaseCommand<
 
   protected async run(
     input: BaseCommandModule.ListingInput,
-  ): Promise<undefined> {
+  ): Promise<BaseCommandModule.ListingRemixResult | undefined> {
     let realmUrls = this.realmServer.availableRealmURLs;
     let { realm, listing: listingInput } = input;
     let realmUrl = new RealmPaths(new URL(realm)).url;
@@ -104,10 +103,17 @@ export default class RemixCommand extends HostBaseCommand<
 
       // before switching to code mode, the FileResource is not ready immediately for the selected file
       // so we need to wait for 1 second before switching to code mode to ensure the file is ready for now
-      await timeout(1000);
+      //  await timeout(1000);
 
-      await new SwitchSubmodeCommand(this.commandContext).execute({
+      /* await new SwitchSubmodeCommand(this.commandContext).execute({
         submode: 'code',
+        codePath: selectedCodeRef.module,
+      }); */
+
+      let commandModule = await this.loadCommandModule();
+      const { ListingRemixResult } = commandModule;
+
+      return new ListingRemixResult({
         codePath: selectedCodeRef.module,
       });
     } else if ('skills' in listing) {
@@ -116,11 +122,18 @@ export default class RemixCommand extends HostBaseCommand<
       let firstSkillCardId =
         skillCardIds && skillCardIds.length > 0 ? skillCardIds[0] : undefined;
       if (firstSkillCardId) {
+        let commandModule = await this.loadCommandModule();
+        const { ListingRemixResult } = commandModule;
+
+        return new ListingRemixResult({
+          codePath: firstSkillCardId,
+        });
         await new SwitchSubmodeCommand(this.commandContext).execute({
           submode: 'code',
           codePath: firstSkillCardId,
         });
       }
     }
+    return undefined;
   }
 }
