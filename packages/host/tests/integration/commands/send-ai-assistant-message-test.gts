@@ -7,7 +7,6 @@ import { module, test } from 'qunit';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
-import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
 
 import RealmService from '@cardstack/host/services/realm';
 
@@ -70,116 +69,5 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
     assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
     let boxelMessageData = JSON.parse(message.content.data);
     assert.strictEqual(boxelMessageData.context.tools.length, 0);
-  });
-
-  test('send an ai assistant message with command call, not required to be called', async function (assert) {
-    let roomId = createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    let commandService = getService('command-service');
-
-    let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
-      commandService.commandContext,
-    );
-    let command = new SwitchSubmodeCommand(commandService.commandContext);
-    await sendAiAssistantMessageCommand.execute({
-      roomId,
-      prompt: 'Hello, world!',
-      commands: [{ command, autoExecute: false }],
-    });
-    let message = getRoomEvents(roomId).pop()!;
-    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
-    let boxelMessageData = JSON.parse(message.content.data);
-    assert.strictEqual(boxelMessageData.context.tools.length, 1);
-    assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
-    let toolName = boxelMessageData.context.tools[0].function.name;
-    assert.true(toolName.startsWith('SwitchSubmode'));
-    assert.strictEqual(boxelMessageData.context.requireToolCall, false);
-  });
-
-  test('send an ai assistant message with command call, explicitly not required to be called', async function (assert) {
-    let roomId = createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    let commandService = getService('command-service');
-
-    let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
-      commandService.commandContext,
-    );
-    let command = new SwitchSubmodeCommand(commandService.commandContext);
-    await sendAiAssistantMessageCommand.execute({
-      roomId,
-      prompt: 'Hello, world!',
-      commands: [{ command, autoExecute: false }],
-      requireCommandCall: false,
-    });
-    let message = getRoomEvents(roomId).pop()!;
-    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
-    let boxelMessageData = JSON.parse(message.content.data);
-    assert.strictEqual(boxelMessageData.context.tools.length, 1);
-    assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
-    let toolName = boxelMessageData.context.tools[0].function.name;
-    assert.true(toolName.startsWith('SwitchSubmode'));
-    assert.strictEqual(boxelMessageData.context.requireToolCall, false);
-  });
-
-  test('send an ai assistant message with command call, explicitly required to be called', async function (assert) {
-    let roomId = createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    let commandService = getService('command-service');
-
-    let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
-      commandService.commandContext,
-    );
-    let command = new SwitchSubmodeCommand(commandService.commandContext);
-    await sendAiAssistantMessageCommand.execute({
-      roomId,
-      prompt: 'Hello, world!',
-      commands: [{ command, autoExecute: false }],
-      requireCommandCall: true,
-    });
-    let message = getRoomEvents(roomId).pop()!;
-    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
-    let boxelMessageData = JSON.parse(message.content.data);
-    assert.strictEqual(boxelMessageData.context.tools.length, 1);
-    assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
-    let toolName = boxelMessageData.context.tools[0].function.name;
-    assert.true(toolName.startsWith('SwitchSubmode'));
-    assert.strictEqual(boxelMessageData.context.requireToolCall, true);
-  });
-
-  test('multiple commands are allowed if not required to be called', async function (assert) {
-    let roomId = createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'room-test',
-    });
-    let commandService = getService('command-service');
-
-    let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
-      commandService.commandContext,
-    );
-    let command1 = new SwitchSubmodeCommand(commandService.commandContext);
-    let command2 = new SwitchSubmodeCommand(commandService.commandContext);
-    await sendAiAssistantMessageCommand.execute({
-      roomId,
-      prompt: 'Hello, world!',
-      commands: [
-        { command: command1, autoExecute: false },
-        { command: command2, autoExecute: false },
-      ],
-      requireCommandCall: false,
-    });
-    let message = getRoomEvents(roomId).pop()!;
-    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
-    let boxelMessageData = JSON.parse(message.content.data);
-    assert.strictEqual(boxelMessageData.context.tools.length, 2);
-    assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
-    let toolName = boxelMessageData.context.tools[0].function.name;
-    assert.true(toolName.startsWith('SwitchSubmode'));
-    assert.strictEqual(boxelMessageData.context.requireToolCall, false);
   });
 });

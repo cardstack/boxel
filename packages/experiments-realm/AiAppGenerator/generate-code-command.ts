@@ -271,9 +271,10 @@ import { on } from '@ember/modifier';
       prompt:
         'Generate code for the application given the product requirements, you do not need to strictly follow the schema if it does not seem appropriate for the application.',
       attachedCards: [input.productRequirements],
-      commands: [
-        { command: constructApplicationCodeCommand, autoExecute: true },
-      ],
+      // TODO: replace this with a skill?
+      // commands: [
+      //   { command: constructApplicationCodeCommand, autoExecute: true },
+      // ],
     });
 
     return await constructApplicationCodeCommand.waitForNextCompletion();

@@ -2,7 +2,7 @@ import { on } from '@ember/modifier';
 
 import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
 import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
-import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
+// import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
 
 import {
   contains,
@@ -44,14 +44,15 @@ export class Person extends CardDef {
       let { roomId } = await createAIAssistantRoomCommand.execute({
         name: 'AI Assistant Room',
       });
-      let switchSubmodeCommand = new SwitchSubmodeCommand(commandContext);
+      // let switchSubmodeCommand = new SwitchSubmodeCommand(commandContext);
       let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
         commandContext,
       );
       await sendAiAssistantMessageCommand.execute({
         roomId,
         prompt: 'Switch to code mode',
-        commands: [{ command: switchSubmodeCommand, autoExecute: true }],
+        // TODO: use a skill instead
+        // commands: [{ command: switchSubmodeCommand, autoExecute: true }],
       });
     };
     <template>

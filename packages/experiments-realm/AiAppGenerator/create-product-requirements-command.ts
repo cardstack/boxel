@@ -100,7 +100,8 @@ export default class CreateProductRequirementsInstance extends Command<
       roomId,
       prompt: this.createPrompt(input),
       attachedCards: [prdCard],
-      commands: [{ command: patchPRDCommand, autoExecute: true }], // this should persist over multiple messages, matrix service is responsible to tracking
+      // TODO: replace this with a skill?
+      // commands: [{ command: patchPRDCommand, autoExecute: true }], // this should persist over multiple messages, matrix service is responsible to tracking
     });
 
     // Wait for the PRD command to have been applied
