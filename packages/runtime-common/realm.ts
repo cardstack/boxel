@@ -671,10 +671,6 @@ export class Realm {
             permissions,
             this.#matrixClient,
           ).for(user);
-          console.log(
-            `making session JWT for user ${user} in realm ${this.url} with permissions ${JSON.stringify(permissions)}`,
-          );
-
           return this.#adapter.createJWT(
             {
               user,
@@ -1005,10 +1001,6 @@ export class Realm {
         user = assumedUser;
         didAssumeUser = true;
       }
-      this.#log.error(
-        `check permissions: token user=${token.user}, assumedUser=${assumedUser}, effective user=${user} realm permissions: ${JSON.stringify(realmPermissions, null, 2)}`,
-      );
-
       // if the client is the realm matrix user then we permit all actions
       if (user === this.#matrixClient.getUserId()) {
         return;
@@ -1026,9 +1018,6 @@ export class Realm {
       }
 
       if (!(await realmPermissionChecker.can(user, requiredPermission))) {
-        this.#log.error(
-          `encountered insufficient permissions: token user=${token.user}, assumedUser=${assumedUser}, effective user=${user} realm permissions: ${JSON.stringify(realmPermissions, null, 2)}`,
-        );
         throw new AuthorizationError(
           'Insufficient permissions to perform this action',
         );
@@ -1037,11 +1026,7 @@ export class Realm {
       if (e instanceof TokenExpiredError) {
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
-
       if (e instanceof JsonWebTokenError) {
-        this.#log.error(
-          `encountered auth error (JWT threw): token=${tokenString} realm permissions: ${JSON.stringify(realmPermissions, null, 2)}`,
-        );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }
 

@@ -216,6 +216,17 @@ export class RealmIndexUpdater {
       this.#dbAdapter,
       this.realmURL,
     );
+
+    // public realms that have special realm users
+    switch (this.realmURL.href) {
+      // the experiments realm has a lot of hard coded human user accounts in it,
+      // so we have to provide some special rules for which username to index with
+      case 'https://realms-staging.stack.cards/experiments/':
+        return '@experiments_realm:stack.cards';
+      case 'https://app.boxel.ai/experiments/':
+        return '@experiments_realm:boxel.ai';
+    }
+
     let [realmUserId] = Object.entries(permissions)
       .filter(([_, permissions]) => permissions?.includes('realm-owner'))
       .map(([userId]) => userId)
