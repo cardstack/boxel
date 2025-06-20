@@ -247,12 +247,6 @@ export default class Room extends Component<Signature> {
         background-color: var(--boxel-light-100);
         border-top: 1px solid var(--boxel-200);
       }
-      :deep(.ai-assistant-conversation > *:first-child) {
-        margin-top: auto;
-      }
-      :deep(.ai-assistant-conversation > *:nth-last-of-type(2)) {
-        padding-bottom: var(--boxel-sp-xl);
-      }
       .loading-indicator {
         margin-top: auto;
         margin-bottom: auto;
