@@ -718,8 +718,6 @@ export default class OperatorModeStateService extends Service {
       ]),
     );
 
-    console.log('in deserialise', rawState.codePath, rawState.moduleInspector);
-
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submodes.Interact,
