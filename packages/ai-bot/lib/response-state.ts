@@ -67,17 +67,13 @@ export default class ResponseState {
     return false;
   }
 
-  updateIsStreamingFinished(isStreamingFinished: boolean) {
+  updateIsStreamingFinished(
+    isStreamingFinished: boolean,
+    isCanceled?: boolean,
+  ) {
     if (this.isStreamingFinished !== isStreamingFinished) {
       this.isStreamingFinished = isStreamingFinished;
-      return true;
-    }
-    return false;
-  }
-
-  updateIsCanceled(isCanceled: boolean) {
-    if (this.isCanceled !== isCanceled) {
-      this.isCanceled = isCanceled;
+      this.isCanceled = isCanceled ?? false;
       return true;
     }
     return false;

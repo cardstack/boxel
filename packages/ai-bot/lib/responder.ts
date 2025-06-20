@@ -168,8 +168,7 @@ export class Responder {
     this.isFinalized = true;
 
     let isStreamingFinishedChanged =
-      this.responseState.updateIsStreamingFinished(true);
-    this.responseState.updateIsCanceled(opts?.isCanceled ?? false);
+      this.responseState.updateIsStreamingFinished(true, opts?.isCanceled);
     log.debug('finalize', {
       isStreamingFinishedChanged,
     });
