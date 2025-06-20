@@ -37,6 +37,7 @@ import type MessageService from '@cardstack/host/services/message-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import { PlaygroundSelection } from '@cardstack/host/services/playground-panel-service';
 import type Realm from '@cardstack/host/services/realm';
+import type RealmServer from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
@@ -78,6 +79,7 @@ export interface OperatorModeState {
   codeSelection?: string;
   fieldSelection?: string;
   moduleInspector?: ModuleInspectorView;
+  newFileDropdownOpen?: boolean;
 }
 
 interface CardItem {
@@ -116,6 +118,7 @@ export default class OperatorModeStateService extends Service {
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
     aiAssistantOpen: false,
+    newFileDropdownOpen: false,
   });
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
@@ -127,6 +130,7 @@ export default class OperatorModeStateService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private realm: Realm;
+  @service declare private realmServer: RealmServer;
   @service declare private recentCardsService: RecentCardsService;
   @service declare private recentFilesService: RecentFilesService;
   @service declare private router: RouterService;
@@ -160,6 +164,7 @@ export default class OperatorModeStateService extends Service {
       fieldSelection: this._state.fieldSelection,
       aiAssistantOpen: this._state.aiAssistantOpen,
       moduleInspector: this._state.moduleInspector,
+      newFileDropdownOpen: this._state.newFileDropdownOpen,
     } as const;
   }
 
@@ -177,6 +182,15 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   };
 
+  setNewFileDropdownOpen = () => {
+    this._state.newFileDropdownOpen = true;
+    this.schedulePersist();
+  };
+  setNewFileDropdownClosed = () => {
+    this._state.newFileDropdownOpen = false;
+    this.schedulePersist();
+  };
+
   resetState() {
     this._state = new TrackedObject({
       stacks: new TrackedArray([]),
@@ -185,6 +199,7 @@ export default class OperatorModeStateService extends Service {
       openDirs: new TrackedMap<string, string[]>(),
       aiAssistantOpen: false,
       moduleInspector: DEFAULT_MODULE_INSPECTOR_VIEW,
+      newFileDropdownOpen: false,
     });
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
@@ -792,20 +807,69 @@ export default class OperatorModeStateService extends Service {
     return isReady(this.openFile.current);
   }
 
-  get realmURL() {
-    // i think we only want to use this logic in code mode (?)
-    if (isReady(this.openFile.current)) {
-      return new URL(this.readyFile.realmURL);
-    } else if (this.cachedRealmURL) {
-      return this.cachedRealmURL;
+  get realmURL(): URL {
+    let { submode } = this._state;
+    if (submode === Submodes.Code) {
+      if (isReady(this.openFile.current)) {
+        return new URL(this.readyFile.realmURL);
+      }
     }
 
     // For interact mode, the idea of "current realm" is a bit abstract. the
     // realm background that you see in interact mode is the realm of the
     // bottom-most card in the stack. however you can have cards of differing
     // realms in the same stack and keep in mind you can have multiple stacks...
+    if (submode === Submodes.Interact) {
+      // Precedence rules for determining "current realm" for READ purposes:
+      // 1. cardURL of the index card to determine current realm
+      // 2. If no index card available, the realm of the top-most card
+      let stack = this.rightMostStack(); // using right-most stack
+      if (stack) {
+        let cardId =
+          stack[0]?.id &&
+          this.realmServer.availableRealmIndexCardIds.includes(stack[0]?.id)
+            ? stack[0].id
+            : stack[stack.length - 1]?.id;
+        if (cardId) {
+          let realm = this.realm.url(cardId);
+          if (realm) {
+            return new URL(realm);
+          }
+        }
+      }
+    }
+
+    if (this.cachedRealmURL) {
+      return this.cachedRealmURL;
+    }
+
     return new URL(this.realm.defaultReadableRealm.path);
   }
+
+  getWritableRealmURL = (preferredURLs: string[] = []) => {
+    // Optional `preferredURLs` argument with highest priority with fallback options below
+    // Precedence rules for determining "current realm" for WRITE purposes:
+    // 1. cardURL of the index card to determine current realm
+    // 2. If no index card available, the realm of the top-most card if the realm is writable.
+    // 3. Otherwise, fallback to the last opened writable realm, especially if the opening click is from dashboard.
+    let urlsToCheck = [
+      ...preferredURLs,
+      this.realmURL.href,
+      this.cachedRealmURL?.href,
+    ].filter(Boolean) as string[];
+
+    let foundURL = urlsToCheck.find((url) => this.realm.canWrite(url));
+
+    if (foundURL) {
+      return new URL(this.realm.url(foundURL)!);
+    }
+
+    if (this.realm.defaultWritableRealm) {
+      return new URL(this.realm.defaultWritableRealm.path);
+    }
+
+    return undefined; // no writable realm found
+  };
 
   subscribeToOpenFileStateChanges(subscriber: OpenFileSubscriber) {
     this.openFileSubscribers.push(subscriber);
@@ -885,6 +949,7 @@ export default class OperatorModeStateService extends Service {
     this.updateSubmode(Submodes.Interact);
 
     this.operatorModeController.workspaceChooserOpened = false;
+    this.cachedRealmURL = new URL(realmUrl);
   };
 
   get workspaceChooserOpened() {
