@@ -671,6 +671,9 @@ export class Realm {
             permissions,
             this.#matrixClient,
           ).for(user);
+          console.log(
+            `making session JWT for user ${user} in realm ${this.url} with permissions ${JSON.stringify(permissions)}`,
+          );
 
           return this.#adapter.createJWT(
             {
