@@ -62,7 +62,6 @@ export default class AiAssistantCardPickerUsage extends Component {
           @removeFile={{this.removeFile}}
           @autoAttachedFile={{this.autoAttachedFile}}
           @filesToAttach={{this.filesToAttach}}
-          @submode='interact'
           as |AttachedItems AttachButton|
         >
           <AttachedItems />
