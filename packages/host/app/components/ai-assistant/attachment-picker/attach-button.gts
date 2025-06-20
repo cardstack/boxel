@@ -75,7 +75,6 @@ export default class AttachButton extends Component<Signature> {
       @dropdownClass='attach-button__dropdown'
       @triggerComponent={{component AttachButtonTrigger}}
       class='attach-button'
-      data-test-attach-button
       as |option|
     >
       {{#if (eq option 'Attach a Card')}}
