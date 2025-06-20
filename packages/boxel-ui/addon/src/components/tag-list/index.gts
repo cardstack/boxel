@@ -67,7 +67,7 @@ export default class TagList extends Component<TagListSignature> {
 
         .tag-list-pill.selected {
           --pill-background-color: var(
-            --tag-list-pill-active-background-color,
+            --tag-list-pill-selected-background-color,
             var(--boxel-dark)
           );
           --pill-font-color: var(

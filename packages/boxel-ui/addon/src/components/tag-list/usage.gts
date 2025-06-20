@@ -33,6 +33,12 @@ export default class TagListUsage extends Component {
   @cssVariable({ cssClassName: 'tag-list-usage' })
   declare tagListPillSelectedBackgroundColor: CSSVariableInfo;
 
+  @cssVariable({ cssClassName: 'tag-list-usage' })
+  declare tagListPillFontColor: CSSVariableInfo;
+
+  @cssVariable({ cssClassName: 'tag-list-usage' })
+  declare tagListPillSelectedFontColor: CSSVariableInfo;
+
   private onTagSelect = (tag: TagItem) => {
     this.selectedTags = this.selectedTags.some((t) => t.id === tag.id)
       ? this.selectedTags.filter((t) => t.id !== tag.id)
@@ -46,6 +52,8 @@ export default class TagListUsage extends Component {
         tag-list-gap=this.tagListGap.value
         tag-list-pill-background-color=this.tagListPillBackgroundColor.value
         tag-list-pill-selected-background-color=this.tagListPillSelectedBackgroundColor.value
+        tag-list-pill-font-color=this.tagListPillFontColor.value
+        tag-list-pill-selected-font-color=this.tagListPillSelectedFontColor.value
       }}
     >
       <FreestyleUsage @name='Tag List'>
@@ -99,6 +107,20 @@ export default class TagListUsage extends Component {
             @description='Background color of selected tags'
             @value={{this.tagListPillSelectedBackgroundColor.value}}
             @onInput={{this.tagListPillSelectedBackgroundColor.update}}
+          />
+          <Css.Basic
+            @name='tag-list-pill-font-color'
+            @type='color'
+            @description='Font color of unselected tags'
+            @value={{this.tagListPillFontColor.value}}
+            @onInput={{this.tagListPillFontColor.update}}
+          />
+          <Css.Basic
+            @name='tag-list-pill-selected-font-color'
+            @type='color'
+            @description='Font color of selected tags'
+            @value={{this.tagListPillSelectedFontColor.value}}
+            @onInput={{this.tagListPillSelectedFontColor.update}}
           />
         </:cssVars>
       </FreestyleUsage>
