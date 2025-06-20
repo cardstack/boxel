@@ -68,7 +68,7 @@ jobs:
         run: pnpm register-realm-users
         working-directory: packages/matrix
       - name: host test suite (shard ${{ matrix.shardIndex }})
-        run: pnpm test-with-percy --filter="updates values in preview panel must be represented in editor panel"
+        run: pnpm test-with-percy
         env:
           PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
