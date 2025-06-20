@@ -1,15 +1,11 @@
 import GlimmerComponent from '@glimmer/component';
 
-import { fn, concat } from '@ember/helper';
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
-
 import {
-  Pill,
   FilterList,
   SkeletonPlaceholder,
 } from '@cardstack/boxel-ui/components';
 import type { Icon } from '@cardstack/boxel-ui/icons';
+import { TagList } from '@cardstack/boxel-ui/components';
 
 export type FilterItem = {
   id: string;
@@ -64,7 +60,7 @@ interface FilterTagGroupArgs {
   Args: {
     title: string;
     tags: FilterItem[];
-    activeTagIds: string[]; // Array since it's multi-select
+    activeTags: FilterItem[]; // Array since it's multi-select
     onTagSelect: (item: FilterItem) => void;
     isLoading?: boolean;
   };
@@ -72,67 +68,21 @@ interface FilterTagGroupArgs {
 }
 
 export class FilterTagGroup extends GlimmerComponent<FilterTagGroupArgs> {
-  @action
-  handleItemClick(item: FilterItem) {
-    this.args.onTagSelect(item);
-  }
-
-  get isItemSelected() {
-    return (itemId: string) => this.args.activeTagIds.includes(itemId);
-  }
-
-  get noItems() {
-    return this.args.tags.length === 0;
-  }
-
   <template>
     <FilterGroupWrapper @title={{@title}} ...attributes>
       {{#if @isLoading}}
-        <div class='filter-list'>
-          <SkeletonPlaceholder class='skeleton-placeholder-filter-list' />
-        </div>
+        <SkeletonPlaceholder class='skeleton-placeholder-filter-list' />
       {{else}}
-        <div class='filter-list'>
-          {{#if this.noItems}}
-            <span>No {{@title}} found</span>
-          {{else}}
-            {{#each @tags as |tag|}}
-              {{! Take note: did not choose to use @pillBackgroundColor args because we want a custom background color toggled based on the selected state }}
-              <Pill
-                @kind='button'
-                class={{concat
-                  'tag-filter-pill'
-                  (if (this.isItemSelected tag.id) ' selected')
-                }}
-                {{on 'click' (fn this.handleItemClick tag)}}
-                data-test-filter-pill={{tag.id}}
-              >
-                <:default>
-                  <span>{{tag.displayName}}</span>
-                </:default>
-              </Pill>
-            {{/each}}
-          {{/if}}
-        </div>
+        <TagList
+          @tags={{@tags}}
+          @selectedTags={{@activeTags}}
+          @onTagSelect={{@onTagSelect}}
+        />
       {{/if}}
     </FilterGroupWrapper>
 
     <style scoped>
       @layer {
-        .filter-list {
-          display: flex;
-          flex-wrap: wrap;
-          gap: var(--boxel-sp-xs);
-          padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm) var(--boxel-sp-sm)
-            var(--boxel-sp-sm);
-        }
-        .tag-filter-pill.selected {
-          background: var(--boxel-dark);
-          color: var(--boxel-light);
-        }
-        .tag-filter-pill:not(.selected):hover {
-          background: var(--boxel-300);
-        }
         .skeleton-placeholder-filter-list {
           height: 20px;
           width: 100%;
@@ -155,8 +105,12 @@ interface FilterGroupWrapperArgs {
 
 class FilterGroupWrapper extends GlimmerComponent<FilterGroupWrapperArgs> {
   <template>
-    <section class='filter-group' ...attributes>
-      <h2 class='filter-heading'>
+    <section
+      class='filter-group'
+      aria-labelledby='filter-heading-{{@title}}'
+      ...attributes
+    >
+      <h2 class='filter-heading' id='filter-heading-{{@title}}'>
         {{@title}}
       </h2>
       {{yield}}
@@ -172,11 +126,12 @@ class FilterGroupWrapper extends GlimmerComponent<FilterGroupWrapperArgs> {
             var(--boxel-light)
           );
           border-radius: var(--boxel-border-radius);
+          padding: var(--boxel-sp-xs);
+          gap: var(--boxel-sp-sm);
         }
         .filter-heading {
           font: 500 var(--boxel-font);
           margin: 0;
-          padding: var(--boxel-sp-xs);
         }
       }
     </style>
@@ -191,7 +146,7 @@ interface FilterSidebarArgs {
     onCategorySelect: (category: FilterItem) => void;
     categoryIsLoading?: boolean;
     tagItems: FilterItem[];
-    activeTagIds: string[];
+    activeTags: FilterItem[];
     onTagSelect: (tag: FilterItem) => void;
     tagIsLoading?: boolean;
   };
@@ -215,7 +170,7 @@ export default class FilterSidebar extends GlimmerComponent<FilterSidebarArgs> {
       <FilterTagGroup
         @title='Tags'
         @tags={{@tagItems}}
-        @activeTagIds={{@activeTagIds}}
+        @activeTags={{@activeTags}}
         @onTagSelect={{@onTagSelect}}
         @isLoading={{@tagIsLoading}}
       />
