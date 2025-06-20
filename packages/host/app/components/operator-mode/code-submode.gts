@@ -71,7 +71,6 @@ import {
 } from '../../utils/local-storage-keys';
 import FileTree from '../editor/file-tree';
 
-import AttachFileModal from './attach-file-modal';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
@@ -641,7 +640,6 @@ export default class CodeSubmode extends Component<Signature> {
 
   <template>
     {{consumeContext this.makeCardResource}}
-    <AttachFileModal />
     {{#let (this.realm.info this.realmURL.href) as |realmInfo|}}
       <div
         class='code-mode-background'

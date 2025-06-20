@@ -193,6 +193,7 @@ test.describe('Room messages', () => {
     await login(page, 'user1', 'pass', { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
 
+    await page.locator('[data-test-attach-button]').click();
     await page.locator('[data-test-choose-card-btn]').click();
     await page
       .locator(
@@ -232,6 +233,7 @@ test.describe('Room messages', () => {
     const testCard = `${appURL}/mango-puppy`; // this is a 153KB card
     await login(page, 'user1', 'pass', { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
+    await page.locator('[data-test-attach-button]').click();
     await page.locator('[data-test-choose-card-btn]').click();
 
     await page
@@ -363,6 +365,7 @@ test.describe('Room messages', () => {
       page.locator(`[data-test-attached-file="${appURL}/person.gts"]`),
     ).toHaveCount(1);
 
+    await page.locator('[data-test-attach-button]').click();
     await page.locator('[data-test-choose-file-btn]').click();
     await page.locator('[data-test-file="pet.gts"]').click();
     await page.locator('[data-test-attach-file-modal-add-button]').click();

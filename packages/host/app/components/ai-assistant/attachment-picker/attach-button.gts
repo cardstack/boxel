@@ -78,12 +78,12 @@ export default class AttachButton extends Component<Signature> {
       as |option|
     >
       {{#if (eq option 'Attach a Card')}}
-        <div class='menu-option'>
+        <div class='menu-option' data-test-choose-card-btn>
           <CaptionsIcon width='16px' height='16px' />
           <span>{{option}}</span>
         </div>
       {{else if (eq option 'Choose File')}}
-        <div class='menu-option'>
+        <div class='menu-option' data-test-choose-file-btn>
           <FileCode width='16px' height='16px' />
           <span>{{option}}</span>
         </div>
@@ -138,7 +138,7 @@ export default class AttachButton extends Component<Signature> {
 
   @action
   handleSelection(option: string) {
-    if (option === 'Attach Card') {
+    if (option === 'Attach a Card') {
       this.onAttachCard();
     } else if (option === 'Choose File') {
       this.onChooseFile();
