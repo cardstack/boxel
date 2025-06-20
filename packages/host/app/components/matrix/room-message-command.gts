@@ -38,10 +38,12 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import ApplyButton from '../ai-assistant/apply-button';
-import { type ApplyButtonState } from '../ai-assistant/apply-button';
+import ApplyButton, {
+  type ApplyButtonState,
+} from '../ai-assistant/apply-button';
 import CodeBlock from '../ai-assistant/code-block';
 import CardRenderer from '../card-renderer';
+import CommandButtonBar from '../matrix/command-button-bar';
 
 import PreparingRoomMessageCommand from './preparing-room-message-command';
 
@@ -160,6 +162,7 @@ export default class RoomMessageCommand extends Component<Signature> {
   <template>
     <div
       class={{cn
+        'command-block'
         is-pending=@isPending
         is-error=@isError
         is-failed=(bool this.failedCommandState)
@@ -173,8 +176,7 @@ export default class RoomMessageCommand extends Component<Signature> {
       {{#if @isStreaming}}
         <PreparingRoomMessageCommand />
       {{else}}
-        <div
-          class='command-button-bar'
+        <CommandButtonBar
           data-test-command-card-idle={{not
             (eq @messageCommand.status 'applying')
           }}
@@ -192,8 +194,10 @@ export default class RoomMessageCommand extends Component<Signature> {
             @state={{this.applyButtonState}}
             {{on 'click' @runCommand}}
             data-test-command-apply={{this.applyButtonState}}
-          >{{@messageCommand.actionVerb}}</ApplyButton>
-        </div>
+          >
+            {{@messageCommand.actionVerb}}
+          </ApplyButton>
+        </CommandButtonBar>
         {{#if this.isDisplayingCode}}
           <CodeBlock
             {{this.scrollBottomIntoView}}
@@ -201,27 +205,20 @@ export default class RoomMessageCommand extends Component<Signature> {
             @codeData={{hash code=this.previewCommandCode language='json'}}
             as |codeBlock|
           >
-            <codeBlock.actions as |actions|>
-              <actions.copyCode />
-            </codeBlock.actions>
             <codeBlock.editor />
-          </CodeBlock>
-        {{/if}}
-        {{#if this.failedCommandState}}
-          <div class='failed-command-result'>
-            <span class='failed-command-text'>
-              {{this.failedCommandState.message}}
-            </span>
-            <Button
-              {{on 'click' @runCommand}}
-              class='retry-button'
-              @size='small'
-              @kind='secondary-dark'
-              data-test-retry-command-button
+            <codeBlock.actions
+              @failedState={{this.failedCommandState}}
+              @retryAction={{@runCommand}}
+              as |actions|
             >
-              Retry
-            </Button>
-          </div>
+              <actions.copyCode />
+              <actions.applyCodePatch
+                @actionVerb={{@messageCommand.actionVerb}}
+                @performPatch={{@runCommand}}
+                @patchCodeStatus={{this.applyButtonState}}
+              />
+            </codeBlock.actions>
+          </CodeBlock>
         {{/if}}
         {{#if this.commandResultCard.card}}
           <CardContainer
@@ -250,6 +247,9 @@ export default class RoomMessageCommand extends Component<Signature> {
     {{! template-lint-disable no-whitespace-for-layout  }}
     {{! ignore the above error because ember-template-lint complains about the whitespace in the multi-line comment below }}
     <style scoped>
+      .command-block > :deep(* + *) {
+        margin-block-start: var(--boxel-sp-sm);
+      }
       .command-description {
         font-size: var(--boxel-font-sm);
         font-weight: 500;
@@ -263,21 +263,8 @@ export default class RoomMessageCommand extends Component<Signature> {
       }
       .is-pending .view-code-button,
       .is-error .view-code-button {
-        background: var(--boxel-200);
-        color: var(--boxel-500);
-      }
-      .is-failed {
-        border: 1px solid var(--boxel-danger);
-        border-radius: var(--boxel-border-radius);
-      }
-      .command-button-bar {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--boxel-sp-xs);
-        margin-top: var(--boxel-sp);
-      }
-      .is-failed .command-button-bar {
-        padding-right: var(--boxel-sp-xs);
+        --boxel-button-color: var(--boxel-200);
+        --boxel-button-text-color: var(--boxel-500);
       }
       .view-code-button {
         --boxel-button-font: 600 var(--boxel-font-xs);
@@ -360,9 +347,6 @@ export default class RoomMessageCommand extends Component<Signature> {
       }
       .failed-command-text {
         color: var(--boxel-light);
-      }
-      :deep(.code-block-actions) {
-        margin-top: var(--boxel-sp);
       }
     </style>
   </template>

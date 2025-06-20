@@ -248,7 +248,7 @@ export default class AiAssistantMessage extends Component<Signature> {
             @hasItems={{this.hasItems}}
             @items={{this.items}}
             @downloadDebugFile={{if @isDebugMessage this.downloadFile}}
-            @isPending={{true}}
+            @isPending={{@isPending}}
           />
         {{/if}}
 
