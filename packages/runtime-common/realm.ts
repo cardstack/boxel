@@ -1036,6 +1036,9 @@ export class Realm {
       }
 
       if (e instanceof JsonWebTokenError) {
+        this.#log.error(
+          `encountered auth error (JWT threw): token${tokenString} realm permissions: ${JSON.stringify(realmPermissions, null, 2)}`,
+        );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }
 
