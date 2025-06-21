@@ -222,7 +222,6 @@ export class RealmIndexUpdater {
       // the experiments realm has a lot of hard coded human user accounts in it,
       // so we have to provide some special rules for which username to index with
       case 'https://realms-staging.stack.cards/experiments/':
-        return 'experiments_realm';
       case 'https://app.boxel.ai/experiments/':
         return 'experiments_realm';
     }
