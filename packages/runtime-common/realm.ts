@@ -120,8 +120,10 @@ export interface TokenClaims {
   permissions: RealmPermissions['user'];
 }
 
+export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
+
 export interface RealmPermissions {
-  [username: string]: ('read' | 'write' | 'realm-owner')[] | null;
+  [username: string]: RealmAction[] | null;
 }
 
 export interface RealmAdapter {
@@ -218,6 +220,7 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #disableModuleCaching = false;
+  #realmServerMatrixUserId: string;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -252,6 +255,7 @@ export class Realm {
       dbAdapter,
       queue,
       virtualNetwork,
+      realmServerMatrixUserId,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -260,12 +264,14 @@ export class Realm {
       dbAdapter: DBAdapter;
       queue: QueuePublisher;
       virtualNetwork: VirtualNetwork;
+      realmServerMatrixUserId: string;
     },
     opts?: Options,
   ) {
     this.paths = new RealmPaths(new URL(url));
     let { username, url: matrixURL } = matrix;
     this.#realmSecretSeed = secretSeed;
+    this.#realmServerMatrixUserId = realmServerMatrixUserId;
     this.#matrixClient = new MatrixClient({
       matrixURL,
       username,
@@ -665,7 +671,6 @@ export class Realm {
             permissions,
             this.#matrixClient,
           ).for(user);
-
           return this.#adapter.createJWT(
             {
               user,
@@ -727,7 +732,7 @@ export class Realm {
           }
         }
 
-        let requiredPermission: 'read' | 'write' | 'realm-owner';
+        let requiredPermission: RealmAction;
         if (['_permissions'].includes(this.paths.local(new URL(request.url)))) {
           requiredPermission = 'realm-owner';
         } else if (
@@ -981,27 +986,39 @@ export class Realm {
     try {
       token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
 
-      // if the client is the realm matrix user then we permit all actions
-      if (token.user === this.#matrixClient.getUserId()) {
-        return;
-      }
-
       let realmPermissionChecker = new RealmPermissionChecker(
         realmPermissions,
         this.#matrixClient,
       );
 
-      let userPermissions = await realmPermissionChecker.for(token.user);
+      let user = token.user;
+      let assumedUser = request.headers.get('X-Boxel-Assume-User');
+      let didAssumeUser = false;
       if (
+        assumedUser &&
+        (await realmPermissionChecker.can(user, 'assume-user'))
+      ) {
+        user = assumedUser;
+        didAssumeUser = true;
+      }
+
+      // if the client is the realm matrix user then we permit all actions
+      if (user === this.#matrixClient.getUserId()) {
+        return;
+      }
+
+      let userPermissions = await realmPermissionChecker.for(user);
+      if (
+        !didAssumeUser &&
         JSON.stringify(token.permissions?.sort()) !==
-        JSON.stringify(userPermissions.sort())
+          JSON.stringify(userPermissions.sort())
       ) {
         throw new AuthenticationError(
           AuthenticationErrorMessages.PermissionMismatch,
         );
       }
 
-      if (!(await realmPermissionChecker.can(token.user, requiredPermission))) {
+      if (!(await realmPermissionChecker.can(user, requiredPermission))) {
         throw new AuthorizationError(
           'Insufficient permissions to perform this action',
         );
@@ -1010,11 +1027,9 @@ export class Realm {
       if (e instanceof TokenExpiredError) {
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
-
       if (e instanceof JsonWebTokenError) {
         throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
       }
-
       throw e;
     }
   }
@@ -2211,10 +2226,10 @@ export class Realm {
   }
 
   private async createRequestContext(): Promise<RequestContext> {
-    let permissions = await fetchUserPermissions(
-      this.#dbAdapter,
-      new URL(this.url),
-    );
+    let permissions = {
+      [this.#realmServerMatrixUserId]: ['assume-user'] as RealmAction[],
+      ...(await fetchUserPermissions(this.#dbAdapter, new URL(this.url))),
+    };
     return {
       realm: this,
       permissions,

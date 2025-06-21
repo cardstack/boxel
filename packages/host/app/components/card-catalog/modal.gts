@@ -4,7 +4,6 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
-import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import { restartableTask, task, timeout } from 'ember-concurrency';
@@ -25,7 +24,6 @@ import {
   Deferred,
   Loader,
   RealmInfo,
-  realmURL,
   CardCatalogQuery,
   isCardInstance,
 } from '@cardstack/runtime-common';
@@ -537,13 +535,6 @@ export default class CardCatalogModal extends Component<Signature> {
           newCard = selectedItem;
         }
 
-        if (this.state.consumingRealm && cardId) {
-          await this.ensureRealmReadPermissions.perform(
-            this.state.consumingRealm.href,
-            cardId,
-          );
-        }
-
         if (newCard) {
           cardId = await this.createNewTask.perform(
             newCard.ref,
@@ -567,65 +558,6 @@ export default class CardCatalogModal extends Component<Signature> {
         this.stateStack.splice(stateIndex, 1);
       } else {
         this.stateStack.pop();
-      }
-    },
-  );
-
-  private ensureRealmReadPermissions = restartableTask(
-    async (realmOfConsumer: string, cardId: string) => {
-      if (!this.state) {
-        return;
-      }
-      let maybeCard = await this.store.get(cardId);
-      if (!isCardInstance(maybeCard)) {
-        return;
-      }
-      let realmOfSelectedCard = maybeCard[realmURL]?.href;
-      if (!realmOfSelectedCard) {
-        throw new Error(`could not determine realm of selected card ${cardId}`);
-      }
-      if (realmOfConsumer !== realmOfSelectedCard) {
-        await this.realm.ensureRealmMeta(realmOfConsumer);
-        let consumingRealmUserId =
-          this.realm.info(realmOfConsumer)?.realmUserId;
-        if (!consumingRealmUserId) {
-          if (isTesting()) {
-            // we exercise this method in our matrix tests which uses the non-test env
-            return;
-          }
-          throw new Error(
-            `Cannot determine the realm user id of ${realmOfConsumer}`,
-          );
-        }
-        // First check if the realm we're reading from has public read permissions
-        await this.realm.ensureRealmMeta(realmOfSelectedCard);
-        let selectedCardRealmInfo = this.realm.info(realmOfSelectedCard);
-        if (selectedCardRealmInfo.isPublic) {
-          // Nothing to do, the realm is publicly readable
-          return;
-        }
-        // If the realm is not publicly readable, try to set the permissions
-        // for the consuming realm
-        let selectedCardRealmPermissions =
-          await this.realm.allUsersPermissions(realmOfSelectedCard);
-        if (selectedCardRealmPermissions == null) {
-          throw new Error(
-            `Unable to ensure that the realm '${
-              this.realm.info(realmOfConsumer).name
-            }' has read permissions to the realm '${
-              this.realm.info(realmOfSelectedCard).name
-            }'`,
-          );
-        }
-        let consumerPermissions =
-          selectedCardRealmPermissions[consumingRealmUserId];
-        if (!consumerPermissions || !consumerPermissions.includes('read')) {
-          await this.realm.setPermissions(
-            realmOfSelectedCard,
-            consumingRealmUserId,
-            ['read'],
-          );
-        }
       }
     },
   );

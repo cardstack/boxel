@@ -14,6 +14,7 @@ import {
   unixTime,
   logger,
   jobIdentity,
+  userIdFromUsername,
   type QueueRunner,
   type TextFileRef,
   type VirtualNetwork,
@@ -149,7 +150,7 @@ export class Worker {
   #virtualNetwork: VirtualNetwork;
   #matrixURL: URL;
   #matrixClientCache: Map<string, MatrixClient> = new Map();
-  #realmAuthCache: WeakMap<MatrixClient, RealmAuthDataSource> = new WeakMap();
+  #realmAuthCache: Map<string, RealmAuthDataSource> = new Map();
   #secretSeed: string;
   #fromScratch:
     | ((realmURL: URL, boom?: true) => Promise<IndexResults>)
@@ -163,6 +164,7 @@ export class Worker {
       ) => Promise<IndexResults>)
     | undefined;
   #reportStatus: ((args: StatusArgs) => void) | undefined;
+  #realmServerMatrixUsername;
 
   constructor({
     indexWriter,
@@ -171,6 +173,7 @@ export class Worker {
     runnerOptsManager,
     virtualNetwork,
     matrixURL,
+    realmServerMatrixUsername,
     secretSeed,
     reportStatus,
   }: {
@@ -180,6 +183,7 @@ export class Worker {
     runnerOptsManager: RunnerOptionsManager;
     virtualNetwork: VirtualNetwork;
     matrixURL: URL;
+    realmServerMatrixUsername: string;
     secretSeed: string;
     reportStatus?: (args: StatusArgs) => void;
   }) {
@@ -191,6 +195,7 @@ export class Worker {
     this.runnerOptsMgr = runnerOptsManager;
     this.#runner = indexRunner;
     this.#reportStatus = reportStatus;
+    this.#realmServerMatrixUsername = realmServerMatrixUsername;
   }
 
   async run() {
@@ -205,8 +210,10 @@ export class Worker {
 
   private async makeAuthedFetch(args: WorkerArgs) {
     let matrixClient: MatrixClient;
-    if (this.#matrixClientCache.has(args.realmUsername)) {
-      matrixClient = this.#matrixClientCache.get(args.realmUsername)!;
+    if (this.#matrixClientCache.has(this.#realmServerMatrixUsername)) {
+      matrixClient = this.#matrixClientCache.get(
+        this.#realmServerMatrixUsername,
+      )!;
 
       if (!(await matrixClient.isTokenValid())) {
         await matrixClient.login();
@@ -214,25 +221,34 @@ export class Worker {
     } else {
       matrixClient = new MatrixClient({
         matrixURL: new URL(this.#matrixURL),
-        username: args.realmUsername,
+        username: this.#realmServerMatrixUsername,
         seed: this.#secretSeed,
       });
 
-      this.#matrixClientCache.set(args.realmUsername, matrixClient);
+      this.#matrixClientCache.set(
+        this.#realmServerMatrixUsername,
+        matrixClient,
+      );
     }
 
     let _fetch: typeof globalThis.fetch | undefined;
     function getFetch() {
       return _fetch!;
     }
-    let realmAuthDataSource = this.#realmAuthCache.get(matrixClient);
+    let realmAuthDataSource = this.#realmAuthCache.get(args.realmURL);
     if (!realmAuthDataSource) {
       realmAuthDataSource = new RealmAuthDataSource(matrixClient, getFetch);
-      this.#realmAuthCache.set(matrixClient, realmAuthDataSource);
+      this.#realmAuthCache.set(args.realmURL, realmAuthDataSource);
     }
+    let realmUserId = userIdFromUsername(
+      args.realmUsername,
+      this.#matrixURL.href,
+    );
+    console.log(`worker assuming user id ${realmUserId}`);
     _fetch = fetcher(this.#virtualNetwork.fetch, [
       async (req, next) => {
         req.headers.set('X-Boxel-Building-Index', 'true');
+        req.headers.set('X-Boxel-Assume-User', realmUserId);
         return next(req);
       },
       // TODO do we need this in our indexer?

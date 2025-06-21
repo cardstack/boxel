@@ -9,6 +9,9 @@ import { MockSDK } from './mock-matrix/_sdk';
 import { MockSlidingSync } from './mock-matrix/_sliding-sync';
 import { MockUtils } from './mock-matrix/_utils';
 
+export const testRealmServerMatrixUsername = 'realm_server';
+export const testRealmServerMatrixUserId = `@${testRealmServerMatrixUsername}:localhost`;
+
 export interface Config {
   loggedInAs?: string;
   displayName?: string;

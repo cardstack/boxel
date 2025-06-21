@@ -28,6 +28,7 @@ import {
   waitUntil,
   testRealmHref,
   createJWT,
+  testRealmServerMatrixUserId,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
@@ -304,6 +305,42 @@ module(basename(__filename), function () {
             );
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            undefined,
+            'realm is not public readable',
+          );
+        });
+
+        test('200 when server user assumes user that has read permission', async function (assert) {
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Assume-User', 'john')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, testRealmServerMatrixUserId, ['assume-user'])}`,
+            );
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            undefined,
+            'realm is not public readable',
+          );
+        });
+
+        test('403 when server user assumes user that has no read permission', async function (assert) {
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-Boxel-Assume-User', 'not-john')
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, testRealmServerMatrixUserId, ['assume-user'])}`,
+            );
+
+          assert.strictEqual(response.status, 403, 'HTTP 403 status');
           assert.strictEqual(
             response.get('X-boxel-realm-public-readable'),
             undefined,

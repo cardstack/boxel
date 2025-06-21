@@ -23,6 +23,13 @@ if (!REALM_SECRET_SEED) {
   );
   process.exit(-1);
 }
+const REALM_SERVER_MATRIX_USERNAME = process.env.REALM_SERVER_MATRIX_USERNAME;
+if (!REALM_SERVER_MATRIX_USERNAME) {
+  console.error(
+    `The REALM_SERVER_MATRIX_USERNAME environment variable is not set. Please make sure this env var has a value`,
+  );
+  process.exit(-1);
+}
 
 // This is an ENV var we get from ECS that looks like:
 // http://169.254.170.2/v3/a1de500d004f49bea02ace30cefb0f01-3236013547 where the
@@ -124,6 +131,7 @@ let autoMigrate = migrateDB || undefined;
     secretSeed: REALM_SECRET_SEED,
     indexRunner: getRunner,
     reportStatus,
+    realmServerMatrixUsername: REALM_SERVER_MATRIX_USERNAME,
   });
 
   await worker.run();

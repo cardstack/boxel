@@ -9,6 +9,7 @@ NODE_ENV=test \
   PGDATABASE=boxel_test \
   NODE_NO_WARNINGS=1 \
   REALM_SECRET_SEED="shhh! it's a secret" \
+  REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \
   --transpileOnly worker-manager \
   --port=4211 \

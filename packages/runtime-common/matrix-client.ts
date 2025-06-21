@@ -376,3 +376,8 @@ export async function waitForMatrixMessage(
 
   return null;
 }
+
+export function userIdFromUsername(username: string, matrixURL: string) {
+  let host = new URL(matrixURL).hostname.split('.').slice(-2).join('.');
+  return `@${username}:${host}`;
+}
