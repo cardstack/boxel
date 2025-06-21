@@ -217,20 +217,15 @@ export class RealmIndexUpdater {
       this.realmURL,
     );
 
-    // public realms that have special realm users
-    switch (this.realmURL.href) {
-      // the experiments realm has a lot of hard coded human user accounts in it,
-      // so we have to provide some special rules for which username to index with
-      case 'https://realms-staging.stack.cards/experiments/':
-      case 'https://app.boxel.ai/experiments/':
-        return 'experiments_realm';
+    let userIds = Object.entries(permissions)
+      .filter(([_, permissions]) => permissions?.includes('realm-owner'))
+      .map(([userId]) => userId);
+    if (userIds.length > 1) {
+      // we want to use the realm's human owner for the realm and not the bot
+      userIds = userIds.filter((userId) => !userId.startsWith('@realm/'));
     }
 
-    let [realmUserId] = Object.entries(permissions)
-      .filter(([_, permissions]) => permissions?.includes('realm-owner'))
-      .map(([userId]) => userId)
-      // we want to use the realm's human owner for the realm and not the bot
-      .filter((userId) => !userId.startsWith('@realm/'));
+    let [realmUserId] = userIds;
     // real matrix user ID's always start with an '@', if it doesn't that
     // means we are testing
     if (realmUserId?.startsWith('@')) {

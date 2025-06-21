@@ -37,7 +37,6 @@ export class MatrixBackendAuthentication {
       challenge?: string;
       challengeResponse?: string;
     };
-    console.log(`Creating realm session for user ${user}`);
     if (!user) {
       return this.utils.badRequest(
         JSON.stringify({ errors: [`Request body missing 'user' property`] }),
