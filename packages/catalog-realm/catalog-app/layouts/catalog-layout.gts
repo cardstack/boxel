@@ -64,10 +64,6 @@ export default class CatalogLayout extends GlimmerComponent<CatalogLayoutSignatu
         border-right: 1px solid var(--boxel-400);
         flex-shrink: 0;
         position: relative;
-        z-index: 1;
-        height: 100%;
-        max-height: 100vh;
-        overflow: hidden;
       }
 
       .layout-content {

@@ -2,7 +2,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import dayjs from 'dayjs';
 
 import cn from '../../helpers/cn.ts';
-import { formatDateTime } from '../../helpers/format-date-time.ts';
+import { dayjsFormat } from '../../helpers/dayjs-format.ts';
 import Profile from '../../icons/profile.gts';
 
 interface Signature {
@@ -57,7 +57,7 @@ const Message: TemplateOnlyComponent<Signature> = <template>
         {{/if}}
         {{#let (if @datetime @datetime (dayjs)) as |datetime|}}
           <time datetime={{datetime}} class='time'>
-            {{formatDateTime datetime 'MM/DD/YYYY, h:mm A'}}
+            {{dayjsFormat datetime 'MM/DD/YYYY, h:mm A'}}
           </time>
         {{/let}}
       </h3>

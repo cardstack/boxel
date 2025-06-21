@@ -562,8 +562,9 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   private createNewCard = restartableTask(async () => {
     let newCardJSON: LooseSingleCardDocument;
+    let isFieldDef = this.args.isFieldDef;
 
-    if (this.args.isFieldDef) {
+    if (isFieldDef) {
       let fieldCard = await loadCardDef(this.args.codeRef, {
         loader: this.loaderService.loader,
       });
@@ -611,9 +612,9 @@ export default class PlaygroundPanel extends Component<Signature> {
       // in the case of an error we still need to persist it in
       // order render the error doc
       typeof maybeId === 'string' ? maybeId : this.newCardLocalId,
-      // open new instance in playground in edit format
-      'edit',
-      this.args.isFieldDef ? 0 : undefined,
+      // preview new instance in isolated format
+      isFieldDef ? 'edit' : 'isolated',
+      isFieldDef ? 0 : undefined,
     );
     if (typeof maybeId === 'string') {
       // reset the local ID for making new cards after each successful attempt

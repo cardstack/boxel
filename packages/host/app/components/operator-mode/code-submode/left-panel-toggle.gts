@@ -3,6 +3,9 @@ import { on } from '@ember/modifier';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import FileCheck from '@cardstack/boxel-icons/file-check';
+import FolderTree from '@cardstack/boxel-icons/folder-tree';
+
 import {
   Label,
   RealmIcon,
@@ -121,6 +124,7 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
         data-test-file-view-header
       >
         <ToggleButton
+          @icon={{FolderTree}}
           @isActive={{this.isFileTreeShowing}}
           {{on 'click' (fn this.setFileView 'browser')}}
           data-test-file-browser-toggle
@@ -128,6 +132,7 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
           File Tree
         </ToggleButton>
         <ToggleButton
+          @icon={{FileCheck}}
           @disabled={{not @isFileOpen}}
           @isActive={{not this.isFileTreeShowing}}
           {{on 'click' (fn this.setFileView 'inspector')}}
@@ -195,7 +200,7 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
 
     <style scoped>
       .left-panel {
-        background-color: var(--code-mode-panel-background-color);
+        background-color: transparent;
       }
       .left-panel-header {
         display: flex;
