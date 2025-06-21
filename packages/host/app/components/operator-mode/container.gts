@@ -34,6 +34,8 @@ import MessageService from '@cardstack/host/services/message-service';
 import CardCatalogModal from '../card-catalog/modal';
 import { Submodes } from '../submode-switcher';
 
+import AttachFileModal from './attach-file-modal';
+
 import type BillingService from '../../services/billing-service';
 import type CardService from '../../services/card-service';
 import type MatrixService from '../../services/matrix-service';
@@ -131,6 +133,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       @isOverlayDismissalDisabled={{true}}
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
+      <AttachFileModal />
       <CardCatalogModal />
       {{#if
         (or

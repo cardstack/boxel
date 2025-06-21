@@ -44,6 +44,7 @@ import { getRoomIdForRealmAndUser } from '../helpers/mock-matrix/_utils';
 import { setupApplicationTest } from '../helpers/setup';
 
 async function selectCardFromCatalog(cardId: string) {
+  await click('[data-test-attach-button]');
   await click('[data-test-choose-card-btn]');
   await click(`[data-test-select="${cardId}"]`);
   await click('[data-test-card-catalog-go-button]');
@@ -529,6 +530,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
 
+    await click('[data-test-attach-button]');
     await click('[data-test-choose-file-btn]');
     assert.dom('[data-test-attach-file-modal]').exists();
     assert.dom('[data-test-file="pet.gts"]').exists();
@@ -549,6 +551,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-attached-file]').exists({ count: 1 });
     assert.dom('[data-test-attached-file]').hasText('person.gts');
     // Add attachment item
+    await click('[data-test-attach-button]');
     await click('[data-test-choose-file-btn]');
     await click('[data-test-file="pet.gts"]');
     await click('[data-test-attach-file-modal-add-button]');
@@ -753,6 +756,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       )
       .exists();
 
+    await click('[data-test-attach-button]');
     await click('[data-test-choose-card-btn]');
     await fillIn('[data-test-search-field]', 'Mango');
     await click(`[data-test-select="${testRealmURL}Pet/mango"]`);

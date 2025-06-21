@@ -23,7 +23,7 @@ interface Signature {
     canSend: boolean;
     attachButton?: WithBoundArgs<
       typeof AttachButton,
-      'submode' | 'files' | 'cards' | 'chooseCard' | 'chooseFile'
+      'files' | 'cards' | 'chooseCard' | 'chooseFile'
     >;
   };
 }
@@ -70,6 +70,8 @@ export default class AiAssistantChatInput extends Component<Signature> {
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xxs) var(--boxel-sp-xxs)
           var(--boxel-sp-xs);
         background-color: var(--boxel-light);
+        border-top-left-radius: var(--boxel-border-radius);
+        border-top-right-radius: var(--boxel-border-radius);
       }
       .chat-input {
         height: var(--chat-input-height);
