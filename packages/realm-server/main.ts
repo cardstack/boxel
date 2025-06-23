@@ -232,6 +232,7 @@ let autoMigrate = migrateDB || undefined;
         realmServerMatrixUserId,
       },
       {
+        fullIndexOnStartup: true,
         ...(process.env.DISABLE_MODULE_CACHING === 'true'
           ? { disableModuleCaching: true }
           : {}),
