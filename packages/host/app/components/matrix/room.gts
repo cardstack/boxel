@@ -77,6 +77,7 @@ import type RoomData from '../../lib/matrix-classes/room';
 import type { RoomSkill } from '../../resources/room';
 
 interface Signature {
+  Element: HTMLElement;
   Args: {
     roomId: string;
     roomResource: RoomResource;
