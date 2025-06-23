@@ -15,4 +15,8 @@ NODE_NO_WARNINGS=1 \
   --toUrl='https://app.boxel.ai/experiments/' \
   \
   --fromUrl='https://app.boxel.ai/catalog/' \
-  --toUrl='https://app.boxel.ai/catalog/'
+  --toUrl='https://app.boxel.ai/catalog/' \
+  \
+  --fromUrl='https://app.boxel.ai/skills/' \
+  --toUrl='https://app.boxel.ai/skills/'
+

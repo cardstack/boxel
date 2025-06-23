@@ -40,4 +40,9 @@ NODE_ENV=development \
   --path='../catalog-realm' \
   --username='catalog_realm' \
   --fromUrl='http://localhost:4201/catalog/' \
-  --toUrl='http://localhost:4201/catalog/'
+  --toUrl='http://localhost:4201/catalog/' \
+  \
+  --path='../skills-realm/contents' \
+  --username='skills_realm' \
+  --fromUrl='http://localhost:4201/skills/' \
+  --toUrl='http://localhost:4201/skills/'

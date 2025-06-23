@@ -26,4 +26,9 @@ NODE_NO_WARNINGS=1 \
   --path='/persistent/catalog' \
   --username='catalog_realm' \
   --fromUrl='https://realms-staging.stack.cards/catalog/' \
-  --toUrl='https://realms-staging.stack.cards/catalog/'
+  --toUrl='https://realms-staging.stack.cards/catalog/'\
+  \
+  --path='/persistent/skills' \
+  --username='skills_realm' \
+  --fromUrl='https://realms-staging.stack.cards/skills/' \
+  --toUrl='https://realms-staging.stack.cards/skills/'

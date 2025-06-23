@@ -25,4 +25,8 @@ NODE_ENV=development \
   --toUrl='http://localhost:4201/experiments/' \
   \
   --fromUrl='http://localhost:4201/catalog/' \
-  --toUrl='http://localhost:4201/catalog/'
+  --toUrl='http://localhost:4201/catalog/' \
+  \
+  --fromUrl='http://localhost:4201/skills/' \
+  --toUrl='http://localhost:4201/skills/'
+
