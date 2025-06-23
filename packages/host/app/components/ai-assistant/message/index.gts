@@ -314,7 +314,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         --ai-bot-message-background-color: #3b394b;
         --ai-assistant-message-avatar-size: 0.75rem; /* 20px. */
         --ai-assistant-message-meta-height: 0.75rem; /* 20px */
-        --ai-assistant-message-gap: var(--boxel-sp-xs);
+        --ai-assistant-message-gap: var(--boxel-sp-xxxs);
         --profile-avatar-icon-size: var(--ai-assistant-message-avatar-size);
         --profile-avatar-icon-border: 1px solid var(--boxel-400);
       }
@@ -366,7 +366,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
 
       .content-container {
-        margin-top: var(--boxel-sp-xs);
+        margin-top: var(--boxel-sp-xxxs);
         border-radius: var(--boxel-border-radius-xxs)
           var(--boxel-border-radius-xl) var(--boxel-border-radius-xl)
           var(--boxel-border-radius-xl);
