@@ -259,6 +259,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
 
       .panel-title-text {
+        position: relative;
         margin: 0;
         padding-right: var(--boxel-sp-xl);
         color: var(--boxel-light);
@@ -274,6 +275,22 @@ export default class AiAssistantPanel extends Component<Signature> {
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
       }
+
+      .panel-title-text:after {
+        content: '';
+        background: linear-gradient(
+          to right,
+          transparent,
+          transparent 80%,
+          var(--boxel-ai-purple) 98%
+        );
+        display: block;
+        inset-block-end: 0;
+        position: absolute;
+        height: 100%;
+        width: 100%;
+      }
+
       .close-ai-panel {
         --icon-color: var(--boxel-highlight);
         /*position: absolute;
