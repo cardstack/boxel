@@ -61,6 +61,7 @@ import SortDropdown, {
 } from './components/sort-dropdown/index.gts';
 import Switch from './components/switch/index.gts';
 import TabbedHeader from './components/tabbed-header/index.gts';
+import TagList from './components/tag-list/index.gts';
 import Tooltip from './components/tooltip/index.gts';
 import ViewSelector, {
   type ViewItem,
@@ -126,6 +127,7 @@ export {
   SortDropdown,
   Switch,
   TabbedHeader,
+  TagList,
   Tooltip,
   ViewSelector,
 };

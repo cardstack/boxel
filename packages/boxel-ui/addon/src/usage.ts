@@ -43,6 +43,7 @@ import SelectUsage from './components/select/usage.gts';
 import SkeletonPlaceholderUsage from './components/skeleton-placeholder/usage.gts';
 import SwitchUsage from './components/switch/usage.gts';
 import TabbedHeaderUsage from './components/tabbed-header/usage.gts';
+import TagListUsage from './components/tag-list/usage.gts';
 import TooltipUsage from './components/tooltip/usage.gts';
 import ViewSelectorUsage from './components/view-selector/usage.gts';
 
@@ -89,6 +90,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['SkeletonPlaceholder', SkeletonPlaceholderUsage],
   ['Switch', SwitchUsage],
   ['TabbedHeader', TabbedHeaderUsage],
+  ['TagList', TagListUsage],
   ['Tooltip', TooltipUsage],
   ['ViewSelector', ViewSelectorUsage],
 ];

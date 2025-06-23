@@ -1,7 +1,4 @@
 import GlimmerComponent from '@glimmer/component';
-import { action } from '@ember/object';
-import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
 
 import {
   CardDef,
@@ -30,14 +27,6 @@ export class CardsIntancesGrid extends GlimmerComponent<CardsIntancesGridArgs> {
     return this.args.selectedView || 'grid';
   }
 
-  @action
-  viewCard(card: CardDef) {
-    if (!this.args.context?.actions?.viewCard) {
-      throw new Error('viewCard action is not available');
-    }
-    this.args.context?.actions?.viewCard?.(new URL(card.id), 'isolated');
-  }
-
   <template>
     <ul class='cards {{this.view}}-view' ...attributes>
       {{#each @cards key='url' as |card|}}
@@ -48,7 +37,6 @@ export class CardsIntancesGrid extends GlimmerComponent<CardsIntancesGridArgs> {
               @displayBoundaries={{true}}
               data-test-cards-grid-item={{removeFileExtension card.id}}
               data-cards-grid-item={{removeFileExtension card.id}}
-              {{on 'click' (fn this.viewCard card)}}
             >
               <CardComponent />
             </CardContainer>
