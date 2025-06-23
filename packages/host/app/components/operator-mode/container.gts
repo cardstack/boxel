@@ -42,6 +42,10 @@ import type RealmServerService from '../../services/realm-server';
 
 const waiter = buildWaiter('operator-mode-container:saveCard-waiter');
 
+import config from '@cardstack/host/config/environment';
+import ChooseSubscriptionPlanModal from './choose-subscription-plan-modal';
+import { tracked } from '@glimmer/tracking';
+
 interface Signature {
   Args: {
     onClose: () => void;
@@ -109,6 +113,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   private get isUserInfoLoading() {
+    return false;
     return this.billingService.fetchingSubscriptionData;
   }
 
@@ -122,6 +127,25 @@ export default class OperatorModeContainer extends Component<Signature> {
     );
   }
 
+  private get needsToSubscribeInStripe() {
+    if (isTesting()) {
+      return false;
+    }
+    let isStripeSignupMandatory = config.featureFlags.STRIPE_SIGNUP_MANDATORY;
+
+    if (isStripeSignupMandatory) {
+      return !this.isUserSubscribed;
+    }
+
+    return false;
+  }
+
+  @tracked private isModalOpen = true;
+
+  private onClose = () => {
+    this.isModalOpen = false;
+  };
+
   <template>
     <Modal
       class='operator-mode'
@@ -132,25 +156,26 @@ export default class OperatorModeContainer extends Component<Signature> {
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
       <CardCatalogModal />
+      <ChooseSubscriptionPlanModal
+        @isModalOpen={{this.isModalOpen}}
+        @onClose={{this.onClose}}
+      />
+
       {{#if
         (or
           (not this.matrixService.isLoggedIn)
           this.matrixService.isInitializingNewUser
         )
       }}
+        {{log '0'}}
         <Auth />
-      {{else if (and this.isUserInfoLoading (not this.isUserSubscribed))}}
-        <div class='loading-spinner-container'>
-          <div class='loading-spinner'>
-            <LoadingIndicator @color='var(--boxel-teal)' />
-            <div class='loading-spinner-text'>Loading…</div>
-          </div>
-        </div>
-      {{else if (not this.isUserSubscribed)}}
-        <PaymentSetup
+      {{else if this.needsToSubscribeInStripe}}
+        {{log '2'}}
+        {{!-- <PaymentSetup
           @flow={{if this.matrixService.isNewUser 'register' 'logged-in'}}
-        />
+        /> --}}
       {{else if this.isCodeMode}}
+        {{log '3'}}
         <CodeSubmode @saveSourceOnClose={{perform this.saveSource}} />
       {{else}}
         <InteractSubmode />

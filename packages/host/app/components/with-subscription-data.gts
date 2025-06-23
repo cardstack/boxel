@@ -60,12 +60,12 @@ interface WithSubscriptionDataSignature {
   Blocks: {
     default: [
       {
-        hasActiveSubscription: boolean;
         plan: ComponentLike;
         monthlyCredit: ComponentLike;
         additionalCredit: ComponentLike;
         isOutOfCredit: boolean;
         isLoading: boolean;
+        isFreePlan: boolean;
       },
     ];
   };
@@ -106,7 +106,7 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
       ? `${formatNumber(
           this.creditsAvailableInPlanAllowance,
         )} of ${formatNumber(this.creditsIncludedInPlanAllowance)} left`
-      : null;
+      : 'Not available on free plan';
   }
 
   private get isOutOfCredit() {
@@ -129,10 +129,13 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
     await this.billingService.fetchSubscriptionData();
   });
 
+  private isFreePlan() {
+    return this.plan == 'free';
+  }
+
   <template>
     {{yield
       (hash
-        hasActiveSubscription=(if this.plan true false)
         plan=(component
           Value
           tag='plan'
@@ -159,6 +162,7 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
         )
         isOutOfCredit=this.isOutOfCredit
         isLoading=this.isLoading
+        isFreePlan=this.isFreePlan
       )
     }}
   </template>

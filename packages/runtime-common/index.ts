@@ -96,6 +96,7 @@ export * from './utils';
 export * from './authorization-middleware';
 export * from './query';
 export * from './formats';
+export * from './db-types';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { RealmPaths, Loader, type LocalPath };

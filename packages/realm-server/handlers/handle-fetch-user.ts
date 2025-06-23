@@ -87,6 +87,66 @@ export default function handleFetchUserRequest({
       return;
     }
 
+    // User is on free plan if they never had a subscription
+    let isOnFreePlan = await getMostRecentSubscriptionCycle(dbAdapter, user.id);
+    if (isOnFreePlan) {
+      let responseBody = {
+        data: {
+          type: 'user',
+          id: user.id,
+          attributes: {
+            matrixUserId: user.matrixUserId,
+            stripeCustomerId: user.stripeCustomerId,
+            stripeCustomerEmail: user.stripeCustomerEmail,
+            creditsAvailableInPlanAllowance: 0,
+            creditsIncludedInPlanAllowance: 0,
+            extraCreditsAvailableInBalance,
+          },
+          relationships: {
+            subscription: mostRecentSubscription
+              ? {
+                  data: {
+                    type: 'subscription',
+                    id: mostRecentSubscription.id,
+                  },
+                }
+              : null,
+          },
+        },
+        included:
+          mostRecentSubscription && plan
+            ? [
+                {
+                  type: 'subscription',
+                  id: mostRecentSubscription.id,
+                  attributes: {
+                    startedAt: mostRecentSubscription.startedAt,
+                    endedAt: mostRecentSubscription.endedAt ?? null,
+                    status: mostRecentSubscription.status,
+                  },
+                  relationships: {
+                    plan: {
+                      data: {
+                        type: 'plan',
+                        id: plan.id,
+                      },
+                    },
+                  },
+                },
+                {
+                  type: 'plan',
+                  id: plan.id,
+                  attributes: {
+                    name: plan.name,
+                    monthlyPrice: plan.monthlyPrice,
+                    creditsIncluded: plan.creditsIncluded,
+                  },
+                },
+              ]
+            : null,
+      } as FetchUserResponse;
+    }
+
     let mostRecentSubscription = await getCurrentActiveSubscription(
       dbAdapter,
       user.id,
@@ -103,6 +163,7 @@ export default function handleFetchUserRequest({
     let creditsAvailableInPlanAllowance: number | null = null;
     let creditsIncludedInPlanAllowance: number | null = null;
     let extraCreditsAvailableInBalance: number | null = null;
+
     if (currentSubscriptionCycle) {
       [
         creditsAvailableInPlanAllowance,
@@ -122,7 +183,15 @@ export default function handleFetchUserRequest({
           userId: user.id,
         }),
       ]);
+    } else {
+      extraCreditsAvailableInBalance = await sumUpCreditsLedger(dbAdapter, {
+        creditType: ['extra_credit', 'extra_credit_used'],
+        userId: user.id,
+      });
     }
+
+    // if (!mostRecentSubscription) {
+    // }
 
     let responseBody = {
       data: {
@@ -177,7 +246,17 @@ export default function handleFetchUserRequest({
                 },
               },
             ]
-          : null,
+          : [
+              {
+                type: 'plan',
+                id: 'free',
+                attributes: {
+                  name: 'Free',
+                  monthlyPrice: 0,
+                  creditsIncluded: 0,
+                },
+              },
+            ],
     } as FetchUserResponse;
 
     return setContextResponse(

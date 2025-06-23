@@ -1,4 +1,4 @@
-import { upsertUser } from '@cardstack/runtime-common';
+import { insertUser } from '@cardstack/runtime-common';
 import Koa from 'koa';
 import {
   fetchRequestFromContext,
@@ -8,6 +8,11 @@ import {
 } from '../middleware';
 import { RealmServerTokenClaim } from '../utils/jwt';
 import { CreateRoutesArgs } from '../routes';
+import {
+  User,
+  addToCreditsLedger,
+  getUserByMatrixUserId,
+} from '@cardstack/billing/billing-queries';
 
 export default function handleCreateUserRequest({
   dbAdapter,
@@ -39,7 +44,26 @@ export default function handleCreateUserRequest({
 
     let registrationToken = json.data.attributes.registrationToken;
 
-    await upsertUser(dbAdapter, matrixUserId, registrationToken);
+    let user;
+
+    try {
+      user = await insertUser(dbAdapter, matrixUserId, registrationToken);
+    } catch (e) {
+      // TODO: detect if the error is because the user already exists
+      await setContextResponse(
+        ctxt,
+        new Response('User already exists', { status: 422 }),
+      );
+      return;
+    }
+
+    await addToCreditsLedger(dbAdapter, {
+      userId: user!.id,
+      creditAmount: 1000,
+      creditType: 'extra_credit',
+      subscriptionCycleId: null,
+    });
+
     await setContextResponse(ctxt, new Response('ok'));
   };
 }

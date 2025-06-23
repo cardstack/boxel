@@ -22,6 +22,8 @@ import {
   addToCreditsLedger,
   insertSubscriptionCycle,
   insertSubscription,
+  getUserByMatrixUserId,
+  sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 
@@ -262,6 +264,121 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         },
         '/_user response is correct',
       );
+    });
+  });
+
+  module('Realm-specific Endpoints | POST _user', function (hooks) {
+    let testRealm: Realm;
+    let testRealmHttpServer: Server;
+    let request: SuperTest<Test>;
+    let dir: DirResult;
+    let dbAdapter: PgAdapter;
+
+    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
+
+    function onRealmSetup(args: {
+      testRealm: Realm;
+      testRealmHttpServer: Server;
+      request: SuperTest<Test>;
+      dbAdapter: PgAdapter;
+      dir: DirResult;
+    }) {
+      testRealm = args.testRealm;
+      testRealmHttpServer = args.testRealmHttpServer;
+      request = args.request;
+      dbAdapter = args.dbAdapter;
+      dir = args.dir;
+    }
+
+    setupCardLogs(
+      hooks,
+      async () => await loader.import(`${baseRealm.url}card-api`),
+    );
+
+    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+
+    hooks.beforeEach(async function () {
+      dir = dirSync();
+      copySync(join(__dirname, '..', 'cards'), dir.name);
+    });
+
+    hooks.afterEach(async function () {
+      await closeServer(testRealmHttpServer);
+      resetCatalogRealms();
+    });
+
+    setupPermissionedRealm(hooks, {
+      permissions: {
+        john: ['read', 'write'],
+      },
+      onRealmSetup,
+    });
+
+    test.only('creates a new user with initial credits', async function (assert) {
+      let response = await request
+        .post(`/_user`)
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'newuser@test', ['read', 'write'])}`,
+        )
+        .send({
+          data: {
+            type: 'user',
+            attributes: {
+              registrationToken: 'reg_token_123',
+            },
+          },
+        });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(response.text, 'ok', 'Response is ok');
+
+      // Verify user was created
+      let user = await getUserByMatrixUserId(dbAdapter, 'newuser@test');
+      assert.ok(user, 'User was created');
+      assert.strictEqual(
+        user!.matrixRegistrationToken,
+        'reg_token_123',
+        'Registration token was saved',
+      );
+
+      // Verify credits were added
+      let extraCredits = await sumUpCreditsLedger(dbAdapter, {
+        userId: user!.id,
+        creditType: 'extra_credit',
+      });
+      assert.strictEqual(extraCredits, 1000, 'extra credits were added');
+      let planAllowance = await sumUpCreditsLedger(dbAdapter, {
+        userId: user!.id,
+        creditType: 'plan_allowance',
+      });
+      assert.strictEqual(
+        planAllowance,
+        0,
+        'plan allowance was not added (because there is no plan for new user)',
+      );
+
+      // Try running the endpoint again
+      response = await request
+        .post(`/_user`)
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'newuser@test', ['read', 'write'])}`,
+        )
+        .send({
+          data: {
+            type: 'user',
+            attributes: {
+              registrationToken: 'reg_token_123',
+            },
+          },
+        });
+
+      assert.strictEqual(response.status, 422, 'HTTP 200 status');
     });
   });
 });
