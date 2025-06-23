@@ -312,9 +312,9 @@ export default class AiAssistantMessage extends Component<Signature> {
     <style scoped>
       .ai-assistant-message {
         --ai-bot-message-background-color: #3b394b;
-        --ai-assistant-message-avatar-size: 1.25rem; /* 20px. */
-        --ai-assistant-message-meta-height: 1.25rem; /* 20px */
-        --ai-assistant-message-gap: var(--boxel-sp-xs);
+        --ai-assistant-message-avatar-size: 0.75rem; /* 12px. */
+        --ai-assistant-message-meta-height: 0.75rem; /* 12px */
+        --ai-assistant-message-gap: var(--boxel-sp-xxxs);
         --profile-avatar-icon-size: var(--ai-assistant-message-avatar-size);
         --profile-avatar-icon-border: 1px solid var(--boxel-400);
       }
@@ -366,7 +366,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
 
       .content-container {
-        margin-top: 13px;
+        margin-top: var(--boxel-sp-xxxs);
         border-radius: var(--boxel-border-radius-xxs)
           var(--boxel-border-radius-xl) var(--boxel-border-radius-xl)
           var(--boxel-border-radius-xl);
@@ -390,6 +390,7 @@ export default class AiAssistantMessage extends Component<Signature> {
           text on dark background (otherwise not good for accessibility) */
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+        padding: 0;
         padding: 0;
       }
 
