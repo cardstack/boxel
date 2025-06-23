@@ -76,9 +76,9 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
         gap: 6px;
         text-wrap: nowrap;
         background-image: image-set(
-          url('../ai-assistant/ai-assist-icon.webp') 1x,
-          url('../ai-assistant/ai-assist-icon@2x.webp') 2x,
-          url('../ai-assistant/ai-assist-icon@3x.webp')
+          url('../ai-assistant/assets/ai-assist-icon.webp') 1x,
+          url('../ai-assistant/assets/ai-assist-icon@2x.webp') 2x,
+          url('../ai-assistant/assets/ai-assist-icon@3x.webp')
         );
         background-color: var(--boxel-ai-purple);
         background-size: 14px 14px;

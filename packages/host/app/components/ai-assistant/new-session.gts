@@ -4,7 +4,7 @@ import Component from '@glimmer/component';
 
 import { Button } from '@cardstack/boxel-ui/components';
 
-import assistantIcon from './ai-assist-icon@2x.webp';
+import assistantIcon from './assets/ai-assist-icon@2x.webp';
 
 interface Signature {
   Args: {

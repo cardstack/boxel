@@ -22,7 +22,7 @@ import MatrixService from '@cardstack/host/services/matrix-service';
 
 import { CurrentRoomIdPersistenceKey } from '@cardstack/host/utils/local-storage-keys';
 
-import assistantIcon from './ai-assist-icon.webp';
+import assistantIcon from './assets/ai-assist-icon.webp';
 
 interface Signature {
   Element: HTMLDivElement;

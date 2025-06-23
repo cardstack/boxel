@@ -23,9 +23,9 @@ const AiAssistantButton: TemplateOnlyComponent<Signature> = <template>
       background-color: var(--boxel-dark);
       border: var(--boxel-border-flexible);
       background-image: image-set(
-        url('./ai-assist-icon.webp') 1x,
-        url('./ai-assist-icon@2x.webp') 2x,
-        url('./ai-assist-icon@3x.webp')
+        url('./assets/ai-assist-icon.webp') 1x,
+        url('./assets/ai-assist-icon@2x.webp') 2x,
+        url('./assets/ai-assist-icon@3x.webp')
       );
       background-size: 26px 26px;
       background-position: center;
@@ -38,14 +38,14 @@ const AiAssistantButton: TemplateOnlyComponent<Signature> = <template>
     .ai-assistant-button.is-active {
       background-image:
         image-set(
-          url('./ai-assist-icon-bw.png') 1x,
-          url('./ai-assist-icon-bw@2x.png') 2x,
-          url('./ai-assist-icon-bw@3x.png')
+          url('./assets/ai-assist-icon-bw.png') 1x,
+          url('./assets/ai-assist-icon-bw@2x.png') 2x,
+          url('./assets/ai-assist-icon-bw@3x.png')
         ),
         image-set(
-          url('./ai-assist-button-active-bg.webp') 1x,
-          url('./ai-assist-button-active-bg@2x.webp') 2x,
-          url('./ai-assist-button-active-bg@3x.webp')
+          url('./assets/ai-assist-button-active-bg.webp') 1x,
+          url('./assets/ai-assist-button-active-bg@2x.webp') 2x,
+          url('./assets/ai-assist-button-active-bg@3x.webp')
         );
       background-size:
         26px 26px,

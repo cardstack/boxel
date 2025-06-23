@@ -40,16 +40,16 @@ export default class MessageMeta extends Component<Signature> {
         height: var(--ai-assistant-message-avatar-size);
 
         background-image: image-set(
-          url('../ai-assist-icon.webp') 1x,
-          url('../ai-assist-icon@2x.webp') 2x,
-          url('../ai-assist-icon@3x.webp')
+          url('../assets/ai-assist-icon.webp') 1x,
+          url('../assets/ai-assist-icon@2x.webp') 2x,
+          url('../assets/ai-assist-icon@3x.webp')
         );
         background-repeat: no-repeat;
         background-size: var(--ai-assistant-message-avatar-size);
       }
 
       .ai-avatar-animated {
-        background-image: url('../ai-assist-icon-animated.webp');
+        background-image: url('../assets/ai-assist-icon-animated.webp');
       }
 
       .time {

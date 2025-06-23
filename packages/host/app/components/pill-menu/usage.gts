@@ -8,7 +8,7 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import type StoreService from '@cardstack/host/services/store';
 
-import headerIcon from '../ai-assistant/ai-assist-icon@2x.webp';
+import headerIcon from '../ai-assistant/assets/ai-assist-icon@2x.webp';
 
 import PillMenu from './index';
 

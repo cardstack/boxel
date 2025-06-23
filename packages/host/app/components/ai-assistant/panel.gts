@@ -33,7 +33,7 @@ import RenameSession from '../ai-assistant/rename-session';
 import Room from '../matrix/room';
 import DeleteModal from '../operator-mode/delete-modal';
 
-import assistantIcon from './ai-assist-icon.webp';
+import assistantIcon from './assets/ai-assist-icon.webp';
 
 import type MatrixService from '../../services/matrix-service';
 import type MonacoService from '../../services/monaco-service';

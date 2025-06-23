@@ -9,9 +9,9 @@ const AiAssistantIcon: Icon = <template>
       width: var(--size);
       height: var(--size);
       background-image: image-set(
-        url('../../../ai-assistant/ai-assist-icon-bw.png') 1x,
-        url('../../../ai-assistant/ai-assist-icon-bw@2x.png') 2x,
-        url('../../../ai-assistant/ai-assist-icon-bw@3x.png')
+        url('../../../ai-assistant/assets/ai-assist-icon-bw.png') 1x,
+        url('../../../ai-assistant/assets/ai-assist-icon-bw@2x.png') 2x,
+        url('../../../ai-assistant/assets/ai-assist-icon-bw@3x.png')
       );
       background-position: center;
       background-repeat: no-repeat;
