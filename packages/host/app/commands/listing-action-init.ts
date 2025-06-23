@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { baseRealm, isCardInstance } from '@cardstack/runtime-common';
+import { isCardInstance } from '@cardstack/runtime-common';
 
 import * as BaseCommandModule from 'https://cardstack.com/base/command';
 
