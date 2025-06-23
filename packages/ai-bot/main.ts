@@ -440,7 +440,10 @@ Common issues are:
     }
   });
 
-  await client.startClient();
+  await client.startClient({
+    initialSyncLimit: 0,
+    lazyLoadMembers: true,
+  });
   log.info('client started');
 })().catch((e) => {
   log.error(e);
