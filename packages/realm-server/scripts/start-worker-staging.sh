@@ -1,6 +1,7 @@
 #! /bin/sh
 
 NODE_NO_WARNINGS=1 \
+  REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \
   --transpileOnly worker-manager \
   --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
