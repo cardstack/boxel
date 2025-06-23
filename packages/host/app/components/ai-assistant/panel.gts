@@ -90,17 +90,49 @@ export default class AiAssistantPanel extends Component<Signature> {
       >
         <@resizeHandle />
         <header class='panel-header'>
-          <div class='panel-title-group'>
-            <img
-              alt='AI Assistant'
-              src={{assistantIcon}}
-              width='20'
-              height='20'
-            />
-            <h3 class='panel-title-text' data-test-chat-title>
-              {{if this.roomResource.name this.roomResource.name 'Assistant'}}
-            </h3>
-          </div>
+          <img
+            alt='AI Assistant'
+            src={{assistantIcon}}
+            width='20'
+            height='20'
+          />
+          <h3 class='panel-title-text' data-test-chat-title>
+            {{if this.roomResource.name this.roomResource.name 'Assistant'}}
+          </h3>
+          <Button
+            title='New Session'
+            class='button new-session-button'
+            @kind='text-only'
+            @size='extra-small'
+            @disabled={{not this.roomResource.messages.length}}
+            {{on
+              'click'
+              (fn this.aiAssistantPanelService.createNewSession false)
+            }}
+            data-test-create-room-btn
+          >
+            <PlusIcon />
+          </Button>
+          {{#if this.aiAssistantPanelService.loadingRooms}}
+            <LoadingIndicator @color='var(--boxel-light)' />
+          {{else}}
+            <Button
+              title='Past Sessions'
+              class='button past-sessions-button
+                {{if
+                  this.hasOtherActiveSessions
+                  "past-sessions-button-active"
+                }}'
+              @kind='text-only'
+              @size='extra-small'
+              @disabled={{this.aiAssistantPanelService.displayRoomError}}
+              {{on 'click' this.aiAssistantPanelService.displayPastSessions}}
+              data-test-past-sessions-button
+              data-test-has-active-sessions={{this.hasOtherActiveSessions}}
+            >
+              <HistoryIcon />
+            </Button>
+          {{/if}}
           <IconButton
             class='close-ai-panel'
             @variant='primary'
@@ -111,43 +143,6 @@ export default class AiAssistantPanel extends Component<Signature> {
             aria-label='Close AI Assistant'
             data-test-close-ai-assistant
           />
-          <div class='header-buttons' {{popoverVelcro.hook}}>
-            <Button
-              title='New Session'
-              class='button new-session-button'
-              @kind='text-only'
-              @size='extra-small'
-              @disabled={{not this.roomResource.messages.length}}
-              {{on
-                'click'
-                (fn this.aiAssistantPanelService.createNewSession false)
-              }}
-              data-test-create-room-btn
-            >
-              <PlusIcon />
-            </Button>
-
-            {{#if this.aiAssistantPanelService.loadingRooms}}
-              <LoadingIndicator @color='var(--boxel-light)' />
-            {{else}}
-              <Button
-                title='Past Sessions'
-                class='button past-sessions-button
-                  {{if
-                    this.hasOtherActiveSessions
-                    "past-sessions-button-active"
-                  }}'
-                @kind='text-only'
-                @size='extra-small'
-                @disabled={{this.aiAssistantPanelService.displayRoomError}}
-                {{on 'click' this.aiAssistantPanelService.displayPastSessions}}
-                data-test-past-sessions-button
-                data-test-has-active-sessions={{this.hasOtherActiveSessions}}
-              >
-                <HistoryIcon />
-              </Button>
-            {{/if}}
-          </div>
         </header>
 
         {{#if this.aiAssistantPanelService.isShowingPastSessions}}
@@ -243,17 +238,14 @@ export default class AiAssistantPanel extends Component<Signature> {
         z-index: 1;
       }
       .panel-header {
-        --panel-title-height: 40px;
         position: relative;
         padding: var(--boxel-sp-xs) var(--boxel-sp);
+
+        display: grid;
+        grid-template-columns: 20px auto 22px 22px 22px;
+        gap: var(--boxel-sp-xxs);
       }
-      .panel-title-group {
-        height: var(--panel-title-height);
-        align-items: center;
-        display: flex;
-        gap: var(--boxel-sp-xs);
-        margin-bottom: var(--boxel-sp);
-      }
+
       .panel-title-text {
         margin: 0;
         padding-right: var(--boxel-sp-xl);
@@ -262,8 +254,9 @@ export default class AiAssistantPanel extends Component<Signature> {
         letter-spacing: var(--boxel-lsp);
         overflow: hidden;
         text-overflow: ellipsis;
+        white-space: nowrap;
         display: -webkit-box;
-        -webkit-line-clamp: 2;
+        -webkit-line-clamp: 1;
         -webkit-box-orient: vertical;
         /* the below font-smoothing options are only recommended for light-colored
           text on dark background (otherwise not good for accessibility) */
@@ -272,10 +265,10 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
       .close-ai-panel {
         --icon-color: var(--boxel-highlight);
-        position: absolute;
+        /*position: absolute;
         right: var(--boxel-sp-xs);
         top: var(--boxel-sp);
-        height: var(--panel-title-height);
+        height: var(--panel-title-height);*/
         display: flex;
         align-items: center;
         justify-content: center;
@@ -284,14 +277,8 @@ export default class AiAssistantPanel extends Component<Signature> {
       .close-ai-panel:hover:not(:disabled) {
         filter: brightness(1.1);
       }
-      .header-buttons {
-        position: relative;
-        align-items: center;
-        display: inline-flex;
-        height: var(--panel-title-height);
-      }
 
-      .header-buttons .button {
+      .button {
         --boxel-button-text-color: var(--boxel-highlight);
         --boxel-button-padding: 2px;
         --boxel-button-min-width: 0;
@@ -299,13 +286,13 @@ export default class AiAssistantPanel extends Component<Signature> {
         border-radius: var(--boxel-border-radius-xs);
       }
 
-      .header-buttons .button:hover {
+      .button:hover {
         --boxel-button-text-color: var(--boxel-dark);
 
         background-color: var(--boxel-highlight);
       }
 
-      .header-buttons .button svg {
+      .button svg {
         width: 18px;
         height: 18px;
       }
