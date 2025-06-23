@@ -526,7 +526,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(attachedCards.length, 0);
   });
 
-  test('downloads most recent version of attached files', async () => {
+  test('downloads and includes most recent version of attached files', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -550,13 +550,13 @@ Current date and time: 2025-06-11T11:43:00.533Z
               {
                 sourceUrl:
                   'http://test-realm-server/my-realm/spaghetti-recipe.gts',
-                url: 'http://test.com/spaghetti-recipe.gts',
+                url: 'http://test.com/spaghetti-recipe-a.gts',
                 name: 'spaghetti-recipe.gts',
                 contentType: 'text/plain',
               },
               {
                 sourceUrl: 'http://test-realm-server/my-realm/best-friends.txt',
-                url: 'http://test.com/best-friends.txt',
+                url: 'http://test.com/best-friends-a.txt',
                 name: 'best-friends.txt',
                 contentType: 'text/plain',
               },
@@ -611,13 +611,13 @@ Current date and time: 2025-06-11T11:43:00.533Z
               {
                 sourceUrl:
                   'http://test-realm-server/my-realm/spaghetti-recipe.gts',
-                url: 'http://test.com/spaghetti-recipe.gts',
+                url: 'http://test.com/spaghetti-recipe-b.gts',
                 name: 'spaghetti-recipe.gts',
                 contentType: 'text/plain',
               },
               {
                 sourceUrl: 'http://test-realm-server/my-realm/best-friends.txt',
-                url: 'http://test.com/best-friends.txt',
+                url: 'http://test.com/best-friends-b.txt',
                 name: 'best-friends.txt',
                 contentType: 'text/plain',
               },
@@ -645,15 +645,76 @@ Current date and time: 2025-06-11T11:43:00.533Z
         },
         status: EventStatus.SENT,
       },
+      {
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'Ok. I see them. What do you want to know?',
+          msgtype: 'm.text',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+        },
+        origin_server_ts: 3,
+        unsigned: {
+          age: 17305,
+          transaction_id: 'm1722242836704.8',
+        },
+        event_id: '3',
+        room_id: 'room1',
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '4',
+        origin_server_ts: 4,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Sending you new files...',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              codeMode: {
+                currentFile:
+                  'http://test-realm-server/my-realm/spaghetti-recipe.gts',
+              },
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl:
+                  'http://test-realm-server/my-realm/spaghetti-recipe.gts',
+                url: 'http://test.com/spaghetti-recipe-c.gts',
+                name: 'spaghetti-recipe.gts',
+                contentType: 'text/plain',
+              },
+              {
+                sourceUrl: 'http://test-realm-server/my-realm/best-friends.txt',
+                url: 'http://test.com/best-friends-c.txt',
+                name: 'best-friends.txt',
+                contentType: 'text/plain',
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '4',
+        },
+        status: EventStatus.SENT,
+      },
     ];
 
     // Set up mock responses for file downloads
-    mockResponses.set('http://test.com/spaghetti-recipe.gts', {
+    mockResponses.set('http://test.com/spaghetti-recipe-c.gts', {
       ok: true,
       text: 'this is the content of the spaghetti-recipe.gts file',
     });
 
-    mockResponses.set('http://test.com/best-friends.txt', {
+    mockResponses.set('http://test.com/best-friends-c.txt', {
       ok: true,
       text: 'this is the content of the best-friends.txt file',
     });
@@ -671,6 +732,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
 
+    console.log(prompt);
     let userMessages = prompt.filter((message) => message.role === 'user');
     assert.ok(
       userMessages[0]?.content?.includes(
@@ -685,10 +747,19 @@ Attached Files (files with newer versions don't show their content):
       userMessages[1]?.content?.includes(
         `
 Attached Files (files with newer versions don't show their content):
-[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts): this is the content of the spaghetti-recipe.gts file
-[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt): this is the content of the best-friends.txt file
+[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
+[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt)
 [file-that-does-not-exist.txt](http://test.com/my-realm/file-that-does-not-exist.txt): Error loading attached file: HTTP error. Status: 404
 [example.pdf](http://test.com/my-realm/example.pdf): Error loading attached file: Unsupported file type: application/pdf. For now, only text files are supported.
+      `.trim(),
+      ),
+    );
+    assert.ok(
+      userMessages[2]?.content?.includes(
+        `
+Attached Files (files with newer versions don't show their content):
+[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts): this is the content of the spaghetti-recipe.gts file
+[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt): this is the content of the best-friends.txt file
       `.trim(),
       ),
     );
