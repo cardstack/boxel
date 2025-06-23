@@ -312,8 +312,8 @@ export default class AiAssistantMessage extends Component<Signature> {
     <style scoped>
       .ai-assistant-message {
         --ai-bot-message-background-color: #3b394b;
-        --ai-assistant-message-avatar-size: 0.75rem; /* 20px. */
-        --ai-assistant-message-meta-height: 0.75rem; /* 20px */
+        --ai-assistant-message-avatar-size: 0.75rem; /* 12px. */
+        --ai-assistant-message-meta-height: 0.75rem; /* 12px */
         --ai-assistant-message-gap: var(--boxel-sp-xxxs);
         --profile-avatar-icon-size: var(--ai-assistant-message-avatar-size);
         --profile-avatar-icon-border: 1px solid var(--boxel-400);
