@@ -2,6 +2,7 @@
 pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
 pnpm setup:catalog-in-deployment
+pnpm setup:skills-in-deployment
 NODE_NO_WARNINGS=1 \
   MATRIX_URL=https://matrix-staging.stack.cards \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
