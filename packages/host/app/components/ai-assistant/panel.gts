@@ -240,13 +240,12 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
       .panel-header {
         position: absolute;
+        width: 100%;
         padding: var(--boxel-sp-xs) var(--boxel-sp);
 
         display: grid;
         grid-template-columns: 20px auto 22px 22px 22px;
         gap: var(--boxel-sp-xxs);
-
-        xxmargin-bottom: var(--boxel-sp);
 
         padding-bottom: 3rem;
         z-index: 10;
