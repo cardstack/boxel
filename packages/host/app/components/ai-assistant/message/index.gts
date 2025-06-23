@@ -296,15 +296,15 @@ export default class AiAssistantMessage extends Component<Signature> {
             </div>
           {{/if}}
 
-          <div class='error-footer'>
-            {{#if this.errorMessages.length}}
+          {{#if this.errorMessages.length}}
+            <div class='error-footer'>
               <Alert
                 @type='error'
                 @messages={{this.errorMessages}}
                 @retryAction={{@retryAction}}
               />
-            {{/if}}
-          </div>
+            </div>
+          {{/if}}
         </div>
       </div>
     </div>
@@ -366,7 +366,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
 
       .content-container {
-        margin-top: var(--boxel-sp-xs);
+        margin-top: 13px;
         border-radius: var(--boxel-border-radius-xxs)
           var(--boxel-border-radius-xl) var(--boxel-border-radius-xl)
           var(--boxel-border-radius-xl);
@@ -390,6 +390,11 @@ export default class AiAssistantMessage extends Component<Signature> {
           text on dark background (otherwise not good for accessibility) */
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+        padding: 0;
+      }
+
+      .is-from-assistant .content :deep(p:last-of-type) {
+        margin-bottom: 0;
       }
 
       .is-from-assistant .content :deep(pre) {
@@ -398,6 +403,10 @@ export default class AiAssistantMessage extends Component<Signature> {
 
       .is-from-assistant .content :deep(pre code) {
         overflow-wrap: break-word;
+      }
+
+      .is-from-assistant .content-container {
+        margin-top: 9px;
       }
 
       .is-pending .content,

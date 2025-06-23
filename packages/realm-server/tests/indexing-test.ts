@@ -20,6 +20,7 @@ import {
   matrixURL,
   closeServer,
   cleanWhiteSpace,
+  testRealmServerMatrixUserId,
 } from './helpers';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { Server } from 'http';
@@ -1675,7 +1676,7 @@ module(basename(__filename), function () {
     module('readable realm', function (hooks) {
       setupRealms(hooks, {
         provider: {
-          '@node-test_realm:localhost': ['read'],
+          [testRealmServerMatrixUserId]: ['read'],
         },
         consumer: {
           '*': ['read', 'write'],
