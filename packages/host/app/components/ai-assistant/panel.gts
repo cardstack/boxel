@@ -172,6 +172,7 @@ export default class AiAssistantPanel extends Component<Signature> {
           {{#if this.roomResource}}
             {{#if this.matrixService.currentRoomId}}
               <Room
+                class='room'
                 @roomId={{this.matrixService.currentRoomId}}
                 @roomResource={{this.roomResource}}
                 @monacoSDK={{this.monacoSDK}}
@@ -238,12 +239,23 @@ export default class AiAssistantPanel extends Component<Signature> {
         z-index: 1;
       }
       .panel-header {
-        position: relative;
+        position: absolute;
         padding: var(--boxel-sp-xs) var(--boxel-sp);
 
         display: grid;
         grid-template-columns: 20px auto 22px 22px 22px;
         gap: var(--boxel-sp-xxs);
+
+        xxmargin-bottom: var(--boxel-sp);
+
+        padding-bottom: 3rem;
+        z-index: 10;
+        background: linear-gradient(
+          to bottom,
+          var(--boxel-ai-purple),
+          var(--boxel-ai-purple) 80%,
+          transparent 100%
+        );
       }
 
       .panel-title-text {
@@ -253,7 +265,6 @@ export default class AiAssistantPanel extends Component<Signature> {
         font: 600 var(--boxel-font);
         letter-spacing: var(--boxel-lsp);
         overflow: hidden;
-        text-overflow: ellipsis;
         white-space: nowrap;
         display: -webkit-box;
         -webkit-line-clamp: 1;
@@ -345,6 +356,11 @@ export default class AiAssistantPanel extends Component<Signature> {
 
       .loading-new-session {
         margin: auto;
+      }
+
+      .room {
+        /* FIXME should be the height of the header */
+        padding-top: 3rem;
       }
 
       @keyframes spin {
