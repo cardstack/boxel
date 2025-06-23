@@ -431,6 +431,32 @@ module(basename(__filename), function () {
       },
     });
 
+    test('realm is full indexed at boot', async function (assert) {
+      let jobs = await testDbAdapter.execute('select * from jobs');
+      assert.strictEqual(
+        jobs.length,
+        1,
+        'there is one job that was run in the queue',
+      );
+      let [job] = jobs;
+      assert.strictEqual(
+        job.job_type,
+        'from-scratch-index',
+        'the job is a from scratch index job',
+      );
+      assert.strictEqual(
+        job.concurrency_group,
+        `indexing:${testRealm}`,
+        'the job is an index of the test realm',
+      );
+      assert.strictEqual(
+        job.status,
+        'resolved',
+        'the job completed successfully',
+      );
+      assert.ok(job.finished_at, 'the job was marked with a finish time');
+    });
+
     test('can store card pre-rendered html in the index', async function (assert) {
       let entry = await realm.realmIndexQueryEngine.instance(
         new URL(`${testRealm}mango`),

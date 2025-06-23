@@ -225,6 +225,7 @@ let autoMigrate = migrateDB || undefined;
         queue,
       },
       {
+        fullIndexOnStartup: true,
         ...(process.env.DISABLE_MODULE_CACHING === 'true'
           ? { disableModuleCaching: true }
           : {}),

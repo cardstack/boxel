@@ -85,10 +85,6 @@ export class RealmIndexUpdater {
     return await this.#indexWriter.isNewIndex(this.realmURL);
   }
 
-  async run() {
-    await this.fullIndex();
-  }
-
   indexing() {
     return this.#indexingDeferred?.promise;
   }

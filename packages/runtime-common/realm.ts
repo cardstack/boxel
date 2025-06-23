@@ -185,6 +185,7 @@ export interface RealmAdapter {
 interface Options {
   disableModuleCaching?: true;
   copiedFromRealm?: URL;
+  fullIndexOnStartup?: true;
 }
 
 interface UpdateItem {
@@ -218,6 +219,7 @@ export class Realm {
   #recentWrites: Map<string, number> = new Map();
   #realmSecretSeed: string;
   #disableModuleCaching = false;
+  #fullIndexOnStartup = false;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -266,6 +268,7 @@ export class Realm {
     this.paths = new RealmPaths(new URL(url));
     let { username, url: matrixURL } = matrix;
     this.#realmSecretSeed = secretSeed;
+    this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
     this.#matrixClient = new MatrixClient({
       matrixURL,
       username,
@@ -595,7 +598,7 @@ export class Realm {
   }
 
   async reindex() {
-    await this.#realmIndexUpdater.run();
+    await this.#realmIndexUpdater.fullIndex();
     this.broadcastRealmEvent({
       eventName: 'index',
       indexType: 'full',
@@ -606,15 +609,19 @@ export class Realm {
     await Promise.resolve();
     let startTime = Date.now();
     let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-    let promise = this.#realmIndexUpdater.run();
-    if (isNewIndex) {
-      // we only await the full indexing at boot if this is a brand new index
-      await promise;
+    if (isNewIndex || this.#fullIndexOnStartup) {
+      let promise = this.#realmIndexUpdater.fullIndex();
+      if (isNewIndex) {
+        // we only await the full indexing at boot if this is a brand new index
+        await promise;
+      }
+      // not sure how useful this event is--nothing is currently listening for
+      // it, and it may happen during or after the full index...
+      this.broadcastRealmEvent({
+        eventName: 'index',
+        indexType: 'full',
+      });
     }
-    this.broadcastRealmEvent({
-      eventName: 'index',
-      indexType: 'full',
-    });
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
     );
