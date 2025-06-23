@@ -1,0 +1,13 @@
+{
+  "name": "@cardstack/skills-realm",
+  "version": "1.0.0",
+  "license": "MIT",
+  "scripts": {
+    "skills:setup": "[ -d contents ] || git clone https://github.com/cardstack/boxel-skills.git contents; cd contents && git pull",
+    "skills:update": "cd contents && git pull",
+    "skills:reset": "rm -rf contents && skills:setup"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}
