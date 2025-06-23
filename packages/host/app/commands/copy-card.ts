@@ -44,6 +44,9 @@ export default class CopyCardCommand extends HostBaseCommand<
     let doc = await this.cardService.serializeCard(input.sourceCard, {
       useAbsoluteURL: true,
     });
+    if (!!input.omitRelationships) {
+      delete doc.data.relationships;
+    }
     delete doc.data.id;
     if (input.codeRef) {
       if (!isResolvedCodeRef(input.codeRef)) {

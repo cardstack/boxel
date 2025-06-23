@@ -85,6 +85,7 @@ export default class ListingUseCommand extends HostBaseCommand<
           sourceCard: card,
           realm: realmUrl,
           localDir,
+          omitRelationships: true,
         });
       }
     }

@@ -41,6 +41,7 @@ export class CopyCardInput extends CardDef {
   @field realm = contains(StringField);
   @field localDir = contains(StringField);
   @field codeRef = contains(CodeRefField);
+  @field omitRelationships = contains(BooleanField);
 }
 
 export class CopyCardResult extends CardDef {

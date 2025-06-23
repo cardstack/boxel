@@ -134,6 +134,7 @@ export async function installListing({
         realm: realmUrl,
         localDir,
         codeRef: cardWithNewCodeRef.codeRef,
+        omitRelationships: true,
       });
       if (!firstExampleCardId) {
         firstExampleCardId = newCardId;
