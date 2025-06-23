@@ -43,12 +43,13 @@ const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
       --boxel-button-border: 1px solid var(--boxel-400);
       --boxel-button-font: 600 var(--boxel-font-xs);
       --boxel-button-letter-spacing: var(--boxel-lsp-xs);
-      --boxel-button-min-width: 4rem;
+      --boxel-button-min-width: 6rem;
       --boxel-button-padding: 0;
       --boxel-button-color: var(--boxel-light);
       border-radius: var(--boxel-border-radius);
       flex: 1;
       justify-content: space-between;
+      white-space: nowrap;
     }
     .toggle-button:hover:not(:disabled) {
       border-color: var(--boxel-dark);
@@ -69,6 +70,7 @@ const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
     .icon {
       transform: scale(0.75);
       margin: 2px -6px 0 4px;
+      flex-shrink: 0;
     }
   </style>
 </template>;
