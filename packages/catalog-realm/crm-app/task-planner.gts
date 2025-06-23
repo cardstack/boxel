@@ -20,7 +20,7 @@ interface CRMTaskPlannerArgs {
     model: Partial<AppCard>;
     context: CardContext | undefined;
     realmURL: URL | undefined;
-    viewCard: () => void;
+    editCard: () => void;
     searchFilter?: Filter[];
     taskFilter?: Filter[];
     sort?: TaskSort;
@@ -290,7 +290,7 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
       @parentId={{this.parentId}}
       @context={{@context}}
       @emptyStateMessage={{this.emptyStateMessage}}
-      @viewCard={{@viewCard}}
+      @editCard={{@editCard}}
     />
   </template>
 }
