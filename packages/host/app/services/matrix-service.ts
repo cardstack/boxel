@@ -606,6 +606,7 @@ export default class MatrixService extends Service {
   }
 
   async createRealmSession(realmURL: URL) {
+    await this.loadSDK();
     return this.client.createRealmSession(realmURL);
   }
 
