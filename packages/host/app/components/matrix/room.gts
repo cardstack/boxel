@@ -252,7 +252,6 @@ export default class Room extends Component<Signature> {
       :deep(.ai-assistant-conversation > *:first-child) {
         margin-top: auto;
       }
-
       .loading-indicator {
         margin-top: auto;
         margin-bottom: auto;
