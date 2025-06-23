@@ -7,6 +7,7 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
   <svg
     xmlns='http://www.w3.org/2000/svg'
     xml:space='preserve'
+    fill='currentColor'
     viewBox='0 15.27 295 264.46'
     ...attributes
   ><path

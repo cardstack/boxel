@@ -218,10 +218,10 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     );
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
     assert.dom('[data-test-card-error]').containsText('Failed to send');
-    assert.dom('[data-test-ai-bot-retry-button]').exists();
+    assert.dom('[data-test-alert-retry-button]').exists();
     await percySnapshot(assert);
 
-    click('[data-test-ai-bot-retry-button]');
+    click('[data-test-alert-retry-button]');
     await waitFor('[data-test-ai-assistant-message].is-pending');
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
     await settled();

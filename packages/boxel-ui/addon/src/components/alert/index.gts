@@ -9,20 +9,12 @@ interface Signature {
   Args: {
     messages: string[];
     retryAction?: () => void;
-    type: 'error' | 'warning';
+    type?: 'error' | 'warning';
   };
   Element: HTMLDivElement;
 }
-
+// TODO: make the icons, content, action more customizable
 export default class Alert extends Component<Signature> {
-  private get showRetryButton() {
-    return this.args.retryAction != null && this.args.type === 'error';
-  }
-
-  private get retryAction() {
-    return this.args.retryAction ?? (() => {});
-  }
-
   <template>
     <div
       class={{cn
@@ -33,29 +25,29 @@ export default class Alert extends Component<Signature> {
       data-test-boxel-alert={{@type}}
       ...attributes
     >
-
-      <div class='alert-headers'>
-        {{#each @messages as |message|}}
-          <div class='alert-header'>
-            {{#if (eq @type 'error')}}
-              <FailureBordered class='alert-icon' />
-            {{else}}
-              <Warning class='alert-icon' />
-            {{/if}}
-            <p class='error-message' data-test-card-error>
-              {{message}}
-            </p>
-          </div>
-        {{/each}}
-      </div>
-
-      {{#if this.showRetryButton}}
+      {{#each @messages as |message i|}}
+        <div class='alert'>
+          {{#if (eq @type 'error')}}
+            <FailureBordered class='alert-icon' />
+          {{else if (eq @type 'warning')}}
+            <Warning class='alert-icon' />
+          {{/if}}
+          <p
+            class='message'
+            data-test-alert-message='{{i}}'
+            data-test-card-error={{eq @type 'error'}}
+          >
+            {{message}}
+          </p>
+        </div>
+      {{/each}}
+      {{#if @retryAction}}
         <Button
-          {{on 'click' this.retryAction}}
+          {{on 'click' @retryAction}}
           class='retry-button'
           @size='small'
           @kind='primary'
-          data-test-ai-bot-retry-button
+          data-test-alert-retry-button
         >
           Retry
         </Button>
@@ -66,55 +58,39 @@ export default class Alert extends Component<Signature> {
       .alert-container {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-sm);
-        padding-bottom: var(--boxel-sp);
-        color: var(--boxel-light);
         font: 500 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp);
-        border-radius: var(--boxel-border-radius-lg);
+        letter-spacing: var(--boxel-lsp-sm);
+        border-radius: var(--boxel-border-radius-xxl);
+        overflow: hidden;
       }
-
-      .alert-container.error {
-        background-color: #3b394b;
+      .error {
+        background-color: var(--boxel-650);
+        color: var(--boxel-light);
       }
-
-      .alert-container.warning {
+      .warning {
         background-color: var(--boxel-warning-200);
+        color: var(--boxel-dark);
       }
-
-      .alert-header {
+      .alert {
         display: flex;
         gap: var(--boxel-sp-xs);
       }
-
-      .alert-headers {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp);
+      .alert + .alert {
+        margin-top: var(--boxel-sp-lg);
       }
-
-      .error .alert-icon {
-        --icon-background-color: var(--boxel-error-400);
-        --icon-color: var(--boxel-light);
-        min-width: 20px;
-        height: 20px;
+      .alert-icon {
+        min-width: 1.5rem;
+        width: 1.5rem; /* 24px */
+        height: 1.5rem; /* 24px */
       }
-
-      .warning .alert-icon {
-        --icon-color: var(--boxel-dark);
-        min-width: 20px;
-        height: 20px;
-      }
-
-      .error-message {
+      .message {
         align-self: center;
         overflow: hidden;
         word-wrap: break-word;
         overflow-wrap: break-word;
         margin: 0;
       }
-
       .retry-button {
         --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
         --boxel-button-min-height: max-content;
@@ -124,6 +100,9 @@ export default class Alert extends Component<Signature> {
         margin-left: auto;
         font-size: var(--boxel-font-size-xs);
         font-weight: 500;
+      }
+      .alert + .retry-button {
+        margin-top: var(--boxel-sp-sm);
       }
     </style>
   </template>
