@@ -32,6 +32,7 @@ import {
   logger,
   ResolvedCodeRef,
   isCardInstance,
+  Deferred,
 } from '@cardstack/runtime-common';
 
 import {
@@ -174,6 +175,7 @@ export default class MatrixService extends Service {
   private timelineQueue: { event: MatrixEvent; oldEventId?: string }[] = [];
   private roomStateQueue: MatrixSDK.RoomState[] = [];
   #ready: Promise<void>;
+  #clientReadyDeferred = new Deferred<void>();
   #matrixSDK: ExtendedMatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
   currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
@@ -239,6 +241,7 @@ export default class MatrixService extends Service {
     this._client = this.matrixSDK.createClient({
       baseUrl: matrixURL,
     });
+    this.#clientReadyDeferred.fulfill();
 
     // building the event bindings like this so that we can consistently bind
     // and unbind these events programmatically--this way if we add a new event
@@ -606,6 +609,7 @@ export default class MatrixService extends Service {
   }
 
   async createRealmSession(realmURL: URL) {
+    await this.#clientReadyDeferred.promise;
     return this.client.createRealmSession(realmURL);
   }
 
