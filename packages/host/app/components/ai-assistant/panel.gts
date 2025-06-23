@@ -245,8 +245,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       .panel-header {
         --panel-title-height: 40px;
         position: relative;
-        padding: var(--boxel-sp) calc(var(--boxel-sp) / 2) var(--boxel-sp)
-          var(--boxel-sp-lg);
+        padding: var(--boxel-sp-xs) var(--boxel-sp);
       }
       .panel-title-group {
         height: var(--panel-title-height);
