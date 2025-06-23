@@ -9,6 +9,9 @@ import { tracked, cached } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { Velcro } from 'ember-velcro';
 
+import HistoryIcon from '@cardstack/boxel-icons/history';
+import PlusIcon from '@cardstack/boxel-icons/plus';
+
 import {
   Button,
   IconButton,
@@ -16,7 +19,7 @@ import {
   ResizeHandle,
 } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
-import { DropdownArrowFilled, IconX } from '@cardstack/boxel-ui/icons';
+import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { ResolvedCodeRef, aiBotUsername } from '@cardstack/runtime-common';
 
@@ -110,9 +113,10 @@ export default class AiAssistantPanel extends Component<Signature> {
           />
           <div class='header-buttons' {{popoverVelcro.hook}}>
             <Button
-              class='new-session-button'
-              @kind='secondary-dark'
-              @size='small'
+              title='New Session'
+              class='button new-session-button'
+              @kind='text-only'
+              @size='extra-small'
               @disabled={{not this.roomResource.messages.length}}
               {{on
                 'click'
@@ -120,28 +124,27 @@ export default class AiAssistantPanel extends Component<Signature> {
               }}
               data-test-create-room-btn
             >
-              New Session
+              <PlusIcon />
             </Button>
 
             {{#if this.aiAssistantPanelService.loadingRooms}}
               <LoadingIndicator @color='var(--boxel-light)' />
             {{else}}
               <Button
-                class='past-sessions-button
+                title='Past Sessions'
+                class='button past-sessions-button
                   {{if
                     this.hasOtherActiveSessions
                     "past-sessions-button-active"
                   }}'
-                @kind='secondary-dark'
-                @size='small'
+                @kind='text-only'
+                @size='extra-small'
                 @disabled={{this.aiAssistantPanelService.displayRoomError}}
                 {{on 'click' this.aiAssistantPanelService.displayPastSessions}}
                 data-test-past-sessions-button
                 data-test-has-active-sessions={{this.hasOtherActiveSessions}}
               >
-                All Sessions
-                <DropdownArrowFilled width='10' height='10' />
-
+                <HistoryIcon />
               </Button>
             {{/if}}
           </div>
@@ -288,12 +291,24 @@ export default class AiAssistantPanel extends Component<Signature> {
         display: inline-flex;
         height: var(--panel-title-height);
       }
-      .new-session-button {
-        margin-right: var(--boxel-sp-xxxs);
+
+      .header-buttons .button {
+        --boxel-button-text-color: var(--boxel-highlight);
+        --boxel-button-padding: 2px;
+        --boxel-button-min-width: 0;
+
+        border-radius: var(--boxel-border-radius-xs);
       }
-      .past-sessions-button svg {
-        --icon-color: var(--boxel-light);
-        margin-left: var(--boxel-sp-xs);
+
+      .header-buttons .button:hover {
+        --boxel-button-text-color: var(--boxel-dark);
+
+        background-color: var(--boxel-highlight);
+      }
+
+      .header-buttons .button svg {
+        width: 18px;
+        height: 18px;
       }
 
       .past-sessions-button-active::before {
