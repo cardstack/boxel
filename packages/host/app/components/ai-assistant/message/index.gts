@@ -390,6 +390,7 @@ export default class AiAssistantMessage extends Component<Signature> {
           text on dark background (otherwise not good for accessibility) */
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+        padding: 0;
       }
 
       .is-from-assistant .content :deep(pre) {
