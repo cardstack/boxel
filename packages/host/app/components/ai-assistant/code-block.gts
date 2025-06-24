@@ -45,6 +45,19 @@ import ApplyButton from '../ai-assistant/apply-button';
 import type { ComponentLike } from '@glint/template';
 import type * as _MonacoSDK from 'monaco-editor';
 
+const commonEditorOptions: MonacoEditorOptions = {
+  theme: 'vs-dark',
+
+  automaticLayout: true,
+  fontSize: 10,
+  lineNumbers: 'off',
+  readOnly: true,
+  scrollbar: {
+    alwaysConsumeMouseWheel: false,
+  },
+  scrollBeyondLastLine: false,
+};
+
 interface CopyCodeButtonSignature {
   Args: {
     code?: string | null;
@@ -395,28 +408,21 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
 
 class CodeBlockEditor extends Component<Signature> {
   editorDisplayOptions: MonacoEditorOptions = {
+    ...commonEditorOptions,
+
     wordWrap: 'on',
     wrappingIndent: 'indent',
     fontWeight: 'bold',
-    scrollbar: {
-      alwaysConsumeMouseWheel: false,
-    },
-    lineNumbers: 'off',
     minimap: {
       enabled: false,
     },
-    readOnly: true,
-    automaticLayout: true,
     stickyScroll: {
       enabled: false,
     },
-    fontSize: 10,
-    scrollBeyondLastLine: false,
     padding: {
       top: 8,
       bottom: 8,
     },
-    theme: 'vs-dark',
   };
 
   <template>
@@ -446,6 +452,8 @@ class CodeBlockEditor extends Component<Signature> {
 
 class CodeBlockDiffEditor extends Component<Signature> {
   private editorDisplayOptions = {
+    ...commonEditorOptions,
+
     originalEditable: false,
     renderSideBySide: false,
     diffAlgorithm: 'advanced',
@@ -456,22 +464,13 @@ class CodeBlockDiffEditor extends Component<Signature> {
       minimumLineCount: 1,
       contextLineCount: 1,
     },
-    readOnly: true,
-    scrollbar: {
-      alwaysConsumeMouseWheel: false,
-    },
-    fontSize: 10,
     renderOverviewRuler: false,
-    automaticLayout: true,
-    scrollBeyondLastLine: false,
     padding: {
       bottom: 0,
       left: 8,
       right: 8,
       top: 8,
     },
-    theme: 'vs-dark',
-    lineNumbers: 'off' as _MonacoSDK.editor.LineNumbersType | undefined,
   };
 
   @tracked diffEditorStats: {
