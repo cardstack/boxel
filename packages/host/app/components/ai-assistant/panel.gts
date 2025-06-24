@@ -304,7 +304,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         height: calc(
           var(--ai-assistant-panel-header-height) *
             var(--ai-assistant-panel-gradient-start-proportion) -
-            var(--ai-assistant-panel-header-padding)
+            var(--ai-assistant-panel-header-padding) / 2
         );
         width: 100%;
       }
