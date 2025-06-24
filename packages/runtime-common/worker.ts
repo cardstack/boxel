@@ -244,7 +244,6 @@ export class Worker {
       args.realmUsername,
       this.#matrixURL.href,
     );
-    console.log(`worker assuming user id ${realmUserId}`);
     _fetch = fetcher(this.#virtualNetwork.fetch, [
       async (req, next) => {
         req.headers.set('X-Boxel-Building-Index', 'true');

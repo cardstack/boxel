@@ -821,7 +821,7 @@ module(basename(__filename), function () {
         test('can reindex a realm via grafana endpoint', async function (assert) {
           let endpoint = `test-realm-${uuidv4()}`;
           let owner = 'mango';
-          let ownerUserId = `@${owner}:boxel.ai`;
+          let ownerUserId = `@${owner}:localhost`;
           let realmURL: string;
           {
             let response = await request2
@@ -865,7 +865,7 @@ module(basename(__filename), function () {
               instanceErrors: 0,
               modulesIndexed: 0,
               instancesIndexed: 0,
-              totalIndexEntries: 0,
+              totalIndexEntries: 1,
             });
           }
           let finalJobs = await dbAdapter.execute('select * from jobs');
@@ -897,7 +897,51 @@ module(basename(__filename), function () {
           );
         });
 
-        test('returns 401 when calling grafana reindex endpoint without a grafana secret', async function (assert) {});
+        test('returns 401 when calling grafana reindex endpoint without a grafana secret', async function (assert) {
+          let endpoint = `test-realm-${uuidv4()}`;
+          let owner = 'mango';
+          let ownerUserId = `@${owner}:localhost`;
+          let realmURL: string;
+          {
+            let response = await request2
+              .post('/_create-realm')
+              .set('Accept', 'application/vnd.api+json')
+              .set('Content-Type', 'application/json')
+              .set(
+                'Authorization',
+                `Bearer ${createRealmServerJWT(
+                  { user: ownerUserId, sessionRoom: 'session-room-test' },
+                  realmSecretSeed,
+                )}`,
+              )
+              .send(
+                JSON.stringify({
+                  data: {
+                    type: 'realm',
+                    attributes: {
+                      name: 'Test Realm',
+                      endpoint,
+                    },
+                  },
+                }),
+              );
+            assert.strictEqual(response.status, 201, 'HTTP 201 status');
+            realmURL = response.body.data.id;
+          }
+          let initialJobs = await dbAdapter.execute('select * from jobs');
+          {
+            let response = await request2
+              .get(`/_grafana-reindex?realm=${encodeURIComponent(realmURL)}`)
+              .set('Content-Type', 'application/json');
+            assert.strictEqual(response.status, 401, 'HTTP 401 status');
+          }
+          let finalJobs = await dbAdapter.execute('select * from jobs');
+          assert.strictEqual(
+            finalJobs.length,
+            initialJobs.length,
+            'an index job was not created',
+          );
+        });
 
         test('returns 404 for request that has malformed URI', async function (assert) {
           let response = await request2.get('/%c0').set('Accept', '*/*');

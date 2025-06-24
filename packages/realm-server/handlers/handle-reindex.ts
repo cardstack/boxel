@@ -35,7 +35,7 @@ export default function handleReindex({
     let realmUserId =
       owners.length === 1
         ? owners[0]
-        : owners.find((userId) => userId.startsWith('@realm/'));
+        : owners.find((userId) => !userId.startsWith('@realm/'));
     let realmUsername = realmUserId?.startsWith('@')
       ? getMatrixUsername(realmUserId)
       : realmUserId;
