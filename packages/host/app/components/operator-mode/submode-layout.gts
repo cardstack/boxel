@@ -53,6 +53,7 @@ import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type StoreService from '../../services/store';
+import ChooseSubscriptionPlanModal from './choose-subscription-plan-modal';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -219,6 +220,13 @@ export default class SubmodeLayout extends Component<Signature> {
     this.profileSummaryOpened = false;
   }
 
+  @action private toggleSubscriptionPlans() {
+    this.isChooseSubscriptionPlanModalOpen =
+      !this.isChooseSubscriptionPlanModalOpen;
+
+    this.profileSummaryOpened = false;
+  }
+
   @action private toggleProfileSummary() {
     this.profileSummaryOpened = !this.profileSummaryOpened;
   }
@@ -255,6 +263,12 @@ export default class SubmodeLayout extends Component<Signature> {
     await timeout(250);
     this.suppressSearchClose = false;
   });
+
+  @tracked private isChooseSubscriptionPlanModalOpen = false;
+
+  private onChooseSubscriptionPlanModalClose = () => {
+    this.isChooseSubscriptionPlanModalOpen = false;
+  };
 
   <template>
     <div
@@ -382,6 +396,7 @@ export default class SubmodeLayout extends Component<Signature> {
           exceptSelector='.profile-icon-button'
         }}
         @toggleProfileSettings={{this.toggleProfileSettings}}
+        @toggleSubscriptionPlans={{this.toggleSubscriptionPlans}}
       />
     {{/if}}
 
@@ -390,6 +405,11 @@ export default class SubmodeLayout extends Component<Signature> {
         @toggleProfileSettings={{this.toggleProfileSettings}}
       />
     {{/if}}
+
+    <ChooseSubscriptionPlanModal
+      @isModalOpen={{this.isChooseSubscriptionPlanModalOpen}}
+      @onClose={{this.toggleSubscriptionPlans}}
+    />
 
     <style scoped>
       .submode-layout {

@@ -140,12 +140,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     return false;
   }
 
-  @tracked private isModalOpen = true;
-
-  private onClose = () => {
-    this.isModalOpen = false;
-  };
-
   <template>
     <Modal
       class='operator-mode'
@@ -156,10 +150,6 @@ export default class OperatorModeContainer extends Component<Signature> {
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
       <CardCatalogModal />
-      <ChooseSubscriptionPlanModal
-        @isModalOpen={{this.isModalOpen}}
-        @onClose={{this.onClose}}
-      />
 
       {{#if
         (or

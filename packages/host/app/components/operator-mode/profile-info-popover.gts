@@ -15,7 +15,7 @@ import MatrixService from '@cardstack/host/services/matrix-service';
 interface ProfileInfoPopoverSignature {
   Args: {
     toggleProfileSettings: () => void;
-    togglePlans: () => void;
+    toggleSubscriptionPlans: () => void;
   };
   Element: HTMLElement;
 }
@@ -144,7 +144,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
               @kind='primary-dark'
               @size='small'
               @disabled={{this.billingService.fetchingStripePaymentLinks}}
-              {{on 'click' @togglePlans}}
+              {{on 'click' @toggleSubscriptionPlans}}
             >Upgrade Plan</BoxelButton>
           {{else}}
             <BoxelButton

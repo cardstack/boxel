@@ -3,28 +3,23 @@ import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
-
+import { service } from '@ember/service';
 import ModalContainer from '../modal-container';
+import BillingService from '@cardstack/host/services/billing-service';
 
 interface Signature {
   Element: HTMLButtonElement;
 }
 
 export default class ChooseSubscriptionPlanModal extends Component<Signature> {
+  @service declare billingService: BillingService;
+
   <template>
     <style scoped>
-      /* You may want to add a font import, e.g., from Google Fonts */
-      /* @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap'); */
-
       .boxel-pricing-container {
-        /* font-family: 'Poppins', sans-serif; */
-        font-family:
-          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
-          Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-          'Segoe UI Symbol';
-        color: #111827; /* Darker gray for better readability than pure black */
+        color: #111827;
         background-color: #fff;
-        padding: 2rem 1rem;
+
         max-width: 1200px;
         margin: 0 auto;
       }
@@ -35,6 +30,7 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
         text-align: center;
         color: #000;
         margin-bottom: 2rem;
+        margin-top: 0;
       }
 
       .early-preview-banner {
@@ -273,11 +269,14 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
           font-size: 1.5rem;
         }
       }
+
+      .choose-subscription-plan-modal {
+        --boxel-modal-max-width: 80rem;
+      }
     </style>
 
     <ModalContainer
       @title='Choose Subscription Plan'
-      @size='large'
       @isOpen={{@isModalOpen}}
       @onClose={{@onClose}}
       @cardContainerClass='choose-subscription-plan'
@@ -295,7 +294,7 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
 
           <p class='intro-text'>
             To use the included AI features, you need to have Boxel Credits in
-            your account. Starter plan includes 1,000 credit per month. To get
+            your account. Starter plan includes 2,500 credit per month. To get
             more credits, you can subscribe to a monthly plan or buy credit
             packs.
           </p>
@@ -345,25 +344,18 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                 <h3 class='plan-name'>Starter</h3>
                 <div class='plan-price'>$0</div>
                 <div class='plan-period'>per month</div>
-                <a href='#' class='btn btn-teal'>Get Started</a>
+                <a
+                  href={{this.billingService.stripeStarterPlanPaymentLink}}
+                  class='btn btn-teal'
+                >Get Started</a>
               </div>
               <div
                 class='feature-cell'
                 data-label='Boxel Credits (For AI Generation)'
               >
                 <div class='credit-value'>
-                  <svg
-                    width='20'
-                    height='20'
-                    viewBox='0 0 24 24'
-                    fill='#00F0B5'
-                    xmlns='http://www.w3.org/2000/svg'
-                  ><path
-                      d='M21 8.66V15.34C21 16.22 20.22 17 19.34 17H13.17C12.59 17 12.04 16.71 11.72 16.22L8.6 11.07C8.28 10.58 8.28 9.92 8.6 9.43L11.72 4.28C12.04 3.79 12.59 3.5 13.17 3.5H19.34C20.22 3.5 21 4.28 21 5.16V8.66Z'
-                    ></path><path
-                      d='M3 8.66V15.34C3 16.22 3.78 17 4.66 17H10.83C11.41 17 11.96 16.71 12.28 16.22L15.4 11.07C15.72 10.58 15.72 9.92 15.4 9.43L12.28 4.28C11.96 3.79 11.41 3.5 10.83 3.5H4.66C3.78 3.5 3 4.28 3 5.16V8.66Z'
-                    ></path></svg>
-                  1,000
+
+                  2,500
                 </div>
                 <div class='feature-note'>Monthly Boxel Credit</div>
               </div>
@@ -381,25 +373,18 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                 <h3 class='plan-name'>Creator</h3>
                 <div class='plan-price'>$12</div>
                 <div class='plan-period'>per month</div>
-                <a href='#' class='btn btn-dark'>Get Started</a>
+                <a
+                  href={{this.billingService.stripeCreatorPlanPaymentLink}}
+                  class='btn btn-dark'
+                >Get Started</a>
               </div>
               <div
                 class='feature-cell'
                 data-label='Boxel Credits (For AI Generation)'
               >
                 <div class='credit-value'>
-                  <svg
-                    width='20'
-                    height='20'
-                    viewBox='0 0 24 24'
-                    fill='#00F0B5'
-                    xmlns='http://www.w3.org/2000/svg'
-                  ><path
-                      d='M21 8.66V15.34C21 16.22 20.22 17 19.34 17H13.17C12.59 17 12.04 16.71 11.72 16.22L8.6 11.07C8.28 10.58 8.28 9.92 8.6 9.43L11.72 4.28C12.04 3.79 12.59 3.5 13.17 3.5H19.34C20.22 3.5 21 4.28 21 5.16V8.66Z'
-                    ></path><path
-                      d='M3 8.66V15.34C3 16.22 3.78 17 4.66 17H10.83C11.41 17 11.96 16.71 12.28 16.22L15.4 11.07C15.72 10.58 15.72 9.92 15.4 9.43L12.28 4.28C11.96 3.79 11.41 3.5 10.83 3.5H4.66C3.78 3.5 3 4.28 3 5.16V8.66Z'
-                    ></path></svg>
-                  5,000
+
+                  6,500
                 </div>
                 <div class='feature-note'>Monthly Boxel Credit</div>
               </div>
@@ -417,25 +402,17 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                 <h3 class='plan-name'>Power User</h3>
                 <div class='plan-price'>$49</div>
                 <div class='plan-period'>per month</div>
-                <a href='#' class='btn btn-dark'>Get Started</a>
+                <a
+                  href={{this.billingService.stripePowerUserPlanPaymentLink}}
+                  class='btn btn-dark'
+                >Get Started</a>
               </div>
               <div
                 class='feature-cell'
                 data-label='Boxel Credits (For AI Generation)'
               >
                 <div class='credit-value'>
-                  <svg
-                    width='20'
-                    height='20'
-                    viewBox='0 0 24 24'
-                    fill='#00F0B5'
-                    xmlns='http://www.w3.org/2000/svg'
-                  ><path
-                      d='M21 8.66V15.34C21 16.22 20.22 17 19.34 17H13.17C12.59 17 12.04 16.71 11.72 16.22L8.6 11.07C8.28 10.58 8.28 9.92 8.6 9.43L11.72 4.28C12.04 3.79 12.59 3.5 13.17 3.5H19.34C20.22 3.5 21 4.28 21 5.16V8.66Z'
-                    ></path><path
-                      d='M3 8.66V15.34C3 16.22 3.78 17 4.66 17H10.83C11.41 17 11.96 16.71 12.28 16.22L15.4 11.07C15.72 10.58 15.72 9.92 15.4 9.43L12.28 4.28C11.96 3.79 11.41 3.5 10.83 3.5H4.66C3.78 3.5 3 4.28 3 5.16V8.66Z'
-                    ></path></svg>
-                  25,000
+                  35,000
                 </div>
                 <div class='feature-note'>Monthly Boxel Credit</div>
               </div>
