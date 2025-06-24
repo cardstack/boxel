@@ -206,11 +206,11 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
     };
   }
 
-  @action viewCard() {
+  @action editCard() {
     if (!this.args.model.id) {
       throw new Error('No card id');
     }
-    this.args.context?.actions?.viewCard?.(new URL(this.args.model.id), 'edit');
+    this.args.context?.actions?.editCard?.(this.args.model as CardDef);
   }
 
   <template>
@@ -220,7 +220,7 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
       @parentId={{this.parentId}}
       @context={{@context}}
       @emptyStateMessage={{this.emptyStateMessage}}
-      @viewCard={{this.viewCard}}
+      @editCard={{this.editCard}}
     />
   </template>
 }
