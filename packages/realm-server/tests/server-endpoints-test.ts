@@ -857,9 +857,10 @@ module(basename(__filename), function () {
           );
           {
             let response = await request2
-              .get(`/_grafana-reindex?realm=${encodeURIComponent(realmURL)}`)
-              .set('Content-Type', 'application/json')
-              .set('Authorization', grafanaSecret);
+              .get(
+                `/_grafana-reindex?authHeader=${grafanaSecret}&realm=${encodeURIComponent(realmURL)}`,
+              )
+              .set('Content-Type', 'application/json');
             assert.deepEqual(response.body, {
               moduleErrors: 0,
               instanceErrors: 0,
