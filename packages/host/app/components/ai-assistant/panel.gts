@@ -330,6 +330,11 @@ export default class AiAssistantPanel extends Component<Signature> {
         height: 18px;
       }
 
+      /* This icon looks slightly bigger so this makes it match */
+      .button.past-sessions-button svg {
+        padding: 2px;
+      }
+
       .button :deep(.loading-indicator) {
         margin-right: 0;
         padding-top: 1px;
