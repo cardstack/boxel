@@ -77,11 +77,8 @@ class File extends Component<FileArgs> {
 
   get fileName() {
     const path = this.args.recentFile.filePath;
-    const lastSlashIndex = path.lastIndexOf('/');
-    const fileName =
-      lastSlashIndex !== -1 ? path.substring(lastSlashIndex + 1) : path;
-    const lastDotIndex = fileName.lastIndexOf('.');
-    return lastDotIndex !== -1 ? fileName.substring(0, lastDotIndex) : fileName;
+    const lastDotIndex = path.lastIndexOf('.');
+    return lastDotIndex !== -1 ? path.substring(0, lastDotIndex) : path;
   }
 
   get fileExtension() {
