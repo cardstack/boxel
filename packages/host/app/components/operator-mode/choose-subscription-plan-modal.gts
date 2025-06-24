@@ -1,14 +1,16 @@
-import { fn } from '@ember/helper';
-
 import Component from '@glimmer/component';
 
-import { tracked } from '@glimmer/tracking';
 import { service } from '@ember/service';
 import ModalContainer from '../modal-container';
 import BillingService from '@cardstack/host/services/billing-service';
+import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Element: HTMLButtonElement;
+  Args: {
+    isModalOpen: boolean;
+    onClose: () => void;
+  };
 }
 
 export default class ChooseSubscriptionPlanModal extends Component<Signature> {
@@ -17,203 +19,208 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
   <template>
     <style scoped>
       .boxel-pricing-container {
-        color: #111827;
-        background-color: #fff;
-
-        max-width: 1200px;
+        color: var(--boxel-700);
+        background-color: var(--boxel-light);
+        max-width: var(--boxel-xxl-container);
         margin: 0 auto;
       }
 
       .main-title {
-        font-size: clamp(2.5rem, 5vw, 4rem);
+        font: var(--boxel-font-xl);
         font-weight: 700;
         text-align: center;
-        color: #000;
-        margin-bottom: 2rem;
+        color: var(--boxel-dark);
+        margin-bottom: var(--boxel-sp-lg);
         margin-top: 0;
       }
 
       .early-preview-banner {
-        background-color: #d9ff8a;
-        border: 1.5px solid #000;
-        border-radius: 8px;
-        padding: 0.75rem 1.5rem;
-        font-size: 1.125rem;
+        background-color: var(--boxel-lime);
+        border: 1.5px solid var(--boxel-dark);
+        border-radius: var(--boxel-border-radius-sm);
+        padding: var(--boxel-sp-sm) var(--boxel-sp);
+        font: var(--boxel-font);
         font-weight: 500;
         text-align: center;
-        max-width: 600px;
-        margin: 0 auto 1.5rem auto;
+        max-width: var(--boxel-lg-container);
+        margin: 0 auto var(--boxel-sp) auto;
       }
 
       .intro-text {
         text-align: center;
-        max-width: 700px;
-        margin: 0 auto 3rem auto;
-        line-height: 1.6;
-        font-size: 1rem;
+        max-width: var(--boxel-xl-container);
+        margin: 0 auto var(--boxel-sp-xxl) auto;
+        line-height: 1.5;
+        color: var(--boxel-700);
       }
 
       .subscription-header {
         text-align: center;
-        margin-bottom: 2rem;
+        margin-bottom: var(--boxel-sp-lg);
       }
 
       .subscription-title {
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 0.75rem;
-        margin-bottom: 0.5rem;
+        gap: var(--boxel-sp-sm);
+        margin-bottom: var(--boxel-sp-xs);
       }
 
       .subscription-title h2 {
-        font-size: clamp(1.8rem, 4vw, 2.5rem);
+        font: var(--boxel-font-lg);
         font-weight: 600;
-        color: #000;
+        color: var(--boxel-dark);
         margin: 0;
       }
 
       .subscription-header p {
-        font-size: 1.125rem;
-        color: #4b5563; /* Gray text */
+        font: var(--boxel-font);
+        color: var(--boxel-500);
         margin: 0;
       }
 
-      /* --- Mobile First Layout (Stacked Cards) --- */
       .pricing-table {
-        border-top: 1px solid #e5e7eb;
-        padding-top: 2rem;
+        border-top: var(--boxel-border);
+        padding-top: var(--boxel-sp-lg);
       }
       .feature-labels-column {
-        display: none; /* Hide labels on mobile */
+        display: none;
       }
 
       .plan-column {
-        border: 1px solid #e5e7eb;
-        border-radius: 12px;
+        border: var(--boxel-border);
+        border-radius: var(--boxel-border-radius-lg);
         overflow: hidden;
-        margin-bottom: 2rem;
-        background-color: #fff;
+        margin-bottom: var(--boxel-sp-lg);
+        background-color: var(--boxel-light);
       }
       .plan-column.plan-free {
-        background-color: #f9fafb;
+        background-color: var(--boxel-100);
       }
 
       .plan-header {
-        padding: 2rem;
+        padding: var(--boxel-sp-lg);
         text-align: center;
       }
       .plan-column.plan-free .plan-header {
-        background-color: #f9fafb;
+        background-color: var(--boxel-100);
       }
       .plan-header:not(.plan-free *) {
-        background-color: #fff;
+        background-color: var(--boxel-light);
       }
 
       .plan-name {
-        font-size: 1.5rem;
+        font: var(--boxel-font-med);
         font-weight: 600;
-        margin: 0 0 0.5rem 0;
+        margin: 0 0 var(--boxel-sp-xs) 0;
       }
       .plan-price {
-        font-size: 3rem;
+        font: var(--boxel-font-xl);
         font-weight: 700;
-        color: #000;
+        color: var(--boxel-dark);
         line-height: 1;
       }
       .plan-period {
-        color: #6b7280;
-        margin-bottom: 1.5rem;
+        margin-bottom: var(--boxel-sp);
       }
 
       .btn {
         display: inline-block;
-        padding: 0.75rem 2rem;
+        padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
         border-radius: 50px;
         text-decoration: none;
         font-weight: 600;
-        transition: transform 0.2s ease;
+        transition: var(--boxel-transition);
+        font: var(--boxel-font-sm);
       }
       .btn:hover {
         transform: scale(1.05);
       }
       .btn-teal {
-        background-color: #00f0b5;
-        color: #000;
+        background-color: var(--boxel-teal);
+        color: var(--boxel-dark);
       }
       .btn-dark {
-        background-color: #000;
-        color: #fff;
+        background-color: var(--boxel-dark);
+        color: var(--boxel-light);
+      }
+      .btn-get-started {
+        font-weight: 600;
       }
 
       .feature-cell {
-        padding: 1rem 1.5rem;
+        padding: var(--boxel-sp) var(--boxel-sp);
         font-weight: 500;
         text-align: center;
+        border-top: var(--boxel-border);
       }
       .feature-cell:not(:last-child) {
-        border-bottom: 1px solid #e5e7eb;
+        border-bottom: var(--boxel-border);
       }
 
-      /* Use data-attribute to show labels on mobile */
       .feature-cell::before {
         content: attr(data-label);
         display: block;
         font-weight: 500;
-        color: #111827;
-        margin-bottom: 0.5rem;
+        color: var(--boxel-700);
+        margin-bottom: var(--boxel-sp-xs);
         text-align: center;
+        font: var(--boxel-font-sm);
       }
       .feature-cell .credit-value {
-        margin-top: 0.5rem;
+        margin-top: var(--boxel-sp-xs);
       }
 
       .credit-value {
         display: flex;
-        flex-direction: column;
+        flex-direction: row;
         align-items: center;
-        gap: 0.5rem;
-        font-size: 1.25rem;
+        gap: var(--boxel-sp-xs);
+        font: var(--boxel-font-lg);
         font-weight: 600;
+        --icon-color: var(--boxel-teal);
       }
       .feature-note {
-        color: #6b7280;
-        font-size: 0.875rem;
-        margin-top: 0.25rem;
+        color: var(--boxel-500);
+        font: var(--boxel-font-sm);
+        margin-top: var(--boxel-sp-xxs);
       }
 
-      /* --- Footer --- */
       .footer-notes {
         text-align: center;
-        margin-top: 1rem;
-        color: #6b7280;
-        line-height: 1.6;
+        margin-top: var(--boxel-sp);
+        color: var(--boxel-450);
+        line-height: 1.5;
+        font: var(--boxel-font-xs);
+        margin-top: 1.5rem;
       }
       .footer-notes p {
-        margin: 0.5rem 0;
+        margin: var(--boxel-sp-xs) 0;
       }
       .footer-notes .highlight {
-        background-color: #d9ff8a;
-        padding: 0.2rem 0.4rem;
-        border-radius: 4px;
-        color: #1f2937;
+        background-color: var(--boxel-lime);
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-xs);
+        color: var(--boxel-700);
         font-weight: 500;
       }
 
-      /* --- Desktop Layout (min-width: 992px) --- */
       @media (min-width: 992px) {
         .pricing-table {
           display: flex;
-          border: 1px solid #e5e7eb;
-          border-radius: 12px;
+          border: var(--boxel-border);
+          border-radius: var(--boxel-border-radius-lg);
           padding-top: 0;
           overflow: hidden;
         }
 
         .feature-labels-column {
-          display: block; /* Show the labels column */
+          display: block;
           flex: 1 1 25%;
-          background-color: #fff;
+          background-color: var(--boxel-light);
+          font-weight: 600;
+          color: var(--boxel-700);
         }
 
         .plan-column {
@@ -223,23 +230,22 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
           margin-bottom: 0;
         }
         .plan-column:not(:first-of-type) {
-          border-left: 1px solid #e5e7eb;
+          border-left: var(--boxel-border);
         }
 
         .plan-header {
-          background-color: #f9fafb;
-          min-height: 255px; /* Align headers */
+          background-color: var(--boxel-100);
+          min-height: 220px;
           display: flex;
           flex-direction: column;
           justify-content: center;
         }
 
-        /* Hide the data-attribute labels on desktop */
         .feature-cell::before {
           display: none;
         }
         .feature-cell {
-          min-height: 120px; /* Align rows */
+          min-height: 100px;
           display: flex;
           flex-direction: column;
           justify-content: center;
@@ -247,31 +253,30 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
         }
 
         .label-cell {
-          min-height: 120px; /* Match feature cell height */
-          padding: 1.5rem;
+          min-height: 100px;
+          padding: var(--boxel-sp);
           font-weight: 600;
           display: flex;
           flex-direction: column;
           justify-content: center;
         }
         .label-cell:not(.is-header) {
-          border-top: 1px solid #e5e7eb;
+          border-top: var(--boxel-border);
         }
         .label-cell.is-header {
-          min-height: 255px; /* Match plan header height */
-        }
-        .label-cell .sub-label {
-          font-weight: 400;
-          color: #6b7280;
+          min-height: 220px;
         }
 
         .credit-value {
-          font-size: 1.5rem;
+          font: var(--boxel-font-lg);
+          font-weight: 600;
         }
       }
 
       .choose-subscription-plan-modal {
         --boxel-modal-max-width: 80rem;
+        --boxel-modal-offset-top: var(--boxel-sp-xxl);
+        height: 90%;
       }
     </style>
 
@@ -301,10 +306,9 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
 
           <div class='subscription-header'>
             <div class='subscription-title'>
-              <!-- Calendar Icon SVG -->
               <svg
-                width='40'
-                height='40'
+                width='32'
+                height='32'
                 viewBox='0 0 24 24'
                 fill='none'
                 xmlns='http://www.w3.org/2000/svg'
@@ -326,10 +330,8 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
           </div>
 
           <div class='pricing-table'>
-            <!-- Feature Labels Column (for desktop view) -->
             <div class='feature-labels-column'>
               <div class='label-cell is-header'></div>
-              <!-- Spacer -->
               <div class='label-cell'>
                 Boxel Credits
                 <span class='sub-label'>(For AI Generation)</span>
@@ -346,28 +348,21 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                 <div class='plan-period'>per month</div>
                 <a
                   href={{this.billingService.stripeStarterPlanPaymentLink}}
-                  class='btn btn-teal'
+                  class='btn btn-teal btn-get-started'
                 >Get Started</a>
               </div>
-              <div
-                class='feature-cell'
-                data-label='Boxel Credits (For AI Generation)'
-              >
+              <div class='feature-cell'>
                 <div class='credit-value'>
-
+                  <IconHexagon width='16px' height='16px' />
                   2,500
                 </div>
                 <div class='feature-note'>Monthly Boxel Credit</div>
               </div>
-              <div class='feature-cell' data-label='Workspaces'>Up to 10</div>
-              <div class='feature-cell' data-label='Cloud Storage'>500 MB</div>
-              <div
-                class='feature-cell'
-                data-label='Boxel Web App'
-              >Included</div>
+              <div class='feature-cell'>Up to 10</div>
+              <div class='feature-cell'>500 MB</div>
+              <div class='feature-cell'>Included</div>
             </div>
 
-            <!-- Creator Plan Column -->
             <div class='plan-column plan-creator'>
               <div class='plan-header'>
                 <h3 class='plan-name'>Creator</h3>
@@ -375,28 +370,21 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                 <div class='plan-period'>per month</div>
                 <a
                   href={{this.billingService.stripeCreatorPlanPaymentLink}}
-                  class='btn btn-dark'
+                  class='btn btn-dark btn-get-started'
                 >Get Started</a>
               </div>
-              <div
-                class='feature-cell'
-                data-label='Boxel Credits (For AI Generation)'
-              >
+              <div class='feature-cell'>
                 <div class='credit-value'>
-
+                  <IconHexagon width='16px' height='16px' />
                   6,500
                 </div>
                 <div class='feature-note'>Monthly Boxel Credit</div>
               </div>
-              <div class='feature-cell' data-label='Workspaces'>Up to 25</div>
-              <div class='feature-cell' data-label='Cloud Storage'>5 GB</div>
-              <div
-                class='feature-cell'
-                data-label='Boxel Web App'
-              >Included</div>
+              <div class='feature-cell'>Up to 25</div>
+              <div class='feature-cell'>5 GB</div>
+              <div class='feature-cell'>Included</div>
             </div>
 
-            <!-- Power User Plan Column -->
             <div class='plan-column plan-power'>
               <div class='plan-header'>
                 <h3 class='plan-name'>Power User</h3>
@@ -404,24 +392,19 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                 <div class='plan-period'>per month</div>
                 <a
                   href={{this.billingService.stripePowerUserPlanPaymentLink}}
-                  class='btn btn-dark'
+                  class='btn btn-dark btn-get-started'
                 >Get Started</a>
               </div>
-              <div
-                class='feature-cell'
-                data-label='Boxel Credits (For AI Generation)'
-              >
+              <div class='feature-cell'>
                 <div class='credit-value'>
+                  <IconHexagon width='16px' height='16px' />
                   35,000
                 </div>
                 <div class='feature-note'>Monthly Boxel Credit</div>
               </div>
-              <div class='feature-cell' data-label='Workspaces'>Up to 150</div>
-              <div class='feature-cell' data-label='Cloud Storage'>20 GB</div>
-              <div
-                class='feature-cell'
-                data-label='Boxel Web App'
-              >Included</div>
+              <div class='feature-cell'>Up to 150</div>
+              <div class='feature-cell'>20 GB</div>
+              <div class='feature-cell'>Included</div>
             </div>
 
           </div>
@@ -430,8 +413,7 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
             <p><span class='highlight'>You need to provide a valid credit card
                 to register and obtain free Boxel Credits.</span></p>
             <p>Your card will not be charged unless you choose to upgrade or buy
-              more credits.</p>
-            <p>Unused monthly Boxel Credits do not roll over.</p>
+              more credits. Unused monthly Boxel Credits do not roll over.</p>
           </div>
         </div>
       </:content>
