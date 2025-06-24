@@ -53,6 +53,10 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 import { TestRealmAdapter } from './adapter';
+import {
+  testRealmServerMatrixUserId,
+  testRealmServerMatrixUsername,
+} from './mock-matrix';
 import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
@@ -413,6 +417,7 @@ async function setupTestRealm({
     virtualNetwork,
     matrixURL: baseTestMatrix.url,
     secretSeed: testRealmSecretSeed,
+    realmServerMatrixUsername: testRealmServerMatrixUsername,
   });
 
   realm = new Realm({
@@ -426,6 +431,7 @@ async function setupTestRealm({
     virtualNetwork,
     dbAdapter,
     queue,
+    realmServerMatrixUserId: testRealmServerMatrixUserId,
   });
 
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?

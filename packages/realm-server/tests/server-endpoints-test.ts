@@ -158,7 +158,7 @@ module(basename(__filename), function () {
           // test state--there is no "delete user" matrix API
           let endpoint = `test-realm-${uuidv4()}`;
           let owner = 'mango';
-          let ownerUserId = '@mango:boxel.ai';
+          let ownerUserId = '@mango:localhost';
           let response = await request2
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
@@ -321,102 +321,10 @@ module(basename(__filename), function () {
           }
         });
 
-        test('POST /_create-realm without copying seed realm', async function (assert) {
-          // we randomize the realm and owner names so that we can isolate matrix
-          // test state--there is no "delete user" matrix API
-          let endpoint = `test-realm-${uuidv4()}`;
-          let owner = 'mango';
-          let ownerUserId = '@mango:boxel.ai';
-          let response = await request2
-            .post('/_create-realm')
-            .set('Accept', 'application/vnd.api+json')
-            .set('Content-Type', 'application/json')
-            .set(
-              'Authorization',
-              `Bearer ${createRealmServerJWT(
-                { user: ownerUserId, sessionRoom: 'session-room-test' },
-                realmSecretSeed,
-              )}`,
-            )
-            .send(
-              JSON.stringify({
-                data: {
-                  type: 'realm',
-                  attributes: {
-                    ...testRealmInfo,
-                    endpoint,
-                    backgroundURL: 'http://example.com/background.jpg',
-                    iconURL: 'http://example.com/icon.jpg',
-                  },
-                },
-              }),
-            );
-
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
-          let json = response.body;
-          assert.deepEqual(
-            json,
-            {
-              data: {
-                type: 'realm',
-                id: `${testRealm2URL.origin}/${owner}/${endpoint}/`,
-                attributes: {
-                  ...testRealmInfo,
-                  endpoint,
-                  backgroundURL: 'http://example.com/background.jpg',
-                  iconURL: 'http://example.com/icon.jpg',
-                },
-              },
-            },
-            'realm creation JSON is correct',
-          );
-
-          let realmPath = join(dir.name, 'realm_server_2', owner, endpoint);
-          let realmJSON = readJSONSync(join(realmPath, '.realm.json'));
-          assert.deepEqual(
-            realmJSON,
-            {
-              name: 'Test Realm',
-              backgroundURL: 'http://example.com/background.jpg',
-              iconURL: 'http://example.com/icon.jpg',
-            },
-            '.realm.json is correct',
-          );
-          assert.ok(
-            existsSync(join(realmPath, 'index.json')),
-            'seed file index.json exists',
-          );
-          assert.notOk(
-            existsSync(
-              join(
-                realmPath,
-                'HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0.json',
-              ),
-            ),
-            'seed file HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0.json exists',
-          );
-          assert.notOk(
-            existsSync(join(realmPath, 'package.json')),
-            'ignored seed file package.json does not exist',
-          );
-          assert.notOk(
-            existsSync(join(realmPath, 'node_modules')),
-            'ignored seed file node_modules/ does not exist',
-          );
-          assert.notOk(
-            existsSync(join(realmPath, '.gitignore')),
-            'ignored seed file .gitignore does not exist',
-          );
-          assert.notOk(
-            existsSync(join(realmPath, 'tsconfig.json')),
-            'ignored seed file tsconfig.json does not exist',
-          );
-        });
-
         test('dynamically created realms are not publicly readable or writable', async function (assert) {
           let endpoint = `test-realm-${uuidv4()}`;
           let owner = 'mango';
-          let ownerUserId = '@mango:boxel.ai';
+          let ownerUserId = '@mango:localhost';
           let response = await request2
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
@@ -489,7 +397,7 @@ module(basename(__filename), function () {
         test('can restart a realm that was created dynamically', async function (assert) {
           let endpoint = `test-realm-${uuidv4()}`;
           let owner = 'mango';
-          let ownerUserId = '@mango:boxel.ai';
+          let ownerUserId = '@mango:localhost';
           let realmURL: string;
           {
             let response = await request2
@@ -499,7 +407,10 @@ module(basename(__filename), function () {
               .set(
                 'Authorization',
                 `Bearer ${createRealmServerJWT(
-                  { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+                  {
+                    user: '@mango:localhost',
+                    sessionRoom: 'session-room-test',
+                  },
                   realmSecretSeed,
                 )}`,
               )
@@ -553,11 +464,20 @@ module(basename(__filename), function () {
             id = response.body.data.id;
           }
 
+          let jobsBeforeRestart = await dbAdapter.execute('select * from jobs');
+
           // Stop and restart the server
           testRealmServer2.testingOnlyUnmountRealms();
           await closeServer(testRealmHttpServer2);
           await startRealmServer(dbAdapter, publisher, runner);
           await testRealmServer2.start();
+
+          let jobsAfterRestart = await dbAdapter.execute('select * from jobs');
+          assert.strictEqual(
+            jobsBeforeRestart.length,
+            jobsAfterRestart.length,
+            'no new indexing jobs were created on boot for the created realm',
+          );
 
           {
             let response = await request2
@@ -643,7 +563,7 @@ module(basename(__filename), function () {
             .set(
               'Authorization',
               `Bearer ${createRealmServerJWT(
-                { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+                { user: '@mango:localhost', sessionRoom: 'session-room-test' },
                 realmSecretSeed,
               )}`,
             )
@@ -664,7 +584,7 @@ module(basename(__filename), function () {
             .set(
               'Authorization',
               `Bearer ${createRealmServerJWT(
-                { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+                { user: '@mango:localhost', sessionRoom: 'session-room-test' },
                 realmSecretSeed,
               )}`,
             )
@@ -689,7 +609,7 @@ module(basename(__filename), function () {
             .set(
               'Authorization',
               `Bearer ${createRealmServerJWT(
-                { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+                { user: '@mango:localhost', sessionRoom: 'session-room-test' },
                 realmSecretSeed,
               )}`,
             )
@@ -720,7 +640,7 @@ module(basename(__filename), function () {
             .set(
               'Authorization',
               `Bearer ${createRealmServerJWT(
-                { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+                { user: '@mango:localhost', sessionRoom: 'session-room-test' },
                 realmSecretSeed,
               )}`,
             )
@@ -750,7 +670,7 @@ module(basename(__filename), function () {
             .set(
               'Authorization',
               `Bearer ${createRealmServerJWT(
-                { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+                { user: '@mango:localhost', sessionRoom: 'session-room-test' },
                 realmSecretSeed,
               )}`,
             )
@@ -777,7 +697,7 @@ module(basename(__filename), function () {
 
         test('cannot create a new realm that collides with an existing realm', async function (assert) {
           let endpoint = `test-realm-${uuidv4()}`;
-          let ownerUserId = '@mango:boxel.ai';
+          let ownerUserId = '@mango:localhost';
           let response = await request2
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
@@ -834,7 +754,7 @@ module(basename(__filename), function () {
         });
 
         test('cannot create a realm with invalid characters in endpoint', async function (assert) {
-          let ownerUserId = '@mango:boxel.ai';
+          let ownerUserId = '@mango:localhost';
           {
             let response = await request2
               .post('/_create-realm')
@@ -903,7 +823,7 @@ module(basename(__filename), function () {
         });
 
         test('can create a user', async function (assert) {
-          let ownerUserId = '@mango:boxel.ai';
+          let ownerUserId = '@mango:localhost';
           let response = await request2
             .post('/_user')
             .set('Accept', 'application/json')

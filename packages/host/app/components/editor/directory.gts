@@ -153,26 +153,29 @@ export default class Directory extends Component<Args> {
   }
 
   @action
-  private selectDirectory(entryPath: string) {
+  private selectDirectory(entryPath: LocalPath) {
+    // Ensure entryPath ends with '/' for directories
+    const dirPath = entryPath.endsWith('/') ? entryPath : `${entryPath}/`;
+
     for (let i = 0; i < this.openDirs.length; i++) {
-      if (this.openDirs[i].startsWith(entryPath)) {
-        let localParts = entryPath.split('/').filter((p) => p.trim() != '');
+      if (this.openDirs[i].startsWith(dirPath)) {
+        let localParts = dirPath.split('/').filter((p) => p.trim() != '');
         localParts.pop();
         if (localParts.length) {
           this.openDirs[i] = localParts.join('/') + '/';
         } else {
           this.openDirs.splice(i, 1);
         }
-        this.args.onDirectorySelected?.(entryPath);
+        this.args.onDirectorySelected?.(dirPath);
         return;
-      } else if (entryPath.startsWith(this.openDirs[i])) {
-        this.openDirs[i] = entryPath;
-        this.args.onDirectorySelected?.(entryPath);
+      } else if (dirPath.startsWith(this.openDirs[i])) {
+        this.openDirs[i] = dirPath;
+        this.args.onDirectorySelected?.(dirPath);
         return;
       }
     }
-    this.openDirs.push(entryPath);
-    this.args.onDirectorySelected?.(entryPath);
+    this.openDirs.push(dirPath);
+    this.args.onDirectorySelected?.(dirPath);
   }
 
   @action

@@ -151,7 +151,6 @@ export default class Room extends Component<Signature> {
             @removeCard={{this.removeCard}}
             @chooseFile={{this.chooseFile}}
             @removeFile={{this.removeFile}}
-            @submode={{this.operatorModeStateService.state.submode}}
             @autoAttachedFile={{this.autoAttachedFile}}
             @filesToAttach={{this.filesToAttach}}
             @autoAttachedCardTooltipMessage={{if
@@ -168,6 +167,8 @@ export default class Room extends Component<Signature> {
                 @acceptingAll={{this.executeAllReadyActionsTask.isRunning}}
                 @acceptingAllLabel={{this.acceptingAllLabel}}
                 @generatingResults={{this.generatingResults}}
+                @stop={{perform this.stopGeneratingTask}}
+                @stopping={{this.stopGeneratingTask.isRunning}}
               />
             {{/if}}
             <div class='chat-input-area' data-test-chat-input-area>
@@ -221,6 +222,7 @@ export default class Room extends Component<Signature> {
         grid-template-rows: 1fr auto;
         height: 100%;
         overflow: hidden;
+        position: relative;
       }
       .unread-indicator {
         position: sticky;
@@ -238,7 +240,6 @@ export default class Room extends Component<Signature> {
       .chat-input-area {
         background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
-        overflow: hidden;
       }
       .chat-input-area__bottom-actions {
         display: flex;
@@ -246,13 +247,13 @@ export default class Room extends Component<Signature> {
         gap: var(--boxel-sp-sm);
         background-color: var(--boxel-light-100);
         border-top: 1px solid var(--boxel-200);
+        border-bottom-left-radius: var(--boxel-border-radius);
+        border-bottom-right-radius: var(--boxel-border-radius);
       }
       :deep(.ai-assistant-conversation > *:first-child) {
         margin-top: auto;
       }
-      :deep(.ai-assistant-conversation > *:nth-last-of-type(2)) {
-        padding-bottom: var(--boxel-sp-xl);
-      }
+
       .loading-indicator {
         margin-top: auto;
         margin-bottom: auto;
@@ -969,8 +970,9 @@ export default class Room extends Component<Signature> {
   private get displayActionBar() {
     let lastMessage = this.messages[this.messages.length - 1];
     if (
-      this.lastCanceledActionMessageId &&
-      lastMessage?.eventId === this.lastCanceledActionMessageId
+      (this.lastCanceledActionMessageId &&
+        lastMessage?.eventId === this.lastCanceledActionMessageId) ||
+      lastMessage?.isCanceled
     ) {
       return false;
     }
@@ -1007,7 +1009,7 @@ export default class Room extends Component<Signature> {
     }
   }
 
-  executeAllReadyActionsTask = task(async () => {
+  private executeAllReadyActionsTask = task(async () => {
     await this.executeReadyCodePatches();
     await this.executeReadyCommands();
   });
@@ -1019,6 +1021,10 @@ export default class Room extends Component<Signature> {
       this.lastCanceledActionMessageId = lastMessage.eventId;
     }
   }
+
+  private stopGeneratingTask = task(async () => {
+    await this.matrixService.sendStopGeneratingEvent(this.args.roomId);
+  });
 }
 
 declare module '@glint/environment-ember-loose/registry' {

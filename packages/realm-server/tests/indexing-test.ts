@@ -20,6 +20,7 @@ import {
   matrixURL,
   closeServer,
   cleanWhiteSpace,
+  testRealmServerMatrixUserId,
 } from './helpers';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { Server } from 'http';
@@ -429,6 +430,32 @@ module(basename(__filename), function () {
         });
         await realm.start();
       },
+    });
+
+    test('realm is full indexed at boot', async function (assert) {
+      let jobs = await testDbAdapter.execute('select * from jobs');
+      assert.strictEqual(
+        jobs.length,
+        1,
+        'there is one job that was run in the queue',
+      );
+      let [job] = jobs;
+      assert.strictEqual(
+        job.job_type,
+        'from-scratch-index',
+        'the job is a from scratch index job',
+      );
+      assert.strictEqual(
+        job.concurrency_group,
+        `indexing:${testRealm}`,
+        'the job is an index of the test realm',
+      );
+      assert.strictEqual(
+        job.status,
+        'resolved',
+        'the job completed successfully',
+      );
+      assert.ok(job.finished_at, 'the job was marked with a finish time');
     });
 
     test('can store card pre-rendered html in the index', async function (assert) {
@@ -1649,7 +1676,7 @@ module(basename(__filename), function () {
     module('readable realm', function (hooks) {
       setupRealms(hooks, {
         provider: {
-          '@node-test_realm:localhost': ['read'],
+          [testRealmServerMatrixUserId]: ['read'],
         },
         consumer: {
           '*': ['read', 'write'],

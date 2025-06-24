@@ -14,8 +14,6 @@ import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
-import { Submode } from '../../submode-switcher';
-
 import AttachButton from './attach-button';
 import AttachedItems from './attached-items';
 
@@ -32,7 +30,6 @@ interface Signature {
     removeCard: (cardId: string) => void;
     chooseFile: (file: FileDef) => void;
     removeFile: (file: FileDef) => void;
-    submode: Submode;
     autoAttachedCardTooltipMessage?: string;
   };
   Blocks: {
@@ -49,7 +46,7 @@ interface Signature {
       >,
       WithBoundArgs<
         typeof AttachButton,
-        'submode' | 'files' | 'cards' | 'chooseCard' | 'chooseFile'
+        'files' | 'cards' | 'chooseCard' | 'chooseFile'
       >,
     ];
   };
@@ -71,7 +68,6 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
       )
       (component
         AttachButton
-        submode=@submode
         files=this.files
         cards=this.cards
         chooseCard=@chooseCard

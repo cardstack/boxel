@@ -6,6 +6,7 @@ import {
   logger,
   RunnerOptionsManager,
   Deferred,
+  userIdFromUsername,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -200,6 +201,11 @@ let autoMigrate = migrateDB || undefined;
     await waitForWorkerManager(workerManagerPort);
   }
 
+  let realmServerMatrixUserId = userIdFromUsername(
+    REALM_SERVER_MATRIX_USERNAME,
+    MATRIX_URL,
+  );
+
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
 
@@ -223,8 +229,10 @@ let autoMigrate = migrateDB || undefined;
         virtualNetwork,
         dbAdapter,
         queue,
+        realmServerMatrixUserId,
       },
       {
+        fullIndexOnStartup: true,
         ...(process.env.DISABLE_MODULE_CACHING === 'true'
           ? { disableModuleCaching: true }
           : {}),

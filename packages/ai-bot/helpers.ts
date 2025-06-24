@@ -396,7 +396,7 @@ export async function getAttachedCards(
             event as MatrixEventWithBoxelContext
           ).content?.data?.attachedCards?.some(
             (cardAttachment: SerializedFileDef) =>
-              cardAttachment.url === attachedCard.url,
+              cardAttachment.sourceUrl === attachedCard.sourceUrl,
           );
         });
       let result: SerializedFileDef = {
@@ -450,7 +450,8 @@ export async function getAttachedFiles(
           return (
             event as MatrixEventWithBoxelContext
           ).content?.data?.attachedFiles?.some(
-            (file: SerializedFileDef) => file.url === attachedFile.url,
+            (file: SerializedFileDef) =>
+              file.sourceUrl === attachedFile.sourceUrl,
           );
         });
 

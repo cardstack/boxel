@@ -3,7 +3,7 @@ import { hash } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
+import { capitalize } from '@ember/string';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
@@ -18,11 +18,13 @@ import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { consume, provide } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
+import startCase from 'lodash/startCase';
+
 import {
   LoadingIndicator,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { not, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -71,15 +73,20 @@ import {
 } from '../../utils/local-storage-keys';
 import FileTree from '../editor/file-tree';
 
-import AttachFileModal from './attach-file-modal';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
-import CreateFileModal, { type FileType } from './create-file-modal';
+import CreateFileModal, {
+  type FileType,
+  newFileTypes,
+} from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
+
 import SubmodeLayout from './submode-layout';
+
+import type { NewFileOptions } from './new-file-button';
 
 interface Signature {
   Args: {
@@ -230,13 +237,6 @@ export default class CodeSubmode extends Component<Signature> {
     return this.cardResource?.cardError?.meta
       ? this.cardResource?.cardError
       : undefined;
-  }
-
-  private backgroundURLStyle(backgroundURL: string | null) {
-    let possibleStyle = backgroundURL
-      ? `background-image: url(${backgroundURL});`
-      : '';
-    return htmlSafe(possibleStyle);
   }
 
   @action setFileView(view: FileView) {
@@ -452,10 +452,28 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
-  private get newFileOptions() {
+  private get menuItems(): MenuItem[] {
+    return newFileTypes.flatMap(({ id, icon, description, extension }) => {
+      if (id === 'duplicate-instance' || id === 'spec-instance') {
+        return [];
+      }
+      let displayName = capitalize(startCase(id));
+      return [
+        new MenuItem(displayName, 'action', {
+          action: () => this.createFile.perform({ id, displayName }),
+          subtext: description,
+          icon,
+          postscript: extension,
+        }),
+      ];
+    });
+  }
+
+  private get newFileOptions(): NewFileOptions {
     return {
-      onSelect: (fileType: FileType) => this.createFile.perform(fileType),
-      isCreateModalOpen: this.isCreateModalOpen,
+      menuItems: this.menuItems,
+      isDisabled: this.isCreateModalOpen,
+      onClose: this.operatorModeStateService.setNewFileDropdownClosed,
     };
   }
 
@@ -549,22 +567,13 @@ export default class CodeSubmode extends Component<Signature> {
         throw new Error(`bug: CreateFileModal not instantiated`);
       }
 
-      let destinationRealm: string | undefined;
+      let sourceURLs = [
+        sourceInstance?.id,
+        definitionClass?.ref?.module,
+      ].filter(Boolean) as string[] | [];
 
-      if (sourceInstance && this.realm.canWrite(sourceInstance.id)) {
-        destinationRealm = this.realm.url(sourceInstance.id);
-      } else if (
-        definitionClass?.ref &&
-        this.realm.canWrite(definitionClass.ref.module)
-      ) {
-        destinationRealm = this.realm.url(definitionClass.ref.module);
-      } else if (
-        this.realm.canWrite(this.operatorModeStateService.realmURL.href)
-      ) {
-        destinationRealm = this.operatorModeStateService.realmURL.href;
-      } else if (this.realm.defaultWritableRealm) {
-        destinationRealm = this.realm.defaultWritableRealm.path;
-      }
+      let destinationRealm =
+        this.operatorModeStateService.getWritableRealmURL(sourceURLs);
 
       if (!destinationRealm) {
         throw new Error('No writable realm found');
@@ -641,18 +650,12 @@ export default class CodeSubmode extends Component<Signature> {
 
   <template>
     {{consumeContext this.makeCardResource}}
-    <AttachFileModal />
-    {{#let (this.realm.info this.realmURL.href) as |realmInfo|}}
-      <div
-        class='code-mode-background'
-        style={{this.backgroundURLStyle realmInfo.backgroundURL}}
-      ></div>
-    {{/let}}
     <SubmodeLayout
       class='code-submode-layout'
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
       @selectedCardRef={{this.selectedCodeRef}}
       @newFileOptions={{this.newFileOptions}}
+      data-test-code-submode
       as |search|
     >
       <div
@@ -722,7 +725,7 @@ export default class CodeSubmode extends Component<Signature> {
                     </:browser>
                   </CodeSubmodeLeftPanelToggle>
                 </VerticallyResizablePanel>
-                <VerticallyResizeHandle />
+                <VerticallyResizeHandle class='handle' />
                 <VerticallyResizablePanel
                   @defaultSize={{this.defaultPanelHeights.recentPanel}}
                   @minSize={{20}}
@@ -742,7 +745,7 @@ export default class CodeSubmode extends Component<Signature> {
               </ResizablePanelGroup>
             </div>
           </ResizablePanel>
-          <ResizeHandle />
+          <ResizeHandle class='handle' />
           {{#if this.codePath}}
             <ResizablePanel
               @defaultSize={{this.defaultPanelWidths.codeEditorPanel}}
@@ -770,13 +773,13 @@ export default class CodeSubmode extends Component<Signature> {
                 {{/if}}
               </InnerContainer>
             </ResizablePanel>
-            <ResizeHandle />
+            <ResizeHandle class='handle' />
             <ResizablePanel
               @defaultSize={{this.defaultPanelWidths.rightPanel}}
               {{! TODO in CS-8713: make this have a minimum width }}
               @collapsible={{false}}
             >
-              <InnerContainer>
+              <InnerContainer class='module-inspector-container'>
                 {{#if this.isReady}}
                   <ModuleInspector
                     @card={{this.card}}
@@ -845,7 +848,7 @@ export default class CodeSubmode extends Component<Signature> {
         --code-mode-panel-background-color: #ebeaed;
         --code-mode-container-border-radius: 10px;
         --code-mode-realm-icon-size: 1.125rem;
-        --code-mode-active-box-shadow: 0 3px 5px 0 rgba(0, 0, 0, 0.35);
+        --code-mode-active-box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.16);
         --code-mode-padding-top: calc(
           var(--operator-mode-top-bar-item-height) +
             (2 * (var(--operator-mode-spacing)))
@@ -867,17 +870,7 @@ export default class CodeSubmode extends Component<Signature> {
         padding-top: var(--code-mode-padding-top);
         overflow: auto;
         flex: 1;
-      }
-
-      .code-mode-background {
-        position: fixed;
-        left: 0;
-        right: 0;
-        display: block;
-        width: 100%;
-        height: 100%;
-        filter: blur(15px);
-        background-size: cover;
+        background-color: #74707d;
       }
 
       .columns {
@@ -885,6 +878,7 @@ export default class CodeSubmode extends Component<Signature> {
         flex-direction: row;
         flex-shrink: 0;
         height: 100%;
+        border-top: 1px solid var(--boxel-dark);
       }
 
       .column {
@@ -892,6 +886,10 @@ export default class CodeSubmode extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp);
         height: 100%;
+      }
+
+      .handle {
+        --boxel-panel-resize-separator-background-color: var(--boxel-dark);
       }
 
       .recent-files-panel {
@@ -926,6 +924,10 @@ export default class CodeSubmode extends Component<Signature> {
       .code-mode-top-bar
         > :deep(* + *:not(.ember-basic-dropdown-content-wormhole-origin)) {
         margin-left: var(--operator-mode-spacing);
+      }
+
+      .module-inspector-container {
+        background-color: transparent;
       }
 
       .loading {

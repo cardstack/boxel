@@ -296,15 +296,15 @@ export default class AiAssistantMessage extends Component<Signature> {
             </div>
           {{/if}}
 
-          <div class='error-footer'>
-            {{#if this.errorMessages.length}}
+          {{#if this.errorMessages.length}}
+            <div class='error-footer'>
               <Alert
                 @type='error'
                 @messages={{this.errorMessages}}
                 @retryAction={{@retryAction}}
               />
-            {{/if}}
-          </div>
+            </div>
+          {{/if}}
         </div>
       </div>
     </div>
@@ -312,9 +312,9 @@ export default class AiAssistantMessage extends Component<Signature> {
     <style scoped>
       .ai-assistant-message {
         --ai-bot-message-background-color: #3b394b;
-        --ai-assistant-message-avatar-size: 1.25rem; /* 20px. */
-        --ai-assistant-message-meta-height: 1.25rem; /* 20px */
-        --ai-assistant-message-gap: var(--boxel-sp-xs);
+        --ai-assistant-message-avatar-size: 0.75rem; /* 12px. */
+        --ai-assistant-message-meta-height: 0.75rem; /* 12px */
+        --ai-assistant-message-gap: var(--boxel-sp-xxxs);
         --profile-avatar-icon-size: var(--ai-assistant-message-avatar-size);
         --profile-avatar-icon-border: 1px solid var(--boxel-400);
       }
@@ -366,7 +366,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
 
       .content-container {
-        margin-top: var(--boxel-sp-xs);
+        margin-top: var(--boxel-sp-xxxs);
         border-radius: var(--boxel-border-radius-xxs)
           var(--boxel-border-radius-xl) var(--boxel-border-radius-xl)
           var(--boxel-border-radius-xl);
@@ -390,6 +390,12 @@ export default class AiAssistantMessage extends Component<Signature> {
           text on dark background (otherwise not good for accessibility) */
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+        padding: 0;
+        padding: 0;
+      }
+
+      .is-from-assistant .content :deep(p:last-of-type) {
+        margin-bottom: 0;
       }
 
       .is-from-assistant .content :deep(pre) {
@@ -398,6 +404,10 @@ export default class AiAssistantMessage extends Component<Signature> {
 
       .is-from-assistant .content :deep(pre code) {
         overflow-wrap: break-word;
+      }
+
+      .is-from-assistant .content-container {
+        margin-top: 9px;
       }
 
       .is-pending .content,

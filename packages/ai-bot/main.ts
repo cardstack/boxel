@@ -2,7 +2,12 @@ import './instrument';
 import './setup-logger'; // This should be first
 import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
 import OpenAI from 'openai';
-import { logger, aiBotUsername, DEFAULT_LLM } from '@cardstack/runtime-common';
+import {
+  logger,
+  aiBotUsername,
+  DEFAULT_LLM,
+  APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+} from '@cardstack/runtime-common';
 import {
   type PromptParts,
   isCommandResultStatusApplied,
@@ -33,10 +38,19 @@ import { getAvailableCredits, saveUsageCost } from './lib/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { OpenAIError } from 'openai/error';
+import { ChatCompletionStream } from 'openai/lib/ChatCompletionStream.mjs';
 
 let log = logger('ai-bot');
 
 let trackAiUsageCostPromises = new Map<string, Promise<void>>();
+let activeGenerations = new Map<
+  string,
+  {
+    responder: Responder;
+    runner: ChatCompletionStream;
+    lastGeneratedChunkId: string | undefined;
+  }
+>();
 
 const MINIMUM_CREDITS = 10;
 
@@ -211,6 +225,25 @@ Common issues are:
           return;
         }
 
+        let activeGeneration = activeGenerations.get(room.roomId);
+        if (
+          activeGeneration &&
+          (event.getType() === APP_BOXEL_STOP_GENERATING_EVENT_TYPE ||
+            event.getType() === 'm.room.message')
+        ) {
+          activeGeneration.runner.abort();
+          await activeGeneration.responder.finalize({
+            isCanceled: true,
+          });
+          if (activeGeneration.lastGeneratedChunkId) {
+            await assistant.trackAiUsageCost(
+              senderMatrixUserId,
+              activeGeneration.lastGeneratedChunkId,
+            );
+          }
+          activeGenerations.delete(room.roomId);
+        }
+
         if (!Responder.eventMayTriggerResponse(event)) {
           return; // early exit for events that will not trigger a response
         }
@@ -301,6 +334,10 @@ Common issues are:
           .getResponse(promptParts)
           .on('chunk', async (chunk, snapshot) => {
             generationId = chunk.id;
+            let activeGeneration = activeGenerations.get(room.roomId);
+            if (activeGeneration) {
+              activeGeneration.lastGeneratedChunkId = generationId;
+            }
 
             let chunkProcessingResult = await responder.onChunk(
               chunk,
@@ -325,6 +362,12 @@ Common issues are:
           .on('error', async (error) => {
             await responder.onError(error);
           });
+
+        activeGenerations.set(room.roomId, {
+          responder,
+          runner,
+          lastGeneratedChunkId: generationId,
+        });
 
         try {
           await runner.finalChatCompletion();
@@ -397,7 +440,10 @@ Common issues are:
     }
   });
 
-  await client.startClient();
+  await client.startClient({
+    initialSyncLimit: 0,
+    lazyLoadMembers: true,
+  });
   log.info('client started');
 })().catch((e) => {
   log.error(e);

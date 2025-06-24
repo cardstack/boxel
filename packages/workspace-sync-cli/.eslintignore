@@ -1,0 +1,11 @@
+# Build output
+dist/
+
+# Dependencies
+node_modules/
+
+# Package files
+*.tgz
+
+# Logs
+*.log 

@@ -34,6 +34,7 @@ export default class RealmDropdown extends Component<Signature> {
   <template>
     <BoxelDropdown
       @contentClass={{@contentClass}}
+      @matchTriggerWidth={{true}}
       data-test-load-realms-loaded='true'
     >
       <:trigger as |bindings|>
@@ -98,6 +99,8 @@ export default class RealmDropdown extends Component<Signature> {
         --boxel-menu-item-content-padding: var(--boxel-sp-xs);
         --boxel-menu-item-gap: var(--boxel-sp-xs);
         min-width: 13rem;
+        max-height: 13rem;
+        overflow-y: scroll;
       }
       .realm-dropdown-menu :deep(.menu-item__icon-url) {
         border-radius: var(--boxel-border-radius-xs);

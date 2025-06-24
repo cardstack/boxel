@@ -1,5 +1,6 @@
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
+import { on } from '@ember/modifier';
 
 import {
   contains,
@@ -22,11 +23,7 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import GlimmerComponent from '@glimmer/component';
 
-import {
-  FilterCategoryGroup,
-  FilterTagGroup,
-  type FilterItem,
-} from './components/filter-section';
+import FilterSidebar, { type FilterItem } from './components/filter-section';
 import CardsDisplaySection, {
   CardsIntancesGrid,
 } from './components/cards-display-section';
@@ -35,8 +32,14 @@ import { CardsGrid } from './components/grid';
 
 import CatalogLayout from './layouts/catalog-layout';
 
-import BookOpen from '@cardstack/boxel-icons/book-open';
+import type IconComponent from '@cardstack/boxel-icons/captions';
+import BuildingBank from '@cardstack/boxel-icons/building-bank';
+import BuildingIcon from '@cardstack/boxel-icons/building';
+import HealthRecognition from '@cardstack/boxel-icons/health-recognition';
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
+import ShipWheelIcon from '@cardstack/boxel-icons/ship-wheel';
+import UsersIcon from '@cardstack/boxel-icons/users';
+import WorldIcon from '@cardstack/boxel-icons/world';
 import {
   Grid3x3 as GridIcon,
   Rows4 as StripIcon,
@@ -68,15 +71,17 @@ interface ShowcaseViewArgs {
 class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
   <template>
     <header class='showcase-header'>
-      <BookOpen width='45' height='45' role='presentation' />
+      <img
+        src='https://boxel-images.boxel.ai/icons/icon_catalog_rounded.png'
+        alt='Catalog Icon'
+        class='catalog-icon'
+      />
       <h1 class='showcase-header-title'>
-        Cardstack Catalog:
-        <br />
-        <span class='showcase-header-highlight'>Discover & Remix the Best</span>
+        Cardstack Catalog: Discover & Remix the Best
       </h1>
-      <p class='showcase-header-description'>Curated apps & tools for creators,
-        coders, and curious minds.</p>
     </header>
+
+    <hr class='showcase-divider' />
 
     <div class='showcase-center-div' ...attributes>
       <div class='showcase-display-container'>
@@ -96,6 +101,8 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
           </:content>
         </CardsDisplaySection>
 
+        <hr class='showcase-divider' />
+
         <CardsDisplaySection class='new-this-week-cards-display'>
           <:intro>
             <h2 class='intro-title'>Editor's Picks – What's Hot This Week</h2>
@@ -108,6 +115,8 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
             <CardsIntancesGrid @cards={{@newListings}} @context={{@context}} />
           </:content>
         </CardsDisplaySection>
+
+        <hr class='showcase-divider' />
 
         <CardsDisplaySection class='featured-cards-display'>
           <:intro>
@@ -127,57 +136,48 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
 
     <style scoped>
       .showcase-header {
-        padding: var(--boxel-sp-lg);
-        background-color: var(--boxel-light);
-        border-radius: var(--boxel-border-radius);
         position: relative;
         overflow: hidden;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
       }
-      .showcase-header > * {
-        position: relative;
-        z-index: 1;
+      .catalog-icon {
+        width: 2rem;
+        height: 2rem;
+        flex-shrink: 0;
       }
       .showcase-header-title {
-        font: 600 var(--boxel-font-xl);
+        font-size: 1.5rem;
+        font-weight: 600;
         line-height: 1.2;
         margin-block: 0;
-        margin-bottom: 1rem;
       }
-      .showcase-header-description {
-        margin-block: 0;
-        font: 400 var(--boxel-font);
-      }
-      .showcase-header-highlight {
-        background: -webkit-linear-gradient(
-          left,
-          var(--boxel-red) 0%,
-          var(--boxel-purple) 20%,
-          var(--boxel-dark) 100%
-        );
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+
+      .showcase-divider {
+        border: none;
+        height: 1px;
+        background-color: #999999;
+        margin: var(--boxel-sp-xl) 0;
       }
 
       .showcase-center-div {
         display: table;
         margin: 0 auto;
         width: 100%;
-        max-width: 900px;
       }
 
       .showcase-display-container {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-xxxl);
+        gap: var(--boxel-sp-lg);
         container-name: showcase-display-container;
         container-type: inline-size;
       }
-      .showcase-display-container > * + * {
-        border-top: 1px solid #999999;
-      }
       .showcase-cards-display :deep(.cards.grid-view),
       .featured-cards-display :deep(.cards.grid-view) {
-        --grid-view-height: 440px;
+        --grid-view-height: 540px;
         grid-template-columns: repeat(2, 1fr);
       }
       .new-this-week-cards-display :deep(.cards.grid-view) {
@@ -187,11 +187,12 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
 
       .intro-title {
         font: 600 var(--boxel-font-lg);
-        color: var(--boxel-light);
+        margin-block: 0;
+        color: var(--boxel-dark);
       }
       .intro-description {
         font: 400 var(--boxel-font);
-        color: var(--boxel-light);
+        color: var(--boxel-dark);
         margin-bottom: var(--boxel-sp-xl);
       }
 
@@ -271,6 +272,7 @@ class CatalogListView extends GlimmerComponent<CatalogListViewArgs> {
         align-items: center;
         justify-content: space-between;
         gap: var(--boxel-sp-sm);
+        margin-bottom: var(--boxel-sp-sm);
       }
       .catalog-list-view-selector {
         margin-left: auto;
@@ -311,35 +313,20 @@ class Isolated extends Component<typeof Catalog> {
     this.activeTabId = tabId;
   }
 
-  @tracked activeCategoryId = 'all';
+  @tracked activeCategoryId: string | undefined =
+    this.activeTabId !== 'showcase' ? 'all' : undefined;
 
-  @action
-  handleCategorySelect(category: { id: string; name: string }) {
-    this.activeCategoryId = category.id;
-  }
-
-  // TODO: Remove this after we get the real tags from query
-  mockTags = [
-    { id: 'ai', name: 'AI' },
-    { id: 'bundled', name: 'Bundled' },
-    { id: 'official', name: 'Official' },
-    { id: 'userContributed', name: 'User Contributed' },
-    { id: 'solo', name: 'Solo' },
-  ];
-
-  @tracked activeTagIds: string[] = [];
+  @tracked activeTags: FilterItem[] = [];
 
   @action
   handleTagSelect(item: FilterItem) {
-    if (this.activeTagIds.includes(item.id)) {
-      this.activeTagIds = this.activeTagIds.filter((id) => id !== item.id);
-    } else {
-      this.activeTagIds = [...this.activeTagIds, item.id];
-    }
+    this.activeTags = this.activeTags.some((t) => t.id === item.id)
+      ? this.activeTags.filter((t) => t.id !== item.id)
+      : [...this.activeTags, item];
   }
 
   // Filter Search
-  @tracked searchValue: string = '';
+  @tracked searchValue: string | undefined = undefined;
 
   @action
   handleSearch(value: string) {
@@ -352,7 +339,10 @@ class Isolated extends Component<typeof Catalog> {
       filter: {
         on: {
           module: new URL('./listing/listing', import.meta.url).href,
-          name: `${capitalize(this.activeTabId)}Listing`,
+          name:
+            this.activeTabId === 'showcase'
+              ? 'Listing'
+              : `${capitalize(this.activeTabId)}Listing`,
         },
         every: [this.categoryFilter, this.tagFilter, this.searchFilter].filter(
           Boolean,
@@ -362,6 +352,8 @@ class Isolated extends Component<typeof Catalog> {
   }
 
   // Category filter
+  @tracked activeCategory: FilterItem | undefined = undefined;
+
   get categoryQuery(): Query {
     return {
       filter: {
@@ -387,22 +379,49 @@ class Isolated extends Component<typeof Catalog> {
     if (!instances) {
       return [];
     }
-    return [
-      { id: 'all', name: 'All' },
-      ...instances.map((instance) => ({
+
+    const iconMap: Record<string, typeof IconComponent> = {
+      All: LayoutGridPlusIcon,
+      'Accounting & Finance': BuildingBank,
+      Business: BuildingIcon,
+      'Content Management': UsersIcon,
+      'Games and Entertainment': WorldIcon,
+      'Health and Fitness': HealthRecognition,
+      'Travel and Lifestyle': ShipWheelIcon,
+    };
+
+    // Create nested structure with "All" as parent
+    const nestedCategories = instances.map((instance) => {
+      return {
         id: instance.id,
-        name: instance.name,
-      })),
+        displayName: instance.name,
+        icon: iconMap[instance.name] || LayoutGridPlusIcon,
+      };
+    });
+
+    return [
+      {
+        id: 'all',
+        displayName: 'All',
+        icon: iconMap['All'],
+        filters: nestedCategories,
+        isExpanded: true,
+      },
     ];
   }
 
+  @action
+  handleCategorySelect(category: FilterItem) {
+    this.activeCategory = category;
+  }
+
   get categoryFilter(): EqFilter | undefined {
-    if (this.activeCategoryId === 'all') {
+    if (this.activeCategory?.id === 'all' || !this.activeCategory) {
       return;
     }
     return {
       eq: {
-        'categories.id': this.activeCategoryId,
+        'categories.id': this.activeCategory.id,
       },
     };
   }
@@ -434,25 +453,25 @@ class Isolated extends Component<typeof Catalog> {
     }
     return instances.map((instance) => ({
       id: instance.id,
-      name: instance.name,
+      displayName: instance.name,
     }));
   }
 
   get tagFilter(): AnyFilter | undefined {
-    if (this.activeTagIds.length === 0) {
+    if (this.activeTags.length === 0) {
       return;
     }
     return {
-      any: this.activeTagIds.map((id) => ({
+      any: this.activeTags.map((tag) => ({
         eq: {
-          'tags.id': id,
+          'tags.id': tag.id,
         },
       })),
     };
   }
 
   get searchFilter(): AnyFilter | undefined {
-    if (!this.searchValue) {
+    if (!this.searchValue || this.searchValue.length === 0) {
       return;
     }
     return {
@@ -462,14 +481,32 @@ class Isolated extends Component<typeof Catalog> {
 
   // end of listing query filter values
 
+  @action navigateToHome() {
+    this.resetFilters();
+  }
+
+  @action resetFilters() {
+    this.activeCategory = undefined;
+    this.searchValue = undefined;
+    this.activeTags = [];
+  }
+
   get shouldShowTab() {
     return (tabId: string) => {
       return this.activeTabId === tabId;
     };
   }
 
-  get shouldShowSidebar() {
-    return !this.shouldShowTab('showcase');
+  get hasActiveFilters() {
+    return (
+      this.activeCategory !== undefined ||
+      this.searchValue !== undefined ||
+      this.activeTags.length > 0
+    );
+  }
+
+  get isShowcaseView() {
+    return this.activeTabId === 'showcase' && !this.hasActiveFilters;
   }
 
   get headerColor() {
@@ -490,10 +527,7 @@ class Isolated extends Component<typeof Catalog> {
   getComponent = (card: CardDef) => card.constructor.getComponent(card);
 
   <template>
-    <CatalogLayout
-      @showSidebar={{this.shouldShowSidebar}}
-      class='catalog-layout {{this.activeTabId}}'
-    >
+    <CatalogLayout class='catalog-layout {{this.activeTabId}}'>
       <:header>
         <TabbedHeader
           @tabs={{this.tabFilterOptions}}
@@ -516,26 +550,31 @@ class Isolated extends Component<typeof Catalog> {
       </:header>
       <:sidebar>
         <div class='sidebar-content'>
-          <div
-            role='complementary'
-            aria-label='Filters'
-            class='filters-container info-box'
-          >
-            <FilterCategoryGroup
-              @title='Categories'
-              @items={{this.categoryItems}}
-              @activeId={{this.activeCategoryId}}
-              @onItemSelect={{this.handleCategorySelect}}
-              @isLoading={{this.categorySearch.isLoading}}
-            />
-            <FilterTagGroup
-              @title='Tags'
-              @items={{this.tagItems}}
-              @activeIds={{this.activeTagIds}}
-              @onItemSelect={{this.handleTagSelect}}
-              @isLoading={{this.tagSearch.isLoading}}
-            />
-          </div>
+          {{#if (this.shouldShowTab 'showcase')}}
+            <button
+              class='navigation-button {{if this.isShowcaseView "is-selected"}}'
+              {{on 'click' this.navigateToHome}}
+              data-test-showcase-tab-button
+            >
+              <img
+                src='https://boxel-images.boxel.ai/icons/icon_catalog_rounded.png'
+                alt='Catalog Icon'
+                class='catalog-icon'
+              />
+              <span class='button-text'>Catalog Home</span>
+            </button>
+          {{/if}}
+
+          <FilterSidebar
+            @categoryItems={{this.categoryItems}}
+            @activeCategory={{this.activeCategory}}
+            @onCategorySelect={{this.handleCategorySelect}}
+            @categoryIsLoading={{this.categorySearch.isLoading}}
+            @tagItems={{this.tagItems}}
+            @activeTags={{this.activeTags}}
+            @onTagSelect={{this.handleTagSelect}}
+            @tagIsLoading={{this.tagSearch.isLoading}}
+          />
         </div>
       </:sidebar>
       <:content>
@@ -543,7 +582,7 @@ class Isolated extends Component<typeof Catalog> {
           <div class='content-area'>
             <div class='catalog-content'>
               <div class='catalog-listing info-box'>
-                {{#if (this.shouldShowTab 'showcase')}}
+                {{#if this.isShowcaseView}}
                   <ShowcaseView
                     @startHereListings={{@model.startHere}}
                     @newListings={{@model.new}}
@@ -593,18 +632,10 @@ class Isolated extends Component<typeof Catalog> {
 
       /* Layout */
       .catalog-layout {
-        --layout-container-background-color: var(--boxel-100);
-        --layout-sidebar-background-color: var(--boxel-100);
+        --layout-theme-color: #a66efa;
+        --layout-container-background-color: #eeedf7;
+        --layout-sidebar-background-color: #eeedf7;
         --layout-content-padding: var(--boxel-sp-xl);
-      }
-      /* CSS Varible can't support linear-gradient, so we need to use !important to override the default value */
-      .catalog-layout.showcase {
-        background: linear-gradient(
-          165deg,
-          var(--boxel-red) 0%,
-          var(--boxel-purple) 20%,
-          var(--boxel-dark) 100%
-        ) !important;
       }
 
       /* Sidebar */
@@ -623,10 +654,6 @@ class Isolated extends Component<typeof Catalog> {
         container-name: content-area-container;
         container-type: inline-size;
       }
-      .content-area-container.showcase {
-        max-width: 1200px;
-        margin: 0 auto;
-      }
 
       .content-area {
         height: 100%;
@@ -640,15 +667,39 @@ class Isolated extends Component<typeof Catalog> {
         background-color: transparent;
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-xxl);
       }
 
       /* Sidebar */
-      .filters-container {
-        background-color: transparent;
+      .navigation-button {
         display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-lg);
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        width: 100%;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border: none;
+        background: var(--layout-container-background-color);
+        color: var(--boxel-dark);
+        font: 500 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+        text-align: left;
+        border-radius: var(--boxel-border-radius-sm);
+        cursor: pointer;
+      }
+      .navigation-button:hover {
+        background-color: var(--boxel-300);
+      }
+      .navigation-button.is-selected {
+        background-color: var(--boxel-dark);
+        color: var(--boxel-light);
+      }
+      .catalog-icon {
+        width: 16px;
+        height: 16px;
+      }
+      .button-text {
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
       }
 
       .operator-mode .buried .cards,
@@ -700,7 +751,7 @@ export class Catalog extends CardDef {
   static icon = LayoutGridPlusIcon;
   static isolated = Isolated;
   static prefersWideFormat = true;
-  static headerColor = '#6638ff';
+  static headerColor = '#a66efa';
   @field realmName = contains(StringField, {
     computeVia: function (this: Catalog) {
       return this[realmInfo]?.name;

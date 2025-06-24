@@ -99,6 +99,13 @@ module('Acceptance | Code patches tests', function (hooks) {
                   },
                   requiresApproval: true,
                 },
+                {
+                  codeRef: {
+                    name: 'default',
+                    module: '@cardstack/boxel-host/commands/show-card',
+                  },
+                  requiresApproval: true,
+                },
               ],
               title: 'Useful Commands',
               description: null,
@@ -214,7 +221,13 @@ ${REPLACE_MARKER}\n\`\`\``;
     // 2. hi.txt: Hi, world! -> Greetings, world!
     // 3. hi.txt: How are you? -> We are one!
 
-    let codeBlock = `\`\`\`
+    let codeBlock = `\`\`\`ruby
+def hello
+  "I am just a simple code block, not a code patch. Even if I am here, it should not affect the 'Accept All' functionality related to code patches."
+end
+\`\`\`
+
+\`\`\`
 http://test-realm/test/hello.txt
 ${SEARCH_MARKER}
 Hello, world!
@@ -252,11 +265,11 @@ ${REPLACE_MARKER}
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: 'abc123',
-          name: 'switch-submode_dd88',
+          name: 'show-card_566f',
           arguments: JSON.stringify({
-            description: 'Switching to code submode',
+            description: 'Showing skill card',
             attributes: {
-              submode: 'code',
+              cardId: `${testRealmURL}Skill/useful-commands`,
             },
           }),
         },
@@ -274,17 +287,18 @@ ${REPLACE_MARKER}
     await waitFor(
       '[data-test-ai-assistant-action-bar] [data-test-loading-indicator]',
     );
-    await waitUntil(() =>
-      document
-        .querySelector('[data-test-ai-assistant-action-bar]')
-        ?.textContent?.includes('Apply Diff'),
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-ai-assistant-action-bar]')
+          ?.textContent?.includes('Apply Diff'),
+      { timeout: 5000 },
     );
     await waitUntil(() =>
       document
         .querySelector('[data-test-ai-assistant-action-bar]')
-        ?.textContent?.includes('Switch'),
+        ?.textContent?.includes('Show Card'),
     );
-
     await waitUntil(
       () =>
         findAll(
@@ -296,24 +310,26 @@ ${REPLACE_MARKER}
           'timed out waiting for code patches to be in applied state',
       },
     );
-    await waitFor('[data-test-code-mode]');
-    assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).doesNotExist();
-    await click('[data-test-file-browser-toggle]');
-    await click('[data-test-file="hello.txt"]');
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Skill/useful-commands"]`)
+      .exists();
 
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
     assert.strictEqual(
       getMonacoContent(),
       'Hi, world!',
       'hello.txt should be patched',
     );
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}hi.txt`,
-    });
+    await click('[data-test-file-browser-toggle]');
+    await click('[data-test-file="hi.txt"]');
 
     // We can see content that is the result of 2 patches made to this file (hi.txt)
     await waitUntil(
       () => getMonacoContent() === 'Greetings, world!\nWe are one!',
+      { timeout: 5000 },
     );
 
     let codePatchResultEvents = getRoomEvents(roomId).filter(
@@ -385,6 +401,63 @@ ${REPLACE_MARKER}
     assert.dom('[data-test-ai-assistant-action-bar]').exists();
     await click('[data-test-ai-assistant-action-bar] [data-test-cancel]');
     assert.dom('[data-test-ai-assistant-action-bar]').doesNotExist();
+  });
+
+  test('does not display the action bar when the streaming is cancelled', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+
+    // there are 3 patches in the message
+    // 1. hello.txt: Hello, world! -> Hi, world!
+    // 2. hi.txt: Hi, world! -> Greetings, world!
+    // 3. hi.txt: How are you? -> We are one!
+
+    let codeBlock = `\`\`\`
+http://test-realm/test/hello.txt
+${SEARCH_MARKER}
+Hello, world!
+${SEPARATOR_MARKER}
+Hi, world!
+${REPLACE_MARKER}
+\`\`\`
+
+I will also update the second file per your request.
+
+ \`\`\`
+http://test-realm/test/hi.txt
+${SEARCH_MARKER}
+Hi, world!
+${SEPARATOR_MARKER}
+Greetings, world!
+${REPLACE_MARKER}
+\`\`\`
+
+\`\`\`
+http://test-realm/test/hi.txt
+${SEARCH_MARKER}
+How are you?
+${SEPARATOR_MARKER}
+We are one!
+${REPLACE_MARKER}
+\`\`\``;
+
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      isCanceled: true,
+    });
+
+    assert.dom('[data-test-ai-assistant-action-bar]').doesNotExist();
+    await waitFor('[data-test-ai-assistant-message]');
+    assert
+      .dom('[data-test-ai-message-content]')
+      .containsText('{Generation Cancelled}');
   });
 
   test('previously applied code patches show the correct applied state', async function (assert) {
