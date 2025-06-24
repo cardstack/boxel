@@ -1181,7 +1181,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/Skill/boxel-environment"]',
+      '[data-test-card-catalog-item="http://localhost:4201/Skill/boxel-environment"]',
     );
     await click('[data-test-card-catalog-go-button]');
 
@@ -1279,7 +1279,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/Skill/boxel-environment"]',
+      '[data-test-card-catalog-item="http://localhost:4201/Skill/boxel-environment"]',
     );
     await click('[data-test-card-catalog-go-button]');
 
