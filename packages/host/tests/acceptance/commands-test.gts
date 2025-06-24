@@ -1493,7 +1493,7 @@ module('Acceptance | Commands tests', function (hooks) {
         'No command result event dispatched',
       );
       maybeBoomShouldBoom = false;
-      await click('[data-test-retry-command-button]');
+      await click('[data-test-alert-retry-button]');
       commandResultEvents = await getRoomEvents(roomId).filter(
         (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       );

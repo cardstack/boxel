@@ -92,7 +92,6 @@ interface CodeBlockActionsSignature {
 interface CodeBlockEditorSignature {
   Args: {
     code?: string | null;
-    dimmed?: boolean;
   };
 }
 
@@ -126,7 +125,6 @@ interface Signature {
     originalCode?: string | null;
     modifiedCode?: string | null;
     language?: string | null;
-    dimmed?: boolean;
     mode?: 'edit' | 'create';
     fileUrl?: string;
     diffEditorStats?: {
@@ -152,7 +150,7 @@ interface Signature {
 }
 
 let CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
-  <div ...attributes>
+  <div class='code-block' ...attributes>
     {{yield
       (hash
         editorHeader=(component
@@ -172,6 +170,27 @@ let CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
       )
     }}
   </div>
+  <style scoped>
+    .code-block {
+      background-color: var(--boxel-dark);
+      color: var(--boxel-light);
+      border: 1px solid var(--boxel-550);
+      border-radius: var(--boxel-border-radius-xxl);
+      overflow: hidden;
+    }
+    :deep(.monaco-editor) {
+      --vscode-editor-background: var(--boxel-dark);
+      --vscode-editorGutter-background: var(--boxel-dark);
+      /* this improves inserted-line legibility by reducing green background overlay opacity */
+      --vscode-diffEditor-insertedLineBackground: rgb(19 255 32 / 26%);
+    }
+    :deep(.monaco-editor .diff-hidden-lines) {
+      margin-left: 9px;
+    }
+    :deep(.monaco-editor span[title='Double click to unfold']) {
+      margin-left: 5px;
+    }
+  </style>
 </template>;
 
 export default CodeBlockComponent;
@@ -430,10 +449,6 @@ class CodeBlockEditor extends Component<Signature> {
       .code-block-editor {
         max-height: 250px;
       }
-
-      .dimmed {
-        opacity: 0.6;
-      }
     </style>
 
     <div
@@ -442,7 +457,7 @@ class CodeBlockEditor extends Component<Signature> {
         codeData=@codeData
         editorDisplayOptions=this.editorDisplayOptions
       }}
-      class='code-block-editor {{if @dimmed "dimmed"}}'
+      class='code-block-editor'
       data-test-editor
     >
       {{! Don't put anything here in this div as monaco modifier will override this element }}
@@ -479,23 +494,6 @@ class CodeBlockDiffEditor extends Component<Signature> {
   } | null = null;
 
   <template>
-    <style scoped>
-      .code-block-editor {
-        max-height: 250px;
-      }
-
-      :deep(.line-insert) {
-        background-color: rgb(19 255 32 / 66%) !important;
-      }
-
-      :deep(.diff-hidden-lines) {
-        margin-left: 9px;
-      }
-
-      :deep(span[title='Double click to unfold']) {
-        margin-left: 5px;
-      }
-    </style>
     <div
       {{MonacoDiffEditor
         monacoSDK=@monacoSDK
@@ -535,11 +533,9 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        background-color: #2c2c3c;
-        color: #ffffff;
+        background-color: var(--boxel-650);
+        color: var(--boxel-light);
         padding: 8px 12px;
-        border-top-left-radius: 12px;
-        border-top-right-radius: 12px;
         font-size: 14px;
         height: 50px;
       }
@@ -635,7 +631,7 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
       }
 
       .context-menu-trigger:hover {
-        --icon-color: #ffffff;
+        --icon-color: var(--boxel-light);
       }
     </style>
     <div class='code-block-diff-header'>
@@ -696,15 +692,12 @@ let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> 
   <template>
     <style scoped>
       .code-block-actions {
-        background: black;
         height: 45px;
         padding: var(--boxel-sp-sm) 27px;
         padding-right: var(--boxel-sp);
         display: flex;
         justify-content: flex-end;
         gap: var(--boxel-sp-xs);
-        border-bottom-left-radius: 12px;
-        border-bottom-right-radius: 12px;
       }
     </style>
     <div class='code-block-actions'>

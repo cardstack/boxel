@@ -1,15 +1,15 @@
-import { array } from '@ember/helper';
-import { fn } from '@ember/helper';
+import { array, fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { service } from '@ember/service';
-import type { SafeString } from '@ember/template';
-import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { Alert } from '@cardstack/boxel-ui/components';
 import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
 
-import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
+import { markdownToHtml } from '@cardstack/runtime-common';
+
+import { sanitizedHtml } from '@cardstack/host/helpers/sanitized-html';
 
 import {
   type HtmlTagGroup,
@@ -26,14 +26,15 @@ import {
   type CodeDiffResource,
   getCodeDiffResultResource,
 } from '@cardstack/host/resources/code-diff';
-import type CardService from '@cardstack/host/services/card-service';
+
 import CommandService from '@cardstack/host/services/command-service';
-import LoaderService from '@cardstack/host/services/loader-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
-import CodeBlock from './code-block';
+import CodeBlock from '../code-block';
 
-interface FormattedAiBotMessageSignature {
+import Message from './text-content';
+
+interface Signature {
   Element: HTMLDivElement;
   Args: {
     htmlParts?: HtmlTagGroup[];
@@ -42,16 +43,15 @@ interface FormattedAiBotMessageSignature {
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
     isLastAssistantMessage: boolean;
+    reasoning?: {
+      content: string | null;
+      isExpanded: boolean;
+      updateExpanded: (ev: MouseEvent | KeyboardEvent) => void;
+    };
   };
 }
 
-function sanitize(html: string): SafeString {
-  return htmlSafe(sanitizeHtml(html));
-}
-
-export default class FormattedAiBotMessage extends Component<FormattedAiBotMessageSignature> {
-  @service private declare cardService: CardService;
-  @service private declare loaderService: LoaderService;
+export default class FormattedAiBotMessage extends Component<Signature> {
   @service private declare commandService: CommandService;
 
   private isLastHtmlGroup = (index: number) => {
@@ -65,7 +65,25 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
   };
 
   <template>
-    <div class='message'>
+    <Message class='ai-bot-message'>
+      {{#if @reasoning}}
+        <div class='reasoning-content'>
+          {{#if (eq 'Thinking...' @reasoning.content)}}
+            Thinking...
+          {{else}}
+            <details
+              open={{@reasoning.isExpanded}}
+              {{on 'click' @reasoning.updateExpanded}}
+              data-test-reasoning
+            >
+              <summary>
+                Thinking...
+              </summary>
+              {{sanitizedHtml (markdownToHtml @reasoning.content)}}
+            </details>
+          {{/if}}
+        </div>
+      {{/if}}
       {{! We are splitting the html into parts so that we can target the
       code blocks (<pre> tags) and apply Monaco editor to them. Here is an
       example of the html argument:
@@ -100,46 +118,41 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
           />
         {{else}}
           {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
-            {{wrapLastTextNodeInStreamingTextSpan (sanitize htmlPart.content)}}
+            {{wrapLastTextNodeInStreamingTextSpan
+              (sanitizedHtml htmlPart.content)
+            }}
           {{else}}
-            {{sanitize htmlPart.content}}
+            {{sanitizedHtml htmlPart.content}}
           {{/if}}
         {{/if}}
       {{/each}}
-    </div>
+    </Message>
 
     <style scoped>
-      .message > :deep(*:first-child) {
-        margin-top: 0;
+      .ai-bot-message {
+        /* the below font-smoothing options are only recommended for light-colored
+          text on dark background (otherwise not good for accessibility) */
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
       }
-
-      .ai-assistant-code-block-actions {
-        position: absolute;
-        width: calc(100% + 2 * var(--ai-assistant-message-padding));
-        margin-left: -16px;
-        background: black;
-        margin-top: 5px;
-        z-index: 1;
-        height: 39px;
-        padding: 18px 25px;
+      .reasoning-content {
+        color: var(--boxel-300);
+        font-style: italic;
       }
-
-      :deep(.monaco-container) {
-        height: var(--monaco-container-height);
-        min-height: 7rem;
-        max-height: 30vh;
+      .reasoning-content summary {
+        cursor: pointer;
       }
-
-      /* our dark-mode background-color is too similar to AI-Assistant message background,
-        so we are using a darker background for code-blocks */
-      :global(.code-block .monaco-editor) {
-        --vscode-editor-background: var(--boxel-dark);
-        --vscode-editorGutter-background: var(--boxel-dark);
-      }
-
-      /* this improves inserted-line legibility by reducing green background overlay opacity */
-      :global(.code-block .monaco-editor .line-insert) {
-        opacity: 0.4;
+      :deep(span.streaming-text:after) {
+        content: '';
+        width: 8px;
+        height: 8px;
+        background: currentColor;
+        border-radius: 50%;
+        display: inline-block;
+        font-family: system-ui, sans-serif;
+        line-height: normal;
+        vertical-align: baseline;
+        margin-left: 5px;
       }
     </style>
   </template>
@@ -244,7 +257,6 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
     <CodeBlock
       @monacoSDK={{@monacoSDK}}
       @codeData={{@codeData}}
-      class='code-block'
       data-test-code-block-index={{@index}}
       as |codeBlock|
     >
@@ -256,7 +268,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               @diffEditorStats={{null}}
               @finalFileUrlAfterCodePatching={{this.codePatchfinalFileUrlAfterCodePatching}}
             />
-            <codeBlock.editor @code={{this.codeForEditor}} @dimmed={{true}} />
+            <codeBlock.editor @code={{this.codeForEditor}} />
             <codeBlock.actions as |actions|>
               <actions.copyCode
                 @code={{this.extractReplaceCode @codeData.searchReplaceBlock}}
@@ -316,19 +328,5 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
         </codeBlock.actions>
       {{/if}}
     </CodeBlock>
-
-    <style scoped>
-      .error-container {
-        margin-bottom: var(--boxel-sp-xs);
-      }
-
-      .code-block {
-        margin-top: 0;
-      }
-
-      .code-block + .code-block {
-        margin-top: 1rem;
-      }
-    </style>
   </template>
 }
