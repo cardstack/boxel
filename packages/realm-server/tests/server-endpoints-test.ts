@@ -464,11 +464,20 @@ module(basename(__filename), function () {
             id = response.body.data.id;
           }
 
+          let jobsBeforeRestart = await dbAdapter.execute('select * from jobs');
+
           // Stop and restart the server
           testRealmServer2.testingOnlyUnmountRealms();
           await closeServer(testRealmHttpServer2);
           await startRealmServer(dbAdapter, publisher, runner);
           await testRealmServer2.start();
+
+          let jobsAfterRestart = await dbAdapter.execute('select * from jobs');
+          assert.strictEqual(
+            jobsBeforeRestart.length,
+            jobsAfterRestart.length,
+            'no new indexing jobs were created on boot for the created realm',
+          );
 
           {
             let response = await request2

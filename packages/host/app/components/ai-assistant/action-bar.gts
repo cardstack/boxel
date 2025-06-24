@@ -2,17 +2,23 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
+import ArrowDownIcon from '@cardstack/boxel-icons/arrow-down';
+
 import { BoxelButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { cn } from '@cardstack/boxel-ui/helpers';
 
 interface Signature {
   Args: {
     acceptAll: () => void;
     cancel: () => void;
-    acceptingAll?: boolean;
+    acceptingAll: boolean;
     acceptingAllLabel?: string;
-    generatingResults?: boolean;
-    stop?: () => void;
-    stopping?: boolean;
+    generatingResults: boolean;
+    stop: () => void;
+    stopping: boolean;
+    showUnreadIndicator: boolean;
+    unreadMessageText: string;
+    scrollToFirstUnread: () => void;
   };
 }
 
@@ -23,8 +29,24 @@ export default class AiAssistantActionBar extends Component<Signature> {
   }
 
   <template>
-    <div class='ai-assistant-action-bar' data-test-ai-assistant-action-bar>
-      {{#if @generatingResults}}
+    <div
+      class={{cn
+        'ai-assistant-action-bar'
+        unread-indicator=@showUnreadIndicator
+      }}
+      data-test-ai-assistant-action-bar
+    >
+      {{#if @showUnreadIndicator}}
+        <BoxelButton
+          @kind='primary'
+          class='unread-btn'
+          {{on 'click' @scrollToFirstUnread}}
+          data-test-unread-messages-button
+        >
+          {{@unreadMessageText}}
+          <ArrowDownIcon class='unread-btn__icon' />
+        </BoxelButton>
+      {{else if @generatingResults}}
         <div class='generating-results-container'>
           <span class='generating-results'>
             Generating results<span class='dot'>.</span><span
@@ -74,6 +96,10 @@ export default class AiAssistantActionBar extends Component<Signature> {
         border-top-left-radius: var(--boxel-border-radius-lg);
         align-items: center;
         border: 1px solid #777;
+      }
+      .ai-assistant-action-bar.unread-indicator {
+        padding: 0;
+        padding-bottom: var(--boxel-sp-xs);
       }
       .action-btn {
         flex: 1;
@@ -131,6 +157,20 @@ export default class AiAssistantActionBar extends Component<Signature> {
         --boxel-button-min-height: 0;
         --boxel-button-min-width: 0;
         --boxel-button-padding: 4px 12px;
+      }
+      .unread-btn {
+        --boxel-button-font: 600 var(--boxel-font-sm);
+        --boxel-button-padding: 10px 13px;
+        --boxel-button-text-color: var(--boxel-teal);
+        --boxel-button-color: transparent;
+        --boxel-button-border: none;
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+      }
+      .unread-btn__icon {
+        height: 18px;
+        width: 18px;
       }
     </style>
   </template>

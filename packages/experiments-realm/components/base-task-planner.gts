@@ -157,7 +157,7 @@ interface TaskPlannerArgs {
     parentId: string | undefined;
     context: CardContext | undefined;
     emptyStateMessage?: string;
-    viewCard: () => void;
+    editCard: () => void;
   };
   Element: HTMLElement;
 }
@@ -403,7 +403,7 @@ export class TaskPlanner extends GlimmerComponent<TaskPlannerArgs> {
     <div class='task-app'>
       {{#if (not @parentId)}}
         <div class='disabled'>
-          <BoxelButton @kind='primary' {{on 'click' @viewCard}}>
+          <BoxelButton @kind='primary' {{on 'click' @editCard}}>
             {{this.emptyStateMessage}}
           </BoxelButton>
         </div>
