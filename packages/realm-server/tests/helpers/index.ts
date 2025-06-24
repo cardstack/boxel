@@ -59,6 +59,9 @@ import type {
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
 
+export const testRealmServerMatrixUsername = 'node-test_realm-server';
+export const testRealmServerMatrixUserId = `@${testRealmServerMatrixUsername}:localhost`;
+
 export { testRealmHref, testRealmURL };
 
 export async function waitUntil<T>(
@@ -285,6 +288,7 @@ export async function createRealm({
       virtualNetwork,
       matrixURL: matrixConfig.url,
       secretSeed: realmSecretSeed,
+      realmServerMatrixUsername: testRealmServerMatrixUsername,
     });
   }
   let realm = new Realm({
@@ -295,6 +299,7 @@ export async function createRealm({
     virtualNetwork,
     dbAdapter,
     queue: publisher,
+    realmServerMatrixUserId: testRealmServerMatrixUserId,
   });
   if (worker) {
     virtualNetwork.mount(realm.handle);
@@ -348,6 +353,7 @@ export async function runBaseRealmServer(
     virtualNetwork,
     matrixURL,
     secretSeed: realmSecretSeed,
+    realmServerMatrixUsername: testRealmServerMatrixUsername,
   });
   let testBaseRealm = await createRealm({
     dir: basePath,
@@ -420,6 +426,7 @@ export async function runTestRealmServer({
     virtualNetwork,
     matrixURL,
     secretSeed: realmSecretSeed,
+    realmServerMatrixUsername: testRealmServerMatrixUsername,
   });
   await worker.run();
   let testRealm = await createRealm({
