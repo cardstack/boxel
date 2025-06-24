@@ -306,8 +306,9 @@ export default class AiAssistantPanel extends Component<Signature> {
 
       .button {
         --boxel-button-text-color: var(--boxel-highlight);
-        --boxel-button-padding: 2px;
+        --boxel-button-padding: 1px 0;
         --boxel-button-min-width: 0;
+        --boxel-button-min-height: 0;
 
         border-radius: var(--boxel-border-radius-xs);
       }
