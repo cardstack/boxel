@@ -66,7 +66,7 @@ export default class AiAssistantToast extends Component<Signature> {
         gap: var(--boxel-sp);
         background-color: var(--boxel-ai-purple);
         border-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp);
+        padding: 0;
 
         overflow: hidden;
 
@@ -85,6 +85,7 @@ export default class AiAssistantToast extends Component<Signature> {
         transform: translateY(100%);
       }
       .visible {
+        padding: var(--boxel-sp);
         opacity: 1;
         height: fit-content;
         transform: translateY(0);
