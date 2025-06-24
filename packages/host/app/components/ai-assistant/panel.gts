@@ -6,12 +6,12 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
-import { Velcro } from 'ember-velcro';
-
 import HistoryIcon from '@cardstack/boxel-icons/history';
 import PlusIcon from '@cardstack/boxel-icons/plus';
 import XIcon from '@cardstack/boxel-icons/x';
+
+import { restartableTask } from 'ember-concurrency';
+import { Velcro } from 'ember-velcro';
 
 import {
   Button,
