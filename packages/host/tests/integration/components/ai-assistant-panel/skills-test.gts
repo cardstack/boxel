@@ -332,7 +332,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
     // Attach the skill card without changing it
     await click('[data-test-attach-button]');
-    await click('[data-test-choose-card-btn]');
+    await click('[data-test-attach-card-btn]');
     await click('[data-test-select="http://test-realm/test/Skill/example"]');
     await click('[data-test-card-catalog-go-button]');
     await click(

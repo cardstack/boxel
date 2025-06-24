@@ -45,7 +45,7 @@ import { setupApplicationTest } from '../helpers/setup';
 
 async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-attach-button]');
-  await click('[data-test-choose-card-btn]');
+  await click('[data-test-attach-card-btn]');
   await click(`[data-test-select="${cardId}"]`);
   await click('[data-test-card-catalog-go-button]');
 }
@@ -531,30 +531,30 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
 
     await click('[data-test-attach-button]');
-    await click('[data-test-choose-file-btn]');
-    assert.dom('[data-test-attach-file-modal]').exists();
+    await click('[data-test-attach-file-btn]');
+    assert.dom('[data-test-choose-file-modal]').exists();
     assert.dom('[data-test-file="pet.gts"]').exists();
 
     // Change realm
-    await click('[data-test-attach-file-modal-realm-chooser]');
-    await click('[data-test-attach-file-modal-realm-option="Base Workspace"]');
+    await click('[data-test-choose-file-modal-realm-chooser]');
+    await click('[data-test-choose-file-modal-realm-option="Base Workspace"]');
     assert.dom('[data-test-file="boolean.gts"]').exists();
 
-    await click('[data-test-attach-file-modal-realm-chooser]');
+    await click('[data-test-choose-file-modal-realm-chooser]');
     await click(
-      '[data-test-attach-file-modal-realm-option="Test Workspace B"]',
+      '[data-test-choose-file-modal-realm-option="Test Workspace B"]',
     );
 
     // Add attachment item
     await click('[data-test-file="person.gts"]');
-    await click('[data-test-attach-file-modal-add-button]');
+    await click('[data-test-choose-file-modal-add-button]');
     assert.dom('[data-test-attached-file]').exists({ count: 1 });
     assert.dom('[data-test-attached-file]').hasText('person.gts');
     // Add attachment item
     await click('[data-test-attach-button]');
-    await click('[data-test-choose-file-btn]');
+    await click('[data-test-attach-file-btn]');
     await click('[data-test-file="pet.gts"]');
-    await click('[data-test-attach-file-modal-add-button]');
+    await click('[data-test-choose-file-modal-add-button]');
     assert.dom('[data-test-attached-file]').exists({ count: 2 });
     assert
       .dom(`[data-test-attached-file="${testRealmURL}person.gts"]`)
@@ -757,7 +757,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .exists();
 
     await click('[data-test-attach-button]');
-    await click('[data-test-choose-card-btn]');
+    await click('[data-test-attach-card-btn]');
     await fillIn('[data-test-search-field]', 'Mango');
     await click(`[data-test-select="${testRealmURL}Pet/mango"]`);
     await click('[data-test-card-catalog-go-button]');
