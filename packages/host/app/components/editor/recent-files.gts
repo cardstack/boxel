@@ -113,7 +113,7 @@ class File extends Component<FileArgs> {
         background-color: var(--boxel-light);
         padding: var(--boxel-sp-xxs);
         font-weight: 600;
-        margin-bottom: var(--boxel-sp-xs);
+        margin-bottom: 4px;
         border-radius: var(--code-mode-container-border-radius);
         display: flex;
         align-items: center;
