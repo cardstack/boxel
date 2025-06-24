@@ -48,7 +48,7 @@ const authorCardSource = `
 `;
 
 let matrixRoomId: string;
-module('Acceptance | catalog app tests', function (hooks) {
+module('Acceptance | Catalog | catalog app tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
@@ -578,7 +578,7 @@ module('Acceptance | catalog app tests', function (hooks) {
          */
         // When I install the listing into my selected realm, it should be:
         /*
-         * contact-link-[uuid]/contact-link.gts
+         * contact-link-[uuid]/fields/contact-link.gts
          */
 
         const listingName = 'contact-link';
@@ -606,8 +606,9 @@ module('Acceptance | catalog app tests', function (hooks) {
         if (outerFolder) {
           await openDir(assert, outerFolder);
         }
-        let gtsFilePath = outerFolder + 'contact-link.gts';
-        // contact-link-[uuid]/contact-link.gts
+        await openDir(assert, `${outerFolder}fields/`);
+        let gtsFilePath = `${outerFolder}fields/contact-link.gts`;
+        // contact-link-[uuid]/fields/contact-link.gts
         await verifyFileInFileTree(assert, gtsFilePath);
       });
 

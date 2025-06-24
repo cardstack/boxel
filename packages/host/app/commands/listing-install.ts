@@ -2,18 +2,22 @@ import { service } from '@ember/service';
 
 import {
   type ResolvedCodeRef,
-  codeRefWithAbsoluteURL,
-  isResolvedCodeRef,
-  type CopyCardsWithCodeRef,
   type Command,
-  listingNameWithUuid,
+  CommandContext,
   RealmPaths,
+  join,
+  type InstallPlan,
+  InstallOptions,
+  planModuleInstall,
+  planInstanceInstall,
+  PlanBuilder,
+  LocalPath,
 } from '@cardstack/runtime-common';
+
+import { logger } from '@cardstack/runtime-common';
 
 import * as CardAPI from 'https://cardstack.com/base/card-api';
 import * as BaseCommandModule from 'https://cardstack.com/base/command';
-
-import type { Skill } from 'https://cardstack.com/base/skill';
 
 import HostBaseCommand from '../lib/host-base-command';
 
@@ -23,10 +27,7 @@ import CopySourceCommand from './copy-source';
 import type RealmServerService from '../services/realm-server';
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
-interface CopyMeta {
-  sourceCodeRef: ResolvedCodeRef;
-  targetCodeRef: ResolvedCodeRef;
-}
+const log = logger('catalog:install');
 
 interface InstallListingInput {
   realmUrl: string;
@@ -41,125 +42,93 @@ interface InstallListingResult {
   selectedCodeRef?: ResolvedCodeRef;
   shouldPersistPlaygroundSelection: boolean;
   firstExampleCardId?: string;
-  skillCardIds?: string[];
+  firstSkillCardId?: string;
+}
+
+interface InstallResults {
+  modules: string[];
+  instances: string[];
+}
+
+async function install(
+  plan: InstallPlan,
+  opts: InstallOptions,
+  commandContext: CommandContext,
+): Promise<InstallResults> {
+  let r: InstallResults = {
+    modules: [],
+    instances: [],
+  };
+  for (const { sourceCodeRef, targetCodeRef } of plan.modulesCopy) {
+    let { url } = await new CopySourceCommand(commandContext).execute({
+      fromRealmUrl: sourceCodeRef.module,
+      toRealmUrl: targetCodeRef.module,
+    });
+    r.modules.push(url);
+  }
+
+  for (const { sourceCard, localDir, targetCodeRef } of plan.instancesCopy) {
+    let { newCardId } = await new CopyCardCommand(commandContext).execute({
+      sourceCard,
+      realm: opts.targetRealm,
+      localDir,
+      codeRef: targetCodeRef,
+    });
+    r.instances.push(newCardId);
+  }
+  return r;
 }
 
 export async function installListing({
   realmUrl,
   listing,
   commandContext,
-  cardAPI,
 }: InstallListingInput): Promise<InstallListingResult> {
-  const copyMeta: CopyMeta[] = [];
+  let installOpts = new InstallOptions(realmUrl, listing);
 
-  const localDir = listingNameWithUuid(listing.name);
-
-  // first spec as the selected code ref with new url
-  // if there are examples, take the first example's code ref
-  let selectedCodeRef;
+  // side-effects
   let shouldPersistPlaygroundSelection = false;
-  let firstExampleCardId;
+  let firstExampleCardId: string | undefined;
+  let selectedCodeRef: ResolvedCodeRef | undefined;
+  let skillLocalDir: LocalPath | undefined;
 
-  // Copy the gts file based on the attached spec's moduleHref
-  for (const spec of listing.specs ?? []) {
-    const absoluteModulePath = spec.moduleHref;
-    const relativeModulePath = spec.ref.module;
-    const normalizedPath = relativeModulePath.split('/').slice(2).join('/');
-    const newPath = localDir.concat('/').concat(normalizedPath);
-    const fileTargetUrl = new URL(newPath, realmUrl).href;
-    const targetFilePath = fileTargetUrl.concat('.gts');
+  const builder = new PlanBuilder(installOpts);
 
-    await new CopySourceCommand(commandContext).execute({
-      fromRealmUrl: absoluteModulePath,
-      toRealmUrl: targetFilePath,
+  builder
+    .addIf(listing.specs?.length > 0, (opts) => {
+      let r = planModuleInstall(listing.specs, opts);
+      selectedCodeRef = r.modulesCopy[0].targetCodeRef;
+      shouldPersistPlaygroundSelection = true;
+      return r;
+    })
+    .addIf(listing.examples?.length > 0, (opts) => {
+      let r = planInstanceInstall(listing.examples, opts);
+      firstExampleCardId = r.instancesCopy[0].sourceCard.id;
+      return r;
+    })
+    .addIf(listing.skills?.length > 0, (opts) => {
+      let r = planInstanceInstall(listing.skills, opts);
+      skillLocalDir = r.instancesCopy[0].localDir;
+      return r;
     });
 
-    copyMeta.push({
-      sourceCodeRef: {
-        module: absoluteModulePath,
-        name: spec.ref.name,
-      },
-      targetCodeRef: {
-        module: fileTargetUrl,
-        name: spec.ref.name,
-      },
-    });
+  const finalPlan = builder.build();
+  let results = await install(finalPlan, installOpts, commandContext);
+  log.debug('=== Final Results ===');
+  log.debug(JSON.stringify(results, null, 2));
 
-    if (!selectedCodeRef) {
-      selectedCodeRef = {
-        module: fileTargetUrl,
-        name: spec.ref.name,
-      };
-    }
-  }
-
-  if (listing.examples) {
-    // Create serialized objects for each example with modified adoptsFrom
-    const results = listing.examples.map((instance) => {
-      let adoptsFrom = instance[cardAPI.meta]?.adoptsFrom;
-      if (!adoptsFrom) {
-        return null;
-      }
-      let exampleCodeRef = instance.id
-        ? codeRefWithAbsoluteURL(adoptsFrom, new URL(instance.id))
-        : adoptsFrom;
-      if (!isResolvedCodeRef(exampleCodeRef)) {
-        throw new Error('exampleCodeRef is NOT resolved');
-      }
-      let maybeCopyMeta = copyMeta.find(
-        (meta) =>
-          meta.sourceCodeRef.module ===
-            (exampleCodeRef as ResolvedCodeRef).module &&
-          meta.sourceCodeRef.name === (exampleCodeRef as ResolvedCodeRef).name,
-      );
-      if (maybeCopyMeta) {
-        if (!shouldPersistPlaygroundSelection) {
-          selectedCodeRef = maybeCopyMeta.targetCodeRef;
-          shouldPersistPlaygroundSelection = true;
-        }
-
-        return {
-          sourceCard: instance,
-          codeRef: maybeCopyMeta.targetCodeRef,
-        };
-      }
-      return null;
-    });
-    const copyCardsWithCodeRef = results.filter(
-      (result) => result !== null,
-    ) as CopyCardsWithCodeRef[];
-    for (const cardWithNewCodeRef of copyCardsWithCodeRef) {
-      const { newCardId } = await new CopyCardCommand(commandContext).execute({
-        sourceCard: cardWithNewCodeRef.sourceCard,
-        realm: realmUrl,
-        localDir,
-        codeRef: cardWithNewCodeRef.codeRef,
-      });
-      if (!firstExampleCardId) {
-        firstExampleCardId = newCardId;
-      }
-    }
-  }
-
-  let skillCardIds: string[] | undefined;
-  if ('skills' in listing && Array.isArray(listing.skills)) {
-    let results = await Promise.all(
-      listing.skills.map((skill: Skill) => {
-        return new CopyCardCommand(commandContext).execute({
-          sourceCard: skill,
-          realm: realmUrl,
-          localDir,
-        });
-      }),
-    );
-    skillCardIds = results.map((r) => r.newCardId);
-  }
+  let firstSkillCardId = skillLocalDir
+    ? results.instances.find((id) => {
+        let root = join(realmUrl, skillLocalDir ?? '');
+        return new RealmPaths(new URL(root)).inRealm(new URL(id));
+      })
+    : undefined;
 
   return {
     selectedCodeRef,
     shouldPersistPlaygroundSelection,
     firstExampleCardId,
-    skillCardIds,
+    firstSkillCardId,
   };
 }
 
