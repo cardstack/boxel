@@ -212,6 +212,8 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
 
       .ai-assistant-panel {
+        --ai-assistant-panel-header-height: 3.5rem;
+
         display: grid;
         grid-template-rows: auto 1fr;
         background-color: var(--boxel-ai-purple);
@@ -241,18 +243,18 @@ export default class AiAssistantPanel extends Component<Signature> {
       .panel-header {
         position: absolute;
         width: 100%;
+        height: var(--ai-assistant-panel-header-height);
         padding: var(--boxel-sp-xs) var(--boxel-sp);
 
         display: grid;
         grid-template-columns: 20px auto 22px 22px 22px;
         gap: var(--boxel-sp-xxs);
 
-        padding-bottom: 3rem;
         z-index: 10;
         background: linear-gradient(
           to bottom,
           var(--boxel-ai-purple),
-          var(--boxel-ai-purple) 80%,
+          var(--boxel-ai-purple) 60%,
           transparent 100%
         );
       }
@@ -275,7 +277,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         -moz-osx-font-smoothing: grayscale;
       }
 
-      .panel-title-text:after {
+      .panel-title-text:aftxer {
         content: '';
         background: linear-gradient(
           to right,
@@ -375,8 +377,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
 
       .room {
-        /* FIXME should be the height of the header */
-        padding-top: 3rem;
+        padding-top: calc(var(--ai-assistant-panel-header-height) * 0.5);
       }
 
       @keyframes spin {
