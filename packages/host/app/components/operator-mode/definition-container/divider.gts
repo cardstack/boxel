@@ -34,7 +34,7 @@ export const Divider: TemplateOnlyComponent<Signature> = <template>
       align-items: center;
       gap: var(--boxel-sp-xxxs);
       padding: 0 var(--boxel-sp-xxxs);
-      background-color: var(--code-mode-panel-background-color);
+      background-color: var(--boxel-200);
       font: 500 var(--boxel-font-xs);
       letter-spacing: var(--divider-content-lsp, var(--boxel-lsp-xs));
       text-wrap: nowrap;
