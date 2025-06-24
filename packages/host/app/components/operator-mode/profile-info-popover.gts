@@ -145,6 +145,7 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
               @size='small'
               @disabled={{this.billingService.fetchingStripePaymentLinks}}
               {{on 'click' @toggleSubscriptionPlans}}
+              data-test-upgrade-plan-button
             >Upgrade Plan</BoxelButton>
           {{else}}
             <BoxelButton

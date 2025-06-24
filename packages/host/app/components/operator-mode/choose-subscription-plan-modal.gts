@@ -349,6 +349,7 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                 <a
                   href={{this.billingService.stripeStarterPlanPaymentLink}}
                   class='btn btn-teal btn-get-started'
+                  data-test-starter-plan-button
                 >Get Started</a>
               </div>
               <div class='feature-cell'>
@@ -371,6 +372,7 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                 <a
                   href={{this.billingService.stripeCreatorPlanPaymentLink}}
                   class='btn btn-dark btn-get-started'
+                  data-test-creator-plan-button
                 >Get Started</a>
               </div>
               <div class='feature-cell'>
@@ -393,6 +395,7 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                 <a
                   href={{this.billingService.stripePowerUserPlanPaymentLink}}
                   class='btn btn-dark btn-get-started'
+                  data-test-power-user-plan-button
                 >Get Started</a>
               </div>
               <div class='feature-cell'>

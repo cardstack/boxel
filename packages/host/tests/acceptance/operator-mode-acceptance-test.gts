@@ -992,9 +992,27 @@ module('Acceptance | operator mode tests', function (hooks) {
           type: 'plan',
           id: 1,
           attributes: {
-            name: 'Free',
+            name: 'Starter',
             monthlyPrice: 0,
-            creditsIncluded: 1000,
+            creditsIncluded: 2500,
+          },
+        },
+        {
+          type: 'plan',
+          id: 1,
+          attributes: {
+            name: 'Creator',
+            monthlyPrice: 12,
+            creditsIncluded: 6500,
+          },
+        },
+        {
+          type: 'plan',
+          id: 1,
+          attributes: {
+            name: 'Power User',
+            monthlyPrice: 49,
+            creditsIncluded: 35000,
           },
         },
       ],
@@ -1115,7 +1133,8 @@ module('Acceptance | operator mode tests', function (hooks) {
       await click('[data-test-profile-icon-button]');
 
       assert.dom('[data-test-profile-popover]').exists();
-      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Starter');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
         .hasText('1,000 of 1,000 left');
@@ -1128,15 +1147,32 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert
         .dom('[data-test-subscription-data="additional-credit"]')
         .hasNoClass('out-of-credit');
-      assert.dom('[data-test-upgrade-plan-button]').exists();
+      await click('[data-test-upgrade-plan-button]');
+      assert.dom('[data-test-choose-subscription-plan-modal]').exists();
+      assert
+        .dom('[data-test-starter-plan-button]')
+        .hasAttribute(
+          'href',
+          'https://buy.stripe.com/starter-plan-payment-link?client_reference_id=QHRlc3R1c2VyOmxvY2FsaG9zdA&prefilled_email=testuser%40example.com',
+        );
+      assert
+        .dom('[data-test-creator-plan-button]')
+        .hasAttribute(
+          'href',
+          'https://buy.stripe.com/creator-plan-payment-link?client_reference_id=QHRlc3R1c2VyOmxvY2FsaG9zdA&prefilled_email=testuser%40example.com',
+        );
+      assert
+        .dom('[data-test-power-user-plan-button]')
+        .hasAttribute(
+          'href',
+          'https://buy.stripe.com/power-user-plan-payment-link?client_reference_id=QHRlc3R1c2VyOmxvY2FsaG9zdA&prefilled_email=testuser%40example.com',
+        );
+
+      await click('[data-test-close-modal]');
+      await click('[data-test-profile-icon-button]');
+
       assert.dom('[data-test-buy-more-credits]').exists();
       assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
-      assert
-        .dom('[data-test-upgrade-plan-button]')
-        .hasAttribute('href', 'https://customer-portal-link');
-      assert
-        .dom('[data-test-upgrade-plan-button]')
-        .hasAttribute('target', '_blank');
 
       assert.dom('[data-test-profile-popover]').exists();
       await click('[data-test-buy-more-credits] button');
@@ -1144,7 +1180,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert
         .dom('[data-test-boxel-card-container]')
         .hasClass('profile-settings');
-      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Starter');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
         .hasText('1,000 of 1,000 left');
@@ -1203,7 +1239,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       });
 
       await click('[data-test-profile-icon-button]');
-      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Starter');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
         .hasText('0 of 1,000 left');
@@ -1226,7 +1262,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         body: JSON.stringify({ eventType: 'billing-notification' }),
       });
       await click('[data-test-profile-icon-button]');
-      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Starter');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
         .hasText('0 of 1,000 left');
@@ -1249,7 +1285,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         body: JSON.stringify({ eventType: 'billing-notification' }),
       });
       await click('[data-test-profile-icon-button]');
-      assert.dom('[data-test-subscription-data="plan"]').hasText('Free');
+      assert.dom('[data-test-subscription-data="plan"]').hasText('Starter');
       assert
         .dom('[data-test-subscription-data="monthly-credit"]')
         .hasText('1,000 of 1,000 left');
