@@ -39,6 +39,14 @@ if (!REALM_SECRET_SEED) {
   process.exit(-1);
 }
 
+const GRAFANA_SECRET = process.env.GRAFANA_SECRET;
+if (!GRAFANA_SECRET) {
+  console.error(
+    `The GRAFANA_SECRET environment variable is not set. Please make sure this env var has a value`,
+  );
+  process.exit(-1);
+}
+
 const MATRIX_URL = process.env.MATRIX_URL;
 if (!MATRIX_URL) {
   console.error(
@@ -258,6 +266,7 @@ let autoMigrate = migrateDB || undefined;
     realmsRootPath,
     realmServerSecretSeed: REALM_SERVER_SECRET_SEED,
     realmSecretSeed: REALM_SECRET_SEED,
+    grafanaSecret: GRAFANA_SECRET,
     dbAdapter,
     queue,
     assetsURL: dist,

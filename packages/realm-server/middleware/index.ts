@@ -156,6 +156,22 @@ export function jwtMiddleware(
   };
 }
 
+export function grafanaAuthorization(
+  grafanaSecret: string,
+): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  return async function (ctxt: Koa.Context, next: Koa.Next) {
+    let authorization = ctxt.req.headers['authorization'];
+    if (!authorization || authorization !== grafanaSecret) {
+      await sendResponseForForbiddenRequest(
+        ctxt,
+        AuthenticationErrorMessages.MissingAuthHeader,
+      );
+      return;
+    }
+    await next();
+  };
+}
+
 export async function sendResponseForBadRequest(
   ctxt: Koa.Context,
   message: string,

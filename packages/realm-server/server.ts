@@ -52,6 +52,7 @@ export class RealmServer {
   private matrixClient: MatrixClient;
   private realmServerSecretSeed: string;
   private realmSecretSeed: string;
+  private grafanaSecret: string;
   private realmsRootPath: string;
   private dbAdapter: DBAdapter;
   private queue: QueuePublisher;
@@ -72,6 +73,7 @@ export class RealmServer {
     matrixClient,
     realmServerSecretSeed,
     realmSecretSeed,
+    grafanaSecret,
     realmsRootPath,
     dbAdapter,
     queue,
@@ -87,6 +89,7 @@ export class RealmServer {
     matrixClient: MatrixClient;
     realmServerSecretSeed: string;
     realmSecretSeed: string;
+    grafanaSecret: string;
     realmsRootPath: string;
     dbAdapter: DBAdapter;
     queue: QueuePublisher;
@@ -109,6 +112,7 @@ export class RealmServer {
     this.matrixClient = matrixClient;
     this.realmSecretSeed = realmSecretSeed;
     this.realmServerSecretSeed = realmServerSecretSeed;
+    this.grafanaSecret = grafanaSecret;
     this.realmsRootPath = realmsRootPath;
     this.dbAdapter = dbAdapter;
     this.queue = queue;
@@ -160,11 +164,13 @@ export class RealmServer {
           matrixClient: this.matrixClient,
           realmServerSecretSeed: this.realmServerSecretSeed,
           realmSecretSeed: this.realmSecretSeed,
+          grafanaSecret: this.grafanaSecret,
           virtualNetwork: this.virtualNetwork,
           createRealm: this.createRealm,
           serveIndex: this.serveIndex,
           serveFromRealm: this.serveFromRealm,
           sendEvent: this.sendEvent,
+          queue: this.queue,
         }),
       )
       .use(this.serveIndex)
