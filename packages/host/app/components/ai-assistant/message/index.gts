@@ -408,6 +408,7 @@ export default class AiAssistantMessage extends Component<Signature> {
 
       .is-from-assistant .content-container {
         margin-top: 9px;
+        border-radius: 0;
       }
 
       .is-pending .content,
