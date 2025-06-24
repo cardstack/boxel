@@ -457,6 +457,9 @@ class CodeBlockDiffEditor extends Component<Signature> {
       contextLineCount: 1,
     },
     readOnly: true,
+    scrollbar: {
+      alwaysConsumeMouseWheel: false,
+    },
     fontSize: 10,
     renderOverviewRuler: false,
     automaticLayout: true,
