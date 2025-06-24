@@ -46,6 +46,11 @@ export async function registerRealmUsers(synapse: SynapseInstance) {
   );
   await registerUser(
     synapse,
+    'skills_realm',
+    await realmPassword('skills_realm', realmSecretSeed),
+  );
+  await registerUser(
+    synapse,
     'test_realm',
     await realmPassword('test_realm', realmSecretSeed),
   );
