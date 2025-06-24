@@ -38,9 +38,4 @@ NODE_ENV=test \
   --fromUrl='http://localhost:4202/test/' \
   --toUrl='http://localhost:4202/test/' \
   --fromUrl='https://cardstack.com/base/' \
-  --toUrl='http://localhost:4201/base/' \
-  \
-  --path='../skills-realm/contents' \
-  --username='skills_realm' \
-  --fromUrl='http://localhost:4202/skills/' \
-  --toUrl='http://localhost:4202/skills/'
+  --toUrl='http://localhost:4201/base/'
