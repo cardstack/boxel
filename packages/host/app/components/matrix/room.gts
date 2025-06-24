@@ -1,6 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { schedule } from '@ember/runloop';
@@ -29,7 +28,7 @@ import { TrackedObject, TrackedArray } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { BoxelButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -128,19 +127,6 @@ export default class Room extends Component<Signature> {
               <NewSession @sendPrompt={{this.sendMessage}} />
             {{/each}}
           {{/if}}
-          {{#if this.room}}
-            {{#if this.showUnreadIndicator}}
-              <div class='unread-indicator'>
-                <BoxelButton
-                  @size='tall'
-                  @kind='primary'
-                  class='unread-button'
-                  data-test-unread-messages-button
-                  {{on 'click' this.scrollToFirstUnread}}
-                >{{this.unreadMessageText}}</BoxelButton>
-              </div>
-            {{/if}}
-          {{/if}}
         </AiAssistantConversation>
 
         <footer class='room-actions'>
@@ -170,6 +156,9 @@ export default class Room extends Component<Signature> {
                 @generatingResults={{this.generatingResults}}
                 @stop={{perform this.stopGeneratingTask}}
                 @stopping={{this.stopGeneratingTask.isRunning}}
+                @showUnreadIndicator={{this.showUnreadIndicator}}
+                @unreadMessageText={{this.unreadMessageText}}
+                @scrollToFirstUnread={{this.scrollToFirstUnread}}
               />
             {{/if}}
             <div class='chat-input-area' data-test-chat-input-area>
@@ -223,15 +212,6 @@ export default class Room extends Component<Signature> {
         grid-template-rows: 1fr auto;
         height: 100%;
         overflow: hidden;
-      }
-      .unread-indicator {
-        position: sticky;
-        bottom: 0;
-        margin-left: auto;
-        width: 100%;
-      }
-      .unread-button {
-        width: 100%;
       }
       .room-actions {
         padding: var(--boxel-sp-xxs) var(--boxel-sp) var(--boxel-sp);
@@ -565,8 +545,8 @@ export default class Room extends Component<Signature> {
   }
 
   private get unreadMessageText() {
-    return `${this.numberOfUnreadMessages} unread ${pluralize(
-      'message',
+    return `${this.numberOfUnreadMessages} New ${pluralize(
+      'Message',
       this.numberOfUnreadMessages,
     )}`;
   }
@@ -976,6 +956,7 @@ export default class Room extends Component<Signature> {
       return false;
     }
     return (
+      this.showUnreadIndicator ||
       this.generatingResults ||
       this.readyCommands.length > 0 ||
       this.readyCodePatches.length > 0 ||
