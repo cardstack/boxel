@@ -213,8 +213,7 @@ export default class CardService extends Service {
     });
 
     const content = await response.text();
-    await this.saveSource(toUrl, content, 'copy');
-    return response;
+    return await this.saveSource(toUrl, content, 'copy');
   }
 
   async deleteSource(url: URL) {
