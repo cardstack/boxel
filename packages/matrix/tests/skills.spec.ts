@@ -67,11 +67,11 @@ test.describe('Skills', () => {
     ).toHaveClass('switch checked');
   }
 
-  const environmentSkillCardId = `https://cardstack.com/base/Skill/boxel-environment`;
+  const environmentSkillCardId = `http://localhost:4201/Skill/boxel-environment`;
   const defaultSkillCardsForCodeMode = [
-    `https://cardstack.com/base/Skill/source-code-editing`,
-    `https://cardstack.com/base/Skill/boxel-development`,
-    `https://cardstack.com/base/Skill/boxel-environment`,
+    `http://localhost:4201/Skill/source-code-editing`,
+    `http://localhost:4201/Skill/boxel-development`,
+    `http://localhost:4201/Skill/boxel-environment`,
   ];
   const skillCard1 = `${appURL}/skill-pirate-speak`;
   const skillCard2 = `${appURL}/skill-seo`;
