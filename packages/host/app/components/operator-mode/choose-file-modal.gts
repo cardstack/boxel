@@ -37,7 +37,7 @@ interface Signature {
   Args: {};
 }
 
-export default class AttachFileModal extends Component<Signature> {
+export default class ChooseFileModal extends Component<Signature> {
   @tracked deferred?: Deferred<FileDef>;
   @tracked selectedRealm = this.knownRealms[0];
   @tracked selectedFile?: LocalPath;
@@ -115,13 +115,13 @@ export default class AttachFileModal extends Component<Signature> {
       :deep(.dialog-box__content) {
         overflow: hidden;
       }
-      .attach-file-modal {
+      .choose-file-modal {
         --horizontal-gap: var(--boxel-sp-xs);
       }
-      .attach-file-modal > :deep(.boxel-modal__inner) {
+      .choose-file-modal > :deep(.boxel-modal__inner) {
         display: flex;
       }
-      :deep(.attach-file) {
+      :deep(.choose-file-modal__container) {
         height: 32rem;
       }
       .field + .field {
@@ -185,14 +185,14 @@ export default class AttachFileModal extends Component<Signature> {
     </style>
     {{#if this.deferred}}
       <ModalContainer
-        @title='Attach File'
+        @title='Choose a File'
         @onClose={{fn this.pick undefined}}
         @size='medium'
         @centered={{true}}
         {{on 'keydown' this.handleKeydown}}
-        @cardContainerClass='attach-file'
-        class='attach-file-modal'
-        data-test-attach-file-modal
+        @cardContainerClass='choose-file-modal__container'
+        class='choose-file-modal'
+        data-test-choose-file-modal
       >
         <:content>
           <FieldContainer class='field' @label='Workspace'>
@@ -201,12 +201,12 @@ export default class AttachFileModal extends Component<Signature> {
               @options={{this.knownRealms}}
               @selected={{this.selectedRealm}}
               @onChange={{this.selectRealm}}
-              data-test-attach-file-modal-realm-chooser
+              data-test-choose-file-modal-realm-chooser
               as |item|
             >
               <div
                 class='realm-chooser__options'
-                data-test-attach-file-modal-realm-option={{item.info.name}}
+                data-test-choose-file-modal-realm-option={{item.info.name}}
               >
                 <img src={{item.info.iconURL}} alt='realm icon' />
                 <span>{{item.info.name}}</span>
@@ -230,7 +230,7 @@ export default class AttachFileModal extends Component<Signature> {
               @size='tall'
               {{on 'click' (fn this.pick undefined)}}
               {{onKeyMod 'Escape'}}
-              data-test-attach-file-modal-cancel-button
+              data-test-choose-file-modal-cancel-button
             >
               Cancel
             </BoxelButton>
@@ -239,7 +239,7 @@ export default class AttachFileModal extends Component<Signature> {
               @size='tall'
               {{on 'click' (fn this.pick this.selectedFile)}}
               {{onKeyMod 'Enter'}}
-              data-test-attach-file-modal-add-button
+              data-test-choose-file-modal-add-button
             >
               Add
             </BoxelButton>

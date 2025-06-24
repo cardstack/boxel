@@ -1,77 +1,59 @@
 import GlimmerComponent from '@glimmer/component';
 
-import { fn, concat } from '@ember/helper';
-import { on } from '@ember/modifier';
-import { eq } from '@cardstack/boxel-ui/helpers';
-import { action } from '@ember/object';
+import {
+  FilterList,
+  SkeletonPlaceholder,
+} from '@cardstack/boxel-ui/components';
+import type { Icon } from '@cardstack/boxel-ui/icons';
+import { TagList } from '@cardstack/boxel-ui/components';
 
-import { Pill } from '@cardstack/boxel-ui/components';
-
-export type FilterItem = { id: string; name: string };
+export type FilterItem = {
+  id: string;
+  displayName: string;
+  filters?: FilterItem[];
+  icon?: Icon | string;
+  isExpanded?: boolean;
+};
 
 interface FilterCategoryGroupArgs {
   Args: {
     title: string;
-    items: FilterItem[];
-    activeId: string;
-    onItemSelect: (item: FilterItem) => void;
+    categories: FilterItem[];
+    activeCategory?: FilterItem;
+    onCategorySelect: (category: FilterItem) => void;
     isLoading?: boolean;
   };
   Element: HTMLElement;
 }
 
 export class FilterCategoryGroup extends GlimmerComponent<FilterCategoryGroupArgs> {
-  @action
-  handleItemClick(item: FilterItem) {
-    this.args.onItemSelect(item);
-  }
-
   <template>
     <FilterGroupWrapper @title={{@title}} ...attributes>
       {{#if @isLoading}}
-        Loading...
+        <SkeletonPlaceholder class='skeleton-placeholder-filter-list' />
       {{else}}
-        <div class='filter-list'>
-          {{#each @items as |item|}}
-            <button
-              class={{concat
-                'filter-button'
-                (if (eq @activeId item.id) ' selected')
-              }}
-              {{on 'click' (fn this.handleItemClick item)}}
-              data-test-filter-button={{item.id}}
-            >
-              {{item.name}}
-            </button>
-          {{/each}}
-        </div>
+        <FilterList
+          @filters={{@categories}}
+          @activeFilter={{@activeCategory}}
+          @onChanged={{@onCategorySelect}}
+          class='filter-category-list'
+        />
       {{/if}}
     </FilterGroupWrapper>
 
     <style scoped>
-      @layer {
-        .filter-list {
-          display: flex;
-          flex-direction: column;
-          padding: var(--boxel-sp-sm);
-        }
-        .filter-button {
-          text-align: left;
-          background: none;
-          border: none;
-          font: 500 var(--boxel-font-sm);
-          padding: var(--boxel-sp-xxs);
-          margin-bottom: var(--boxel-sp-4xs);
-        }
-        .filter-button.selected {
-          color: var(--boxel-light);
-          background: var(--boxel-dark);
-          border-radius: 6px;
-        }
-        .filter-button:not(.selected):hover {
-          background: var(--boxel-300);
-          border-radius: 6px;
-        }
+      .filter-category-list :deep(.filter-list) {
+        padding-inline-start: var(--boxel-sp-xs);
+      }
+      .filter-category-list :deep(.list-item-buttons) {
+        background-color: var(--layout-container-background-color);
+      }
+      .filter-category-list :deep(.list-item-buttons:hover) {
+        background-color: var(--boxel-300);
+      }
+      .skeleton-placeholder-filter-list {
+        height: 20px;
+        width: 100%;
       }
     </style>
   </template>
@@ -80,72 +62,33 @@ export class FilterCategoryGroup extends GlimmerComponent<FilterCategoryGroupArg
 interface FilterTagGroupArgs {
   Args: {
     title: string;
-    items: FilterItem[];
-    activeIds: string[]; // Array since it's multi-select
-    onItemSelect: (item: FilterItem) => void;
+    tags: FilterItem[];
+    activeTags: FilterItem[]; // Array since it's multi-select
+    onTagSelect: (item: FilterItem) => void;
     isLoading?: boolean;
   };
   Element: HTMLElement;
 }
 
 export class FilterTagGroup extends GlimmerComponent<FilterTagGroupArgs> {
-  @action
-  handleItemClick(item: FilterItem) {
-    this.args.onItemSelect(item);
-  }
-
-  get isItemSelected() {
-    return (itemId: string) => this.args.activeIds.includes(itemId);
-  }
-
-  get noItems() {
-    return this.args.items.length === 0;
-  }
-
   <template>
     <FilterGroupWrapper @title={{@title}} ...attributes>
       {{#if @isLoading}}
-        Loading...
+        <SkeletonPlaceholder class='skeleton-placeholder-filter-list' />
       {{else}}
-        <div class='filter-list'>
-          {{#if this.noItems}}
-            <span>No {{@title}} found</span>
-          {{else}}
-            {{#each @items as |item|}}
-              {{! Take note: did not choose to use @pillBackgroundColor args because we want a custom background color toggled based on the selected state }}
-              <Pill
-                @kind='button'
-                class={{concat
-                  'tag-filter-pill'
-                  (if (this.isItemSelected item.id) ' selected')
-                }}
-                {{on 'click' (fn this.handleItemClick item)}}
-                data-test-filter-pill={{item.id}}
-              >
-                <:default>
-                  <span>{{item.name}}</span>
-                </:default>
-              </Pill>
-            {{/each}}
-          {{/if}}
-        </div>
+        <TagList
+          @tags={{@tags}}
+          @selectedTags={{@activeTags}}
+          @onTagSelect={{@onTagSelect}}
+        />
       {{/if}}
     </FilterGroupWrapper>
 
     <style scoped>
       @layer {
-        .filter-list {
-          display: flex;
-          flex-wrap: wrap;
-          gap: var(--boxel-sp-xs);
-          padding: var(--boxel-sp-sm);
-        }
-        .tag-filter-pill.selected {
-          background: var(--boxel-dark);
-          color: var(--boxel-light);
-        }
-        .tag-filter-pill:not(.selected):hover {
-          background: var(--boxel-300);
+        .skeleton-placeholder-filter-list {
+          height: 20px;
+          width: 100%;
         }
       }
     </style>
@@ -165,8 +108,12 @@ interface FilterGroupWrapperArgs {
 
 class FilterGroupWrapper extends GlimmerComponent<FilterGroupWrapperArgs> {
   <template>
-    <section class='filter-group' ...attributes>
-      <h2 class='filter-heading'>
+    <section
+      class='filter-group'
+      aria-labelledby='filter-heading-{{@title}}'
+      ...attributes
+    >
+      <h2 class='filter-heading' id='filter-heading-{{@title}}'>
         {{@title}}
       </h2>
       {{yield}}
@@ -177,15 +124,72 @@ class FilterGroupWrapper extends GlimmerComponent<FilterGroupWrapperArgs> {
         .filter-group {
           display: flex;
           flex-direction: column;
-          background-color: var(--boxel-light);
+          background-color: var(
+            --filter-group-background-color,
+            var(--boxel-light)
+          );
           border-radius: var(--boxel-border-radius);
+          padding: var(--boxel-sp-xs);
+          gap: var(--boxel-sp-sm);
         }
         .filter-heading {
           font: 500 var(--boxel-font);
           margin: 0;
-          padding: var(--boxel-sp-sm);
-          border-bottom: 1px solid var(--boxel-border-color);
         }
+      }
+    </style>
+  </template>
+}
+
+// Filter Sidebar Component - Grouped Filters
+interface FilterSidebarArgs {
+  Args: {
+    categoryItems: FilterItem[];
+    activeCategory: FilterItem | undefined;
+    onCategorySelect: (category: FilterItem) => void;
+    categoryIsLoading?: boolean;
+    tagItems: FilterItem[];
+    activeTags: FilterItem[];
+    onTagSelect: (tag: FilterItem) => void;
+    tagIsLoading?: boolean;
+  };
+}
+
+export default class FilterSidebar extends GlimmerComponent<FilterSidebarArgs> {
+  <template>
+    <div
+      role='complementary'
+      aria-label='Filters'
+      class='filters-container info-box'
+    >
+      <FilterCategoryGroup
+        @title='Categories'
+        @categories={{@categoryItems}}
+        @activeCategory={{@activeCategory}}
+        @onCategorySelect={{@onCategorySelect}}
+        @isLoading={{@categoryIsLoading}}
+        class='filter-category-group'
+      />
+      <FilterTagGroup
+        @title='Tags'
+        @tags={{@tagItems}}
+        @activeTags={{@activeTags}}
+        @onTagSelect={{@onTagSelect}}
+        @isLoading={{@tagIsLoading}}
+      />
+    </div>
+
+    <style scoped>
+      .filters-container {
+        background-color: transparent;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+        margin-top: var(--boxel-sp);
+      }
+
+      .filter-category-group {
+        --filter-group-background-color: transparent;
       }
     </style>
   </template>

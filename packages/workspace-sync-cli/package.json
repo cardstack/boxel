@@ -1,0 +1,63 @@
+{
+  "name": "@cardstack/workspace-sync-cli",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "CLI tools for syncing files between local directories and Boxel workspaces",
+  "main": "./dist/index.js",
+  "bin": {
+    "workspace-push": "./dist/push.js",
+    "workspace-pull": "./dist/pull.js"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "boxel",
+    "workspace",
+    "sync",
+    "cli",
+    "cardstack"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cardstack/boxel.git",
+    "directory": "packages/realm-sync-cli"
+  },
+  "author": "Cardstack",
+  "dependencies": {},
+  "devDependencies": {
+    "@cardstack/runtime-common": "workspace:*",
+    "@types/node": "^18.18.5",
+    "esbuild": "^0.19.0",
+    "tsx": "^4.0.0",
+    "ts-node": "^10.9.1",
+    "typescript": "~5.1.6",
+    "concurrently": "catalog:",
+    "ignore": "^5.3.0"
+  },
+  "scripts": {
+    "build": "pnpm clean && tsx scripts/build.ts",
+    "clean": "rm -rf dist/*",
+    "push": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/push.ts",
+    "pull": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/pull.ts",
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
+    "lint:js": "eslint . --report-unused-disable-directives --cache",
+    "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
+    "version:patch": "npm version patch",
+    "version:minor": "npm version minor",
+    "version:major": "npm version major",
+    "publish:npm": "npm publish",
+    "publish:dry": "npm publish --dry-run"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}

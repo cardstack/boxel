@@ -703,7 +703,6 @@ let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> 
         gap: var(--boxel-sp-xs);
         border-bottom-left-radius: 12px;
         border-bottom-right-radius: 12px;
-        margin-top: -5px;
       }
     </style>
     <div class='code-block-actions'>
