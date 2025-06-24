@@ -95,9 +95,14 @@ export default class AiAssistantPanel extends Component<Signature> {
             width='20'
             height='20'
           />
-          <h3 class='panel-title-text' data-test-chat-title>
-            {{if this.roomResource.name this.roomResource.name 'Assistant'}}
-          </h3>
+          {{#let
+            (if this.roomResource.name this.roomResource.name 'Assistant')
+            as |title|
+          }}
+            <h3 title={{title}} class='panel-title-text' data-test-chat-title>
+              {{title}}
+            </h3>
+          {{/let}}
           <Button
             title='New Session'
             class='button new-session-button'
