@@ -11,15 +11,14 @@ import { Velcro } from 'ember-velcro';
 
 import HistoryIcon from '@cardstack/boxel-icons/history';
 import PlusIcon from '@cardstack/boxel-icons/plus';
+import XIcon from '@cardstack/boxel-icons/x';
 
 import {
   Button,
-  IconButton,
   LoadingIndicator,
   ResizeHandle,
 } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
-import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { ResolvedCodeRef, aiBotUsername } from '@cardstack/runtime-common';
 
@@ -133,16 +132,16 @@ export default class AiAssistantPanel extends Component<Signature> {
               <HistoryIcon />
             </Button>
           {{/if}}
-          <IconButton
-            class='close-ai-panel'
-            @variant='primary'
-            @icon={{IconX}}
-            @width='12px'
-            @height='12px'
+          <Button
+            title='Close AI Assistant'
+            class='button'
+            @kind='text-only'
+            @size='extra-small'
             {{on 'click' @onClose}}
-            aria-label='Close AI Assistant'
             data-test-close-ai-assistant
-          />
+          >
+            <XIcon />
+          </Button>
         </header>
 
         {{#if this.aiAssistantPanelService.isShowingPastSessions}}
@@ -298,21 +297,6 @@ export default class AiAssistantPanel extends Component<Signature> {
             var(--boxel-sp-xs)
         );
         width: 100%;
-      }
-
-      .close-ai-panel {
-        --icon-color: var(--boxel-highlight);
-        /*position: absolute;
-        right: var(--boxel-sp-xs);
-        top: var(--boxel-sp);
-        height: var(--panel-title-height);*/
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1;
-      }
-      .close-ai-panel:hover:not(:disabled) {
-        filter: brightness(1.1);
       }
 
       .button {
