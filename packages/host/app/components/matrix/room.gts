@@ -137,7 +137,6 @@ export default class Room extends Component<Signature> {
             @removeCard={{this.removeCard}}
             @chooseFile={{this.chooseFile}}
             @removeFile={{this.removeFile}}
-            @submode={{this.operatorModeStateService.state.submode}}
             @autoAttachedFile={{this.autoAttachedFile}}
             @filesToAttach={{this.filesToAttach}}
             @autoAttachedCardTooltipMessage={{if
@@ -212,6 +211,7 @@ export default class Room extends Component<Signature> {
         grid-template-rows: 1fr auto;
         height: 100%;
         overflow: hidden;
+        position: relative;
       }
       .room-actions {
         padding: var(--boxel-sp-xxs) var(--boxel-sp) var(--boxel-sp);
@@ -220,7 +220,6 @@ export default class Room extends Component<Signature> {
       .chat-input-area {
         background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
-        overflow: hidden;
       }
       .chat-input-area__bottom-actions {
         display: flex;
@@ -228,6 +227,8 @@ export default class Room extends Component<Signature> {
         gap: var(--boxel-sp-sm);
         background-color: var(--boxel-light-100);
         border-top: 1px solid var(--boxel-200);
+        border-bottom-left-radius: var(--boxel-border-radius);
+        border-bottom-right-radius: var(--boxel-border-radius);
       }
       :deep(.ai-assistant-conversation > *:first-child) {
         margin-top: auto;
