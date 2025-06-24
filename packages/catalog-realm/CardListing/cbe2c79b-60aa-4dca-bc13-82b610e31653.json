@@ -45,12 +45,12 @@
       },
       "examples.0": {
         "links": {
-          "self": "../homework/Homework/math"
+          "self": "../homework-grader/Homework/math"
         }
       },
       "examples.1": {
         "links": {
-          "self": "../homework/Homework/history"
+          "self": "../homework-grader/Homework/history"
         }
       }
     },

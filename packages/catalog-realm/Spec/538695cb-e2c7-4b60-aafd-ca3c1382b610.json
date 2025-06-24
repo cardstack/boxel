@@ -5,7 +5,7 @@
       "readMe": null,
       "ref": {
         "name": "Homework",
-        "module": "../homework/homework"
+        "module": "../homework-grader/homework"
       },
       "specType": "card",
       "containedExamples": [],
