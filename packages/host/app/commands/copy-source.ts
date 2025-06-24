@@ -31,5 +31,6 @@ export default class CopySourceCommand extends HostBaseCommand<
     if (r.ok && r.url) {
       return new CopySourceResult({ url: r.url });
     }
+    return new CopySourceResult({});
   }
 }
