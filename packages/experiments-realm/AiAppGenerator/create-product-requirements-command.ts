@@ -1,4 +1,4 @@
-import { Command } from '@cardstack/runtime-common';
+import { Command, CommandRequest } from '@cardstack/runtime-common';
 import {
   CardDef,
   StringField,
@@ -9,11 +9,11 @@ import {
 import { ProductRequirementDocument } from '../product-requirement-document';
 import { Skill } from 'https://cardstack.com/base/skill';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
-import PatchCardInstanceCommand from '@cardstack/boxel-host/commands/patch-card-instance';
 import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
 import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
 import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
 import OpenAiAssistantRoomCommand from '@cardstack/boxel-host/commands/open-ai-assistant-room';
+import { waitForCompletedCommandRequest } from '@cardstack/boxel-host/commands/utils';
 
 export class CreateProductRequirementsInput extends CardDef {
   @field targetAudience = contains(StringField);
@@ -68,10 +68,6 @@ export default class CreateProductRequirementsInstance extends Command<
       card: prdCard,
     });
     // Get patch command, this takes the card and returns a command that can be used to patch the card
-    let patchPRDCommand = new PatchCardInstanceCommand(this.commandContext, {
-      cardType: ProductRequirementDocument,
-    });
-
     let createRoomCommand = new CreateAiAssistantRoomCommand(
       this.commandContext,
     );
@@ -96,18 +92,20 @@ export default class CreateProductRequirementsInstance extends Command<
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
       this.commandContext,
     );
-    await sendAiAssistantMessageCommand.execute({
+    let { eventId } = await sendAiAssistantMessageCommand.execute({
       roomId,
       prompt: this.createPrompt(input),
       attachedCards: [prdCard],
-      // TODO: replace this with a skill?
-      // commands: [{ command: patchPRDCommand, autoExecute: true }], // this should persist over multiple messages, matrix service is responsible to tracking
     });
 
-    // Wait for the PRD command to have been applied
-    await patchPRDCommand.waitForNextCompletion();
-    // TODO: alternate approach is to have room have a goal, and monitor for that completion as opposed to command completion
-    // TODO: alternate simpler approach, send a message and wait for a reply. If the reply is a the tool call, continue, otherwise, show room to the user and wait for the next reply
+    // Wait for the card to have been patched
+    await waitForCompletedCommandRequest(
+      this.commandContext,
+      roomId,
+      (commandRequest: Partial<CommandRequest>) =>
+        commandRequest.name === 'patchCardInstance',
+      { afterEventId: eventId },
+    );
 
     let result = new CreateProductRequirementsResult();
     result.productRequirements = prdCard;

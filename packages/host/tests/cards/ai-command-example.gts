@@ -6,7 +6,7 @@ import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-a
 import { Button } from '@cardstack/boxel-ui/components';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 
-// import { Command } from '@cardstack/runtime-common';
+import { Command } from '@cardstack/runtime-common';
 
 import {
   CardDef,
@@ -15,6 +15,7 @@ import {
   field,
   contains,
 } from 'https://cardstack.com/base/card-api';
+import { Skill } from 'https://cardstack.com/base/skill';
 
 export class WeatherLocationInput extends CardDef {
   @field location = contains(StringField);
@@ -25,24 +26,24 @@ export class WeatherReport extends CardDef {
   @field conditions = contains(StringField);
 }
 
-// class GetWeatherCommand extends Command<
-//   typeof WeatherLocationInput,
-//   typeof WeatherReport
-// > {
-//   static actionVerb = 'Retrieve';
-//   inputType = WeatherLocationInput;
+export class GetWeatherCommand extends Command<
+  typeof WeatherLocationInput,
+  typeof WeatherReport
+> {
+  static actionVerb = 'Retrieve';
+  inputType = WeatherLocationInput;
 
-//   async getInputType() {
-//     return WeatherLocationInput;
-//   }
+  async getInputType() {
+    return WeatherLocationInput;
+  }
 
-//   protected async run(_input: WeatherLocationInput): Promise<WeatherReport> {
-//     return new WeatherReport({
-//       temperature: '25 C',
-//       conditions: 'Sunny',
-//     });
-//   }
-// }
+  protected async run(_input: WeatherLocationInput): Promise<WeatherReport> {
+    return new WeatherReport({
+      temperature: '25 C',
+      conditions: 'Sunny',
+    });
+  }
+}
 
 export class AiCommandExample extends CardDef {
   static displayName = 'AI Command Example';
@@ -61,8 +62,24 @@ export class AiCommandExample extends CardDef {
       let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
         commandContext,
       );
+      let weatherSkill = new Skill({
+        name: 'Weather Skill',
+        description: 'A skill to get weather information',
+        instructions:
+          'Use the command to ask for the weather in a specific location',
+        commands: [
+          {
+            codeRef: {
+              module: import.meta.url,
+              name: 'GetWeatherCommand',
+            },
+            requiresApproval: false,
+          },
+        ],
+      });
       let { roomId } = await createAIAssistantRoomCommand.execute({
         name: 'Weather Assistant',
+        defaultSkills: [weatherSkill],
       });
 
       let sendMessageCommand = new SendAiAssistantMessageCommand(
@@ -72,8 +89,6 @@ export class AiCommandExample extends CardDef {
       await sendMessageCommand.execute({
         roomId,
         prompt: `What is the weather in ${this.args.model.location}?`,
-        // TODO: use a skill instead?
-        // commands: [{ command: getWeatherCommand, autoExecute: true }],
       });
     };
 

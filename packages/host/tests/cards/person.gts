@@ -44,15 +44,12 @@ export class Person extends CardDef {
       let { roomId } = await createAIAssistantRoomCommand.execute({
         name: 'AI Assistant Room',
       });
-      // let switchSubmodeCommand = new SwitchSubmodeCommand(commandContext);
       let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
         commandContext,
       );
       await sendAiAssistantMessageCommand.execute({
         roomId,
         prompt: 'Switch to code mode',
-        // TODO: use a skill instead
-        // commands: [{ command: switchSubmodeCommand, autoExecute: true }],
       });
     };
     <template>

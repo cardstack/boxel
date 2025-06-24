@@ -239,6 +239,15 @@ export class CardForAttachmentCard extends CardDef {
   @field cardForAttachment = contains(JsonField);
 }
 
+export class GetEventsFromRoomInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field sinceEventId = contains(StringField);
+}
+
+export class GetEventsFromRoomResult extends CardDef {
+  @field matrixEvents = containsMany(JsonField);
+}
+
 export {
   SearchCardsByQueryInput,
   SearchCardsByTypeAndTitleInput,
