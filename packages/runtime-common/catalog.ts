@@ -7,11 +7,14 @@ import { ResolvedCodeRef, resolveAdoptedCodeRef } from './code-ref';
 import { realmURL } from './constants';
 import { logger } from './log';
 
+// @ts-ignore TODO: fix catalog types in runtime-common
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
 const baseRealmPath = new RealmPaths(new URL('https://cardstack.com/base/'));
 
 // sourceCodeRef -- (installs module) --> targetCodeRef
+// sourceCodeRef: code ref of the code from the source realm
+// targetCodeRef: code ref of the code from the target realm
 export interface CopyMeta {
   sourceCodeRef: ResolvedCodeRef;
   targetCodeRef: ResolvedCodeRef;
@@ -48,8 +51,8 @@ export class InstallOptions {
   private sourceRealmPath: RealmPaths;
   private listingDirectoryPath: RealmPaths; // organizing folder of listing
   installDirectoryName: string; //name of outer uuid  folder
-  sourceDirectoryPath: RealmPaths; // (best guess) listing folder of listing
-  removeListingDirectory: boolean = true; // if true, remove listting directory from source directory
+  sourceDirectoryPath: RealmPaths; // (best guess) listing folder of distributed code; typically, fallsback to realm when not all code is self-contained in this folder
+  removeListingDirectory: boolean = true; // if true, remove listting directory from source directory.
   targetLocalDirectory: string;
 
   constructor(targetRealm: string, listing: Listing, installDirId?: string) {
@@ -75,7 +78,7 @@ export class InstallOptions {
       listing,
       this.listingDirectory,
     );
-    //use source directory
+
     this.sourceDirectoryPath = this.removeListingDirectory
       ? this.listingDirectoryPath
       : this.sourceRealmPath;
