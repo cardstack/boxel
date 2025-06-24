@@ -50,6 +50,7 @@
     "@embroider/core": "^3.4.15",
     "@embroider/macros": "^1.16.5",
     "@embroider/webpack": "^4.0.4",
+    "eventemitter3": "catalog:",
     "@floating-ui/dom": "catalog:",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.1.2",

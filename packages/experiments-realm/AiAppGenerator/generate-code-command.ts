@@ -4,12 +4,14 @@ import {
   linksTo,
   contains,
 } from 'https://cardstack.com/base/card-api';
-import { Command } from '@cardstack/runtime-common';
+import { Command, type CommandRequest } from '@cardstack/runtime-common';
 import { Skill } from 'https://cardstack.com/base/skill';
 import StringField from 'https://cardstack.com/base/string';
 import { ProductRequirementDocument } from '../product-requirement-document';
 import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
 import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
+import { waitForCompletedCommandRequest } from '@cardstack/boxel-host/commands/utils';
+import type { CommandResultWithOutputContent } from 'https://cardstack.com/base/matrix-event';
 
 export class GenerateCodeInput extends CardDef {
   @field productRequirements = linksTo(() => ProductRequirementDocument);
@@ -41,7 +43,7 @@ export class ConstructApplicationCodeInput extends CardDef {
   });
 }
 
-class ConstructApplicationCodeCommand extends Command<
+export class ConstructApplicationCodeCommand extends Command<
   typeof ConstructApplicationCodeInput,
   typeof ConstructApplicationCodeInput
 > {
@@ -246,6 +248,15 @@ import { on } from '@ember/modifier';
 
         Never ask the user for followups, you must call the ConstructApplicationCodeCommand to continue.
       `,
+      commands: [
+        {
+          codeRef: {
+            name: 'ConstructApplicationCodeCommand',
+            module: import.meta.url,
+          },
+          requiresApproval: false,
+        },
+      ],
     });
   }
 
@@ -253,9 +264,6 @@ import { on } from '@ember/modifier';
     input: GenerateCodeInput,
   ): Promise<ConstructApplicationCodeInput> {
     console.log('Input into the run', input);
-    let constructApplicationCodeCommand = new ConstructApplicationCodeCommand(
-      this.commandContext,
-    );
     let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
       this.commandContext,
     );
@@ -266,17 +274,33 @@ import { on } from '@ember/modifier';
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
       this.commandContext,
     );
-    await sendAiAssistantMessageCommand.execute({
+    let { eventId } = await sendAiAssistantMessageCommand.execute({
       roomId: input.roomId,
       prompt:
         'Generate code for the application given the product requirements, you do not need to strictly follow the schema if it does not seem appropriate for the application.',
       attachedCards: [input.productRequirements],
-      // TODO: replace this with a skill?
-      // commands: [
-      //   { command: constructApplicationCodeCommand, autoExecute: true },
-      // ],
     });
 
-    return await constructApplicationCodeCommand.waitForNextCompletion();
+    let commandResultEvent = await waitForCompletedCommandRequest(
+      this.commandContext,
+      input.roomId,
+      (commandRequest: Partial<CommandRequest>) =>
+        commandRequest.name === 'ConstructApplicationCodeCommand',
+      { afterEventId: eventId },
+    );
+    if (!commandResultEvent) {
+      throw new Error(
+        `No ConstructApplicationCodeCommand result found in room ${input.roomId}`,
+      );
+    }
+    let commandResultEventContent =
+      commandResultEvent.content as CommandResultWithOutputContent;
+    let commandResultCardJson = JSON.parse(
+      commandResultEventContent.data.card!.content!,
+    );
+    return new ConstructApplicationCodeInput({
+      appName: commandResultCardJson.data.attributes.appName,
+      code: commandResultCardJson.data.attributes.code,
+    });
   }
 }

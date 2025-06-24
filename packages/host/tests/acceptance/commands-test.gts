@@ -38,6 +38,7 @@ import SaveCardCommand from '@cardstack/host/commands/save-card';
 import { SearchCardsByTypeAndTitleCommand } from '@cardstack/host/commands/search-cards';
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
 import ShowCardCommand from '@cardstack/host/commands/show-card';
+import { waitForCompletedCommandRequest } from '@cardstack/host/commands/utils';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -166,7 +167,6 @@ module('Acceptance | Commands tests', function (hooks) {
           realm: testRealmURL,
         });
 
-        // Mutate and save again
         let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
           this.commandContext,
         );
@@ -176,14 +176,18 @@ module('Acceptance | Commands tests', function (hooks) {
         let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
           this.commandContext,
         );
-        await sendAiAssistantMessageCommand.execute({
+        let { eventId } = await sendAiAssistantMessageCommand.execute({
           roomId,
           prompt: `Change the topic of the meeting to "${input.topic}"`,
           attachedCards: [meeting],
         });
 
-        // TODO: wait for a condition once we implement this
-        // await patchCardInstanceCommand.waitForNextCompletion();
+        await waitForCompletedCommandRequest(
+          this.commandContext,
+          roomId,
+          (commandRequest) => commandRequest.name === 'patchCardInstance',
+          { afterEventId: eventId },
+        );
 
         let showCardCommand = new ShowCardCommand(this.commandContext);
         await showCardCommand.execute({
@@ -484,6 +488,7 @@ module('Acceptance | Commands tests', function (hooks) {
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           name: 'patchCardInstance',
+          id: '794c52f1-b444-47bd-8b2c-5d03ba7ef042',
           arguments: JSON.stringify({
             description:
               'Change the topic of the meeting to "Meeting with Hassan"',

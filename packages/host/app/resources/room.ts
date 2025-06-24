@@ -246,8 +246,12 @@ export class RoomResource extends Resource<Args> {
     return -1;
   }
 
-  private get events() {
+  get events() {
     return this.matrixRoom?.events ?? [];
+  }
+
+  async waitForNextEvent() {
+    return this.matrixRoom?.waitForNextEvent();
   }
 
   @cached
