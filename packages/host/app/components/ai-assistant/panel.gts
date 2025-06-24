@@ -117,9 +117,10 @@ export default class AiAssistantPanel extends Component<Signature> {
           >
             <PlusIcon />
           </Button>
-          {{#if this.aiAssistantPanelService.loadingRooms}}
-            <LoadingIndicator @color='var(--boxel-light)' />
-          {{else}}
+          {{#let
+            this.aiAssistantPanelService.loadingRooms
+            as |pastSessionsLoading|
+          }}
             <Button
               title='Past Sessions'
               class='button past-sessions-button
@@ -129,14 +130,17 @@ export default class AiAssistantPanel extends Component<Signature> {
                 }}'
               @kind='text-only'
               @size='extra-small'
+              @loading={{pastSessionsLoading}}
               @disabled={{this.aiAssistantPanelService.displayRoomError}}
               {{on 'click' this.aiAssistantPanelService.displayPastSessions}}
               data-test-past-sessions-button
               data-test-has-active-sessions={{this.hasOtherActiveSessions}}
             >
-              <HistoryIcon />
+              {{#unless pastSessionsLoading}}
+                <HistoryIcon />
+              {{/unless}}
             </Button>
-          {{/if}}
+          {{/let}}
           <Button
             title='Close AI Assistant'
             class='button'
@@ -310,6 +314,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         --boxel-button-padding: 1px 0;
         --boxel-button-min-width: 0;
         --boxel-button-min-height: 0;
+        --boxel-loading-indicator-size: 16px;
 
         border-radius: var(--boxel-border-radius-xs);
       }
@@ -323,6 +328,11 @@ export default class AiAssistantPanel extends Component<Signature> {
       .button svg {
         width: 18px;
         height: 18px;
+      }
+
+      .button :deep(.loading-indicator) {
+        margin-right: 0;
+        padding-top: 1px;
       }
 
       .past-sessions-button-active::before {
