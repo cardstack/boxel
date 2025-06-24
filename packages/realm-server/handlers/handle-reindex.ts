@@ -5,6 +5,7 @@ import {
   fetchUserPermissions,
   userInitiatedPriority,
   SupportedMimeType,
+  RealmPaths,
 } from '@cardstack/runtime-common';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 import {
@@ -16,17 +17,19 @@ import { type CreateRoutesArgs } from '../routes';
 
 export default function handleReindex({
   queue,
+  serverURL,
   dbAdapter,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    let realm = ctxt.URL.searchParams.get('realm');
-    if (!realm) {
+    let realmPath = ctxt.URL.searchParams.get('realm')?.replace(/\/$/, '');
+    if (!realmPath) {
       await sendResponseForBadRequest(
         ctxt,
         'Request missing "realm" query param',
       );
       return;
     }
+    let realm = new RealmPaths(new URL(serverURL)).directoryURL(realmPath).href;
 
     let permissions = await fetchUserPermissions(dbAdapter, new URL(realm));
     let owners = Object.entries(permissions)

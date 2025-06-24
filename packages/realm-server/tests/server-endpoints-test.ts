@@ -856,9 +856,12 @@ module(basename(__filename), function () {
             'number of jobs initially is correct',
           );
           {
+            let realmPath = realmURL.substring(
+              new URL(testRealm2URL.origin).href.length,
+            );
             let response = await request2
               .get(
-                `/_grafana-reindex?authHeader=${grafanaSecret}&realm=${encodeURIComponent(realmURL)}`,
+                `/_grafana-reindex?authHeader=${grafanaSecret}&realm=${realmPath}`,
               )
               .set('Content-Type', 'application/json');
             assert.deepEqual(response.body, {

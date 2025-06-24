@@ -24,6 +24,7 @@ import handleQueueStatusRequest from './handlers/handle-queue-status';
 import handleReindex from './handlers/handle-reindex';
 
 export type CreateRoutesArgs = {
+  serverURL: string;
   dbAdapter: DBAdapter;
   matrixClient: MatrixClient;
   realmServerSecretSeed: string;

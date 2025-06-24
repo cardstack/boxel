@@ -168,6 +168,7 @@ export class RealmServer {
       .use(
         createRoutes({
           dbAdapter: this.dbAdapter,
+          serverURL: this.serverURL.href,
           matrixClient: this.matrixClient,
           realmServerSecretSeed: this.realmServerSecretSeed,
           realmSecretSeed: this.realmSecretSeed,
