@@ -53,31 +53,6 @@ interface Signature {
 }
 
 export default class AiAssistantPanel extends Component<Signature> {
-  get hasOtherActiveSessions() {
-    let oneMinuteAgo = new Date(Date.now() - 60 * 1000).getTime();
-
-    return this.aiAssistantPanelService.aiSessionRooms
-      .filter((session) => session.roomId !== this.roomResource?.roomId)
-      .some((session) => {
-        let isSessionActive = false;
-        isSessionActive =
-          this.matrixService.getLastActiveTimestamp(
-            session.roomId,
-            session.lastActiveTimestamp,
-          ) > oneMinuteAgo;
-
-        let lastMessageEventId = session.lastMessage?.eventId;
-
-        let hasSeenLastMessage = lastMessageEventId
-          ? this.matrixService.currentUserEventReadReceipts.has(
-              lastMessageEventId,
-            )
-          : false;
-
-        return isSessionActive && !hasSeenLastMessage;
-      });
-  }
-
   <template>
     <Velcro @placement='bottom' @offsetOptions={{-50}} as |popoverVelcro|>
       <div
@@ -379,6 +354,31 @@ export default class AiAssistantPanel extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.loadMonaco.perform();
+  }
+
+  get hasOtherActiveSessions() {
+    let oneMinuteAgo = new Date(Date.now() - 60 * 1000).getTime();
+
+    return this.aiAssistantPanelService.aiSessionRooms
+      .filter((session) => session.roomId !== this.roomResource?.roomId)
+      .some((session) => {
+        let isSessionActive = false;
+        isSessionActive =
+          this.matrixService.getLastActiveTimestamp(
+            session.roomId,
+            session.lastActiveTimestamp,
+          ) > oneMinuteAgo;
+
+        let lastMessageEventId = session.lastMessage?.eventId;
+
+        let hasSeenLastMessage = lastMessageEventId
+          ? this.matrixService.currentUserEventReadReceipts.has(
+              lastMessageEventId,
+            )
+          : false;
+
+        return isSessionActive && !hasSeenLastMessage;
+      });
   }
 
   @cached
