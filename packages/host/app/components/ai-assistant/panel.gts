@@ -229,8 +229,8 @@ export default class AiAssistantPanel extends Component<Signature> {
         padding: var(--ai-assistant-panel-padding);
 
         display: grid;
-        grid-template-columns: 20px auto 22px 22px 22px;
-        gap: var(--boxel-sp-xxs);
+        grid-template-columns: 20px auto 20px 20px 20px;
+        gap: var(--boxel-sp-xxxs);
 
         z-index: 10;
         background: linear-gradient(
@@ -302,6 +302,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       .button svg {
         width: 18px;
         height: 18px;
+        stroke-width: 2.5;
       }
 
       /* This icon looks slightly bigger so this makes it match */
