@@ -30,6 +30,18 @@ test.describe('Skills', () => {
   let realmServer: IsolatedRealmServer;
   test.beforeEach(async ({ page }) => {
     test.setTimeout(120_000);
+    // Intercept all skill card requests and redirect them
+    await page.route('http://localhost:4201/skills/**', async (route) => {
+      const url = route.request().url();
+      const suffix = url.split('http://localhost:4201/skills/').pop();
+
+      // Redirect to your test realm
+      const newUrl = `http://localhost:4205/skills/${suffix}`;
+      console.log(`redirecting skill card request to ${newUrl}`);
+
+      // Continue with the modified URL
+      await route.continue({ url: newUrl });
+    });
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
     realmServer = await startRealmServer();

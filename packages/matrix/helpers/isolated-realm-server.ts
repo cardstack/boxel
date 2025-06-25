@@ -9,6 +9,9 @@ setGracefulCleanup();
 const testRealmCards = resolve(
   join(__dirname, '..', '..', 'host', 'tests', 'cards'),
 );
+const skillsRealmCards = resolve(
+  join(__dirname, '..', '..', 'skills-realm', 'contents'),
+);
 const realmServerDir = resolve(join(__dirname, '..', '..', 'realm-server'));
 const matrixDir = resolve(join(__dirname, '..'));
 export const appURL = 'http://localhost:4205/test';
@@ -22,6 +25,10 @@ export async function startServer() {
   let testRealmDir = join(dir.name, 'test');
   ensureDirSync(testRealmDir);
   copySync(testRealmCards, testRealmDir);
+
+  let skillsRealmDir = join(dir.name, 'skills');
+  ensureDirSync(skillsRealmDir);
+  copySync(skillsRealmCards, skillsRealmDir);
 
   process.env.PGPORT = '5435';
   process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
@@ -42,6 +49,10 @@ export async function startServer() {
     `--fromUrl='http://localhost:4205/test/'`,
     `--toUrl='http://localhost:4205/test/'`,
   ];
+  workerArgs = workerArgs.concat([
+    `--fromUrl='http://localhost:4205/skills/'`,
+    `--toUrl='http://localhost:4205/skills/'`,
+  ]);
   workerArgs = workerArgs.concat([
     `--fromUrl='https://cardstack.com/base/'`,
     `--toUrl='http://localhost:4201/base/'`,
@@ -70,13 +81,18 @@ export async function startServer() {
     `--workerManagerPort=4212`,
     `--migrateDB`,
     `--useRegistrationSecretFunction`,
-
-    `--path='${testRealmDir}'`,
-    `--username='test_realm'`,
   ];
   serverArgs = serverArgs.concat([
+    `--path='${testRealmDir}'`,
+    `--username='test_realm'`,
     `--fromUrl='http://localhost:4205/test/'`,
     `--toUrl='http://localhost:4205/test/'`,
+  ]);
+  serverArgs = serverArgs.concat([
+    `--path='${skillsRealmDir}'`,
+    `--username='skills_realm'`,
+    `--fromUrl='http://localhost:4205/skills/'`,
+    `--toUrl='http://localhost:4205/skills/'`,
   ]);
   serverArgs = serverArgs.concat([
     `--fromUrl='https://cardstack.com/base/'`,
