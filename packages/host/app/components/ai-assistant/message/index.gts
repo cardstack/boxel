@@ -547,7 +547,8 @@ const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSign
       .ai-assistant-conversation {
         display: flex;
         flex-direction: column;
-        padding: 0 var(--boxel-sp) var(--boxel-sp) var(--boxel-sp);
+        padding: 0 var(--ai-assistant-panel-padding)
+          var(--ai-assistant-panel-padding) var(--ai-assistant-panel-padding);
         overflow-y: auto;
       }
     </style>
