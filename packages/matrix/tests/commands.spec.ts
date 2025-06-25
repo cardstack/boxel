@@ -36,8 +36,8 @@ test.describe('Commands', () => {
   let userCred: Credentials;
   test.beforeEach(async () => {
     synapse = await synapseStart();
-    realmServer = await startRealmServer();
     await registerRealmUsers(synapse);
+    realmServer = await startRealmServer();
     userCred = await registerUser(synapse, 'user1', 'pass');
     await setupUserSubscribed('@user1:localhost', realmServer);
   });
