@@ -66,9 +66,10 @@ export default class AiAssistantChatInput extends Component<Signature> {
       .chat-input-container {
         display: grid;
         grid-template-columns: auto 1fr auto;
+        align-items: center;
+        min-height: 54px;
         gap: var(--boxel-sp-xxs);
-        padding: var(--boxel-sp-xxs) var(--boxel-sp-xxs) var(--boxel-sp-xxs)
-          var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         background-color: var(--boxel-light);
         border-top-left-radius: var(--chat-input-area-border-radius);
         border-top-right-radius: var(--chat-input-area-border-radius);
@@ -80,6 +81,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
         border-color: transparent;
         font-weight: 500;
         padding: var(--boxel-sp-4xs);
+        padding-top: 10px;
         resize: none;
         outline: 0;
         transition: height 0.2s ease-in-out;
@@ -96,7 +98,6 @@ export default class AiAssistantChatInput extends Component<Signature> {
         height: var(--boxel-icon-med);
         background-color: var(--boxel-highlight);
         border-radius: var(--boxel-border-radius-sm);
-        align-self: flex-start;
       }
       .send-button:hover:not(:disabled),
       .send-button:focus:not(:disabled) {
