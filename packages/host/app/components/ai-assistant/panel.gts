@@ -315,6 +315,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         --boxel-loading-indicator-size: 16px;
 
         border-radius: var(--boxel-border-radius-xs);
+        transform: translateY(-1px);
       }
 
       .button:hover {
