@@ -244,7 +244,6 @@ export default class AiAssistantPanel extends Component<Signature> {
 
       .panel-title-text {
         position: relative;
-        top: -1px;
         margin: 0;
         padding-right: var(--boxel-sp-xl);
         padding-left: 2px;
