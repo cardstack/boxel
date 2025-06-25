@@ -39,7 +39,7 @@ export async function prerenderCard(url: string): Promise<RenderResponse> {
   const isolatedHTML = await renderHTML(page, 'isolated', 0);
   const atomHTML = await renderHTML(page, 'atom', 0);
   const embeddedHTML = await renderAncestors(page, 'embedded', meta.types);
-  const fittedHTML = await renderAncestors(page, 'embedded', meta.types);
+  const fittedHTML = await renderAncestors(page, 'fitted', meta.types);
   const iconHTML = await renderIcon(page);
 
   await context.close();
