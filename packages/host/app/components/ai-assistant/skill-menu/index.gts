@@ -7,6 +7,8 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
+import pluralize from 'pluralize';
+
 import { Button } from '@cardstack/boxel-ui/components';
 
 import { skillCardRef } from '@cardstack/runtime-common';
@@ -136,7 +138,10 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     if (this.isExpanded) {
       return `Skills: ${this.activeSkills.length} of ${this.args.skills.length} active`;
     }
-    return `Skills ${this.activeSkills.length}`;
+    return `${this.activeSkills.length} ${pluralize(
+      'Skills',
+      this.activeSkills.length,
+    )}`;
   }
 
   private get activeSkills() {
