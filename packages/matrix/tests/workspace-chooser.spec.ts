@@ -63,7 +63,7 @@ test.describe('Workspace Chooser', () => {
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
 
     // realm1 and catalog realm
-    await expect(page.locator('[data-test-workspace]')).toHaveCount(2);
+    await expect(page.locator('[data-test-workspace]')).toHaveCount(3);
     await expect(
       page.locator(`[data-test-workspace-list] [data-test-workspace="realm1"]`),
     ).toHaveCount(1);
