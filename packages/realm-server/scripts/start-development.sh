@@ -18,6 +18,7 @@ NODE_ENV=development \
   LOG_LEVELS='*=info' \
   REALM_SERVER_SECRET_SEED="mum's the word" \
   REALM_SECRET_SEED="shhh! it's a secret" \
+  GRAFANA_SECRET="shhh! it's a secret" \
   MATRIX_URL=http://localhost:8008 \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   ENABLE_FILE_WATCHER=true \

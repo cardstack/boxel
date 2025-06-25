@@ -31,6 +31,7 @@ export async function startServer() {
   process.env.NODE_NO_WARNINGS = '1';
   process.env.REALM_SERVER_SECRET_SEED = "mum's the word";
   process.env.REALM_SECRET_SEED = "shhh! it's a secret";
+  process.env.GRAFANA_SECRET = "shhh! it's a secret";
   process.env.MATRIX_URL = 'http://localhost:8008';
   process.env.REALM_SERVER_MATRIX_USERNAME = 'realm_server';
   process.env.NODE_ENV = 'test';

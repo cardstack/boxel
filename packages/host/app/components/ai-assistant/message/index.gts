@@ -408,6 +408,7 @@ export default class AiAssistantMessage extends Component<Signature> {
 
       .is-from-assistant .content-container {
         margin-top: 9px;
+        border-radius: 0;
       }
 
       .is-pending .content,
@@ -546,7 +547,8 @@ const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSign
       .ai-assistant-conversation {
         display: flex;
         flex-direction: column;
-        padding: 0 var(--boxel-sp) var(--boxel-sp) var(--boxel-sp);
+        padding: 0 var(--ai-assistant-panel-padding)
+          var(--ai-assistant-panel-padding) var(--ai-assistant-panel-padding);
         overflow-y: auto;
       }
     </style>

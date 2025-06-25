@@ -363,35 +363,35 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     await click('[data-test-file="index.json"]');
     assert
       .dom('[data-test-recent-file]:nth-child(1)')
-      .containsText('Person/1.json');
+      .containsText('Person/1 .json');
 
     await waitFor('[data-test-file="Person/1.json"]');
     await click('[data-test-file="Person/1.json"]');
 
     assert
       .dom('[data-test-recent-file]:nth-child(1)')
-      .containsText('index.json');
+      .containsText('index .json');
 
     await waitFor('[data-test-file="français.json"]');
     await click('[data-test-file="français.json"]');
 
     assert
       .dom('[data-test-recent-file]:first-child')
-      .containsText('Person/1.json')
+      .containsText('Person/1 .json')
       .doesNotContainText(testRealmURL, 'expected realm root to be hidden');
     assert
       .dom('[data-test-recent-file]:nth-child(2)')
-      .containsText('index.json');
+      .containsText('index .json');
 
     await click('[data-test-recent-file]:nth-child(2)');
     assert.dom('[data-test-index-card]').exists('index card is rendered');
 
     assert
       .dom('[data-test-recent-file]:first-child')
-      .containsText('français.json');
+      .containsText('français .json');
     assert
       .dom('[data-test-recent-file]:nth-child(2)')
-      .containsText('Person/1.json');
+      .containsText('Person/1 .json');
 
     assert.deepEqual(recentFilesWoTimestamp(), [
       [testRealmURL, 'index.json', null],
@@ -432,21 +432,21 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
 
     assert
       .dom('[data-test-recent-file]:nth-child(1)')
-      .containsText('file-0.txt');
+      .containsText('file-0 .txt');
 
     assert
       .dom('[data-test-recent-file]:nth-child(99)')
-      .containsText('file-98.txt');
+      .containsText('file-98 .txt');
 
     await click('[data-test-file="index.json"]');
 
     assert
       .dom('[data-test-recent-file]:nth-child(1)')
-      .containsText('Person/1.json');
+      .containsText('Person/1 .json');
 
     assert
       .dom('[data-test-recent-file]:nth-child(99)')
-      .containsText('file-97.txt');
+      .containsText('file-97 .txt');
   });
 
   test('recent files section does not list files not-found', async function (assert) {
@@ -483,7 +483,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     assert.dom(`[data-test-recent-file="${testRealmURL}person.gts"]`).exists();
     assert
       .dom(`[data-test-recent-file]:first-child`)
-      .containsText('person.gts');
+      .containsText('person .gts');
 
     await fillIn(
       '[data-test-card-url-bar-input]',
@@ -503,7 +503,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     assert.dom(`[data-test-recent-file="${testRealmURL}pers"]`).doesNotExist();
     assert
       .dom(`[data-test-recent-file]:first-child`)
-      .containsText('person.gts');
+      .containsText('person .gts');
   });
 
   test('displays recent files in base realm', async function (assert) {
@@ -561,11 +561,15 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     await click('[data-test-file="field-component.gts"]');
     await waitFor('[data-test-file="field-component.gts"].selected');
 
-    assert.dom('[data-test-recent-file]:nth-child(1)').containsText('date.gts');
+    assert
+      .dom('[data-test-recent-file]:nth-child(1)')
+      .containsText('date .gts');
     assert
       .dom('[data-test-recent-file]:nth-child(2)')
-      .containsText('code-ref.gts');
-    assert.dom('[data-test-recent-file]:nth-child(3)').containsText('spec.gts');
+      .containsText('code-ref .gts');
+    assert
+      .dom('[data-test-recent-file]:nth-child(3)')
+      .containsText('spec .gts');
 
     // the cursor positions seem to be different in CI than locally
     let removedCursorPositions = recentFilesWoTimestamp()?.map(

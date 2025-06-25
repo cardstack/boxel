@@ -8,6 +8,7 @@ import {
 import { Loader } from './loader';
 import { isField, primitive } from './constants';
 import { CardError } from './error';
+import { meta } from './constants';
 import { isUrlLike, trimExecutableExtension } from './index';
 
 export type ResolvedCodeRef = {
@@ -280,4 +281,16 @@ export async function getNarrowestType(
   let narrowestType =
     narrowTypeExists && typeConstraint ? typeConstraint : type;
   return narrowestType;
+}
+
+export function resolveAdoptedCodeRef(instance: CardDef) {
+  let adoptsFrom = instance[meta]?.adoptsFrom as CodeRef;
+  if (!adoptsFrom) {
+    throw new Error('Instance missing adoptsFrom');
+  }
+  let resolved = codeRefWithAbsoluteURL(adoptsFrom, new URL(instance.id));
+  if (!isResolvedCodeRef(resolved)) {
+    throw new Error('code ref is not resolved');
+  }
+  return resolved;
 }

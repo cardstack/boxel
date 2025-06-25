@@ -31,7 +31,7 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
   checkScroll = modifier((element: HTMLElement) => {
     let checkScrollPosition = () => {
       let { scrollHeight, scrollTop, clientHeight } = element;
-      let isAtBottom = Math.abs(scrollHeight - scrollTop - clientHeight) < 1;
+      let isAtBottom = Math.abs(scrollHeight - scrollTop - clientHeight) <= 1;
       let hasNoScroll = scrollHeight <= clientHeight;
 
       if (isAtBottom || hasNoScroll) {

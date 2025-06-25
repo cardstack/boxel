@@ -4,7 +4,7 @@ import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 import { cached, tracked } from '@glimmer/tracking';
 
-import { task, dropTask } from 'ember-concurrency';
+import { dropTask, task, timeout } from 'ember-concurrency';
 import window from 'ember-window-mock';
 import { cloneDeep } from 'lodash';
 import {
@@ -129,6 +129,7 @@ const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
 const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
 const SLIDING_SYNC_LIST_RANGE_END = 9;
 const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
+const SLIDING_SYNC_TIMEOUT = 30000;
 
 const realmEventsLogger = logger('realm:events');
 
@@ -562,7 +563,7 @@ export default class MatrixService extends Service {
         timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT,
       },
       this.client as any,
-      30000,
+      SLIDING_SYNC_TIMEOUT,
     );
     this.slidingSync.on(
       SlidingSyncEvent.Lifecycle,
@@ -570,6 +571,7 @@ export default class MatrixService extends Service {
         state: SlidingSyncState | null,
         resp: MSC3575SlidingSyncResponse | null,
       ) => {
+        console.log('SlidingSync lifecycle event', { state, resp });
         if (
           state === SlidingSyncState.Complete &&
           resp &&
@@ -1706,10 +1708,20 @@ export default class MatrixService extends Service {
 
     this._isLoadingMoreAIRooms = true;
     try {
+      // Temporarily disable timeout to get immediate response when changing list ranges.
+      // Without this, the server would hold the request open for 30 seconds waiting for
+      // "new" data, even though we want the expanded range data immediately.
+      // This prevents the poor UX of waiting 30 seconds after calling setListRanges.
+      // @ts-expect-error bypassing "private readonly" TS annotation
+      this.slidingSync.timeoutMS = 0;
       await this.slidingSync.setListRanges(SLIDING_SYNC_AI_ROOM_LIST_NAME, [
         [0, newEndRange],
       ]);
     } finally {
+      // Restore normal long-polling timeout for efficient background syncing
+      // @ts-expect-error bypassing "private readonly" TS annotation
+      this.slidingSync.timeoutMS = SLIDING_SYNC_TIMEOUT;
+      await timeout(500); // keep the spinner up a bit longer while the new rooms are rendered
       this._isLoadingMoreAIRooms = false;
     }
   });

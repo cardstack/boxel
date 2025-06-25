@@ -892,10 +892,6 @@ export default class CodeSubmode extends Component<Signature> {
         --boxel-panel-resize-separator-background-color: var(--boxel-dark);
       }
 
-      .recent-files-panel {
-        background-color: var(--code-mode-panel-background-color);
-      }
-
       .monaco-editor-panel {
         background-color: var(--monaco-background);
       }
