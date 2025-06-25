@@ -36,9 +36,6 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       @onCollapse={{fn this.setExpanded false}}
       ...attributes
     >
-      <:headerIcon>
-        <span class='header-icon' />
-      </:headerIcon>
       <:headerDetail>
         <span
           class='skills-length'
@@ -73,16 +70,6 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       </:footer>
     </PillMenu>
     <style scoped>
-      .header-icon {
-        display: inline-block;
-        width: 20px;
-        height: 18px;
-        background-image: url('./robot-head@2x.webp');
-        background-position: left center;
-        background-repeat: no-repeat;
-        background-size: contain;
-        flex-shrink: 0;
-      }
       .skill-menu {
         background-color: transparent;
         box-shadow: none;
