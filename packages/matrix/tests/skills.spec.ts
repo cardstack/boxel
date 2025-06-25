@@ -31,9 +31,9 @@ test.describe('Skills', () => {
   test.beforeEach(async ({ page }) => {
     test.setTimeout(120_000);
     // Intercept all skill card requests and redirect them
-    await page.route('http://localhost:4201/skills/**', async (route) => {
+    await page.route('http://localhost:4205/skills/**', async (route) => {
       const url = route.request().url();
-      const suffix = url.split('http://localhost:4201/skills/').pop();
+      const suffix = url.split('http://localhost:4205/skills/').pop();
 
       // Redirect to your test realm
       const newUrl = `http://localhost:4205/skills/${suffix}`;
@@ -79,11 +79,11 @@ test.describe('Skills', () => {
     ).toHaveClass('switch checked');
   }
 
-  const environmentSkillCardId = `http://localhost:4201/skills/Skill/boxel-environment`;
+  const environmentSkillCardId = `http://localhost:4205/skills/Skill/boxel-environment`;
   const defaultSkillCardsForCodeMode = [
-    `http://localhost:4201/skills/Skill/source-code-editing`,
-    `http://localhost:4201/skills/Skill/boxel-development`,
-    `http://localhost:4201/skills/Skill/boxel-environment`,
+    `http://localhost:4205/skills/Skill/source-code-editing`,
+    `http://localhost:4205/skills/Skill/boxel-development`,
+    `http://localhost:4205/skills/Skill/boxel-environment`,
   ];
   const skillCard1 = `${appURL}/skill-pirate-speak`;
   const skillCard2 = `${appURL}/skill-seo`;
