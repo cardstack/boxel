@@ -86,7 +86,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       assert.strictEqual(response.status, 404, 'HTTP 404 status');
     });
 
-    test('responds with 200 and null subscription values if user is not subscribed', async function (assert) {
+    test('responds with 200 and free plan if user is not subscribed via stripe', async function (assert) {
       let user = await insertUser(
         dbAdapter,
         'user@test',
@@ -114,13 +114,23 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
               stripeCustomerEmail: user.stripeCustomerEmail,
               creditsAvailableInPlanAllowance: null,
               creditsIncludedInPlanAllowance: null,
-              extraCreditsAvailableInBalance: null,
+              extraCreditsAvailableInBalance: 0,
             },
             relationships: {
               subscription: null,
             },
           },
-          included: null,
+          included: [
+            {
+              type: 'plan',
+              id: 'free',
+              attributes: {
+                name: 'Free',
+                monthlyPrice: 0,
+                creditsIncluded: 0,
+              },
+            },
+          ],
         },
         '/_user response is correct',
       );
@@ -314,7 +324,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       onRealmSetup,
     });
 
-    test.only('creates a new user with initial credits', async function (assert) {
+    test('creates a new user with initial credits', async function (assert) {
       let response = await request
         .post(`/_user`)
         .set('Accept', 'application/vnd.api+json')
