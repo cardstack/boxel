@@ -76,6 +76,7 @@ import type RoomData from '../../lib/matrix-classes/room';
 import type { RoomSkill } from '../../resources/room';
 
 interface Signature {
+  Element: HTMLElement;
   Args: {
     roomId: string;
     roomResource: RoomResource;
@@ -100,6 +101,7 @@ export default class Room extends Component<Signature> {
         data-test-room-name={{@roomResource.name}}
         data-test-room={{@roomId}}
         data-room-id={{@roomId}}
+        ...attributes
       >
         <AiAssistantConversation
           @registerConversationScroller={{this.registerConversationScroller}}
