@@ -220,6 +220,11 @@ export default class Room extends Component<Signature> {
         box-shadow: var(--boxel-box-shadow);
       }
       .chat-input-area {
+        --boxel-pill-menu-header-padding: 0;
+        --boxel-pill-menu-content-padding: var(--boxel-sp) 0;
+        --boxel-pill-menu-footer-padding: 0;
+        --boxel-pill-menu-button-padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+
         background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
       }

@@ -84,10 +84,6 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         flex-shrink: 0;
       }
       .skill-menu {
-        --boxel-pill-menu-header-padding: 0;
-        --boxel-pill-menu-content-padding: var(--boxel-sp) 0;
-        --boxel-pill-menu-footer-padding: 0;
-        --boxel-pill-menu-button-padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
         background-color: transparent;
         box-shadow: none;
       }
