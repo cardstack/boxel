@@ -4,7 +4,7 @@ import {
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
   loadCardDef,
-  listingNameWithUuid,
+  generateInstallFolderName,
   RealmPaths,
 } from '@cardstack/runtime-common';
 
@@ -54,7 +54,7 @@ export default class ListingUseCommand extends HostBaseCommand<
       (spec) => spec.specType !== 'field',
     );
 
-    const localDir = listingNameWithUuid(listing.name);
+    const localDir = generateInstallFolderName(listing.name);
 
     for (const spec of specsWithoutFields) {
       if (spec.isComponent) {

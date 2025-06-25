@@ -468,7 +468,8 @@ export class Listing extends CardDef {
   @field tags = linksToMany(() => Tag);
   @field license = linksTo(() => License);
   @field images = containsMany(StringField);
-  @field examples = linksToMany(CardDef);
+  @field examples = linksToMany(() => CardDef);
+  @field skills = linksToMany(() => Skill);
 
   @field title = contains(StringField, {
     computeVia(this: Listing) {
@@ -487,6 +488,7 @@ export class AppListing extends Listing {
 
 export class CardListing extends Listing {
   static displayName = 'CardListing';
+  @field skills = linksToMany(() => Skill);
 }
 
 export class FieldListing extends Listing {
@@ -495,7 +497,6 @@ export class FieldListing extends Listing {
 
 export class SkillListing extends Listing {
   static displayName = 'SkillListing';
-  @field skills = linksToMany(() => Skill);
 }
 
 function specBreakdown(specs: Spec[]): Record<SpecType, Spec[]> {

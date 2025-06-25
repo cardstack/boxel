@@ -113,6 +113,7 @@ export const realmServerTestMatrix: MatrixConfig = {
 };
 export const realmServerSecretSeed = "mum's the word";
 export const realmSecretSeed = `shhh! it's a secret`;
+export const grafanaSecret = `shhh! it's a secret`;
 export const matrixRegistrationSecret: string =
   getSynapseConfig()!.registration_shared_secret; // as long as synapse has been started at least once, this will always exist
 
@@ -382,6 +383,7 @@ export async function runBaseRealmServer(
     dbAdapter,
     queue: publisher,
     getIndexHTML,
+    grafanaSecret,
     serverURL: new URL(localBaseRealmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
@@ -460,6 +462,7 @@ export async function runTestRealmServer({
     dbAdapter,
     queue: publisher,
     getIndexHTML,
+    grafanaSecret,
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });

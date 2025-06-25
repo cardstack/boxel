@@ -32,7 +32,6 @@ import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 import { RoomResource } from '@cardstack/host/resources/room';
 import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
@@ -62,7 +61,6 @@ interface Signature {
 export default class RoomMessageCommand extends Component<Signature> {
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
-  @service private declare monacoService: MonacoService;
 
   private get previewCommandCode() {
     let { name, arguments: payload } = this.args.messageCommand;
@@ -101,11 +99,17 @@ export default class RoomMessageCommand extends Component<Signature> {
   };
 
   private scrollBottomIntoView = modifier((element: HTMLElement) => {
-    let height = this.monacoService.getContentHeight();
-    if (!height || height < 0) {
+    let editor = this.args.monacoSDK.editor
+      .getEditors()
+      .find((editor) => element.contains(editor.getContainerDomNode()));
+    let editorHeight = editor?.getContentHeight() ?? 0;
+    if (!editorHeight || editorHeight < 0) {
       return;
     }
-    element.style.height = `${height}px`; // max-height is constrained by CSS
+    let heightOfOtherChildren = [...element.children]
+      .filter((childEl) => childEl !== editor?.getContainerDomNode())
+      .reduce((acc, childEl) => acc + (childEl as HTMLElement).offsetHeight, 0);
+    element.style.height = `${editorHeight + heightOfOtherChildren}px`; // max-height is constrained by CSS
     this.scrollIntoView(element.parentElement as HTMLElement);
   });
 
@@ -201,10 +205,10 @@ export default class RoomMessageCommand extends Component<Signature> {
             @codeData={{hash code=this.previewCommandCode language='json'}}
             as |codeBlock|
           >
+            <codeBlock.editor />
             <codeBlock.actions as |actions|>
               <actions.copyCode />
             </codeBlock.actions>
-            <codeBlock.editor />
           </CodeBlock>
         {{/if}}
         {{#if this.failedCommandState}}
@@ -361,7 +365,7 @@ export default class RoomMessageCommand extends Component<Signature> {
       .failed-command-text {
         color: var(--boxel-light);
       }
-      :deep(.code-block-actions) {
+      :deep(.code-block-editor) {
         margin-top: var(--boxel-sp);
       }
     </style>

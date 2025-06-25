@@ -1,0 +1,55 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "instructions": "Solve the following arithmetic problems. Show your work where necessary.",
+      "questions": [
+        {
+          "title": "Addition",
+          "questionText": "What is 15 + 27?",
+          "answer": "42",
+          "maxPoints": 5
+        },
+        {
+          "title": "Division",
+          "questionText": "What is 48 ÷ 6?",
+          "answer": "8",
+          "maxPoints": 5
+        },
+        {
+          "title": "Multiplication",
+          "questionText": "What is 13 × 4?",
+          "answer": "40",
+          "maxPoints": 5
+        },
+        {
+          "title": "Subtraction",
+          "questionText": "What is 45 - 19?",
+          "answer": "26",
+          "maxPoints": 5
+        }
+      ],
+      "grade": {
+        "overallGrade": "B",
+        "overallFeedback": "### Feedback\n\nGreat effort on your arithmetic homework! Here's how you did on each question:\n\n1. **Addition**: Your answer (42) is correct! \n2. **Division**: Your answer (8) is correct!\n3. **Multiplication**: Your answer (40) is _incorrect_. The correct answer is 52 (because 13 × 4 = 52).\n4. **Subtraction**: Your answer (26) is correct!\n\n**Tips:**\n- Double-check multiplication calculations—writing them out step-by-step can help eliminate mistakes.\n\n**Overall:** You got 3 out of 4 questions correct. Nice work! Practice multiplication for extra confidence.\n\n---\n**Total Points:** 15/20\n\nKeep practicing, you're doing well!",
+        "questionPoints": [5, 5, 0, 5]
+      },
+      "title": "Basic Arithmetic Homework",
+      "description": "Practice your basic arithmetic skills with these math problems.",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "gradingSkill": {
+        "links": {
+          "self": "../../Skill/homework-grader"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../homework",
+        "name": "Homework"
+      }
+    }
+  }
+}
