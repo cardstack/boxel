@@ -124,10 +124,7 @@ export default class AiAssistantPanel extends Component<Signature> {
             <Button
               title='Past Sessions'
               class='button past-sessions-button
-                {{if
-                  this.hasOtherActiveSessions
-                  "past-sessions-button-active"
-                }}'
+                {{if this.hasOtherActiveSessions "has-other-active-sessions"}}'
               @kind='text-only'
               @size='extra-small'
               @loading={{pastSessionsLoading}}
@@ -341,50 +338,8 @@ export default class AiAssistantPanel extends Component<Signature> {
         padding-top: 1px;
       }
 
-      .past-sessions-button-active::before {
-        content: '';
-        position: absolute;
-        top: -105px;
-        left: -55px;
-        width: 250px;
-        height: 250px;
-        background: conic-gradient(
-          #ffcc8f 0deg,
-          #ff3966 45deg,
-          #ff309e 90deg,
-          #aa1dc9 135deg,
-          #d7fad6 180deg,
-          #5fdfea 225deg,
-          #3d83f2 270deg,
-          #5145e8 315deg,
-          #ffcc8f 360deg
-        );
-        z-index: -1;
-        animation: spin 4s infinite linear;
-      }
-
-      .past-sessions-button-active::after {
-        content: '';
-        position: absolute;
-        top: 1px;
-        left: 1px;
-        right: 1px;
-        bottom: 1px;
-        background: var(--boxel-700);
-        border-radius: inherit;
-        z-index: -1;
-      }
-
-      .past-sessions-button-active {
-        position: relative;
-        display: inline-block;
-        border-radius: 3rem;
-        color: white;
-        background: var(--boxel-700);
-        border: none;
-        cursor: pointer;
-        z-index: 1;
-        overflow: hidden;
+      .has-other-active-sessions {
+        animation: cycle-color-to-background 1s ease-in infinite alternate;
       }
 
       .loading-new-session {
@@ -395,9 +350,13 @@ export default class AiAssistantPanel extends Component<Signature> {
         padding-top: calc(var(--ai-assistant-panel-header-height) * 0.5);
       }
 
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
+      @keyframes cycle-color-to-background {
+        100% {
+          color: color-mix(
+            in oklab,
+            var(--boxel-highlight),
+            var(--boxel-ai-purple) 75%
+          );
         }
       }
 
