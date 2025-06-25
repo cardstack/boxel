@@ -10,6 +10,9 @@ const testRealmCards = resolve(
   join(__dirname, '..', '..', 'host', 'tests', 'cards'),
 );
 const realmServerDir = resolve(join(__dirname, '..', '..', 'realm-server'));
+const skillsRealmDir = resolve(
+  join(__dirname, '..', '..', 'skills-realm', 'contents'),
+);
 const matrixDir = resolve(join(__dirname, '..'));
 export const appURL = 'http://localhost:4205/test';
 
@@ -73,10 +76,14 @@ export async function startServer() {
 
     `--path='${testRealmDir}'`,
     `--username='test_realm'`,
-  ];
-  serverArgs = serverArgs.concat([
     `--fromUrl='http://localhost:4205/test/'`,
     `--toUrl='http://localhost:4205/test/'`,
+  ];
+  serverArgs = serverArgs.concat([
+    `--username='skills_realm'`,
+    `--path='${skillsRealmDir}'`,
+    `--fromUrl='http://localhost:4205/skills/'`,
+    `--toUrl='http://localhost:4205/skills/'`,
   ]);
   serverArgs = serverArgs.concat([
     `--fromUrl='https://cardstack.com/base/'`,

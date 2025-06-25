@@ -38,7 +38,10 @@ exports.up = (pgm) => {
          VALUES
            ('http://localhost:4201/skills/', '@skills_realm:localhost', true, true, true),
            ('http://localhost:4201/skills/', '@skills_writer:localhost', true, true, false),
-           ('http://localhost:4201/skills/', '*', true, false, false)
+           ('http://localhost:4201/skills/', '*', true, false, false),
+           ('http://localhost:4205/skills/', '@skills_realm:localhost', true, true, true),
+           ('http://localhost:4205/skills/', '@skills_writer:localhost', true, true, false),
+           ('http://localhost:4205/skills/', '*', true, false, false)
          ON CONFLICT ON CONSTRAINT realm_user_permissions_pkey
          DO UPDATE SET
            realm_url   = EXCLUDED.realm_url,

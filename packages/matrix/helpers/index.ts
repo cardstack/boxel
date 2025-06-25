@@ -28,6 +28,15 @@ interface LoginOptions {
   skipOpeningAssistant?: true;
 }
 
+export async function setSkillsRedirect(page: Page) {
+  await page.route('http://localhost:4201/skills/**', async (route) => {
+    const url = route.request().url();
+    const suffix = url.split('http://localhost:4201/skills/').pop();
+    const newUrl = `http://localhost:4205/skills/${suffix}`;
+    await route.continue({ url: newUrl });
+  });
+}
+
 export async function registerRealmUsers(synapse: SynapseInstance) {
   await registerUser(
     synapse,

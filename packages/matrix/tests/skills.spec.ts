@@ -13,6 +13,7 @@ import {
   registerRealmUsers,
   setupUserSubscribed,
   clearLocalStorage,
+  setSkillsRedirect,
 } from '../helpers';
 import {
   synapseStart,
@@ -30,6 +31,7 @@ test.describe('Skills', () => {
   let realmServer: IsolatedRealmServer;
   test.beforeEach(async ({ page }) => {
     test.setTimeout(120_000);
+    await setSkillsRedirect(page);
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
     realmServer = await startRealmServer();
@@ -67,11 +69,11 @@ test.describe('Skills', () => {
     ).toHaveClass('switch checked');
   }
 
-  const environmentSkillCardId = `http://localhost:4201/skills/Skill/boxel-environment`;
+  const environmentSkillCardId = `http://localhost:4205/skills/Skill/boxel-environment`;
   const defaultSkillCardsForCodeMode = [
-    `http://localhost:4201/skills/Skill/source-code-editing`,
-    `http://localhost:4201/skills/Skill/boxel-development`,
-    `http://localhost:4201/skills/Skill/boxel-environment`,
+    `http://localhost:4205/skills/Skill/source-code-editing`,
+    `http://localhost:4205/skills/Skill/boxel-development`,
+    `http://localhost:4205/skills/Skill/boxel-environment`,
   ];
   const skillCard1 = `${appURL}/skill-pirate-speak`;
   const skillCard2 = `${appURL}/skill-seo`;
