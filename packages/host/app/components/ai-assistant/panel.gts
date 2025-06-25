@@ -298,6 +298,13 @@ export default class AiAssistantPanel extends Component<Signature> {
         background-color: var(--boxel-highlight);
       }
 
+      .button[disabled] {
+        --boxel-button-text-color: var(--boxel-400);
+
+        background-color: transparent;
+        border-color: transparent;
+      }
+
       .button svg {
         width: 18px;
         height: 18px;
