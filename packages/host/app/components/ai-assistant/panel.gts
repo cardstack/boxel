@@ -302,7 +302,7 @@ export default class AiAssistantPanel extends Component<Signature> {
       .button svg {
         width: 18px;
         height: 18px;
-        stroke-width: 2.5;
+        stroke-width: 2.25;
       }
 
       /* This icon looks slightly bigger so this makes it match */
