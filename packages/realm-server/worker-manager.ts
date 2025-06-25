@@ -228,7 +228,7 @@ async function monitorWorker(workerId: string, worker: ChildProcess) {
   let stuckJobs = (await query([
     `SELECT id, job_id FROM job_reservations WHERE worker_id=`,
     param(workerId),
-    `AND completed_at IS NULL AND locked_until < NOW()`,
+    `AND completed_at IS NULL AND locked_until < NOW() - INTERVAL '30 seconds'`,
   ])) as { id: string; job_id: string }[];
 
   if (stuckJobs.length > 0) {
