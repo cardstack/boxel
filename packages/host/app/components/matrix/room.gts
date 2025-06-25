@@ -223,13 +223,15 @@ export default class Room extends Component<Signature> {
         --boxel-pill-menu-header-padding: 0;
         --boxel-pill-menu-content-padding: var(--boxel-sp) 0;
         --boxel-pill-menu-footer-padding: 0;
-        --boxel-pill-menu-button-padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+        --boxel-pill-menu-button-padding: 2px 6px;
 
         background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
       }
       .chat-input-area__bottom-actions {
         display: flex;
+        align-items: center;
+        height: 40px;
         padding: var(--boxel-sp-sm);
         gap: var(--boxel-sp-sm);
         background-color: var(--boxel-light-100);
@@ -247,13 +249,23 @@ export default class Room extends Component<Signature> {
         margin-left: auto;
         margin-right: auto;
       }
-      .skill-menu:deep(.pill-menu-button),
-      .llm-select:deep(.pill-menu-button) {
-        flex: 1;
+
+      .chat-input-area :deep(.pill-menu-button) {
+        height: 22px;
+        gap: var(--boxel-sp-xxxs);
       }
+
+      .chat-input-area :deep(.pill-menu-button:hover) {
+        border-color: var(--boxel-dark);
+      }
+
       .llm-select :deep(.menu-content) {
         margin-right: calc(-2 * var(--boxel-sp-sm));
         padding-right: var(--boxel-sp-sm);
+      }
+
+      .chat-input-area :deep(.minimized-arrow) {
+        margin-left: 0;
       }
     </style>
   </template>
