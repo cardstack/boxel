@@ -457,9 +457,22 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: ./.github/actions/init
+      - name: Build boxel-icons
+        run: pnpm build
+        working-directory: packages/boxel-icons
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
       - name: Build workspace-sync-cli
         run: pnpm build
         working-directory: packages/workspace-sync-cli
+      - name: Start host to serve assets
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
+          working-directory: packages/host
+          wait-for: 3m
+          wait-on: http-get://localhost:4200
       - name: Start PostgreSQL for tests
         run: pnpm start:pg | tee -a /tmp/test-services.log &
         working-directory: packages/realm-server
