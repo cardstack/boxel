@@ -84,7 +84,7 @@ jobs:
         if: always()
         run: cat /tmp/server.log
       - name: Print synapse logs
-        if: always
+        if: always()
         run: docker logs boxel-synapse -n all
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1

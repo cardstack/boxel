@@ -393,7 +393,7 @@ jobs:
         if: always()
         run: cat /tmp/server.log
       - name: Print synapse logs
-        if: always
+        if: always()
         run: docker logs boxel-synapse -n all
       - name: Prepare artifact name
         id: artifact_name
