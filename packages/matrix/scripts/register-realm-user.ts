@@ -18,6 +18,9 @@ if (!realmUser) {
   console.error(`please specify the realm user to migrate`);
   process.exit(-1);
 }
+
+console.log(`Registering realm user ${realmUser}...`);
+
 (async () => {
   let password = await realmPassword(realmUser, realmSecretSeed);
   return new Promise<string>((resolve, reject) => {
