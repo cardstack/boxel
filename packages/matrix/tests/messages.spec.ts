@@ -35,7 +35,7 @@ test.describe('Room messages', () => {
   let synapse: SynapseInstance;
   let realmServer: IsolatedRealmServer;
   let userCred: Credentials;
-  test.beforeEach(async () => {
+  test.beforeEach(async ({ page }) => {
     await setSkillsRedirect(page);
     test.setTimeout(120_000);
     synapse = await synapseStart();
