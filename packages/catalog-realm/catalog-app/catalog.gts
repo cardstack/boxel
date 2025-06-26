@@ -520,7 +520,7 @@ class Isolated extends Component<typeof Catalog> {
     const tabOption = this.tabFilterOptions.find(
       (tab) => tab.tabId === this.activeTabId,
     );
-    return tabOption ? `All ${tabOption.displayName} Home` : 'Catalog Home';
+    return tabOption ? `All ${tabOption.displayName}` : 'Catalog Home';
   }
 
   get headerColor() {
