@@ -20,7 +20,6 @@ import { tracked } from '@glimmer/tracking';
 import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
 import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
 import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
-import PatchCardInstanceCommand from '@cardstack/boxel-host/commands/patch-card-instance';
 import OpenAiAssistantRoomCommand from '@cardstack/boxel-host/commands/open-ai-assistant-room';
 
 class GradeField extends FieldDef {
@@ -369,14 +368,6 @@ class HomeworkIsolated extends Component<typeof Homework> {
       await sendMessageCommand.execute({
         roomId: this.roomId,
         prompt: 'Please grade this homework assignment',
-        commands: [
-          {
-            command: new PatchCardInstanceCommand(commandContext, {
-              cardType: Homework,
-            }),
-            autoExecute: true,
-          },
-        ],
         requireCommandCall: true,
         attachedCards: [
           this.args.model as CardDef,

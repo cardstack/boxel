@@ -15,6 +15,7 @@ import {
   field,
   contains,
 } from 'https://cardstack.com/base/card-api';
+import { Skill } from 'https://cardstack.com/base/skill';
 
 export class WeatherLocationInput extends CardDef {
   @field location = contains(StringField);
@@ -25,7 +26,7 @@ export class WeatherReport extends CardDef {
   @field conditions = contains(StringField);
 }
 
-class GetWeatherCommand extends Command<
+export class GetWeatherCommand extends Command<
   typeof WeatherLocationInput,
   typeof WeatherReport
 > {
@@ -56,13 +57,29 @@ export class AiCommandExample extends CardDef {
         throw new Error('No command context found');
       }
 
-      let getWeatherCommand = new GetWeatherCommand(commandContext);
+      // let getWeatherCommand = new GetWeatherCommand(commandContext);
 
       let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
         commandContext,
       );
+      let weatherSkill = new Skill({
+        name: 'Weather Skill',
+        description: 'A skill to get weather information',
+        instructions:
+          'Use the command to ask for the weather in a specific location',
+        commands: [
+          {
+            codeRef: {
+              module: import.meta.url,
+              name: 'GetWeatherCommand',
+            },
+            requiresApproval: false,
+          },
+        ],
+      });
       let { roomId } = await createAIAssistantRoomCommand.execute({
         name: 'Weather Assistant',
+        defaultSkills: [weatherSkill],
       });
 
       let sendMessageCommand = new SendAiAssistantMessageCommand(
@@ -72,7 +89,6 @@ export class AiCommandExample extends CardDef {
       await sendMessageCommand.execute({
         roomId,
         prompt: `What is the weather in ${this.args.model.location}?`,
-        commands: [{ command: getWeatherCommand, autoExecute: true }],
       });
     };
 

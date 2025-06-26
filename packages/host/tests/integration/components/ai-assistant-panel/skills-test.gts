@@ -209,6 +209,20 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
               }
             }
         `,
+        'placeholder-command.ts': `
+            import { Command } from '@cardstack/runtime-common';
+
+            export default class PlaceholderCommand extends Command<undefined, undefined> {
+              static displayName = 'PlaceholderCommand';
+              static actionVerb = 'Placeholder';
+              async getInputType() {
+                return undefined;
+              }
+              protected async run(): Promise<undefined> {
+                return undefined;
+              }
+            }
+        `,
         'Skill/example.json': {
           data: {
             attributes: {
@@ -247,7 +261,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
                 {
                   codeRef: {
                     name: 'default',
-                    module: `@cardstack/boxel-host/commands/get-boxel-ui-state`,
+                    module: `${testRealmURL}placeholder-command`,
                   },
                   requiresApproval: true,
                 },
@@ -309,10 +323,10 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await waitUntil(
       () =>
         document
-          .querySelector('[data-test-skill-menu]')
-          ?.textContent?.trim() === 'Skills 1',
+          .querySelector('[data-test-active-skills-count]')
+          ?.textContent?.trim() === '1 Skill',
     );
-    assert.dom('[data-test-skill-menu]').containsText('Skills 1');
+    assert.dom('[data-test-active-skills-count]').containsText('1 Skill');
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     assert.dom('[data-test-skill-menu]').containsText('Skills: 1 of 1 active');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
@@ -358,7 +372,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
 
     await waitFor('[data-test-room-settled]');
-    assert.dom('[data-test-skill-menu]').containsText('Skills 1');
+    assert.dom('[data-test-active-skills-count]').containsText('1 Skill');
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     assert.dom('[data-test-skill-menu]').containsText('Skills: 1 of 1 active');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
@@ -931,10 +945,10 @@ ${REPLACE_MARKER}
     );
     assert.strictEqual(
       initialRoomStateSkillsJson.commandDefinitions.filter((cmd: any) =>
-        cmd.name.includes('get-boxel-ui-state'),
+        cmd.name.includes('placeholder'),
       ).length,
       0,
-      'get-boxel-ui-state is not present',
+      'placeholder is not present',
     );
     // Attach the second skill card
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
@@ -955,10 +969,10 @@ ${REPLACE_MARKER}
     );
     assert.strictEqual(
       finalRoomStateSkillsJson.commandDefinitions.filter((cmd: any) =>
-        cmd.name.includes('get-boxel-ui-state'),
+        cmd.name.includes('placeholder'),
       ).length,
       1,
-      'get-boxel-ui-state is now present',
+      'placeholder is now present',
     );
   });
 });

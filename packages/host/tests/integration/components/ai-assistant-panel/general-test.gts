@@ -58,7 +58,6 @@ import {
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
-import { suspendGlobalErrorHook } from '../../../helpers/uncaught-exceptions';
 
 module('Integration | ai-assistant-panel | general', function (hooks) {
   const realmName = 'Operator Mode Workspace';
@@ -591,49 +590,41 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     await percySnapshot(assert);
   });
 
-  module('suspending global error hook', (hooks) => {
-    let { capturedExceptions } = suspendGlobalErrorHook(hooks);
+  test('it can handle an error during room creation', async function (assert) {
+    setCardInOperatorModeState();
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+          <div class='invisible' data-test-throw-room-error />
+          <style scoped>
+            .invisible {
+              display: none;
+            }
+          </style>
+        </template>
+      },
+    );
 
-    test('it can handle an error during room creation', async function (assert) {
-      setCardInOperatorModeState();
-      await renderComponent(
-        class TestDriver extends GlimmerComponent {
-          <template>
-            <OperatorMode @onClose={{noop}} />
-            <CardPrerender />
-            <div class='invisible' data-test-throw-room-error />
-            <style scoped>
-              .invisible {
-                display: none;
-              }
-            </style>
-          </template>
-        },
-      );
+    await waitFor('[data-test-open-ai-assistant]');
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-new-session]');
+    assert.dom('[data-test-room-error]').exists();
+    assert.dom('[data-test-room]').doesNotExist();
+    assert.dom('[data-test-past-sessions-button]').isDisabled();
+    await percySnapshot(
+      'Integration | ai-assistant-panel | it can handle an error during room creation | error state',
+    );
 
-      await waitFor('[data-test-open-ai-assistant]');
-      await click('[data-test-open-ai-assistant]');
-      await waitFor('[data-test-new-session]');
-      assert.dom('[data-test-room-error]').exists();
-      assert.dom('[data-test-room]').doesNotExist();
-      assert.dom('[data-test-past-sessions-button]').isDisabled();
-      assert.strictEqual(
-        capturedExceptions[0].message,
-        'Intentional error thrown',
-      );
-      await percySnapshot(
-        'Integration | ai-assistant-panel | it can handle an error during room creation | error state',
-      );
-
-      document.querySelector('[data-test-throw-room-error]')?.remove();
-      await click('[data-test-room-error] > button');
-      await waitFor('[data-test-room]');
-      assert.dom('[data-test-room-error]').doesNotExist();
-      assert.dom('[data-test-past-sessions-button]').isEnabled();
-      await percySnapshot(
-        'Integration | ai-assistant-panel | it can handle an error during room creation | new room state',
-      );
-    });
+    document.querySelector('[data-test-throw-room-error]')?.remove();
+    await click('[data-test-room-error] > button');
+    await waitFor('[data-test-room]');
+    assert.dom('[data-test-room-error]').doesNotExist();
+    assert.dom('[data-test-past-sessions-button]').isEnabled();
+    await percySnapshot(
+      'Integration | ai-assistant-panel | it can handle an error during room creation | new room state',
+    );
   });
 
   test('sends read receipts only for bot messages', async function (assert) {

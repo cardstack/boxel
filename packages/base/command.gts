@@ -1,6 +1,5 @@
 import {
   CardDef,
-  Component,
   FieldDef,
   StringField,
   contains,
@@ -185,32 +184,11 @@ export class SendAiAssistantMessageInput extends CardDef {
   @field realmUrl = contains(StringField);
   @field openCardIds = containsMany(StringField);
   @field requireCommandCall = contains(BooleanField);
-  // This is a bit of a "fake" field in that it would not serialize properly.
-  // It works OK for the purposes of transient input to SendAiAssistantMessageCommand.
-  // The typescript type here is intended to be { command: Command<any, any, any>; autoExecute: boolean }[]
-  @field commands = containsMany(JsonField);
 }
 
 export class SendAiAssistantMessageResult extends CardDef {
   @field roomId = contains(StringField);
   @field eventId = contains(StringField);
-}
-
-export class GetBoxelUIStateResult extends CardDef {
-  @field submode = contains(StringField);
-  //TODO expand this to include more of the UI state:
-  // - open cards
-  // - current room ID
-  static embedded = class Embedded extends Component<
-    typeof GetBoxelUIStateResult
-  > {
-    <template>
-      <div>
-        <h2>Boxel UI State</h2>
-        <div>Submode: {{@model.submode}}</div>
-      </div>
-    </template>
-  };
 }
 
 export class OpenAiAssistantRoomInput extends CardDef {
@@ -259,6 +237,15 @@ export class FileForAttachmentCard extends CardDef {
 
 export class CardForAttachmentCard extends CardDef {
   @field cardForAttachment = contains(JsonField);
+}
+
+export class GetEventsFromRoomInput extends CardDef {
+  @field roomId = contains(StringField);
+  @field sinceEventId = contains(StringField);
+}
+
+export class GetEventsFromRoomResult extends CardDef {
+  @field matrixEvents = containsMany(JsonField);
 }
 
 export {

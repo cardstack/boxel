@@ -51,6 +51,11 @@ const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> = <template>
       justify-content: space-between;
       white-space: nowrap;
     }
+
+    .toggle-button:disabled {
+      --boxel-button-color: var(--boxel-button-border-color);
+    }
+
     .toggle-button:hover:not(:disabled) {
       border-color: var(--boxel-dark);
     }

@@ -142,7 +142,7 @@ module('Integration | ask-ai', function (hooks) {
       .dom('[data-test-ai-assistant-panel] [data-test-chat-title]')
       .hasText('New AI Assistant Chat')
       .hasAttribute('title', 'New AI Assistant Chat');
-    assert.dom('[data-test-pill-menu-button]').containsText('Skills 1');
+    assert.dom('[data-test-active-skills-count]').containsText('1 Skill');
     await assertMessages(assert, [
       {
         from: 'testuser',
@@ -176,7 +176,7 @@ module('Integration | ask-ai', function (hooks) {
     assert
       .dom('[data-test-ai-assistant-panel] [data-test-chat-title]')
       .hasText('New AI Assistant Chat');
-    assert.dom('[data-test-pill-menu-button]').containsText('Skills 1');
+    assert.dom('[data-test-active-skills-count]').containsText('1 Skill');
     await assertMessages(assert, [
       {
         from: 'testuser',
@@ -221,7 +221,7 @@ module('Integration | ask-ai', function (hooks) {
     assert
       .dom('[data-test-ai-assistant-panel] [data-test-chat-title]')
       .hasText('New AI Assistant Chat');
-    assert.dom('[data-test-pill-menu-button]').containsText('Skills 3');
+    assert.dom('[data-test-active-skills-count]').containsText('3 Skills');
     await assertMessages(assert, [
       {
         from: 'testuser',
