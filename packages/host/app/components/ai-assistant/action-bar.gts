@@ -90,10 +90,12 @@ export default class AiAssistantActionBar extends Component<Signature> {
         display: flex;
         gap: var(--boxel-sp-sm);
         padding: 10px 13px;
-        padding-bottom: calc(10px + var(--boxel-sp-xs));
-        margin-bottom: calc(-1 * var(--boxel-sp-xs));
-        border-top-right-radius: var(--boxel-border-radius-lg);
-        border-top-left-radius: var(--boxel-border-radius-lg);
+        padding-bottom: calc(
+          var(--chat-input-area-border-radius) + var(--boxel-sp-xs)
+        );
+        margin-bottom: calc(-1 * var(--chat-input-area-border-radius));
+        border-top-right-radius: var(--chat-input-area-border-radius);
+        border-top-left-radius: var(--chat-input-area-border-radius);
         align-items: center;
         border: 1px solid #777;
       }

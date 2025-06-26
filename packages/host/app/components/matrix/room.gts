@@ -214,6 +214,8 @@ export default class Room extends Component<Signature> {
         height: 100%;
         overflow: hidden;
         position: relative;
+
+        --chat-input-area-border-radius: var(--boxel-border-radius-xxl);
       }
       .room-actions {
         padding: var(--boxel-sp-xxs) var(--boxel-sp) var(--boxel-sp);
@@ -224,8 +226,6 @@ export default class Room extends Component<Signature> {
         --boxel-pill-menu-content-padding: var(--boxel-sp) 0;
         --boxel-pill-menu-footer-padding: 0;
         --boxel-pill-menu-button-padding: 2px 6px;
-
-        --chat-input-area-border-radius: var(--boxel-border-radius-xxl);
 
         background-color: var(--boxel-light);
         border-radius: var(--chat-input-area-border-radius);
