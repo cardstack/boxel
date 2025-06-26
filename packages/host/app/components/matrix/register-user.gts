@@ -706,11 +706,6 @@ export default class RegisterUser extends Component<Signature> {
               : {},
         },
       });
-      if (this.state.type === 'waitForEmailValidation') {
-        // Email validation succeeded - refresh the index route which will show the workspace chooser
-
-        this.router.refresh();
-      }
     } catch (e: any) {
       let maybeRegistrationFlow = e.data;
       if (
