@@ -568,7 +568,7 @@ class Isolated extends Component<typeof Catalog> {
             class='navigation-button
               {{if this.hasNoActiveFilters "is-selected"}}'
             {{on 'click' this.clearFiltersAndReset}}
-            data-test-showcase-tab-button
+            data-test-navigation-reset-button={{this.activeTabId}}
           >
             <img
               src='https://boxel-images.boxel.ai/icons/icon_catalog_rounded.png'
