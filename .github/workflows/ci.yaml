@@ -391,6 +391,7 @@ jobs:
           TEST_MODULE: ${{matrix.testModule}}
       - name: Prepare artifact name
         id: artifact_name
+        if: always()
         run: |
           export SAFE_ARTIFACT_NAME=$(echo ${{ matrix.testModule }} |  sed 's/[/]/_/g')
           echo "artifact_name=$SAFE_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
