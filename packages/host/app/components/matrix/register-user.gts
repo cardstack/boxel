@@ -36,6 +36,7 @@ import {
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import { AuthMode } from './auth';
+import RouterService from '@ember/routing/router-service';
 
 const MATRIX_REGISTRATION_TYPES = {
   sendToken: 'm.login.registration_token',
@@ -293,6 +294,7 @@ export default class RegisterUser extends Component<Signature> {
       }
     </style>
   </template>
+  @service private declare router: RouterService;
   @tracked private email = '';
   @tracked private name = '';
   @tracked private username = '';
@@ -704,6 +706,11 @@ export default class RegisterUser extends Component<Signature> {
               : {},
         },
       });
+      if (this.state.type === 'waitForEmailValidation') {
+        // Email validation succeeded - refresh the index route which will show the workspace chooser
+
+        this.router.refresh();
+      }
     } catch (e: any) {
       let maybeRegistrationFlow = e.data;
       if (
