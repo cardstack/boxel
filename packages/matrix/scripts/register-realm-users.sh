@@ -18,9 +18,16 @@ done
 export REALM_SECRET_SEED
 
 ts-node --transpileOnly ./scripts/register-realm-user.ts realm_server
+curl http://localhost:8080/_matrix/client/v3/register/available\?username\=realm_server
 ts-node --transpileOnly ./scripts/register-realm-user.ts node-test_realm-server
+curl http://localhost:8080/_matrix/client/v3/register/available\?username\=node-test_realm-server
 ts-node --transpileOnly ./scripts/register-realm-user.ts base_realm
+curl http://localhost:8080/_matrix/client/v3/register/available\?username\=base_realm
 ts-node --transpileOnly ./scripts/register-realm-user.ts experiments_realm
+curl http://localhost:8080/_matrix/client/v3/register/available\?username\=experiments_realm
 ts-node --transpileOnly ./scripts/register-realm-user.ts catalog_realm
+curl http://localhost:8080/_matrix/client/v3/register/available\?username\=catalog_realm
 ts-node --transpileOnly ./scripts/register-realm-user.ts node-test_realm
+curl http://localhost:8080/_matrix/client/v3/register/available\?username\=node-test_realm
 ts-node --transpileOnly ./scripts/register-realm-user.ts test_realm
+curl http://localhost:8080/_matrix/client/v3/register/available\?username\=test_realm
