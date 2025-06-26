@@ -1,4 +1,4 @@
-import { click, waitFor, findAll, waitUntil } from '@ember/test-helpers';
+import { click, waitFor, find, findAll, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -291,7 +291,8 @@ ${REPLACE_MARKER}
       () =>
         document
           .querySelector('[data-test-ai-assistant-action-bar]')
-          ?.textContent?.includes('Apply Diff'),
+          ?.textContent?.includes('Apply Diff') &&
+        find('[data-test-code-block-index] [data-test-apply-state="applying"]'),
       { timeout: 5000 },
     );
     await waitUntil(() =>
