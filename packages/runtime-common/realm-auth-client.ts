@@ -141,6 +141,9 @@ export class RealmAuthClient {
     if (!userId) {
       throw new Error('userId is undefined');
     }
+
+    console.log(`initiating session request for user ${userId}`);
+
     return this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
       method: 'POST',
       headers: {
@@ -156,6 +159,9 @@ export class RealmAuthClient {
     challenge: string,
     challengeResponse?: string,
   ) {
+    console.log(
+      `responding to challenge for user ${this.matrixClient.getUserId()}`,
+    );
     return this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
       method: 'POST',
       headers: {
