@@ -218,7 +218,8 @@ export default class Room extends Component<Signature> {
         --chat-input-area-border-radius: var(--boxel-border-radius-xxl);
       }
       .room-actions {
-        padding: var(--boxel-sp-xxs) var(--boxel-sp) var(--boxel-sp);
+        padding: var(--boxel-sp-xxs) var(--ai-assistant-panel-padding)
+          var(--ai-assistant-panel-padding);
         box-shadow: var(--boxel-box-shadow);
       }
       .chat-input-area {
