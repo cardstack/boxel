@@ -30,6 +30,8 @@ import {
 import CommandService from '@cardstack/host/services/command-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
+import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
+
 import CodeBlock from '../code-block';
 
 import Message from './text-content';
@@ -62,6 +64,10 @@ export default class FormattedAiBotMessage extends Component<Signature> {
     return this.args
       .htmlParts!.slice(0, htmlPartIndex)
       .filter(isHtmlPreTagGroup).length;
+  };
+
+  private codePatchStatus = (codeData: CodeData) => {
+    return this.commandService.getCodePatchStatus(codeData);
   };
 
   <template>
@@ -115,6 +121,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
             @monacoSDK={{@monacoSDK}}
             @isLastAssistantMessage={{@isLastAssistantMessage}}
             @index={{this.preTagGroupIndex index}}
+            @codePatchStatus={{this.codePatchStatus htmlPart.codeData}}
           />
         {{else}}
           {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
@@ -172,6 +179,7 @@ interface HtmlGroupCodeBlockSignature {
     monacoSDK: MonacoSDK;
     isLastAssistantMessage: boolean;
     index: number;
+    codePatchStatus: CodePatchStatus | 'applying' | 'ready';
     codePatchResult: MessageCodePatchResult | undefined;
   };
 }
@@ -232,7 +240,8 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   private get isAppliedOrIgnoredCodePatch() {
     // Ignored means the user moved on to the next message
     return (
-      this.codePatchStatus === 'applied' || !this.args.isLastAssistantMessage
+      this.args.codePatchStatus === 'applied' ||
+      !this.args.isLastAssistantMessage
     );
   }
 
@@ -243,12 +252,8 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
     this.diffEditorStats = stats;
   };
 
-  private get codePatchStatus() {
-    return this.args.codePatchResult?.status ?? 'ready';
-  }
-
   private get codePatchfinalFileUrlAfterCodePatching() {
-    return this.codePatchStatus === 'applied'
+    return this.args.codePatchStatus === 'applied'
       ? this.args.codePatchResult?.finalFileUrlAfterCodePatching
       : null;
   }
@@ -273,11 +278,11 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               <actions.copyCode
                 @code={{this.extractReplaceCode @codeData.searchReplaceBlock}}
               />
-              {{#if (eq this.codePatchStatus 'applied')}}
+              {{#if (eq @codePatchStatus 'applied')}}
                 {{! This is just to show the ✅ icon to signalize that the code patch has been applied }}
                 <actions.applyCodePatch
                   @codeData={{@codeData}}
-                  @patchCodeStatus={{this.codePatchStatus}}
+                  @patchCodeStatus={{@codePatchStatus}}
                 />
               {{/if}}
             </codeBlock.actions>
@@ -308,7 +313,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               <actions.applyCodePatch
                 @codeData={{@codeData}}
                 @performPatch={{fn @onPatchCode @codeData}}
-                @patchCodeStatus={{this.codePatchStatus}}
+                @patchCodeStatus={{@codePatchStatus}}
                 @originalCode={{this.codeDiffResource.originalCode}}
                 @modifiedCode={{this.codeDiffResource.modifiedCode}}
               />
