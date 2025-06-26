@@ -4,9 +4,9 @@ import type { ComponentLike } from '@glint/template';
 
 import cssVar from '../..//helpers/css-var.ts';
 import cn from '../../helpers/cn.ts';
-import { and } from '../../helpers/truth-helpers.ts';
 import { getContrastColor } from '../../helpers/contrast-color.ts';
 import { MenuItem } from '../../helpers/menu-item.ts';
+import { and } from '../../helpers/truth-helpers.ts';
 import { bool, or } from '../../helpers/truth-helpers.ts';
 import { IconPencil, IconX, ThreeDotsHorizontal } from '../../icons.gts';
 import setCssVar from '../../modifiers/set-css-var.ts';
