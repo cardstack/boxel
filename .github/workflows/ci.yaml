@@ -389,7 +389,7 @@ jobs:
         working-directory: packages/realm-server
         env:
           TEST_MODULE: ${{matrix.testModule}}
-      - name: prepare_artifact_name
+      - name: Prepare artifact name
         id: artifact_name
         run: |
           export SAFE_ARTIFACT_NAME=$(echo ${{ matrix.testModule }} |  sed 's/[/]/_/g')
