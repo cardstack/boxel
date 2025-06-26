@@ -44,8 +44,8 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
   }
 
   //default to rendering 10 skeletons
-  renderSkeletons(length: number = 10) {
-    return Array.from({ length }, (_, i) => i);
+  get renderSkeletons() {
+    return Array.from({ length: 10 }, (_, i) => i);
   }
 
   isHydrated = (cardUrl: string) => {
@@ -65,7 +65,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
       >
         <:loading>
           <ul class='cards {{@selectedView}}-view' ...attributes>
-            {{#each (this.renderSkeletons)}}
+            {{#each this.renderSkeletons}}
               <li class='{{@selectedView}}-view-container'>
                 <CardContainer class='card' @displayBoundaries={{true}}>
                   <ListingFittedSkeleton />
