@@ -223,20 +223,20 @@ test.describe('Skills', () => {
 
     await openRoom(page, room1);
     await isInRoom(page, room1);
-    await expect(page.locator('[data-test-skill-menu]')).toContainText(
-      'Skills 4',
+    await expect(page.locator('[data-test-active-skills-count]')).toContainText(
+      '4 Skills',
     );
 
     await openRoom(page, room2);
     await isInRoom(page, room2);
-    await expect(page.locator('[data-test-skill-menu]')).toContainText(
-      'Skills 2',
+    await expect(page.locator('[data-test-active-skills-count]')).toContainText(
+      '2 Skills',
     );
 
     await openRoom(page, room3);
     await isInRoom(page, room3);
-    await expect(page.locator('[data-test-skill-menu]')).toContainText(
-      'Skills 2',
+    await expect(page.locator('[data-test-active-skills-count]')).toContainText(
+      '2 Skills',
     );
   });
 
@@ -345,8 +345,8 @@ test.describe('Skills', () => {
 
     await reloadAndOpenAiAssistant(page);
     await openRoom(page, room1);
-    await expect(page.locator('[data-test-skill-menu]')).toContainText(
-      'Skills 2',
+    await expect(page.locator('[data-test-active-skills-count]')).toContainText(
+      '2 Skill',
     );
 
     await logout(page);
@@ -363,8 +363,8 @@ test.describe('Skills', () => {
     await logout(page);
     await login(page, 'user1', 'pass', { url: appURL });
     await openRoom(page, room1);
-    await expect(page.locator('[data-test-skill-menu]')).toContainText(
-      'Skills 2',
+    await expect(page.locator('[data-test-active-skills-count]')).toContainText(
+      '2 Skills',
     );
   });
 
