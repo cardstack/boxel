@@ -701,6 +701,8 @@ export class Realm {
         `for ${this.#matrixClient.getUserId()} ${this.#realmSecretSeed}`,
       );
 
+      console.log('About to try again');
+
       try {
         return await matrixBackendAuthentication.createSession(request);
       } catch (e) {
