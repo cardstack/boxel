@@ -240,7 +240,7 @@ class CatalogListView extends GlimmerComponent<CatalogListViewArgs> {
   }
 
   <template>
-    <CardsDisplaySection>
+    <CardsDisplaySection ...attributes>
       <:intro>
         <header class='catalog-list-header'>
           <ViewSelector
@@ -601,12 +601,14 @@ class Isolated extends Component<typeof Catalog> {
                     @newListings={{@model.new}}
                     @featuredListings={{@model.featured}}
                     @context={{@context}}
+                    data-test-showcase-view
                   />
                 {{else}}
                   <CatalogListView
                     @query={{this.query}}
                     @realms={{this.realmHrefs}}
                     @context={{@context}}
+                    data-test-catalog-list-view
                   />
                 {{/if}}
               </div>
