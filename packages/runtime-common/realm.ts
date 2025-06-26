@@ -708,8 +708,10 @@ export class Realm {
       console.log('About to try again');
 
       try {
+        console.log('pre');
         response =
           await matrixBackendAuthentication.createSession(clonedRequest);
+        console.log('post');
         return response;
       } catch (e) {
         console.log('Second error in _session');
