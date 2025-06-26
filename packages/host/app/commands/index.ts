@@ -6,7 +6,7 @@ import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-bl
 import * as CopyCardCommandModule from './copy-card';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
-import * as GetBoxelUiStateModule from './get-boxel-ui-state';
+import * as GetEventsFromRoomCommandModule from './get-events-from-room';
 import * as ListingInitCommandModule from './listing-action-init';
 import * as ListingInstallCommandModule from './listing-install';
 import * as ListingRemixCommandModule from './listing-remix';
@@ -26,6 +26,7 @@ import * as TransformCardsCommandModule from './transform-cards';
 import * as UpdateCodePathWithSelectionCommandModule from './update-code-path-with-selection';
 import * as UpdatePlaygroundSelectionCommandModule from './update-playground-selection';
 import * as UpdateSkillActivationCommandModule from './update-skill-activation';
+import * as CommandUtilsModule from './utils';
 import * as WriteTextFileCommandModule from './write-text-file';
 
 export function shimHostCommands(virtualNetwork: VirtualNetwork) {
@@ -54,8 +55,8 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     CreateAIAssistantRoomCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-boxel-ui-state',
-    GetBoxelUiStateModule,
+    '@cardstack/boxel-host/commands/get-events-from-room',
+    GetEventsFromRoomCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/listing-action-init',
@@ -132,6 +133,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/update-skill-activation',
     UpdateSkillActivationCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/utils',
+    CommandUtilsModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/write-text-file',

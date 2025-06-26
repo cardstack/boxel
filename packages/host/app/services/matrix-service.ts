@@ -35,12 +35,6 @@ import {
   Deferred,
 } from '@cardstack/runtime-common';
 
-import {
-  basicMappings,
-  generateJsonSchemaForCardType,
-  getPatchTool,
-} from '@cardstack/runtime-common/helpers/ai';
-
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
@@ -96,6 +90,7 @@ import type {
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
+import { addPatchTools } from '../commands/utils';
 import { isSkillCard } from '../lib/file-def-manager';
 import { importResource } from '../resources/import';
 
@@ -916,24 +911,21 @@ export default class MatrixService extends Service {
   ): Promise<void> {
     let tools: Tool[] = [];
     let attachedOpenCards: CardDef[] = [];
-    let mappings = await basicMappings(this.loaderService.loader);
     // Open cards are attached automatically
     // If they are not attached, the user is not allowing us to
     // modify them
-    attachedOpenCards = attachedCards.filter((c) =>
-      (context?.openCardIds ?? []).includes(c.id),
-    );
+    let openCardIds = context?.openCardIds ?? [];
+    let patchableCards = attachedCards
+      .filter((c) => openCardIds.includes(c.id))
+      .filter((c) => this.realm.canWrite(c.id));
     // Generate tool calls for patching currently open cards permitted for modification
-    for (let attachedOpenCard of attachedOpenCards) {
-      let patchSpec = generateJsonSchemaForCardType(
-        attachedOpenCard.constructor as typeof CardDef,
+    tools = tools.concat(
+      await addPatchTools(
+        this.commandService.commandContext,
+        patchableCards,
         this.cardAPI,
-        mappings,
-      );
-      if (this.realm.canWrite(attachedOpenCard.id)) {
-        tools.push(getPatchTool(attachedOpenCard.id, patchSpec));
-      }
-    }
+      ),
+    );
 
     await this.updateSkillsAndCommandsIfNeeded(roomId);
     let contentData = await this.withContextAndAttachments(

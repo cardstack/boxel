@@ -66,12 +66,6 @@ export abstract class Command<
 
   abstract getInputType(): Promise<CardInputType>;
 
-  invocations: CommandInvocation<CardInputType, CardResultType>[] = [];
-
-  nextCompletionDeferred: Deferred<CardInstance<CardResultType>> = new Deferred<
-    CardInstance<CardResultType>
-  >();
-
   name: string = this.constructor.name;
   description = '';
 
@@ -88,10 +82,6 @@ export abstract class Command<
       ? Partial<FieldsOf<CardInstance<CardInputType>>>
       : never,
   ): Promise<CardInstance<CardResultType>> {
-    // internal bookkeeping
-    // todo: support for this.runTask being defined
-    // runTask would be an ember task, run would just be a normal function
-
     let inputCard: CardInstance<CardInputType>;
     if (input === undefined) {
       inputCard = undefined as CardInstance<CardInputType>;
@@ -105,37 +95,12 @@ export abstract class Command<
         inputCard = new InputType(input) as CardInstance<CardInputType>;
       }
     }
-    let invocation = new CommandInvocation<CardInputType, CardResultType>(
-      inputCard,
-    );
-
-    this.invocations.push(invocation);
-    this.nextCompletionDeferred.fulfill(invocation.promise);
-
-    try {
-      let result = await this.run(inputCard);
-      invocation.fulfill(result);
-      return result;
-    } catch (error) {
-      invocation.reject(error);
-      throw error;
-    } finally {
-      this.nextCompletionDeferred = new Deferred<
-        CardInstance<CardResultType>
-      >();
-      this.nextCompletionDeferred.promise.catch(() => {
-        // ensure this is not considered an unhandled rejection by QUnit
-      });
-    }
+    return this.run(inputCard);
   }
 
   protected abstract run(
     input: CardInstance<CardInputType>,
   ): Promise<CardInstance<CardResultType>>;
-
-  waitForNextCompletion(): Promise<CardInstance<CardResultType>> {
-    return this.nextCompletionDeferred.promise;
-  }
 
   async getInputJsonSchema(
     cardApi: typeof CardAPI,
