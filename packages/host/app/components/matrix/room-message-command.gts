@@ -14,7 +14,6 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import {
   Alert,
-  Button,
   CardContainer,
   CardHeader,
 } from '@cardstack/boxel-ui/components';
@@ -38,9 +37,11 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import ApplyButton from '../ai-assistant/apply-button';
-import { type ApplyButtonState } from '../ai-assistant/apply-button';
+import ApplyButton, {
+  type ApplyButtonState,
+} from '../ai-assistant/apply-button';
 import CodeBlock from '../ai-assistant/code-block';
+import ViewCodeButton from '../ai-assistant/code-block/view-code-button';
 import CardRenderer from '../card-renderer';
 
 import PreparingRoomMessageCommand from './preparing-room-message-command';
@@ -185,15 +186,12 @@ export default class RoomMessageCommand extends Component<Signature> {
             (eq @messageCommand.status 'applying')
           }}
         >
-          <Button
+          <ViewCodeButton
             class='view-code-button'
-            {{on 'click' this.toggleViewCode}}
-            @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
-            @size='extra-small'
+            @toggleViewCode={{this.toggleViewCode}}
+            @isDisplayingCode={{this.isDisplayingCode}}
             data-test-view-code-button
-          >
-            {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
-          </Button>
+          />
           <ApplyButton
             @state={{this.applyButtonState}}
             {{on 'click' @runCommand}}
@@ -202,6 +200,7 @@ export default class RoomMessageCommand extends Component<Signature> {
         </div>
         {{#if this.isDisplayingCode}}
           <CodeBlock
+            class='command-code-block'
             {{this.scrollBottomIntoView}}
             @monacoSDK={{@monacoSDK}}
             @codeData={{hash code=this.previewCommandCode language='json'}}
@@ -270,37 +269,10 @@ export default class RoomMessageCommand extends Component<Signature> {
         display: flex;
         justify-content: flex-end;
         gap: var(--boxel-sp-xs);
-      }
-      .view-code-button {
-        --boxel-button-font: 600 var(--boxel-font-xs);
-        --boxel-button-min-height: 1.5rem;
-        --boxel-button-padding: 0 var(--boxel-sp-xs);
-        min-width: initial;
-        width: auto;
-        max-height: 1.5rem;
-      }
-      .view-code-button:hover:not(:disabled) {
-        filter: brightness(1.1);
+        padding: var(--boxel-sp-4xs);
       }
       .command-result-card-preview {
         margin-top: var(--boxel-sp);
-      }
-      .code-copy-button {
-        --boxel-button-font: 600 var(--boxel-font-xs);
-        --boxel-button-padding: 0 var(--boxel-sp-xs);
-        --icon-color: var(--boxel-highlight);
-        --icon-stroke-width: 2px;
-        margin-left: var(--spacing);
-        margin-bottom: var(--spacing);
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: var(--spacing);
-      }
-      .code-copy-button > .copy-text {
-        color: transparent;
-      }
-      .code-copy-button:hover:not(:disabled) > .copy-text {
-        color: var(--boxel-highlight);
       }
       .header {
         --boxel-label-color: var(--boxel-450);
@@ -317,6 +289,9 @@ export default class RoomMessageCommand extends Component<Signature> {
       }
       .options-menu :deep(.check-icon) {
         display: none;
+      }
+      .command-code-block :deep(.code-block-editor) {
+        max-height: unset;
       }
     </style>
   </template>
