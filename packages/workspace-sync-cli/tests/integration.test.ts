@@ -6,16 +6,11 @@ import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { realmPassword } from '../../matrix/helpers/realm-credentials.js';
-import {
-  startTestRealmServer,
-  waitForServer,
-  TestRealmServer,
-} from './start-test-realm.js';
+import { startTestRealmServer, TestRealmServer } from './start-test-realm.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const TEST_TIMEOUT = 60000; // 60 seconds
 const REALM_PORT = 4205; // Using isolated realm server port
 const MATRIX_URL = 'http://localhost:8008';
 const TEST_USERNAME = 'test_realm'; // Using test_realm username
