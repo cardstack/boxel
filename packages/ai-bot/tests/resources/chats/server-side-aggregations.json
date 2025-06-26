@@ -300,43 +300,17 @@
     "room_id": "!kPfqCQancBpffSwcNk:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "",
+      "body": "I see a card with the ID \"http://localhost:4201/admin/personal/BusinessCard/business_card\". It appears to be a business card for Jane Smith, a Senior Software Architect at Innovative Solutions Inc.",
       "msgtype": "app.boxel.message",
       "format": "org.matrix.custom.html",
-      "app.boxel.reasoning": "Thinking...",
+      "app.boxel.reasoning": "",
       "app.boxel.commandRequests": [],
-      "isStreamingFinished": false
+      "isStreamingFinished": true
     },
     "origin_server_ts": 1747730574976,
     "unsigned": {
       "membership": "join",
-      "age": 72908,
-      "m.relations": {
-        "m.replace": {
-          "type": "m.room.message",
-          "room_id": "!kPfqCQancBpffSwcNk:localhost",
-          "sender": "@aibot:localhost",
-          "content": {
-            "body": "I see a card with the ID \"http://localhost:4201/admin/personal/BusinessCard/business_card\". It appears to be a business card for Jane Smith, a Senior Software Architect at Innovative Solutions Inc.",
-            "msgtype": "app.boxel.message",
-            "format": "org.matrix.custom.html",
-            "app.boxel.reasoning": "",
-            "app.boxel.commandRequests": [],
-            "isStreamingFinished": true,
-            "m.relates_to": {
-              "rel_type": "m.replace",
-              "event_id": "$x7diOHIm13DugikxbJVb59WwyAE_IAqbnRGs3dIv5Ys"
-            }
-          },
-          "origin_server_ts": 1747730576426,
-          "unsigned": {
-            "age": 71458
-          },
-          "event_id": "$liEbthPDIFnSxCuIv78KPdMJoRiFP0tp2S_lcaajm3E",
-          "user_id": "@aibot:localhost",
-          "age": 71458
-        }
-      }
+      "age": 72908
     },
     "event_id": "$x7diOHIm13DugikxbJVb59WwyAE_IAqbnRGs3dIv5Ys",
     "user_id": "@aibot:localhost",
@@ -370,46 +344,20 @@
       "body": "",
       "msgtype": "app.boxel.message",
       "format": "org.matrix.custom.html",
-      "app.boxel.reasoning": "Thinking...",
-      "app.boxel.commandRequests": [],
-      "isStreamingFinished": false
+      "app.boxel.reasoning": "",
+      "app.boxel.commandRequests": [
+        {
+          "id": "call_jEowBofOsQLw0DfVGLCs7q7d",
+          "name": "patchCardInstance",
+          "arguments": "{\"description\":\"Change the name to Stephanie\",\"attributes\":{\"cardId\":\"http://localhost:4201/admin/personal/BusinessCard/business_card\",\"patch\":{\"attributes\":{\"name\":\"Stephanie\"}}}}"
+        }
+      ],
+      "isStreamingFinished": true
     },
     "origin_server_ts": 1747730581708,
     "unsigned": {
       "membership": "join",
-      "age": 66176,
-      "m.relations": {
-        "m.replace": {
-          "type": "m.room.message",
-          "room_id": "!kPfqCQancBpffSwcNk:localhost",
-          "sender": "@aibot:localhost",
-          "content": {
-            "body": "",
-            "msgtype": "app.boxel.message",
-            "format": "org.matrix.custom.html",
-            "app.boxel.reasoning": "",
-            "app.boxel.commandRequests": [
-              {
-                "id": "call_jEowBofOsQLw0DfVGLCs7q7d",
-                "name": "patchCardInstance",
-                "arguments": "{\"description\":\"Change the name to Stephanie\",\"attributes\":{\"cardId\":\"http://localhost:4201/admin/personal/BusinessCard/business_card\",\"patch\":{\"attributes\":{\"name\":\"Stephanie\"}}}}"
-              }
-            ],
-            "isStreamingFinished": true,
-            "m.relates_to": {
-              "rel_type": "m.replace",
-              "event_id": "$JvAlylrXjQAhFnESGUP90KMBHMNpm-i9vJ-pRyShhfs"
-            }
-          },
-          "origin_server_ts": 1747730583562,
-          "unsigned": {
-            "age": 64322
-          },
-          "event_id": "$ODFzWdUmTwWoppszqtnnYfgv-yA6jnSkAk0XUrr0OkE",
-          "user_id": "@aibot:localhost",
-          "age": 64322
-        }
-      }
+      "age": 66176
     },
     "event_id": "$JvAlylrXjQAhFnESGUP90KMBHMNpm-i9vJ-pRyShhfs",
     "user_id": "@aibot:localhost",
@@ -465,46 +413,20 @@
       "body": "",
       "msgtype": "app.boxel.message",
       "format": "org.matrix.custom.html",
-      "app.boxel.reasoning": "Thinking...",
-      "app.boxel.commandRequests": [],
-      "isStreamingFinished": false
+      "app.boxel.reasoning": "",
+      "app.boxel.commandRequests": [
+        {
+          "id": "call_wk06TY9njoAOlIIDGACh478c",
+          "name": "patchCardInstance",
+          "arguments": "{\"description\":\"Add sample data for the address\",\"attributes\":{\"cardId\":\"http://localhost:4201/admin/personal/BusinessCard/business_card\",\"patch\":{\"attributes\":{\"address\":{\"addressLine1\":\"456 Example Street\",\"addressLine2\":\"Apt 789\",\"city\":\"Los Angeles\",\"state\":\"CA\",\"postalCode\":\"90001\",\"country\":{\"name\":\"United States\",\"code\":\"US\"}}}}}}"
+        }
+      ],
+      "isStreamingFinished": true
     },
     "origin_server_ts": 1747730606245,
     "unsigned": {
       "membership": "join",
-      "age": 41639,
-      "m.relations": {
-        "m.replace": {
-          "type": "m.room.message",
-          "room_id": "!kPfqCQancBpffSwcNk:localhost",
-          "sender": "@aibot:localhost",
-          "content": {
-            "body": "",
-            "msgtype": "app.boxel.message",
-            "format": "org.matrix.custom.html",
-            "app.boxel.reasoning": "",
-            "app.boxel.commandRequests": [
-              {
-                "id": "call_wk06TY9njoAOlIIDGACh478c",
-                "name": "patchCardInstance",
-                "arguments": "{\"description\":\"Add sample data for the address\",\"attributes\":{\"cardId\":\"http://localhost:4201/admin/personal/BusinessCard/business_card\",\"patch\":{\"attributes\":{\"address\":{\"addressLine1\":\"456 Example Street\",\"addressLine2\":\"Apt 789\",\"city\":\"Los Angeles\",\"state\":\"CA\",\"postalCode\":\"90001\",\"country\":{\"name\":\"United States\",\"code\":\"US\"}}}}}}"
-              }
-            ],
-            "isStreamingFinished": true,
-            "m.relates_to": {
-              "rel_type": "m.replace",
-              "event_id": "$lOf5XJv-ndpwIsv01G7OKq1J_odLcMG4FlF2dCy56HI"
-            }
-          },
-          "origin_server_ts": 1747730609749,
-          "unsigned": {
-            "age": 38135
-          },
-          "event_id": "$_FHf9AvjyyYSI-hkRPbLGX4BlRFMsOyDxPQri4M_j7E",
-          "user_id": "@aibot:localhost",
-          "age": 38135
-        }
-      }
+      "age": 41639
     },
     "event_id": "$lOf5XJv-ndpwIsv01G7OKq1J_odLcMG4FlF2dCy56HI",
     "user_id": "@aibot:localhost",

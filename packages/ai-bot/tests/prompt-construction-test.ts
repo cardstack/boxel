@@ -151,7 +151,6 @@ module('buildPromptForModel', (hooks) => {
     assert.equal(result[2].role, 'user');
     assert.equal(result[2].content, 'Hey');
 
-    console.log(result[1].content);
     assert.equal(
       result[1].content,
       `The user is currently viewing the following user interface:
@@ -732,7 +731,6 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
 
-    console.log(prompt);
     let userMessages = prompt.filter((message) => message.role === 'user');
     assert.ok(
       userMessages[0]?.content?.includes(
