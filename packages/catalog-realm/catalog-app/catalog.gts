@@ -690,8 +690,8 @@ class Isolated extends Component<typeof Catalog> {
         width: 100%;
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         border: none;
-        background: var(--boxel-200);
-        box-shadow: 0 0 0 1px var(--boxel-light-500);
+        background: var(--boxel-light);
+
         color: var(--boxel-dark);
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
