@@ -17,8 +17,6 @@ import {
   CodeRef,
   isResolvedCodeRef,
   isCardInstance,
-  type ResolvedCodeRef,
-  internalKeyFor,
   isLocalId,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
@@ -347,15 +345,11 @@ export default class OperatorModeStateService extends Service {
       .map((stack) => stack[stack.length - 1]);
   }
 
-  getOpenCardIds(selectedCardRef?: ResolvedCodeRef): string[] {
+  getOpenCardIds(): string[] {
     if (this._state.submode === Submodes.Code) {
       let openCardsInCodeMode = [];
-      // selectedCardRef is only needed for determining open playground card id in code submode
-      if (selectedCardRef) {
-        let moduleId = internalKeyFor(selectedCardRef, undefined);
-        openCardsInCodeMode.push(
-          this.playgroundPanelService.getSelection(moduleId)?.cardId,
-        );
+      if (this.playgroundPanelSelection) {
+        openCardsInCodeMode.push(this.playgroundPanelSelection.cardId);
       }
       // Alternatively we may simply be looking at a card in code mode
       if (this._state.codePath?.href.endsWith('.json')) {
@@ -374,8 +368,8 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
-  getOpenCards = restartableTask(async (selectedCardRef?: ResolvedCodeRef) => {
-    let cardIds = this.getOpenCardIds(selectedCardRef);
+  getOpenCards = restartableTask(async () => {
+    let cardIds = this.getOpenCardIds();
     if (!cardIds) {
       return;
     }
