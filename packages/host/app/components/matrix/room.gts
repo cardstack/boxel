@@ -214,24 +214,38 @@ export default class Room extends Component<Signature> {
         height: 100%;
         overflow: hidden;
         position: relative;
+
+        --chat-input-area-border-radius: var(--boxel-border-radius-xxl);
       }
       .room-actions {
-        padding: var(--boxel-sp-xxs) var(--boxel-sp) var(--boxel-sp);
+        padding: var(--boxel-sp-xxs) var(--ai-assistant-panel-padding)
+          var(--ai-assistant-panel-padding);
         box-shadow: var(--boxel-box-shadow);
       }
       .chat-input-area {
+        --boxel-pill-menu-header-padding: 0;
+        --boxel-pill-menu-content-padding: var(--boxel-sp) 0;
+        --boxel-pill-menu-footer-padding: 0;
+        --boxel-pill-menu-button-padding: 2px 6px;
+
         background-color: var(--boxel-light);
-        border-radius: var(--boxel-border-radius);
+        border-radius: var(--chat-input-area-border-radius);
       }
       .chat-input-area__bottom-actions {
         display: flex;
+        align-items: center;
         padding: var(--boxel-sp-sm);
         gap: var(--boxel-sp-sm);
         background-color: var(--boxel-light-100);
         border-top: 1px solid var(--boxel-200);
-        border-bottom-left-radius: var(--boxel-border-radius);
-        border-bottom-right-radius: var(--boxel-border-radius);
+        border-bottom-left-radius: var(--chat-input-area-border-radius);
+        border-bottom-right-radius: var(--chat-input-area-border-radius);
       }
+
+      .chat-input-area__bottom-actions:not(:has(.menu-content)) {
+        height: 40px;
+      }
+
       :deep(.ai-assistant-conversation > *:first-child) {
         margin-top: auto;
       }
@@ -242,13 +256,23 @@ export default class Room extends Component<Signature> {
         margin-left: auto;
         margin-right: auto;
       }
-      .skill-menu:deep(.pill-menu-button),
-      .llm-select:deep(.pill-menu-button) {
-        flex: 1;
+
+      .chat-input-area :deep(.pill-menu-button) {
+        height: 22px;
+        gap: var(--boxel-sp-xxxs);
       }
+
+      .chat-input-area :deep(.pill-menu-button:hover) {
+        border-color: var(--boxel-dark);
+      }
+
       .llm-select :deep(.menu-content) {
         margin-right: calc(-2 * var(--boxel-sp-sm));
         padding-right: var(--boxel-sp-sm);
+      }
+
+      .chat-input-area :deep(.minimized-arrow) {
+        margin-left: 0;
       }
     </style>
   </template>
