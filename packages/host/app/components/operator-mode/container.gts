@@ -11,9 +11,9 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import { provide } from 'ember-provide-consume-context';
 
-import { Modal, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { Modal } from '@cardstack/boxel-ui/components';
 
-import { or, not, and } from '@cardstack/boxel-ui/helpers';
+import { or, not } from '@cardstack/boxel-ui/helpers';
 
 import {
   GetCardContextName,
@@ -22,7 +22,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import Auth from '@cardstack/host/components/matrix/auth';
-import PaymentSetup from '@cardstack/host/components/matrix/payment-setup';
+
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
@@ -43,10 +43,6 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import type RealmServerService from '../../services/realm-server';
 
 const waiter = buildWaiter('operator-mode-container:saveCard-waiter');
-
-import config from '@cardstack/host/config/environment';
-import ChooseSubscriptionPlanModal from './choose-subscription-plan-modal';
-import { tracked } from '@glimmer/tracking';
 
 interface Signature {
   Args: {
@@ -114,34 +110,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.submode === Submodes.Code;
   }
 
-  private get isUserInfoLoading() {
-    return false;
-    return this.billingService.fetchingSubscriptionData;
-  }
-
-  private get isUserSubscribed() {
-    if (isTesting()) {
-      return true;
-    }
-    return (
-      !!this.billingService.subscriptionData?.stripeCustomerId &&
-      !!this.billingService.subscriptionData?.plan
-    );
-  }
-
-  private get needsToSubscribeInStripe() {
-    if (isTesting()) {
-      return false;
-    }
-    let isStripeSignupMandatory = config.featureFlags.STRIPE_SIGNUP_MANDATORY;
-
-    if (isStripeSignupMandatory) {
-      return !this.isUserSubscribed;
-    }
-
-    return false;
-  }
-
   <template>
     <Modal
       class='operator-mode'
@@ -160,15 +128,8 @@ export default class OperatorModeContainer extends Component<Signature> {
           this.matrixService.isInitializingNewUser
         )
       }}
-        {{log '0'}}
         <Auth />
-      {{else if this.needsToSubscribeInStripe}}
-        {{log '2'}}
-        {{!-- <PaymentSetup
-          @flow={{if this.matrixService.isNewUser 'register' 'logged-in'}}
-        /> --}}
       {{else if this.isCodeMode}}
-        {{log '3'}}
         <CodeSubmode @saveSourceOnClose={{perform this.saveSource}} />
       {{else}}
         <InteractSubmode />

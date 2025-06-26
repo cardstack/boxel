@@ -1,9 +1,12 @@
+import { service } from '@ember/service';
+
 import Component from '@glimmer/component';
 
-import { service } from '@ember/service';
-import ModalContainer from '../modal-container';
-import BillingService from '@cardstack/host/services/billing-service';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
+
+import BillingService from '@cardstack/host/services/billing-service';
+
+import ModalContainer from '../modal-container';
 
 interface Signature {
   Element: HTMLButtonElement;

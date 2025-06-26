@@ -139,25 +139,15 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
             <span class='label'>Membership Tier</span>
             {{subscriptionData.plan}}
           </div>
-          {{#if subscriptionData.isFreePlan}}
-            <BoxelButton
-              @kind='primary-dark'
-              @size='small'
-              @disabled={{this.billingService.fetchingStripePaymentLinks}}
-              {{on 'click' @toggleSubscriptionPlans}}
-              data-test-upgrade-plan-button
-            >Upgrade Plan</BoxelButton>
-          {{else}}
-            <BoxelButton
-              @as='anchor'
-              @kind='secondary-light'
-              @size='small'
-              @disabled={{this.billingService.fetchingStripePaymentLinks}}
-              @href={{this.billingService.customerPortalLink}}
-              target='_blank'
-              data-test-upgrade-plan-button
-            >Upgrade Plan</BoxelButton>
-          {{/if}}
+
+          <BoxelButton
+            @kind='primary-dark'
+            @size='small'
+            @disabled={{this.billingService.fetchingStripePaymentLinks}}
+            {{on 'click' @toggleSubscriptionPlans}}
+            data-test-upgrade-plan-button
+          >Upgrade Plan</BoxelButton>
+
           <div class='info-group'>
             <span class='label'>Monthly Credit</span>
             {{subscriptionData.monthlyCredit}}

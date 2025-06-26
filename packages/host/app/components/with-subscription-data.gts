@@ -64,7 +64,6 @@ interface WithSubscriptionDataSignature {
         additionalCredit: ComponentLike;
         isOutOfCredit: boolean;
         isLoading: boolean;
-        isFreePlan: boolean;
       },
     ];
   };
@@ -130,10 +129,6 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
     await this.billingService.fetchSubscriptionData();
   });
 
-  private isFreePlan() {
-    return this.plan == 'free';
-  }
-
   <template>
     {{yield
       (hash
@@ -163,7 +158,6 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
         )
         isOutOfCredit=this.isOutOfCredit
         isLoading=this.isLoading
-        isFreePlan=this.isFreePlan
       )
     }}
   </template>

@@ -12,10 +12,10 @@ import {
   encodeWebSafeBase64,
 } from '@cardstack/runtime-common';
 
+import MatrixService from './matrix-service';
 import NetworkService from './network';
 import RealmServerService from './realm-server';
 import ResetService from './reset';
-import MatrixService from './matrix-service';
 
 interface SubscriptionData {
   plan: string | null;

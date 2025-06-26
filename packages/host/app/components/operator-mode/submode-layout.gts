@@ -46,6 +46,8 @@ import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 
 import AskAiContainer from './ask-ai-container';
 
+import ChooseSubscriptionPlanModal from './choose-subscription-plan-modal';
+
 import NewFileButton, { type NewFileOptions } from './new-file-button';
 import WorkspaceChooser from './workspace-chooser';
 
@@ -54,7 +56,6 @@ import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type StoreService from '../../services/store';
-import ChooseSubscriptionPlanModal from './choose-subscription-plan-modal';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -263,10 +264,6 @@ export default class SubmodeLayout extends Component<Signature> {
   });
 
   @tracked private isChooseSubscriptionPlanModalOpen = false;
-
-  private onChooseSubscriptionPlanModalClose = () => {
-    this.isChooseSubscriptionPlanModalOpen = false;
-  };
 
   <template>
     <div
