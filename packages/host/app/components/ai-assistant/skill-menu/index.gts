@@ -23,7 +23,7 @@ interface Signature {
     skills: RoomSkill[];
     onExpand?: () => void;
     onCollapse?: () => void;
-    onChooseCard?: (cardId: string) => void;
+    onChooseCard?: (cardId: string) => Promise<unknown>;
     onUpdateSkillIsActive?: (isActive: boolean, skillCardId: string) => void;
   };
 }
@@ -64,11 +64,16 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         <Button
           class='attach-button'
           @kind='primary'
-          {{on 'click' this.attachCard}}
-          @disabled={{this.doAttachCard.isRunning}}
+          {{on 'click' this.attachSkillCard}}
+          @disabled={{this.doAttachSkillCard.isRunning}}
+          @loading={{this.isAttachingSkill}}
           data-test-pill-menu-add-button
         >
-          Choose a Skill to add
+          {{#if this.isAttachingSkill}}
+            Adding Skill
+          {{else}}
+            Choose a Skill to add
+          {{/if}}
         </Button>
       </:footer>
     </PillMenu>
@@ -127,6 +132,10 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         background: none;
         box-shadow: none;
       }
+      .attach-button:disabled {
+        --boxel-button-text-color: var(--boxel-300);
+        --boxel-button-border: 1px solid var(--boxel-300);
+      }
       .attach-button > :deep(svg > path) {
         stroke: none;
       }
@@ -134,6 +143,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
   </template>
 
   @tracked private isExpanded = false;
+  @tracked private isAttachingSkill = false;
 
   private urlForRealmLookup(skill: RoomSkill) {
     return skill.fileDef.sourceUrl;
@@ -161,11 +171,11 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
   }
 
   @action
-  private attachCard() {
-    this.doAttachCard.perform();
+  private attachSkillCard() {
+    this.doAttachSkillCard.perform();
   }
 
-  private doAttachCard = restartableTask(async () => {
+  private doAttachSkillCard = restartableTask(async () => {
     let selectedCardIds =
       this.args.skills?.map((skill: RoomSkill) => ({
         not: { eq: { id: skill.cardId } },
@@ -178,7 +188,12 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     };
     let cardId = await chooseCard(query);
     if (cardId) {
-      this.args.onChooseCard?.(cardId);
+      try {
+        this.isAttachingSkill = true;
+        await this.args.onChooseCard?.(cardId);
+      } finally {
+        this.isAttachingSkill = false;
+      }
     }
   });
 

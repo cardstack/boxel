@@ -205,10 +205,10 @@ export default class RoomMessageCommand extends Component<Signature> {
             @codeData={{hash code=this.previewCommandCode language='json'}}
             as |codeBlock|
           >
+            <codeBlock.editor />
             <codeBlock.actions as |actions|>
               <actions.copyCode />
             </codeBlock.actions>
-            <codeBlock.editor />
           </CodeBlock>
         {{/if}}
         {{#if this.failedCommandState}}
@@ -365,7 +365,7 @@ export default class RoomMessageCommand extends Component<Signature> {
       .failed-command-text {
         color: var(--boxel-light);
       }
-      :deep(.code-block-actions) {
+      :deep(.code-block-editor) {
         margin-top: var(--boxel-sp);
       }
     </style>
