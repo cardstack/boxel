@@ -59,10 +59,11 @@ async function install(
     modules: [],
     instances: [],
   };
-  for (const { sourceCodeRef, targetCodeRef } of plan.modulesCopy) {
+  let modulesToInstall = plan.modulesToInstall();
+  for (const { sourceModule, targetModule } of modulesToInstall) {
     let { url } = await new CopySourceCommand(commandContext).execute({
-      fromRealmUrl: sourceCodeRef.module,
-      toRealmUrl: targetCodeRef.module,
+      fromRealmUrl: sourceModule,
+      toRealmUrl: targetModule,
     });
     r.modules.push(url);
   }

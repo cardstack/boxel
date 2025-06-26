@@ -25,10 +25,13 @@ export interface CopyInstanceMeta {
   localDir: string;
   targetCodeRef?: ResolvedCodeRef | undefined;
 }
-
 export interface InstallPlan {
   modulesCopy: CopyMeta[];
   instancesCopy: CopyInstanceMeta[];
+}
+export interface CopyModuleMeta {
+  sourceModule: string;
+  targetModule: string;
 }
 
 export function generateInstallFolderName(
@@ -189,6 +192,10 @@ export class PlanBuilder {
     this.log.debug(JSON.stringify(finalPlan, null, 2));
     return finalPlan;
   }
+
+  modulesToInstall(): CopyModuleMeta[] {
+    return modulesToInstall(this.build());
+  }
 }
 
 export function planModuleInstall(
@@ -273,4 +280,20 @@ export function mergePlans(...plans: InstallPlan[]): InstallPlan {
       plans.flatMap((p) => p.instancesCopy),
     ),
   };
+}
+
+export function modulesToInstall(plan: InstallPlan): CopyModuleMeta[] {
+  // Deduplicate based on source and target module paths
+  const uniqueModules = plan.modulesCopy.reduce((acc, copyMeta) => {
+    const key = `${copyMeta.sourceCodeRef.module}-${copyMeta.targetCodeRef.module}`;
+    if (!acc.has(key)) {
+      acc.set(key, {
+        sourceModule: copyMeta.sourceCodeRef.module,
+        targetModule: copyMeta.targetCodeRef.module,
+      });
+    }
+    return acc;
+  }, new Map<string, CopyModuleMeta>());
+
+  return Array.from(uniqueModules.values());
 }
