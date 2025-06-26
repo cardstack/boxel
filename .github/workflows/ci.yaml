@@ -390,6 +390,7 @@ jobs:
         env:
           TEST_MODULE: ${{matrix.testModule}}
       - name: Print realm server logs
+        if: always()
         run: cat /tmp/server.log
       - name: Prepare artifact name
         id: artifact_name
