@@ -692,8 +692,11 @@ export class Realm {
       } as Utils,
     );
 
+    let response;
+
     try {
-      return await matrixBackendAuthentication.createSession(request);
+      response = await matrixBackendAuthentication.createSession(request);
+      return response;
     } catch (e) {
       console.log('Error in _session');
       console.log(e);
@@ -704,7 +707,8 @@ export class Realm {
       console.log('About to try again');
 
       try {
-        return await matrixBackendAuthentication.createSession(request);
+        response = await matrixBackendAuthentication.createSession(request);
+        return response;
       } catch (e) {
         console.log('Second error in _session');
         console.log(e);
