@@ -63,6 +63,11 @@ class TestRunner {
       JSON.stringify({ title: 'Test Card 1', type: 'card' }, null, 2),
     );
 
+    await fs.writeFile(
+      path.join(this.context.realmDir, '.realm.json'),
+      JSON.stringify({ name: 'Test Realm', version: '1.0.0' }, null, 2),
+    );
+
     await fs.mkdir(path.join(this.context.realmDir, 'nested'), {
       recursive: true,
     });
@@ -337,7 +342,95 @@ export default class TestComponent extends Component {
       }
     });
 
-    // Test 5: Test .boxelignore
+    // Test 5: Test .realm.json syncing
+    await this.test('Syncs .realm.json files in both directions', async () => {
+      // Test 5a: pull it
+      const pullResult = await this.runCommand(
+        'node',
+        [
+          pullCmd,
+          `http://localhost:${REALM_PORT}/test/`,
+          this.context.localDir,
+        ],
+        process.cwd(),
+      );
+
+      if (pullResult.code !== 0) {
+        throw new Error(`Pull .realm.json failed: ${pullResult.stderr}`);
+      }
+
+      // Verify .realm.json was pulled
+      const realmJsonExists = await fs
+        .access(path.join(this.context.localDir, '.realm.json'))
+        .then(() => true)
+        .catch(() => false);
+      if (!realmJsonExists) {
+        throw new Error('.realm.json was not pulled from realm');
+      }
+
+      const realmJsonContent = await fs.readFile(
+        path.join(this.context.localDir, '.realm.json'),
+        'utf-8',
+      );
+      const realmConfig = JSON.parse(realmJsonContent);
+      if (realmConfig.name !== 'Test Realm') {
+        throw new Error('.realm.json content mismatch after pull');
+      }
+
+      // Test 5b: Modify .realm.json locally and push it back
+      await fs.writeFile(
+        path.join(this.context.localDir, '.realm.json'),
+        JSON.stringify(
+          { name: 'Modified Test Realm', version: '1.1.0', modified: true },
+          null,
+          2,
+        ),
+      );
+
+      const pushResult = await this.runCommand(
+        'node',
+        [
+          pushCmd,
+          this.context.localDir,
+          `http://localhost:${REALM_PORT}/test/`,
+        ],
+        process.cwd(),
+      );
+
+      if (pushResult.code !== 0) {
+        throw new Error(`Push .realm.json failed: ${pushResult.stderr}`);
+      }
+
+      // Verify the modification was pushed by pulling to a new directory
+      const verifyDir = path.join(this.context.tempDir, 'realm-json-verify');
+      await fs.mkdir(verifyDir, { recursive: true });
+
+      const verifyPullResult = await this.runCommand(
+        'node',
+        [pullCmd, `http://localhost:${REALM_PORT}/test/`, verifyDir],
+        process.cwd(),
+      );
+
+      if (verifyPullResult.code !== 0) {
+        throw new Error(
+          `Verification pull for .realm.json failed: ${verifyPullResult.stderr}`,
+        );
+      }
+
+      const verifyRealmJsonContent = await fs.readFile(
+        path.join(verifyDir, '.realm.json'),
+        'utf-8',
+      );
+      const verifyRealmConfig = JSON.parse(verifyRealmJsonContent);
+      if (
+        verifyRealmConfig.modified !== true ||
+        verifyRealmConfig.version !== '1.1.0'
+      ) {
+        throw new Error('.realm.json modifications were not properly pushed');
+      }
+    });
+
+    // Test 6: Test .boxelignore
     await this.test('Respects .boxelignore patterns', async () => {
       // Create .boxelignore
       await fs.writeFile(

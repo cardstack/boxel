@@ -67,11 +67,6 @@ class RealmPusher extends RealmSyncBase {
       }
 
       for (const relativePath of filesToDelete) {
-        // Skip metadata files
-        if (relativePath === '.realm.json' || relativePath.startsWith('.')) {
-          continue;
-        }
-
         try {
           await this.deleteFile(relativePath);
         } catch (error) {
