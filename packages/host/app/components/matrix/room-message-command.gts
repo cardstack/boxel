@@ -1,4 +1,4 @@
-import { hash } from '@ember/helper';
+import { array, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
@@ -13,6 +13,7 @@ import { resource, use } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 
 import {
+  Alert,
   Button,
   CardContainer,
   CardHeader,
@@ -164,6 +165,7 @@ export default class RoomMessageCommand extends Component<Signature> {
   <template>
     <div
       class={{cn
+        'room-message-command'
         is-pending=@isPending
         is-error=@isError
         is-failed=(bool this.failedCommandState)
@@ -212,20 +214,11 @@ export default class RoomMessageCommand extends Component<Signature> {
           </CodeBlock>
         {{/if}}
         {{#if this.failedCommandState}}
-          <div class='failed-command-result'>
-            <span class='failed-command-text'>
-              {{this.failedCommandState.message}}
-            </span>
-            <Button
-              {{on 'click' @runCommand}}
-              class='retry-button'
-              @size='small'
-              @kind='secondary-dark'
-              data-test-retry-command-button
-            >
-              Retry
-            </Button>
-          </div>
+          <Alert
+            @type='error'
+            @messages={{array this.failedCommandState.message}}
+            @retryAction={{@runCommand}}
+          />
         {{/if}}
         {{#if this.commandResultCard.card}}
           <CardContainer
@@ -254,6 +247,9 @@ export default class RoomMessageCommand extends Component<Signature> {
     {{! template-lint-disable no-whitespace-for-layout  }}
     {{! ignore the above error because ember-template-lint complains about the whitespace in the multi-line comment below }}
     <style scoped>
+      .room-message-command > * + * {
+        margin-top: var(--boxel-sp-xs);
+      }
       .command-description {
         font-size: var(--boxel-font-sm);
         font-weight: 500;
@@ -270,18 +266,10 @@ export default class RoomMessageCommand extends Component<Signature> {
         background: var(--boxel-200);
         color: var(--boxel-500);
       }
-      .is-failed {
-        border: 1px solid var(--boxel-danger);
-        border-radius: var(--boxel-border-radius);
-      }
       .command-button-bar {
         display: flex;
         justify-content: flex-end;
         gap: var(--boxel-sp-xs);
-        margin-top: var(--boxel-sp);
-      }
-      .is-failed .command-button-bar {
-        padding-right: var(--boxel-sp-xs);
       }
       .view-code-button {
         --boxel-button-font: 600 var(--boxel-font-xs);
@@ -296,16 +284,6 @@ export default class RoomMessageCommand extends Component<Signature> {
       }
       .command-result-card-preview {
         margin-top: var(--boxel-sp);
-      }
-      .preview-code {
-        --spacing: var(--boxel-sp-sm);
-        --fill-container-spacing: calc(
-          -1 * var(--ai-assistant-message-padding)
-        );
-        margin: var(--boxel-sp) var(--fill-container-spacing)
-          var(--fill-container-spacing) var(--fill-container-spacing);
-        padding: var(--spacing) 0;
-        background-color: var(--boxel-dark);
       }
       .code-copy-button {
         --boxel-button-font: 600 var(--boxel-font-xs);
@@ -324,11 +302,6 @@ export default class RoomMessageCommand extends Component<Signature> {
       .code-copy-button:hover:not(:disabled) > .copy-text {
         color: var(--boxel-highlight);
       }
-      .monaco-container {
-        height: var(--monaco-container-height);
-        min-height: 10rem;
-        max-height: 30vh;
-      }
       .header {
         --boxel-label-color: var(--boxel-450);
         --boxel-label-font: 600 var(--boxel-font-xs);
@@ -344,29 +317,6 @@ export default class RoomMessageCommand extends Component<Signature> {
       }
       .options-menu :deep(.check-icon) {
         display: none;
-      }
-      .retry-button {
-        --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
-        --boxel-button-min-height: max-content;
-        --boxel-button-min-width: max-content;
-        border-color: var(--boxel-light);
-      }
-      .failed-command-result {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        background-color: var(--boxel-danger);
-        padding: var(--boxel-sp-xs);
-        border-bottom-left-radius: var(--boxel-border-radius);
-        border-bottom-right-radius: var(--boxel-border-radius);
-        margin-top: var(--boxel-sp-xs);
-      }
-      .failed-command-text {
-        color: var(--boxel-light);
-      }
-      :deep(.code-block-editor) {
-        margin-top: var(--boxel-sp);
       }
     </style>
   </template>

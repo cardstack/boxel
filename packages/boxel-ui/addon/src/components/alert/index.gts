@@ -1,5 +1,5 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
-import Component from '@glimmer/component';
 
 import { cn, eq } from '../../helpers.ts';
 import { FailureBordered, Warning } from '../../icons.gts';
@@ -9,122 +9,104 @@ interface Signature {
   Args: {
     messages: string[];
     retryAction?: () => void;
-    type: 'error' | 'warning';
+    type?: 'error' | 'warning';
   };
   Element: HTMLDivElement;
 }
 
-export default class Alert extends Component<Signature> {
-  private get showRetryButton() {
-    return this.args.retryAction != null && this.args.type === 'error';
-  }
-
-  private get retryAction() {
-    return this.args.retryAction ?? (() => {});
-  }
-
-  <template>
-    <div
-      class={{cn
-        'alert-container'
-        error=(eq @type 'error')
-        warning=(eq @type 'warning')
-      }}
-      data-test-boxel-alert={{@type}}
-      ...attributes
-    >
-
-      <div class='alert-headers'>
-        {{#each @messages as |message|}}
-          <div class='alert-header'>
-            {{#if (eq @type 'error')}}
-              <FailureBordered class='alert-icon' />
-            {{else}}
-              <Warning class='alert-icon' />
-            {{/if}}
-            <p class='error-message' data-test-card-error>
-              {{message}}
-            </p>
-          </div>
-        {{/each}}
-      </div>
-
-      {{#if this.showRetryButton}}
-        <Button
-          {{on 'click' this.retryAction}}
-          class='retry-button'
-          @size='small'
-          @kind='primary'
-          data-test-ai-bot-retry-button
+const Alert: TemplateOnlyComponent<Signature> = <template>
+  <div
+    class={{cn
+      'alert-container'
+      error-container=(eq @type 'error')
+      warning-container=(eq @type 'warning')
+    }}
+    data-test-boxel-alert={{@type}}
+    ...attributes
+  >
+    {{#each @messages as |message i|}}
+      <div class='alert'>
+        {{#if (eq @type 'error')}}
+          <FailureBordered class='alert-icon' />
+        {{else if (eq @type 'warning')}}
+          <Warning class='alert-icon' />
+        {{/if}}
+        <p
+          class='message'
+          data-test-alert-message='{{i}}'
+          data-test-card-error={{eq @type 'error'}}
         >
-          Retry
-        </Button>
-      {{/if}}
-    </div>
+          {{message}}
+        </p>
+      </div>
+    {{/each}}
 
-    <style scoped>
-      .alert-container {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-sm);
-        padding-bottom: var(--boxel-sp);
-        color: var(--boxel-light);
-        font: 500 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp);
-        border-radius: var(--boxel-border-radius-lg);
-      }
+    {{#if @retryAction}}
+      <Button
+        {{on 'click' @retryAction}}
+        class='retry-button'
+        @size='small'
+        @kind='primary'
+        data-test-alert-retry-button
+        data-test-ai-bot-retry-button
+      >
+        Retry
+      </Button>
+    {{/if}}
+  </div>
 
-      .alert-container.error {
-        background-color: #3b394b;
-      }
+  <style scoped>
+    .alert-container {
+      display: flex;
+      flex-direction: column;
+      padding: var(--boxel-sp-sm);
+      font: 500 var(--boxel-font-xs);
+      letter-spacing: var(--boxel-lsp-sm);
+      border-radius: var(--boxel-border-radius-xxl);
+    }
+    .error-container {
+      background-color: var(--boxel-650);
+      color: var(--boxel-light);
+    }
+    .warning-container {
+      background-color: var(--boxel-warning-200);
+      color: var(--boxel-dark);
+    }
+    .alert {
+      display: flex;
+      gap: var(--boxel-sp-xs);
+    }
+    .alert + .alert {
+      margin-top: var(--boxel-sp-lg);
+    }
+    .alert-icon {
+      min-width: 20px;
+      height: 20px;
+    }
+    .error-container .alert-icon {
+      --icon-background-color: var(--boxel-error-400);
+    }
+    .message {
+      align-self: center;
+      overflow: hidden;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      margin: 0;
+    }
+    .retry-button {
+      --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+      --boxel-button-min-height: max-content;
+      --boxel-button-min-width: max-content;
+      border-color: transparent;
+      width: fit-content;
+      margin-left: auto;
+      font-size: var(--boxel-font-size-xs);
+      font-weight: 500;
+    }
+    .alert + .retry-button {
+      margin-top: var(--boxel-sp-sm);
+    }
+  </style>
+</template>;
 
-      .alert-container.warning {
-        background-color: var(--boxel-warning-200);
-      }
-
-      .alert-header {
-        display: flex;
-        gap: var(--boxel-sp-xs);
-      }
-
-      .alert-headers {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp);
-      }
-
-      .error .alert-icon {
-        --icon-background-color: var(--boxel-error-400);
-        --icon-color: var(--boxel-light);
-        min-width: 20px;
-        height: 20px;
-      }
-
-      .warning .alert-icon {
-        --icon-color: var(--boxel-dark);
-        min-width: 20px;
-        height: 20px;
-      }
-
-      .error-message {
-        align-self: center;
-        overflow: hidden;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-        margin: 0;
-      }
-
-      .retry-button {
-        --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
-        --boxel-button-min-height: max-content;
-        --boxel-button-min-width: max-content;
-        border-color: transparent;
-        width: fit-content;
-        margin-left: auto;
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 500;
-      }
-    </style>
-  </template>
-}
+export default Alert;
