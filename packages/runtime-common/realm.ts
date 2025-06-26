@@ -697,6 +697,9 @@ export class Realm {
     } catch (e) {
       console.log('Error in _session');
       console.log(e);
+      console.log(
+        `for ${this.#matrixClient.getUserId()} ${this.#realmSecretSeed}`,
+      );
 
       throw e;
     }
