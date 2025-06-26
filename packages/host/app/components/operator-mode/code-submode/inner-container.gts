@@ -32,7 +32,7 @@ class InnerContainerContent extends Component<ContentSignature> {
         padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-sm);
         overflow-y: auto;
         height: 100%;
-        background-color: var(--boxel-light);
+        background-color: var(--boxel-200);
       }
       .inner-container__header + .inner-container__content {
         padding-top: 0;
@@ -114,7 +114,7 @@ const CodeSubmodeInnerContainer: TemplateOnlyComponent<Signature> = <template>
       position: relative;
       display: flex;
       flex-direction: column;
-      background-color: var(--boxel-light);
+      background-color: var(--boxel-200);
       overflow: hidden;
     }
   </style>

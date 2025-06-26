@@ -6,17 +6,19 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
+import HistoryIcon from '@cardstack/boxel-icons/history';
+import PlusIcon from '@cardstack/boxel-icons/plus';
+import XIcon from '@cardstack/boxel-icons/x';
+
 import { restartableTask } from 'ember-concurrency';
 import { Velcro } from 'ember-velcro';
 
 import {
   Button,
-  IconButton,
   LoadingIndicator,
   ResizeHandle,
 } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
-import { DropdownArrowFilled, IconX } from '@cardstack/boxel-ui/icons';
 
 import { ResolvedCodeRef, aiBotUsername } from '@cardstack/runtime-common';
 
@@ -51,31 +53,6 @@ interface Signature {
 }
 
 export default class AiAssistantPanel extends Component<Signature> {
-  get hasOtherActiveSessions() {
-    let oneMinuteAgo = new Date(Date.now() - 60 * 1000).getTime();
-
-    return this.aiAssistantPanelService.aiSessionRooms
-      .filter((session) => session.roomId !== this.roomResource?.roomId)
-      .some((session) => {
-        let isSessionActive = false;
-        isSessionActive =
-          this.matrixService.getLastActiveTimestamp(
-            session.roomId,
-            session.lastActiveTimestamp,
-          ) > oneMinuteAgo;
-
-        let lastMessageEventId = session.lastMessage?.eventId;
-
-        let hasSeenLastMessage = lastMessageEventId
-          ? this.matrixService.currentUserEventReadReceipts.has(
-              lastMessageEventId,
-            )
-          : false;
-
-        return isSessionActive && !hasSeenLastMessage;
-      });
-  }
-
   <template>
     <Velcro @placement='bottom' @offsetOptions={{-50}} as |popoverVelcro|>
       <div
@@ -87,64 +64,65 @@ export default class AiAssistantPanel extends Component<Signature> {
       >
         <@resizeHandle />
         <header class='panel-header'>
-          <div class='panel-title-group'>
-            <img
-              alt='AI Assistant'
-              src={{assistantIcon}}
-              width='20'
-              height='20'
-            />
-            <h3 class='panel-title-text' data-test-chat-title>
-              {{if this.roomResource.name this.roomResource.name 'Assistant'}}
-            </h3>
-          </div>
-          <IconButton
-            class='close-ai-panel'
-            @variant='primary'
-            @icon={{IconX}}
-            @width='12px'
-            @height='12px'
-            {{on 'click' @onClose}}
-            aria-label='Close AI Assistant'
-            data-test-close-ai-assistant
+          <img
+            alt='AI Assistant'
+            src={{assistantIcon}}
+            width='20'
+            height='20'
           />
-          <div class='header-buttons' {{popoverVelcro.hook}}>
+          {{#let
+            (if this.roomResource.name this.roomResource.name 'Assistant')
+            as |title|
+          }}
+            <h3 title={{title}} class='panel-title-text' data-test-chat-title>
+              {{title}}
+            </h3>
+          {{/let}}
+          <Button
+            title='New Session'
+            class='button new-session-button'
+            @kind='text-only'
+            @size='extra-small'
+            @disabled={{not this.roomResource.messages.length}}
+            {{on
+              'click'
+              (fn this.aiAssistantPanelService.createNewSession false)
+            }}
+            data-test-create-room-btn
+          >
+            <PlusIcon />
+          </Button>
+          {{#let
+            this.aiAssistantPanelService.loadingRooms
+            as |pastSessionsLoading|
+          }}
             <Button
-              class='new-session-button'
-              @kind='secondary-dark'
-              @size='small'
-              @disabled={{not this.roomResource.messages.length}}
-              {{on
-                'click'
-                (fn this.aiAssistantPanelService.createNewSession false)
-              }}
-              data-test-create-room-btn
+              title='Past Sessions'
+              class='button past-sessions-button
+                {{if this.hasOtherActiveSessions "has-other-active-sessions"}}'
+              @kind='text-only'
+              @size='extra-small'
+              @loading={{pastSessionsLoading}}
+              @disabled={{this.aiAssistantPanelService.displayRoomError}}
+              {{on 'click' this.aiAssistantPanelService.displayPastSessions}}
+              data-test-past-sessions-button
+              data-test-has-active-sessions={{this.hasOtherActiveSessions}}
             >
-              New Session
+              {{#unless pastSessionsLoading}}
+                <HistoryIcon />
+              {{/unless}}
             </Button>
-
-            {{#if this.aiAssistantPanelService.loadingRooms}}
-              <LoadingIndicator @color='var(--boxel-light)' />
-            {{else}}
-              <Button
-                class='past-sessions-button
-                  {{if
-                    this.hasOtherActiveSessions
-                    "past-sessions-button-active"
-                  }}'
-                @kind='secondary-dark'
-                @size='small'
-                @disabled={{this.aiAssistantPanelService.displayRoomError}}
-                {{on 'click' this.aiAssistantPanelService.displayPastSessions}}
-                data-test-past-sessions-button
-                data-test-has-active-sessions={{this.hasOtherActiveSessions}}
-              >
-                All Sessions
-                <DropdownArrowFilled width='10' height='10' />
-
-              </Button>
-            {{/if}}
-          </div>
+          {{/let}}
+          <Button
+            title='Close AI Assistant'
+            class='button'
+            @kind='text-only'
+            @size='extra-small'
+            {{on 'click' @onClose}}
+            data-test-close-ai-assistant
+          >
+            <XIcon />
+          </Button>
         </header>
 
         {{#if this.aiAssistantPanelService.isShowingPastSessions}}
@@ -174,6 +152,7 @@ export default class AiAssistantPanel extends Component<Signature> {
           {{#if this.roomResource}}
             {{#if this.matrixService.currentRoomId}}
               <Room
+                class='room'
                 @roomId={{this.matrixService.currentRoomId}}
                 @roomResource={{this.roomResource}}
                 @monacoSDK={{this.monacoSDK}}
@@ -213,8 +192,10 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
 
       .ai-assistant-panel {
-        display: grid;
-        grid-template-rows: auto 1fr;
+        --ai-assistant-panel-header-height: 4.5rem;
+        --ai-assistant-panel-gradient-start-proportion: 0.6;
+        --ai-assistant-panel-padding: var(--boxel-sp-sm);
+
         background-color: var(--boxel-ai-purple);
         border-radius: 0;
         color: var(--boxel-light);
@@ -240,115 +221,123 @@ export default class AiAssistantPanel extends Component<Signature> {
         z-index: 1;
       }
       .panel-header {
-        --panel-title-height: 40px;
-        position: relative;
-        padding: var(--boxel-sp) calc(var(--boxel-sp) / 2) var(--boxel-sp)
-          var(--boxel-sp-lg);
+        position: absolute;
+        width: 100%;
+        height: var(--ai-assistant-panel-header-height);
+        padding: var(--ai-assistant-panel-padding);
+
+        display: grid;
+        grid-template-columns: 20px auto 20px 20px 20px;
+        gap: var(--boxel-sp-xxxs);
+
+        z-index: 10;
+        background: linear-gradient(
+          to bottom,
+          var(--boxel-ai-purple),
+          var(--boxel-ai-purple)
+            calc(var(--ai-assistant-panel-gradient-start-proportion) * 100%),
+          transparent 100%
+        );
       }
-      .panel-title-group {
-        height: var(--panel-title-height);
-        align-items: center;
-        display: flex;
-        gap: var(--boxel-sp-xs);
-        margin-bottom: var(--boxel-sp);
-      }
+
       .panel-title-text {
+        position: relative;
         margin: 0;
         padding-right: var(--boxel-sp-xl);
+        padding-left: 2px;
         color: var(--boxel-light);
-        font: 600 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp);
+        font: 600 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-sm);
         overflow: hidden;
-        text-overflow: ellipsis;
+        white-space: nowrap;
         display: -webkit-box;
-        -webkit-line-clamp: 2;
+        -webkit-line-clamp: 1;
         -webkit-box-orient: vertical;
         /* the below font-smoothing options are only recommended for light-colored
           text on dark background (otherwise not good for accessibility) */
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
       }
-      .close-ai-panel {
-        --icon-color: var(--boxel-highlight);
-        position: absolute;
-        right: var(--boxel-sp-xs);
-        top: var(--boxel-sp);
-        height: var(--panel-title-height);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1;
-      }
-      .close-ai-panel:hover:not(:disabled) {
-        filter: brightness(1.1);
-      }
-      .header-buttons {
-        position: relative;
-        align-items: center;
-        display: inline-flex;
-        height: var(--panel-title-height);
-      }
-      .new-session-button {
-        margin-right: var(--boxel-sp-xxxs);
-      }
-      .past-sessions-button svg {
-        --icon-color: var(--boxel-light);
-        margin-left: var(--boxel-sp-xs);
-      }
 
-      .past-sessions-button-active::before {
+      .panel-title-text:after {
         content: '';
-        position: absolute;
-        top: -105px;
-        left: -55px;
-        width: 250px;
-        height: 250px;
-        background: conic-gradient(
-          #ffcc8f 0deg,
-          #ff3966 45deg,
-          #ff309e 90deg,
-          #aa1dc9 135deg,
-          #d7fad6 180deg,
-          #5fdfea 225deg,
-          #3d83f2 270deg,
-          #5145e8 315deg,
-          #ffcc8f 360deg
+        background: linear-gradient(
+          to right,
+          transparent,
+          transparent 80%,
+          var(--boxel-ai-purple) 98%
         );
-        z-index: -1;
-        animation: spin 4s infinite linear;
-      }
-
-      .past-sessions-button-active::after {
-        content: '';
+        display: block;
+        top: 0;
+        inset-block-end: 0;
         position: absolute;
-        top: 1px;
-        left: 1px;
-        right: 1px;
-        bottom: 1px;
-        background: var(--boxel-700);
-        border-radius: inherit;
-        z-index: -1;
+        height: calc(
+          var(--ai-assistant-panel-header-height) *
+            var(--ai-assistant-panel-gradient-start-proportion) -
+            var(--ai-assistant-panel-padding)
+        );
+        width: 100%;
       }
 
-      .past-sessions-button-active {
-        position: relative;
-        display: inline-block;
-        border-radius: 3rem;
-        color: white;
-        background: var(--boxel-700);
-        border: none;
-        cursor: pointer;
-        z-index: 1;
-        overflow: hidden;
+      .button {
+        --boxel-button-text-color: var(--boxel-highlight);
+        --boxel-button-padding: 1px 0;
+        --boxel-button-min-width: 0;
+        --boxel-button-min-height: 0;
+        --boxel-loading-indicator-size: 16px;
+
+        border-radius: var(--boxel-border-radius-xs);
+        transform: translateY(-1px);
+      }
+
+      .button:hover {
+        --boxel-button-text-color: var(--boxel-dark);
+
+        background-color: var(--boxel-highlight);
+      }
+
+      .button[disabled] {
+        --boxel-button-text-color: var(--boxel-400);
+
+        background-color: transparent;
+        border-color: transparent;
+      }
+
+      .button svg {
+        width: 18px;
+        height: 18px;
+        stroke-width: 2.5;
+      }
+
+      /* This icon looks slightly bigger so this makes it match */
+      .button.past-sessions-button svg {
+        padding: 2px;
+      }
+
+      .button :deep(.loading-indicator) {
+        margin-right: 0;
+        padding-top: 1px;
+      }
+
+      .has-other-active-sessions {
+        animation: cycle-color-to-background 1s ease-in infinite alternate;
       }
 
       .loading-new-session {
         margin: auto;
       }
 
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
+      .room {
+        padding-top: calc(var(--ai-assistant-panel-header-height) * 0.5);
+      }
+
+      @keyframes cycle-color-to-background {
+        100% {
+          color: color-mix(
+            in oklab,
+            var(--boxel-highlight),
+            var(--boxel-ai-purple) 75%
+          );
         }
       }
 
@@ -370,6 +359,31 @@ export default class AiAssistantPanel extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.loadMonaco.perform();
+  }
+
+  get hasOtherActiveSessions() {
+    let oneMinuteAgo = new Date(Date.now() - 60 * 1000).getTime();
+
+    return this.aiAssistantPanelService.aiSessionRooms
+      .filter((session) => session.roomId !== this.roomResource?.roomId)
+      .some((session) => {
+        let isSessionActive = false;
+        isSessionActive =
+          this.matrixService.getLastActiveTimestamp(
+            session.roomId,
+            session.lastActiveTimestamp,
+          ) > oneMinuteAgo;
+
+        let lastMessageEventId = session.lastMessage?.eventId;
+
+        let hasSeenLastMessage = lastMessageEventId
+          ? this.matrixService.currentUserEventReadReceipts.has(
+              lastMessageEventId,
+            )
+          : false;
+
+        return isSessionActive && !hasSeenLastMessage;
+      });
   }
 
   @cached

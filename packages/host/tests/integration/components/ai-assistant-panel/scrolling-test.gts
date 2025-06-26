@@ -238,7 +238,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
       .exists('unread messages button exists when there are unread messages');
     assert
       .dom('[data-test-unread-messages-button]')
-      .containsText('1 unread message');
+      .containsText('1 New Message');
   });
 
   test('clicking on unread message indicator scrolls to unread message', async function (assert) {
