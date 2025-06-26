@@ -670,7 +670,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .dom(
             '[data-test-playground-panel] [data-test-boxel-card-header-title]',
           )
-          .hasText('Author');
+          .hasText('Author - Mike Dane');
       });
       test('skill listing: installs the card and redirects to code mode with preview on first skill successfully', async function (assert) {
         const listingName = 'talk-like-a-pirate';
@@ -790,7 +790,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       await waitForCodeEditor();
       assert
         .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
-        .hasText('Author');
+        .hasText('Author - Mike Dane');
     });
   });
 });
