@@ -43,6 +43,11 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
     this.hydratedCardId = cardId;
   }
 
+  //default to rendering 10 skeletons
+  renderSkeletons(length: number = 10) {
+    return Array.from({ length }, (_, i) => i);
+  }
+
   isHydrated = (cardUrl: string) => {
     return removeFileExtension(cardUrl) == this.hydratedCardId;
   };
@@ -60,11 +65,13 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
       >
         <:loading>
           <ul class='cards {{@selectedView}}-view' ...attributes>
-            <li class='{{@selectedView}}-view-container'>
-              <CardContainer class='card' @displayBoundaries={{true}}>
-                <ListingFittedSkeleton />
-              </CardContainer>
-            </li>
+            {{#each (this.renderSkeletons)}}
+              <li class='{{@selectedView}}-view-container'>
+                <CardContainer class='card' @displayBoundaries={{true}}>
+                  <ListingFittedSkeleton />
+                </CardContainer>
+              </li>
+            {{/each}}
           </ul>
         </:loading>
         <:response as |cards|>
@@ -200,8 +207,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
         padding: var(--boxel-sp-xl);
         text-align: center;
       }
-
-      .no-results-icon {
+      p .no-results-icon {
         width: 64px;
         height: 64px;
         color: var(--layout-theme-color);
