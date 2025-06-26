@@ -97,6 +97,8 @@ export default class NewSession extends Component<Signature> {
       .prompt::before {
         display: inline-block;
         margin-right: var(--boxel-sp-sm);
+        /* 1.5px for both values causes a build failure TODO fix in CS-8981 */
+        padding: 0 0 1.49px 1.5px;
         content: '?';
         width: 1.25rem;
         height: 1.25rem;

@@ -249,17 +249,12 @@ module('constructHistory', (hooks) => {
     assert.deepEqual(result, history);
   });
 
-  test('should return an array of DiscreteMatrixEvent objects with no duplicates based on event_id even when m.relates_to is present and include senders and origin_server_ts', async () => {
+  test('should return all message events with preserved properties and chronological ordering', async () => {
     const history: IRoomEvent[] = [
-      // this event will _not_ replace event_id 2 since it's timestamp is before event_id 2
       {
         event_id: '1',
         type: 'm.room.message',
         content: {
-          'm.relates_to': {
-            rel_type: 'm.replace',
-            event_id: '2',
-          },
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'yo',
@@ -304,15 +299,10 @@ module('constructHistory', (hooks) => {
           transaction_id: '3',
         },
       },
-      // this event _will_ replace event_id 3 since it's timestamp is after event_id 3
       {
         event_id: '4',
         type: 'm.room.message',
         content: {
-          'm.relates_to': {
-            rel_type: 'm.replace',
-            event_id: '3',
-          },
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hola',
@@ -348,6 +338,23 @@ module('constructHistory', (hooks) => {
     assert.deepEqual(result, [
       // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
+        event_id: '1',
+        type: 'm.room.message',
+        content: {
+          msgtype: 'm.text',
+          format: 'org.matrix.custom.html',
+          body: 'yo',
+        },
+        sender: 'user1',
+        origin_server_ts: 1629876543210,
+        room_id: 'room1',
+        unsigned: {
+          age: 1001,
+          transaction_id: '1',
+        },
+      },
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
+      {
         event_id: '2',
         type: 'm.room.message',
         content: {
@@ -366,6 +373,23 @@ module('constructHistory', (hooks) => {
       // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         event_id: '3',
+        type: 'm.room.message',
+        content: {
+          msgtype: 'm.text',
+          format: 'org.matrix.custom.html',
+          body: 'hi',
+        },
+        sender: 'user3',
+        origin_server_ts: 1629876543230,
+        room_id: 'room1',
+        unsigned: {
+          age: 1002,
+          transaction_id: '3',
+        },
+      },
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
+      {
+        event_id: '4',
         type: 'm.room.message',
         content: {
           msgtype: 'm.text',
@@ -656,88 +680,19 @@ module('constructHistory', (hooks) => {
   });
 
   test('should return an array with a single message event when the input array contains an event and continuation events', async () => {
+    // With server-side filtering, we only receive the final aggregated event without replacement chain
     const history: IRoomEvent[] = [
       {
         event_id: '0',
         room_id: 'room-id',
         type: 'm.room.message',
         sender: 'aibot',
-        origin_server_ts: 1234567890,
-        content: {
-          body: '',
-          msgtype: 'app.boxel.message',
-          format: 'org.matrix.custom.html',
-          'app.boxel.reasoning': 'Thinking...',
-          'app.boxel.commandRequests': [],
-          isStreamingFinished: false,
-        },
-      },
-      {
-        event_id: '1',
-        room_id: 'room-id',
-        type: 'm.room.message',
-        sender: 'aibot',
-        origin_server_ts: 1234567891,
-        content: {
-          body: '',
-          msgtype: 'app.boxel.message',
-          format: 'org.matrix.custom.html',
-          'app.boxel.reasoning': 'a'.repeat(1024),
-          'app.boxel.commandRequests': [],
-          isStreamingFinished: false,
-          'm.relates_to': {
-            rel_type: 'm.replace',
-            event_id: '0',
-          },
-        },
-      },
-      {
-        event_id: '2',
-        room_id: 'room-id',
-        type: 'm.room.message',
-        sender: 'aibot',
-        origin_server_ts: 1234567892,
-        content: {
-          body: 'b'.repeat(512),
-          msgtype: 'app.boxel.message',
-          format: 'org.matrix.custom.html',
-          'app.boxel.reasoning': 'a'.repeat(1024),
-          'app.boxel.commandRequests': [],
-          isStreamingFinished: true,
-          'app.boxel.has-continuation': true,
-          'm.relates_to': {
-            rel_type: 'm.replace',
-            event_id: '0',
-          },
-        },
-      },
-      {
-        event_id: '3',
-        room_id: 'room-id',
-        type: 'm.room.message',
-        sender: 'aibot',
-        origin_server_ts: 1234567893,
-        content: {
-          body: 'b'.repeat(1024),
-          msgtype: 'app.boxel.message',
-          format: 'org.matrix.custom.html',
-          'app.boxel.reasoning': '',
-          'app.boxel.commandRequests': [],
-          isStreamingFinished: false,
-          'app.boxel.continuation-of': '0',
-        },
-      },
-      {
-        event_id: '4',
-        room_id: 'room-id',
-        type: 'm.room.message',
-        sender: 'aibot',
         origin_server_ts: 1234567894,
         content: {
-          body: 'b'.repeat(1024),
+          body: 'b'.repeat(1536),
           msgtype: 'app.boxel.message',
           format: 'org.matrix.custom.html',
-          'app.boxel.reasoning': '',
+          'app.boxel.reasoning': 'a'.repeat(1024),
           'app.boxel.commandRequests': [
             {
               commandRequestId: 'tool-call-id-1',
@@ -746,11 +701,6 @@ module('constructHistory', (hooks) => {
             },
           ],
           isStreamingFinished: true,
-          'app.boxel.continuation-of': '0',
-          'm.relates_to': {
-            rel_type: 'm.replace',
-            event_id: '3',
-          },
         },
       },
     ];

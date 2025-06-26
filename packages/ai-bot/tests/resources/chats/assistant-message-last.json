@@ -266,43 +266,17 @@
     "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "",
+      "body": "Hello! I’m here to help. How can I assist you with your workspace or any cards today? If you’d like to view or edit a card, please navigate to a card in your workspace and let me know what you’d like to do.",
       "msgtype": "app.boxel.message",
       "format": "org.matrix.custom.html",
-      "app.boxel.reasoning": "Thinking...",
+      "app.boxel.reasoning": "",
       "app.boxel.commandRequests": [],
-      "isStreamingFinished": false
+      "isStreamingFinished": true
     },
     "origin_server_ts": 1749132090071,
     "unsigned": {
       "membership": "join",
-      "age": 1022408,
-      "m.relations": {
-        "m.replace": {
-          "type": "m.room.message",
-          "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
-          "sender": "@aibot:localhost",
-          "content": {
-            "body": "Hello! I’m here to help. How can I assist you with your workspace or any cards today? If you’d like to view or edit a card, please navigate to a card in your workspace and let me know what you’d like to do.",
-            "msgtype": "app.boxel.message",
-            "format": "org.matrix.custom.html",
-            "app.boxel.reasoning": "",
-            "app.boxel.commandRequests": [],
-            "isStreamingFinished": true,
-            "m.relates_to": {
-              "rel_type": "m.replace",
-              "event_id": "$OyZ22PWDbEDq8CzDZAYAfnSJb-R7KieSqRNY4xdHEF8"
-            }
-          },
-          "origin_server_ts": 1749132091756,
-          "unsigned": {
-            "age": 1020723
-          },
-          "event_id": "$Q5k5Po-EmbYdkM7cw3jSK8Nb2cPj98KpECLZJmqx72s",
-          "user_id": "@aibot:localhost",
-          "age": 1020723
-        }
-      }
+      "age": 1022408
     },
     "event_id": "$OyZ22PWDbEDq8CzDZAYAfnSJb-R7KieSqRNY4xdHEF8",
     "user_id": "@aibot:localhost",
