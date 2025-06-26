@@ -701,7 +701,17 @@ export class Realm {
         `for ${this.#matrixClient.getUserId()} ${this.#realmSecretSeed}`,
       );
 
-      throw e;
+      try {
+        return await matrixBackendAuthentication.createSession(request);
+      } catch (e) {
+        console.log('Second error in _session');
+        console.log(e);
+        console.log(
+          `for ${this.#matrixClient.getUserId()} ${this.#realmSecretSeed}`,
+        );
+
+        throw e;
+      }
     }
   }
 
