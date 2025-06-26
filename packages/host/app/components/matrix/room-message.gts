@@ -32,7 +32,7 @@ import { aiBotUserId } from '../ai-assistant/panel';
 import RoomMessageCommand from './room-message-command';
 
 interface Signature {
-  Element: HTMLDivElement;
+  Element: HTMLElement;
   Args: {
     roomId: string;
     // use a RoomResource as an arg instead of message to keep this component stable
@@ -123,7 +123,6 @@ export default class RoomMessage extends Component<Signature> {
     {{#if this.attachedCardCollection.isLoaded}}
       <AiAssistantMessage
         id='message-container-{{@index}}'
-        class='room-message'
         @messageHTML={{this.message.bodyHTML}}
         @messageHTMLParts={{this.message.htmlParts}}
         @reasoningContent={{this.message.reasoningContent}}
@@ -166,12 +165,6 @@ export default class RoomMessage extends Component<Signature> {
         {{/each}}
       </AiAssistantMessage>
     {{/if}}
-
-    <style scoped>
-      .room-message {
-        --ai-assistant-message-padding: var(--boxel-sp);
-      }
-    </style>
   </template>
 
   @service private declare operatorModeStateService: OperatorModeStateService;

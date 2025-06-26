@@ -86,7 +86,7 @@ export default class AiAssistantActionBar extends Component<Signature> {
 
     <style scoped>
       .ai-assistant-action-bar {
-        background-color: #3b394b;
+        background-color: var(--boxel-650);
         display: flex;
         gap: var(--boxel-sp-sm);
         padding: 10px 13px;

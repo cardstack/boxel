@@ -2,7 +2,7 @@ import { RenderingTestContext, render } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import FormattedUserMessage from '@cardstack/host/components/ai-assistant/formatted-user-message';
+import FormattedUserMessage from '@cardstack/host/components/ai-assistant/message/user-message';
 
 import { setupRenderingTest } from '../../helpers/setup';
 
