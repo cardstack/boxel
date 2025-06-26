@@ -140,7 +140,8 @@ module('Integration | ask-ai', function (hooks) {
     });
     assert
       .dom('[data-test-ai-assistant-panel] [data-test-chat-title]')
-      .hasText('New AI Assistant Chat');
+      .hasText('New AI Assistant Chat')
+      .hasAttribute('title', 'New AI Assistant Chat');
     assert.dom('[data-test-pill-menu-button]').containsText('Skills 1');
     await assertMessages(assert, [
       {

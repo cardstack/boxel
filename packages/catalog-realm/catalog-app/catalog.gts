@@ -608,7 +608,6 @@ class Isolated extends Component<typeof Catalog> {
         position: sticky;
         top: 0;
         z-index: 10;
-        --header-text-color: var(--boxel-light) !important;
         container-name: catalog-tab-header;
         container-type: inline-size;
       }
@@ -751,7 +750,7 @@ export class Catalog extends CardDef {
   static icon = LayoutGridPlusIcon;
   static isolated = Isolated;
   static prefersWideFormat = true;
-  static headerColor = '#a66efa';
+  static headerColor = '#9f3bf9';
   @field realmName = contains(StringField, {
     computeVia: function (this: Catalog) {
       return this[realmInfo]?.name;
