@@ -38,7 +38,10 @@ import SaveCardCommand from '@cardstack/host/commands/save-card';
 import { SearchCardsByTypeAndTitleCommand } from '@cardstack/host/commands/search-cards';
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
 import ShowCardCommand from '@cardstack/host/commands/show-card';
-import { waitForCompletedCommandRequest } from '@cardstack/host/commands/utils';
+import {
+  waitForCompletedCommandRequest,
+  waitForRealmState,
+} from '@cardstack/host/commands/utils';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -187,6 +190,12 @@ module('Acceptance | Commands tests', function (hooks) {
           roomId,
           (commandRequest) => commandRequest.name === 'patchCardInstance',
           { afterEventId: eventId },
+        );
+
+        await waitForRealmState(
+          this.commandContext,
+          testRealmURL,
+          () => meeting.topic === input.topic,
         );
 
         let showCardCommand = new ShowCardCommand(this.commandContext);

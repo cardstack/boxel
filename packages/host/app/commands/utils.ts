@@ -21,15 +21,18 @@ import type {
   CardMessageEvent,
   CommandResultEvent,
   MatrixEvent,
+  RealmEventContent,
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
 
 import GetEventsFromRoomCommand from './get-events-from-room';
 
+import type MessageService from '../services/message-service';
+
 export async function waitForMatrixEvent(
   commandContext: CommandContext,
   roomId: string,
-  callback: (matrixEvent: MatrixEvent[]) => boolean,
+  callback: (matrixEvents: MatrixEvent[]) => boolean,
   options: { timeoutMs?: number } = {},
 ): Promise<void> {
   let timeoutMs = options.timeoutMs ?? 1000 * 60 * 20; // default to 20 minutes
@@ -130,4 +133,42 @@ export async function addPatchTools(
     results.push(getPatchTool(patchableCard.id, patchSpec));
   }
   return results;
+}
+
+export async function waitForRealmState(
+  commandContext: CommandContext,
+  realmId: string,
+  predicate: (ev: RealmEventContent | undefined) => boolean,
+  options: { timeoutMs?: number } = {},
+): Promise<void> {
+  let timeoutMs = options.timeoutMs ?? 1000 * 60 * 20; // default to 20 minutes
+  if (predicate(undefined)) {
+    return;
+  }
+  const timeoutPromise = new Promise<void>((_, reject) => {
+    setTimeout(() => {
+      reject(new Error(`Timed out waiting for realm state in ${realmId}`));
+    }, timeoutMs);
+  });
+
+  const messageService = getOwner(commandContext)?.lookup(
+    'service:message-service',
+  ) as MessageService | undefined;
+  if (!messageService) {
+    throw new Error('MessageService not found');
+  }
+  let unsubscribe: () => void = () => {};
+  const predicateSucceededPromise = new Promise<void>((resolve) => {
+    unsubscribe = messageService.subscribe(realmId, (ev) => {
+      if (predicate(ev)) {
+        unsubscribe?.();
+        resolve();
+      }
+    });
+  });
+  return Promise.race([predicateSucceededPromise, timeoutPromise]).finally(
+    () => {
+      unsubscribe?.();
+    },
+  );
 }
