@@ -25,6 +25,7 @@ console.log(`Registering realm user ${realmUser}...`);
   let password = await realmPassword(realmUser, realmSecretSeed);
   return new Promise<string>((resolve, reject) => {
     const command = `docker exec boxel-synapse register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u ${realmUser} -p ${password} --no-admin`;
+    console.log('Executing command:', command);
     childProcess.exec(command, async (err, stdout) => {
       if (err) {
         if (stdout.includes('User ID already taken')) {
