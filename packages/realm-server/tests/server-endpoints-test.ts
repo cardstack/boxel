@@ -818,6 +818,150 @@ module(basename(__filename), function () {
           }
         });
 
+        test('can force job completion by job_id via grafana endpoint', async function (assert) {
+          let [{ id }] = (await dbAdapter.execute(`INSERT INTO jobs
+            (args, job_type, concurrency_group, timeout, priority)
+            VALUES
+            (
+              '{"realmURL": "${testRealm2URL.href}", "realmUsername":"node-test_realm"}',
+              'from-scratch-index',
+              'indexing:${testRealm2URL.href}',
+              180,
+              0
+            ) RETURNING id`)) as { id: string }[];
+          let response = await request2
+            .get(
+              `/_grafana-complete-job?authHeader=${grafanaSecret}&job_id=${id}`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 204, 'HTTP 204 response');
+          let [job] = await dbAdapter.execute(
+            `SELECT * FROM jobs WHERE id = ${id}`,
+          );
+          assert.strictEqual(job.status, 'rejected', 'job status is correct');
+          assert.deepEqual(
+            job.result,
+            {
+              status: 418,
+              message: 'User initiated job cancellation',
+            },
+            'job result is correct',
+          );
+          assert.ok(job.finished_at, 'job was marked with finish time');
+        });
+
+        test('can force job completion by reservation_id via grafana endpoint', async function (assert) {
+          let [{ id: jobId }] = (await dbAdapter.execute(`INSERT INTO jobs
+            (args, job_type, concurrency_group, timeout, priority)
+            VALUES
+            (
+              '{"realmURL": "${testRealm2URL.href}", "realmUsername":"node-test_realm"}',
+              'from-scratch-index',
+              'indexing:${testRealm2URL.href}',
+              180,
+              0
+            ) RETURNING id`)) as { id: string }[];
+          let [{ id: reservationId }] =
+            (await dbAdapter.execute(`INSERT INTO job_reservations
+            (job_id, locked_until ) VALUES (${jobId}, NOW() + INTERVAL '3 minutes') RETURNING id `)) as {
+              id: string;
+            }[];
+          let response = await request2
+            .get(
+              `/_grafana-complete-job?authHeader=${grafanaSecret}&reservation_id=${reservationId}`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 204, 'HTTP 204 response');
+          let [reservation] = await dbAdapter.execute(
+            `SELECT * FROM job_reservations WHERE id = ${reservationId}`,
+          );
+          assert.ok(reservation.completed_at, 'completed_at time set');
+          let [job] = await dbAdapter.execute(
+            `SELECT * FROM jobs WHERE id = ${jobId}`,
+          );
+          assert.strictEqual(job.status, 'rejected', 'job status is correct');
+          assert.deepEqual(
+            job.result,
+            {
+              status: 418,
+              message: 'User initiated job cancellation',
+            },
+            'job result is correct',
+          );
+          assert.ok(job.finished_at, 'job was marked with finish time');
+        });
+
+        test('can force job completion by job_id where reservation id exists via grafana endpoint', async function (assert) {
+          let [{ id: jobId }] = (await dbAdapter.execute(`INSERT INTO jobs
+            (args, job_type, concurrency_group, timeout, priority)
+            VALUES
+            (
+              '{"realmURL": "${testRealm2URL.href}", "realmUsername":"node-test_realm"}',
+              'from-scratch-index',
+              'indexing:${testRealm2URL.href}',
+              180,
+              0
+            ) RETURNING id`)) as { id: string }[];
+          let [{ id: reservationId }] =
+            (await dbAdapter.execute(`INSERT INTO job_reservations
+            (job_id, locked_until ) VALUES (${jobId}, NOW() + INTERVAL '3 minutes') RETURNING id `)) as {
+              id: string;
+            }[];
+          let response = await request2
+            .get(
+              `/_grafana-complete-job?authHeader=${grafanaSecret}&job_id=${jobId}`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 204, 'HTTP 204 response');
+          let [reservation] = await dbAdapter.execute(
+            `SELECT * FROM job_reservations WHERE id = ${reservationId}`,
+          );
+          assert.ok(reservation.completed_at, 'completed_at time set');
+          let [job] = await dbAdapter.execute(
+            `SELECT * FROM jobs WHERE id = ${jobId}`,
+          );
+          assert.strictEqual(job.status, 'rejected', 'job status is correct');
+          assert.deepEqual(
+            job.result,
+            {
+              status: 418,
+              message: 'User initiated job cancellation',
+            },
+            'job result is correct',
+          );
+          assert.ok(job.finished_at, 'job was marked with finish time');
+        });
+
+        test('returns 401 when calling grafana job completion endpoint without a grafana secret', async function (assert) {
+          let [{ id }] = (await dbAdapter.execute(`INSERT INTO jobs
+            (args, job_type, concurrency_group, timeout, priority)
+            VALUES
+            (
+              '{"realmURL": "${testRealm2URL.href}", "realmUsername":"node-test_realm"}',
+              'from-scratch-index',
+              'indexing:${testRealm2URL.href}',
+              180,
+              0
+            ) RETURNING id`)) as { id: string }[];
+          let response = await request2
+            .get(`/_grafana-complete-job?job_id=${id}`)
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+          let [job] = await dbAdapter.execute(
+            `SELECT * FROM jobs WHERE id = ${id}`,
+          );
+          assert.strictEqual(
+            job.status,
+            'unfulfilled',
+            'job status is correct',
+          );
+          assert.strictEqual(
+            job.finished_at,
+            null,
+            'job was not marked with finish time',
+          );
+        });
+
         test('can reindex a realm via grafana endpoint', async function (assert) {
           let endpoint = `test-realm-${uuidv4()}`;
           let owner = 'mango';
