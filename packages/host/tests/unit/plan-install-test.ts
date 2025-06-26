@@ -619,6 +619,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
               },
             },
           ],
+          modulesToInstall: [],
         });
       });
       test('instanceCopy is deduplicated', function (assert) {
@@ -653,6 +654,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
             },
           ],
           modulesCopy: [],
+          modulesToInstall: [],
         });
       });
     });
@@ -709,7 +711,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
             instancesCopy: [],
           };
         });
-        let modulesToInstall = builder.modulesToInstall();
+        let { modulesToInstall } = builder.build();
         assert.strictEqual(modulesToInstall.length, 2);
         assert.deepEqual(modulesToInstall[0], {
           sourceModule: `${sourceRealmURL.href}some-folder/some`,

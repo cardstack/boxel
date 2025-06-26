@@ -29,6 +29,11 @@ export interface InstallPlan {
   modulesCopy: CopyMeta[];
   instancesCopy: CopyInstanceMeta[];
 }
+
+export interface FinalInstallPlan extends InstallPlan {
+  modulesToInstall: CopyModuleMeta[];
+}
+
 export interface CopyModuleMeta {
   sourceModule: string;
   targetModule: string;
@@ -176,8 +181,8 @@ export class PlanBuilder {
     return this;
   }
 
-  build(): InstallPlan {
-    let finalPlan = this.steps.reduce(
+  build(): FinalInstallPlan {
+    let accumulatedPlan: InstallPlan = this.steps.reduce(
       (plan: InstallPlan, step: PlanBuilderStep, i) => {
         this.log.debug(`=== Plan Step ${i} ===`);
         this.log.debug(JSON.stringify(plan, null, 2));
@@ -188,13 +193,13 @@ export class PlanBuilder {
         instancesCopy: [],
       },
     );
+    const finalPlan: FinalInstallPlan = {
+      ...accumulatedPlan,
+      modulesToInstall: modulesToInstall(accumulatedPlan),
+    };
     this.log.debug(`=== Final Plan ===`);
     this.log.debug(JSON.stringify(finalPlan, null, 2));
     return finalPlan;
-  }
-
-  modulesToInstall(): CopyModuleMeta[] {
-    return modulesToInstall(this.build());
   }
 }
 
