@@ -50,3 +50,15 @@ console.log(`Registering realm user ${realmUser}...`);
     });
   });
 })().catch((e) => console.error(`unexpected error`, e));
+
+(async () => {
+  let response = await fetch(
+    `http://localhost:8008/_matrix/client/v3/register/available?username=${realmUser}`,
+    {
+      method: 'GET',
+    },
+  );
+
+  console.log(`User ${realmUser} existence check completed`);
+  console.log(await response.text());
+})().catch((e) => console.error(`unexpected error getting user existence`, e));
