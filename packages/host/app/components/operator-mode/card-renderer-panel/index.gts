@@ -95,6 +95,7 @@ export default class CardRendererPanel extends Component<Signature> {
       class='card-renderer-header'
       @cardTypeDisplayName={{cardTypeDisplayName @card}}
       @cardTypeIcon={{cardTypeIcon @card}}
+      @cardTitle={{@card.title}}
       @realmInfo={{this.realmInfo}}
       @onEdit={{if this.canEditCard (fn @setFormat 'edit')}}
       @onFinishEditing={{if (eq this.format 'edit') (fn @setFormat 'isolated')}}

@@ -236,6 +236,7 @@ export default class RoomMessageCommand extends Component<Signature> {
             <CardHeader
               @cardTypeDisplayName={{this.headerTitle}}
               @cardTypeIcon={{cardTypeIcon this.commandResultCard.card}}
+              @cardTitle={{this.commandResultCard.card.title}}
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
               class='header'
               data-test-command-result-header
