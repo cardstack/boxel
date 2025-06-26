@@ -309,10 +309,10 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await waitUntil(
       () =>
         document
-          .querySelector('[data-test-skill-menu]')
-          ?.textContent?.trim() === 'Skills 1',
+          .querySelector('[data-test-active-skills-count]')
+          ?.textContent?.trim() === '1 Skill',
     );
-    assert.dom('[data-test-skill-menu]').containsText('Skills 1');
+    assert.dom('[data-test-active-skills-count]').containsText('1 Skill');
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     assert.dom('[data-test-skill-menu]').containsText('Skills: 1 of 1 active');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
@@ -358,7 +358,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
 
     await waitFor('[data-test-room-settled]');
-    assert.dom('[data-test-skill-menu]').containsText('Skills 1');
+    assert.dom('[data-test-active-skills-count]').containsText('1 Skill');
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     assert.dom('[data-test-skill-menu]').containsText('Skills: 1 of 1 active');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
