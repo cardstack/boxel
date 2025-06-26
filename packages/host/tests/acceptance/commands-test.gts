@@ -1076,7 +1076,7 @@ module('Acceptance | Commands tests', function (hooks) {
       .dom(
         '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]',
       )
-      .includesText('Person Hassan');
+      .includesText('Person - Hassan Abdel-Rahman');
 
     // verify that command result event was created correctly
     await waitUntil(() => getRoomIds().length > 0);
@@ -1165,7 +1165,7 @@ module('Acceptance | Commands tests', function (hooks) {
       .dom(
         '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]',
       )
-      .includesText('Person Hassan');
+      .includesText('Person - Hassan Abdel-Rahman');
 
     // verify that command result event was created correctly
     await waitUntil(() => getRoomIds().length > 0);

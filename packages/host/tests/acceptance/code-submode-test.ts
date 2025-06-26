@@ -1085,7 +1085,7 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       assert
         .dom('[data-test-code-mode-card-renderer-header]')
-        .hasText('Person');
+        .hasText('Person - Fadhlan');
       assert
         .dom('[data-test-code-mode-card-renderer-body]')
         .includesText('Fadhlan');
