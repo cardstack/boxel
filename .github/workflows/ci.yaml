@@ -389,8 +389,7 @@ jobs:
         working-directory: packages/realm-server
         env:
           TEST_MODULE: ${{matrix.testModule}}
-      - name: Print realm server logs on failure
-        if: failure()
+      - name: Print realm server logs
         run: cat /tmp/server.log
       - name: Prepare artifact name
         id: artifact_name
