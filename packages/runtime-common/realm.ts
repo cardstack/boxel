@@ -692,7 +692,14 @@ export class Realm {
       } as Utils,
     );
 
-    return await matrixBackendAuthentication.createSession(request);
+    try {
+      return await matrixBackendAuthentication.createSession(request);
+    } catch (e) {
+      console.log('Error in _session');
+      console.log(e);
+
+      throw e;
+    }
   }
 
   private async internalHandle(
