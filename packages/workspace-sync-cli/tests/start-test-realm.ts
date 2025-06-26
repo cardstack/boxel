@@ -14,17 +14,20 @@ export interface TestRealmServer {
   stop: () => Promise<void>;
 }
 
-export async function startTestRealmServer(realmPath: string, realmsRootPath: string): Promise<TestRealmServer> {
+export async function startTestRealmServer(
+  realmPath: string,
+  realmsRootPath: string,
+): Promise<TestRealmServer> {
   const realmServerDir = path.join(__dirname, '..', '..', 'realm-server');
   const matrixDir = path.join(__dirname, '..', '..', 'matrix');
-  
+
   // Use unique test database name like isolated-realm-server
   const testDbName = `test_db_${Math.floor(10000000 * Math.random())}`;
-  
+
   const env = {
     ...process.env,
     PGHOST: 'localhost',
-    PGPORT: '5435',  // Test port, not 5432
+    PGPORT: '5435', // Test port, not 5432
     PGUSER: 'postgres',
     PGDATABASE: testDbName,
     REALM_SERVER_SECRET_SEED: "mum's the word",
@@ -52,7 +55,7 @@ export async function startTestRealmServer(realmPath: string, realmsRootPath: st
   const workerProcess = spawn('ts-node', workerArgs, {
     cwd: realmServerDir,
     env,
-    stdio: ['pipe', 'pipe', 'pipe', 'ipc']
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
   });
 
   if (workerProcess.stdout) {
@@ -90,7 +93,7 @@ export async function startTestRealmServer(realmPath: string, realmsRootPath: st
   const realmProcess = spawn('ts-node', serverArgs, {
     cwd: realmServerDir,
     env,
-    stdio: ['pipe', 'pipe', 'pipe', 'ipc']
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
   });
 
   // Handle registration secret requests
@@ -112,7 +115,11 @@ export async function startTestRealmServer(realmPath: string, realmsRootPath: st
   if (realmProcess.stdout) {
     realmProcess.stdout.on('data', (data: Buffer) => {
       const output = data.toString().trim();
-      if (process.env.DEBUG || output.includes('error') || output.includes('Error')) {
+      if (
+        process.env.DEBUG ||
+        output.includes('error') ||
+        output.includes('Error')
+      ) {
         console.log(`[realm-server] ${output}`);
       }
     });
@@ -173,7 +180,10 @@ export async function startTestRealmServer(realmPath: string, realmsRootPath: st
   return { realmProcess, workerProcess, stop };
 }
 
-export async function waitForServer(url: string, maxAttempts = 30): Promise<void> {
+export async function waitForServer(
+  url: string,
+  maxAttempts = 30,
+): Promise<void> {
   for (let i = 0; i < maxAttempts; i++) {
     try {
       const response = await fetch(url);
@@ -183,8 +193,10 @@ export async function waitForServer(url: string, maxAttempts = 30): Promise<void
     } catch (e) {
       // Server not ready yet
     }
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  
-  throw new Error(`Server at ${url} failed to start after ${maxAttempts} attempts`);
+
+  throw new Error(
+    `Server at ${url} failed to start after ${maxAttempts} attempts`,
+  );
 }
