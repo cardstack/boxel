@@ -617,7 +617,9 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
-    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
+    assert
+      .dom('[data-test-boxel-card-header-title]')
+      .hasText('Person - Fadhlan');
     assert
       .dom(
         `[data-test-card-header-realm-icon="https://boxel-images.boxel.ai/icons/Letter-o.png"]`,
@@ -2436,7 +2438,9 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await waitFor('[data-test-card-header-realm-icon]');
-    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
+    assert
+      .dom('[data-test-boxel-card-header-title]')
+      .hasText('Person - Fadhlan');
     assert
       .dom(
         `[data-test-card-header-realm-icon="https://boxel-images.boxel.ai/icons/Letter-o.png"]`,
@@ -2447,7 +2451,9 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-tooltip-content]')
       .hasText('In Operator Mode Workspace');
     await triggerEvent(`[data-test-card-header-realm-icon]`, 'mouseleave');
-    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
+    assert
+      .dom('[data-test-boxel-card-header-title]')
+      .hasText('Person - Fadhlan');
   });
 
   test(`it has an option to copy the card url`, async function (assert) {

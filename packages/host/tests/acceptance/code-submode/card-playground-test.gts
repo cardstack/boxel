@@ -631,7 +631,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       assert
         .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
-        .hasText('Author');
+        .hasText('Author - Jane Doe');
       assertCardExists(assert, cardId, 'isolated');
       assert.dom('[data-test-author-title]').hasText('Jane Doe');
       assert
@@ -652,7 +652,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-format-chooser="edit"]').hasClass('active');
       assert
         .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
-        .hasText('Author');
+        .hasText('Author - Jane Doe');
       assertCardExists(assert, cardId, 'edit');
 
       await selectFormat('atom');
@@ -680,7 +680,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       assert
         .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
-        .hasText('Author');
+        .hasText('Author - Jane Doe');
       assertCardExists(assert, cardId, 'isolated');
       assert.dom('[data-test-author-title]').hasText('Jane Doe');
       assert.dom('[data-test-format-chooser="isolated"]').hasClass('active');
