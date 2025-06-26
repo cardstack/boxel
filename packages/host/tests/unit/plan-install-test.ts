@@ -619,7 +619,12 @@ module('Unit | Catalog | Install Plan Builder', function () {
               },
             },
           ],
-          modulesToInstall: [],
+          modulesToInstall: [
+            {
+              sourceModule: `${sourceRealmURL.href}some-folder/some`,
+              targetModule: `${targetRealmURL}xyz/some-folder/some.gts`,
+            },
+          ],
         });
       });
       test('instanceCopy is deduplicated', function (assert) {
