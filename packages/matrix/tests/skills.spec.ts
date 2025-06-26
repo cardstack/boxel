@@ -295,7 +295,9 @@ test.describe('Skills', () => {
       { from: 'user1', message: 'Message 1' },
       { from: 'user1', message: 'Message 2' },
     ]);
-    expect(page.locator('[data-test-skill-menu]')).toHaveText('Skills 0');
+    expect(page.locator('[data-test-active-skills-count]')).toHaveText(
+      '0 Skills',
+    );
   });
 
   test(`previously disabled skills can be enabled`, async ({ page }) => {
