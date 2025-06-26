@@ -97,6 +97,7 @@ export default class NewSession extends Component<Signature> {
       .prompt::before {
         display: inline-block;
         margin-right: var(--boxel-sp-sm);
+        padding: 0 0 1px 1px;
         content: '?';
         width: 1.25rem;
         height: 1.25rem;
