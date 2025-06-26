@@ -120,7 +120,10 @@ Options:
 Environment Variables (required):
   MATRIX_URL       The Matrix server URL
   MATRIX_USERNAME  Your Matrix username  
-  MATRIX_PASSWORD  Your Matrix password
+  MATRIX_PASSWORD  Your Matrix password (or use REALM_SECRET_SEED for realm users)
+  
+Environment Variables (optional):
+  REALM_SECRET_SEED  Secret for generating realm user passwords (alternative to MATRIX_PASSWORD)
 
 File Filtering:
   - Files starting with a dot (.) are always ignored
@@ -154,7 +157,7 @@ async function main() {
   const { workspaceUrl, localDir, deleteLocal, dryRun } = parseArgs();
 
   // Get environment variables for Matrix authentication
-  const { matrixUrl, username, password } = validateMatrixEnvVars();
+  const { matrixUrl, username, password } = await validateMatrixEnvVars();
 
   try {
     const puller = new RealmPuller(

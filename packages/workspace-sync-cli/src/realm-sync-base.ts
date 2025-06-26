@@ -407,14 +407,15 @@ export abstract class RealmSyncBase {
   abstract sync(): Promise<void>;
 }
 
-export function validateMatrixEnvVars(): {
+export async function validateMatrixEnvVars(): Promise<{
   matrixUrl: string;
   username: string;
   password: string;
-} {
+}> {
   const matrixUrl = process.env.MATRIX_URL;
   const username = process.env.MATRIX_USERNAME;
-  const password = process.env.MATRIX_PASSWORD;
+  let password = process.env.MATRIX_PASSWORD;
+  const realmSecret = process.env.REALM_SECRET_SEED;
 
   if (!matrixUrl) {
     console.error('MATRIX_URL environment variable is required');
@@ -426,10 +427,23 @@ export function validateMatrixEnvVars(): {
     process.exit(1);
   }
 
-  if (!password) {
-    console.error('MATRIX_PASSWORD environment variable is required');
+  if (!password && !realmSecret) {
+    console.error(
+      'Either MATRIX_PASSWORD or REALM_SECRET_SEED environment variable is required',
+    );
     process.exit(1);
   }
 
-  return { matrixUrl, username, password };
+  // If password is not provided but realm secret is, generate password from secret
+  if (!password && realmSecret) {
+    const { realmPassword } = await import(
+      '../../matrix/helpers/realm-credentials.js'
+    );
+    password = await realmPassword(username, realmSecret);
+    console.log(
+      'Generated password from REALM_SECRET_SEED for realm user authentication',
+    );
+  }
+
+  return { matrixUrl, username, password: password! };
 }

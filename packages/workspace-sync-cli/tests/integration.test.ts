@@ -110,17 +110,23 @@ export default class TestComponent extends Component {
     command: string,
     args: string[],
     cwd: string,
+    customEnv?: Record<string, string>,
   ): Promise<{ stdout: string; stderr: string; code: number }> {
     const testPassword = await realmPassword(TEST_USERNAME, REALM_SECRET_SEED);
     return new Promise((resolve) => {
+      const defaultEnv = {
+        ...process.env,
+        MATRIX_URL,
+        MATRIX_USERNAME: TEST_USERNAME,
+        MATRIX_PASSWORD: testPassword,
+      };
+
+      // If custom env is provided, use it instead of defaults
+      const env = customEnv ? { ...process.env, ...customEnv } : defaultEnv;
+
       const proc = spawn(command, args, {
         cwd,
-        env: {
-          ...process.env,
-          MATRIX_URL,
-          MATRIX_USERNAME: TEST_USERNAME,
-          MATRIX_PASSWORD: testPassword,
-        },
+        env,
       });
 
       let stdout = '';
@@ -430,7 +436,48 @@ export default class TestComponent extends Component {
       }
     });
 
-    // Test 6: Test .boxelignore
+    // Test 6: Test password generation from realm secret
+    await this.test(
+      'Generates password from REALM_SECRET_SEED when MATRIX_PASSWORD not provided',
+      async () => {
+        // Test using only REALM_SECRET_SEED instead of MATRIX_PASSWORD
+        const pullResult = await this.runCommand(
+          'node',
+          [
+            pullCmd,
+            `http://localhost:${REALM_PORT}/test/`,
+            this.context.localDir,
+          ],
+          process.cwd(),
+          {
+            // Remove MATRIX_PASSWORD and provide REALM_SECRET_SEED instead
+            MATRIX_URL,
+            MATRIX_USERNAME: TEST_USERNAME,
+            REALM_SECRET_SEED,
+            // Don't provide MATRIX_PASSWORD to test the fallback
+          },
+        );
+
+        if (pullResult.code !== 0) {
+          throw new Error(
+            `Pull with realm secret failed: ${pullResult.stderr}`,
+          );
+        }
+
+        // Verify files were pulled successfully (basic smoke test)
+        const card1Exists = await fs
+          .access(path.join(this.context.localDir, 'card1.json'))
+          .then(() => true)
+          .catch(() => false);
+        if (!card1Exists) {
+          throw new Error(
+            'Authentication with generated password failed - card1.json not pulled',
+          );
+        }
+      },
+    );
+
+    // Test 7: Test .boxelignore
     await this.test('Respects .boxelignore patterns', async () => {
       // Create .boxelignore
       await fs.writeFile(
