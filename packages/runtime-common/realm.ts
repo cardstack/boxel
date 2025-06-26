@@ -693,6 +693,7 @@ export class Realm {
     );
 
     let response;
+    let clonedRequest = request.clone();
 
     try {
       response = await matrixBackendAuthentication.createSession(request);
@@ -707,7 +708,8 @@ export class Realm {
       console.log('About to try again');
 
       try {
-        response = await matrixBackendAuthentication.createSession(request);
+        response =
+          await matrixBackendAuthentication.createSession(clonedRequest);
         return response;
       } catch (e) {
         console.log('Second error in _session');
