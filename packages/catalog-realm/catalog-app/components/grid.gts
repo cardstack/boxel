@@ -207,7 +207,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
         padding: var(--boxel-sp-xl);
         text-align: center;
       }
-      p .no-results-icon {
+      .no-results-icon {
         width: 64px;
         height: 64px;
         color: var(--layout-theme-color);
