@@ -446,6 +446,40 @@ jobs:
         run: pnpm build
         working-directory: packages/workspace-sync-cli
 
+  workspace-sync-cli-test:
+    name: Workspace Sync CLI Integration Tests
+    needs: change-check
+    if: needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: workspace-sync-cli-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: ./.github/actions/init
+      - name: Build workspace-sync-cli
+        run: pnpm build
+        working-directory: packages/workspace-sync-cli
+      - name: Start PostgreSQL for tests
+        run: pnpm start:pg | tee -a /tmp/test-services.log &
+        working-directory: packages/realm-server
+      - name: Start Matrix services for tests
+        run: pnpm start:matrix | tee -a /tmp/test-services.log &
+        working-directory: packages/realm-server
+      - name: Register realm users for tests
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
+      - name: Run integration tests
+        run: pnpm test:integration
+        working-directory: packages/workspace-sync-cli
+      - name: Upload test services log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: workspace-sync-cli-test-services-log
+          path: /tmp/test-services.log
+          retention-days: 30
+
   deploy:
     name: Deploy boxel to staging
     if: needs.change-check.outputs.boxel == 'true' && github.ref == 'refs/heads/main'
