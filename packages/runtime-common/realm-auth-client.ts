@@ -143,6 +143,7 @@ export class RealmAuthClient {
     }
 
     console.log(`initiating session request for user ${userId}`);
+    console.trace('trace!');
 
     return this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
       method: 'POST',
