@@ -6,6 +6,7 @@ import type { Icon } from './icons/types.ts';
 import ArrowLeft from './icons/arrow-left.gts';
 import ArrowRight from './icons/arrow-right.gts';
 import ArrowTopLeft from './icons/arrow-top-left.gts';
+import ArrowUp from './icons/arrow-up.gts';
 import BoxelIcon from './icons/boxel-icon.gts';
 import Card from './icons/card.gts';
 import CardbotLg from './icons/cardbot-lg.gts';
@@ -74,6 +75,7 @@ export const ALL_ICON_COMPONENTS = [
   ArrowLeft,
   ArrowRight,
   ArrowTopLeft,
+  ArrowUp,
   BoxelIcon,
   Card,
   CardbotLg,
@@ -143,6 +145,7 @@ export {
   ArrowLeft,
   ArrowRight,
   ArrowTopLeft,
+  ArrowUp,
   BoxelIcon,
   Card,
   CardbotLg,

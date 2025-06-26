@@ -7,7 +7,7 @@ import onKeyMod from 'ember-keyboard/modifiers/on-key';
 
 import { BoxelInput, IconButton } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
-import { Send } from '@cardstack/boxel-ui/icons';
+import { ArrowUp } from '@cardstack/boxel-ui/icons';
 import { setCssVar } from '@cardstack/boxel-ui/modifiers';
 
 import AttachButton from '../attachment-picker/attach-button';
@@ -55,7 +55,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
         disabled={{not @canSend}}
         data-test-can-send-msg={{@canSend}}
         class='send-button'
-        @icon={{Send}}
+        @icon={{ArrowUp}}
         @height='20'
         @width='25'
         aria-label='Send'
@@ -94,22 +94,24 @@ export default class AiAssistantChatInput extends Component<Signature> {
         border-color: transparent;
       }
       .send-button {
+        color: var(--boxel-dark);
         width: var(--boxel-icon-med);
         height: var(--boxel-icon-med);
         background-color: var(--boxel-highlight);
         border-radius: var(--boxel-border-radius-sm);
+        margin-top: 2px;
       }
       .send-button:hover:not(:disabled),
       .send-button:focus:not(:disabled) {
         background-color: var(--boxel-highlight-hover);
       }
       .send-button:disabled {
-        --icon-color: var(--boxel-450);
+        color: var(--boxel-450);
         background-color: var(--boxel-300);
         pointer-events: none;
       }
       .send-button :deep(svg) {
-        padding-top: var(--boxel-sp-5xs);
+        padding: var(--boxel-sp-5xs);
       }
     </style>
   </template>
