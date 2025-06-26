@@ -56,7 +56,7 @@ export default class CatalogLayout extends GlimmerComponent<CatalogLayoutSignatu
       }
 
       .sidebar {
-        width: var(--sidebar-width, 255px);
+        width: var(--sidebar-width, 290px);
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-lg);
