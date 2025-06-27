@@ -1,7 +1,3 @@
-/* eslint-disable camelcase */
-
-exports.shorthands = undefined;
-
 exports.up = (pgm) => {
   pgm.sql(`UPDATE plans SET name = 'Starter' WHERE name = 'Free'`);
 

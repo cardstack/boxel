@@ -44,8 +44,6 @@ module.exports = function (environment) {
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
     featureFlags: {
       SHOW_ASK_AI: process.env.SHOW_ASK_AI === 'true' || false,
-      STRIPE_SIGNUP_MANDATORY:
-        process.env.STRIPE_SIGNUP_MANDATORY === 'true' || false,
     },
   };
 
