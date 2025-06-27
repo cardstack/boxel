@@ -1168,6 +1168,10 @@ module('Acceptance | operator mode tests', function (hooks) {
           'https://buy.stripe.com/power-user-plan-payment-link?client_reference_id=QHRlc3R1c2VyOmxvY2FsaG9zdA&prefilled_email=testuser%40example.com',
         );
 
+      assert
+        .dom('[data-test-current-plan-badge]')
+        .doesNotExist('when on free plan no subscription plan is current');
+
       await click('[data-test-close-modal]');
       await click('[data-test-profile-icon-button]');
 
@@ -1299,6 +1303,28 @@ module('Acceptance | operator mode tests', function (hooks) {
         .dom('[data-test-subscription-data="additional-credit"]')
         .hasNoClass('out-of-credit');
       assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
+
+      // changes plan
+      userResponseBody.data.attributes.plan = 'Creator';
+      simulateRemoteMessage(matrixRoomId, '@realm-server:localhost', {
+        msgtype: APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
+        body: JSON.stringify({ eventType: 'billing-notification' }),
+      });
+      await click('[data-test-profile-icon-button]');
+      assert
+        .dom('[data-test-creator-plan-column] [data-test-current-plan-badge]')
+        .exists();
+      assert
+        .dom('[data-test-starter-plan-column] [data-test-current-plan-badge]')
+        .doesNotExist();
+      assert
+        .dom(
+          '[data-test-power-user-plan-column] [data-test-current-plan-badge]',
+        )
+        .doesNotExist();
+      assert.dom('[data-test-creator-plan-button]').hasText('Manage Plan');
+      assert.dom('[data-test-starter-plan-button]').hasText('Get Started');
+      assert.dom('[data-test-power-user-plan-button]').hasText('Get Started');
     });
 
     test(`ai panel continues being open when switching to code submode`, async function (assert) {

@@ -19,6 +19,22 @@ interface Signature {
 export default class ChooseSubscriptionPlanModal extends Component<Signature> {
   @service declare billingService: BillingService;
 
+  get currentPlan() {
+    return this.billingService.subscriptionData?.plan;
+  }
+
+  get isStarterPlan() {
+    return this.currentPlan === 'Starter';
+  }
+
+  get isCreatorPlan() {
+    return this.currentPlan === 'Creator';
+  }
+
+  get isPowerUserPlan() {
+    return this.currentPlan === 'Power User';
+  }
+
   <template>
     <style scoped>
       .boxel-pricing-container {
@@ -97,19 +113,35 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
         overflow: hidden;
         margin-bottom: var(--boxel-sp-lg);
         background-color: var(--boxel-light);
+        position: relative;
       }
-      .plan-column.plan-free {
+      .plan-column.plan-starter {
         background-color: var(--boxel-100);
+      }
+
+      .current-plan-badge {
+        position: absolute;
+        top: var(--boxel-sp);
+        right: var(--boxel-sp);
+        background-color: var(--boxel-450);
+        color: var(--boxel-light);
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+        border-radius: 50px;
+        font: var(--boxel-font-xs);
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: 8px;
       }
 
       .plan-header {
         padding: var(--boxel-sp-lg);
         text-align: center;
       }
-      .plan-column.plan-free .plan-header {
+      .plan-column.plan-starter .plan-header {
         background-color: var(--boxel-100);
       }
-      .plan-header:not(.plan-free *) {
+      .plan-header:not(.plan-starter *) {
         background-color: var(--boxel-light);
       }
 
@@ -344,7 +376,17 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
               <div class='label-cell'>Boxel Web App</div>
             </div>
 
-            <div class='plan-column plan-free'>
+            <div
+              class='plan-column plan-starter
+                {{if this.isStarterPlan "current-plan"}}'
+              data-test-starter-plan-column
+            >
+              {{#if this.isStarterPlan}}
+                <div
+                  class='current-plan-badge'
+                  data-test-current-plan-badge
+                >Current Plan</div>
+              {{/if}}
               <div class='plan-header'>
                 <h3 class='plan-name'>Starter</h3>
                 <div class='plan-price'>$0</div>
@@ -353,7 +395,7 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                   href={{this.billingService.stripeStarterPlanPaymentLink}}
                   class='btn btn-teal btn-get-started'
                   data-test-starter-plan-button
-                >Get Started</a>
+                >{{if this.isStarterPlan 'Manage Plan' 'Get Started'}}</a>
               </div>
               <div class='feature-cell'>
                 <div class='credit-value'>
@@ -367,7 +409,17 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
               <div class='feature-cell'>Included</div>
             </div>
 
-            <div class='plan-column plan-creator'>
+            <div
+              class='plan-column plan-creator
+                {{if this.isCreatorPlan "current-plan"}}'
+              data-test-creator-plan-column
+            >
+              {{#if this.isCreatorPlan}}
+                <div
+                  class='current-plan-badge'
+                  data-test-current-plan-badge
+                >Current Plan</div>
+              {{/if}}
               <div class='plan-header'>
                 <h3 class='plan-name'>Creator</h3>
                 <div class='plan-price'>$12</div>
@@ -376,7 +428,7 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                   href={{this.billingService.stripeCreatorPlanPaymentLink}}
                   class='btn btn-dark btn-get-started'
                   data-test-creator-plan-button
-                >Get Started</a>
+                >{{if this.isCreatorPlan 'Manage Plan' 'Get Started'}}</a>
               </div>
               <div class='feature-cell'>
                 <div class='credit-value'>
@@ -390,7 +442,17 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
               <div class='feature-cell'>Included</div>
             </div>
 
-            <div class='plan-column plan-power'>
+            <div
+              class='plan-column plan-power
+                {{if this.isPowerUserPlan "current-plan"}}'
+              data-test-power-user-plan-column
+            >
+              {{#if this.isPowerUserPlan}}
+                <div
+                  class='current-plan-badge'
+                  data-test-current-plan-badge
+                >Current Plan</div>
+              {{/if}}
               <div class='plan-header'>
                 <h3 class='plan-name'>Power User</h3>
                 <div class='plan-price'>$49</div>
@@ -399,7 +461,7 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                   href={{this.billingService.stripePowerUserPlanPaymentLink}}
                   class='btn btn-dark btn-get-started'
                   data-test-power-user-plan-button
-                >Get Started</a>
+                >{{if this.isPowerUserPlan 'Manage Plan' 'Get Started'}}</a>
               </div>
               <div class='feature-cell'>
                 <div class='credit-value'>
