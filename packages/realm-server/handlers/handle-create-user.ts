@@ -57,6 +57,8 @@ export default function handleCreateUserRequest({
       return;
     }
 
+    // When user signs up, they get 1000 credits and no stripe subscription is needed
+    // In this case we don't need to create a subscription cycle, just add the credits to the user
     await addToCreditsLedger(dbAdapter, {
       userId: user!.id,
       creditAmount: 1000,
