@@ -62,7 +62,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         data-test-room-is-empty={{if this.roomResource.messages false true}}
         ...attributes
       >
-        <@resizeHandle />
+        <@resizeHandle class='ai-assistant-panel-resize-handle' />
         <header class='panel-header'>
           <img
             alt='AI Assistant'
@@ -343,6 +343,10 @@ export default class AiAssistantPanel extends Component<Signature> {
 
       .session-error {
         padding: 0 var(--boxel-sp);
+      }
+
+      .ai-assistant-panel-resize-handle {
+        z-index: calc(var(--host-ai-panel-z-index) + 1);
       }
     </style>
   </template>
