@@ -99,6 +99,10 @@ class EditView extends Component<typeof CodeRefField> {
           this.validationState = 'invalid';
         }
       } catch (err) {
+        console.log(
+          `======> error testing for code ref validity for URL ${module} with export ${name}`,
+          err,
+        );
         this.validationState = 'invalid';
       }
     },
