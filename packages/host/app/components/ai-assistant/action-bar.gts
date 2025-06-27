@@ -103,6 +103,11 @@ export default class AiAssistantActionBar extends Component<Signature> {
         padding: 0;
         padding-bottom: var(--boxel-sp-xs);
       }
+
+      .ai-assistant-action-bar button {
+        height: 24px;
+      }
+
       .action-btn {
         flex: 1;
         --boxel-button-font: 600 var(--boxel-font-xs);
