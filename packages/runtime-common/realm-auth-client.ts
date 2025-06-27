@@ -1,4 +1,4 @@
-import { unixTime } from './index';
+import { unixTime, delay } from './index';
 import { TokenClaims } from './realm';
 
 // iat - issued at (seconds since epoch)
@@ -141,31 +141,55 @@ export class RealmAuthClient {
     if (!userId) {
       throw new Error('userId is undefined');
     }
-    return this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        user: userId,
+    return this.withRetries(() =>
+      this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          user: userId,
+        }),
       }),
-    });
+    );
   }
 
   private async challengeRequest(
     challenge: string,
     challengeResponse?: string,
   ) {
-    return this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        user: this.matrixClient.getUserId(),
-        challenge,
-        ...(challengeResponse ? { challengeResponse } : {}),
+    return this.withRetries(() =>
+      this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          user: this.matrixClient.getUserId(),
+          challenge,
+          ...(challengeResponse ? { challengeResponse } : {}),
+        }),
       }),
-    });
+    );
+  }
+
+  private async withRetries(
+    fetchFn: () => ReturnType<typeof globalThis.fetch>,
+  ) {
+    let attempt = 0;
+    for (;;) {
+      let response = await fetchFn();
+      // we believe that realm is sometimes unable to login to matrix in CI
+      // which results in failed auth requests because the realm doesn't know
+      // who it is. in these cases the realm responds with a 500 error, so we try again...
+      if (response.status === 500 && ++attempt <= maxAttempts) {
+        await delay(attempt * backOffMs);
+      } else {
+        return response;
+      }
+    }
   }
 }
+
+const maxAttempts = 3;
+const backOffMs = 100;
