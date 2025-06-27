@@ -191,5 +191,5 @@ export class RealmAuthClient {
   }
 }
 
-const maxAttempts = 3;
+const maxAttempts = 5;
 const backOffMs = 100;
