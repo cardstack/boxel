@@ -88,8 +88,8 @@ export default class AiAssistantActionBar extends Component<Signature> {
       .ai-assistant-action-bar {
         background-color: var(--boxel-650);
         display: flex;
-        gap: var(--boxel-sp-sm);
-        padding: 10px 13px;
+        gap: 10px;
+        padding: 10px;
         padding-bottom: calc(
           var(--chat-input-area-border-radius) + var(--boxel-sp-xs)
         );
