@@ -2,6 +2,9 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 
 import { action } from '@ember/object';
+
+import RouterService from '@ember/routing/router-service';
+
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -36,7 +39,6 @@ import {
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import { AuthMode } from './auth';
-import RouterService from '@ember/routing/router-service';
 
 const MATRIX_REGISTRATION_TYPES = {
   sendToken: 'm.login.registration_token',
