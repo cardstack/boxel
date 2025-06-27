@@ -229,7 +229,10 @@ export default class Room extends Component<Signature> {
         position: absolute;
 
         width: 100%;
-        height: calc(var(--boxel-sp-xl) + var(--chat-input-area-border-radius));
+        height: calc(
+          var(--ai-assistant-panel-bottom-gradient-height) +
+            var(--chat-input-area-border-radius)
+        );
         left: 0;
         bottom: calc(100% - var(--chat-input-area-border-radius));
 

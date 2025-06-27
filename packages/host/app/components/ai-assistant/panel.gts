@@ -196,6 +196,8 @@ export default class AiAssistantPanel extends Component<Signature> {
         --ai-assistant-panel-top-gradient-start-proportion: 0.6;
         --ai-assistant-panel-padding: var(--boxel-sp-sm);
 
+        --ai-assistant-panel-bottom-gradient-height: var(--boxel-sp-xl);
+
         background-color: var(--boxel-ai-purple);
         border-radius: 0;
         color: var(--boxel-light);
