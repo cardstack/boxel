@@ -193,8 +193,10 @@ export default class AiAssistantPanel extends Component<Signature> {
 
       .ai-assistant-panel {
         --ai-assistant-panel-header-height: 4.5rem;
-        --ai-assistant-panel-gradient-start-proportion: 0.6;
+        --ai-assistant-panel-top-gradient-start-proportion: 0.6;
         --ai-assistant-panel-padding: var(--boxel-sp-sm);
+
+        --ai-assistant-panel-bottom-gradient-height: var(--boxel-sp-xl);
 
         background-color: var(--boxel-ai-purple);
         border-radius: 0;
@@ -235,7 +237,7 @@ export default class AiAssistantPanel extends Component<Signature> {
           to bottom,
           var(--boxel-ai-purple),
           var(--boxel-ai-purple)
-            calc(var(--ai-assistant-panel-gradient-start-proportion) * 100%),
+            calc(var(--ai-assistant-panel-top-gradient-start-proportion) * 100%),
           transparent 100%
         );
       }
@@ -273,7 +275,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         position: absolute;
         height: calc(
           var(--ai-assistant-panel-header-height) *
-            var(--ai-assistant-panel-gradient-start-proportion) -
+            var(--ai-assistant-panel-top-gradient-start-proportion) -
             var(--ai-assistant-panel-padding)
         );
         width: 100%;
