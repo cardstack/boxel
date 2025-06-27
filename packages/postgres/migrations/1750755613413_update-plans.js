@@ -1,6 +1,5 @@
 exports.up = (pgm) => {
   pgm.sql(`UPDATE plans SET name = 'Starter' WHERE name = 'Free'`);
-
   pgm.sql(`UPDATE plans SET credits_included = 2500 WHERE name = 'Starter'`);
   pgm.sql(`UPDATE plans SET credits_included = 6500 WHERE name = 'Creator'`);
   pgm.sql(

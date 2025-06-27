@@ -209,13 +209,11 @@ export default class BillingService extends Service {
   async fetchSubscriptionData() {
     this._fetchingSubscriptionData = true;
     try {
-      let token = await this.getToken();
-
       let response = await this.network.fetch(`${this.url.origin}/_user`, {
         headers: {
           Accept: SupportedMimeType.JSONAPI,
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${await this.getToken()}`,
         },
       });
 

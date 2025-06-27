@@ -106,7 +106,7 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
         })} of ${formatNumber(this.creditsIncludedInPlanAllowance, {
           size: 'short',
         })} left`
-      : 'Not available on free plan';
+      : 'Not available on Free plan';
   }
 
   private get isOutOfCredit() {
