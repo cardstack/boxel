@@ -1,4 +1,4 @@
-import { unixTime } from './index';
+import { unixTime, delay } from './index';
 import { TokenClaims } from './realm';
 
 // iat - issued at (seconds since epoch)
@@ -145,15 +145,17 @@ export class RealmAuthClient {
     console.log(`initiating session request for user ${userId}`);
     console.trace('trace!');
 
-    return this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        user: userId,
+    return this.withRetries(() =>
+      this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          user: userId,
+        }),
       }),
-    });
+    );
   }
 
   private async challengeRequest(
@@ -163,16 +165,39 @@ export class RealmAuthClient {
     console.log(
       `responding to challenge for user ${this.matrixClient.getUserId()}`,
     );
-    return this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        user: this.matrixClient.getUserId(),
-        challenge,
-        ...(challengeResponse ? { challengeResponse } : {}),
+
+    return this.withRetries(() =>
+      this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          user: this.matrixClient.getUserId(),
+          challenge,
+          ...(challengeResponse ? { challengeResponse } : {}),
+        }),
       }),
-    });
+    );
+  }
+
+  private async withRetries(
+    fetchFn: () => ReturnType<typeof globalThis.fetch>,
+  ) {
+    let attempt = 0;
+    for (;;) {
+      let response = await fetchFn();
+      // we believe that realm is sometimes unable to login to matrix in CI
+      // which results in failed auth requests because the realm doesn't know
+      // who it is. in these cases the realm responds with a 500 error, so we try again...
+      if (response.status === 500 && ++attempt <= maxAttempts) {
+        await delay(attempt * backOffMs);
+      } else {
+        return response;
+      }
+    }
   }
 }
+
+const maxAttempts = 5;
+const backOffMs = 100;
