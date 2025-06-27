@@ -23,7 +23,7 @@ module(basename(__filename), function () {
     });
   });
 
-  test('can rewrite import()', async function (assert) {
+  test('can rewrite import() that has url like argument', async function (assert) {
     let transpiled = transpileJS(
       `
       async function test() {
@@ -36,6 +36,23 @@ module(basename(__filename), function () {
       `
       async function test() {
         return await import.meta.loader.import(new URL('./x', import.meta.url).href); 
+      }`,
+    );
+  });
+
+  test('can rewrite import() that has module specifier argument', async function (assert) {
+    let transpiled = transpileJS(
+      `
+      async function test() {
+        return await import('lodash'); 
+      }`,
+      'test-module.ts',
+    );
+    assert.codeEqual(
+      transpiled,
+      `
+      async function test() {
+        return await import.meta.loader.import('lodash'); 
       }`,
     );
   });

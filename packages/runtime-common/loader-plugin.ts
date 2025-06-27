@@ -5,6 +5,15 @@ import type { NodePath } from '@babel/traverse';
 export function loaderPlugin(babel: typeof Babel) {
   let t = babel.types;
 
+  function isPathLike(value: string): boolean {
+    return (
+      value.startsWith('./') ||
+      value.startsWith('../') ||
+      value.startsWith('/') ||
+      value.includes('://')
+    ); // Also handle absolute URLs
+  }
+
   function createLoaderImportCall(
     args: (t.Expression | t.SpreadElement | t.ArgumentPlaceholder)[],
   ): t.CallExpression {
@@ -17,16 +26,26 @@ export function loaderPlugin(babel: typeof Babel) {
       );
     }
 
-    // Always wrap in new URL() - it handles both relative and absolute URLs
-    const urlConstructor = t.newExpression(t.identifier('URL'), [
-      firstArg,
-      t.memberExpression(
-        t.metaProperty(t.identifier('import'), t.identifier('meta')),
-        t.identifier('url'),
-      ),
-    ]);
+    let processedFirstArg: t.Expression;
 
-    const hrefAccess = t.memberExpression(urlConstructor, t.identifier('href'));
+    // If it's a string literal and looks like a path/URL, wrap in new URL()
+    if (t.isStringLiteral(firstArg) && isPathLike(firstArg.value)) {
+      const urlConstructor = t.newExpression(t.identifier('URL'), [
+        firstArg,
+        t.memberExpression(
+          t.metaProperty(t.identifier('import'), t.identifier('meta')),
+          t.identifier('url'),
+        ),
+      ]);
+
+      processedFirstArg = t.memberExpression(
+        urlConstructor,
+        t.identifier('href'),
+      );
+    } else {
+      // For module specifiers or non-string literals, use as-is
+      processedFirstArg = firstArg;
+    }
 
     return t.callExpression(
       t.memberExpression(
@@ -36,7 +55,10 @@ export function loaderPlugin(babel: typeof Babel) {
         ),
         t.identifier('import'),
       ),
-      [hrefAccess, ...args.slice(1).filter((arg) => t.isExpression(arg))], // Filter out non-Expression arguments
+      [
+        processedFirstArg,
+        ...args.slice(1).filter((arg) => t.isExpression(arg)),
+      ], // Filter out non-Expression arguments
     );
   }
 
@@ -56,7 +78,10 @@ export function loaderPlugin(babel: typeof Babel) {
             ),
           );
         } else if (callee.node.type === 'Import') {
+          // for URL like arguments
           // import('./x') => import.meta.loader.import(new URL('./x', import.meta.url).href)
+          // for module specifiers
+          // import('lodash') => import.meta.loader.import('lodash')
           path.replaceWith(createLoaderImportCall(path.node.arguments));
         }
       },
