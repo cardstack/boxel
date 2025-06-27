@@ -23,7 +23,7 @@ console.log(`Registering realm user ${realmUser}...`);
 
 (async () => {
   let password = await realmPassword(realmUser, realmSecretSeed);
-  return new Promise<string>((resolve, reject) => {
+  let result = await new Promise<string>((resolve, reject) => {
     const command = `docker exec boxel-synapse register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u ${realmUser} -p ${password} --no-admin`;
     console.log('Executing command:', command);
     childProcess.exec(command, async (err, stdout) => {
@@ -49,9 +49,7 @@ console.log(`Registering realm user ${realmUser}...`);
       resolve(stdout.trim());
     });
   });
-})().catch((e) => console.error(`unexpected error`, e));
 
-(async () => {
   let response = await fetch(
     `http://localhost:8008/_matrix/client/v3/register/available?username=${realmUser}`,
     {
@@ -61,4 +59,6 @@ console.log(`Registering realm user ${realmUser}...`);
 
   console.log(`User ${realmUser} existence check completed`);
   console.log(await response.text());
-})().catch((e) => console.error(`unexpected error getting user existence`, e));
+
+  return result;
+})().catch((e) => console.error(`unexpected error`, e));
