@@ -20,6 +20,9 @@ import CodeBlockActionsComponent, {
 import CodeBlockDiffEditorHeader, {
   type CodeBlockDiffEditorHeaderSignature,
 } from './diff-editor-header';
+import CodeBlockEditorHeader, {
+  type CodeBlockEditorHeaderSignature,
+} from './editor-header';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -63,6 +66,7 @@ interface Signature {
     default: [
       {
         diffEditorHeader: ComponentLike<CodeBlockDiffEditorHeaderSignature>;
+        editorHeader: ComponentLike<CodeBlockEditorHeaderSignature>;
         editor: ComponentLike<CodeBlockEditorSignature>;
         diffEditor: ComponentLike<CodeBlockDiffEditorSignature>;
         actions: ComponentLike<CodeBlockActionsSignature>;
@@ -76,6 +80,7 @@ const CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
   <section class='code-block' ...attributes>
     {{yield
       (hash
+        editorHeader=(component CodeBlockEditorHeader)
         diffEditorHeader=(component
           CodeBlockDiffEditorHeader
           codeData=@codeData

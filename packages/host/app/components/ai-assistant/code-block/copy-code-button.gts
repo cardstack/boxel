@@ -41,7 +41,7 @@ export default class CopyCodeButton extends Component<CopyCodeButtonSignature> {
     <style scoped>
       .code-copy-button {
         --boxel-button-font: 600 var(--boxel-font-xs);
-        --boxel-button-text-color: var(--boxel-highlight);
+        --boxel-button-text-color: var(--boxel-light);
         --boxel-button-padding: 4px;
         --boxel-button-min-width: 1.5rem;
         --boxel-button-min-height: 1.5rem;
@@ -55,9 +55,15 @@ export default class CopyCodeButton extends Component<CopyCodeButtonSignature> {
       .copy-text {
         display: none;
       }
+      .code-copy-button:not(:disabled):hover {
+        min-width: 78px;
+      }
       .code-copy-button:not(:disabled):hover > .copy-text,
       .copy-text.shown {
         display: block;
+      }
+      .copy-icon {
+        flex-shrink: 0;
       }
     </style>
   </template>

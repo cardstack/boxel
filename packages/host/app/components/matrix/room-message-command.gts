@@ -1,5 +1,4 @@
 import { array, hash } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -37,14 +36,15 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import ApplyButton, {
-  type ApplyButtonState,
-} from '../ai-assistant/apply-button';
+import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import CodeBlock from '../ai-assistant/code-block';
-import ViewCodeButton from '../ai-assistant/code-block/view-code-button';
 import CardRenderer from '../card-renderer';
 
 import PreparingRoomMessageCommand from './preparing-room-message-command';
+
+function getCardIdFromCommand(command: MessageCommand) {
+  return command.commandRequest?.['arguments']?.['attributes']?.['cardId'];
+}
 
 interface Signature {
   Element: HTMLDivElement;
@@ -180,38 +180,28 @@ export default class RoomMessageCommand extends Component<Signature> {
       {{#if @isStreaming}}
         <PreparingRoomMessageCommand />
       {{else}}
-        <div
-          class='command-button-bar'
+        <CodeBlock
+          class='command-code-block'
+          {{this.scrollBottomIntoView}}
+          @monacoSDK={{@monacoSDK}}
+          @codeData={{hash code=this.previewCommandCode language='json'}}
           data-test-command-card-idle={{not
             (eq @messageCommand.status 'applying')
           }}
+          as |codeBlock|
         >
-          <ViewCodeButton
-            class='view-code-button'
-            @toggleViewCode={{this.toggleViewCode}}
+          <codeBlock.editorHeader
+            @fileURL={{getCardIdFromCommand @messageCommand}}
+            @applyButtonAction={{@runCommand}}
+            @applyButtonState={{this.applyButtonState}}
+            @code={{this.previewCommandCode}}
             @isDisplayingCode={{this.isDisplayingCode}}
-            data-test-view-code-button
+            @toggleViewCode={{this.toggleViewCode}}
           />
-          <ApplyButton
-            @state={{this.applyButtonState}}
-            {{on 'click' @runCommand}}
-            data-test-command-apply={{this.applyButtonState}}
-          >{{@messageCommand.actionVerb}}</ApplyButton>
-        </div>
-        {{#if this.isDisplayingCode}}
-          <CodeBlock
-            class='command-code-block'
-            {{this.scrollBottomIntoView}}
-            @monacoSDK={{@monacoSDK}}
-            @codeData={{hash code=this.previewCommandCode language='json'}}
-            as |codeBlock|
-          >
+          {{#if this.isDisplayingCode}}
             <codeBlock.editor />
-            <codeBlock.actions as |actions|>
-              <actions.copyCode />
-            </codeBlock.actions>
-          </CodeBlock>
-        {{/if}}
+          {{/if}}
+        </CodeBlock>
         {{#if this.failedCommandState}}
           <Alert
             @type='error'
