@@ -12,7 +12,7 @@ import {
 import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
 import * as MonacoSDK from 'monaco-editor';
-import { module, skip, test } from 'qunit';
+import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
 
@@ -649,6 +649,36 @@ module('Acceptance | code submode tests', function (_hooks) {
                     shippingInfo: {
                       preferredCarrier: 'DHL',
                       remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+                    },
+                  },
+                ],
+              },
+              relationships: {
+                pet: {
+                  links: {
+                    self: `${testRealmURL}Pet/mango`,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}person`,
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          'Person/AXAXAXAXAX.json': {
+            data: {
+              attributes: {
+                firstName: 'AXAXAXAXAX',
+                address: [
+                  {
+                    city: 'AXAXAXAXAX',
+                    country: 'AXAXAXAXAX',
+                    shippingInfo: {
+                      preferredCarrier: 'AXAXAXAXAX',
+                      remarks: `AXAXAXAXAX`,
                     },
                   },
                 ],
@@ -1454,8 +1484,12 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
     });
 
-    // TODO: restore in CS-8200
-    skip('updates values in preview panel must be represented in editor panel', async function (assert) {
+    test('updates values in preview panel must be represented in editor panel', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}Person/AXAXAXAXAX.json`,
+      });
+      await waitForCodeEditor();
       await visitOperatorMode({
         submode: 'code',
         codePath: `${testRealmURL}Person/fadhlan.json`,
@@ -1485,13 +1519,18 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
       await waitFor(
         `[data-test-select="${testRealmURL}Country/united-states"]`,
+        { timeout: 10_000 },
       );
+      await percySnapshot('AAAFIRST');
+
       await click(`[data-test-select="${testRealmURL}Country/united-states"]`);
       await click(`[data-test-card-catalog-go-button]`);
 
       await waitFor('[data-test-saved]');
       await waitFor('[data-test-save-idle]');
       await settled();
+
+      await percySnapshot('AAASECOND');
 
       let content = getMonacoContent();
       await waitUntil(() => content.includes('Ridhwanallah'));
@@ -1510,6 +1549,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         content.includes(`${testRealmURL}Country/united-states`),
         'content includes Country/united-states',
       );
+      await percySnapshot('AAATHIRD');
     });
 
     test('monaco editor live updates when index changes', async function (assert) {
