@@ -8,6 +8,7 @@ import './index-writer-test';
 import './indexing-test';
 import './loader-test';
 import './module-syntax-test';
+import './transpile-test';
 import './permissions/permission-checker-test';
 import './queue-test';
 import './card-endpoints-test';
