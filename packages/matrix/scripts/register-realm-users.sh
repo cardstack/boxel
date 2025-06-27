@@ -1,5 +1,7 @@
 #! /bin/sh
 
+set -x
+
 COUNT=0
 MAX_ATTEMPTS=10
 
