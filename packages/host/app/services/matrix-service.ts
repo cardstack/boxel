@@ -143,7 +143,6 @@ export default class MatrixService extends Service {
   @service declare private store: StoreService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
-  @tracked private _isNewUser = false;
   @tracked private postLoginCompleted = false;
   @tracked private _currentRoomId: string | undefined;
   @tracked private timelineLoadingState: Map<string, boolean> =
@@ -370,10 +369,6 @@ export default class MatrixService extends Service {
     return this._isInitializingNewUser;
   }
 
-  get isNewUser() {
-    return this._isNewUser;
-  }
-
   async initializeNewUser(
     auth: LoginResponse,
     displayName: string,
@@ -401,7 +396,8 @@ export default class MatrixService extends Service {
       }),
       this.realmServer.fetchCatalogRealms(),
     ]);
-    this._isNewUser = true;
+
+    this.router.refresh();
     this._isInitializingNewUser = false;
   }
 

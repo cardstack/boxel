@@ -708,10 +708,24 @@ export function setupRealmServerEndpoints(
                 },
               },
               {
-                type: 'free-plan-payment-link',
-                id: 'plink_1QP4pEPUHhctoJxaEp1D3myQ',
+                type: 'starter-plan-payment-link',
+                id: 'starter-plan-payment-link',
                 attributes: {
-                  url: 'https://free-plan-payment-link',
+                  url: 'https://buy.stripe.com/starter-plan-payment-link',
+                },
+              },
+              {
+                type: 'creator-plan-payment-link',
+                id: 'creator-plan-payment-link',
+                attributes: {
+                  url: 'https://buy.stripe.com/creator-plan-payment-link',
+                },
+              },
+              {
+                type: 'power-user-plan-payment-link',
+                id: 'power-user-plan-payment-link',
+                attributes: {
+                  url: 'https://buy.stripe.com/power-user-plan-payment-link',
                 },
               },
               {

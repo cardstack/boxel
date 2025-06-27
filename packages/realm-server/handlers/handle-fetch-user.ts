@@ -1,4 +1,8 @@
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  Plan,
+  SubscriptionCycle,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 import Koa from 'koa';
 import {
   sendResponseForNotFound,
@@ -11,8 +15,6 @@ import {
   getMostRecentSubscriptionCycle,
   getPlanById,
   getUserByMatrixUserId,
-  Plan,
-  SubscriptionCycle,
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
 import { CreateRoutesArgs } from '../routes';
@@ -87,22 +89,23 @@ export default function handleFetchUserRequest({
       return;
     }
 
-    let mostRecentSubscription = await getCurrentActiveSubscription(
+    let currentActiveSubscription = await getCurrentActiveSubscription(
       dbAdapter,
       user.id,
     );
     let currentSubscriptionCycle: SubscriptionCycle | null = null;
     let plan: Plan | null = null;
-    if (mostRecentSubscription) {
+    if (currentActiveSubscription) {
       [currentSubscriptionCycle, plan] = await Promise.all([
-        getMostRecentSubscriptionCycle(dbAdapter, mostRecentSubscription.id),
-        getPlanById(dbAdapter, mostRecentSubscription.planId),
+        getMostRecentSubscriptionCycle(dbAdapter, currentActiveSubscription.id),
+        getPlanById(dbAdapter, currentActiveSubscription.planId),
       ]);
     }
 
     let creditsAvailableInPlanAllowance: number | null = null;
     let creditsIncludedInPlanAllowance: number | null = null;
     let extraCreditsAvailableInBalance: number | null = null;
+
     if (currentSubscriptionCycle) {
       [
         creditsAvailableInPlanAllowance,
@@ -122,6 +125,11 @@ export default function handleFetchUserRequest({
           userId: user.id,
         }),
       ]);
+    } else {
+      extraCreditsAvailableInBalance = await sumUpCreditsLedger(dbAdapter, {
+        creditType: ['extra_credit', 'extra_credit_used'],
+        userId: user.id,
+      });
     }
 
     let responseBody = {
@@ -137,26 +145,26 @@ export default function handleFetchUserRequest({
           extraCreditsAvailableInBalance,
         },
         relationships: {
-          subscription: mostRecentSubscription
+          subscription: currentActiveSubscription
             ? {
                 data: {
                   type: 'subscription',
-                  id: mostRecentSubscription.id,
+                  id: currentActiveSubscription.id,
                 },
               }
             : null,
         },
       },
       included:
-        mostRecentSubscription && plan
+        currentActiveSubscription && plan
           ? [
               {
                 type: 'subscription',
-                id: mostRecentSubscription.id,
+                id: currentActiveSubscription.id,
                 attributes: {
-                  startedAt: mostRecentSubscription.startedAt,
-                  endedAt: mostRecentSubscription.endedAt ?? null,
-                  status: mostRecentSubscription.status,
+                  startedAt: currentActiveSubscription.startedAt,
+                  endedAt: currentActiveSubscription.endedAt ?? null,
+                  status: currentActiveSubscription.status,
                 },
                 relationships: {
                   plan: {
@@ -177,7 +185,17 @@ export default function handleFetchUserRequest({
                 },
               },
             ]
-          : null,
+          : [
+              {
+                type: 'plan',
+                id: 'free',
+                attributes: {
+                  name: 'Free',
+                  monthlyPrice: 0,
+                  creditsIncluded: 0,
+                },
+              },
+            ],
     } as FetchUserResponse;
 
     return setContextResponse(

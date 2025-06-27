@@ -1,5 +1,4 @@
 import {
-  getCurrentActiveSubscription,
   getUserByMatrixUserId,
   spendCredits,
   sumUpCreditsLedger,
@@ -27,16 +26,6 @@ export async function saveUsageCost(
     let creditsConsumed = Math.round(costInUsd * CREDITS_PER_USD);
 
     let user = await getUserByMatrixUserId(pgAdapter, matrixUserId);
-
-    // This check is for the transition period where we don't have subscriptions fully rolled out yet.
-    // When we have assurance that all users who use the bot have subscriptions, we can remove this subscription check.
-    let subscription = await getCurrentActiveSubscription(pgAdapter, user!.id);
-    if (!subscription) {
-      log.info(
-        `user ${matrixUserId} has no subscription, skipping credit usage tracking`,
-      );
-      return Promise.resolve();
-    }
 
     if (!user) {
       throw new Error(

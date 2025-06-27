@@ -15,6 +15,7 @@ import MatrixService from '@cardstack/host/services/matrix-service';
 interface ProfileInfoPopoverSignature {
   Args: {
     toggleProfileSettings: () => void;
+    toggleSubscriptionPlans: () => void;
   };
   Element: HTMLElement;
 }
@@ -133,52 +134,48 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
 
       <ProfileInfo />
       <WithSubscriptionData as |subscriptionData|>
-        {{! Show credit info if the user has an active plan }}
-        {{#if subscriptionData.hasActiveSubscription}}
-          <div class='credit-info' data-test-credit-info>
-            <div class='info-group'>
-              <span class='label'>Membership Tier</span>
-              {{subscriptionData.plan}}
-            </div>
-            <BoxelButton
-              @as='anchor'
-              @kind='secondary-light'
-              @size='small'
-              @disabled={{this.billingService.fetchingStripePaymentLinks}}
-              @href={{this.billingService.customerPortalLink}}
-              target='_blank'
-              data-test-upgrade-plan-button
-            >Upgrade Plan</BoxelButton>
-            <div class='info-group'>
-              <span class='label'>Monthly Credit</span>
-              {{subscriptionData.monthlyCredit}}
-            </div>
-            <div class='info-group additional-credit'>
-              <span class='label'>Additional Credit</span>
-              {{subscriptionData.additionalCredit}}
-            </div>
-            <div
-              class={{cn
-                'buy-more-credits'
-                out-of-credit=subscriptionData.isOutOfCredit
-              }}
-              data-test-buy-more-credits
-            >
-              <BoxelButton
-                @kind={{if
-                  subscriptionData.isOutOfCredit
-                  'primary'
-                  'secondary-light'
-                }}
-                @size={{if subscriptionData.isOutOfCredit 'base' 'small'}}
-                @disabled={{this.billingService.fetchingStripePaymentLinks}}
-                {{on 'click' @toggleProfileSettings}}
-              >Buy more credits</BoxelButton>
-            </div>
+        <div class='credit-info' data-test-credit-info>
+          <div class='info-group'>
+            <span class='label'>Membership Tier</span>
+            {{subscriptionData.plan}}
           </div>
-        {{/if}}
-      </WithSubscriptionData>
 
+          <BoxelButton
+            @kind='primary-dark'
+            @size='small'
+            @disabled={{this.billingService.fetchingStripePaymentLinks}}
+            {{on 'click' @toggleSubscriptionPlans}}
+            data-test-upgrade-plan-button
+          >Upgrade Plan</BoxelButton>
+
+          <div class='info-group'>
+            <span class='label'>Monthly Credit</span>
+            {{subscriptionData.monthlyCredit}}
+          </div>
+          <div class='info-group additional-credit'>
+            <span class='label'>Extra Credit</span>
+            {{subscriptionData.additionalCredit}}
+          </div>
+          <div
+            class={{cn
+              'buy-more-credits'
+              out-of-credit=subscriptionData.isOutOfCredit
+            }}
+            data-test-buy-more-credits
+          >
+            <BoxelButton
+              @kind={{if
+                subscriptionData.isOutOfCredit
+                'primary'
+                'secondary-light'
+              }}
+              @size={{if subscriptionData.isOutOfCredit 'base' 'small'}}
+              @disabled={{this.billingService.fetchingStripePaymentLinks}}
+              {{on 'click' @toggleProfileSettings}}
+            >Buy more credits</BoxelButton>
+          </div>
+        </div>
+      </WithSubscriptionData>
     </div>
   </template>
 

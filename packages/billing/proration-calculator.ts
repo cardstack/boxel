@@ -1,4 +1,4 @@
-import { Plan } from './billing-queries';
+import { type Plan } from '@cardstack/runtime-common';
 
 export class ProrationCalculator {
   static centsToCredits(cents: number, plan: Plan): number {

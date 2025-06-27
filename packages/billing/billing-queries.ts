@@ -12,52 +12,13 @@ import {
   update,
 } from '@cardstack/runtime-common';
 import { StripeEvent } from './stripe-webhook-handlers';
-
-export interface User {
-  id: string;
-  matrixUserId: string;
-  stripeCustomerId: string;
-  stripeCustomerEmail: string | null;
-  matrixRegistrationToken: string | null;
-}
-
-export interface Plan {
-  id: string;
-  stripePlanId: string;
-  name: string;
-  monthlyPrice: number;
-  creditsIncluded: number;
-}
-
-export interface Subscription {
-  id: string;
-  userId: string;
-  planId: string;
-  startedAt: number;
-  endedAt?: number;
-  status: string;
-  stripeSubscriptionId: string;
-}
-
-export interface SubscriptionCycle {
-  id: string;
-  subscriptionId: string;
-  periodStart: number;
-  periodEnd: number;
-}
-
-export interface LedgerEntry {
-  id: string;
-  userId: string;
-  creditAmount: number;
-  creditType:
-    | 'plan_allowance'
-    | 'extra_credit'
-    | 'plan_allowance_used'
-    | 'extra_credit_used'
-    | 'plan_allowance_expired';
-  subscriptionCycleId: string | null;
-}
+import {
+  type Plan,
+  type Subscription,
+  type SubscriptionCycle,
+  type LedgerEntry,
+  type User,
+} from '@cardstack/runtime-common';
 
 function planRowToPlan(row: Record<string, PgPrimitive>): Plan {
   return {
@@ -504,9 +465,31 @@ export async function spendCredits(
   creditsToSpend: number,
 ) {
   let subscription = await getCurrentActiveSubscription(dbAdapter, userId);
+
   if (!subscription) {
-    throw new Error('active subscription not found');
+    // If user has no subscription, it means they are on the free plan
+    let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {
+      creditType: ['extra_credit', 'extra_credit_used'],
+      userId,
+    });
+
+    let extraCreditsToSpend = creditsToSpend;
+    if (extraCreditsToSpend > availableExtraCredits) {
+      extraCreditsToSpend = availableExtraCredits;
+    }
+
+    if (extraCreditsToSpend > 0) {
+      await addToCreditsLedger(dbAdapter, {
+        userId,
+        creditAmount: -extraCreditsToSpend,
+        creditType: 'extra_credit_used',
+        subscriptionCycleId: null, // Free plan has no subscription cycle
+      });
+    }
+
+    return;
   }
+
   let subscriptionCycle = await getMostRecentSubscriptionCycle(
     dbAdapter,
     subscription.id,
