@@ -632,7 +632,7 @@ export async function assertPaymentLink(
 export async function setupPayment(
   username: string,
   realmServer: IsolatedRealmServer,
-  page?: Page,
+  _page?: Page,
 ) {
   // decode the username from base64
   const decodedUsername = decodeFromAlphanumeric(username);

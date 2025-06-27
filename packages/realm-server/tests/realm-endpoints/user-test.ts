@@ -389,6 +389,11 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         });
 
       assert.strictEqual(response.status, 422, 'HTTP 200 status');
+      assert.strictEqual(
+        response.text,
+        'User already exists',
+        'Response is correct',
+      );
     });
   });
 });

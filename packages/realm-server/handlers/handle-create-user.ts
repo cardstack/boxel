@@ -8,11 +8,7 @@ import {
 } from '../middleware';
 import { RealmServerTokenClaim } from '../utils/jwt';
 import { CreateRoutesArgs } from '../routes';
-import {
-  User,
-  addToCreditsLedger,
-  getUserByMatrixUserId,
-} from '@cardstack/billing/billing-queries';
+import { addToCreditsLedger } from '@cardstack/billing/billing-queries';
 
 export default function handleCreateUserRequest({
   dbAdapter,
@@ -49,10 +45,20 @@ export default function handleCreateUserRequest({
     try {
       user = await insertUser(dbAdapter, matrixUserId, registrationToken);
     } catch (e) {
-      // TODO: detect if the error is because the user already exists
+      let errorMessage: string;
+      if (
+        (e as Error).message.includes(
+          'duplicate key value violates unique constraint',
+        )
+      ) {
+        errorMessage = 'User already exists';
+      } else {
+        errorMessage = 'Unknown error creating user';
+      }
+
       await setContextResponse(
         ctxt,
-        new Response('User already exists', { status: 422 }),
+        new Response(errorMessage, { status: 422 }),
       );
       return;
     }

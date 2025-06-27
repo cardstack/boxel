@@ -20,13 +20,10 @@ import {
   assertLoggedOut,
   logout,
   login,
-  assertPaymentLink,
-  setupPayment,
   registerRealmUsers,
   enterWorkspace,
   showAllCards,
   setupUser,
-  encodeWebSafeBase64,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '../helpers/matrix-constants';
