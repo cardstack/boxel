@@ -362,6 +362,9 @@ const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSign
         padding: 0 var(--ai-assistant-panel-padding)
           var(--ai-assistant-panel-padding) var(--ai-assistant-panel-padding);
         overflow-y: auto;
+
+        /* This lets the conversation be visible in the missing border radius of the form, with its gradient */
+        margin-bottom: calc(var(--chat-input-area-border-radius) * -1);
       }
       .ai-assistant-conversation > :deep(* + *) {
         margin-top: var(--boxel-sp-lg);
