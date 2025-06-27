@@ -16,6 +16,7 @@ interface Signature {
   Element: HTMLButtonElement | HTMLDivElement;
   Args: {
     state: ApplyButtonState;
+    actionVerb?: string;
   };
   Blocks: {
     default: [];
@@ -34,6 +35,8 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
     >
       {{#if (has-block)}}
         {{yield}}
+      {{else if @actionVerb}}
+        {{@actionVerb}}
       {{else}}
         Apply
       {{/if}}
