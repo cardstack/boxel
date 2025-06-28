@@ -16,4 +16,9 @@ NODE_NO_WARNINGS=1 \
   --toUrl='https://realms-staging.stack.cards/experiments/' \
   \
   --fromUrl='https://realms-staging.stack.cards/catalog/' \
-  --toUrl='https://realms-staging.stack.cards/catalog/'
+  --toUrl='https://realms-staging.stack.cards/catalog/' \
+  \
+  --fromUrl='https://realms-staging.stack.cards/skills/' \
+  --toUrl='https://realms-staging.stack.cards/skills/' \
+  
+

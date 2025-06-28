@@ -53,7 +53,11 @@ type Plural<T> = {
   [K in keyof T]: T[K][];
 };
 
-const publicRealmURLs = [baseRealm.url, 'http://localhost:4201/catalog/'];
+const publicRealmURLs = [
+  baseRealm.url,
+  'http://localhost:4201/catalog/',
+  'http://localhost:4201/skills/',
+];
 
 export class MockClient implements ExtendedClient {
   private listeners: Partial<Plural<MatrixSDK.ClientEventHandlerMap>> = {};

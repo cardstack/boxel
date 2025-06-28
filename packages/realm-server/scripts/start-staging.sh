@@ -2,6 +2,7 @@
 pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
 pnpm setup:catalog-in-deployment
+pnpm setup:skills-in-deployment
 NODE_NO_WARNINGS=1 \
   MATRIX_URL=https://matrix-staging.stack.cards \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
@@ -26,4 +27,9 @@ NODE_NO_WARNINGS=1 \
   --path='/persistent/catalog' \
   --username='catalog_realm' \
   --fromUrl='https://realms-staging.stack.cards/catalog/' \
-  --toUrl='https://realms-staging.stack.cards/catalog/'
+  --toUrl='https://realms-staging.stack.cards/catalog/'\
+  \
+  --path='/persistent/skills' \
+  --username='skills_realm' \
+  --fromUrl='https://realms-staging.stack.cards/skills/' \
+  --toUrl='https://realms-staging.stack.cards/skills/'

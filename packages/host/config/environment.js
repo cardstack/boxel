@@ -42,6 +42,8 @@ module.exports = function (environment) {
     hostsOwnAssets: true,
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
+    resolvedSkillsRealmURL:
+      process.env.RESOLVED_SKILLS_REALM_URL || 'http://localhost:4201/skills/',
     featureFlags: {
       SHOW_ASK_AI: process.env.SHOW_ASK_AI === 'true' || false,
     },

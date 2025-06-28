@@ -4,6 +4,8 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 wait_for_postgres
 
+pnpm --dir=../skills-realm skills:setup
+
 if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
   MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly "$SCRIPTS_DIR/matrix-registration-secret.ts")
   export MATRIX_REGISTRATION_SHARED_SECRET

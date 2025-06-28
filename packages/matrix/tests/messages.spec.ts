@@ -17,6 +17,7 @@ import {
   setupTwoStackItems,
   showAllCards,
   setupUserSubscribed,
+  setSkillsRedirect,
 } from '../helpers';
 import {
   synapseStart,
@@ -34,7 +35,8 @@ test.describe('Room messages', () => {
   let synapse: SynapseInstance;
   let realmServer: IsolatedRealmServer;
   let userCred: Credentials;
-  test.beforeEach(async () => {
+  test.beforeEach(async ({ page }) => {
+    await setSkillsRedirect(page);
     test.setTimeout(120_000);
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
@@ -604,6 +606,7 @@ test.describe('Room messages', () => {
 
   test.describe('auto-attachment of cards in matrix room', () => {
     test.beforeEach(async ({ page }) => {
+      await setSkillsRedirect(page);
       await login(page, 'user1', 'pass', { url: appURL });
       await getRoomId(page);
       await showAllCards(page);
