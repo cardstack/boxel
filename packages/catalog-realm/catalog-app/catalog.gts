@@ -1,6 +1,7 @@
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
+import { debounce } from 'lodash';
 
 import {
   contains,
@@ -328,9 +329,13 @@ class Isolated extends Component<typeof Catalog> {
   // Filter Search
   @tracked searchValue: string | undefined = undefined;
 
-  @action
-  handleSearch(value: string) {
+  private debouncedSetSearchKey = debounce((value: string) => {
     this.searchValue = value;
+  }, 300);
+
+  @action
+  onSearchInput(value: string) {
+    this.debouncedSetSearchKey(value);
   }
 
   //query
@@ -554,7 +559,7 @@ class Isolated extends Component<typeof Catalog> {
             <BoxelInput
               @type='search'
               @value={{this.searchValue}}
-              @onInput={{this.handleSearch}}
+              @onInput={{this.onSearchInput}}
               placeholder='Search by Title'
               data-test-filter-search-input
               class='catalog-search-input'
