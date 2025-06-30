@@ -42,7 +42,7 @@ export default class CodeBlockEditorHeader extends Component<CodeBlockEditorHead
           @toggleViewCode={{@toggleViewCode}}
         />
         {{#if @isDisplayingCode}}
-          <CopyCodeButton @code={{@code}} />
+          <CopyCodeButton class='copy-code-button' @code={{@code}} />
         {{/if}}
         <ApplyButton
           @actionVerb='Go'
@@ -61,7 +61,7 @@ export default class CodeBlockEditorHeader extends Component<CodeBlockEditorHead
         background-color: var(--boxel-650);
         color: var(--boxel-light);
         padding: var(--boxel-sp-xs);
-        min-height: 50px;
+        height: 50px;
         white-space: nowrap;
         text-overflow: ellipsis;
         overflow: hidden;
@@ -79,6 +79,9 @@ export default class CodeBlockEditorHeader extends Component<CodeBlockEditorHead
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
+      }
+      .copy-code-button {
+        justify-content: flex-end;
       }
     </style>
   </template>

@@ -15,6 +15,7 @@ export interface CopyCodeButtonSignature {
   Args: {
     code?: string | null;
   };
+  Element: HTMLButtonElement;
 }
 
 export default class CopyCodeButton extends Component<CopyCodeButtonSignature> {
@@ -25,6 +26,7 @@ export default class CopyCodeButton extends Component<CopyCodeButtonSignature> {
       {{on 'click' (fn (perform this.copyCode) @code)}}
       aria-label={{this.copyCodeButtonText}}
       data-test-copy-code
+      ...attributes
     >
       <span class={{cn 'copy-text' shown=this.copyCode.isRunning}}>
         {{this.copyCodeButtonText}}

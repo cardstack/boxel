@@ -44,12 +44,15 @@ const CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature
     </div>
     <style scoped>
       .code-block-actions {
-        min-height: 45px;
+        height: 45px;
         padding: var(--boxel-sp-xs) var(--boxel-sp);
         display: flex;
         justify-content: flex-end;
         align-items: center;
         gap: var(--boxel-sp-xs);
+      }
+      :deep(.code-copy-button) {
+        justify-content: flex-end;
       }
     </style>
   </template>;
