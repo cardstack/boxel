@@ -456,6 +456,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         await fillIn('[data-test-filter-search-input]', 'Mortgage');
 
         // Step 2: verify you looking at catalog grid view / list view
+        await waitFor('[data-test-catalog-list-view]');
         assert
           .dom('[data-test-catalog-list-view]')
           .exists(
