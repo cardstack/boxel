@@ -195,6 +195,7 @@ module('Integration | ask-ai', function (hooks) {
       stacks: [[{ id: mangoId, format: 'isolated' }]],
       submode: 'code',
       codePath: petCardId,
+      moduleInspector: 'preview',
     });
     setPlaygroundSelections({
       [`${petCardId.replace('.gts', '')}/Pet`]: {
