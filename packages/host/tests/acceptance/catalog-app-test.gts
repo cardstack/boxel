@@ -1,4 +1,4 @@
-import { click, waitFor, waitUntil } from '@ember/test-helpers';
+import { click, waitFor, waitUntil, fillIn } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -446,6 +446,108 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         )
         .hasText('Mortgage Calculator');
     });
+
+    module('showcase tab is active', async function () {
+      test('when filter applied, we will see the catalog grid view / list view', async function (assert) {
+        // Step 1: Apply some filters on the catalog
+        // ** filter by search
+        await waitFor('[data-test-filter-search-input]');
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'Mortgage');
+
+        // Step 2: verify you looking at catalog grid view / list view
+        assert
+          .dom('[data-test-catalog-list-view]')
+          .exists(
+            'Catalog list view should be visible when filters are applied',
+          );
+      });
+
+      test('filters reset when clicking on the "Catalog Home" button', async function (assert) {
+        // Step 1: Apply some filters first
+        await waitFor('[data-test-filter-search-input]');
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'Mortgage');
+        // ** filter by category
+        await click('[data-test-filter-list-item="All"]');
+        // ** filter by tag
+        let tagPill = document.querySelector('[data-test-tag-list-pill]');
+        if (tagPill) {
+          await click(tagPill);
+        }
+
+        // Step 3: Verify we're in catalog grid / list view (not showcase view)
+        assert
+          .dom('[data-test-showcase-view]')
+          .doesNotExist('Should be in list view after applying filter');
+
+        //step 4: click on the home button
+        await click('[data-test-navigation-reset-button="showcase"]');
+
+        //step 5: Verify you looking at showcase view
+        assert
+          .dom('[data-test-showcase-view]')
+          .exists('Should return to showcase view after clicking Catalog Home');
+
+        // Step 6: Verify filters are reset - make sure you reset category/tag/search state
+        assert
+          .dom('[data-test-filter-search-input]')
+          .hasValue('', 'Search input should be cleared');
+        // Category and tag filters should be unselected
+        assert
+          .dom('[data-test-filter-list-item].is-selected')
+          .doesNotExist('No category should be selected after reset');
+        assert
+          .dom('[data-test-tag-list-pill].selected')
+          .doesNotExist('No tag should be selected after reset');
+      });
+    });
+
+    module(
+      'other tab is active, showcase tab is NOT active',
+      async function () {
+        test('filters reset when clicking on the "All Apps" button', async function (assert) {
+          // Step 1: Switch to Apps tab
+          await click('[data-tab-label="Apps"]');
+          assert
+            .dom('[data-tab-label="Apps"]')
+            .hasClass('active', 'Apps tab should be active');
+
+          // Step 2: Apply some filters first
+          // ** filter by search
+          await waitFor('[data-test-filter-search-input]');
+          await click('[data-test-filter-search-input]');
+          await fillIn('[data-test-filter-search-input]', 'Test');
+          // ** filter by category
+          await click('[data-test-filter-list-item="All"]');
+          // ** filter by tag
+          let tagPill = document.querySelector('[data-test-tag-list-pill]');
+          if (tagPill) {
+            await click(tagPill);
+          }
+
+          //step 3: click on the home button
+          await click('[data-test-navigation-reset-button="app"]');
+          //step 4: Verify you only looking at catalog grid view / list view
+          assert
+            .dom('[data-test-showcase-view]')
+            .doesNotExist('Should remain in list view, not return to showcase');
+          assert
+            .dom('[data-test-catalog-list-view]')
+            .exists('Catalog list view should still be visible');
+          // Step 5: Verify filters are reset - make sure you reset category/tag/search state
+          assert
+            .dom('[data-test-filter-search-input]')
+            .hasValue('', 'Search input should be cleared');
+          assert
+            .dom('[data-test-filter-list-item].is-selected')
+            .doesNotExist('No category should be selected after reset');
+          assert
+            .dom('[data-test-tag-list-pill].selected')
+            .doesNotExist('No tag should be selected after reset');
+        });
+      },
+    );
   });
 
   module('listing isolated', async function (hooks) {
