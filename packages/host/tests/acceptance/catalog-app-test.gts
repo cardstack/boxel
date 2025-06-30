@@ -453,7 +453,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           await click('[data-tab-label="Showcase"]');
           assert
             .dom('[data-test-navigation-reset-button="showcase"]')
-            .exists(`"Catalog Home" button should exists`)
+            .exists(`"Catalog Home" button should exist`)
             .hasClass('is-selected');
           assert.dom('[data-test-boxel-radio-option-id="grid"]').doesNotExist();
         });
@@ -462,7 +462,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           await click('[data-tab-label="Apps"]');
           assert
             .dom('[data-test-navigation-reset-button="app"]')
-            .exists(`"All Apps" button should exists`)
+            .exists(`"All Apps" button should exist`)
             .hasClass('is-selected');
           assert.dom('[data-test-boxel-radio-option-id="grid"]').exists();
         });
@@ -471,7 +471,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           await click('[data-tab-label="Cards"]');
           assert
             .dom('[data-test-navigation-reset-button="card"]')
-            .exists(`"All Cards" button should exists`)
+            .exists(`"All Cards" button should exist`)
             .hasClass('is-selected');
           assert.dom('[data-test-boxel-radio-option-id="grid"]').exists();
         });
@@ -480,7 +480,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           await click('[data-tab-label="Fields"]');
           assert
             .dom('[data-test-navigation-reset-button="field"]')
-            .exists(`"All Fields" button should exists`)
+            .exists(`"All Fields" button should exist`)
             .hasClass('is-selected');
           assert.dom('[data-test-boxel-radio-option-id="grid"]').exists();
         });
@@ -489,7 +489,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           await click('[data-tab-label="Skills"]');
           assert
             .dom('[data-test-navigation-reset-button="skill"]')
-            .exists(`"All Skills" button should exists`)
+            .exists(`"All Skills" button should exist`)
             .hasClass('is-selected');
           assert.dom('[data-test-boxel-radio-option-id="grid"]').exists();
         });
