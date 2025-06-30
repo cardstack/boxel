@@ -1,6 +1,7 @@
 import './instrument';
 import './setup-logger'; // This should be first
 import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
+import { SlidingSync, type MSC3575List } from 'matrix-js-sdk/lib/sliding-sync';
 import OpenAI from 'openai';
 import {
   logger,
@@ -8,6 +9,11 @@ import {
   DEFAULT_LLM,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
 } from '@cardstack/runtime-common';
+import {
+  SLIDING_SYNC_AI_ROOM_LIST_NAME,
+  SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+  SLIDING_SYNC_TIMEOUT,
+} from '@cardstack/runtime-common/matrix-constants';
 import {
   type PromptParts,
   isCommandResultStatusApplied,
@@ -440,9 +446,24 @@ Common issues are:
     }
   });
 
+  let lists: Map<string, MSC3575List> = new Map();
+  lists.set(SLIDING_SYNC_AI_ROOM_LIST_NAME, {
+    ranges: [[0, 0]],
+    filters: {
+      is_dm: false,
+    },
+    timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+    required_state: [['*', '*']],
+  });
+  let slidingSync = new SlidingSync(
+    client.baseUrl,
+    lists,
+    { timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT },
+    client,
+    SLIDING_SYNC_TIMEOUT,
+  );
   await client.startClient({
-    initialSyncLimit: 0,
-    lazyLoadMembers: true,
+    slidingSync,
   });
   log.info('client started');
 })().catch((e) => {

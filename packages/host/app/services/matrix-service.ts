@@ -55,6 +55,11 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+  SLIDING_SYNC_AI_ROOM_LIST_NAME,
+  SLIDING_SYNC_AUTH_ROOM_LIST_NAME,
+  SLIDING_SYNC_LIST_RANGE_END,
+  SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+  SLIDING_SYNC_TIMEOUT,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -120,11 +125,6 @@ import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
-const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
-const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
-const SLIDING_SYNC_LIST_RANGE_END = 9;
-const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
-const SLIDING_SYNC_TIMEOUT = 30000;
 
 const realmEventsLogger = logger('realm:events');
 
