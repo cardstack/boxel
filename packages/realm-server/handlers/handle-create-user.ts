@@ -1,4 +1,4 @@
-import { upsertUser } from '@cardstack/runtime-common';
+import { insertUser } from '@cardstack/runtime-common';
 import Koa from 'koa';
 import {
   fetchRequestFromContext,
@@ -8,6 +8,7 @@ import {
 } from '../middleware';
 import { RealmServerTokenClaim } from '../utils/jwt';
 import { CreateRoutesArgs } from '../routes';
+import { addToCreditsLedger } from '@cardstack/billing/billing-queries';
 
 export default function handleCreateUserRequest({
   dbAdapter,
@@ -39,7 +40,38 @@ export default function handleCreateUserRequest({
 
     let registrationToken = json.data.attributes.registrationToken;
 
-    await upsertUser(dbAdapter, matrixUserId, registrationToken);
+    let user;
+
+    try {
+      user = await insertUser(dbAdapter, matrixUserId, registrationToken);
+    } catch (e) {
+      let errorMessage: string;
+      if (
+        (e as Error).message.includes(
+          'duplicate key value violates unique constraint',
+        )
+      ) {
+        errorMessage = 'User already exists';
+      } else {
+        errorMessage = 'Unknown error creating user';
+      }
+
+      await setContextResponse(
+        ctxt,
+        new Response(errorMessage, { status: 422 }),
+      );
+      return;
+    }
+
+    // When user signs up, they get 1000 credits and no stripe subscription is needed
+    // In this case we don't need to create a subscription cycle, just add the credits to the user
+    await addToCreditsLedger(dbAdapter, {
+      userId: user!.id,
+      creditAmount: 1000,
+      creditType: 'extra_credit',
+      subscriptionCycleId: null,
+    });
+
     await setContextResponse(ctxt, new Response('ok'));
   };
 }

@@ -59,7 +59,6 @@ interface WithSubscriptionDataSignature {
   Blocks: {
     default: [
       {
-        hasActiveSubscription: boolean;
         plan: ComponentLike;
         monthlyCredit: ComponentLike;
         additionalCredit: ComponentLike;
@@ -107,7 +106,7 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
         })} of ${formatNumber(this.creditsIncludedInPlanAllowance, {
           size: 'short',
         })} left`
-      : null;
+      : 'Not available on Free plan';
   }
 
   private get isOutOfCredit() {
@@ -133,7 +132,6 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
   <template>
     {{yield
       (hash
-        hasActiveSubscription=(if this.plan true false)
         plan=(component
           Value
           tag='plan'

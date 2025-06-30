@@ -11,9 +11,9 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import { provide } from 'ember-provide-consume-context';
 
-import { Modal, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { Modal } from '@cardstack/boxel-ui/components';
 
-import { or, not, and } from '@cardstack/boxel-ui/helpers';
+import { or, not } from '@cardstack/boxel-ui/helpers';
 
 import {
   GetCardContextName,
@@ -22,7 +22,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import Auth from '@cardstack/host/components/matrix/auth';
-import PaymentSetup from '@cardstack/host/components/matrix/payment-setup';
+
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
@@ -110,20 +110,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.submode === Submodes.Code;
   }
 
-  private get isUserInfoLoading() {
-    return this.billingService.fetchingSubscriptionData;
-  }
-
-  private get isUserSubscribed() {
-    if (isTesting()) {
-      return true;
-    }
-    return (
-      !!this.billingService.subscriptionData?.stripeCustomerId &&
-      !!this.billingService.subscriptionData?.plan
-    );
-  }
-
   <template>
     <Modal
       class='operator-mode'
@@ -135,6 +121,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     >
       <ChooseFileModal />
       <CardCatalogModal />
+
       {{#if
         (or
           (not this.matrixService.isLoggedIn)
@@ -142,17 +129,6 @@ export default class OperatorModeContainer extends Component<Signature> {
         )
       }}
         <Auth />
-      {{else if (and this.isUserInfoLoading (not this.isUserSubscribed))}}
-        <div class='loading-spinner-container'>
-          <div class='loading-spinner'>
-            <LoadingIndicator @color='var(--boxel-teal)' />
-            <div class='loading-spinner-text'>Loading…</div>
-          </div>
-        </div>
-      {{else if (not this.isUserSubscribed)}}
-        <PaymentSetup
-          @flow={{if this.matrixService.isNewUser 'register' 'logged-in'}}
-        />
       {{else if this.isCodeMode}}
         <CodeSubmode @saveSourceOnClose={{perform this.saveSource}} />
       {{else}}
