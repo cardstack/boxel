@@ -93,9 +93,9 @@ export default class BillingService extends Service {
       .sort((a, b) => a.creditReloadAmount - b.creditReloadAmount)
       .map((link) => ({
         ...link,
-        amountFormatted: `${formatNumber(
-          link.creditReloadAmount,
-        )} credits for $${formatNumber(link.price)}`,
+        amountFormatted: `${formatNumber(link.creditReloadAmount, {
+          size: 'short',
+        })} credits for $${formatNumber(link.price)}`,
       }));
   }
 
