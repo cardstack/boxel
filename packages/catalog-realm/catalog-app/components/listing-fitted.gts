@@ -70,7 +70,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
     e.stopPropagation();
   }
 
-  @action preview(e: MouseEvent) {
+  @action previewExample(e: MouseEvent) {
     e.stopPropagation();
 
     if (!this.hasExample) {
@@ -80,7 +80,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
     this.args.context?.actions?.viewCard?.(this.args.examples![0]);
   }
 
-  @action viewDetails(e: MouseEvent) {
+  @action viewListingDetails(e: MouseEvent) {
     e.stopPropagation();
 
     if (!this.args.id) {
@@ -101,7 +101,13 @@ class CarouselComponent extends GlimmerComponent<Signature> {
   }
 
   <template>
-    <div class='carousel'>
+    <div
+      class='carousel'
+      role='button'
+      data-test-catalog-listing-fitted-preview
+      aria-label='Preview Example'
+      {{on 'click' this.previewExample}}
+    >
       <div
         class='actions-buttons-container'
         {{on 'mouseenter' this._stopPropagation}}
@@ -111,8 +117,8 @@ class CarouselComponent extends GlimmerComponent<Signature> {
             @kind='secondary-dark'
             class='preview-button'
             data-test-catalog-listing-fitted-preview-button
-            {{on 'click' this.preview}}
-            aria-label='Preview'
+            aria-label='Preview Example'
+            {{on 'click' this.previewExample}}
           >
             Preview
           </BoxelButton>
@@ -122,8 +128,8 @@ class CarouselComponent extends GlimmerComponent<Signature> {
           @kind='secondary-dark'
           class='details-button'
           data-test-catalog-listing-fitted-details-button
-          {{on 'click' this.viewDetails}}
-          aria-label='Details'
+          aria-label='View Listing Details'
+          {{on 'click' this.viewListingDetails}}
         >
           Details
         </BoxelButton>
@@ -308,7 +314,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
           align-items: center;
           gap: var(--boxel-sp-sm);
           opacity: 0;
-          background-color: rgba(0, 0, 0, 0.5);
+          background-color: rgba(0, 0, 0, 0.6);
           transition: opacity 0.3s ease;
         }
 
@@ -432,6 +438,19 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     this._openRoomWithSkillAndPrompt.perform(realmUrl);
   }
 
+  @action viewListingDetails(e: MouseEvent) {
+    e.stopPropagation();
+
+    if (!this.args.model.id) {
+      throw new Error('No card id');
+    }
+
+    this.args.context?.actions?.viewCard?.(
+      new URL(this.args.model.id),
+      'isolated',
+    );
+  }
+
   @action
   _stopPropagation(e: MouseEvent) {
     e.stopPropagation();
@@ -454,7 +473,13 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           />
         {{/if}}
       </div>
-      <div class='info-section'>
+      <div
+        class='info-section'
+        role='button'
+        data-test-catalog-listing-fitted-details
+        aria-label='View Listing Details'
+        {{on 'click' this.viewListingDetails}}
+      >
         <div class='card-content'>
           <h3 class='card-title' data-test-card-title={{@model.name}}>
             {{@model.name}}
