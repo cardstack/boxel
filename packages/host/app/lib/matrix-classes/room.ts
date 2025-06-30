@@ -1,5 +1,6 @@
 import { cached, tracked } from '@glimmer/tracking';
 
+import EventEmitter from 'eventemitter3';
 import { type IEvent } from 'matrix-js-sdk';
 
 import {
@@ -36,6 +37,13 @@ export default class Room {
   constructor(public readonly roomId: string) {}
 
   readonly mutex = new Mutex();
+  private readonly emitter = new EventEmitter();
+
+  waitForNextEvent(): Promise<void> {
+    return new Promise((resolve) => {
+      this.emitter.once('event.added', resolve);
+    });
+  }
 
   get events() {
     return this._events;
@@ -138,5 +146,6 @@ export default class Room {
     let eventIndex = this._events.indexOf(eventToReplace);
     this._events[eventIndex] = event as unknown as DiscreteMatrixEvent;
     this._events = [...this._events];
+    this.emitter.emit('event.added');
   }
 }

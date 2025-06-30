@@ -22,6 +22,7 @@ import handleStripeLinksRequest from './handlers/handle-stripe-links';
 import handleCreateUserRequest from './handlers/handle-create-user';
 import handleQueueStatusRequest from './handlers/handle-queue-status';
 import handleReindex from './handlers/handle-reindex';
+import handleRemoveJob from './handlers/handle-remove-job';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -82,7 +83,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     grafanaAuthorization(args.grafanaSecret),
     handleReindex(args),
   );
-  // TODO add grafana endpoint to remove job
+  router.get(
+    '/_grafana-complete-job',
+    grafanaAuthorization(args.grafanaSecret),
+    handleRemoveJob(args),
+  );
 
   return router.routes();
 }

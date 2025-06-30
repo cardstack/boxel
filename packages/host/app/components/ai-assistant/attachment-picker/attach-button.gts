@@ -40,8 +40,8 @@ const AttachButtonTrigger: TemplateOnlyComponent<AttachButtonTriggerSignature> =
       }
       .attach-button__trigger:hover:not(:disabled),
       .attach-button__trigger:focus:not(:disabled) {
-        --icon-color: var(--boxel-600);
-        color: var(--boxel-600);
+        --icon-color: #e0e0e0;
+        color: #e0e0e0;
         background: none;
         box-shadow: none;
       }

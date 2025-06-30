@@ -6,6 +6,7 @@ import cssVar from '../..//helpers/css-var.ts';
 import cn from '../../helpers/cn.ts';
 import { getContrastColor } from '../../helpers/contrast-color.ts';
 import { MenuItem } from '../../helpers/menu-item.ts';
+import { and } from '../../helpers/truth-helpers.ts';
 import { bool, or } from '../../helpers/truth-helpers.ts';
 import { IconPencil, IconX, ThreeDotsHorizontal } from '../../icons.gts';
 import setCssVar from '../../modifiers/set-css-var.ts';
@@ -17,6 +18,7 @@ import Tooltip from '../tooltip/index.gts';
 
 interface Signature {
   Args: {
+    cardTitle?: string;
     cardTypeDisplayName?: string;
     cardTypeIcon?: ComponentLike<{ Element: Element }>;
     headerColor?: string;
@@ -80,7 +82,15 @@ export default class CardHeader extends Component<Signature> {
 
       <div class='card-type-display-name' data-test-boxel-card-header-title>
         {{#if @cardTypeIcon}}<@cardTypeIcon />{{/if}}
-        {{#if @cardTypeDisplayName}}{{@cardTypeDisplayName}}{{/if}}
+        {{#if @cardTypeDisplayName}}<span
+            class='card-type-display-name-text'
+          >{{@cardTypeDisplayName}}</span>{{/if}}
+        {{#if (and @cardTypeDisplayName @cardTitle)}}<span
+            class='card-title-text'
+          >-</span>
+        {{/if}}
+        {{#if @cardTitle}}<span class='card-title-text'>
+            {{@cardTitle}}</span>{{/if}}
         {{#if (or @isSaving (bool @lastSavedMessage))}}
           <div class='save-indicator' data-test-auto-save-indicator>
             {{#if @isSaving}}
@@ -201,6 +211,9 @@ export default class CardHeader extends Component<Signature> {
           display: flex;
           align-items: center;
           min-height: var(--boxel-card-header-min-height, 1.875rem); /* 30px */
+          width: 100%;
+          box-sizing: border-box;
+          overflow: hidden;
           color: var(--boxel-card-header-text-color, var(--boxel-dark));
           background-color: var(
             --boxel-card-header-background-color,
@@ -237,7 +250,16 @@ export default class CardHeader extends Component<Signature> {
           overflow: hidden;
           text-wrap: nowrap;
           flex-grow: 1;
+          flex-shrink: 1;
+          min-width: 0;
           text-align: center;
+          padding: 0 30px;
+        }
+        .card-type-display-name-text {
+          font: 600 var(--boxel-font-sm);
+        }
+        .card-title-text {
+          font: 500 var(--boxel-font-sm);
         }
 
         header .card-type-display-name > :deep(svg) {

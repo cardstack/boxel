@@ -21,7 +21,7 @@ import {
   REPLACE_MARKER,
 } from '@cardstack/runtime-common';
 
-import FormattedAiBotMessage from '@cardstack/host/components/ai-assistant/formatted-aibot-message';
+import FormattedAiBotMessage from '@cardstack/host/components/ai-assistant/message/aibot-message';
 
 import {
   makeCodeDiffStats,
@@ -90,7 +90,6 @@ puts "💎"
       isStreaming: false,
       isLastAssistantMessage: true,
     });
-
     let messageElement = (this as RenderingTestContext).element.querySelector(
       '.message',
     ) as HTMLElement;

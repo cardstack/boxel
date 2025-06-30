@@ -3,7 +3,11 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { CardContainer, CardHeader } from '@cardstack/boxel-ui/components';
 import { eq, or, MenuItem } from '@cardstack/boxel-ui/helpers';
 
-import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
+import {
+  cardTypeDisplayName,
+  cardTypeIcon,
+  isCardInstance,
+} from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import FittedFormatGallery from '@cardstack/host/components/operator-mode/card-renderer-panel/fitted-format-gallery';
@@ -40,6 +44,7 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
           class='preview-header'
           @cardTypeDisplayName={{cardTypeDisplayName @card}}
           @cardTypeIcon={{cardTypeIcon @card}}
+          @cardTitle={{if (isCardInstance @card) @card.title undefined}}
           @realmInfo={{@realmInfo}}
           @onEdit={{@onEdit}}
           @onFinishEditing={{@onFinishEditing}}
@@ -83,6 +88,7 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
       flex-grow: 1;
       display: grid;
       grid-auto-rows: max-content 1fr;
+      min-width: 0;
     }
     .preview-header {
       box-shadow: 0 1px 0 0 rgba(0 0 0 / 15%);

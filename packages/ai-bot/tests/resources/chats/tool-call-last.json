@@ -266,43 +266,17 @@
     "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "",
+      "body": "Hello! I’m here to help. How can I assist you with your workspace or any cards today? If you’d like to view or edit a card, please navigate to a card in your workspace and let me know what you’d like to do.",
       "msgtype": "app.boxel.message",
       "format": "org.matrix.custom.html",
-      "app.boxel.reasoning": "Thinking...",
+      "app.boxel.reasoning": "",
       "app.boxel.commandRequests": [],
-      "isStreamingFinished": false
+      "isStreamingFinished": true
     },
     "origin_server_ts": 1749132090071,
     "unsigned": {
       "membership": "join",
-      "age": 1022408,
-      "m.relations": {
-        "m.replace": {
-          "type": "m.room.message",
-          "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
-          "sender": "@aibot:localhost",
-          "content": {
-            "body": "Hello! I’m here to help. How can I assist you with your workspace or any cards today? If you’d like to view or edit a card, please navigate to a card in your workspace and let me know what you’d like to do.",
-            "msgtype": "app.boxel.message",
-            "format": "org.matrix.custom.html",
-            "app.boxel.reasoning": "",
-            "app.boxel.commandRequests": [],
-            "isStreamingFinished": true,
-            "m.relates_to": {
-              "rel_type": "m.replace",
-              "event_id": "$OyZ22PWDbEDq8CzDZAYAfnSJb-R7KieSqRNY4xdHEF8"
-            }
-          },
-          "origin_server_ts": 1749132091756,
-          "unsigned": {
-            "age": 1020723
-          },
-          "event_id": "$Q5k5Po-EmbYdkM7cw3jSK8Nb2cPj98KpECLZJmqx72s",
-          "user_id": "@aibot:localhost",
-          "age": 1020723
-        }
-      }
+      "age": 1022408
     },
     "event_id": "$OyZ22PWDbEDq8CzDZAYAfnSJb-R7KieSqRNY4xdHEF8",
     "user_id": "@aibot:localhost",
@@ -333,43 +307,17 @@
     "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "",
+      "body": "Here it is—a second message! If you have any specific questions or would like to work with a card in your workspace, just let me know what you’d like to do next.",
       "msgtype": "app.boxel.message",
       "format": "org.matrix.custom.html",
-      "app.boxel.reasoning": "Thinking...",
+      "app.boxel.reasoning": "",
       "app.boxel.commandRequests": [],
-      "isStreamingFinished": false
+      "isStreamingFinished": true
     },
     "origin_server_ts": 1749132098605,
     "unsigned": {
       "membership": "join",
-      "age": 1013874,
-      "m.relations": {
-        "m.replace": {
-          "type": "m.room.message",
-          "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
-          "sender": "@aibot:localhost",
-          "content": {
-            "body": "Here it is—a second message! If you have any specific questions or would like to work with a card in your workspace, just let me know what you’d like to do next.",
-            "msgtype": "app.boxel.message",
-            "format": "org.matrix.custom.html",
-            "app.boxel.reasoning": "",
-            "app.boxel.commandRequests": [],
-            "isStreamingFinished": true,
-            "m.relates_to": {
-              "rel_type": "m.replace",
-              "event_id": "$xOm9RGE1m0BdwlaFvcJNFlzu07mFbEhMmYjdxTw0Xm0"
-            }
-          },
-          "origin_server_ts": 1749132100026,
-          "unsigned": {
-            "age": 1012453
-          },
-          "event_id": "$a4CBhJIS29xPmiH95XQYWBqX3z3um1AKRmXqcdWKbos",
-          "user_id": "@aibot:localhost",
-          "age": 1012453
-        }
-      }
+      "age": 1013874
     },
     "event_id": "$xOm9RGE1m0BdwlaFvcJNFlzu07mFbEhMmYjdxTw0Xm0",
     "user_id": "@aibot:localhost",
@@ -403,46 +351,20 @@
       "body": "",
       "msgtype": "app.boxel.message",
       "format": "org.matrix.custom.html",
-      "app.boxel.reasoning": "Thinking...",
-      "app.boxel.commandRequests": [],
-      "isStreamingFinished": false
+      "app.boxel.reasoning": "",
+      "app.boxel.commandRequests": [
+        {
+          "id": "call_wVE7nNzp1kmJQhr4gRuGoWFc",
+          "name": "switch-submode_dd88",
+          "arguments": "{\"description\":\"Switch to code mode in the current workspace\",\"attributes\":{\"submode\":\"code\"}}"
+        }
+      ],
+      "isStreamingFinished": true
     },
     "origin_server_ts": 1749132111204,
     "unsigned": {
       "membership": "join",
-      "age": 1001275,
-      "m.relations": {
-        "m.replace": {
-          "type": "m.room.message",
-          "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
-          "sender": "@aibot:localhost",
-          "content": {
-            "body": "",
-            "msgtype": "app.boxel.message",
-            "format": "org.matrix.custom.html",
-            "app.boxel.reasoning": "",
-            "app.boxel.commandRequests": [
-              {
-                "id": "call_wVE7nNzp1kmJQhr4gRuGoWFc",
-                "name": "switch-submode_dd88",
-                "arguments": "{\"description\":\"Switch to code mode in the current workspace\",\"attributes\":{\"submode\":\"code\"}}"
-              }
-            ],
-            "isStreamingFinished": true,
-            "m.relates_to": {
-              "rel_type": "m.replace",
-              "event_id": "$FVsN_CvhDO-Sy2wmYRKV8MYPrOl4xUEC_k0ks_q7PPc"
-            }
-          },
-          "origin_server_ts": 1749132112539,
-          "unsigned": {
-            "age": 999940
-          },
-          "event_id": "$VVzIoGNOlXMiwf_uwEh8Q1rSEYRPvTg6w0KI4Q-f1NY",
-          "user_id": "@aibot:localhost",
-          "age": 999940
-        }
-      }
+      "age": 1001275
     },
     "event_id": "$FVsN_CvhDO-Sy2wmYRKV8MYPrOl4xUEC_k0ks_q7PPc",
     "user_id": "@aibot:localhost",

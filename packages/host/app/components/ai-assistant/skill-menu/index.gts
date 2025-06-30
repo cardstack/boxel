@@ -7,6 +7,8 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
+import pluralize from 'pluralize';
+
 import { Button } from '@cardstack/boxel-ui/components';
 
 import { skillCardRef } from '@cardstack/runtime-common';
@@ -36,9 +38,6 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       @onCollapse={{fn this.setExpanded false}}
       ...attributes
     >
-      <:headerIcon>
-        <span class='header-icon' />
-      </:headerIcon>
       <:headerDetail>
         <span
           class='skills-length'
@@ -78,21 +77,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       </:footer>
     </PillMenu>
     <style scoped>
-      .header-icon {
-        display: inline-block;
-        width: 20px;
-        height: 18px;
-        background-image: url('./robot-head@2x.webp');
-        background-position: left center;
-        background-repeat: no-repeat;
-        background-size: contain;
-        flex-shrink: 0;
-      }
       .skill-menu {
-        --boxel-pill-menu-header-padding: 0;
-        --boxel-pill-menu-content-padding: var(--boxel-sp) 0;
-        --boxel-pill-menu-footer-padding: 0;
-        --boxel-pill-menu-button-padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
         background-color: transparent;
         box-shadow: none;
       }
@@ -163,7 +148,10 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     if (this.isExpanded) {
       return `Skills: ${this.activeSkills.length} of ${this.args.skills.length} active`;
     }
-    return `Skills ${this.activeSkills.length}`;
+    return `${this.activeSkills.length} ${pluralize(
+      'Skills',
+      this.activeSkills.length,
+    )}`;
   }
 
   private get activeSkills() {
