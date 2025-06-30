@@ -671,7 +671,7 @@ module('Acceptance | Commands tests', function (hooks) {
       .containsText('Finding and opening Hassan card');
     assert
       .dom('[data-test-message-idx="0"] [data-test-command-apply]')
-      .containsText('Go');
+      .containsText('Search');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
     assert
       .dom(

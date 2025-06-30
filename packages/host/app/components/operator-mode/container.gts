@@ -149,7 +149,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       }
       :global(button:focus:not(:disabled)) {
         outline-color: var(--boxel-header-text-color, var(--boxel-highlight));
-        outline-offset: var(--outline-offset, 2px);
+        outline-offset: -2px;
       }
       :global(button:focus:not(:focus-visible)) {
         outline-color: transparent;

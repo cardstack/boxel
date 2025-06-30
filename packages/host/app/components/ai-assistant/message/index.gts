@@ -224,22 +224,24 @@ export default class AiAssistantMessage extends Component<Signature> {
       {{/unless}}
       <div class='content' data-test-ai-message-content>
         {{#if @isFromAssistant}}
-          <AiBotMessage
-            @monacoSDK={{@monacoSDK}}
-            @htmlParts={{@messageHTMLParts}}
-            @roomId={{@roomId}}
-            @eventId={{@eventId}}
-            @isStreaming={{@isStreaming}}
-            @isLastAssistantMessage={{@isLastAssistantMessage}}
-            @reasoning={{if
-              @reasoningContent
-              (hash
-                content=@reasoningContent
-                isExpanded=this.isReasoningExpanded
-                updateExpanded=this.updateReasoningExpanded
-              )
-            }}
-          />
+          {{#if this.hasBotMessage}}
+            <AiBotMessage
+              @monacoSDK={{@monacoSDK}}
+              @htmlParts={{@messageHTMLParts}}
+              @roomId={{@roomId}}
+              @eventId={{@eventId}}
+              @isStreaming={{@isStreaming}}
+              @isLastAssistantMessage={{@isLastAssistantMessage}}
+              @reasoning={{if
+                @reasoningContent
+                (hash
+                  content=@reasoningContent
+                  isExpanded=this.isReasoningExpanded
+                  updateExpanded=this.updateReasoningExpanded
+                )
+              }}
+            />
+          {{/if}}
           {{#if this.hasItems}}
             <Attachments
               @items={{this.items}}
@@ -295,6 +297,10 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
     </style>
   </template>
+
+  private get hasBotMessage() {
+    return this.args.messageHTMLParts?.length || this.args.reasoningContent;
+  }
 
   private get isAvatarAnimated() {
     return this.args.isStreaming && !this.args.errorMessage;

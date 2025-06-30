@@ -32,12 +32,13 @@ const ViewCodeButton: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     .view-code-button {
       --boxel-button-font: 600 var(--boxel-font-xs);
-      --boxel-button-min-height: 1.5rem;
+      --boxel-button-min-height: auto;
       --boxel-button-min-width: auto;
-      --boxel-button-padding: 0 var(--boxel-sp-xxxs);
-      --boxel-button-text-color: var(--boxel-light);
+      --boxel-button-padding: 0 var(--boxel-sp-5xs);
+      --boxel-button-text-color: currentColor;
       gap: var(--boxel-sp-xxs);
       border-radius: var(--boxel-border-radius-xs);
+      flex-shrink: 0;
     }
   </style>
 </template>;

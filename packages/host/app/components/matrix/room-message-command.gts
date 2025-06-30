@@ -42,10 +42,6 @@ import CardRenderer from '../card-renderer';
 
 import PreparingRoomMessageCommand from './preparing-room-message-command';
 
-function getCardIdFromCommand(command: MessageCommand) {
-  return command.commandRequest?.['arguments']?.['attributes']?.['cardId'];
-}
-
 interface Signature {
   Element: HTMLDivElement;
   Args: {
@@ -174,9 +170,6 @@ export default class RoomMessageCommand extends Component<Signature> {
       data-test-command-id={{@messageCommand.commandRequest.id}}
       ...attributes
     >
-      {{#if @messageCommand.description}}
-        <div class='command-description'>{{@messageCommand.description}}</div>
-      {{/if}}
       {{#if @isStreaming}}
         <PreparingRoomMessageCommand />
       {{else}}
@@ -190,13 +183,14 @@ export default class RoomMessageCommand extends Component<Signature> {
           }}
           as |codeBlock|
         >
-          <codeBlock.editorHeader
-            @fileURL={{getCardIdFromCommand @messageCommand}}
-            @applyButtonAction={{@runCommand}}
-            @applyButtonState={{this.applyButtonState}}
+          <codeBlock.commandHeader
+            @commandDescription={{@messageCommand.description}}
+            @action={{@runCommand}}
+            @actionVerb={{@messageCommand.actionVerb}}
             @code={{this.previewCommandCode}}
+            @commandState={{this.applyButtonState}}
             @isDisplayingCode={{this.isDisplayingCode}}
-            @toggleViewCode={{this.toggleViewCode}}
+            @toggleCode={{this.toggleViewCode}}
           />
           {{#if this.isDisplayingCode}}
             <codeBlock.editor />
@@ -219,7 +213,7 @@ export default class RoomMessageCommand extends Component<Signature> {
               @cardTypeDisplayName={{this.headerTitle}}
               @cardTypeIcon={{cardTypeIcon this.commandResultCard.card}}
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
-              class='header'
+              class='command-result-card-header'
               data-test-command-result-header
             />
             <CardRenderer
@@ -233,55 +227,21 @@ export default class RoomMessageCommand extends Component<Signature> {
       {{/if}}
     </div>
 
-    {{! template-lint-disable no-whitespace-for-layout  }}
-    {{! ignore the above error because ember-template-lint complains about the whitespace in the multi-line comment below }}
     <style scoped>
       .room-message-command > * + * {
         margin-top: var(--boxel-sp-xs);
       }
-      .command-description {
-        font-size: var(--boxel-font-sm);
-        font-weight: 500;
-        line-height: 1.25rem;
-        letter-spacing: var(--boxel-lsp-xs);
-        color: var(--boxel-light);
-        /* the below font-smoothing options are only recommended for light-colored
-          text on dark background (otherwise not good for accessibility) */
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-      }
-      .is-pending .view-code-button,
-      .is-error .view-code-button {
-        background: var(--boxel-200);
-        color: var(--boxel-500);
-      }
-      .command-button-bar {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-4xs);
-      }
       .command-result-card-preview {
         margin-top: var(--boxel-sp);
       }
-      .header {
+      .command-result-card-header {
         --boxel-label-color: var(--boxel-450);
         --boxel-label-font: 600 var(--boxel-font-xs);
         --boxel-header-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxxs) 0
           var(--left-padding);
       }
-      .header :deep(.content) {
+      .command-result-card-header :deep(.content) {
         gap: 0;
-      }
-      .options-menu :deep(.boxel-menu__item__content) {
-        padding-right: var(--boxel-sp-xxs);
-        padding-left: var(--boxel-sp-xxs);
-      }
-      .options-menu :deep(.check-icon) {
-        display: none;
-      }
-      .command-code-block :deep(.code-block-editor) {
-        max-height: unset;
       }
     </style>
   </template>
