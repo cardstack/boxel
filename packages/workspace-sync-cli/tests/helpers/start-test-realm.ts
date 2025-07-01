@@ -1,12 +1,7 @@
 #!/usr/bin/env tsx
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 import { readFileSync } from 'fs';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 export interface TestRealmServer {
   realmProcess: ChildProcess;
@@ -18,8 +13,8 @@ export async function startTestRealmServer(
   realmPath: string,
   realmsRootPath: string,
 ): Promise<TestRealmServer> {
-  const realmServerDir = path.join(__dirname, '..', '..', 'realm-server');
-  const matrixDir = path.join(__dirname, '..', '..', 'matrix');
+  const realmServerDir = path.join(__dirname, '..', '..', '..', 'realm-server');
+  const matrixDir = path.join(__dirname, '..', '..', '..', 'matrix');
 
   // Use unique test database name like isolated-realm-server
   const testDbName = `test_db_${Math.floor(10000000 * Math.random())}`;
