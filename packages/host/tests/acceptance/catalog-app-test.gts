@@ -473,13 +473,10 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     module('clicking home button resets filters', async function () {
       // showcase tab has different behavior compared to other tabs (apps, cards, fields, skills)
       test('when showcase tab is active - catalog grid/list view is shown when filters are applied', async function (assert) {
-        // Apply some filters on the catalog
-        // ** filter by search
         await waitFor('[data-test-filter-search-input]');
         await click('[data-test-filter-search-input]');
         await fillIn('[data-test-filter-search-input]', 'Mortgage');
 
-        // verify you looking at catalog grid view / list view
         await waitFor('[data-test-catalog-list-view]');
         assert
           .dom('[data-test-catalog-list-view]')
@@ -489,36 +486,30 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
 
       test('when showcase tab is active - filters reset when clicking "Catalog Home" button', async function (assert) {
-        // Apply some filters first
         await waitFor('[data-test-filter-search-input]');
         await click('[data-test-filter-search-input]');
         await fillIn('[data-test-filter-search-input]', 'Mortgage');
-        // ** filter by category
+
         await click('[data-test-filter-list-item="All"]');
-        // ** filter by tag
+
         let tagPill = document.querySelector('[data-test-tag-list-pill]');
         if (tagPill) {
           await click(tagPill);
         }
 
-        // Verify we're in catalog grid / list view (not showcase view)
         assert
           .dom('[data-test-showcase-view]')
           .doesNotExist('Should be in list view after applying filter');
 
-        // click on the home button
         await click('[data-test-navigation-reset-button="showcase"]');
 
-        // Verify you looking at showcase view
         assert
           .dom('[data-test-showcase-view]')
           .exists('Should return to showcase view after clicking Catalog Home');
 
-        // Verify filters are reset - make sure you reset category/tag/search state
         assert
           .dom('[data-test-filter-search-input]')
           .hasValue('', 'Search input should be cleared');
-        // Category and tag filters should be unselected
         assert
           .dom('[data-test-filter-list-item].is-selected')
           .doesNotExist('No category should be selected after reset');
@@ -528,28 +519,23 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
 
       test('when apps tab is active - filters reset when clicking "All Apps" button', async function (assert) {
-        // Switch to Apps tab
         await click('[data-tab-label="Apps"]');
         assert
           .dom('[data-tab-label="Apps"]')
           .hasClass('active', 'Apps tab should be active');
 
-        //  Apply some filters first
-        // ** filter by search
         await waitFor('[data-test-filter-search-input]');
         await click('[data-test-filter-search-input]');
         await fillIn('[data-test-filter-search-input]', 'Test');
-        // ** filter by category
+
         await click('[data-test-filter-list-item="All"]');
-        // ** filter by tag
+
         let tagPill = document.querySelector('[data-test-tag-list-pill]');
         if (tagPill) {
           await click(tagPill);
         }
 
-        // click on the home button
         await click('[data-test-navigation-reset-button="app"]');
-        // Verify you only looking at catalog grid view / list view
         assert
           .dom('[data-test-showcase-view]')
           .doesNotExist('Should remain in list view, not return to showcase');
@@ -557,7 +543,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         assert
           .dom('[data-test-catalog-list-view]')
           .exists('Catalog list view should still be visible');
-        // Verify filters are reset - make sure you reset category/tag/search state
+
         assert
           .dom('[data-test-filter-search-input]')
           .hasValue('', 'Search input should be cleared');
