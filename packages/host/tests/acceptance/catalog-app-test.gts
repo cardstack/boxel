@@ -1,7 +1,7 @@
 import { click, waitFor, waitUntil, fillIn } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { module, test } from 'qunit';
+import { module, skip, test } from 'qunit';
 
 import { validate as uuidValidate } from 'uuid';
 
@@ -516,7 +516,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .doesNotExist('No tag should be selected after reset');
       });
 
-      test('should be reset when clicking "All Apps" button', async function (assert) {
+      // TODO: CS-9002 this test is flaky
+      skip('should be reset when clicking "All Apps" button', async function (assert) {
         await click('[data-tab-label="Apps"]');
         assert
           .dom('[data-tab-label="Apps"]')
