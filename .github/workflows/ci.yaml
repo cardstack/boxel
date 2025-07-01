@@ -483,7 +483,7 @@ jobs:
         run: pnpm register-realm-users
         working-directory: packages/matrix
       - name: Run integration tests
-        run: pnpm test:integration
+        run: pnpm test
         working-directory: packages/workspace-sync-cli
       - name: Upload test services log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1

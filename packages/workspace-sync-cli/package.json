@@ -32,12 +32,14 @@
   "devDependencies": {
     "@cardstack/runtime-common": "workspace:*",
     "@types/node": "^18.18.5",
+    "@types/qunit": "catalog:",
     "esbuild": "^0.19.0",
     "tsx": "^4.0.0",
     "ts-node": "^10.9.1",
     "typescript": "~5.1.6",
     "concurrently": "catalog:",
-    "ignore": "^5.3.0"
+    "ignore": "^5.3.0",
+    "qunit": "^2.24.1"
   },
   "scripts": {
     "build": "pnpm clean && tsx scripts/build.ts",
@@ -48,8 +50,7 @@
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:js": "eslint . --report-unused-disable-directives --cache",
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
-    "test": "tsx tests/integration.test.ts",
-    "test:integration": "tsx tests/integration.test.ts",
+    "test": "NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts",
     "version:patch": "npm version patch",
     "version:minor": "npm version minor",
     "version:major": "npm version major",
