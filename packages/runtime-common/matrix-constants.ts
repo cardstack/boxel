@@ -45,3 +45,9 @@ export const DEFAULT_LLM_LIST = [
   'openai/gpt-4o-mini',
   'x-ai/grok-3-mini-beta',
 ];
+
+export const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
+export const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
+export const SLIDING_SYNC_LIST_RANGE_END = 9;
+export const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
+export const SLIDING_SYNC_TIMEOUT = 30000;
