@@ -447,6 +447,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         .hasText('Mortgage Calculator');
     });
 
+    // showcase tab has different behavior compared to other tabs (apps, cards, fields, skills)
     module('tab navigation', async function () {
       // showcase tab has different behavior compared to other tabs (apps, cards, fields, skills)
       module('show results as per catalog tab selected', async function () {
@@ -470,13 +471,22 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
     });
 
-    module('clicking home button resets filters', async function () {
-      // showcase tab has different behavior compared to other tabs (apps, cards, fields, skills)
-      test('when showcase tab is active - catalog grid/list view is shown when filters are applied', async function (assert) {
+    module('filters', async function (hooks) {
+      hooks.beforeEach(async function () {
+        // filter by search
         await waitFor('[data-test-filter-search-input]');
         await click('[data-test-filter-search-input]');
         await fillIn('[data-test-filter-search-input]', 'Mortgage');
+        // filter by category
+        await click('[data-test-filter-list-item="All"]');
+        // filter by tag
+        let tagPill = document.querySelector('[data-test-tag-list-pill]');
+        if (tagPill) {
+          await click(tagPill);
+        }
+      });
 
+      test('list view is shown if filters are applied', async function (assert) {
         await waitFor('[data-test-catalog-list-view]');
         assert
           .dom('[data-test-catalog-list-view]')
@@ -485,18 +495,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           );
       });
 
-      test('when showcase tab is active - filters reset when clicking "Catalog Home" button', async function (assert) {
-        await waitFor('[data-test-filter-search-input]');
-        await click('[data-test-filter-search-input]');
-        await fillIn('[data-test-filter-search-input]', 'Mortgage');
-
-        await click('[data-test-filter-list-item="All"]');
-
-        let tagPill = document.querySelector('[data-test-tag-list-pill]');
-        if (tagPill) {
-          await click(tagPill);
-        }
-
+      test('should be reset when clicking "Catalog Home" button', async function (assert) {
         assert
           .dom('[data-test-showcase-view]')
           .doesNotExist('Should be in list view after applying filter');
@@ -518,22 +517,11 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .doesNotExist('No tag should be selected after reset');
       });
 
-      test('when apps tab is active - filters reset when clicking "All Apps" button', async function (assert) {
+      test('should be reset when clicking "All Apps" button', async function (assert) {
         await click('[data-tab-label="Apps"]');
         assert
           .dom('[data-tab-label="Apps"]')
           .hasClass('active', 'Apps tab should be active');
-
-        await waitFor('[data-test-filter-search-input]');
-        await click('[data-test-filter-search-input]');
-        await fillIn('[data-test-filter-search-input]', 'Test');
-
-        await click('[data-test-filter-list-item="All"]');
-
-        let tagPill = document.querySelector('[data-test-tag-list-pill]');
-        if (tagPill) {
-          await click(tagPill);
-        }
 
         await click('[data-test-navigation-reset-button="app"]');
         assert
