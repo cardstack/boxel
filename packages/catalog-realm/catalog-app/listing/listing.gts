@@ -213,12 +213,15 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
         </div>
 
-        <div class='license-section'>
+        <div
+          class='license-section'
+          data-test-catalog-listing-embedded-license-section
+        >
           <h2>License</h2>
           {{#if @model.license.name}}
             {{@model.license.name}}
           {{else}}
-            <p class='no-data-text'>No license Provided</p>
+            <p class='no-data-text'>No License Provided</p>
           {{/if}}
         </div>
       </section>
@@ -240,7 +243,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         {{/if}}
       </section>
 
-      <section class='app-listing-examples'>
+      <section
+        class='app-listing-examples'
+        data-test-catalog-listing-embedded-examples-section
+      >
         <h2>Examples</h2>
         {{#if this.hasExamples}}
           <ul class='examples-list' data-test-catalog-listing-embedded-examples>
@@ -277,7 +283,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
       <hr class='divider' />
 
-      <section class='app-listing-skills'>
+      <section
+        class='app-listing-skills'
+        data-test-catalog-listing-embedded-skills-section
+      >
         <h2>Skills</h2>
         {{#if this.hasSkills}}
           <ul class='skills-list' data-test-catalog-listing-embedded-skills>
@@ -293,7 +302,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       </section>
 
       <hr class='divider' />
-      <section class='app-listing-spec-breakdown'>
+      <section
+        class='app-listing-spec-breakdown'
+        data-test-catalog-listing-embedded-specs-section
+      >
         <h2>Includes These Boxels</h2>
         {{#if this.hasNonEmptySpecBreakdown}}
           <Accordion

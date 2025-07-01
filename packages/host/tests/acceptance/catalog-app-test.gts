@@ -621,18 +621,35 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           ],
         ],
       });
+
+      //sections exists
       assert
-        .dom('[data-test-catalog-listing-embedded-images]')
-        .exists('Images section should be visible');
+        .dom('[data-test-catalog-listing-embedded-license-section]')
+        .exists();
       assert
-        .dom('[data-test-catalog-listing-embedded-examples]')
-        .exists('Examples section should be visible');
+        .dom('[data-test-catalog-listing-embedded-images-section]')
+        .exists();
       assert
-        .dom('[data-test-catalog-listing-embedded-categories]')
-        .exists('Categories section should be visible');
+        .dom('[data-test-catalog-listing-embedded-examples-section]')
+        .exists();
       assert
-        .dom('[data-test-catalog-listing-embedded-skills]')
-        .exists('Skills section should be visible');
+        .dom('[data-test-catalog-listing-embedded-categories-section]')
+        .exists();
+      assert.dom('[data-test-catalog-listing-embedded-specs-section]').exists();
+      assert
+        .dom('[data-test-catalog-listing-embedded-skills-section]')
+        .exists();
+
+      //content exists
+      assert.dom('[data-test-catalog-listing-embedded-images]').exists();
+      assert.dom('[data-test-catalog-listing-embedded-examples]').exists();
+      assert.dom('[data-test-catalog-listing-embedded-categories]').exists();
+      assert.dom('[data-test-catalog-listing-embedded-skills]').exists();
+      assert.dom('[data-test-catalog-listing-embedded-specs]').exists();
+
+      assert
+        .dom('[data-test-catalog-listing-embedded-license-section]')
+        .containsText('No License Provided');
 
       assert
         .dom('[data-test-catalog-listing-embedded-images] li')
@@ -680,6 +697,14 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
 
       assert
+        .dom('[data-test-catalog-listing-embedded-examples-section]')
+        .containsText('No Examples Provided');
+
+      assert
+        .dom('[data-test-catalog-listing-embedded-specs-section]')
+        .containsText('No Specs Provided');
+
+      assert
         .dom('[data-test-catalog-listing-embedded-remix-button]')
         .isDisabled();
     });
@@ -696,6 +721,10 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           ],
         ],
       });
+
+      assert
+        .dom('[data-test-catalog-listing-embedded-skills-section]')
+        .containsText('No Skills Provided');
 
       assert
         .dom('[data-test-catalog-listing-embedded-remix-button]')
