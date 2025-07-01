@@ -492,7 +492,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
     );
     const verifyRealmConfig = JSON.parse(verifyRealmJsonContent);
     assert.true(
-      verifyRealmConfig.modified === true,
+      verifyRealmConfig.modified,
       '.realm.json modifications should be properly pushed',
     );
     assert.strictEqual(
