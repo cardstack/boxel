@@ -80,7 +80,7 @@ export interface OperatorModeState {
   fieldSelection?: string;
   moduleInspector?: ModuleInspectorView;
   newFileDropdownOpen?: boolean;
-  cardPreviewFormat?: Format;
+  cardPreviewFormat: Format;
 }
 
 interface CardItem {
@@ -103,6 +103,7 @@ export type SerializedState = {
   fieldSelection?: string;
   aiAssistantOpen?: boolean;
   moduleInspector?: ModuleInspectorView;
+  cardPreviewFormat?: Format;
 };
 
 interface OpenFileSubscriber {
@@ -120,6 +121,7 @@ export default class OperatorModeStateService extends Service {
     openDirs: new TrackedMap<string, string[]>(),
     aiAssistantOpen: false,
     newFileDropdownOpen: false,
+    cardPreviewFormat: 'isolated' as Format,
   });
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
@@ -203,6 +205,7 @@ export default class OperatorModeStateService extends Service {
       aiAssistantOpen: false,
       moduleInspector: DEFAULT_MODULE_INSPECTOR_VIEW,
       newFileDropdownOpen: false,
+      cardPreviewFormat: 'isolated' as Format,
     });
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
@@ -677,6 +680,7 @@ export default class OperatorModeStateService extends Service {
       fieldSelection: this._state.fieldSelection,
       aiAssistantOpen: this._state.aiAssistantOpen,
       moduleInspector: this._state.moduleInspector,
+      cardPreviewFormat: this._state.cardPreviewFormat,
     };
 
     for (let stack of this._state.stacks) {
@@ -1027,6 +1031,7 @@ export default class OperatorModeStateService extends Service {
               format: this.playgroundPanelSelection.format,
             }
           : undefined;
+        codeMode.selectedCodeRef = this.codeSemanticsService.selectedCodeRef;
       }
     }
 

@@ -1089,6 +1089,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       },
       'Context sent with message contains correct previewPanelSelection',
     );
+    assert.deepEqual(
+      contextSent.codeMode.selectedCodeRef,
+      undefined,
+      'Context sent with message contains correct selectedCodeRef',
+    );
     await click('[data-test-clickable-definition-container]');
 
     await fillIn('[data-test-message-field]', `Message - 2`);
@@ -1127,6 +1132,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       contextSent.codeMode.previewPanelSelection,
       undefined,
       'Context sent with message contains correct previewPanelSelection',
+    );
+    assert.deepEqual(
+      contextSent.codeMode.selectedCodeRef,
+      {
+        module: 'http://test-realm/test/plant',
+        name: 'Plant',
+      },
+      'Context sent with message contains correct selectedCodeRef',
     );
 
     await click(
@@ -1173,6 +1186,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       },
       'Context sent with message contains correct previewPanelSelection',
     );
+    assert.deepEqual(
+      contextSent.codeMode.selectedCodeRef,
+      {
+        module: 'http://test-realm/test/plant',
+        name: 'Plant',
+      },
+      'Context sent with message contains correct selectedCodeRef',
+    );
 
     await click(
       '[data-test-boxel-button][data-test-module-inspector-view="spec"]',
@@ -1213,6 +1234,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       contextSent.codeMode.previewPanelSelection,
       undefined,
       'Context sent with message contains correct previewPanelSelection',
+    );
+    assert.deepEqual(
+      contextSent.codeMode.selectedCodeRef,
+      {
+        module: 'http://test-realm/test/plant',
+        name: 'Plant',
+      },
+      'Context sent with message contains correct selectedCodeRef',
     );
   });
 });
