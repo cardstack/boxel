@@ -140,7 +140,7 @@ async function runCommand(
   });
 }
 
-module('Workspace Sync CLI Integration Tests', function (hooks: any) {
+module('Workspace Sync CLI Integration Tests', function (hooks) {
   hooks.before(async function () {
     console.log('🧪 Workspace Sync CLI Integration Tests\n');
     await checkDependencies();
@@ -207,7 +207,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks: any) {
     }
   });
 
-  test('Pull files from realm to local directory', async function (assert: any) {
+  test('Pull files from realm to local directory', async function (assert) {
     const pullCmd = path.join(__dirname, '..', 'dist', 'pull.js');
 
     const result = await runCommand(
@@ -247,7 +247,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks: any) {
     assert.false(hiddenExists, '.hidden file should not have been pulled');
   });
 
-  test('Push modified files from local to realm', async function (assert: any) {
+  test('Push modified files from local to realm', async function (assert) {
     const pushCmd = path.join(__dirname, '..', 'dist', 'push.js');
     const pullCmd = path.join(__dirname, '..', 'dist', 'pull.js');
 
@@ -316,7 +316,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks: any) {
     assert.true(newCardExists, 'new-card.json should be pushed');
   });
 
-  test('Pull with --delete removes extra local files', async function (assert: any) {
+  test('Pull with --delete removes extra local files', async function (assert) {
     const pullCmd = path.join(__dirname, '..', 'dist', 'pull.js');
 
     // First pull to get initial files
@@ -359,7 +359,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks: any) {
     );
   });
 
-  test('Push with --dry-run does not modify realm', async function (assert: any) {
+  test('Push with --dry-run does not modify realm', async function (assert) {
     const pushCmd = path.join(__dirname, '..', 'dist', 'push.js');
     const pullCmd = path.join(__dirname, '..', 'dist', 'pull.js');
 
@@ -410,7 +410,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks: any) {
     assert.false(dryRunExists, '--dry-run should not have pushed the file');
   });
 
-  test('Respects .boxelignore patterns', async function (assert: any) {
+  test('Respects .boxelignore patterns', async function (assert) {
     const pushCmd = path.join(__dirname, '..', 'dist', 'push.js');
     const pullCmd = path.join(__dirname, '..', 'dist', 'pull.js');
 
