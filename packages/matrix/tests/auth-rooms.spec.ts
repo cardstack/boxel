@@ -44,7 +44,10 @@ test.describe('Auth rooms', () => {
     await realmServer.stop();
   });
 
-  test('auth rooms have a retention policy', async ({ page }) => {
+  // CS-8988 - this test is flaky and needs to be fixed
+  // By delaying await getJoinedRooms(user.accessToken); the test is passing more
+  // reliably but that makes the test take too long to run (several seconds)
+  test.skip('auth rooms have a retention policy', async ({ page }) => {
     await login(page, 'user1', 'pass', { url: appURL });
 
     let roomIds = await getJoinedRooms(user.accessToken);

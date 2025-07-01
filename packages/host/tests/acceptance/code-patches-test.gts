@@ -1,4 +1,4 @@
-import { click, waitFor, findAll, waitUntil } from '@ember/test-helpers';
+import { click, waitFor, find, findAll, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -76,15 +76,8 @@ module('Acceptance | Code patches tests', function (hooks) {
             type: 'card',
             attributes: {
               instructions:
-                'Here are few commands you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode. * get-boxel-ui-state: find out what mode you are in currently, and what cards are open. * search-cards-by-type-and-title: search for cards by name or description.',
+                'Here are few commands you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode. * search-cards-by-type-and-title: search for cards by name or description.',
               commands: [
-                {
-                  codeRef: {
-                    name: 'default',
-                    module: '@cardstack/boxel-host/commands/get-boxel-ui-state',
-                  },
-                  requiresApproval: true,
-                },
                 {
                   codeRef: {
                     name: 'SearchCardsByTypeAndTitleCommand',
@@ -291,7 +284,8 @@ ${REPLACE_MARKER}
       () =>
         document
           .querySelector('[data-test-ai-assistant-action-bar]')
-          ?.textContent?.includes('Apply Diff'),
+          ?.textContent?.includes('Apply Diff') &&
+        find('[data-test-code-block-index] [data-test-apply-state="applying"]'),
       { timeout: 5000 },
     );
     await waitUntil(() =>

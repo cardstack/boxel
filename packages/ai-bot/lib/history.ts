@@ -37,22 +37,15 @@ export async function constructHistory(
   client: MatrixClient,
 ) {
   /**
-   * We send a lot of events to create messages,
-   * as we stream updates to the UI. This works by
-   * sending a new event with the full content and
-   * information about which event it should replace
-   *
-   * This function is to construct the chat as a user
-   * would see it - with only the latest event for each
-   * message.
-   *
-   * When replacements are applied, the server aggregates
-   * them into a single event.
+   * Return a list of all message events and command/patch result events for the room,
+   * in chronological order
    */
-  const eventListWithReplacementsApplied = applyAllReplacements(eventlist);
 
   const latestEventsMap = new Map<string, DiscreteMatrixEvent>();
-  for (let rawEvent of eventListWithReplacementsApplied) {
+  let eventsWithAggregatedReplacements = eventlist.map(
+    getAggregatedReplacement,
+  );
+  for (let rawEvent of eventsWithAggregatedReplacements) {
     if (
       rawEvent.type !== 'm.room.message' &&
       rawEvent.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
@@ -72,30 +65,14 @@ export async function constructHistory(
       | MessageEvent; // Typescript could have inferred this from the line above
     let eventId = event.event_id!;
 
-    // replace events with their replacement
-
-    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
-    if (event.content['m.relates_to']?.rel_type === 'm.replace') {
-      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
-      eventId = event.content['m.relates_to']!.event_id!;
-      event.event_id = eventId;
-    }
+    // Simple deduplication by event ID - no replacement processing needed
+    // since replacement events are filtered out at the API level
     const existingEvent = latestEventsMap.get(eventId);
     if (
       !existingEvent ||
-      // we check the timestamps of the events because the existing event may
-      // itself be an already replaced event. The idea is that you can perform
-      // multiple replacements on an event. In order to prevent backing out a
-      // subsequent replacement we also assert that the replacement timestamp is
-      // after the event that it is replacing
       existingEvent.origin_server_ts < event.origin_server_ts
     ) {
       latestEventsMap.set(eventId, event as DiscreteMatrixEvent);
-      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
-      if (event.content['m.relates_to']?.rel_type === 'm.replace') {
-        // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
-        delete event.content['m.relates_to'];
-      }
     }
   }
 
@@ -181,38 +158,6 @@ function getAggregatedReplacement(event: IRoomEvent) {
     finalRawEvent = event;
   }
   return finalRawEvent;
-}
-
-function applyAllReplacements(eventlist: IRoomEvent[]): IRoomEvent[] {
-  // First apply any server-side aggregations
-  let eventsWithAggregatedReplacements = eventlist.map(
-    getAggregatedReplacement,
-  );
-  // Now if the event list we have doesn't have aggregations but still
-  // has replacements, we need to apply them manually
-  // TODO: remove this as part of #CS-8662
-  let eventsMap = new Map<string, IRoomEvent>();
-  for (let event of eventsWithAggregatedReplacements) {
-    let canonicalEventId;
-    if (event.content['m.relates_to']?.rel_type === 'm.replace') {
-      canonicalEventId = event.content['m.relates_to'].event_id!;
-    } else {
-      canonicalEventId = event.event_id!;
-    }
-    if (eventsMap.has(canonicalEventId)) {
-      let existingEvent = eventsMap.get(canonicalEventId)!;
-      // Events can be replaced multiple times, we only want the latest version
-      if (existingEvent.origin_server_ts < event.origin_server_ts) {
-        event.event_id = canonicalEventId;
-        eventsMap.set(canonicalEventId, event);
-      }
-    } else {
-      eventsMap.set(canonicalEventId, event);
-    }
-  }
-  let updatedEvents = Array.from(eventsMap.values());
-  updatedEvents.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
-  return updatedEvents;
 }
 
 function parseContentData(event: IRoomEvent) {

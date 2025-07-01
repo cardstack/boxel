@@ -509,7 +509,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assertMessages(assert, [
       {
         from: 'testuser',
-        message: 'Message with updated card new card',
+        message: 'Message with updated card',
         cards: [{ id, title: 'new card' }],
       },
     ]);

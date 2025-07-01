@@ -83,8 +83,8 @@ test.describe('Skills', () => {
     await expect(page.locator('[data-test-new-session]')).toHaveCount(1);
     await expect(page.locator('[data-test-skill-menu]')).toHaveCount(1);
 
-    await expect(page.locator('[data-test-skill-menu]')).toContainText(
-      'Skills 1',
+    await expect(page.locator('[data-test-active-skills-count]')).toContainText(
+      '1 Skill',
     );
     await page
       .locator('[data-test-skill-menu][data-test-pill-menu-button]')
@@ -199,8 +199,8 @@ test.describe('Skills', () => {
     await sendMessage(page, room1, 'Room 1'); // sending a message to be able to create new room
 
     let room2 = await createRoom(page);
-    await expect(page.locator('[data-test-skill-menu]')).toContainText(
-      'Skills 1',
+    await expect(page.locator('[data-test-active-skills-count]')).toContainText(
+      '1 Skill',
     );
     await attachSkill(page, skillCard2, true);
     await expect(page.locator('[data-test-skill-menu]')).toContainText(
@@ -209,8 +209,8 @@ test.describe('Skills', () => {
     await sendMessage(page, room2, 'Room 2'); // sending a message to be able to create new room
 
     let room3 = await createRoom(page);
-    await expect(page.locator('[data-test-skill-menu]')).toContainText(
-      'Skills 1',
+    await expect(page.locator('[data-test-active-skills-count]')).toContainText(
+      '1 Skill',
     );
     await attachSkill(page, skillCard3, true);
     await attachSkill(page, skillCard2);
@@ -223,20 +223,20 @@ test.describe('Skills', () => {
 
     await openRoom(page, room1);
     await isInRoom(page, room1);
-    await expect(page.locator('[data-test-skill-menu]')).toContainText(
-      'Skills 4',
+    await expect(page.locator('[data-test-active-skills-count]')).toContainText(
+      '4 Skills',
     );
 
     await openRoom(page, room2);
     await isInRoom(page, room2);
-    await expect(page.locator('[data-test-skill-menu]')).toContainText(
-      'Skills 2',
+    await expect(page.locator('[data-test-active-skills-count]')).toContainText(
+      '2 Skills',
     );
 
     await openRoom(page, room3);
     await isInRoom(page, room3);
-    await expect(page.locator('[data-test-skill-menu]')).toContainText(
-      'Skills 2',
+    await expect(page.locator('[data-test-active-skills-count]')).toContainText(
+      '2 Skills',
     );
   });
 
@@ -263,7 +263,9 @@ test.describe('Skills', () => {
     await sendMessage(page, room1, 'Message 1');
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
-    expect(page.locator('[data-test-skill-menu]')).toHaveText('Skills 3');
+    expect(page.locator('[data-test-active-skills-count]')).toHaveText(
+      '3 Skills',
+    );
     await page.locator('[data-test-skill-menu]').hover();
     await page
       .locator('[data-test-skill-menu][data-test-pill-menu-button]')
@@ -293,7 +295,9 @@ test.describe('Skills', () => {
       { from: 'user1', message: 'Message 1' },
       { from: 'user1', message: 'Message 2' },
     ]);
-    expect(page.locator('[data-test-skill-menu]')).toHaveText('Skills 0');
+    expect(page.locator('[data-test-active-skills-count]')).toHaveText(
+      '0 Skills',
+    );
   });
 
   test(`previously disabled skills can be enabled`, async ({ page }) => {
@@ -343,15 +347,15 @@ test.describe('Skills', () => {
 
     await reloadAndOpenAiAssistant(page);
     await openRoom(page, room1);
-    await expect(page.locator('[data-test-skill-menu]')).toContainText(
-      'Skills 2',
+    await expect(page.locator('[data-test-active-skills-count]')).toContainText(
+      '2 Skill',
     );
 
     await logout(page);
     await login(page, 'user2', 'pass', { url: appURL });
     await getRoomId(page);
-    await expect(page.locator('[data-test-skill-menu]')).toContainText(
-      'Skills 1',
+    await expect(page.locator('[data-test-active-skills-count]')).toContainText(
+      '1 Skill',
     );
     await attachSkill(page, skillCard3, true);
     await expect(page.locator('[data-test-skill-menu]')).toContainText(
@@ -361,8 +365,8 @@ test.describe('Skills', () => {
     await logout(page);
     await login(page, 'user1', 'pass', { url: appURL });
     await openRoom(page, room1);
-    await expect(page.locator('[data-test-skill-menu]')).toContainText(
-      'Skills 2',
+    await expect(page.locator('[data-test-active-skills-count]')).toContainText(
+      '2 Skills',
     );
   });
 

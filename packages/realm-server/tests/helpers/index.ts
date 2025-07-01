@@ -31,6 +31,9 @@ import {
   type QueuePublisher,
   type QueueRunner,
   type IndexRunner,
+  User,
+  Subscription,
+  Plan,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
@@ -46,7 +49,7 @@ import {
 import { Server } from 'http';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { shimExternals } from '../../lib/externals';
-import { Plan, Subscription, User } from '@cardstack/billing/billing-queries';
+
 import supertest, { SuperTest, Test } from 'supertest';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {

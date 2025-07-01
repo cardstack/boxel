@@ -1,24 +1,22 @@
 import { DBAdapter } from './db';
 
-import { query, asExpressions, upsert } from './expression';
+import { query, asExpressions, insert } from './expression';
+import { type User } from './db-types';
 
-export async function upsertUser(
+export async function insertUser(
   dbAdapter: DBAdapter,
   matrixUserId: string,
   matrixRegistrationToken: string,
-) {
+): Promise<User> {
   let { valueExpressions, nameExpressions } = asExpressions({
     matrix_user_id: matrixUserId,
     matrix_registration_token: matrixRegistrationToken,
   });
 
-  await query(
+  let result = await query(
     dbAdapter,
-    upsert(
-      'users',
-      'users_matrix_user_id_key',
-      nameExpressions,
-      valueExpressions,
-    ),
+    insert('users', nameExpressions, valueExpressions),
   );
+
+  return result[0] as unknown as User;
 }
