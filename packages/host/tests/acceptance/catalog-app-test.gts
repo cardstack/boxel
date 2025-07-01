@@ -447,7 +447,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         .hasText('Mortgage Calculator');
     });
 
-    // showcase tab has different behavior compared to other tabs (apps, cards, fields, skills)
     module('tab navigation', async function () {
       // showcase tab has different behavior compared to other tabs (apps, cards, fields, skills)
       module('show results as per catalog tab selected', async function () {
