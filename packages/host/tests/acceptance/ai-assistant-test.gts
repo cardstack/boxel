@@ -1081,19 +1081,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'preview',
       'Context sent with message contains correct moduleInspectorPanel',
     );
-    // TODO: should we report what format the user is looking at the card in?
-    // assert.strictEqual(
-    //   contextSent.codeMode.cardRendererFormat,
-    //   'isolated',
-    //   'Context sent with message contains correct cardRendererFormat',
-    // );
-
-    assert.strictEqual(
+    assert.deepEqual(
       contextSent.codeMode.previewPanelSelection,
-      undefined,
+      {
+        cardId: `${testRealmURL}Plant/highbush-blueberry`,
+        format: 'isolated',
+      },
       'Context sent with message contains correct previewPanelSelection',
     );
-
     await click('[data-test-clickable-definition-container]');
 
     await fillIn('[data-test-message-field]', `Message - 2`);

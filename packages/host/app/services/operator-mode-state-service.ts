@@ -80,6 +80,7 @@ export interface OperatorModeState {
   fieldSelection?: string;
   moduleInspector?: ModuleInspectorView;
   newFileDropdownOpen?: boolean;
+  cardPreviewFormat?: Format;
 }
 
 interface CardItem {
@@ -166,6 +167,7 @@ export default class OperatorModeStateService extends Service {
       aiAssistantOpen: this._state.aiAssistantOpen,
       moduleInspector: this._state.moduleInspector,
       newFileDropdownOpen: this._state.newFileDropdownOpen,
+      cardPreviewFormat: this._state.cardPreviewFormat,
     } as const;
   }
 
@@ -622,6 +624,11 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  updateCardPreviewFormat(format: Format) {
+    this._state.cardPreviewFormat = format;
+    this.schedulePersist();
+  }
+
   clearStacks() {
     this._state.stacks.splice(0);
     this.schedulePersist();
@@ -733,6 +740,7 @@ export default class OperatorModeStateService extends Service {
       aiAssistantOpen: rawState.aiAssistantOpen ?? false,
       moduleInspector:
         rawState.moduleInspector ?? DEFAULT_MODULE_INSPECTOR_VIEW,
+      cardPreviewFormat: rawState.cardPreviewFormat ?? 'isolated',
     });
 
     if (rawState.codePath && rawState.moduleInspector) {
@@ -1000,21 +1008,27 @@ export default class OperatorModeStateService extends Service {
   getSummaryForAIBot(
     openCardIdsSet: Set<string> = new Set([...this.getOpenCardIds()]),
   ): BoxelContext {
-    let codeMode =
-      this._state.submode === Submodes.Code
-        ? {
-            currentFile: this.codePathString,
-            moduleInspectorPanel: this.isViewingCardInCodeMode
-              ? 'preview'
-              : this.moduleInspectorPanel,
-            previewPanelSelection: this.playgroundPanelSelection
-              ? {
-                  cardId: this.playgroundPanelSelection.cardId,
-                  format: this.playgroundPanelSelection.format,
-                }
-              : undefined,
-          }
-        : undefined;
+    let codeMode: BoxelContext['codeMode'] = undefined;
+    if (this._state.submode === Submodes.Code) {
+      codeMode = {
+        currentFile: this.codePathString,
+      };
+      if (this.isViewingCardInCodeMode) {
+        codeMode.moduleInspectorPanel = 'preview';
+        codeMode.previewPanelSelection = {
+          cardId: this.codePathString!.replace(/\.json$/, ''),
+          format: this._state.cardPreviewFormat ?? 'isolated',
+        };
+      } else {
+        codeMode.moduleInspectorPanel = this.moduleInspectorPanel;
+        codeMode.previewPanelSelection = this.playgroundPanelSelection
+          ? {
+              cardId: this.playgroundPanelSelection.cardId,
+              format: this.playgroundPanelSelection.format,
+            }
+          : undefined;
+      }
+    }
 
     let openCardIds = this.makeRemoteIdsList([...openCardIdsSet]);
     return {
