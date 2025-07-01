@@ -480,6 +480,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         await fillIn('[data-test-filter-search-input]', 'Mortgage');
 
         // verify you looking at catalog grid view / list view
+        await waitFor('[data-test-catalog-list-view]');
         assert
           .dom('[data-test-catalog-list-view]')
           .exists(
@@ -552,6 +553,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         assert
           .dom('[data-test-showcase-view]')
           .doesNotExist('Should remain in list view, not return to showcase');
+        await waitFor('[data-test-catalog-list-view]');
         assert
           .dom('[data-test-catalog-list-view]')
           .exists('Catalog list view should still be visible');
