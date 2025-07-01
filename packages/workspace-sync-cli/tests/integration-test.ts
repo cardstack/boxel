@@ -3,8 +3,7 @@ import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
-import { dirname } from 'path';
-import { module, test, assert } from 'qunit';
+import { module, test } from 'qunit';
 import { realmPassword } from '../../matrix/helpers/realm-credentials';
 import {
   startTestRealmServer,
