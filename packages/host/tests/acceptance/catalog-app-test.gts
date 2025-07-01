@@ -160,6 +160,51 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             },
           },
         },
+        'Listing/empty.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Empty',
+              name: 'Empty',
+              summary: 'Empty',
+              images: null,
+              description: null,
+              thumbnailURL: null,
+            },
+            relationships: {
+              'skills.0': {
+                links: {
+                  self: `${catalogRealmURL}Skill/homework-grader`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${catalogRealmURL}catalog-app/listing/listing`,
+                name: 'Listing',
+              },
+            },
+          },
+        },
+        'Listing/empty-skill.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Empty',
+              name: 'Empty',
+              summary: 'Empty',
+              images: null,
+              description: null,
+              thumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${catalogRealmURL}catalog-app/listing/listing`,
+                name: 'SkillListing',
+              },
+            },
+          },
+        },
         'index.json': {
           data: {
             type: 'card',
@@ -403,7 +448,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         ],
       });
       await click(
-        `[data-test-card="${listingId}"] [data-test-catalog-listing-isolated-remix-button]`,
+        `[data-test-card="${listingId}"] [data-test-catalog-listing-embedded-remix-button]`,
       );
       assert
         .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
@@ -564,10 +609,105 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
     });
 
+    test('display of sections when viewing listing details', async function (assert) {
+      const homeworkGraderId = `${catalogRealmURL}CardListing/cbe2c79b-60aa-4dca-bc13-82b610e31653`;
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: homeworkGraderId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+      assert
+        .dom('[data-test-catalog-listing-embedded-images]')
+        .exists('Images section should be visible');
+      assert
+        .dom('[data-test-catalog-listing-embedded-examples]')
+        .exists('Examples section should be visible');
+      assert
+        .dom('[data-test-catalog-listing-embedded-categories]')
+        .exists('Categories section should be visible');
+      assert
+        .dom('[data-test-catalog-listing-embedded-skills]')
+        .exists('Skills section should be visible');
+
+      assert
+        .dom('[data-test-catalog-listing-embedded-images] li')
+        .exists({ count: 3 });
+
+      assert
+        .dom('[data-test-catalog-listing-embedded-examples] li')
+        .exists({ count: 2 });
+      assert
+        .dom('[data-test-catalog-listing-embedded-examples] li:first-child')
+        .containsText('Basic Arithmetic');
+      assert
+        .dom('[data-test-catalog-listing-embedded-examples] li:last-child')
+        .containsText('US History');
+      assert
+        .dom('[data-test-catalog-listing-embedded-categories] li')
+        .exists({ count: 1 });
+      assert
+        .dom('[data-test-catalog-listing-embedded-categories] li:first-child')
+        .containsText('Education and Learning');
+      assert
+        .dom('[data-test-catalog-listing-embedded-skills] li')
+        .exists({ count: 1 });
+      assert
+        .dom('[data-test-catalog-listing-embedded-skills] li:first-child')
+        .containsText('Grading Skill');
+      assert.dom('[data-test-accordion-item="card"]').exists();
+      await click('[data-test-accordion-item="card"] button');
+      assert
+        .dom('[data-test-selected-accordion-item="card"]')
+        .containsText('Homework');
+    });
+
+    test('remix button is disabled when remix a listing has no examples and no specs', async function (assert) {
+      const emptyListingId = `${testRealmURL}Listing/empty`;
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: emptyListingId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      assert
+        .dom('[data-test-catalog-listing-embedded-remix-button]')
+        .isDisabled();
+    });
+
+    test('remix button is disabled when remix a skill listing has no skills', async function (assert) {
+      const emptySkillListingId = `${testRealmURL}Listing/empty-skill`;
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: emptySkillListingId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      assert
+        .dom('[data-test-catalog-listing-embedded-remix-button]')
+        .isDisabled(
+          'Remix button should be disabled when skill listing has no skills',
+        );
+    });
+
     test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
       await verifyButtonAction(
         assert,
-        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-isolated-remix-button]`,
+        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-embedded-remix-button]`,
         'Remix',
         'I would like to remix this Mortgage Calculator under the following realm: http://test-realm/test/',
       );
@@ -575,7 +715,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
     test('after clicking "Preview" button, the example card opens up onto the stack', async function (assert) {
       await click(
-        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-isolated-preview-button]`,
+        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-embedded-preview-button]`,
       );
       assert
         .dom(
