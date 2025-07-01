@@ -13,8 +13,8 @@ import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-ado
 import { CardType, Type } from '@cardstack/host/resources/card-type';
 import { Ready } from '@cardstack/host/resources/file';
 import { inheritanceChain } from '@cardstack/host/resources/inheritance-chain';
-import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
-import LoaderService from '@cardstack/host/services/loader-service';
+import type { ModuleAnalysis } from '@cardstack/host/resources/module-contents';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import { calculateTotalOwnFields } from '@cardstack/host/utils/schema-editor';
 
 import { BaseDef } from 'https://cardstack.com/base/card-api';
@@ -25,7 +25,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     file: Ready;
-    moduleContentsResource: ModuleContentsResource;
+    moduleAnalysis: ModuleAnalysis;
     cardTypeResource?: CardType;
     card: typeof BaseDef;
     isReadOnly: boolean;
@@ -121,7 +121,7 @@ export default class SchemaEditor extends Component<Signature> {
 
   get isLoading() {
     return (
-      this.args.moduleContentsResource.isLoadingNewModule ||
+      this.args.moduleAnalysis.isLoadingNewModule ||
       this.cardInheritanceChain.isLoading
     );
   }

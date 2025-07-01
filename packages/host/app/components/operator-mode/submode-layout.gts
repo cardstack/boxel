@@ -349,7 +349,7 @@ export default class SubmodeLayout extends Component<Signature> {
           />
           {{#if config.featureFlags.SHOW_ASK_AI}}
             {{#if (not this.aiAssistantPanelService.isOpen)}}
-              <AskAiContainer @selectedCardRef={{@selectedCardRef}} />
+              <AskAiContainer />
             {{/if}}
           {{/if}}
           <AiAssistantButton

@@ -906,7 +906,6 @@ export default class MatrixService extends Service {
     context?: BoxelContext,
   ): Promise<void> {
     let tools: Tool[] = [];
-    let attachedOpenCards: CardDef[] = [];
     // Open cards are attached automatically
     // If they are not attached, the user is not allowing us to
     // modify them
@@ -940,7 +939,6 @@ export default class MatrixService extends Service {
         attachedCards: contentData.attachedCards,
         context: {
           ...contentData.context,
-          openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
           debug: context?.debug,
           functions: [],

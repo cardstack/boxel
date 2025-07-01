@@ -20,6 +20,7 @@ import type StoreService from '../services/store';
 interface Args {
   named: {
     submode: Submode;
+    moduleInspectorPanel: string | undefined; // 'preview' | 'spec' | 'schema' | 'card-renderer'
     autoAttachedFileUrl: string | undefined;
     playgroundPanelCardId: string | undefined;
     topMostStackItems: StackItem[];
@@ -40,6 +41,7 @@ export class AutoAttachment extends Resource<Args> {
   modify(_positional: never[], named: Args['named']) {
     const {
       submode,
+      moduleInspectorPanel,
       autoAttachedFileUrl,
       playgroundPanelCardId,
       topMostStackItems,
@@ -48,6 +50,7 @@ export class AutoAttachment extends Resource<Args> {
     } = named;
     this.calculateAutoAttachments.perform(
       submode,
+      moduleInspectorPanel,
       autoAttachedFileUrl,
       playgroundPanelCardId,
       topMostStackItems,
@@ -59,6 +62,7 @@ export class AutoAttachment extends Resource<Args> {
   private calculateAutoAttachments = restartableTask(
     async (
       submode: Submode,
+      moduleInspectorPanel: string | undefined,
       autoAttachedFileUrl: string | undefined,
       playgroundPanelCardId: string | undefined,
       topMostStackItems: StackItem[],
@@ -98,6 +102,7 @@ export class AutoAttachment extends Resource<Args> {
           this.cardIds.add(cardId);
         }
         if (
+          moduleInspectorPanel === 'preview' &&
           playgroundPanelCardId &&
           !removedCardIds?.includes(playgroundPanelCardId) &&
           !attachedCardIds?.includes(playgroundPanelCardId)
@@ -113,6 +118,7 @@ export function getAutoAttachment(
   parent: object,
   args: {
     submode: () => Submode;
+    moduleInspectorPanel: () => string | undefined;
     autoAttachedFileUrl: () => string | undefined;
     playgroundPanelCardId: () => string | undefined;
     topMostStackItems: () => StackItem[];
@@ -123,6 +129,7 @@ export function getAutoAttachment(
   return AutoAttachment.from(parent, () => ({
     named: {
       submode: args.submode(),
+      moduleInspectorPanel: args.moduleInspectorPanel(),
       autoAttachedFileUrl: args.autoAttachedFileUrl(),
       playgroundPanelCardId: args.playgroundPanelCardId(),
       topMostStackItems: args.topMostStackItems(),

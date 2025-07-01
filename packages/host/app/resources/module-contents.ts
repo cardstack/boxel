@@ -82,7 +82,17 @@ export interface State {
   declarations: ModuleDeclaration[];
 }
 
-export class ModuleContentsResource extends Resource<Args> {
+export interface ModuleAnalysis {
+  declarations: ModuleDeclaration[];
+  moduleError: { type: 'runtime' | 'compile'; message: string } | undefined;
+  isLoading: boolean;
+  isLoadingNewModule: boolean;
+}
+
+export class ModuleContentsResource
+  extends Resource<Args>
+  implements ModuleAnalysis
+{
   @service declare operatorModeStateService: OperatorModeStateService;
   @tracked moduleError:
     | { type: 'runtime' | 'compile'; message: string }
