@@ -16,6 +16,7 @@ interface Signature {
   Element: HTMLButtonElement | HTMLDivElement;
   Args: {
     state: ApplyButtonState;
+    actionVerb?: string;
   };
   Blocks: {
     default: [];
@@ -34,12 +35,18 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
     >
       {{#if (has-block)}}
         {{yield}}
+      {{else if @actionVerb}}
+        {{@actionVerb}}
       {{else}}
-        Apply
+        Run
       {{/if}}
     </BoxelButton>
   {{else}}
-    <div class='state-indicator {{@state}}' data-test-apply-state={{@state}}>
+    <div
+      class='state-indicator {{@state}}'
+      data-test-apply-state={{@state}}
+      ...attributes
+    >
       {{#if (eq @state 'applying')}}
         <CircleSpinner width='18' height='18' />
       {{else if (eq @state 'applied')}}
@@ -55,7 +62,6 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
           disabled
           {{setCssVar boxel-button-text-color='var(--boxel-200)'}}
           data-test-apply-state='preparing'
-          ...attributes
         >
           Working…
         </BoxelButton>
