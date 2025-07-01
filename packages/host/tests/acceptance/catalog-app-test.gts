@@ -505,7 +505,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .dom('[data-test-showcase-view]')
           .doesNotExist('Should be in list view after applying filter');
 
-        //step 4: click on the home button
+        // click on the home button
         await click('[data-test-navigation-reset-button="showcase"]');
 
         // Verify you looking at showcase view
