@@ -98,6 +98,9 @@ export default class AiAssistantActionBar extends Component<Signature> {
         border-top-left-radius: var(--chat-input-area-border-radius);
         align-items: center;
         border: 1px solid #777;
+
+        position: relative;
+        z-index: 1;
       }
       .ai-assistant-action-bar.unread-indicator {
         padding: 0;
