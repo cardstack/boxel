@@ -219,7 +219,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
       process.cwd(),
     );
 
-    assert.equal(
+    assert.strictEqual(
       result.code,
       0,
       `Pull command should succeed: ${result.stderr}`,
@@ -231,7 +231,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
       'utf-8',
     );
     const parsed = JSON.parse(card1);
-    assert.equal(
+    assert.strictEqual(
       parsed.title,
       'Test Card 1',
       'card1.json content should match',
@@ -283,7 +283,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
       process.cwd(),
     );
 
-    assert.equal(
+    assert.strictEqual(
       result.code,
       0,
       `Push command should succeed: ${result.stderr}`,
@@ -299,7 +299,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
       process.cwd(),
     );
 
-    assert.equal(
+    assert.strictEqual(
       pullResult.code,
       0,
       `Verification pull should succeed: ${pullResult.stderr}`,
@@ -346,7 +346,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
       process.cwd(),
     );
 
-    assert.equal(
+    assert.strictEqual(
       result.code,
       0,
       `Pull with --delete should succeed: ${result.stderr}`,
@@ -390,7 +390,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
       process.cwd(),
     );
 
-    assert.equal(
+    assert.strictEqual(
       result.code,
       0,
       `Push --dry-run should succeed: ${result.stderr}`,
@@ -424,7 +424,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
       process.cwd(),
     );
 
-    assert.equal(
+    assert.strictEqual(
       pullResult.code,
       0,
       `Pull .realm.json should succeed: ${pullResult.stderr}`,
@@ -442,7 +442,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
       'utf-8',
     );
     const realmConfig = JSON.parse(realmJsonContent);
-    assert.equal(
+    assert.strictEqual(
       realmConfig.name,
       'Test Realm',
       '.realm.json content should match after pull',
@@ -464,7 +464,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
       process.cwd(),
     );
 
-    assert.equal(
+    assert.strictEqual(
       pushResult.code,
       0,
       `Push .realm.json should succeed: ${pushResult.stderr}`,
@@ -480,7 +480,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
       process.cwd(),
     );
 
-    assert.equal(
+    assert.strictEqual(
       verifyPullResult.code,
       0,
       `Verification pull for .realm.json should succeed: ${verifyPullResult.stderr}`,
@@ -495,7 +495,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
       verifyRealmConfig.modified === true,
       '.realm.json modifications should be properly pushed',
     );
-    assert.equal(
+    assert.strictEqual(
       verifyRealmConfig.version,
       '1.1.0',
       '.realm.json version should be updated',
@@ -539,7 +539,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
       process.cwd(),
     );
 
-    assert.equal(
+    assert.strictEqual(
       result.code,
       0,
       `Push with .boxelignore should succeed: ${result.stderr}`,
