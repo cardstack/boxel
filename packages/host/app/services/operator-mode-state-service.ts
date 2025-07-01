@@ -348,6 +348,13 @@ export default class OperatorModeStateService extends Service {
       .map((stack) => stack[stack.length - 1]);
   }
 
+  get isViewingCardInCodeMode() {
+    return (
+      this._state.submode === Submodes.Code &&
+      this.codePathString?.endsWith('.json')
+    );
+  }
+
   getOpenCardIds(): string[] {
     if (this._state.submode === Submodes.Code) {
       let openCardsInCodeMode = [];
@@ -355,8 +362,8 @@ export default class OperatorModeStateService extends Service {
         openCardsInCodeMode.push(this.playgroundPanelSelection.cardId);
       }
       // Alternatively we may simply be looking at a card in code mode
-      if (this._state.codePath?.href.endsWith('.json')) {
-        let cardId = this._state.codePath.href.replace(/\.json$/, '');
+      if (this.isViewingCardInCodeMode) {
+        let cardId = this.codePathString!.replace(/\.json$/, '');
         if (!openCardsInCodeMode.includes(cardId)) {
           openCardsInCodeMode.push(cardId);
         }
@@ -997,7 +1004,9 @@ export default class OperatorModeStateService extends Service {
       this._state.submode === Submodes.Code
         ? {
             currentFile: this.codePathString,
-            moduleInspectorPanel: this.moduleInspectorPanel,
+            moduleInspectorPanel: this.isViewingCardInCodeMode
+              ? 'preview'
+              : this.moduleInspectorPanel,
             previewPanelSelection: this.playgroundPanelSelection
               ? {
                   cardId: this.playgroundPanelSelection.cardId,

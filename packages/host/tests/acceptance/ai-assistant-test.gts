@@ -1076,12 +1076,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       `${testRealmURL}Plant/highbush-blueberry.json`,
       'Context sent with message contains correct currentFile',
     );
-    // TODO: contextSent.codeMode.moduleInspectorPanel is 'schema' but the schema panel is not visible right now
-    // assert.strictEqual(
-    //   contextSent.codeMode.moduleInspectorPanel,
-    //   'card-renderer',
-    //   'Context sent with message contains correct moduleInspectorPanel',
-    // );
+    assert.strictEqual(
+      contextSent.codeMode.moduleInspectorPanel,
+      'preview',
+      'Context sent with message contains correct moduleInspectorPanel',
+    );
     // TODO: should we report what format the user is looking at the card in?
     // assert.strictEqual(
     //   contextSent.codeMode.cardRendererFormat,
