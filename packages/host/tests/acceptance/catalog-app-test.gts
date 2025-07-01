@@ -166,7 +166,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             attributes: {
               title: 'Empty',
               name: 'Empty',
-              summary: 'Empty',
+              summary: null,
               images: null,
               description: null,
               thumbnailURL: null,
@@ -624,6 +624,9 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
       //sections exists
       assert
+        .dom('[data-test-catalog-listing-embedded-summary-section]')
+        .exists();
+      assert
         .dom('[data-test-catalog-listing-embedded-license-section]')
         .exists();
       assert
@@ -645,8 +648,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       assert.dom('[data-test-catalog-listing-embedded-examples]').exists();
       assert.dom('[data-test-catalog-listing-embedded-categories]').exists();
       assert.dom('[data-test-catalog-listing-embedded-skills]').exists();
-      assert.dom('[data-test-catalog-listing-embedded-specs]').exists();
 
+      assert
+        .dom('[data-test-catalog-listing-embedded-summary-section]')
+        .containsText(
+          'An AI-assisted card for grading assignments. Define questions, collect student answers, and trigger grading through a linked AI skill. The system creates an assistant room, sends the assignment and skill, and executes a grading command. The AI returns a letter grade, individual question scores, and markdown-formatted feedback, which are displayed in a styled summary.',
+        );
       assert
         .dom('[data-test-catalog-listing-embedded-license-section]')
         .containsText('No License Provided');
@@ -695,6 +702,10 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           ],
         ],
       });
+
+      assert
+        .dom('[data-test-catalog-listing-embedded-summary-section]')
+        .containsText('No Summary Provided');
 
       assert
         .dom('[data-test-catalog-listing-embedded-examples-section]')

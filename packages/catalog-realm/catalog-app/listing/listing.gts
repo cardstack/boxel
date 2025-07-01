@@ -203,14 +203,16 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           </Pill>
         </div>
 
-        <div class='app-listing-summary info-box'>
+        <div
+          class='app-listing-summary info-box'
+          data-test-catalog-listing-embedded-summary-section
+        >
           <h2>Summary</h2>
           {{#if @model.summary}}
             <@fields.summary />
           {{else}}
             <p class='no-data-text'>No Summary Provided</p>
           {{/if}}
-
         </div>
 
         <div
@@ -228,7 +230,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
       <hr class='divider' />
 
-      <section class='app-listing-images'>
+      <section
+        class='app-listing-images'
+        data-test-catalog-listing-embedded-images-section
+      >
         <h2>Images</h2>
         {{#if this.hasImages}}
           <ul class='images-list' data-test-catalog-listing-embedded-images>
@@ -263,7 +268,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
       <hr class='divider' />
 
-      <section class='app-listing-categories'>
+      <section
+        class='app-listing-categories'
+        data-test-catalog-listing-embedded-categories-section
+      >
         <h2>Categories</h2>
         {{#if this.hasCategories}}
           <ul
