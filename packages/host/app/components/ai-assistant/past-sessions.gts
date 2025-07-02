@@ -55,7 +55,7 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
       ...attributes
     >
       <:header>
-        All Sessions
+        Past Sessions
         <IconButton
           @icon={{DropdownArrowFilled}}
           @width='12px'
