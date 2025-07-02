@@ -41,7 +41,7 @@ export default class Switch extends Component<SwitchSiganture> {
         height: 20px;
         background-color: var(--boxel-450);
         border-radius: 20px;
-        padding: 3px;
+        padding: 2.5px;
         display: inline-flex;
         align-items: center;
         transition: background-color 0.1s ease-in;
@@ -53,8 +53,8 @@ export default class Switch extends Component<SwitchSiganture> {
       }
       .switch-input {
         margin: 0;
-        width: 50%;
         height: 100%;
+        aspect-ratio: 1;
         background-color: var(--boxel-light);
         border-radius: 50%;
         transform: translateX(0);
