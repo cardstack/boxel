@@ -39,7 +39,7 @@ export default class Switch extends Component<SwitchSiganture> {
       .switch {
         width: 34px;
         height: 20px;
-        background-color: var(--boxel-450);
+        background-color: var(--boxel-400);
         border-radius: 20px;
         padding: 2.5px;
         display: inline-flex;
@@ -74,7 +74,7 @@ export default class Switch extends Component<SwitchSiganture> {
         cursor: pointer;
       }
       .switch.disabled {
-        background-color: var(--boxel-400);
+        opacity: 0.5;
       }
       .switch.disabled,
       .switch.disabled .switch-input {
