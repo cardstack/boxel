@@ -258,6 +258,12 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
       : null;
   }
 
+  private get originalUploadedFileUrl() {
+    return this.args.codePatchStatus === 'applied'
+      ? this.args.codePatchResult?.originalUploadedFileUrl
+      : null;
+  }
+
   <template>
     <CodeBlock
       @monacoSDK={{@monacoSDK}}
@@ -272,6 +278,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               @codeData={{@codeData}}
               @diffEditorStats={{null}}
               @finalFileUrlAfterCodePatching={{this.codePatchfinalFileUrlAfterCodePatching}}
+              @originalUploadedFileUrl={{this.originalUploadedFileUrl}}
             />
             <codeBlock.editor @code={{this.codeForEditor}} />
             <codeBlock.actions as |actions|>

@@ -1,6 +1,6 @@
 import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { registerDestructor } from '@ember/destroyable';
-import { array, hash, fn } from '@ember/helper';
+import { hash, fn } from '@ember/helper';
 
 import { on } from '@ember/modifier';
 
@@ -20,11 +20,12 @@ import {
   Menu,
 } from '@cardstack/boxel-ui/components';
 
-import { menuItem } from '@cardstack/boxel-ui/helpers';
+import { MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import {
   Copy as CopyIcon,
   IconCode,
+  IconPencil,
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
 
@@ -44,6 +45,8 @@ import ApplyButton from '../ai-assistant/apply-button';
 
 import type { ComponentLike } from '@glint/template';
 import type * as _MonacoSDK from 'monaco-editor';
+import MatrixService from '@cardstack/host/services/matrix-service';
+import CardService from '@cardstack/host/services/card-service';
 
 const commonEditorOptions: MonacoEditorOptions = {
   theme: 'vs-dark',
@@ -115,6 +118,7 @@ interface CodeBlockHeaderSignature {
       linesAdded: number;
     } | null;
     finalFileUrlAfterCodePatching?: string | null;
+    originalUploadedFileUrl?: string | null;
   };
 }
 
@@ -513,6 +517,8 @@ class CodeBlockDiffEditor extends Component<Signature> {
 
 class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare matrixService: MatrixService;
+  @service private declare cardService: CardService;
   get fileUrl() {
     return (
       this.args.finalFileUrlAfterCodePatching ?? this.args.codeData.fileUrl
@@ -523,8 +529,48 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
     return new URL(this.fileUrl ?? '').pathname.split('/').pop() || '';
   }
 
+  get menuItems(): MenuItem[] {
+    const items = [
+      new MenuItem('Open in Code Mode', 'action', {
+        action: this.openInCodeMode,
+        icon: IconCode,
+      }),
+    ];
+
+    if (this.args.originalUploadedFileUrl) {
+      items.push(
+        new MenuItem('Restore Content', 'action', {
+          action: this.restoreContent,
+          icon: IconPencil,
+          dangerous: true,
+        }),
+      );
+    }
+
+    return items;
+  }
+
   openInCodeMode = () => {
     this.operatorModeStateService.updateCodePath(new URL(this.fileUrl!));
+  };
+
+  restoreContent = async () => {
+    // TODO: Implement restore content functionality
+    console.log('Restore content clicked');
+
+    // TODO: Are you sure you want to restore the content that was in this file before the patch was applied?
+    let originalUploadedFileUrl = this.args.originalUploadedFileUrl;
+    let response = await this.matrixService.fetchMatrixHostedFile(
+      originalUploadedFileUrl,
+    );
+    let content = await response.text();
+    let finalFileUrlAfterCodePatching = this.args.finalFileUrlAfterCodePatching;
+    await this.cardService.saveSource(
+      new URL(finalFileUrlAfterCodePatching),
+      content,
+      'bot-patch',
+    );
+    alert(content);
   };
 
   <template>
@@ -663,9 +709,7 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
           <:content as |dd|>
             <Menu
               class='context-menu-list'
-              @items={{array
-                (menuItem 'Open in Code Mode' this.openInCodeMode icon=IconCode)
-              }}
+              @items={{this.menuItems}}
               @closeMenu={{dd.close}}
             />
           </:content>

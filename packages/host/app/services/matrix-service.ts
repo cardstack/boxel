@@ -897,6 +897,15 @@ export default class MatrixService extends Service {
     return await this.client.uploadFiles(files);
   }
 
+  async fetchMatrixHostedFile(matrixFileUrl: string) {
+    let response = await fetch(matrixFileUrl, {
+      headers: {
+        Authorization: `Bearer ${this.client.getAccessToken()}`,
+      },
+    });
+    return response;
+  }
+
   async sendMessage(
     roomId: string,
     body: string | undefined,
