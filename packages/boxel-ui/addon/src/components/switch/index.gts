@@ -57,8 +57,8 @@ export default class Switch extends Component<SwitchSiganture> {
         aspect-ratio: 1;
         background-color: var(--boxel-light);
         border-radius: 50%;
-        transform: translateX(0);
-        transition: transform 0.1s ease-in;
+        margin-left: 0;
+        transition: margin-left 0.1s ease-in;
       }
       .switch.checked {
         background-color: var(
@@ -67,7 +67,7 @@ export default class Switch extends Component<SwitchSiganture> {
         );
       }
       .switch.checked .switch-input {
-        transform: translateX(100%);
+        margin-left: 49%;
       }
       .switch:hover,
       .switch-input:hover {
