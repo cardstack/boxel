@@ -74,7 +74,7 @@ export default class Switch extends Component<SwitchSiganture> {
         cursor: pointer;
       }
       .switch.disabled {
-        opacity: 0.5;
+        background-color: var(--boxel-400);
       }
       .switch.disabled,
       .switch.disabled .switch-input {
