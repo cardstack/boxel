@@ -177,6 +177,7 @@ export default class AiAssistantActionBar extends Component<Signature> {
         width: 100%;
         display: flex;
         justify-content: space-between;
+        margin-bottom: 10px;
       }
       .unread-btn__icon {
         height: 18px;
