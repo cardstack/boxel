@@ -43,6 +43,13 @@ const personCardSource = `
   import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component, FieldDef } from "https://cardstack.com/base/card-api";
   import StringField from "https://cardstack.com/base/string";
 
+  export class PersonField extends FieldDef {
+    static displayName = 'PersonField';
+  }
+  export class DifferentField extends FieldDef {
+    static displayName = 'DifferentField';
+  }
+
   export class Person extends CardDef {
     static displayName = 'Person';
     @field firstName = contains(StringField);
@@ -68,12 +75,6 @@ const personCardSource = `
       </template>
     };
   }
-  export class PersonField extends FieldDef {
-    static displayName = 'PersonField';
-  }
-  export class DifferentField extends FieldDef {
-    static displayName = 'DifferentField';
-  }
 `;
 
 const person1CardSource = `
@@ -88,6 +89,10 @@ const person1CardSource = `
 const petCardSource = `
   import { contains, field, Component, CardDef, FieldDef } from "https://cardstack.com/base/card-api";
   import StringField from "https://cardstack.com/base/string";
+
+  export class PetField extends FieldDef {
+    static displayName = 'PetField';
+  }
 
   export class Pet extends CardDef {
     static displayName = 'Pet';
@@ -112,9 +117,6 @@ const petCardSource = `
         </h2>
       </template>
     }
-  }
-  export class PetField extends FieldDef {
-    static displayName = 'PetField';
   }
 `;
 
@@ -596,7 +598,6 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
     });
-    assert.dom('[data-test-module-inspector-view="spec"]').exists();
     await click('[data-test-module-inspector-view="spec"]');
     assert.dom('[data-test-spec-selector]').exists();
     assert.dom('[data-test-spec-selector-item-path]').hasText('person-entry');
@@ -615,8 +616,6 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
-    assert.dom('[data-test-module-inspector-view="spec"]').exists();
-
     await click('[data-test-module-inspector-view="spec"]');
     assert.dom('[data-test-spec-selector]').exists();
     assert.dom('[data-test-caret-down]').exists();
@@ -919,6 +918,7 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}primitive-field.gts`,
     });
+    await selectDeclaration('PrimitiveField');
     await click('[data-test-module-inspector-view="spec"]');
     assert.dom('[data-test-spec-example-incompatible-primitives]').exists();
     await click(
