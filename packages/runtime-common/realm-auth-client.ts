@@ -145,6 +145,13 @@ export class RealmAuthClient {
     console.log(`initiating session request for user ${userId}`);
     console.trace('trace!');
 
+    try {
+      throw new Error('fake');
+    } catch (e: any) {
+      console.log('error happened, stacktrace');
+      console.log(e.stack);
+    }
+
     return this.withRetries(() =>
       this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
         method: 'POST',
