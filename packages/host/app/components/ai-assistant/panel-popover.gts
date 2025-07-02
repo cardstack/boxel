@@ -21,9 +21,9 @@ const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
       width: 24.5rem;
       min-height: 12.5rem;
       max-height: 75vh;
-      background-color: var(--boxel-light);
+      background-color: #4f4b57;
       border-radius: var(--boxel-border-radius-xl);
-      color: var(--boxel-dark);
+      color: var(--boxel-light);
       box-shadow: 0 5px 15px 0 rgba(0, 0, 0, 0.5);
       z-index: var(--host-ai-panel-popover-z-index);
       display: flex;
