@@ -67,7 +67,7 @@ export default class Switch extends Component<SwitchSiganture> {
         );
       }
       .switch.checked .switch-input {
-        transform: translateX(10px);
+        transform: translateX(100%);
       }
       .switch:hover,
       .switch-input:hover {
