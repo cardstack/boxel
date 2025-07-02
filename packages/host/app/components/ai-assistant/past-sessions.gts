@@ -4,7 +4,7 @@ import Component from '@glimmer/component';
 
 import { modifier } from 'ember-modifier';
 
-import { IconButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
 
@@ -56,14 +56,6 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
     >
       <:header>
         Past Sessions
-        <IconButton
-          @icon={{DropdownArrowFilled}}
-          @width='12px'
-          @height='12px'
-          {{on 'click' @onClose}}
-          aria-label='Close Past Sessions'
-          data-test-close-past-sessions
-        />
       </:header>
       <:body>
         {{#if @sessions}}
