@@ -53,8 +53,8 @@ export default class Switch extends Component<SwitchSiganture> {
       }
       .switch-input {
         margin: 0;
-        width: 6px;
-        height: 6px;
+        width: 50%;
+        height: 100%;
         background-color: var(--boxel-light);
         border-radius: 50%;
         transform: translateX(0);
