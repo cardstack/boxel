@@ -17,10 +17,9 @@ import {
   CodeRef,
   isResolvedCodeRef,
   isCardInstance,
-  type ResolvedCodeRef,
-  internalKeyFor,
   isLocalId,
   SupportedMimeType,
+  internalKeyFor,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
@@ -58,6 +57,7 @@ import MatrixService from './matrix-service';
 import NetworkService from './network';
 
 import type CardService from './card-service';
+import type CodeSemanticsService from './code-semantics-service';
 import type { RecentFile } from './recent-files-service';
 import type ResetService from './reset';
 import type SpecPanelService from './spec-panel-service';
@@ -127,6 +127,7 @@ export default class OperatorModeStateService extends Service {
   private moduleInspectorHistory: Record<string, ModuleInspectorView>;
 
   @service declare private cardService: CardService;
+  @service declare private codeSemanticsService: CodeSemanticsService;
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private realm: Realm;
@@ -347,15 +348,11 @@ export default class OperatorModeStateService extends Service {
       .map((stack) => stack[stack.length - 1]);
   }
 
-  getOpenCardIds(selectedCardRef?: ResolvedCodeRef): string[] {
+  getOpenCardIds(): string[] {
     if (this._state.submode === Submodes.Code) {
       let openCardsInCodeMode = [];
-      // selectedCardRef is only needed for determining open playground card id in code submode
-      if (selectedCardRef) {
-        let moduleId = internalKeyFor(selectedCardRef, undefined);
-        openCardsInCodeMode.push(
-          this.playgroundPanelService.getSelection(moduleId)?.cardId,
-        );
+      if (this.playgroundPanelSelection) {
+        openCardsInCodeMode.push(this.playgroundPanelSelection.cardId);
       }
       // Alternatively we may simply be looking at a card in code mode
       if (this._state.codePath?.href.endsWith('.json')) {
@@ -374,8 +371,8 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
-  getOpenCards = restartableTask(async (selectedCardRef?: ResolvedCodeRef) => {
-    let cardIds = this.getOpenCardIds(selectedCardRef);
+  getOpenCards = restartableTask(async () => {
+    let cardIds = this.getOpenCardIds();
     if (!cardIds) {
       return;
     }
@@ -980,16 +977,21 @@ export default class OperatorModeStateService extends Service {
       let playgroundSelections = JSON.parse(
         window.localStorage.getItem(PlaygroundSelections) ?? '{}',
       );
-      let playgroundPanelSelection = Object.values(playgroundSelections).find(
-        (selection: any) => selection.url === this.codePathString,
-      );
-      return playgroundPanelSelection as PlaygroundSelection | undefined;
+      if (this.codePathString && playgroundSelections[this.codePathString]) {
+        return playgroundSelections[this.codePathString];
+      }
+      let selectedCodeRefUrl = this.codeSemanticsService.selectedCodeRef
+        ? internalKeyFor(this.codeSemanticsService.selectedCodeRef!, undefined)
+        : null;
+      if (selectedCodeRefUrl && playgroundSelections[selectedCodeRefUrl]) {
+        return playgroundSelections[selectedCodeRefUrl];
+      }
     }
     return undefined;
   }
 
   getSummaryForAIBot(
-    openCardIds: Set<string> = new Set([...this.getOpenCardIds()]),
+    openCardIdsSet: Set<string> = new Set([...this.getOpenCardIds()]),
   ): BoxelContext {
     let codeMode =
       this._state.submode === Submodes.Code
@@ -1005,11 +1007,12 @@ export default class OperatorModeStateService extends Service {
           }
         : undefined;
 
+    let openCardIds = this.makeRemoteIdsList([...openCardIdsSet]);
     return {
       agentId: this.matrixService.agentId,
       submode: this._state.submode,
       debug: this.operatorModeController.debug,
-      openCardIds: this.makeRemoteIdsList([...openCardIds]),
+      openCardIds,
       realmUrl: this.realmURL.href,
       codeMode,
     };

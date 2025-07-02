@@ -94,15 +94,14 @@ puts "💎"
       '.message',
     ) as HTMLElement;
     let directChildren = messageElement.children;
-
     assert.ok(directChildren[0]?.tagName == 'P');
     assert.ok(
-      directChildren[1]?.tagName == 'DIV' &&
+      directChildren[1]?.tagName == 'SECTION' &&
         directChildren[1]?.classList.contains('code-block'),
     );
     assert.ok(directChildren[2]?.tagName == 'P');
     assert.ok(
-      directChildren[3]?.tagName == 'DIV' &&
+      directChildren[3]?.tagName == 'SECTION' &&
         directChildren[3]?.classList.contains('code-block'),
     );
     assert.ok(directChildren[4]?.tagName == 'P');

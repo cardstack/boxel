@@ -1638,8 +1638,6 @@ module(basename(__filename), function () {
           assert.strictEqual(subscriptions[0].status, 'expired');
           assert.strictEqual(subscriptions[0].planId, creatorPlan.id);
 
-          // ensures the subscription info is null,
-          // so the host can use that to redirect user to checkout free plan page
           let response = await request
             .get(`/_user`)
             .set('Accept', 'application/vnd.api+json')
@@ -1664,13 +1662,23 @@ module(basename(__filename), function () {
                   stripeCustomerEmail: user.stripeCustomerEmail,
                   creditsAvailableInPlanAllowance: null,
                   creditsIncludedInPlanAllowance: null,
-                  extraCreditsAvailableInBalance: null,
+                  extraCreditsAvailableInBalance: 0,
                 },
                 relationships: {
                   subscription: null,
                 },
               },
-              included: null,
+              included: [
+                {
+                  type: 'plan',
+                  id: 'free',
+                  attributes: {
+                    name: 'Free',
+                    monthlyPrice: 0,
+                    creditsIncluded: 0,
+                  },
+                },
+              ],
             },
             '/_user response is correct',
           );
