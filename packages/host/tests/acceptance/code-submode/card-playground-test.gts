@@ -1879,5 +1879,67 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .dom('[data-test-error-container]')
         .doesNotExist('can recover from missing link error');
     });
+
+    test('it renders error message for missing file', async function (assert) {
+      setPlaygroundSelections({
+        [`${testRealmURL}person/Person`]: {
+          cardId: `${testRealmURL}Person/chef-mike`,
+          format: 'isolated',
+        },
+      });
+      await openFileInPlayground('person.gts', testRealmURL, {
+        declaration: 'Person',
+      });
+      assert
+        .dom('[data-test-boxel-card-header-title]')
+        .containsText('Card Error: Not Found');
+      assert
+        .dom('[data-test-card-error]')
+        .containsText(
+          'File not found. Please choose or create another instance.',
+        );
+    });
+
+    test('it renders error message for non-existent link in relationship field', async function (assert) {
+      // non-existent link in links-to field
+      await realm.write(
+        'Person/chef-mike.json',
+        JSON.stringify({
+          data: {
+            attributes: { title: 'Chef Mike' },
+            relationships: {
+              pet: {
+                links: {
+                  self: '../Pet/missing-pet',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        }),
+      );
+      setPlaygroundSelections({
+        [`${testRealmURL}person/Person`]: {
+          cardId: `${testRealmURL}Person/chef-mike`,
+          format: 'isolated',
+        },
+      });
+      await openFileInPlayground('person.gts', testRealmURL, {
+        declaration: 'Person',
+      });
+      assert
+        .dom('[data-test-boxel-card-header-title]')
+        .containsText('Card Error: Link Not Found');
+      assert
+        .dom('[data-test-card-error]')
+        .containsText(
+          `Card "${testRealmURL}Person/chef-mike" contains a missing link.`,
+        );
+    });
   });
 });
