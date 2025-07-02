@@ -37,10 +37,10 @@ export default class Switch extends Component<SwitchSiganture> {
 
     <style scoped>
       .switch {
-        width: 22px;
-        height: 12px;
+        width: 34px;
+        height: 20px;
         background-color: var(--boxel-450);
-        border-radius: var(--boxel-border-radius-sm);
+        border-radius: 20px;
         padding: 3px;
         display: inline-flex;
         align-items: center;
