@@ -5,8 +5,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
-import { type ResolvedCodeRef } from '@cardstack/runtime-common';
-
 import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
 import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
 import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
@@ -19,9 +17,7 @@ import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 interface Signature {
-  Args: {
-    selectedCardRef?: ResolvedCodeRef;
-  };
+  Args: {};
 }
 
 export default class AskAiContainer extends Component<Signature> {
@@ -51,9 +47,7 @@ export default class AskAiContainer extends Component<Signature> {
       this.matrixService.loadDefaultSkills(
         this.operatorModeStateService.state.submode,
       ),
-      this.operatorModeStateService.getOpenCards.perform(
-        this.args.selectedCardRef,
-      ),
+      this.operatorModeStateService.getOpenCards.perform(),
     ]);
 
     await Promise.all([

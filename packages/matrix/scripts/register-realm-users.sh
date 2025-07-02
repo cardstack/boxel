@@ -31,5 +31,7 @@ ts-node --transpileOnly ./scripts/register-realm-user.ts catalog_realm
 curl http://localhost:8008/_matrix/client/v3/register/available\?username\=catalog_realm
 ts-node --transpileOnly ./scripts/register-realm-user.ts node-test_realm
 curl http://localhost:8008/_matrix/client/v3/register/available\?username\=node-test_realm
+ts-node --transpileOnly ./scripts/register-realm-user.ts skills_realm
+curl http://localhost:8008/_matrix/client/v3/register/available\?username\=skills_realm
 ts-node --transpileOnly ./scripts/register-realm-user.ts test_realm
 curl http://localhost:8008/_matrix/client/v3/register/available\?username\=test_realm

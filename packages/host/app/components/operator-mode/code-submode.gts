@@ -28,10 +28,7 @@ import { not, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
-  identifyCard,
   isCardDocumentString,
-  isResolvedCodeRef,
-  hasExecutableExtension,
   RealmPaths,
   PermissionsContextName,
   GetCardContextName,
@@ -46,15 +43,13 @@ import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode
 import ModuleInspector from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
-import { isReady, type FileResource } from '@cardstack/host/resources/file';
+import { type FileResource } from '@cardstack/host/resources/file';
 import {
-  isCardOrFieldDeclaration,
-  moduleContentsResource,
   type ModuleDeclaration,
   type State as ModuleState,
-  findDeclarationByName,
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
+import type CodeSemanticsService from '@cardstack/host/services/code-semantics-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
@@ -138,6 +133,7 @@ export default class CodeSubmode extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
 
   @service private declare cardService: CardService;
+  @service private declare codeSemanticsService: CodeSemanticsService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
   @service private declare recentFilesService: RecentFilesService;
@@ -161,17 +157,11 @@ export default class CodeSubmode extends Component<Signature> {
     | undefined;
 
   private createFileModal: CreateFileModal | undefined;
-  private moduleContentsResource = moduleContentsResource(
-    this,
-    () => {
-      return this.isModule ? this.readyFile : undefined;
-    },
-    this.onModuleEdit,
-  );
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.operatorModeStateService.subscribeToOpenFileStateChanges(this);
+    this.codeSemanticsService.setOnModuleEditCallback(this.onModuleEdit);
 
     let persistedDefaultPanelWidths = window.localStorage.getItem(
       CodeModePanelWidths,
@@ -247,18 +237,6 @@ export default class CodeSubmode extends Component<Signature> {
     return this.operatorModeStateService.realmURL;
   }
 
-  private get isIncompatibleFile() {
-    return this.readyFile.isBinary || this.isNonCardJson;
-  }
-
-  private get isModule() {
-    return (
-      this.isReady &&
-      hasExecutableExtension(this.readyFile.url) &&
-      !this.isIncompatibleFile
-    );
-  }
-
   private get isCard() {
     return (
       this.isReady &&
@@ -267,27 +245,23 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
-  private get isNonCardJson() {
-    return (
-      this.readyFile.name.endsWith('.json') &&
-      !isCardDocumentString(this.readyFile.content)
-    );
-  }
-
   get fileView() {
     return this.operatorModeStateService.state.fileView;
   }
 
   private get isFileOpen() {
-    return !!(this.codePath && this.currentOpenFile?.state !== 'not-found');
+    return !!(
+      this.codeSemanticsService.codePath &&
+      this.currentOpenFile?.state !== 'not-found'
+    );
   }
 
   private get currentOpenFile() {
-    return this.operatorModeStateService.openFile.current;
+    return this.codeSemanticsService.currentOpenFile;
   }
 
   private get isReady() {
-    return isReady(this.currentOpenFile);
+    return this.codeSemanticsService.isReady;
   }
 
   private get isLoading() {
@@ -295,16 +269,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get readyFile() {
-    if (isReady(this.currentOpenFile)) {
-      return this.currentOpenFile;
-    }
-    throw new Error(
-      `cannot access file contents ${this.codePath} before file is open`,
-    );
-  }
-
-  private get codePath() {
-    return this.operatorModeStateService.state.codePath;
+    return this.codeSemanticsService.readyFile;
   }
 
   @action private resetLoadFileError() {
@@ -332,41 +297,28 @@ export default class CodeSubmode extends Component<Signature> {
     }
   }
 
-  private get declarations() {
-    return this.moduleContentsResource?.declarations;
-  }
+  // Adapter getter for components that expect the resource interface
+  private get moduleAnalysis() {
+    let file = this.isModule ? this.readyFile : undefined;
+    let isModule = this.isModule;
 
-  private get _selectedDeclaration() {
-    let codeSelection = this.operatorModeStateService.state.codeSelection;
-    if (codeSelection === undefined) return undefined;
-    return findDeclarationByName(codeSelection, this.declarations);
-  }
-
-  private get selectedDeclaration() {
-    if (!this.isModule || this.moduleContentsResource.moduleError) {
-      return undefined;
-    }
-    if (this._selectedDeclaration) {
-      return this._selectedDeclaration;
-    } else {
-      // default to 1st selection
-      return this.declarations.length > 0 ? this.declarations[0] : undefined;
-    }
+    return {
+      declarations: this.codeSemanticsService.getDeclarations(file, isModule),
+      moduleError: this.codeSemanticsService.getModuleError(file, isModule),
+      isLoading: this.codeSemanticsService.getIsLoading(file, isModule),
+      isLoadingNewModule: this.codeSemanticsService.getIsLoadingNewModule(
+        file,
+        isModule,
+      ),
+    };
   }
 
   private get selectedCardOrField() {
-    if (
-      this.selectedDeclaration !== undefined &&
-      isCardOrFieldDeclaration(this.selectedDeclaration)
-    ) {
-      return this.selectedDeclaration;
-    }
-    return undefined;
+    return this.codeSemanticsService.selectedCardOrField;
   }
 
   private get selectedCodeRef(): ResolvedCodeRef | undefined {
-    let codeRef = identifyCard(this.selectedCardOrField?.cardOrField);
-    return isResolvedCodeRef(codeRef) ? codeRef : undefined;
+    return this.codeSemanticsService.selectedCodeRef;
   }
 
   private get itemToDeleteAsCard() {
@@ -648,6 +600,22 @@ export default class CodeSubmode extends Component<Signature> {
       : this.itemToDelete.id;
   }
 
+  get selectedDeclaration(): ModuleDeclaration | undefined {
+    return this.codeSemanticsService.selectedDeclaration;
+  }
+
+  get isIncompatibleFile() {
+    return this.codeSemanticsService.isIncompatibleFile;
+  }
+
+  get isModule() {
+    return this.codeSemanticsService.isModule;
+  }
+
+  get codePath() {
+    return this.codeSemanticsService.codePath;
+  }
+
   <template>
     {{consumeContext this.makeCardResource}}
     <SubmodeLayout
@@ -699,7 +667,7 @@ export default class CodeSubmode extends Component<Signature> {
                     <:inspector>
                       {{#if this.isReady}}
                         <DetailPanel
-                          @moduleContentsResource={{this.moduleContentsResource}}
+                          @moduleAnalysis={{this.moduleAnalysis}}
                           @cardInstance={{this.card}}
                           @readyFile={{this.readyFile}}
                           @selectedDeclaration={{this.selectedDeclaration}}
@@ -755,7 +723,7 @@ export default class CodeSubmode extends Component<Signature> {
                 {{#if this.isReady}}
                   <CodeEditor
                     @file={{this.currentOpenFile}}
-                    @moduleContentsResource={{this.moduleContentsResource}}
+                    @moduleAnalysis={{this.moduleAnalysis}}
                     @selectedDeclaration={{this.selectedDeclaration}}
                     @saveSourceOnClose={{@saveSourceOnClose}}
                     @selectDeclaration={{this.selectDeclaration}}
@@ -790,7 +758,7 @@ export default class CodeSubmode extends Component<Signature> {
                     @isIncompatibleFile={{this.isIncompatibleFile}}
                     @isModule={{this.isModule}}
                     @isReadOnly={{this.isReadOnly}}
-                    @moduleContentsResource={{this.moduleContentsResource}}
+                    @moduleAnalysis={{this.moduleAnalysis}}
                     @previewFormat={{this.previewFormat}}
                     @readyFile={{this.readyFile}}
                     @selectedCardOrField={{this.selectedCardOrField}}

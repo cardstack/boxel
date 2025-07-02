@@ -1,6 +1,7 @@
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
+import { debounce } from 'lodash';
 
 import {
   contains,
@@ -240,7 +241,7 @@ class CatalogListView extends GlimmerComponent<CatalogListViewArgs> {
   }
 
   <template>
-    <CardsDisplaySection>
+    <CardsDisplaySection ...attributes>
       <:intro>
         <header class='catalog-list-header'>
           <ViewSelector
@@ -328,9 +329,13 @@ class Isolated extends Component<typeof Catalog> {
   // Filter Search
   @tracked searchValue: string | undefined = undefined;
 
-  @action
-  handleSearch(value: string) {
+  private debouncedSetSearchKey = debounce((value: string) => {
     this.searchValue = value;
+  }, 300);
+
+  @action
+  onSearchInput(value: string) {
+    this.debouncedSetSearchKey(value);
   }
 
   //query
@@ -481,7 +486,7 @@ class Isolated extends Component<typeof Catalog> {
 
   // end of listing query filter values
 
-  @action navigateToHome() {
+  @action clearFiltersAndReset() {
     this.resetFilters();
   }
 
@@ -505,8 +510,22 @@ class Isolated extends Component<typeof Catalog> {
     );
   }
 
+  get hasNoActiveFilters() {
+    return !this.hasActiveFilters;
+  }
+
   get isShowcaseView() {
-    return this.activeTabId === 'showcase' && !this.hasActiveFilters;
+    return this.activeTabId === 'showcase' && this.hasNoActiveFilters;
+  }
+
+  get navigationButtonText() {
+    if (this.activeTabId === 'showcase') {
+      return 'Catalog Home';
+    }
+    const tabOption = this.tabFilterOptions.find(
+      (tab) => tab.tabId === this.activeTabId,
+    );
+    return tabOption ? `All ${tabOption.displayName}` : 'Catalog Home';
   }
 
   get headerColor() {
@@ -540,7 +559,7 @@ class Isolated extends Component<typeof Catalog> {
             <BoxelInput
               @type='search'
               @value={{this.searchValue}}
-              @onInput={{this.handleSearch}}
+              @onInput={{this.onSearchInput}}
               placeholder='Search by Title'
               data-test-filter-search-input
               class='catalog-search-input'
@@ -550,20 +569,19 @@ class Isolated extends Component<typeof Catalog> {
       </:header>
       <:sidebar>
         <div class='sidebar-content'>
-          {{#if (this.shouldShowTab 'showcase')}}
-            <button
-              class='navigation-button {{if this.isShowcaseView "is-selected"}}'
-              {{on 'click' this.navigateToHome}}
-              data-test-showcase-tab-button
-            >
-              <img
-                src='https://boxel-images.boxel.ai/icons/icon_catalog_rounded.png'
-                alt='Catalog Icon'
-                class='catalog-icon'
-              />
-              <span class='button-text'>Catalog Home</span>
-            </button>
-          {{/if}}
+          <button
+            class='navigation-button
+              {{if this.hasNoActiveFilters "is-selected"}}'
+            {{on 'click' this.clearFiltersAndReset}}
+            data-test-navigation-reset-button={{this.activeTabId}}
+          >
+            <img
+              src='https://boxel-images.boxel.ai/icons/icon_catalog_rounded.png'
+              alt='Catalog Icon'
+              class='catalog-icon'
+            />
+            <span class='button-text'>{{this.navigationButtonText}}</span>
+          </button>
 
           <FilterSidebar
             @categoryItems={{this.categoryItems}}
@@ -588,12 +606,14 @@ class Isolated extends Component<typeof Catalog> {
                     @newListings={{@model.new}}
                     @featuredListings={{@model.featured}}
                     @context={{@context}}
+                    data-test-showcase-view
                   />
                 {{else}}
                   <CatalogListView
                     @query={{this.query}}
                     @realms={{this.realmHrefs}}
                     @context={{@context}}
+                    data-test-catalog-list-view
                   />
                 {{/if}}
               </div>
@@ -676,7 +696,8 @@ class Isolated extends Component<typeof Catalog> {
         width: 100%;
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         border: none;
-        background: var(--layout-container-background-color);
+        background: var(--boxel-light);
+
         color: var(--boxel-dark);
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);

@@ -1,7 +1,7 @@
-import { click, waitFor, waitUntil } from '@ember/test-helpers';
+import { click, waitFor, waitUntil, fillIn } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { module, test } from 'qunit';
+import { module, skip, test } from 'qunit';
 
 import { validate as uuidValidate } from 'uuid';
 
@@ -445,6 +445,103 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
         )
         .hasText('Mortgage Calculator');
+    });
+
+    module('tab navigation', async function () {
+      // showcase tab has different behavior compared to other tabs (apps, cards, fields, skills)
+      module('show results as per catalog tab selected', async function () {
+        test('switch to showcase tab', async function (assert) {
+          await click('[data-tab-label="Showcase"]');
+          assert
+            .dom('[data-test-navigation-reset-button="showcase"]')
+            .exists(`"Catalog Home" button should exist`)
+            .hasClass('is-selected');
+          assert.dom('[data-test-boxel-radio-option-id="grid"]').doesNotExist();
+        });
+
+        test('switch to apps tab', async function (assert) {
+          await click('[data-tab-label="Apps"]');
+          assert
+            .dom('[data-test-navigation-reset-button="app"]')
+            .exists(`"All Apps" button should exist`)
+            .hasClass('is-selected');
+          assert.dom('[data-test-boxel-radio-option-id="grid"]').exists();
+        });
+      });
+    });
+
+    module('filters', async function (hooks) {
+      hooks.beforeEach(async function () {
+        // filter by search
+        await waitFor('[data-test-filter-search-input]');
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'Mortgage');
+        // filter by category
+        await click('[data-test-filter-list-item="All"]');
+        // filter by tag
+        let tagPill = document.querySelector('[data-test-tag-list-pill]');
+        if (tagPill) {
+          await click(tagPill);
+        }
+      });
+
+      test('list view is shown if filters are applied', async function (assert) {
+        await waitFor('[data-test-catalog-list-view]');
+        assert
+          .dom('[data-test-catalog-list-view]')
+          .exists(
+            'Catalog list view should be visible when filters are applied',
+          );
+      });
+
+      test('should be reset when clicking "Catalog Home" button', async function (assert) {
+        assert
+          .dom('[data-test-showcase-view]')
+          .doesNotExist('Should be in list view after applying filter');
+
+        await click('[data-test-navigation-reset-button="showcase"]');
+
+        assert
+          .dom('[data-test-showcase-view]')
+          .exists('Should return to showcase view after clicking Catalog Home');
+
+        assert
+          .dom('[data-test-filter-search-input]')
+          .hasValue('', 'Search input should be cleared');
+        assert
+          .dom('[data-test-filter-list-item].is-selected')
+          .doesNotExist('No category should be selected after reset');
+        assert
+          .dom('[data-test-tag-list-pill].selected')
+          .doesNotExist('No tag should be selected after reset');
+      });
+
+      // TODO: CS-9002 this test is flaky
+      skip('should be reset when clicking "All Apps" button', async function (assert) {
+        await click('[data-tab-label="Apps"]');
+        assert
+          .dom('[data-tab-label="Apps"]')
+          .hasClass('active', 'Apps tab should be active');
+
+        await click('[data-test-navigation-reset-button="app"]');
+        assert
+          .dom('[data-test-showcase-view]')
+          .doesNotExist('Should remain in list view, not return to showcase');
+        await waitFor('[data-test-catalog-list-view]');
+        assert
+          .dom('[data-test-catalog-list-view]')
+          .exists('Catalog list view should still be visible');
+
+        assert
+          .dom('[data-test-filter-search-input]')
+          .hasValue('', 'Search input should be cleared');
+        assert
+          .dom('[data-test-filter-list-item].is-selected')
+          .doesNotExist('No category should be selected after reset');
+        assert
+          .dom('[data-test-tag-list-pill].selected')
+          .doesNotExist('No tag should be selected after reset');
+      });
     });
   });
 

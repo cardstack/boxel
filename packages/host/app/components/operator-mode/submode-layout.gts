@@ -46,6 +46,8 @@ import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 
 import AskAiContainer from './ask-ai-container';
 
+import ChooseSubscriptionPlanModal from './choose-subscription-plan-modal';
+
 import NewFileButton, { type NewFileOptions } from './new-file-button';
 import WorkspaceChooser from './workspace-chooser';
 
@@ -217,6 +219,13 @@ export default class SubmodeLayout extends Component<Signature> {
     this.profileSummaryOpened = false;
   }
 
+  @action private toggleSubscriptionPlans() {
+    this.isChooseSubscriptionPlanModalOpen =
+      !this.isChooseSubscriptionPlanModalOpen;
+
+    this.profileSummaryOpened = false;
+  }
+
   @action private toggleProfileSummary() {
     this.profileSummaryOpened = !this.profileSummaryOpened;
   }
@@ -253,6 +262,8 @@ export default class SubmodeLayout extends Component<Signature> {
     await timeout(250);
     this.suppressSearchClose = false;
   });
+
+  @tracked private isChooseSubscriptionPlanModalOpen = false;
 
   <template>
     <div
@@ -338,7 +349,7 @@ export default class SubmodeLayout extends Component<Signature> {
           />
           {{#if config.featureFlags.SHOW_ASK_AI}}
             {{#if (not this.aiAssistantPanelService.isOpen)}}
-              <AskAiContainer @selectedCardRef={{@selectedCardRef}} />
+              <AskAiContainer />
             {{/if}}
           {{/if}}
           <AiAssistantButton
@@ -382,6 +393,7 @@ export default class SubmodeLayout extends Component<Signature> {
           exceptSelector='.profile-icon-button'
         }}
         @toggleProfileSettings={{this.toggleProfileSettings}}
+        @toggleSubscriptionPlans={{this.toggleSubscriptionPlans}}
       />
     {{/if}}
 
@@ -390,6 +402,11 @@ export default class SubmodeLayout extends Component<Signature> {
         @toggleProfileSettings={{this.toggleProfileSettings}}
       />
     {{/if}}
+
+    <ChooseSubscriptionPlanModal
+      @isModalOpen={{this.isChooseSubscriptionPlanModalOpen}}
+      @onClose={{this.toggleSubscriptionPlans}}
+    />
 
     <style scoped>
       .submode-layout {

@@ -12,9 +12,15 @@ type CustomerPortalLink = {
   };
 };
 
-type FreePlanPaymentLink = {
-  type: 'free-plan-payment-link';
-  id: 'free-plan-payment-link';
+type PlanPaymentLink = {
+  type:
+    | 'starter-plan-payment-link'
+    | 'creator-plan-payment-link'
+    | 'power-user-plan-payment-link';
+  id:
+    | 'starter-plan-payment-link'
+    | 'creator-plan-payment-link'
+    | 'power-user-plan-payment-link';
   attributes: {
     url: string;
   };
@@ -33,7 +39,7 @@ type ExtraCreditsPaymentLink = {
 
 type PaymentLink =
   | CustomerPortalLink
-  | FreePlanPaymentLink
+  | PlanPaymentLink
   | ExtraCreditsPaymentLink;
 
 interface APIResponse {
@@ -65,13 +71,33 @@ export default function handleStripeLinksRequest(): (
       active: true,
     });
 
-    let freePlanPaymentLink = paymentLinks.data.find(
-      (link) => link.metadata?.free_plan === 'true',
+    let starterPlanPaymentLink = paymentLinks.data.find(
+      (link) => link.metadata?.plan === 'starter',
     );
 
-    if (!freePlanPaymentLink) {
+    let creatorPlanPaymentLink = paymentLinks.data.find(
+      (link) => link.metadata?.plan === 'creator',
+    );
+
+    let powerUserPlanPaymentLink = paymentLinks.data.find(
+      (link) => link.metadata?.plan === 'power-user',
+    );
+
+    if (!starterPlanPaymentLink) {
       throw new Error(
-        'Expected free plan payment link with metadata.free_plan=true but none found',
+        'Expected starter plan payment link with metadata.plan=starter but none found',
+      );
+    }
+
+    if (!creatorPlanPaymentLink) {
+      throw new Error(
+        'Expected creator plan payment link with metadata.plan=creator but none found',
+      );
+    }
+
+    if (!powerUserPlanPaymentLink) {
+      throw new Error(
+        'Expected power user plan payment link with metadata.plan=power-user but none found',
       );
     }
 
@@ -95,10 +121,24 @@ export default function handleStripeLinksRequest(): (
           },
         },
         {
-          type: 'free-plan-payment-link',
-          id: 'free-plan-payment-link',
+          type: 'starter-plan-payment-link',
+          id: 'starter-plan-payment-link',
           attributes: {
-            url: freePlanPaymentLink.url,
+            url: starterPlanPaymentLink.url,
+          },
+        },
+        {
+          type: 'creator-plan-payment-link',
+          id: 'creator-plan-payment-link',
+          attributes: {
+            url: creatorPlanPaymentLink.url,
+          },
+        },
+        {
+          type: 'power-user-plan-payment-link',
+          id: 'power-user-plan-payment-link',
+          attributes: {
+            url: powerUserPlanPaymentLink.url,
           },
         },
         ...creditTopUpPaymentLinks.map((link, index) => ({

@@ -218,10 +218,34 @@ export default class Room extends Component<Signature> {
         --chat-input-area-border-radius: var(--boxel-border-radius-xxl);
       }
       .room-actions {
-        padding: var(--boxel-sp-xxs) var(--ai-assistant-panel-padding)
+        position: relative;
+        padding: 0 var(--ai-assistant-panel-padding)
           var(--ai-assistant-panel-padding);
         box-shadow: var(--boxel-box-shadow);
       }
+
+      .room-actions::before {
+        content: '';
+        position: absolute;
+
+        width: 100%;
+        height: calc(
+          var(--ai-assistant-panel-bottom-gradient-height) +
+            var(--chat-input-area-border-radius)
+        );
+        left: 0;
+        bottom: calc(100% - var(--chat-input-area-border-radius));
+
+        background: linear-gradient(
+          to top,
+          var(--boxel-ai-purple),
+          var(--boxel-ai-purple) 20%,
+          transparent 100%
+        );
+
+        z-index: 0;
+      }
+
       .chat-input-area {
         --boxel-pill-menu-header-padding: 0;
         --boxel-pill-menu-content-padding: var(--boxel-sp) 0;
@@ -230,6 +254,9 @@ export default class Room extends Component<Signature> {
 
         background-color: var(--boxel-light);
         border-radius: var(--chat-input-area-border-radius);
+
+        position: relative;
+        z-index: 2;
       }
       .chat-input-area__bottom-actions {
         display: flex;
@@ -295,6 +322,8 @@ export default class Room extends Component<Signature> {
 
   private autoAttachmentResource = getAutoAttachment(this, {
     submode: () => this.operatorModeStateService.state.submode,
+    moduleInspectorPanel: () =>
+      this.operatorModeStateService.moduleInspectorPanel,
     autoAttachedFileUrl: () => this.autoAttachedFileUrl,
     playgroundPanelCardId: () => this.playgroundPanelCardId,
     topMostStackItems: () => this.topMostStackItems,
@@ -802,9 +831,7 @@ export default class Room extends Component<Signature> {
         this.matrixService.cardsToSend.set(this.args.roomId, undefined);
       }
       let openCardIds = new Set([
-        ...(this.operatorModeStateService.getOpenCardIds(
-          this.args.selectedCardRef,
-        ) || []),
+        ...(this.operatorModeStateService.getOpenCardIds() || []),
         ...this.autoAttachedCardIds,
       ]);
       let context =
