@@ -1025,6 +1025,15 @@ module(basename(__filename), function () {
           assert.strictEqual(sum, 0, `user has 0 extra credit`);
         });
 
+        test("returns 400 when calling grafana add credit endpoint when user doesn't exist", async function (assert) {
+          let response = await request2
+            .get(
+              `/_grafana-add-credit?authHeader=${grafanaSecret}&user=nobody&credit=1000`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        });
+
         test('returns 401 when calling grafana add credit endpoint without a grafana secret', async function (assert) {
           let user = await insertUser(
             dbAdapter,

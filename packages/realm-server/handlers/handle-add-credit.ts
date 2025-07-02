@@ -14,6 +14,7 @@ export default function handleAddCredit({
   async function query(expression: Expression) {
     return await _query(dbAdapter, expression);
   }
+
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let user = ctxt.URL.searchParams.get('user');
     if (!user) {
@@ -31,7 +32,7 @@ export default function handleAddCredit({
       return;
     }
 
-    await query([
+    let result = await query([
       `INSERT INTO credits_ledger (user_id, credit_amount, credit_type)`,
       `SELECT u.id as user_id,`,
       param(credit),
@@ -39,7 +40,13 @@ export default function handleAddCredit({
       `FROM users u`,
       `WHERE u.matrix_user_id =`,
       param(user),
+      `RETURNING id`,
     ]);
+
+    if (result.length === 0) {
+      await sendResponseForBadRequest(ctxt, `user "${user}" does not exist`);
+      return;
+    }
 
     return setContextResponse(
       ctxt,
