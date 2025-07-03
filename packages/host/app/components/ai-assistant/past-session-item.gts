@@ -125,7 +125,7 @@ export default class PastSessionItem extends Component<Signature> {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        border-top: 1px solid var(--boxel-300);
+        border-top: 1px solid #75707e;
         padding-top: var(--boxel-sp-sm);
         padding-left: var(--boxel-sp-xs);
         padding-bottom: var(--boxel-sp-sm);
