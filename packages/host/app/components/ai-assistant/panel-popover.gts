@@ -56,9 +56,9 @@ const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
     class='panel-popover'
     ...attributes
   >
-    <div class='header'>
+    <header class='header'>
       {{yield to='header'}}
-    </div>
+    </header>
     <div class='body'>
       {{yield to='body'}}
     </div>
