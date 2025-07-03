@@ -138,7 +138,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
       <div class='carousel-items'>
         {{#each @items as |item index|}}
           <div
-            class='carousel-item
+            class='carousel-item carousel-item-{{index}}
               {{if (eq this.currentIndex index) "is-active"}}'
             aria-hidden={{if (eq this.currentIndex index) 'false' 'true'}}
           >
