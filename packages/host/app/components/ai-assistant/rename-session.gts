@@ -7,11 +7,7 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 
-import {
-  FieldContainer,
-  BoxelInput,
-  Button,
-} from '@cardstack/boxel-ui/components';
+import { BoxelInput, Button } from '@cardstack/boxel-ui/components';
 
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import { SessionRoomData } from '@cardstack/host/services/ai-assistant-panel-service';

@@ -1,4 +1,3 @@
-import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -6,7 +5,6 @@ import { modifier } from 'ember-modifier';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
 
 import { SessionRoomData } from '../../services/ai-assistant-panel-service';
 
