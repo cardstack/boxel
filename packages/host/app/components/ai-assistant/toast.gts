@@ -5,10 +5,10 @@ import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import { format as formatDate, formatISO, isAfter, subMinutes } from 'date-fns';
-import { cancelPoll, pollTask, runTask } from 'ember-concurrency';
+
+import { cancelPoll, pollTask, runTask } from 'ember-lifeline';
 
 import { TrackedObject } from 'tracked-built-ins';
 
