@@ -23,7 +23,6 @@ export default class LocalStorageService extends Service {
   // for settings that are scoped to the current browser tab.
   // Example: being able to store the current AI panel room id for every browser tab separately.
   private getOrCreateBrowserTabId(): string {
-    // Try to get existing tab ID from sessionStorage
     let existingBrowserTabId = window.sessionStorage.getItem(TAB_ID_KEY);
 
     if (existingBrowserTabId) {
