@@ -79,6 +79,7 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: var(--boxel-sp-xs);
         background-color: var(--boxel-650);
         color: var(--boxel-light);
         padding: 8px 12px;
@@ -89,14 +90,17 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
       .code-block-diff-header .left-section {
         display: flex;
         align-items: center;
-        gap: 8px;
         flex: 1;
         min-width: 0;
       }
 
+      .mode + .file-info-button {
+        margin-left: var(--boxel-sp-xs);
+      }
+
       .file-info-button {
-        --boxel-button-min-width: auto;
-        --boxel-button-min-height: auto;
+        --boxel-button-min-width: unset;
+        --boxel-button-min-height: unset;
         --boxel-button-padding: var(--boxel-sp-xxxs);
         --boxel-button-letter-spacing: var(--boxel-lsp-xs);
         --icon-color: currentColor;
