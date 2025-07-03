@@ -27,6 +27,7 @@ export const APP_BOXEL_CONTINUATION_OF_CONTENT_KEY =
   'app.boxel.continuation-of';
 export const DEFAULT_LLM = 'openai/gpt-4.1';
 export const DEFAULT_CODING_LLM = 'anthropic/claude-sonnet-4';
+export const DEFAULT_REMIX_LLM = 'openai/gpt-4.1-nano';
 export const DEFAULT_LLM_LIST = [
   'anthropic/claude-3.5-sonnet',
   'anthropic/claude-3.7-sonnet',

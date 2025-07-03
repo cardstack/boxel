@@ -23,6 +23,7 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+  CodeRef,
 } from '@cardstack/runtime-common';
 import { type SerializedFile } from './file-api';
 
@@ -182,6 +183,7 @@ export interface BoxelContext {
       cardId: string;
       format: string;
     };
+    selectedCodeRef?: CodeRef;
   };
   debug?: boolean;
   requireToolCall?: boolean;

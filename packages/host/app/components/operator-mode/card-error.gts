@@ -30,6 +30,7 @@ interface Signature {
       onClose?: () => void;
     };
     fileToFixWithAi?: FileDef;
+    message?: string;
   };
   Element: HTMLElement;
   Blocks: {
@@ -58,7 +59,9 @@ export default class CardErrorComponent extends Component<Signature> {
         <div class='card-error-default'>
           <FileAlert class='icon' />
           <div class='message'>
-            {{#if @cardCreationError}}
+            {{#if @message}}
+              {{@message}}
+            {{else if @cardCreationError}}
               Failed to create card.
             {{else}}
               This card contains an error.
@@ -91,6 +94,7 @@ export default class CardErrorComponent extends Component<Signature> {
         justify-content: center;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp);
       }
       .card-error {
         flex: 1;
@@ -103,6 +107,7 @@ export default class CardErrorComponent extends Component<Signature> {
         width: 100%;
         text-align: center;
         font: 600 var(--boxel-font);
+        text-wrap: pretty;
       }
       .error-header {
         color: var(--boxel-error-300);

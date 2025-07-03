@@ -315,6 +315,24 @@ export default class PlaygroundPanel extends Component<Signature> {
     return this.cardResource?.cardError;
   }
 
+  private get errorMessage() {
+    let error = this.cardResource?.cardError;
+    if (!error) {
+      return undefined;
+    }
+    if (error.status === 404 && error.title === 'Not Found') {
+      if (error.message.includes('missing')) {
+        // missing relationship link
+        return `Card "${error.id}" contains a missing link.`;
+      } else {
+        // custom message for missing file case
+        return 'File not found. Please choose or create another instance.';
+      }
+    }
+    // default error message will be shown
+    return undefined;
+  }
+
   private get specCard(): Spec | undefined {
     let card = this.card;
     if (!card || !this.args.isFieldDef) {
@@ -878,6 +896,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                     data-test-error-container
                   >
                     <CardError
+                      @message={{this.errorMessage}}
                       @error={{this.cardError}}
                       @cardCreationError={{this.cardError.meta.isCreationError}}
                       @fileToFixWithAi={{this.currentFileDef}}

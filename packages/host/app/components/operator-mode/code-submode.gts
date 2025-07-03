@@ -145,7 +145,6 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;
   @tracked private sourceFileIsSaving = false;
-  @tracked private previewFormat: Format = 'isolated';
   @tracked private isCreateModalOpen = false;
   @tracked private itemToDelete: CardDef | URL | null | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
@@ -541,7 +540,7 @@ export default class CodeSubmode extends Component<Signature> {
       this.isCreateModalOpen = false;
       if (url) {
         await this.operatorModeStateService.updateCodePath(url);
-        this.setPreviewFormat('edit');
+        this.setCardPreviewFormat('edit');
       }
     },
   );
@@ -578,8 +577,12 @@ export default class CodeSubmode extends Component<Signature> {
     await this.operatorModeStateService.updateCodePath(codePath);
   }
 
-  @action private setPreviewFormat(format: Format) {
-    this.previewFormat = format;
+  get cardPreviewFormat() {
+    return this.operatorModeStateService.state.cardPreviewFormat;
+  }
+
+  @action private setCardPreviewFormat(format: Format) {
+    this.operatorModeStateService.updateCardPreviewFormat(format);
   }
 
   get isReadOnly() {
@@ -759,12 +762,12 @@ export default class CodeSubmode extends Component<Signature> {
                     @isModule={{this.isModule}}
                     @isReadOnly={{this.isReadOnly}}
                     @moduleAnalysis={{this.moduleAnalysis}}
-                    @previewFormat={{this.previewFormat}}
+                    @previewFormat={{this.cardPreviewFormat}}
                     @readyFile={{this.readyFile}}
                     @selectedCardOrField={{this.selectedCardOrField}}
                     @selectedCodeRef={{this.selectedCodeRef}}
                     @selectedDeclaration={{this.selectedDeclaration}}
-                    @setPreviewFormat={{this.setPreviewFormat}}
+                    @setPreviewFormat={{this.setCardPreviewFormat}}
                   />
                 {{else if this.isLoading}}
                   <LoadingIndicator class='loading-indicator' />
