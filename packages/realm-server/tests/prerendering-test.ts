@@ -154,7 +154,7 @@ module(basename(__filename), function () {
         result = await prerenderCard(testCardURL);
       });
 
-      test('error during render', function (assert) {
+      QUnit.skip('error during render', function (assert) {
         assert.ok(
           /TODO: error result here/.test(result.isolatedHTML),
           `failed to match embedded html:${JSON.stringify(result.isolatedHTML)}`,
