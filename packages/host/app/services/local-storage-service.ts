@@ -62,3 +62,9 @@ export default class LocalStorageService extends Service {
     );
   }
 }
+
+declare module '@ember/service' {
+  interface Registry {
+    'local-storage-service': LocalStorageService;
+  }
+}

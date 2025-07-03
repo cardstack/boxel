@@ -13,7 +13,6 @@ import { getService } from '@universal-ember/test-support';
 
 import { format, subMinutes } from 'date-fns';
 
-import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -31,8 +30,6 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import { CurrentRoomIdPersistenceKey } from '@cardstack/host/utils/local-storage-keys';
 
 import {
   percySnapshot,
