@@ -1,4 +1,4 @@
-import { fn } from '@ember/helper';
+import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { htmlSafe } from '@ember/template';
@@ -73,7 +73,9 @@ class Isolated extends Component<typeof Theme> {
           <div class='color-swatch primary-swatch'>
             <div
               class='color-display'
-              style='background-color:{{@model.colorPrimary}}'
+              style={{sanitize
+                (concat 'background-color:' @model.colorPrimary)
+              }}
             >
               <button
                 class='color-copy'
@@ -96,7 +98,9 @@ class Isolated extends Component<typeof Theme> {
           <div class='color-swatch secondary-swatch'>
             <div
               class='color-display'
-              style='background-color:{{@model.colorSecondary}}'
+              style={{sanitize
+                (concat 'background-color:' @model.colorSecondary)
+              }}
             >
               <button
                 class='color-copy'
@@ -119,7 +123,7 @@ class Isolated extends Component<typeof Theme> {
           <div class='color-swatch dark-swatch'>
             <div
               class='color-display'
-              style='background-color:{{@model.colorDark}}'
+              style={{sanitize (concat 'background-color:' @model.colorDark)}}
             >
               <button
                 class='color-copy'
@@ -142,7 +146,7 @@ class Isolated extends Component<typeof Theme> {
           <div class='color-swatch light-swatch'>
             <div
               class='color-display'
-              style='background-color:{{@model.colorLight}}; border: 1px solid rgba(0,0,0,0.1);'
+              style={{sanitize (concat 'background-color:' @model.colorLight)}}
             >
               <button
                 class='color-copy'
@@ -165,7 +169,9 @@ class Isolated extends Component<typeof Theme> {
           <div class='color-swatch bg-swatch'>
             <div
               class='color-display'
-              style='background-color:{{@model.colorBackground}}; border: 1px solid rgba(0,0,0,0.1);'
+              style={{sanitize
+                (concat 'background-color:' @model.colorBackground)
+              }}
             >
               <button
                 class='color-copy'
@@ -208,7 +214,14 @@ class Isolated extends Component<typeof Theme> {
               <span class='font-size-label'>Heading</span>
               <div
                 class='font-size-display'
-                style='font-size: {{@model.headerFontSize}}; line-height: 1.2;'
+                style={{sanitize
+                  (concat
+                    'font-size:'
+                    @model.headerFontSize
+                    ';line-height:'
+                    @model.lineHeight
+                  )
+                }}
               >The quick brown fox</div>
               <div class='font-size-value-container'>
                 <span class='font-size-value'>{{@model.headerFontSize}}</span>
@@ -227,7 +240,14 @@ class Isolated extends Component<typeof Theme> {
               <span class='font-size-label'>Body</span>
               <div
                 class='font-size-display'
-                style='font-size: {{@model.bodyFontSize}}; line-height: {{@model.lineHeight}};'
+                style={{sanitize
+                  (concat
+                    'font-size:'
+                    @model.bodyFontSize
+                    ';line-height:'
+                    @model.lineHeight
+                  )
+                }}
               >The quick brown fox</div>
               <div class='font-size-value-container'>
                 <span class='font-size-value'>{{@model.bodyFontSize}}</span>
@@ -262,7 +282,7 @@ class Isolated extends Component<typeof Theme> {
             <div class='radius-sample'>
               <div
                 class='radius-display'
-                style='border-radius: {{@model.borderRadius}}'
+                style={{sanitize (concat 'border-radius:' @model.borderRadius)}}
               ></div>
               <div class='radius-value'>{{@model.borderRadius}}</div>
             </div>
@@ -381,6 +401,7 @@ class Isolated extends Component<typeof Theme> {
       .color-display {
         position: relative;
         height: 80px;
+        border: 1px solid rgba(0, 0, 0, 0.1);
         border-radius: 8px;
         margin-bottom: 8px;
         transition: transform 0.2s ease;
@@ -668,7 +689,9 @@ class Embedded extends Component<typeof Theme> {
           <div class='color-swatch primary-swatch'>
             <div
               class='color-display'
-              style='background-color:{{@model.colorPrimary}}'
+              style={{sanitize
+                (concat 'background-color:' @model.colorPrimary)
+              }}
             >
               <button
                 class='color-copy'
@@ -691,7 +714,9 @@ class Embedded extends Component<typeof Theme> {
           <div class='color-swatch secondary-swatch'>
             <div
               class='color-display'
-              style='background-color:{{@model.colorSecondary}}'
+              style={{sanitize
+                (concat 'background-color:' @model.colorSecondary)
+              }}
             >
               <button
                 class='color-copy'
@@ -714,7 +739,7 @@ class Embedded extends Component<typeof Theme> {
           <div class='color-swatch dark-swatch'>
             <div
               class='color-display'
-              style='background-color:{{@model.colorDark}}'
+              style={{sanitize (concat 'background-color:' @model.colorDark)}}
             >
               <button
                 class='color-copy'
@@ -737,7 +762,7 @@ class Embedded extends Component<typeof Theme> {
           <div class='color-swatch light-swatch'>
             <div
               class='color-display'
-              style='background-color:{{@model.colorLight}}; border: 1px solid rgba(0,0,0,0.1);'
+              style={{sanitize (concat 'background-color:' @model.colorLight)}}
             >
               <button
                 class='color-copy'
@@ -760,7 +785,9 @@ class Embedded extends Component<typeof Theme> {
           <div class='color-swatch bg-swatch'>
             <div
               class='color-display'
-              style='background-color:{{@model.colorBackground}}; border: 1px solid rgba(0,0,0,0.1);'
+              style={{sanitize
+                (concat 'background-color:' @model.colorBackground)
+              }}
             >
               <button
                 class='color-copy'
@@ -803,7 +830,14 @@ class Embedded extends Component<typeof Theme> {
               <span class='font-size-label'>H1</span>
               <span
                 class='font-size-display'
-                style='font-size: {{@model.headerFontSize}}; line-height: 1.2;'
+                style={{sanitize
+                  (concat
+                    'font-size:'
+                    @model.headerFontSize
+                    ';line-height:'
+                    @model.lineHeight
+                  )
+                }}
               >Aa</span>
               <div class='font-size-value-container'>
                 <span class='font-size-value'>{{@model.headerFontSize}}</span>
@@ -822,7 +856,14 @@ class Embedded extends Component<typeof Theme> {
               <span class='font-size-label'>Body</span>
               <span
                 class='font-size-display'
-                style='font-size: {{@model.bodyFontSize}}; line-height: {{@model.lineHeight}};'
+                style={{sanitize
+                  (concat
+                    'font-size:'
+                    @model.bodyFontSize
+                    ';line-height:'
+                    @model.lineHeight
+                  )
+                }}
               >Aa</span>
               <div class='font-size-value-container'>
                 <span class='font-size-value'>{{@model.bodyFontSize}}</span>
@@ -921,6 +962,7 @@ class Embedded extends Component<typeof Theme> {
       .color-display {
         position: relative;
         height: 80px;
+        border: 1px solid rgba(0, 0, 0, 0.1);
         border-radius: 8px;
         margin-bottom: 8px;
         transition: transform 0.2s ease;
