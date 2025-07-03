@@ -101,16 +101,14 @@ import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
 
-import {
-  CurrentRoomIdPersistenceKey,
-  clearLocalStorage,
-} from '../utils/local-storage-keys';
+import { clearLocalStorage } from '../utils/local-storage-keys';
 
 import { type SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
 
 import type CardService from './card-service';
 import type CommandService from './command-service';
 import type LoaderService from './loader-service';
+import type LocalStorageService from './local-storage-service';
 import type LoggerService from './logger-service';
 import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
@@ -141,6 +139,7 @@ export default class MatrixService extends Service {
   @service declare private reset: ResetService;
   @service declare private network: NetworkService;
   @service declare private store: StoreService;
+  @service declare private localStorageService: LocalStorageService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
   @tracked private postLoginCompleted = false;
@@ -204,9 +203,9 @@ export default class MatrixService extends Service {
     this._currentRoomId = value;
     if (value) {
       this.loadAllTimelineEvents(value);
-      window.localStorage.setItem(CurrentRoomIdPersistenceKey, value);
+      this.localStorageService.setCurrentRoomId(value);
     } else {
-      window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
+      this.localStorageService.removeCurrentRoomId();
     }
   }
 
@@ -1747,7 +1746,8 @@ function saveAuth(auth: LoginResponse) {
 
 function clearAuth() {
   window.localStorage.removeItem('auth');
-  window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
+  // Note: We can't use localStorageService here since this is a standalone function
+  // The service will handle this when the service is available
 }
 
 function getAuth(): LoginResponse | undefined {

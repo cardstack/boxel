@@ -5,11 +5,10 @@ import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { format as formatDate, formatISO, isAfter, subMinutes } from 'date-fns';
-import { cancelPoll, pollTask, runTask } from 'ember-lifeline';
-
-import window from 'ember-window-mock';
+import { cancelPoll, pollTask, runTask } from 'ember-concurrency';
 
 import { TrackedObject } from 'tracked-built-ins';
 
@@ -19,15 +18,14 @@ import { markdownToHtml } from '@cardstack/runtime-common';
 
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import MatrixService from '@cardstack/host/services/matrix-service';
-
-import { CurrentRoomIdPersistenceKey } from '@cardstack/host/utils/local-storage-keys';
+import LocalStorageService from '@cardstack/host/services/local-storage-service';
 
 import assistantIcon from './ai-assist-icon.webp';
 
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    hide: boolean;
+    hide?: boolean;
     onViewInChatClick: () => void;
   };
 }
@@ -129,6 +127,7 @@ export default class AiAssistantToast extends Component<Signature> {
   </template>
 
   @service private declare matrixService: MatrixService;
+  @service private declare localStorageService: LocalStorageService;
   _pollToken: ReturnType<typeof pollTask> | null = null;
 
   private get state() {
@@ -226,7 +225,7 @@ export default class AiAssistantToast extends Component<Signature> {
 
   @action
   private viewInChat() {
-    window.localStorage.setItem(CurrentRoomIdPersistenceKey, this.roomId);
+    this.localStorageService.setCurrentRoomId(this.roomId);
     this.args.onViewInChatClick();
   }
 }
