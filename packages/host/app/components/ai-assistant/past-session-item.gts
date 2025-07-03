@@ -4,6 +4,8 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import ExternalLink from '@cardstack/boxel-icons/external-link';
+
 import { format as formatDate, isSameDay, isSameYear } from 'date-fns';
 
 import {
@@ -14,7 +16,6 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { menuItem } from '@cardstack/boxel-ui/helpers';
 import {
-  Upload,
   IconPencil,
   IconTrash,
   ThreeDotsHorizontal,
@@ -105,7 +106,9 @@ export default class PastSessionItem extends Component<Signature> {
             @closeMenu={{dd.close}}
             @items={{array
               (menuItem
-                'Open Session' (fn @actions.open @session.roomId) icon=Upload
+                'Open Session'
+                (fn @actions.open @session.roomId)
+                icon=ExternalLink
               )
               (menuItem 'Rename' (fn @actions.rename @session) icon=IconPencil)
               (menuItem 'Delete' (fn @actions.delete @session) icon=IconTrash)
@@ -180,12 +183,32 @@ export default class PastSessionItem extends Component<Signature> {
         stroke-width: 1px;
       }
 
+      .menu {
+        --boxel-menu-item-content-padding: var(--boxel-sp-xxs)
+          var(--boxel-sp-sm);
+
+        background: #4f4b57;
+        color: var(--boxel-light);
+        padding: var(--boxel-sp-xs);
+        box-shadow: var(--boxel-deep-box-shadow);
+      }
+
       .menu :deep(svg) {
         --icon-stroke-width: 1.5px;
+        --icon-color: var(--boxel-light);
+
+        margin-right: var(--boxel-sp-xs);
       }
+
       .menu :deep(.boxel-menu__item:nth-child(2) svg) {
         --icon-stroke-width: 0.5px;
       }
+
+      .menu :deep(.boxel-menu__item:hover) {
+        background-color: #797788;
+        border-radius: var(--boxel-border-radius-xs);
+      }
+
       .icon-recency-indicator {
         display: inline-block;
         margin-right: 4px;
