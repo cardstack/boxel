@@ -133,13 +133,13 @@ export default class PastSessionItem extends Component<Signature> {
         margin-left: var(--boxel-sp-xs);
       }
       .session:hover {
-        background-color: var(--boxel-200);
+        background-color: #797788;
         cursor: pointer;
         border-radius: 8px;
       }
       .session[data-is-current-room] {
         border: 1px solid var(--boxel-highlight);
-        border-radius: 8px;
+        border-radius: var(--boxel-border-radius-xs);
       }
       .session:hover + .session:not([data-is-current-room]),
       .session[data-is-current-room] + .session {
