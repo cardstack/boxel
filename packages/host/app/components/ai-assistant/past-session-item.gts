@@ -138,7 +138,7 @@ export default class PastSessionItem extends Component<Signature> {
         border-radius: 8px;
       }
       .session[data-is-current-room] {
-        border: 1px solid var(--boxel-highlight);
+        border: 1px solid #75707e;
         border-radius: var(--boxel-border-radius-xs);
       }
       .session:hover + .session:not([data-is-current-room]),
