@@ -126,9 +126,9 @@ export default class PastSessionItem extends Component<Signature> {
         align-items: center;
         justify-content: space-between;
         border-top: 1px solid #75707e;
-        padding-top: var(--boxel-sp-sm);
-        padding-left: var(--boxel-sp-xs);
-        padding-bottom: var(--boxel-sp-sm);
+        padding-top: var(--boxel-sp);
+        padding-left: var(--boxel-sp-sm);
+        padding-bottom: var(--boxel-sp);
         margin-right: var(--boxel-sp-xs);
         margin-left: var(--boxel-sp-xs);
       }
@@ -149,7 +149,7 @@ export default class PastSessionItem extends Component<Signature> {
         font-weight: 600;
       }
       .date {
-        margin-top: var(--boxel-sp-4xs);
+        margin-top: var(--boxel-sp-xxs);
         color: var(--boxel-400);
       }
       .view-session-button {
