@@ -3,6 +3,7 @@ import Service from '@ember/service';
 import { uuidv4 } from '@cardstack/runtime-common';
 
 import { CurrentRoomIdPersistenceKey } from '../utils/local-storage-keys';
+import { shortenUuid } from '../utils/uuid';
 
 const TAB_ID_KEY = 'boxel-browser-tab-id';
 
@@ -29,7 +30,7 @@ export default class LocalStorageService extends Service {
       return existingBrowserTabId;
     }
 
-    let newBrowserTabId = uuidv4();
+    let newBrowserTabId = shortenUuid(uuidv4());
     window.sessionStorage.setItem(TAB_ID_KEY, newBrowserTabId);
     return newBrowserTabId;
   }

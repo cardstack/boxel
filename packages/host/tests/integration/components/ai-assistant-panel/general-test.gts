@@ -58,11 +58,13 @@ import {
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
+import LocalStorageService from '@cardstack/host/services/local-storage-service';
 
 module('Integration | ai-assistant-panel | general', function (hooks) {
   const realmName = 'Operator Mode Workspace';
   let loader: Loader;
   let operatorModeStateService: OperatorModeStateService;
+  let localStorageService: LocalStorageService;
 
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
@@ -101,6 +103,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
   hooks.beforeEach(async function () {
     operatorModeStateService = getService('operator-mode-state-service');
+    localStorageService = getService('local-storage-service');
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -278,19 +281,22 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
         );
 
       await click('[data-test-close-ai-assistant]');
-      window.localStorage.setItem(
-        CurrentRoomIdPersistenceKey,
-        "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
-      );
+
+      // Set the test value to all localStorage items that begin with CurrentRoomIdPersistenceKey
+      const testValue =
+        "room-id-that-doesn't-exist-and-should-not-break-the-implementation";
+
+      localStorageService.setCurrentRoomId(testValue);
+
       await click('[data-test-open-ai-assistant]');
-      await waitFor(`[data-room-settled]`);
+      await waitFor(`[data-test-room="${room2Id}"]`);
       assert
         .dom(`[data-test-room="${room2Id}"]`)
         .exists(
           "test room 2 is the most recently created room and it's opened initially",
         );
     } finally {
-      window.localStorage.removeItem(CurrentRoomIdPersistenceKey); // Cleanup
+      localStorageService.removeCurrentRoomId();
     }
   });
 
