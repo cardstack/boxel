@@ -1,7 +1,5 @@
 import window from 'ember-window-mock';
 
-import { uuidv4 } from '@cardstack/runtime-common';
-
 export const CurrentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
 export const NewSessionIdPersistenceKey = 'aiPanelNewSessionId';
 export const CodeModePanelWidths = 'code-mode-panel-widths';
