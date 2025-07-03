@@ -188,6 +188,7 @@ export default class PastSessionItem extends Component<Signature> {
           var(--boxel-sp-sm);
 
         background: #4f4b57;
+        border: 1px solid #75707e;
         color: var(--boxel-light);
         padding: var(--boxel-sp-xs);
         box-shadow: var(--boxel-deep-box-shadow);
