@@ -1039,6 +1039,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       );
 
       await click(`[data-test-recent-file="${testRealmURL}blog-post.gts"]`); // change open file
+      await selectDeclaration('Category');
       await togglePlaygroundPanel();
       assert.dom('[data-test-selected-item]').containsText('City Design');
       assertCardExists(assert, categoryId1, 'embedded');
@@ -1136,7 +1137,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       await click('[data-test-file-browser-toggle]');
       await click('[data-test-file="blog-post.gts"]');
-      await click('[data-test-module-inspector-view="preview"]');
+      await togglePlaygroundPanel();
+      await click('[data-test-inspector-toggle]');
+      await selectDeclaration('Category');
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="1"]');
       assert

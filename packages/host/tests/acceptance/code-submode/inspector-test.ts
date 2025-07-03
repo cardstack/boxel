@@ -11,6 +11,7 @@ import {
 
 import { getService } from '@universal-ember/test-support';
 
+import window from 'ember-window-mock';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
@@ -22,6 +23,8 @@ import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
+
+import { CodeModePanelHeights } from '@cardstack/host/utils/local-storage-keys';
 
 import {
   elementIsVisible,
@@ -695,12 +698,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
-    //default is the 1st index
-    let elementName = 'AClassWithExportName (LocalClass) class';
+    //default is the last index
+    let elementName = 'default (DefaultClass) class';
     assert
-      .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
-      .hasText(elementName);
-    assert.true(monacoService.getLineCursorOn()?.includes('LocalClass'));
+      .dom('[data-test-boxel-selector-item]:nth-of-type(11)')
+      .hasText(elementName, 'defaults to the last declaration');
+    assert.true(monacoService.getLineCursorOn()?.includes('DefaultClass'));
     // elements must be ordered by the way they appear in the source code
     const expectedElementNames = [
       'AClassWithExportName (LocalClass) class',
@@ -791,6 +794,10 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test('inspector persists scroll position but choosing another element overrides it', async function (assert) {
+    window.localStorage.setItem(
+      CodeModePanelHeights,
+      JSON.stringify({ filePanel: 50, recentPanel: 50 }),
+    );
     await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
@@ -799,31 +806,31 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     await waitForCodeEditor();
 
-    let defaultClassSelector =
-      '[data-test-boxel-selector-item-text="DefaultClass"]';
-    let defaultClassElement = find(defaultClassSelector);
+    let localClassSelector =
+      '[data-test-boxel-selector-item-text="LocalClass"]';
+    let localClassElement = find(localClassSelector);
 
-    if (!defaultClassElement) {
-      assert.ok(defaultClassElement, 'default class should exist');
+    if (!localClassElement) {
+      assert.ok(localClassElement, 'local class should exist');
     } else {
       assert.notOk(
-        await elementIsVisible(defaultClassElement),
-        'expected default class not to be within view',
+        await elementIsVisible(localClassElement),
+        'expected local class not to be within view',
       );
 
-      defaultClassElement.scrollIntoView({ block: 'center' });
+      localClassElement.scrollIntoView({ block: 'center' });
 
       assert.ok(
-        await elementIsVisible(defaultClassElement),
-        'expected default class to now be within view',
+        await elementIsVisible(localClassElement),
+        'expected local class to now be within view',
       );
     }
 
     await click('[data-test-file-browser-toggle]');
-    assert.dom(defaultClassSelector).doesNotExist();
+    assert.dom(localClassSelector).doesNotExist();
 
     await click('[data-test-inspector-toggle]');
-    await waitFor(defaultClassSelector);
+    await waitFor(localClassSelector);
 
     let position = new MonacoSDK.Position(15, 0);
     monacoService.updateCursorPosition(position);
@@ -835,7 +842,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     let exportedClassElement = find(exportedClassSelector);
 
     if (!exportedClassElement) {
-      assert.ok(exportedClassElement, 'local class element should exist');
+      assert.ok(exportedClassElement, 'exported class element should exist');
     } else {
       assert.ok(
         await elementIsVisible(exportedClassElement),
@@ -1319,6 +1326,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     //click card type
     await visitOperatorMode(operatorModeState);
     await waitForCodeEditor();
+    await click(`[data-test-boxel-selector-item-text="ChildCard1"]`);
     let elementName = 'AncestorCard2';
     await waitFor(
       `[data-test-card-schema="${elementName}"] [data-test-card-schema-navigational-button]`,
@@ -1502,7 +1510,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
-    //default is the 1st index
+    //default is the last index
+    await click(`[data-test-boxel-selector-item-text="GrandParent"]`);
     let elementName = 'GrandParent card';
     assert
       .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
@@ -1602,12 +1611,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
-    //default is the 1st index
-    let elementName = 'AClassWithExportName (LocalClass) class';
+    //default is the last index
+    let elementName = 'default (DefaultClass) class';
     assert
-      .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
+      .dom('[data-test-boxel-selector-item]:nth-of-type(11)')
       .hasText(elementName);
-    assert.true(monacoService.getLineCursorOn()?.includes('LocalClass'));
+    assert.true(monacoService.getLineCursorOn()?.includes('DefaultClass'));
     // elements must be ordered by the way they appear in the source code
     const expectedElementNames = [
       'AClassWithExportName (LocalClass) class',
