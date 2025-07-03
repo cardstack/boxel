@@ -86,8 +86,8 @@ export default class PastSessionItem extends Component<Signature> {
             <:trigger>
               <IconButton
                 @icon={{ThreeDotsHorizontal}}
-                @width='20px'
-                @height='20px'
+                @width='16px'
+                @height='16px'
                 class='menu-button'
                 aria-label='Options'
                 data-test-past-session-options-button={{@session.roomId}}
@@ -126,9 +126,7 @@ export default class PastSessionItem extends Component<Signature> {
         align-items: center;
         justify-content: space-between;
         border-top: 1px solid #75707e;
-        padding-top: var(--boxel-sp);
-        padding-left: var(--boxel-sp-sm);
-        padding-bottom: var(--boxel-sp);
+        padding: var(--boxel-sp) var(--boxel-sp-sm);
         margin-right: var(--boxel-sp-xs);
         margin-left: var(--boxel-sp-xs);
       }
@@ -159,9 +157,29 @@ export default class PastSessionItem extends Component<Signature> {
         width: 100%;
         text-align: left;
       }
-      .menu-button:hover:not(:disabled) {
-        --icon-color: var(--boxel-highlight);
+
+      .menu-button {
+        visibility: hidden;
+        display: flex;
+        width: auto;
+        height: auto;
+        padding: 2px;
+        border-radius: var(--boxel-border-radius-xs);
       }
+
+      .session:hover .menu-button {
+        visibility: visible;
+      }
+
+      .menu-button:hover:not(:disabled) {
+        background-color: var(--boxel-highlight);
+      }
+
+      .menu-button :deep(svg) {
+        stroke: var(--boxel-dark);
+        stroke-width: 1px;
+      }
+
       .menu :deep(svg) {
         --icon-stroke-width: 1.5px;
       }
