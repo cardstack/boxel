@@ -134,6 +134,11 @@ export default class PastSessionItem extends Component<Signature> {
         margin-left: var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius-xs);
       }
+
+      .session:first-child {
+        border-top: none;
+      }
+
       .session:hover {
         background-color: #797788;
         cursor: pointer;
