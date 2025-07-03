@@ -45,7 +45,10 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import jwt from 'jsonwebtoken';
 import { type CardCollectionDocument } from '@cardstack/runtime-common/card-document';
 import { type PgAdapter } from '@cardstack/postgres';
-import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
+import {
+  getUserByMatrixUserId,
+  sumUpCreditsLedger,
+} from '@cardstack/billing/billing-queries';
 import {
   createJWT as createRealmServerJWT,
   RealmServerTokenClaim,
@@ -960,6 +963,93 @@ module(basename(__filename), function () {
             null,
             'job was not marked with finish time',
           );
+        });
+
+        test('can add user credit via grafana endpoint', async function (assert) {
+          let user = await insertUser(
+            dbAdapter,
+            'user@test',
+            'cus_123',
+            'user@test.com',
+          );
+          let sum = await sumUpCreditsLedger(dbAdapter, {
+            creditType: ['extra_credit', 'extra_credit_used'],
+            userId: user.id,
+          });
+          assert.strictEqual(sum, 0, `user has 0 extra credit`);
+
+          let response = await request2
+            .get(
+              `/_grafana-add-credit?authHeader=${grafanaSecret}&user=${user.matrixUserId}&credit=1000`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.deepEqual(
+            response.body,
+            {
+              message: `Added 1000 credits to user '${user.matrixUserId}'`,
+            },
+            `response body is correct`,
+          );
+          sum = await sumUpCreditsLedger(dbAdapter, {
+            creditType: ['extra_credit', 'extra_credit_used'],
+            userId: user.id,
+          });
+          assert.strictEqual(sum, 1000, `user has 1000 extra credit`);
+        });
+
+        test('returns 400 when calling grafana add credit endpoint without a user', async function (assert) {
+          let response = await request2
+            .get(`/_grafana-add-credit?authHeader=${grafanaSecret}&credit=1000`)
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        });
+
+        test('returns 400 when calling grafana add credit endpoint with credit amount that is not a number', async function (assert) {
+          let user = await insertUser(
+            dbAdapter,
+            'user@test',
+            'cus_123',
+            'user@test.com',
+          );
+          let response = await request2
+            .get(
+              `/_grafana-add-credit?authHeader=${grafanaSecret}&user=${user.matrixUserId}&credit=a+million+dollars`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+          let sum = await sumUpCreditsLedger(dbAdapter, {
+            creditType: ['extra_credit', 'extra_credit_used'],
+            userId: user.id,
+          });
+          assert.strictEqual(sum, 0, `user has 0 extra credit`);
+        });
+
+        test("returns 400 when calling grafana add credit endpoint when user doesn't exist", async function (assert) {
+          let response = await request2
+            .get(
+              `/_grafana-add-credit?authHeader=${grafanaSecret}&user=nobody&credit=1000`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        });
+
+        test('returns 401 when calling grafana add credit endpoint without a grafana secret', async function (assert) {
+          let user = await insertUser(
+            dbAdapter,
+            'user@test',
+            'cus_123',
+            'user@test.com',
+          );
+          let response = await request2
+            .get(`/_grafana-add-credit?user=${user.matrixUserId}&credit=1000`)
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+          let sum = await sumUpCreditsLedger(dbAdapter, {
+            creditType: ['extra_credit', 'extra_credit_used'],
+            userId: user.id,
+          });
+          assert.strictEqual(sum, 0, `user has 0 extra credit`);
         });
 
         test('can reindex a realm via grafana endpoint', async function (assert) {
