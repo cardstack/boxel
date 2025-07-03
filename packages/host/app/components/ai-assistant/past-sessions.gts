@@ -95,6 +95,7 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
         margin-bottom: var(--boxel-sp-xs);
         max-height: 400px;
         overflow-y: auto;
+        scroll-timeline: --past-sessions-scroll-timeline block;
       }
       .empty-collection {
         padding: var(--boxel-sp-sm);
