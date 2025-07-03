@@ -70,7 +70,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
     e.stopPropagation();
   }
 
-  @action preview(e: MouseEvent) {
+  @action previewExample(e: MouseEvent) {
     e.stopPropagation();
 
     if (!this.hasExample) {
@@ -80,7 +80,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
     this.args.context?.actions?.viewCard?.(this.args.examples![0]);
   }
 
-  @action viewDetails(e: MouseEvent) {
+  @action viewListingDetails(e: MouseEvent) {
     e.stopPropagation();
 
     if (!this.args.id) {
@@ -101,7 +101,13 @@ class CarouselComponent extends GlimmerComponent<Signature> {
   }
 
   <template>
-    <div class='carousel'>
+    <div
+      class='carousel'
+      tabindex='0'
+      data-test-catalog-listing-fitted-preview
+      aria-label='Preview Example'
+      {{on 'click' this.previewExample}}
+    >
       <div
         class='actions-buttons-container'
         {{on 'mouseenter' this._stopPropagation}}
@@ -111,8 +117,8 @@ class CarouselComponent extends GlimmerComponent<Signature> {
             @kind='secondary-dark'
             class='preview-button'
             data-test-catalog-listing-fitted-preview-button
-            {{on 'click' this.preview}}
-            aria-label='Preview'
+            aria-label='Preview Example'
+            {{on 'click' this.previewExample}}
           >
             Preview
           </BoxelButton>
@@ -122,8 +128,8 @@ class CarouselComponent extends GlimmerComponent<Signature> {
           @kind='secondary-dark'
           class='details-button'
           data-test-catalog-listing-fitted-details-button
-          {{on 'click' this.viewDetails}}
-          aria-label='Details'
+          aria-label='View Listing Details'
+          {{on 'click' this.viewListingDetails}}
         >
           Details
         </BoxelButton>
@@ -132,7 +138,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
       <div class='carousel-items'>
         {{#each @items as |item index|}}
           <div
-            class='carousel-item
+            class='carousel-item carousel-item-{{index}}
               {{if (eq this.currentIndex index) "is-active"}}'
             aria-hidden={{if (eq this.currentIndex index) 'false' 'true'}}
           >
@@ -150,22 +156,20 @@ class CarouselComponent extends GlimmerComponent<Signature> {
           role='presentation'
           {{on 'mouseenter' this._stopPropagation}}
         >
-          <div
+          <button
             class='carousel-arrow carousel-arrow-prev'
-            {{on 'click' (fn this.updateCurrentIndex this.prevIndex)}}
-            role='button'
             aria-label='Previous slide'
+            {{on 'click' (fn this.updateCurrentIndex this.prevIndex)}}
           >
             &#10094;
-          </div>
-          <div
+          </button>
+          <button
             class='carousel-arrow carousel-arrow-next'
-            {{on 'click' (fn this.updateCurrentIndex this.nextIndex)}}
-            role='button'
             aria-label='Next slide'
+            {{on 'click' (fn this.updateCurrentIndex this.nextIndex)}}
           >
             &#10095;
-          </div>
+          </button>
         </div>
       {{/if}}
 
@@ -242,6 +246,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
         }
 
         .carousel-arrow {
+          all: unset;
           cursor: pointer;
           user-select: none;
           padding: 0px;
@@ -308,7 +313,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
           align-items: center;
           gap: var(--boxel-sp-sm);
           opacity: 0;
-          background-color: rgba(0, 0, 0, 0.5);
+          background-color: rgba(0, 0, 0, 0.6);
           transition: opacity 0.3s ease;
         }
 
@@ -432,6 +437,19 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     this._openRoomWithSkillAndPrompt.perform(realmUrl);
   }
 
+  @action viewListingDetails(e: MouseEvent) {
+    e.stopPropagation();
+
+    if (!this.args.model.id) {
+      throw new Error('No card id');
+    }
+
+    this.args.context?.actions?.viewCard?.(
+      new URL(this.args.model.id),
+      'isolated',
+    );
+  }
+
   @action
   _stopPropagation(e: MouseEvent) {
     e.stopPropagation();
@@ -454,7 +472,13 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           />
         {{/if}}
       </div>
-      <div class='info-section'>
+      <div
+        class='info-section'
+        tabindex='0'
+        data-test-catalog-listing-fitted-details
+        aria-label='View Listing Details'
+        {{on 'click' this.viewListingDetails}}
+      >
         <div class='card-content'>
           <h3 class='card-title' data-test-card-title={{@model.name}}>
             {{@model.name}}
@@ -477,6 +501,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
                 @loading={{this._openRoomWithSkillAndPrompt.isRunning}}
                 {{on 'click' this._stopPropagation}}
                 {{bindings}}
+                aria-label='Remix listing'
               >
                 Remix
               </BoxelButton>
