@@ -153,6 +153,7 @@ export default class PastSessionItem extends Component<Signature> {
         color: var(--boxel-400);
       }
       .view-session-button {
+        color: var(--boxel-light);
         background-color: transparent;
         border: none;
         width: 100%;
