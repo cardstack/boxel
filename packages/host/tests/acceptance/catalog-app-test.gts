@@ -424,7 +424,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .exists();
       });
 
-      test('after clicking "Preview" button, the example card opens up onto the stack', async function (assert) {
+      test('after clicking "Preview" button, the first example card opens up onto the stack', async function (assert) {
         await waitFor(
           `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
         );
@@ -451,7 +451,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .hasText('Mortgage Calculator');
       });
 
-      test('after clicking "carousel" area, the example card opens up onto the stack', async function (assert) {
+      test('after clicking "carousel" area, the first example card opens up onto the stack', async function (assert) {
         await waitFor(
           `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
         );
@@ -510,7 +510,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .hasText('CardListing - Mortgage Calculator');
       });
 
-      test('carousel arrows and dots appear only when multiple images exist', async function (assert) {
+      test('no arrows and dots appear when one image exist', async function (assert) {
         await waitFor(
           `[data-test-card="${leafletMapCardId}"] [data-test-card-title="Leaflet Map"]`,
         );
@@ -551,7 +551,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
 
       // leaflet map has 3 slides, so index 2 is the last slide
-      test('carousel navigation works correctly when triggered by arrows or dots', async function (assert) {
+      test('carousel arrows and dots appear only when multiple images exist and works when triggered', async function (assert) {
         await click(
           `[data-test-card="${leafletMapCardId}"] .carousel-arrow-prev`,
         );
@@ -730,7 +730,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       );
     });
 
-    test('after clicking "Preview" button, the example card opens up onto the stack', async function (assert) {
+    test('after clicking "Preview" button, the first example card opens up onto the stack', async function (assert) {
       await click(
         `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-isolated-preview-button]`,
       );
