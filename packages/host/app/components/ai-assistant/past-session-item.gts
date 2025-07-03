@@ -150,7 +150,7 @@ export default class PastSessionItem extends Component<Signature> {
       }
       .date {
         margin-top: var(--boxel-sp-4xs);
-        color: var(--boxel-450);
+        color: var(--boxel-400);
       }
       .view-session-button {
         background-color: transparent;
