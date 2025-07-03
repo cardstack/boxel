@@ -103,7 +103,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
   <template>
     <div
       class='carousel'
-      role='button'
+      tabindex='0'
       data-test-catalog-listing-fitted-preview
       aria-label='Preview Example'
       {{on 'click' this.previewExample}}
@@ -156,22 +156,20 @@ class CarouselComponent extends GlimmerComponent<Signature> {
           role='presentation'
           {{on 'mouseenter' this._stopPropagation}}
         >
-          <div
+          <button
             class='carousel-arrow carousel-arrow-prev'
-            {{on 'click' (fn this.updateCurrentIndex this.prevIndex)}}
-            role='button'
             aria-label='Previous slide'
+            {{on 'click' (fn this.updateCurrentIndex this.prevIndex)}}
           >
             &#10094;
-          </div>
-          <div
+          </button>
+          <button
             class='carousel-arrow carousel-arrow-next'
-            {{on 'click' (fn this.updateCurrentIndex this.nextIndex)}}
-            role='button'
             aria-label='Next slide'
+            {{on 'click' (fn this.updateCurrentIndex this.nextIndex)}}
           >
             &#10095;
-          </div>
+          </button>
         </div>
       {{/if}}
 
@@ -248,6 +246,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
         }
 
         .carousel-arrow {
+          all: unset;
           cursor: pointer;
           user-select: none;
           padding: 0px;
@@ -475,7 +474,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
       </div>
       <div
         class='info-section'
-        role='button'
+        tabindex='0'
         data-test-catalog-listing-fitted-details
         aria-label='View Listing Details'
         {{on 'click' this.viewListingDetails}}
@@ -502,6 +501,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
                 @loading={{this._openRoomWithSkillAndPrompt.isRunning}}
                 {{on 'click' this._stopPropagation}}
                 {{bindings}}
+                aria-label='Remix listing'
               >
                 Remix
               </BoxelButton>
