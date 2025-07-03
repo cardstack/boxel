@@ -320,23 +320,6 @@
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "Thinking...",
-      "msgtype": "m.text",
-      "format": "org.matrix.custom.html"
-    },
-    "origin_server_ts": 1736864365020,
-    "unsigned": {
-      "age": 69139
-    },
-    "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE",
-    "user_id": "@aibot:localhost",
-    "age": 69139
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@aibot:localhost",
-    "content": {
       "body": "Check the current weather conditions for traveling",
       "msgtype": "app.boxel.message",
       "format": "org.matrix.custom.html",
@@ -350,19 +333,15 @@
             "attributes": { "location": "New York" }
           }
         }
-      ],
-      "m.relates_to": {
-        "rel_type": "m.replace",
-        "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE"
-      }
+      ]
     },
-    "origin_server_ts": 1736864370642,
+    "origin_server_ts": 1736864365020,
     "unsigned": {
-      "age": 63517
+      "age": 69139
     },
-    "event_id": "$V4k751dVMZphpB6P7OJ3Q-vRbTihn5KekUpTNL1LVpE",
+    "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE",
     "user_id": "@aibot:localhost",
-    "age": 63517
+    "age": 69139
   },
   {
     "type": "app.boxel.commandResult",
@@ -391,9 +370,10 @@
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "Thinking...",
+      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer to your departure for any specific warnings or advisories.\n\nIf you have more locations to visit, let me know, and I'll help you decide the best order or provide more detailed insights!",
       "msgtype": "m.text",
-      "format": "org.matrix.custom.html"
+      "format": "org.matrix.custom.html",
+      "isStreamingFinished": true
     },
     "origin_server_ts": 1736864372713,
     "unsigned": {
@@ -427,269 +407,5 @@
     "prev_content": {
       "name": "Weather Travel Advice"
     }
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@aibot:localhost",
-    "content": {
-      "body": "The",
-      "msgtype": "m.text",
-      "format": "org.matrix.custom.html",
-      "isStreamingFinished": false,
-      "m.relates_to": {
-        "rel_type": "m.replace",
-        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
-      }
-    },
-    "origin_server_ts": 1736864376150,
-    "unsigned": {
-      "age": 58009
-    },
-    "event_id": "$BqFIFCOK_RFYBvuhdDKM1-pqyHiyajjyIzoSGvXbdgc",
-    "user_id": "@aibot:localhost",
-    "age": 58009
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@aibot:localhost",
-    "content": {
-      "body": "The current weather",
-      "msgtype": "m.text",
-      "format": "org.matrix.custom.html",
-      "isStreamingFinished": false,
-      "m.relates_to": {
-        "rel_type": "m.replace",
-        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
-      }
-    },
-    "origin_server_ts": 1736864376701,
-    "unsigned": {
-      "age": 57458
-    },
-    "event_id": "$weXQDkD3nj7D3A7mvSkw7qCJxPbLr0zKE6jAR-PD5jU",
-    "user_id": "@aibot:localhost",
-    "age": 57458
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@aibot:localhost",
-    "content": {
-      "body": "The current weather in",
-      "msgtype": "m.text",
-      "format": "org.matrix.custom.html",
-      "isStreamingFinished": false,
-      "m.relates_to": {
-        "rel_type": "m.replace",
-        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
-      }
-    },
-    "origin_server_ts": 1736864376747,
-    "unsigned": {
-      "age": 57412
-    },
-    "event_id": "$4j_Lr0PDpqevZ-bEbySJCR5sblKEBJIy2sdSQdZvQgs",
-    "user_id": "@aibot:localhost",
-    "age": 57412
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@aibot:localhost",
-    "content": {
-      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suit",
-      "msgtype": "m.text",
-      "format": "org.matrix.custom.html",
-      "isStreamingFinished": false,
-      "m.relates_to": {
-        "rel_type": "m.replace",
-        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
-      }
-    },
-    "origin_server_ts": 1736864377718,
-    "unsigned": {
-      "age": 56441
-    },
-    "event_id": "$tepkzDJHWwVZhMSZqJO1ghJkyoOq7om2qqz0uSeeYKU",
-    "user_id": "@aibot:localhost",
-    "age": 56441
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@aibot:localhost",
-    "content": {
-      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability",
-      "msgtype": "m.text",
-      "format": "org.matrix.custom.html",
-      "isStreamingFinished": false,
-      "m.relates_to": {
-        "rel_type": "m.replace",
-        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
-      }
-    },
-    "origin_server_ts": 1736864378711,
-    "unsigned": {
-      "age": 55448
-    },
-    "event_id": "$FXOzMr2M9qS6Q6M8urSPZgzg9dwH7pQhKffPHp3Q7IM",
-    "user_id": "@aibot:localhost",
-    "age": 55448
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@aibot:localhost",
-    "content": {
-      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**",
-      "msgtype": "m.text",
-      "format": "org.matrix.custom.html",
-      "isStreamingFinished": false,
-      "m.relates_to": {
-        "rel_type": "m.replace",
-        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
-      }
-    },
-    "origin_server_ts": 1736864379713,
-    "unsigned": {
-      "age": 54446
-    },
-    "event_id": "$KXfWZDRB62KypbbD1qOjUDWIA1GtDMcx_j1v94CwaLM",
-    "user_id": "@aibot:localhost",
-    "age": 54446
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@aibot:localhost",
-    "content": {
-      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**",
-      "msgtype": "m.text",
-      "format": "org.matrix.custom.html",
-      "isStreamingFinished": false,
-      "m.relates_to": {
-        "rel_type": "m.replace",
-        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
-      }
-    },
-    "origin_server_ts": 1736864380706,
-    "unsigned": {
-      "age": 53453
-    },
-    "event_id": "$V2H_tIKw4z55f9VsQbmor8tB27RdVIPzx6EHmDX9ers",
-    "user_id": "@aibot:localhost",
-    "age": 53453
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@aibot:localhost",
-    "content": {
-      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.",
-      "msgtype": "m.text",
-      "format": "org.matrix.custom.html",
-      "isStreamingFinished": false,
-      "m.relates_to": {
-        "rel_type": "m.replace",
-        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
-      }
-    },
-    "origin_server_ts": 1736864381711,
-    "unsigned": {
-      "age": 52448
-    },
-    "event_id": "$DEuswdCLtnANsVKIOqDDjJyK9iLuTWXeEpwNJignvZM",
-    "user_id": "@aibot:localhost",
-    "age": 52448
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@aibot:localhost",
-    "content": {
-      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.",
-      "msgtype": "m.text",
-      "format": "org.matrix.custom.html",
-      "isStreamingFinished": false,
-      "m.relates_to": {
-        "rel_type": "m.replace",
-        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
-      }
-    },
-    "origin_server_ts": 1736864382712,
-    "unsigned": {
-      "age": 51447
-    },
-    "event_id": "$flkRYqtKZHbhXOfyVKQUP96JZIKSS1DWHJ3TiubGNjw",
-    "user_id": "@aibot:localhost",
-    "age": 51447
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@aibot:localhost",
-    "content": {
-      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates",
-      "msgtype": "m.text",
-      "format": "org.matrix.custom.html",
-      "isStreamingFinished": false,
-      "m.relates_to": {
-        "rel_type": "m.replace",
-        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
-      }
-    },
-    "origin_server_ts": 1736864383711,
-    "unsigned": {
-      "age": 50448
-    },
-    "event_id": "$pnA-Wm6Y_UbtBF5NJx82AbMZNJZjESqlNEdriHaeS9M",
-    "user_id": "@aibot:localhost",
-    "age": 50448
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@aibot:localhost",
-    "content": {
-      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer",
-      "msgtype": "m.text",
-      "format": "org.matrix.custom.html",
-      "isStreamingFinished": false,
-      "m.relates_to": {
-        "rel_type": "m.replace",
-        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
-      }
-    },
-    "origin_server_ts": 1736864384710,
-    "unsigned": {
-      "age": 49449
-    },
-    "event_id": "$k6LudyB8zdQC49VcVJKsmQlUOOhOsubYE3OWdu3YNhU",
-    "user_id": "@aibot:localhost",
-    "age": 49449
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@aibot:localhost",
-    "content": {
-      "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer to your departure for any specific warnings or advisories.\n\nIf you have more locations to visit, let me know, and I'll help you decide the best order or provide more detailed insights!",
-      "msgtype": "m.text",
-      "format": "org.matrix.custom.html",
-      "isStreamingFinished": true,
-      "m.relates_to": {
-        "rel_type": "m.replace",
-        "event_id": "$MBrYaz8jM42sVc7t7-gtqnxcMet0WupdnFnheHv-1po"
-      }
-    },
-    "origin_server_ts": 1736864385711,
-    "unsigned": {
-      "age": 48448
-    },
-    "event_id": "$ZpMuOXcWqbeqqrejv0VdOiE7ePfQ0qZUbX5rXL7eSxo",
-    "user_id": "@aibot:localhost",
-    "age": 48448
   }
 ]

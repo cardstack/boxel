@@ -1,6 +1,7 @@
 import { service } from '@ember/service';
 
 import { isCardInstance } from '@cardstack/runtime-common';
+import { DEFAULT_REMIX_LLM } from '@cardstack/runtime-common/matrix-constants';
 
 import * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -13,6 +14,7 @@ import AddSkillsToRoomCommand from './add-skills-to-room';
 import CreateAiAssistantRoomCommand from './create-ai-assistant-room';
 import OpenAiAssistantRoomCommand from './open-ai-assistant-room';
 import SendAiAssistantMessageCommand from './send-ai-assistant-message';
+import SetActiveLLMCommand from './set-active-llm';
 
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
@@ -75,6 +77,13 @@ export default class ListingActionInitCommand extends HostBaseCommand<
     }
 
     if (roomId) {
+      let setActiveLLMCommand = new SetActiveLLMCommand(this.commandContext);
+
+      await setActiveLLMCommand.execute({
+        roomId,
+        model: DEFAULT_REMIX_LLM,
+      });
+
       await new SendAiAssistantMessageCommand(this.commandContext).execute({
         roomId,
         prompt: `I would like to ${actionType} this ${listing.name} under the following realm: ${realmUrl}`,

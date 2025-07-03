@@ -320,24 +320,6 @@
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "Thinking...",
-      "msgtype": "m.text",
-      "format": "org.matrix.custom.html",
-      "isStreamingFinished": true
-    },
-    "origin_server_ts": 1736864365020,
-    "unsigned": {
-      "age": 69139
-    },
-    "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE",
-    "user_id": "@aibot:localhost",
-    "age": 69139
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@aibot:localhost",
-    "content": {
       "body": "Updating the file...\nhttp://test.com/spaghetti-recipe.gts\n╔═══ SEARCH ════╗\nthis is the riveting content of the spaghetti-recipe.gts file\n╠═══════════════╣\nthis is the engaging content of the spaghetti-recipe.gts file\n╚═══ REPLACE ═══╝\n",
       "data": "{\"eventId\":\"$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE\",\"toolCall\":{\"type\":\"function\",\"id\":\"call_or0qFTa8y9Ef8ZVyRDNR2P1T\",\"name\":\"GetWeatherCommand_qPbgi8D3nYdEvEMwj6DVUX\",\"arguments\":{\"description\":\"Check the current weather conditions for traveling\",\"attributes\":{\"location\":\"New York\"}}}}",
       "app.boxel.commandRequests": [
@@ -352,19 +334,15 @@
       ],
       "msgtype": "app.boxel.message",
       "format": "org.matrix.custom.html",
-      "isStreamingFinished": true,
-      "m.relates_to": {
-        "rel_type": "m.replace",
-        "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE"
-      }
+      "isStreamingFinished": true
     },
-    "origin_server_ts": 1736864370642,
+    "origin_server_ts": 1736864365020,
     "unsigned": {
-      "age": 63517
+      "age": 69139
     },
-    "event_id": "$V4k751dVMZphpB6P7OJ3Q-vRbTihn5KekUpTNL1LVpE",
+    "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE",
     "user_id": "@aibot:localhost",
-    "age": 63517
+    "age": 69139
   },
   {
     "type": "app.boxel.commandResult",

@@ -45,7 +45,10 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import jwt from 'jsonwebtoken';
 import { type CardCollectionDocument } from '@cardstack/runtime-common/card-document';
 import { type PgAdapter } from '@cardstack/postgres';
-import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
+import {
+  getUserByMatrixUserId,
+  sumUpCreditsLedger,
+} from '@cardstack/billing/billing-queries';
 import {
   createJWT as createRealmServerJWT,
   RealmServerTokenClaim,
@@ -818,6 +821,237 @@ module(basename(__filename), function () {
           }
         });
 
+        test('can force job completion by job_id via grafana endpoint', async function (assert) {
+          let [{ id }] = (await dbAdapter.execute(`INSERT INTO jobs
+            (args, job_type, concurrency_group, timeout, priority)
+            VALUES
+            (
+              '{"realmURL": "${testRealm2URL.href}", "realmUsername":"node-test_realm"}',
+              'from-scratch-index',
+              'indexing:${testRealm2URL.href}',
+              180,
+              0
+            ) RETURNING id`)) as { id: string }[];
+          let response = await request2
+            .get(
+              `/_grafana-complete-job?authHeader=${grafanaSecret}&job_id=${id}`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 204, 'HTTP 204 response');
+          let [job] = await dbAdapter.execute(
+            `SELECT * FROM jobs WHERE id = ${id}`,
+          );
+          assert.strictEqual(job.status, 'rejected', 'job status is correct');
+          assert.deepEqual(
+            job.result,
+            {
+              status: 418,
+              message: 'User initiated job cancellation',
+            },
+            'job result is correct',
+          );
+          assert.ok(job.finished_at, 'job was marked with finish time');
+        });
+
+        test('can force job completion by reservation_id via grafana endpoint', async function (assert) {
+          let [{ id: jobId }] = (await dbAdapter.execute(`INSERT INTO jobs
+            (args, job_type, concurrency_group, timeout, priority)
+            VALUES
+            (
+              '{"realmURL": "${testRealm2URL.href}", "realmUsername":"node-test_realm"}',
+              'from-scratch-index',
+              'indexing:${testRealm2URL.href}',
+              180,
+              0
+            ) RETURNING id`)) as { id: string }[];
+          let [{ id: reservationId }] =
+            (await dbAdapter.execute(`INSERT INTO job_reservations
+            (job_id, locked_until ) VALUES (${jobId}, NOW() + INTERVAL '3 minutes') RETURNING id `)) as {
+              id: string;
+            }[];
+          let response = await request2
+            .get(
+              `/_grafana-complete-job?authHeader=${grafanaSecret}&reservation_id=${reservationId}`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 204, 'HTTP 204 response');
+          let [reservation] = await dbAdapter.execute(
+            `SELECT * FROM job_reservations WHERE id = ${reservationId}`,
+          );
+          assert.ok(reservation.completed_at, 'completed_at time set');
+          let [job] = await dbAdapter.execute(
+            `SELECT * FROM jobs WHERE id = ${jobId}`,
+          );
+          assert.strictEqual(job.status, 'rejected', 'job status is correct');
+          assert.deepEqual(
+            job.result,
+            {
+              status: 418,
+              message: 'User initiated job cancellation',
+            },
+            'job result is correct',
+          );
+          assert.ok(job.finished_at, 'job was marked with finish time');
+        });
+
+        test('can force job completion by job_id where reservation id exists via grafana endpoint', async function (assert) {
+          let [{ id: jobId }] = (await dbAdapter.execute(`INSERT INTO jobs
+            (args, job_type, concurrency_group, timeout, priority)
+            VALUES
+            (
+              '{"realmURL": "${testRealm2URL.href}", "realmUsername":"node-test_realm"}',
+              'from-scratch-index',
+              'indexing:${testRealm2URL.href}',
+              180,
+              0
+            ) RETURNING id`)) as { id: string }[];
+          let [{ id: reservationId }] =
+            (await dbAdapter.execute(`INSERT INTO job_reservations
+            (job_id, locked_until ) VALUES (${jobId}, NOW() + INTERVAL '3 minutes') RETURNING id `)) as {
+              id: string;
+            }[];
+          let response = await request2
+            .get(
+              `/_grafana-complete-job?authHeader=${grafanaSecret}&job_id=${jobId}`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 204, 'HTTP 204 response');
+          let [reservation] = await dbAdapter.execute(
+            `SELECT * FROM job_reservations WHERE id = ${reservationId}`,
+          );
+          assert.ok(reservation.completed_at, 'completed_at time set');
+          let [job] = await dbAdapter.execute(
+            `SELECT * FROM jobs WHERE id = ${jobId}`,
+          );
+          assert.strictEqual(job.status, 'rejected', 'job status is correct');
+          assert.deepEqual(
+            job.result,
+            {
+              status: 418,
+              message: 'User initiated job cancellation',
+            },
+            'job result is correct',
+          );
+          assert.ok(job.finished_at, 'job was marked with finish time');
+        });
+
+        test('returns 401 when calling grafana job completion endpoint without a grafana secret', async function (assert) {
+          let [{ id }] = (await dbAdapter.execute(`INSERT INTO jobs
+            (args, job_type, concurrency_group, timeout, priority)
+            VALUES
+            (
+              '{"realmURL": "${testRealm2URL.href}", "realmUsername":"node-test_realm"}',
+              'from-scratch-index',
+              'indexing:${testRealm2URL.href}',
+              180,
+              0
+            ) RETURNING id`)) as { id: string }[];
+          let response = await request2
+            .get(`/_grafana-complete-job?job_id=${id}`)
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+          let [job] = await dbAdapter.execute(
+            `SELECT * FROM jobs WHERE id = ${id}`,
+          );
+          assert.strictEqual(
+            job.status,
+            'unfulfilled',
+            'job status is correct',
+          );
+          assert.strictEqual(
+            job.finished_at,
+            null,
+            'job was not marked with finish time',
+          );
+        });
+
+        test('can add user credit via grafana endpoint', async function (assert) {
+          let user = await insertUser(
+            dbAdapter,
+            'user@test',
+            'cus_123',
+            'user@test.com',
+          );
+          let sum = await sumUpCreditsLedger(dbAdapter, {
+            creditType: ['extra_credit', 'extra_credit_used'],
+            userId: user.id,
+          });
+          assert.strictEqual(sum, 0, `user has 0 extra credit`);
+
+          let response = await request2
+            .get(
+              `/_grafana-add-credit?authHeader=${grafanaSecret}&user=${user.matrixUserId}&credit=1000`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.deepEqual(
+            response.body,
+            {
+              message: `Added 1000 credits to user '${user.matrixUserId}'`,
+            },
+            `response body is correct`,
+          );
+          sum = await sumUpCreditsLedger(dbAdapter, {
+            creditType: ['extra_credit', 'extra_credit_used'],
+            userId: user.id,
+          });
+          assert.strictEqual(sum, 1000, `user has 1000 extra credit`);
+        });
+
+        test('returns 400 when calling grafana add credit endpoint without a user', async function (assert) {
+          let response = await request2
+            .get(`/_grafana-add-credit?authHeader=${grafanaSecret}&credit=1000`)
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        });
+
+        test('returns 400 when calling grafana add credit endpoint with credit amount that is not a number', async function (assert) {
+          let user = await insertUser(
+            dbAdapter,
+            'user@test',
+            'cus_123',
+            'user@test.com',
+          );
+          let response = await request2
+            .get(
+              `/_grafana-add-credit?authHeader=${grafanaSecret}&user=${user.matrixUserId}&credit=a+million+dollars`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+          let sum = await sumUpCreditsLedger(dbAdapter, {
+            creditType: ['extra_credit', 'extra_credit_used'],
+            userId: user.id,
+          });
+          assert.strictEqual(sum, 0, `user has 0 extra credit`);
+        });
+
+        test("returns 400 when calling grafana add credit endpoint when user doesn't exist", async function (assert) {
+          let response = await request2
+            .get(
+              `/_grafana-add-credit?authHeader=${grafanaSecret}&user=nobody&credit=1000`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        });
+
+        test('returns 401 when calling grafana add credit endpoint without a grafana secret', async function (assert) {
+          let user = await insertUser(
+            dbAdapter,
+            'user@test',
+            'cus_123',
+            'user@test.com',
+          );
+          let response = await request2
+            .get(`/_grafana-add-credit?user=${user.matrixUserId}&credit=1000`)
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+          let sum = await sumUpCreditsLedger(dbAdapter, {
+            creditType: ['extra_credit', 'extra_credit_used'],
+            userId: user.id,
+          });
+          assert.strictEqual(sum, 0, `user has 0 extra credit`);
+        });
+
         test('can reindex a realm via grafana endpoint', async function (assert) {
           let endpoint = `test-realm-${uuidv4()}`;
           let owner = 'mango';
@@ -1494,8 +1728,6 @@ module(basename(__filename), function () {
           assert.strictEqual(subscriptions[0].status, 'expired');
           assert.strictEqual(subscriptions[0].planId, creatorPlan.id);
 
-          // ensures the subscription info is null,
-          // so the host can use that to redirect user to checkout free plan page
           let response = await request
             .get(`/_user`)
             .set('Accept', 'application/vnd.api+json')
@@ -1520,13 +1752,23 @@ module(basename(__filename), function () {
                   stripeCustomerEmail: user.stripeCustomerEmail,
                   creditsAvailableInPlanAllowance: null,
                   creditsIncludedInPlanAllowance: null,
-                  extraCreditsAvailableInBalance: null,
+                  extraCreditsAvailableInBalance: 0,
                 },
                 relationships: {
                   subscription: null,
                 },
               },
-              included: null,
+              included: [
+                {
+                  type: 'plan',
+                  id: 'free',
+                  attributes: {
+                    name: 'Free',
+                    monthlyPrice: 0,
+                    creditsIncluded: 0,
+                  },
+                },
+              ],
             },
             '/_user response is correct',
           );

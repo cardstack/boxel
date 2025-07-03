@@ -37,11 +37,11 @@ export default class Switch extends Component<SwitchSiganture> {
 
     <style scoped>
       .switch {
-        width: 22px;
-        height: 12px;
-        background-color: var(--boxel-450);
-        border-radius: var(--boxel-border-radius-sm);
-        padding: 3px;
+        width: 34px;
+        height: 20px;
+        background-color: var(--boxel-400);
+        border-radius: 20px;
+        padding: 2.5px;
         display: inline-flex;
         align-items: center;
         transition: background-color 0.1s ease-in;
@@ -53,12 +53,12 @@ export default class Switch extends Component<SwitchSiganture> {
       }
       .switch-input {
         margin: 0;
-        width: 6px;
-        height: 6px;
+        height: 100%;
+        aspect-ratio: 1;
         background-color: var(--boxel-light);
         border-radius: 50%;
-        transform: translateX(0);
-        transition: transform 0.1s ease-in;
+        margin-left: 0;
+        transition: margin-left 0.1s ease-in;
       }
       .switch.checked {
         background-color: var(
@@ -67,7 +67,7 @@ export default class Switch extends Component<SwitchSiganture> {
         );
       }
       .switch.checked .switch-input {
-        transform: translateX(10px);
+        margin-left: 49%;
       }
       .switch:hover,
       .switch-input:hover {

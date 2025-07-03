@@ -868,7 +868,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assertMessages(assert, [
         {
           from: 'testuser',
-          message: `In the attachment file, I encountered an error that needs fixing: Syntax Error Stack trace: Parse Error at broken.gts:1:6: 1:10. broken.gts`,
+          message: `In the attachment file, I encountered an error that needs fixing: Syntax Error Stack trace: Parse Error at broken.gts:1:6: 1:10.`,
           files: [
             { name: 'broken.gts', sourceUrl: `${testRealmURL}broken.gts` },
           ],
@@ -1085,7 +1085,7 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       assert
         .dom('[data-test-code-mode-card-renderer-header]')
-        .hasText('Person');
+        .hasText('Person - Fadhlan');
       assert
         .dom('[data-test-code-mode-card-renderer-body]')
         .includesText('Fadhlan');

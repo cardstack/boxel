@@ -255,59 +255,6 @@ test.describe('Commands', () => {
     }).toPass();
   });
 
-  test('a command sent via SendAiAssistantMessageCommand becomes an available tool', async ({
-    page,
-  }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
-    await showAllCards(page);
-    await page
-      .locator(
-        `[data-test-stack-card="${appURL}/index"] [data-test-cards-grid-item="${appURL}/mango"]`,
-      )
-      .click();
-    await expect(
-      page.locator(`[data-test-stack-card="${appURL}/mango"]`),
-    ).toHaveCount(1);
-    await page.locator('[data-test-switch-to-code-mode-button]').click();
-    await waitUntil(async () => (await getRoomEvents()).length > 0);
-    let message = (await getRoomEvents()).pop()!;
-    expect(message.content.msgtype).toStrictEqual(APP_BOXEL_MESSAGE_MSGTYPE);
-    let boxelMessageData = JSON.parse(message.content.data);
-    expect(boxelMessageData.context.tools.length).toEqual(1);
-    expect(boxelMessageData.context.tools[0].type).toEqual('function');
-    expect(boxelMessageData.context.tools[0].function.name).toMatch(
-      /^SwitchSubmodeCommand_/,
-    );
-    expect(boxelMessageData.context.tools[0].function.description).toEqual(
-      'Navigate the UI to another submode. Possible values for submode are "interact" and "code".',
-    );
-    // TODO: do we need to include `required: ['attributes'],` in the parameters object? If so, how?
-    expect(boxelMessageData.context.tools[0].function.parameters).toMatchObject(
-      {
-        type: 'object',
-        properties: {
-          attributes: {
-            type: 'object',
-            properties: {
-              submode: {
-                type: 'string',
-              },
-              title: {
-                type: 'string',
-              },
-              description: {
-                type: 'string',
-              },
-              thumbnailURL: {
-                type: 'string',
-              },
-            },
-          },
-        },
-      },
-    );
-  });
-
   test('an autoexecuted command does not run again when the message is re-rendered', async ({
     page,
   }) => {

@@ -320,8 +320,8 @@
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "Thinking...",
-      "msgtype": "m.text",
+      "body": "Updating the file...\nhttp://test.com/spaghetti-recipe.gts\n╔═══ SEARCH ════╗\nthis is the riveting content of the spaghetti-recipe.gts file\n╠═══════════════╣\nthis is the engaging content of the spaghetti-recipe.gts file\n╚═══ REPLACE ═══╝\n\nI will also create a file for rigatoni:\n\nhttp://test.com/rigatoni-recipe.gts\n╔═══ SEARCH ════╗\n╠═══════════════╣\nthis is the holy content of the rigatoni-recipe.gts file\n╚═══ REPLACE ═══╝\n",
+      "msgtype": "app.boxel.message",
       "format": "org.matrix.custom.html",
       "isStreamingFinished": true
     },
@@ -332,28 +332,6 @@
     "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE",
     "user_id": "@aibot:localhost",
     "age": 69139
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@aibot:localhost",
-    "content": {
-      "body": "Updating the file...\nhttp://test.com/spaghetti-recipe.gts\n╔═══ SEARCH ════╗\nthis is the riveting content of the spaghetti-recipe.gts file\n╠═══════════════╣\nthis is the engaging content of the spaghetti-recipe.gts file\n╚═══ REPLACE ═══╝\n\nI will also create a file for rigatoni:\n\nhttp://test.com/rigatoni-recipe.gts\n╔═══ SEARCH ════╗\n╠═══════════════╣\nthis is the holy content of the rigatoni-recipe.gts file\n╚═══ REPLACE ═══╝\n",
-      "msgtype": "app.boxel.message",
-      "format": "org.matrix.custom.html",
-      "isStreamingFinished": true,
-      "m.relates_to": {
-        "rel_type": "m.replace",
-        "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE"
-      }
-    },
-    "origin_server_ts": 1736864370642,
-    "unsigned": {
-      "age": 63517
-    },
-    "event_id": "$V4k751dVMZphpB6P7OJ3Q-vRbTihn5KekUpTNL1LVpE",
-    "user_id": "@aibot:localhost",
-    "age": 63517
   },
   {
     "type": "app.boxel.codePatchResult",

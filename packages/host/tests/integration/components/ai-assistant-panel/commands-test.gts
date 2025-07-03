@@ -233,7 +233,9 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
 
     await waitFor('[data-test-person]');
-    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
+    assert
+      .dom('[data-test-boxel-card-header-title]')
+      .hasText('Person - Fadhlan');
     assert.dom('[data-test-person]').hasText('Fadhlan');
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
@@ -844,7 +846,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
     assert
       .dom(`${rightStackItem} [data-test-boxel-card-header-title]`)
-      .hasText('Search Results');
+      .hasText('Search Results - Search Results');
 
     const savedCardId = document
       .querySelector(rightStackItem)
@@ -924,7 +926,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
     assert
       .dom(`${stackItem} [data-test-boxel-card-header-title]`)
-      .hasText('Search Results');
+      .hasText('Search Results - Search Results');
 
     const savedCardId = document
       .querySelector(stackItem)

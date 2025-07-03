@@ -34,12 +34,6 @@ import {
   Deferred,
 } from '@cardstack/runtime-common';
 
-import {
-  basicMappings,
-  generateJsonSchemaForCardType,
-  getPatchTool,
-} from '@cardstack/runtime-common/helpers/ai';
-
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
@@ -60,6 +54,11 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+  SLIDING_SYNC_AI_ROOM_LIST_NAME,
+  SLIDING_SYNC_AUTH_ROOM_LIST_NAME,
+  SLIDING_SYNC_LIST_RANGE_END,
+  SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+  SLIDING_SYNC_TIMEOUT,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -95,6 +94,7 @@ import type {
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
+import { addPatchTools } from '../commands/utils';
 import { isSkillCard } from '../lib/file-def-manager';
 import { skillCardURL } from '../lib/utils';
 import { importResource } from '../resources/import';
@@ -125,11 +125,6 @@ import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
-const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
-const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
-const SLIDING_SYNC_LIST_RANGE_END = 9;
-const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
-const SLIDING_SYNC_TIMEOUT = 30000;
 
 const realmEventsLogger = logger('realm:events');
 
@@ -148,7 +143,6 @@ export default class MatrixService extends Service {
   @service declare private store: StoreService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
-  @tracked private _isNewUser = false;
   @tracked private postLoginCompleted = false;
   @tracked private _currentRoomId: string | undefined;
   @tracked private timelineLoadingState: Map<string, boolean> =
@@ -375,10 +369,6 @@ export default class MatrixService extends Service {
     return this._isInitializingNewUser;
   }
 
-  get isNewUser() {
-    return this._isNewUser;
-  }
-
   async initializeNewUser(
     auth: LoginResponse,
     displayName: string,
@@ -406,7 +396,8 @@ export default class MatrixService extends Service {
       }),
       this.realmServer.fetchCatalogRealms(),
     ]);
-    this._isNewUser = true;
+
+    this.router.refresh();
     this._isInitializingNewUser = false;
   }
 
@@ -915,25 +906,21 @@ export default class MatrixService extends Service {
     context?: BoxelContext,
   ): Promise<void> {
     let tools: Tool[] = [];
-    let attachedOpenCards: CardDef[] = [];
-    let mappings = await basicMappings(this.loaderService.loader);
     // Open cards are attached automatically
     // If they are not attached, the user is not allowing us to
     // modify them
-    attachedOpenCards = attachedCards.filter((c) =>
-      (context?.openCardIds ?? []).includes(c.id),
-    );
+    let openCardIds = context?.openCardIds ?? [];
+    let patchableCards = attachedCards
+      .filter((c) => openCardIds.includes(c.id))
+      .filter((c) => this.realm.canWrite(c.id));
     // Generate tool calls for patching currently open cards permitted for modification
-    for (let attachedOpenCard of attachedOpenCards) {
-      let patchSpec = generateJsonSchemaForCardType(
-        attachedOpenCard.constructor as typeof CardDef,
+    tools = tools.concat(
+      await addPatchTools(
+        this.commandService.commandContext,
+        patchableCards,
         this.cardAPI,
-        mappings,
-      );
-      if (this.realm.canWrite(attachedOpenCard.id)) {
-        tools.push(getPatchTool(attachedOpenCard.id, patchSpec));
-      }
-    }
+      ),
+    );
 
     await this.updateSkillsAndCommandsIfNeeded(roomId);
     let contentData = await this.withContextAndAttachments(
@@ -952,7 +939,6 @@ export default class MatrixService extends Service {
         attachedCards: contentData.attachedCards,
         context: {
           ...contentData.context,
-          openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
           debug: context?.debug,
           functions: [],

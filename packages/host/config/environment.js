@@ -81,7 +81,7 @@ module.exports = function (environment) {
 
   if (environment === 'production') {
     // here you can enable a production-specific feature
-    ENV.logLevels = '*=warn,current-run=error';
+    ENV.logLevels = '*=warn,current-run=debug';
   }
 
   return ENV;

@@ -646,14 +646,14 @@ export async function assertPaymentLink(
 export async function setupPayment(
   username: string,
   realmServer: IsolatedRealmServer,
-  page?: Page,
+  _page?: Page,
 ) {
   // decode the username from base64
   const decodedUsername = decodeFromAlphanumeric(username);
 
   // mock trigger stripe webhook 'checkout.session.completed'
-  let freePlan = await realmServer.executeSQL(
-    `SELECT * FROM plans WHERE name = 'Free'`,
+  let starterPlan = await realmServer.executeSQL(
+    `SELECT * FROM plans WHERE name = 'Starter'`,
   );
 
   const randomNumber = Math.random().toString(36).substring(2, 12);
@@ -686,7 +686,7 @@ export async function setupPayment(
       stripe_subscription_id
     ) VALUES (
       '${userId}',
-      '${freePlan[0].id}',
+      '${starterPlan[0].id}',
       ${now},
       ${oneYearFromNow},
       'active',
@@ -717,22 +717,8 @@ export async function setupPayment(
   const subscriptionCycleUUID = subscriptionCycle[0].id;
 
   await realmServer.executeSQL(
-    `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, subscription_cycle_id) VALUES ('${userId}', ${freePlan[0].credits_included}, 'plan_allowance', '${subscriptionCycleUUID}')`,
+    `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, subscription_cycle_id) VALUES ('${userId}', ${starterPlan[0].credits_included}, 'plan_allowance', '${subscriptionCycleUUID}')`,
   );
-
-  // Return url example: https://realms-staging.stack.cards/?from-free-plan-payment-link=true
-  // extract return url from page.url()
-  // assert return url contains ?from-free-plan-payment-link=true
-  if (page) {
-    const currentUrl = new URL(page.url());
-    const currentParams = currentUrl.searchParams;
-    await currentParams.append('from-free-plan-payment-link', 'true');
-    const returnUrl = `${currentUrl.origin}${
-      currentUrl.pathname
-    }?${currentParams.toString()}`;
-
-    await page.goto(returnUrl);
-  }
 }
 
 export async function setupUserSubscribed(

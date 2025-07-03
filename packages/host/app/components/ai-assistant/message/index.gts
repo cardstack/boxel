@@ -1,42 +1,34 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { registerDestructor } from '@ember/destroyable';
-import { on } from '@ember/modifier';
+import { hash } from '@ember/helper';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
-import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
-import { format as formatDate, formatISO } from 'date-fns';
 import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
 import { Alert } from '@cardstack/boxel-ui/components';
-import { and, cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn } from '@cardstack/boxel-ui/helpers';
 
-import {
-  type getCardCollection,
-  markdownToHtml,
-} from '@cardstack/runtime-common';
+import { type getCardCollection } from '@cardstack/runtime-common';
 
-import CardPill from '@cardstack/host/components/card-pill';
-import FilePill from '@cardstack/host/components/file-pill';
 import { type HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
-import { urlForRealmLookup } from '@cardstack/host/lib/utils';
-
-import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
-import FormattedAiBotMessage from '../formatted-aibot-message';
-import FormattedUserMessage from '../formatted-user-message';
+import AiBotMessage from './aibot-message';
+import Attachments from './attachments';
+import Meta from './meta';
+import UserMessage from './user-message';
 
 import type { ComponentLike } from '@glint/template';
 
 interface Signature {
-  Element: HTMLDivElement;
+  Element: HTMLElement;
   Args: {
     reasoningContent?: string | null;
     messageHTML?: string;
@@ -61,6 +53,7 @@ interface Signature {
     isDebugMessage?: boolean;
     isPending?: boolean;
     retryAction?: () => void;
+    hideMeta?: boolean;
   };
   Blocks: { default: [] };
 }
@@ -180,10 +173,9 @@ function collectionResourceError(id: string | null | undefined) {
 }
 
 export default class AiAssistantMessage extends Component<Signature> {
-  @service private declare cardService: CardService;
   @service private declare matrixService: MatrixService;
 
-  get isReasoningExpandedByDefault() {
+  private get isReasoningExpandedByDefault() {
     let result =
       this.args.isStreaming &&
       !isPresent(this.args.messageHTML) &&
@@ -191,13 +183,13 @@ export default class AiAssistantMessage extends Component<Signature> {
       !isThinkingMessage(this.args.reasoningContent);
     return result;
   }
-  get isReasoningExpanded() {
+  private get isReasoningExpanded() {
     return (
       this.matrixService.reasoningExpandedState.get(this.args.eventId) ??
       this.isReasoningExpandedByDefault
     );
   }
-  updateReasoningExpanded = (ev: MouseEvent) => {
+  private updateReasoningExpanded = (ev: MouseEvent | KeyboardEvent) => {
     ev.preventDefault();
     this.matrixService.reasoningExpandedState.set(
       this.args.eventId,
@@ -214,278 +206,101 @@ export default class AiAssistantMessage extends Component<Signature> {
     }
   }
 
-  get hasMessageHTMLParts() {
-    return !!this.args.messageHTMLParts;
-  }
-
   <template>
-    <div
-      class={{cn
-        'ai-assistant-message'
-        is-from-assistant=@isFromAssistant
-        is-pending=@isPending
-      }}
+    <section
+      class={{cn 'ai-assistant-message' meta-hidden=@hideMeta}}
       {{MessageScroller index=@index registerScroller=@registerScroller}}
       data-test-ai-assistant-message
+      data-test-ai-assistant-message-pending={{@isPending}}
       ...attributes
     >
-      <div class='meta'>
+      {{#unless @hideMeta}}
+        <Meta
+          @datetime={{@datetime}}
+          @isFromAssistant={{@isFromAssistant}}
+          @profileAvatar={{@profileAvatar}}
+          @isAvatarAnimated={{this.isAvatarAnimated}}
+        />
+      {{/unless}}
+      <div class='content' data-test-ai-message-content>
         {{#if @isFromAssistant}}
-          <div
-            class='ai-avatar {{if this.isAvatarAnimated "ai-avatar-animated"}}'
-            data-test-ai-avatar
-          ></div>
-        {{else if @profileAvatar}}
-          <@profileAvatar />
-        {{/if}}
-        <time datetime={{formatISO @datetime}} class='time'>
-          {{formatDate @datetime 'iiii MMM d, yyyy, h:mm aa'}}
-        </time>
-      </div>
-      <div class='content-container'>
-        <div class='content' data-test-ai-message-content>
-          {{#if @reasoningContent}}
-            <div class='reasoning-content'>
-              {{#if (eq 'Thinking...' @reasoningContent)}}
-                Thinking...
-              {{else}}
-                <details open={{this.isReasoningExpanded}} data-test-reasoning>
-                  {{! template-lint-disable no-invalid-interactive }}
-                  {{! template-lint-disable no-nested-interactive }}
-                  <summary
-                    {{on 'click' this.updateReasoningExpanded}}
-                  >Thinking...</summary>
-                  {{htmlSafe (markdownToHtml @reasoningContent)}}
-                </details>
-              {{/if}}
-            </div>
-          {{/if}}
-
-          {{#if (and @isFromAssistant this.hasMessageHTMLParts)}}
-            <FormattedAiBotMessage
+          {{#if this.hasBotMessage}}
+            <AiBotMessage
               @monacoSDK={{@monacoSDK}}
               @htmlParts={{@messageHTMLParts}}
               @roomId={{@roomId}}
               @eventId={{@eventId}}
               @isStreaming={{@isStreaming}}
               @isLastAssistantMessage={{@isLastAssistantMessage}}
+              @reasoning={{if
+                @reasoningContent
+                (hash
+                  content=@reasoningContent
+                  isExpanded=this.isReasoningExpanded
+                  updateExpanded=this.updateReasoningExpanded
+                )
+              }}
             />
-          {{else}}
-            <FormattedUserMessage @html={{@messageHTML}} />
           {{/if}}
-
-          {{yield}}
-
           {{#if this.hasItems}}
-            <div class='items' data-test-message-items>
-              {{#each this.items as |item|}}
-                {{#if (isCardCollectionResource item)}}
-                  {{#each item.cards as |card|}}
-                    <CardPill
-                      @cardId={{card.id}}
-                      @urlForRealmLookup={{urlForRealmLookup card}}
-                    />
-                  {{/each}}
-                {{else}}
-                  <FilePill
-                    @file={{item}}
-                    @downloadFile={{if @isDebugMessage this.downloadFile}}
-                  />
-                {{/if}}
-              {{/each}}
-            </div>
+            <Attachments
+              @items={{this.items}}
+              @downloadFile={{if @isDebugMessage this.downloadFile}}
+            />
           {{/if}}
-
-          {{#if this.errorMessages.length}}
-            <div class='error-footer'>
-              <Alert
-                @type='error'
-                @messages={{this.errorMessages}}
-                @retryAction={{@retryAction}}
+        {{else}}
+          <UserMessage @html={{@messageHTML}} @isPending={{@isPending}}>
+            {{#if this.hasItems}}
+              <Attachments
+                @items={{this.items}}
+                @downloadFile={{if @isDebugMessage this.downloadFile}}
               />
-            </div>
-          {{/if}}
-        </div>
+            {{/if}}
+          </UserMessage>
+        {{/if}}
+
+        {{yield}}
+
+        {{#if this.errorMessages.length}}
+          <Alert
+            @type='error'
+            @messages={{this.errorMessages}}
+            @retryAction={{@retryAction}}
+          />
+        {{/if}}
       </div>
-    </div>
+    </section>
 
     <style scoped>
       .ai-assistant-message {
-        --ai-bot-message-background-color: #3b394b;
+        --ai-bot-message-background-color: var(--boxel-650);
         --ai-assistant-message-avatar-size: 0.75rem; /* 12px. */
         --ai-assistant-message-meta-height: 0.75rem; /* 12px */
         --ai-assistant-message-gap: var(--boxel-sp-xxxs);
         --profile-avatar-icon-size: var(--ai-assistant-message-avatar-size);
         --profile-avatar-icon-border: 1px solid var(--boxel-400);
       }
-      .meta {
-        display: grid;
-        grid-template-columns: var(--ai-assistant-message-avatar-size) 1fr;
-        grid-template-rows: var(--ai-assistant-message-meta-height);
-        align-items: center;
-        gap: var(--ai-assistant-message-gap);
+      .ai-assistant-message > * + * {
+        margin-top: var(--boxel-sp-xs);
       }
-      .ai-avatar {
-        width: var(--ai-assistant-message-avatar-size);
-        height: var(--ai-assistant-message-avatar-size);
-
-        background-image: image-set(
-          url('../ai-assist-icon.webp') 1x,
-          url('../ai-assist-icon@2x.webp') 2x,
-          url('../ai-assist-icon@3x.webp')
-        );
-        background-repeat: no-repeat;
-        background-size: var(--ai-assistant-message-avatar-size);
-      }
-
-      .ai-avatar-animated {
-        background-image: url('../ai-assist-icon-animated.webp');
-      }
-
-      .avatar-img {
-        width: var(--ai-assistant-message-avatar-size);
-        height: var(--ai-assistant-message-avatar-size);
-        border-radius: 100px;
-      }
-
-      .time {
-        display: block;
-        font: 500 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-sm);
-        color: var(--boxel-450);
-        white-space: nowrap;
-      }
-
-      /* spacing for sequential thread messages */
-      .ai-assistant-message + .ai-assistant-message {
-        margin-top: var(--boxel-sp-lg);
-      }
-
-      .ai-assistant-message + .hide-meta {
-        margin-top: var(--boxel-sp);
-      }
-
-      .content-container {
-        margin-top: var(--boxel-sp-xxxs);
-        border-radius: var(--boxel-border-radius-xxs)
-          var(--boxel-border-radius-xl) var(--boxel-border-radius-xl)
-          var(--boxel-border-radius-xl);
-        overflow: hidden;
-      }
-
       .content {
-        background-color: var(--boxel-light);
-        color: var(--boxel-dark);
-        font-size: var(--boxel-font-sm);
-        font-weight: 500;
-        line-height: 1.25rem;
-        letter-spacing: var(--boxel-lsp-xs);
-        padding: var(--ai-assistant-message-padding, var(--boxel-sp));
-      }
-
-      .is-from-assistant .content {
-        background-color: transparent;
-        color: var(--boxel-light);
-        /* the below font-smoothing options are only recommended for light-colored
-          text on dark background (otherwise not good for accessibility) */
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-        padding: 0;
-        padding: 0;
-      }
-
-      .is-from-assistant .content :deep(p:last-of-type) {
-        margin-bottom: 0;
-      }
-
-      .is-from-assistant .content :deep(pre) {
-        white-space: pre-wrap;
-      }
-
-      .is-from-assistant .content :deep(pre code) {
-        overflow-wrap: break-word;
-      }
-
-      .is-from-assistant .content-container {
-        margin-top: 9px;
-        border-radius: 0;
-      }
-
-      .is-pending .content,
-      .is-pending .content .items > :deep(.card-pill),
-      .is-pending .content .items > :deep(.card-pill .boxel-card-container) {
-        background: var(--boxel-200);
-        color: var(--boxel-500);
-      }
-
-      .content :deep(span.streaming-text:after) {
-        content: '';
-        width: 8px;
-        height: 8px;
-        background: currentColor;
-        border-radius: 50%;
-        display: inline-block;
-        font-family: system-ui, sans-serif;
-        line-height: normal;
-        vertical-align: baseline;
-        margin-left: 5px;
-      }
-
-      .content > :deep(.command-message) {
-        font-weight: 600;
-        letter-spacing: var(--boxel-lsp-sm);
-      }
-
-      .content > :deep(*) {
-        margin-top: 0;
-        margin-bottom: 0;
+        overflow: hidden;
       }
       .content > :deep(* + *) {
-        margin-top: var(--boxel-sp);
+        margin-top: var(--boxel-sp-sm);
       }
-
-      .reasoning-content {
-        color: var(--boxel-300);
-        font-style: italic;
+      :deep(pre) {
+        white-space: pre-wrap;
       }
-
-      .reasoning-content summary {
-        cursor: pointer;
-      }
-      .error-footer {
-        --fill-container-spacing: calc(
-          -1 * var(--ai-assistant-message-padding)
-        );
-        margin-inline: var(--fill-container-spacing);
-        margin-bottom: var(--fill-container-spacing);
-        padding: var(--boxel-sp-xs);
-      }
-      .error-icon {
-        --icon-background-color: var(--boxel-light);
-        --icon-color: var(--boxel-danger);
-        margin-top: var(--boxel-sp-5xs);
-      }
-      .error-message {
-        align-self: center;
-        overflow: hidden;
-        word-wrap: break-word;
+      :deep(code) {
         overflow-wrap: break-word;
-      }
-      .retry-button {
-        --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
-        --boxel-button-min-height: max-content;
-        --boxel-button-min-width: max-content;
-        border-color: var(--boxel-light);
-      }
-
-      .items {
-        color: var(--boxel-dark);
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-xxs);
       }
     </style>
   </template>
+
+  private get hasBotMessage() {
+    return this.args.messageHTMLParts?.length || this.args.reasoningContent;
+  }
 
   private get isAvatarAnimated() {
     return this.args.isStreaming && !this.args.errorMessage;
@@ -533,31 +348,42 @@ interface AiAssistantConversationSignature {
 
 const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSignature> =
   <template>
-    <div
+    <section
       {{ScrollPosition
         setScrollPosition=@setScrollPosition
         registerConversationScroller=@registerConversationScroller
       }}
       class='ai-assistant-conversation'
+      tabindex='0'
+      aria-label='AI Bot conversation'
+      aria-live='polite'
       data-test-ai-assistant-conversation
     >
       {{yield}}
-    </div>
+    </section>
     <style scoped>
       .ai-assistant-conversation {
         display: flex;
         flex-direction: column;
         padding: 0 var(--ai-assistant-panel-padding)
-          var(--ai-assistant-panel-padding) var(--ai-assistant-panel-padding);
+          calc(
+            var(--ai-assistant-panel-padding) +
+              var(--chat-input-area-border-radius) +
+              var(--ai-assistant-panel-bottom-gradient-height)
+          )
+          var(--ai-assistant-panel-padding);
         overflow-y: auto;
+
+        /* This lets the conversation be visible in the missing border radius of the form, with its gradient */
+        margin-bottom: calc(var(--chat-input-area-border-radius) * -1);
+      }
+      .ai-assistant-conversation > :deep(* + *) {
+        margin-top: var(--boxel-sp-lg);
+      }
+      .ai-assistant-conversation > :deep(* + .meta-hidden) {
+        margin-top: var(--boxel-sp-xs);
       }
     </style>
   </template>;
-
-function isCardCollectionResource(
-  obj: any,
-): obj is ReturnType<getCardCollection> {
-  return 'value' in obj;
-}
 
 export { AiAssistantConversation };
