@@ -41,11 +41,6 @@ export async function registerRealmUsers(synapse: SynapseInstance) {
   );
   await registerUser(
     synapse,
-    'seed_realm',
-    await realmPassword('seed_realm', realmSecretSeed),
-  );
-  await registerUser(
-    synapse,
     'catalog_realm',
     await realmPassword('catalog_realm', realmSecretSeed),
   );
@@ -87,14 +82,10 @@ export async function createRealm(
   page: Page,
   endpoint: string,
   name = endpoint,
-  copyFromSeed = true,
 ) {
   await page.locator('[data-test-add-workspace]').click();
   await page.locator('[data-test-display-name-field]').fill(name);
   await page.locator('[data-test-endpoint-field]').fill(endpoint);
-  if (copyFromSeed) {
-    await page.locator('[data-test-copy-from-seed-field]').click();
-  }
   await page.locator('[data-test-create-workspace-submit]').click();
   await expect(page.locator(`[data-test-workspace="${name}"]`)).toBeVisible();
   await expect(page.locator('[data-test-create-workspace-modal]')).toHaveCount(
@@ -398,7 +389,8 @@ export async function selectCardFromCatalog(
   cardId: string,
   realmName = 'Test Workspace A',
 ) {
-  await page.locator('[data-test-choose-card-btn]').click();
+  await page.locator('[data-test-attach-button]').click();
+  await page.locator('[data-test-attach-card-btn]').click();
   await page
     .locator(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`)
     .click();
@@ -640,14 +632,14 @@ export async function assertPaymentLink(
 export async function setupPayment(
   username: string,
   realmServer: IsolatedRealmServer,
-  page?: Page,
+  _page?: Page,
 ) {
   // decode the username from base64
   const decodedUsername = decodeFromAlphanumeric(username);
 
   // mock trigger stripe webhook 'checkout.session.completed'
-  let freePlan = await realmServer.executeSQL(
-    `SELECT * FROM plans WHERE name = 'Free'`,
+  let starterPlan = await realmServer.executeSQL(
+    `SELECT * FROM plans WHERE name = 'Starter'`,
   );
 
   const randomNumber = Math.random().toString(36).substring(2, 12);
@@ -680,7 +672,7 @@ export async function setupPayment(
       stripe_subscription_id
     ) VALUES (
       '${userId}',
-      '${freePlan[0].id}',
+      '${starterPlan[0].id}',
       ${now},
       ${oneYearFromNow},
       'active',
@@ -711,22 +703,8 @@ export async function setupPayment(
   const subscriptionCycleUUID = subscriptionCycle[0].id;
 
   await realmServer.executeSQL(
-    `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, subscription_cycle_id) VALUES ('${userId}', ${freePlan[0].credits_included}, 'plan_allowance', '${subscriptionCycleUUID}')`,
+    `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, subscription_cycle_id) VALUES ('${userId}', ${starterPlan[0].credits_included}, 'plan_allowance', '${subscriptionCycleUUID}')`,
   );
-
-  // Return url example: https://realms-staging.stack.cards/?from-free-plan-payment-link=true
-  // extract return url from page.url()
-  // assert return url contains ?from-free-plan-payment-link=true
-  if (page) {
-    const currentUrl = new URL(page.url());
-    const currentParams = currentUrl.searchParams;
-    await currentParams.append('from-free-plan-payment-link', 'true');
-    const returnUrl = `${currentUrl.origin}${
-      currentUrl.pathname
-    }?${currentParams.toString()}`;
-
-    await page.goto(returnUrl);
-  }
 }
 
 export async function setupUserSubscribed(
@@ -781,6 +759,26 @@ export async function getRoomEvents(
     );
   }
   return await getAllRoomEvents(roomId, accessToken);
+}
+
+export function getAgentId(
+  roomEvents: {
+    content?: {
+      data?: string;
+    };
+  }[],
+) {
+  // Iterate backwards and get the most recent agentId
+  for (let i = roomEvents.length - 1; i >= 0; i--) {
+    let event = roomEvents[i];
+    let data = event.content?.data as any;
+    if (data) {
+      let parsedData = JSON.parse(data);
+      if (parsedData.context?.agentId) {
+        return parsedData.context.agentId;
+      }
+    }
+  }
 }
 
 export async function getRoomsFromSync(username = 'user1', password = 'pass') {

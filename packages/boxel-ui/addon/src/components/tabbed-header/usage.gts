@@ -4,6 +4,7 @@ import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import Icon from '../../icons/sparkle.gts';
+import BoxelInput from '../input/index.gts';
 import TabbedHeader from './index.gts';
 
 export default class TabbedHeaderUsage extends Component {
@@ -32,6 +33,7 @@ export default class TabbedHeaderUsage extends Component {
   @tracked headerTitle = 'AI App Generator';
   @tracked activeTabId = this.tabs[0]?.tabId;
   @tracked headerColor = '#ffd800';
+  @tracked searchValue = '';
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -53,6 +55,14 @@ export default class TabbedHeaderUsage extends Component {
           <:headerIcon>
             <Icon width='25' height='25' role='presentation' />
           </:headerIcon>
+          <:sideContent>
+            <BoxelInput
+              @type='search'
+              @value={{this.searchValue}}
+              @onInput={{fn (mut this.searchValue)}}
+              placeholder='Search...'
+            />
+          </:sideContent>
         </TabbedHeader>
       </:example>
       <:api as |Args|>

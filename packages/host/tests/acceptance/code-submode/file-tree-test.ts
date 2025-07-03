@@ -8,11 +8,13 @@ import {
   triggerEvent,
 } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
+import WriteTextFileCommand from '@cardstack/host/commands/write-text-file';
 import { ScrollPositions } from '@cardstack/host/utils/local-storage-keys';
 
 import {
@@ -44,6 +46,7 @@ const indexCardSource = `
 const personCardSource = `
   import { contains, containsMany, field, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
   import StringField from "https://cardstack.com/base/string";
+import WriteTextFileCommand from '../../../app/commands/write-text-file';
   import { Friend } from './friend';
 
   export class Person extends CardDef {
@@ -349,7 +352,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       .dom('[data-test-realm-name]')
       .hasText(`In ${realmInfo.name}`)
       .hasAttribute('title', `In ${realmInfo.name}`);
-    assert.dom('[data-test-realm-writable]').exists();
+    assert.dom('[data-test-realm-read-only]').doesNotExist();
 
     await waitFor('[data-test-file="pet-person.gts"]');
 
@@ -386,8 +389,82 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
       await waitForCodeEditor();
       await waitFor('[data-test-realm-name]');
-      assert.dom('[data-test-realm-not-writable]').exists();
+      assert.dom('[data-test-realm-read-only]').exists();
     });
+  });
+
+  test('can switch realms', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-realm-name="Test Workspace B"]');
+    assert.dom('[data-test-realm-name]').hasText('In Test Workspace B');
+
+    await waitFor('[data-test-file-tree-realm-dropdown-button]');
+    await click('[data-test-file-tree-realm-dropdown-button]');
+
+    assert.dom('[data-test-boxel-menu-item-text="Base Workspace"]').exists();
+    await click('[data-test-boxel-menu-item-text="Base Workspace"]');
+
+    await waitFor('[data-test-realm-name="Base Workspace"]');
+    assert.dom('[data-test-realm-name]').hasText('In Base Workspace');
+    assert.dom('[data-test-realm-read-only]').exists();
+  });
+
+  test('switch realm with recent file exists should open the recent file', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-realm-name]');
+    assert.dom('[data-test-realm-name]').hasText('In Test Workspace B');
+
+    // go to a file with different realm
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `http://localhost:4202/test/mango.png`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+
+    await waitFor('[data-test-file-tree-realm-dropdown-button]');
+    await click('[data-test-file-tree-realm-dropdown-button]');
+
+    assert.dom('[data-test-boxel-menu-item-text="Test Workspace B"]').exists();
+    await click('[data-test-boxel-menu-item-text="Test Workspace B"]');
+
+    await waitFor('[data-test-realm-name="Test Workspace B"]');
+    assert.dom('[data-test-realm-name]').hasText('In Test Workspace B');
+    assert.dom('[data-test-realm-read-only]').doesNotExist();
+
+    await waitFor('[data-test-file="Person/1.json"]');
+    assert.dom('[data-test-file="Person/1.json"]').hasClass('selected');
   });
 
   test('navigating to a file in a different realm causes it to become active in the file tree', async function (assert) {
@@ -871,5 +948,81 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     }
 
     assert.strictEqual(scrollablePanel?.scrollTop, expectedScrollTop);
+  });
+
+  test('new directory appears in the file tree when a new file is created within it via dialog', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
+
+    let newDirName = 'new-dir';
+    let newFileName = 'new-file';
+
+    await click('[data-test-new-file-button]');
+    await click('[data-test-boxel-menu-item-text="Card Definition"]');
+    await fillIn('[data-test-display-name-field]', 'New File');
+    await fillIn('[data-test-file-name-field]', `${newDirName}/${newFileName}`);
+    await click('[data-test-create-definition]');
+
+    assert.dom(`[data-test-directory="${newDirName}/"]`).exists();
+    assert.dom(`[data-test-directory="${newDirName}/"] .icon`).hasClass('open');
+    assert.dom(`[data-test-file="${newDirName}/${newFileName}.gts"]`).exists();
+  });
+
+  test('new directory appears in the file tree when a new file is created within it via command', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
+
+    let newDirName = 'new-dir';
+    let newFileName = 'new-file.gts';
+
+    let commandService = getService('command-service');
+    let writeTextFileCommand = new WriteTextFileCommand(
+      commandService.commandContext,
+    );
+    await writeTextFileCommand.execute({
+      path: `${newDirName}/${newFileName}`,
+      content:
+        'import { CardDef, Component } from "https://cardstack.com/base/card-api";\n\nexport class NewFile extends CardDef {\n  static isolated = class Isolated extends Component<typeof this> {\n    <template>\n      <div data-test-new-file>New File Content</div>\n    </template>\n  };\n}',
+      realm: testRealmURL,
+    });
+    await settled();
+    assert.dom(`[data-test-directory="${newDirName}/"]`).exists();
+    assert
+      .dom(`[data-test-directory="${newDirName}/"] .icon`)
+      .hasClass('closed');
+    await click(`[data-test-directory="${newDirName}/"]`);
+    assert.dom(`[data-test-directory="${newDirName}/"] .icon`).hasClass('open');
+    assert.dom(`[data-test-file="${newDirName}/${newFileName}"]`).exists();
+    assert
+      .dom(`[data-test-file="${newDirName}/${newFileName}"]`)
+      .hasText(newFileName, 'New file is created with the correct name');
   });
 });

@@ -1,4 +1,3 @@
-import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -14,7 +13,7 @@ import AiAssistantSkillMenu from './index';
 export default class AiAssistantSkillMenuUsage extends Component {
   @tracked skills: RoomSkill[] = [];
 
-  @action attachSkill(cardId: string) {
+  attachSkill = async (cardId: string) => {
     this.skills = [
       ...this.skills,
       new TrackedObject({
@@ -29,7 +28,7 @@ export default class AiAssistantSkillMenuUsage extends Component {
         isActive: true,
       }),
     ];
-  }
+  };
 
   <template>
     <FreestyleUsage @name='AiAssistant::CardPicker'>

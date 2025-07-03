@@ -15,9 +15,12 @@ import { modifier } from 'ember-modifier';
 
 import { TrackedObject } from 'tracked-built-ins';
 
-import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import { Avatar, IconButton } from '@cardstack/boxel-ui/components';
-import { cn, not } from '@cardstack/boxel-ui/helpers';
+import {
+  Avatar,
+  IconButton,
+  ResizablePanelGroup,
+} from '@cardstack/boxel-ui/components';
+import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
 
 import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 
@@ -42,6 +45,10 @@ import SearchSheet, {
 import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 
 import AskAiContainer from './ask-ai-container';
+
+import ChooseSubscriptionPlanModal from './choose-subscription-plan-modal';
+
+import NewFileButton, { type NewFileOptions } from './new-file-button';
 import WorkspaceChooser from './workspace-chooser';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
@@ -57,6 +64,7 @@ interface Signature {
     onSearchSheetClosed?: () => void;
     onCardSelectFromSearch: (cardId: string) => void;
     selectedCardRef?: ResolvedCodeRef | undefined;
+    newFileOptions?: NewFileOptions;
   };
   Blocks: {
     default: [
@@ -146,13 +154,13 @@ export default class SubmodeLayout extends Component<Signature> {
     return this.operatorModeStateService.state.stacks.length === 0;
   }
 
-  @action private updateSubmode(submode: Submode) {
+  @action private async updateSubmode(submode: Submode) {
     switch (submode) {
       case Submodes.Interact:
-        this.operatorModeStateService.updateCodePath(null);
+        await this.operatorModeStateService.updateCodePath(null);
         break;
       case Submodes.Code:
-        this.operatorModeStateService.updateCodePath(
+        await this.operatorModeStateService.updateCodePath(
           this.lastCardIdInRightMostStack
             ? new URL(this.lastCardIdInRightMostStack + '.json')
             : null,
@@ -211,6 +219,13 @@ export default class SubmodeLayout extends Component<Signature> {
     this.profileSummaryOpened = false;
   }
 
+  @action private toggleSubscriptionPlans() {
+    this.isChooseSubscriptionPlanModalOpen =
+      !this.isChooseSubscriptionPlanModalOpen;
+
+    this.profileSummaryOpened = false;
+  }
+
   @action private toggleProfileSummary() {
     this.profileSummaryOpened = !this.profileSummaryOpened;
   }
@@ -248,10 +263,13 @@ export default class SubmodeLayout extends Component<Signature> {
     this.suppressSearchClose = false;
   });
 
+  @tracked private isChooseSubscriptionPlanModalOpen = false;
+
   <template>
     <div
       {{handleWindowResizeModifier this.onWindowResize}}
       class='submode-layout {{this.aiAssistantVisibilityClass}}'
+      ...attributes
     >
       <ResizablePanelGroup
         @orientation='horizontal'
@@ -267,7 +285,7 @@ export default class SubmodeLayout extends Component<Signature> {
               disabled={{this.isToggleWorkspaceChooserDisabled}}
               class={{cn
                 'workspace-button'
-                dark-icon=(not this.workspaceChooserOpened)
+                workspace-button--dark=(not this.workspaceChooserOpened)
               }}
               {{on 'click' this.toggleWorkspaceChooser}}
               data-test-workspace-chooser-toggle
@@ -279,9 +297,19 @@ export default class SubmodeLayout extends Component<Signature> {
               >BOXEL</span>
             {{else}}
               <SubmodeSwitcher
+                class='submode-switcher'
                 @submode={{this.operatorModeStateService.state.submode}}
                 @onSubmodeSelect={{this.updateSubmode}}
               />
+              {{#if @newFileOptions}}
+                <NewFileButton
+                  class='new-file-button'
+                  @dropdownOptions={{@newFileOptions}}
+                  @initiallyOpened={{bool
+                    this.operatorModeStateService.state.newFileDropdownOpen
+                  }}
+                />
+              {{/if}}
             {{/if}}
           </div>
           {{#if this.workspaceChooserOpened}}
@@ -321,7 +349,7 @@ export default class SubmodeLayout extends Component<Signature> {
           />
           {{#if config.featureFlags.SHOW_ASK_AI}}
             {{#if (not this.aiAssistantPanelService.isOpen)}}
-              <AskAiContainer @selectedCardRef={{@selectedCardRef}} />
+              <AskAiContainer />
             {{/if}}
           {{/if}}
           <AiAssistantButton
@@ -365,6 +393,7 @@ export default class SubmodeLayout extends Component<Signature> {
           exceptSelector='.profile-icon-button'
         }}
         @toggleProfileSettings={{this.toggleProfileSettings}}
+        @toggleSubscriptionPlans={{this.toggleSubscriptionPlans}}
       />
     {{/if}}
 
@@ -374,8 +403,16 @@ export default class SubmodeLayout extends Component<Signature> {
       />
     {{/if}}
 
+    <ChooseSubscriptionPlanModal
+      @isModalOpen={{this.isChooseSubscriptionPlanModalOpen}}
+      @onClose={{this.toggleSubscriptionPlans}}
+    />
+
     <style scoped>
       .submode-layout {
+        --submode-bar-item-border-radius: var(--boxel-border-radius);
+        --boxel-icon-button-width: var(--container-button-size);
+        --boxel-icon-button-height: var(--container-button-size);
         display: flex;
         height: 100%;
       }
@@ -401,7 +438,7 @@ export default class SubmodeLayout extends Component<Signature> {
         bottom: var(--operator-mode-spacing);
         right: var(--operator-mode-spacing);
         background-color: var(--boxel-ai-purple);
-        box-shadow: var(--boxel-deep-box-shadow);
+        box-shadow: var(--submode-bar-item-box-shadow);
         z-index: var(--host-ai-panel-button-z-index);
       }
 
@@ -420,11 +457,38 @@ export default class SubmodeLayout extends Component<Signature> {
         display: flex;
         align-items: center;
       }
+      .top-left-menu
+        > :deep(* + *:not(.ember-basic-dropdown-content-wormhole-origin)) {
+        margin-left: var(--operator-mode-spacing);
+      }
+
+      .code-submode-layout .top-left-menu {
+        background-color: var(--code-mode-top-bar-background-color);
+      }
 
       .boxel-title {
         color: var(--boxel-light);
         font: 900 var(--boxel-font-size-med) 'Rustica';
         letter-spacing: 3px;
+      }
+
+      .submode-switcher {
+        border: none;
+        border-radius: var(--submode-bar-item-border-radius);
+        box-shadow: var(--submode-bar-item-box-shadow);
+        outline: var(--submode-bar-item-outline);
+      }
+      .submode-switcher
+        :deep(.submode-switcher-dropdown-trigger):focus:not(:focus-visible),
+      .submode-switcher
+        :deep(.submode-switcher-dropdown-trigger):focus:not(:disabled) {
+        outline-offset: unset;
+      }
+
+      .new-file-button {
+        border: none;
+        border-radius: var(--submode-bar-item-border-radius);
+        box-shadow: var(--submode-bar-item-box-shadow);
       }
 
       .profile-icon-button {
@@ -436,21 +500,35 @@ export default class SubmodeLayout extends Component<Signature> {
         padding: 0;
         background: none;
         border: none;
-        border-radius: 50px;
+        border-radius: 50%;
+        box-shadow: var(--submode-bar-item-box-shadow);
         z-index: var(--host-profile-z-index);
       }
 
       .workspace-button {
-        --boxel-icon-button-width: var(--container-button-size);
-        --boxel-icon-button-height: var(--container-button-size);
         border: none;
-        outline: var(--boxel-border-flexible);
-        margin-right: var(--operator-mode-spacing);
-        border-radius: var(--boxel-border-radius);
+        border-radius: var(--submode-bar-item-border-radius);
+        box-shadow: var(--submode-bar-item-box-shadow);
+        flex-shrink: 0;
       }
-      .dark-icon {
+      .workspace-button:focus:not(:focus-visible) {
+        outline-offset: unset;
+      }
+      .workspace-button:focus:not(:disabled) {
+        outline-offset: 1px;
+      }
+      .workspace-button--dark {
         --icon-bg-opacity: 1;
         --icon-color: var(--boxel-dark);
+        outline: var(--submode-bar-item-outline);
+      }
+      .workspace-button--dark:focus:not(:focus-visible) {
+        outline: var(--submode-bar-item-outline);
+        outline-offset: 0px;
+      }
+      .workspace-button--dark:focus:focus-visible {
+        outline-width: 2px;
+        outline-offset: 0px;
       }
     </style>
   </template>

@@ -10,6 +10,7 @@ NODE_ENV=development \
   PGDATABASE=boxel \
   LOG_LEVELS='*=info' \
   REALM_SECRET_SEED="shhh! it's a secret" \
+  REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \
   --transpileOnly worker-manager \
   --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
@@ -24,8 +25,9 @@ NODE_ENV=development \
   --fromUrl='http://localhost:4201/experiments/' \
   --toUrl='http://localhost:4201/experiments/' \
   \
-  --fromUrl='http://localhost:4201/seed/' \
-  --toUrl='http://localhost:4201/seed/' \
-  \
   --fromUrl='http://localhost:4201/catalog/' \
-  --toUrl='http://localhost:4201/catalog/'
+  --toUrl='http://localhost:4201/catalog/' \
+  \
+  --fromUrl='http://localhost:4201/skills/' \
+  --toUrl='http://localhost:4201/skills/'
+

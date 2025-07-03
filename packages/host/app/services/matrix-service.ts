@@ -4,7 +4,7 @@ import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 import { cached, tracked } from '@glimmer/tracking';
 
-import { task, dropTask } from 'ember-concurrency';
+import { dropTask, task, timeout } from 'ember-concurrency';
 import window from 'ember-window-mock';
 import { cloneDeep } from 'lodash';
 import {
@@ -13,6 +13,7 @@ import {
   type RoomMember,
   type EmittedEvents,
 } from 'matrix-js-sdk';
+import { Filter } from 'matrix-js-sdk';
 import {
   type SlidingSync,
   type MSC3575List,
@@ -31,13 +32,8 @@ import {
   logger,
   ResolvedCodeRef,
   isCardInstance,
+  Deferred,
 } from '@cardstack/runtime-common';
-
-import {
-  basicMappings,
-  generateJsonSchemaForCardType,
-  getPatchTool,
-} from '@cardstack/runtime-common/helpers/ai';
 
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
@@ -58,6 +54,12 @@ import {
   DEFAULT_LLM_LIST,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+  SLIDING_SYNC_AI_ROOM_LIST_NAME,
+  SLIDING_SYNC_AUTH_ROOM_LIST_NAME,
+  SLIDING_SYNC_LIST_RANGE_END,
+  SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+  SLIDING_SYNC_TIMEOUT,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -72,6 +74,10 @@ import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
 import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import {
+  CardForAttachmentCard,
+  FileForAttachmentCard,
+} from 'https://cardstack.com/base/command';
 import type * as FileAPI from 'https://cardstack.com/base/file-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 import type {
@@ -89,6 +95,7 @@ import type {
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
+import { addPatchTools } from '../commands/utils';
 import { isSkillCard } from '../lib/file-def-manager';
 import { importResource } from '../resources/import';
 
@@ -118,10 +125,6 @@ import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
-const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
-const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
-const SLIDING_SYNC_LIST_RANGE_END = 9;
-const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
 
 const realmEventsLogger = logger('realm:events');
 
@@ -140,7 +143,6 @@ export default class MatrixService extends Service {
   @service declare private store: StoreService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
-  @tracked private _isNewUser = false;
   @tracked private postLoginCompleted = false;
   @tracked private _currentRoomId: string | undefined;
   @tracked private timelineLoadingState: Map<string, boolean> =
@@ -168,6 +170,7 @@ export default class MatrixService extends Service {
   private timelineQueue: { event: MatrixEvent; oldEventId?: string }[] = [];
   private roomStateQueue: MatrixSDK.RoomState[] = [];
   #ready: Promise<void>;
+  #clientReadyDeferred = new Deferred<void>();
   #matrixSDK: ExtendedMatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
   currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
@@ -176,6 +179,7 @@ export default class MatrixService extends Service {
   private slidingSync: SlidingSync | undefined;
   private aiRoomIds: Set<string> = new Set();
   @tracked private _isLoadingMoreAIRooms = false;
+  agentId = uuidv4();
 
   constructor(owner: Owner) {
     super(owner);
@@ -232,6 +236,7 @@ export default class MatrixService extends Service {
     this._client = this.matrixSDK.createClient({
       baseUrl: matrixURL,
     });
+    this.#clientReadyDeferred.fulfill();
 
     // building the event bindings like this so that we can consistently bind
     // and unbind these events programmatically--this way if we add a new event
@@ -364,10 +369,6 @@ export default class MatrixService extends Service {
     return this._isInitializingNewUser;
   }
 
-  get isNewUser() {
-    return this._isNewUser;
-  }
-
   async initializeNewUser(
     auth: LoginResponse,
     displayName: string,
@@ -395,7 +396,8 @@ export default class MatrixService extends Service {
       }),
       this.realmServer.fetchCatalogRealms(),
     ]);
-    this._isNewUser = true;
+
+    this.router.refresh();
     this._isInitializingNewUser = false;
   }
 
@@ -404,20 +406,17 @@ export default class MatrixService extends Service {
     name,
     iconURL,
     backgroundURL,
-    copyFromSeedRealm,
   }: {
     endpoint: string;
     name: string;
     iconURL?: string;
     backgroundURL?: string;
-    copyFromSeedRealm?: boolean;
   }) {
     let personalRealmURL = await this.realmServer.createRealm({
       endpoint,
       name,
       iconURL,
       backgroundURL,
-      copyFromSeedRealm,
     });
     let { realms = [] } =
       (await this.client.getAccountDataFromServer<{ realms: string[] }>(
@@ -555,7 +554,7 @@ export default class MatrixService extends Service {
         timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT,
       },
       this.client as any,
-      30000,
+      SLIDING_SYNC_TIMEOUT,
     );
     this.slidingSync.on(
       SlidingSyncEvent.Lifecycle,
@@ -563,6 +562,7 @@ export default class MatrixService extends Service {
         state: SlidingSyncState | null,
         resp: MSC3575SlidingSyncResponse | null,
       ) => {
+        console.log('SlidingSync lifecycle event', { state, resp });
         if (
           state === SlidingSyncState.Complete &&
           resp &&
@@ -602,6 +602,7 @@ export default class MatrixService extends Service {
   }
 
   async createRealmSession(realmURL: URL) {
+    await this.#clientReadyDeferred.promise;
     return this.client.createRealmSession(realmURL);
   }
 
@@ -765,6 +766,14 @@ export default class MatrixService extends Service {
     await this.client.cacheContentHashIfNeeded(event);
   }
 
+  async sendStopGeneratingEvent(roomId: string) {
+    return await this.client.sendEvent(
+      roomId,
+      APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+      {},
+    );
+  }
+
   async sendCommandResultEvent(
     roomId: string,
     invokedToolFromEventId: string,
@@ -783,6 +792,24 @@ export default class MatrixService extends Service {
       attachedCards,
       attachedFiles,
     );
+    if ((resultCard as FileForAttachmentCard)?.fileForAttachment) {
+      contentData.attachedFiles.push(
+        (
+          (resultCard as FileForAttachmentCard)!
+            .fileForAttachment as unknown as FileDef
+        ).serialize(),
+      );
+      resultCardFileDef = undefined; // don't send the card as a result if the file is attached
+    }
+    if ((resultCard as CardForAttachmentCard)?.cardForAttachment) {
+      contentData.attachedCards.push(
+        (
+          (resultCard as CardForAttachmentCard)!
+            .cardForAttachment as unknown as FileDef
+        ).serialize(),
+      );
+      resultCardFileDef = undefined; // don't send the card as a result if the card is attached
+    }
     let content:
       | CommandResultWithNoOutputContent
       | CommandResultWithOutputContent;
@@ -879,25 +906,21 @@ export default class MatrixService extends Service {
     context?: BoxelContext,
   ): Promise<void> {
     let tools: Tool[] = [];
-    let attachedOpenCards: CardDef[] = [];
-    let mappings = await basicMappings(this.loaderService.loader);
     // Open cards are attached automatically
     // If they are not attached, the user is not allowing us to
     // modify them
-    attachedOpenCards = attachedCards.filter((c) =>
-      (context?.openCardIds ?? []).includes(c.id),
-    );
+    let openCardIds = context?.openCardIds ?? [];
+    let patchableCards = attachedCards
+      .filter((c) => openCardIds.includes(c.id))
+      .filter((c) => this.realm.canWrite(c.id));
     // Generate tool calls for patching currently open cards permitted for modification
-    for (let attachedOpenCard of attachedOpenCards) {
-      let patchSpec = generateJsonSchemaForCardType(
-        attachedOpenCard.constructor as typeof CardDef,
+    tools = tools.concat(
+      await addPatchTools(
+        this.commandService.commandContext,
+        patchableCards,
         this.cardAPI,
-        mappings,
-      );
-      if (this.realm.canWrite(attachedOpenCard.id)) {
-        tools.push(getPatchTool(attachedOpenCard.id, patchSpec));
-      }
-    }
+      ),
+    );
 
     await this.updateSkillsAndCommandsIfNeeded(roomId);
     let contentData = await this.withContextAndAttachments(
@@ -916,7 +939,6 @@ export default class MatrixService extends Service {
         attachedCards: contentData.attachedCards,
         context: {
           ...contentData.context,
-          openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
           debug: context?.debug,
           functions: [],
@@ -1015,10 +1037,7 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [
-      `${baseRealm.url}Skill/boxel-environment`,
-      `${baseRealm.url}Skill/card-editing`,
-    ];
+    let interactModeDefaultSkills = [`${baseRealm.url}Skill/boxel-environment`];
 
     let codeModeDefaultSkills = [
       `${baseRealm.url}Skill/boxel-environment`,
@@ -1288,16 +1307,41 @@ export default class MatrixService extends Service {
 
     this.timelineLoadingState.set(roomId, true);
     try {
-      while (room.oldState.paginationToken != null) {
-        await this.client.scrollback(room);
-        let rs = room.getLiveTimeline().getState('f' as MatrixSDK.Direction);
-        if (rs) {
-          roomData.notifyRoomStateUpdated(rs);
-        }
+      // Create a filter that includes all events
+      let filter = new Filter(this.client.getUserId()!, 'old_messages');
+      filter.setDefinition({
+        room: {
+          timeline: {
+            limit: 30,
+            not_types: [APP_BOXEL_STOP_GENERATING_EVENT_TYPE],
+            'org.matrix.msc3874.not_rel_types': ['m.replace'],
+          },
+        },
+      });
+
+      // Get or create a filtered timeline set
+      let timelineSet = room.getOrCreateFilteredTimelineSet(filter, {
+        prepopulateTimeline: true,
+        useSyncEvents: true,
+      });
+
+      let timeline = timelineSet.getLiveTimeline();
+      if (timeline.getPaginationToken('b' as MatrixSDK.Direction) == null) {
+        return;
+      }
+
+      while (timeline.getPaginationToken('b' as MatrixSDK.Direction) != null) {
+        await this.client.paginateEventTimeline(timeline, {
+          backwards: true,
+        });
+      }
+
+      let rs = room.getLiveTimeline().getState('f' as MatrixSDK.Direction);
+      if (rs) {
+        roomData.notifyRoomStateUpdated(rs);
       }
 
       // Wait for all events to be loaded in roomResource
-      let timeline = room.getLiveTimeline();
       let events = timeline.getEvents();
       this.timelineQueue.push(...events.map((e) => ({ event: e })));
       await this.drainTimeline();
@@ -1566,12 +1610,14 @@ export default class MatrixService extends Service {
           'Ignoring realm event because no realm found',
           event,
         );
-      } else if (realmResourceForEvent.info?.realmUserId !== event.sender) {
-        realmEventsLogger.debug(
-          `Ignoring realm event because sender ${event.sender} is not the realm user ${realmResourceForEvent.info?.realmUserId}`,
-          event,
-        );
       } else {
+        if (realmResourceForEvent.info?.realmUserId !== event.sender) {
+          realmEventsLogger.warn(
+            `Realm event sender ${event.sender} is not the realm user ${realmResourceForEvent.info?.realmUserId}`,
+            event,
+          );
+        }
+
         (event.content as any).origin_server_ts = event.origin_server_ts;
         this.messageService.relayRealmEvent(
           realmResourceForEvent.url,
@@ -1650,10 +1696,20 @@ export default class MatrixService extends Service {
 
     this._isLoadingMoreAIRooms = true;
     try {
+      // Temporarily disable timeout to get immediate response when changing list ranges.
+      // Without this, the server would hold the request open for 30 seconds waiting for
+      // "new" data, even though we want the expanded range data immediately.
+      // This prevents the poor UX of waiting 30 seconds after calling setListRanges.
+      // @ts-expect-error bypassing "private readonly" TS annotation
+      this.slidingSync.timeoutMS = 0;
       await this.slidingSync.setListRanges(SLIDING_SYNC_AI_ROOM_LIST_NAME, [
         [0, newEndRange],
       ]);
     } finally {
+      // Restore normal long-polling timeout for efficient background syncing
+      // @ts-expect-error bypassing "private readonly" TS annotation
+      this.slidingSync.timeoutMS = SLIDING_SYNC_TIMEOUT;
+      await timeout(500); // keep the spinner up a bit longer while the new rooms are rendered
       this._isLoadingMoreAIRooms = false;
     }
   });

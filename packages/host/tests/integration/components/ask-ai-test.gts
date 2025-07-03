@@ -140,10 +140,9 @@ module('Integration | ask-ai', function (hooks) {
     });
     assert
       .dom('[data-test-ai-assistant-panel] [data-test-chat-title]')
-      .hasText('New AI Assistant Chat');
-    assert
-      .dom('[data-test-pill-menu-header]')
-      .containsText('2 of 2 Skills Active');
+      .hasText('New AI Assistant Chat')
+      .hasAttribute('title', 'New AI Assistant Chat');
+    assert.dom('[data-test-active-skills-count]').containsText('1 Skill');
     await assertMessages(assert, [
       {
         from: 'testuser',
@@ -177,9 +176,7 @@ module('Integration | ask-ai', function (hooks) {
     assert
       .dom('[data-test-ai-assistant-panel] [data-test-chat-title]')
       .hasText('New AI Assistant Chat');
-    assert
-      .dom('[data-test-pill-menu-header]')
-      .containsText('2 of 2 Skills Active');
+    assert.dom('[data-test-active-skills-count]').containsText('1 Skill');
     await assertMessages(assert, [
       {
         from: 'testuser',
@@ -198,6 +195,7 @@ module('Integration | ask-ai', function (hooks) {
       stacks: [[{ id: mangoId, format: 'isolated' }]],
       submode: 'code',
       codePath: petCardId,
+      moduleInspector: 'preview',
     });
     setPlaygroundSelections({
       [`${petCardId.replace('.gts', '')}/Pet`]: {
@@ -224,9 +222,7 @@ module('Integration | ask-ai', function (hooks) {
     assert
       .dom('[data-test-ai-assistant-panel] [data-test-chat-title]')
       .hasText('New AI Assistant Chat');
-    assert
-      .dom('[data-test-pill-menu-header]')
-      .containsText('3 of 3 Skills Active');
+    assert.dom('[data-test-active-skills-count]').containsText('3 Skills');
     await assertMessages(assert, [
       {
         from: 'testuser',

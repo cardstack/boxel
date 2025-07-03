@@ -64,7 +64,7 @@ export default class NewSession extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp-xl);
         height: 100%;
-        padding: var(--boxel-sp) var(--boxel-sp-xxxs) 0;
+        padding: var(--boxel-sp-xl) var(--boxel-sp-xxxs) 0;
         color: var(--boxel-light);
         letter-spacing: var(--boxel-lsp);
         overflow: auto;
@@ -97,6 +97,8 @@ export default class NewSession extends Component<Signature> {
       .prompt::before {
         display: inline-block;
         margin-right: var(--boxel-sp-sm);
+        /* 1.5px for both values causes a build failure TODO fix in CS-8981 */
+        padding: 0 0 1.49px 1.5px;
         content: '?';
         width: 1.25rem;
         height: 1.25rem;

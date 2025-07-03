@@ -1,18 +1,20 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
+
 import { tracked } from '@glimmer/tracking';
+
+import Eye from '@cardstack/boxel-icons/eye';
+import FileCog from '@cardstack/boxel-icons/file-cog';
+import Schema from '@cardstack/boxel-icons/schema';
 
 import { task } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
-
-import { TrackedObject } from 'tracked-built-ins';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
@@ -55,32 +57,33 @@ import { type Ready } from '@cardstack/host/resources/file';
 import type { FileResource } from '@cardstack/host/resources/file';
 import {
   type CardOrFieldDeclaration,
-  type ModuleContentsResource,
+  type ModuleAnalysis,
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
+import { DEFAULT_MODULE_INSPECTOR_VIEW } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type { ModuleInspectorView } from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import { CodeModePanelSelections } from '@cardstack/host/utils/local-storage-keys';
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
-export type ActiveModuleInspectorView = 'schema' | 'spec' | 'preview';
+import type { ComponentLike } from '@glint/template';
 
-const moduleInspectorPanels: ActiveModuleInspectorView[] = [
-  'schema',
-  'preview',
-  'spec',
-];
+const moduleInspectorPanels: Record<ModuleInspectorView, ComponentLike> = {
+  schema: Schema,
+  preview: Eye,
+  spec: FileCog,
+};
 
 interface ModuleInspectorSignature {
   Args: {
@@ -96,7 +99,7 @@ interface ModuleInspectorSignature {
     isIncompatibleFile: boolean;
     isModule: boolean;
     isReadOnly: boolean;
-    moduleContentsResource: ModuleContentsResource;
+    moduleAnalysis: ModuleAnalysis;
     previewFormat: Format;
     readyFile: Ready;
     selectedCardOrField: CardOrFieldDeclaration | undefined;
@@ -121,19 +124,8 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   @tracked private specSearch: ReturnType<getCards<Spec>> | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
-  private panelSelections: Record<string, ActiveModuleInspectorView>;
-
-  constructor(owner: Owner, args: ModuleInspectorSignature['Args']) {
-    super(owner, args);
-
-    let panelSelections = window.localStorage.getItem(CodeModePanelSelections);
-    this.panelSelections = new TrackedObject(
-      panelSelections ? JSON.parse(panelSelections) : {},
-    );
-  }
-
   private get declarations() {
-    return this.args.moduleContentsResource?.declarations;
+    return this.args.moduleAnalysis?.declarations;
   }
 
   get showSpecPreview() {
@@ -166,7 +158,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       }
     }
 
-    if (this.args.moduleContentsResource.moduleError) {
+    if (this.args.moduleAnalysis.moduleError) {
       return null; // Handled in code-submode schema editor
     }
 
@@ -177,7 +169,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     // If the module is incompatible
     if (this.args.isModule) {
       //this will prevent displaying message during a page refresh
-      if (this.args.moduleContentsResource.isLoading) {
+      if (this.args.moduleAnalysis.isLoading) {
         return null;
       }
       if (!this.hasCardDefOrFieldDef) {
@@ -206,18 +198,15 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     return null;
   }
 
-  private get activePanel(): ActiveModuleInspectorView {
-    let selection = this.panelSelections[this.args.readyFile.url];
-    return selection ?? 'schema';
+  private get activePanel(): ModuleInspectorView {
+    return (
+      this.operatorModeStateService.state.moduleInspector ??
+      DEFAULT_MODULE_INSPECTOR_VIEW
+    );
   }
 
-  @action private setActivePanel(item: ActiveModuleInspectorView) {
-    this.panelSelections[this.args.readyFile.url] = item;
-    // persist in local storage
-    window.localStorage.setItem(
-      CodeModePanelSelections,
-      JSON.stringify(this.panelSelections),
-    );
+  @action private setActivePanel(item: ModuleInspectorView) {
+    this.operatorModeStateService.updateModuleInspectorView(item);
   }
 
   private updatePlaygroundSelectionsFromSpec = (spec: Spec) => {
@@ -340,11 +329,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     return this.cardResource?.card as Spec;
   }
 
-  private get selectedView(): ActiveModuleInspectorView {
-    let selection = this.panelSelections[this.args.readyFile.url];
-    return selection ?? 'schema';
-  }
-
   private createSpecTask = task(
     async (ref: ResolvedCodeRef, specType: SpecType) => {
       let relativeTo = new URL(ref.module);
@@ -367,7 +351,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           doNotWaitForPersist: true,
         });
         this.specPanelService.setSelection(spec[localId]);
-        if (this.selectedView !== 'spec') {
+        if (this.activePanel !== 'spec') {
           this.setActivePanel('spec');
         }
       } catch (e: any) {
@@ -441,7 +425,9 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     {{#if this.isCardPreviewError}}
       {{! this is here to make TS happy, this is always true }}
       {{#if @cardError}}
-        <CardError @error={{@cardError}} @hideHeader={{true}} />
+        <section class='module-inspector-content error'>
+          <CardError @error={{@cardError}} />
+        </section>
       {{/if}}
     {{else if this.isEmptyFile}}
       <SyntaxErrorDisplay @syntaxErrors='File is empty' />
@@ -459,7 +445,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
       <SchemaEditor
         @file={{@readyFile}}
-        @moduleContentsResource={{@moduleContentsResource}}
+        @moduleAnalysis={{@moduleAnalysis}}
         @card={{@selectedCardOrField.cardOrField}}
         @cardTypeResource={{@selectedCardOrField.cardType}}
         @goToDefinition={{@goToDefinitionAndResetCursorPosition}}
@@ -475,47 +461,50 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           }}
           data-test-preview-panel-header
         >
-          {{#each moduleInspectorPanels as |moduleInspectorView|}}
+          {{#each-in moduleInspectorPanels as |moduleInspectorView icon|}}
             <ToggleButton
               class='toggle-button'
-              @isActive={{eq this.selectedView moduleInspectorView}}
+              @icon={{icon}}
+              @isActive={{eq this.activePanel moduleInspectorView}}
               {{on 'click' (fn this.setActivePanel moduleInspectorView)}}
               data-test-module-inspector-view={{moduleInspectorView}}
             >
-              {{capitalize moduleInspectorView}}
-              {{#if (eq moduleInspectorView 'spec')}}
-                <SpecPreviewBadge
-                  @spec={{this.activeSpec}}
-                  @showCreateSpec={{this.showCreateSpec}}
-                  @createSpec={{this.createSpec}}
-                  @isCreateSpecInstanceRunning={{this.createSpecTask.isRunning}}
-                  @numberOfInstances={{this.specsForSelectedDefinition.length}}
-                />
-              {{else if (eq moduleInspectorView 'schema')}}
-                <SchemaEditorBadge />
-              {{/if}}
+              <:default>{{capitalize moduleInspectorView}}</:default>
+              <:annotation>
+                {{#if (eq moduleInspectorView 'spec')}}
+                  <SpecPreviewBadge
+                    @spec={{this.activeSpec}}
+                    @showCreateSpec={{this.showCreateSpec}}
+                    @createSpec={{this.createSpec}}
+                    @isCreateSpecInstanceRunning={{this.createSpecTask.isRunning}}
+                    @numberOfInstances={{this.specsForSelectedDefinition.length}}
+                  />
+                {{else if (eq moduleInspectorView 'schema')}}
+                  <SchemaEditorBadge />
+                {{/if}}
+              </:annotation>
             </ToggleButton>
-          {{/each}}
+          {{/each-in}}
         </header>
 
         <section
           class='module-inspector-content'
           data-test-module-inspector='card-or-field'
-          data-test-active-module-inspector-view={{this.selectedView}}
+          data-test-active-module-inspector-view={{this.activePanel}}
         >
-          {{#if (eq this.selectedView 'schema')}}
+          {{#if (eq this.activePanel 'schema')}}
             <SchemaEditorPanel class='non-preview-panel-content' />
-          {{else if (eq this.selectedView 'preview')}}
+          {{else if (eq this.activePanel 'preview')}}
             <Playground
               @isOpen={{eq this.activePanel 'preview'}}
               @codeRef={{@selectedCodeRef}}
-              @isUpdating={{@moduleContentsResource.isLoading}}
+              @isUpdating={{@moduleAnalysis.isLoading}}
               @cardOrField={{@selectedCardOrField.cardOrField}}
             />
-          {{else if (eq this.selectedView 'spec')}}
+          {{else if (eq this.activePanel 'spec')}}
             <SpecPreview
               @selectedDeclaration={{@selectedDeclaration}}
-              @isLoadingNewModule={{@moduleContentsResource.isLoadingNewModule}}
+              @isLoadingNewModule={{@moduleAnalysis.isLoadingNewModule}}
               @setActiveModuleInspectorPanel={{this.setActivePanel}}
               @isPanelOpen={{eq this.activePanel 'spec'}}
               @selectedDeclarationAsCodeRef={{this.selectedDeclarationAsCodeRef}}
@@ -540,15 +529,13 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           {{/if}}
         </section>
       </SchemaEditor>
-    {{else if @moduleContentsResource.moduleError}}
+    {{else if @moduleAnalysis.moduleError}}
       <SyntaxErrorDisplay
-        @syntaxErrors={{@moduleContentsResource.moduleError.message}}
+        @syntaxErrors={{@moduleAnalysis.moduleError.message}}
       />
     {{else if @card}}
       <CardRendererPanel
-        class='card-renderer-panel'
         @card={{@card}}
-        @realmURL={{this.operatorModeStateService.realmURL}}
         @format={{@previewFormat}}
         @setFormat={{@setPreviewFormat}}
         data-test-card-resource-loaded
@@ -562,16 +549,30 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs);
         border-bottom: var(--boxel-border);
+        background-color: transparent;
       }
 
       .module-inspector-content {
-        overflow: scroll;
+        overflow: auto;
         height: 100%;
+        background-color: var(--boxel-light);
+      }
+
+      .module-inspector-content.error {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: var(--boxel-dark);
+      }
+
+      .module-inspector-content.error :deep(.error-header) {
+        width: 100%;
       }
 
       .toggle-button {
-        justify-content: space-between;
-        padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp);
+        padding-right: var(--boxel-sp-xxxs);
       }
 
       .file-incompatible-message {

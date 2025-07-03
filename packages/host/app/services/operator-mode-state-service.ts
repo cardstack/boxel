@@ -7,6 +7,7 @@ import Service, { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
 
 import { task, restartableTask } from 'ember-concurrency';
+import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
@@ -16,9 +17,9 @@ import {
   CodeRef,
   isResolvedCodeRef,
   isCardInstance,
-  type ResolvedCodeRef,
-  internalKeyFor,
   isLocalId,
+  SupportedMimeType,
+  internalKeyFor,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
@@ -33,7 +34,9 @@ import { maybe } from '@cardstack/host/resources/maybe';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import { PlaygroundSelection } from '@cardstack/host/services/playground-panel-service';
 import type Realm from '@cardstack/host/services/realm';
+import type RealmServer from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
@@ -45,10 +48,16 @@ import { type Stack } from '../components/operator-mode/interact-submode';
 
 import { removeFileExtension } from '../components/search-sheet/utils';
 
+import {
+  ModuleInspectorSelections,
+  PlaygroundSelections,
+} from '../utils/local-storage-keys';
+
 import MatrixService from './matrix-service';
 import NetworkService from './network';
 
 import type CardService from './card-service';
+import type CodeSemanticsService from './code-semantics-service';
 import type { RecentFile } from './recent-files-service';
 import type ResetService from './reset';
 import type SpecPanelService from './spec-panel-service';
@@ -69,6 +78,9 @@ export interface OperatorModeState {
   openDirs: Map<string, string[]>;
   codeSelection?: string;
   fieldSelection?: string;
+  moduleInspector?: ModuleInspectorView;
+  newFileDropdownOpen?: boolean;
+  cardPreviewFormat: Format;
 }
 
 interface CardItem {
@@ -90,28 +102,39 @@ export type SerializedState = {
   codeSelection?: string;
   fieldSelection?: string;
   aiAssistantOpen?: boolean;
+  moduleInspector?: ModuleInspectorView;
+  cardPreviewFormat?: Format;
 };
 
 interface OpenFileSubscriber {
   onStateChange: (state: FileResource['state']) => void;
 }
 
+export type ModuleInspectorView = 'schema' | 'spec' | 'preview';
+export const DEFAULT_MODULE_INSPECTOR_VIEW: ModuleInspectorView = 'schema';
+
 export default class OperatorModeStateService extends Service {
-  @tracked state: OperatorModeState = new TrackedObject({
+  @tracked private _state: OperatorModeState = new TrackedObject({
     stacks: new TrackedArray<Stack>([]),
     submode: Submodes.Interact,
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
     aiAssistantOpen: false,
+    newFileDropdownOpen: false,
+    cardPreviewFormat: 'isolated' as Format,
   });
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
   private cardTitles = new TrackedMap<string, string>();
 
+  private moduleInspectorHistory: Record<string, ModuleInspectorView>;
+
   @service declare private cardService: CardService;
+  @service declare private codeSemanticsService: CodeSemanticsService;
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private realm: Realm;
+  @service declare private realmServer: RealmServer;
   @service declare private recentCardsService: RecentCardsService;
   @service declare private recentFilesService: RecentFilesService;
   @service declare private router: RouterService;
@@ -125,29 +148,64 @@ export default class OperatorModeStateService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.reset.register(this);
+
+    let moduleInspectorHistory = window.localStorage.getItem(
+      ModuleInspectorSelections,
+    );
+    this.moduleInspectorHistory = new TrackedObject(
+      moduleInspectorHistory ? JSON.parse(moduleInspectorHistory) : {},
+    );
+  }
+
+  get state() {
+    return {
+      stacks: this._state.stacks,
+      submode: this._state.submode,
+      codePath: this._state.codePath,
+      fileView: this._state.fileView,
+      openDirs: this._state.openDirs,
+      codeSelection: this._state.codeSelection,
+      fieldSelection: this._state.fieldSelection,
+      aiAssistantOpen: this._state.aiAssistantOpen,
+      moduleInspector: this._state.moduleInspector,
+      newFileDropdownOpen: this._state.newFileDropdownOpen,
+      cardPreviewFormat: this._state.cardPreviewFormat,
+    } as const;
   }
 
   get aiAssistantOpen() {
-    return this.state.aiAssistantOpen;
+    return this._state.aiAssistantOpen;
   }
 
   openAiAssistant = () => {
-    this.state.aiAssistantOpen = true;
+    this._state.aiAssistantOpen = true;
     this.schedulePersist();
   };
 
   closeAiAssistant = () => {
-    this.state.aiAssistantOpen = false;
+    this._state.aiAssistantOpen = false;
+    this.schedulePersist();
+  };
+
+  setNewFileDropdownOpen = () => {
+    this._state.newFileDropdownOpen = true;
+    this.schedulePersist();
+  };
+  setNewFileDropdownClosed = () => {
+    this._state.newFileDropdownOpen = false;
     this.schedulePersist();
   };
 
   resetState() {
-    this.state = new TrackedObject({
+    this._state = new TrackedObject({
       stacks: new TrackedArray([]),
       submode: Submodes.Interact,
       codePath: null,
       openDirs: new TrackedMap<string, string[]>(),
       aiAssistantOpen: false,
+      moduleInspector: DEFAULT_MODULE_INSPECTOR_VIEW,
+      newFileDropdownOpen: false,
+      cardPreviewFormat: 'isolated' as Format,
     });
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
@@ -155,23 +213,23 @@ export default class OperatorModeStateService extends Service {
   }
 
   restore(rawState: SerializedState) {
-    this.state = this.deserialize(rawState);
+    this._state = this.deserialize(rawState);
   }
 
   addItemToStack(item: StackItem) {
     let stackIndex = item.stackIndex;
-    if (!this.state.stacks[stackIndex]) {
-      this.state.stacks[stackIndex] = new TrackedArray([]);
+    if (!this._state.stacks[stackIndex]) {
+      this._state.stacks[stackIndex] = new TrackedArray([]);
     }
     if (
       item.id &&
-      this.state.stacks[stackIndex].find((i: StackItem) => i.id === item.id)
+      this._state.stacks[stackIndex].find((i: StackItem) => i.id === item.id)
     ) {
       // this card is already in the stack, do nothing (maybe we could hoist
       // this card to the top instead?)
       return;
     }
-    this.state.stacks[stackIndex].push(item);
+    this._state.stacks[stackIndex].push(item);
     if (item.id) {
       this.recentCardsService.add(item.id);
     }
@@ -190,7 +248,7 @@ export default class OperatorModeStateService extends Service {
 
     // remove all stack items for the deleted card
     let items: StackItem[] = [];
-    for (let stack of this.state.stacks || []) {
+    for (let stack of this._state.stacks || []) {
       items.push(
         ...(stack.filter(
           (i: StackItem) => i.id && removeFileExtension(i.id) === cardId,
@@ -212,17 +270,17 @@ export default class OperatorModeStateService extends Service {
 
   trimItemsFromStack(item: StackItem) {
     let stackIndex = item.stackIndex;
-    let itemIndex = this.state.stacks[stackIndex].indexOf(item);
-    this.state.stacks[stackIndex].splice(itemIndex); // Remove anything above the item
+    let itemIndex = this._state.stacks[stackIndex].indexOf(item);
+    this._state.stacks[stackIndex].splice(itemIndex); // Remove anything above the item
 
     // If the resulting stack is now empty, remove it
-    if (this.stackIsEmpty(stackIndex) && this.state.stacks.length >= 1) {
-      this.state.stacks.splice(stackIndex, 1);
+    if (this.stackIsEmpty(stackIndex) && this._state.stacks.length >= 1) {
+      this._state.stacks.splice(stackIndex, 1);
 
       // If we just removed the last item in the stack, and we also removed the stack because of that, we need
       // to update the stackIndex of all items in the stacks that come after the removed stack.
       // This is another code smell that the stackIndex should perhaps not not live in the item. For now, we keep it for convenience.
-      this.state.stacks
+      this._state.stacks
         .filter((_, stackIndex) => stackIndex >= item.stackIndex)
         .forEach((stack, realStackIndex) => {
           stack.forEach((stackItem: StackItem) => {
@@ -233,7 +291,7 @@ export default class OperatorModeStateService extends Service {
         });
     }
 
-    if (this.state.stacks.length === 0) {
+    if (this._state.stacks.length === 0) {
       this.operatorModeController.workspaceChooserOpened = true;
     }
 
@@ -241,7 +299,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   popItemFromStack(stackIndex: number) {
-    let stack = this.state.stacks[stackIndex];
+    let stack = this._state.stacks[stackIndex];
     if (!stack) {
       throw new Error(`No stack at index ${stackIndex}`);
     }
@@ -255,7 +313,7 @@ export default class OperatorModeStateService extends Service {
 
   replaceItemInStack(item: StackItem, newItem: StackItem) {
     let stackIndex = item.stackIndex;
-    let itemIndex = this.state.stacks[stackIndex].indexOf(item);
+    let itemIndex = this._state.stacks[stackIndex].indexOf(item);
 
     if (newItem.stackIndex !== stackIndex) {
       // this could be a smell that the stack index should not live in the item
@@ -264,12 +322,12 @@ export default class OperatorModeStateService extends Service {
       );
     }
 
-    this.state.stacks[stackIndex].splice(itemIndex, 1, newItem);
+    this._state.stacks[stackIndex].splice(itemIndex, 1, newItem);
     this.schedulePersist();
   }
 
   clearStackAndAdd(stackIndex: number, newItem: StackItem) {
-    let itemsToPopCount = this.state.stacks[stackIndex].length;
+    let itemsToPopCount = this._state.stacks[stackIndex].length;
 
     for (let i = 0; i < itemsToPopCount; i++) {
       this.popItemFromStack(stackIndex);
@@ -279,35 +337,38 @@ export default class OperatorModeStateService extends Service {
   }
 
   numberOfStacks() {
-    return this.state.stacks.length;
+    return this._state.stacks.length;
   }
 
   rightMostStack() {
     if (this.numberOfStacks() > 0) {
-      return this.state.stacks[this.state.stacks.length - 1];
+      return this._state.stacks[this._state.stacks.length - 1];
     }
     return;
   }
 
   topMostStackItems() {
-    return this.state.stacks
+    return this._state.stacks
       .filter((stack) => stack.length > 0)
       .map((stack) => stack[stack.length - 1]);
   }
 
-  getOpenCardIds(selectedCardRef?: ResolvedCodeRef): string[] {
-    if (this.state.submode === Submodes.Code) {
+  get isViewingCardInCodeMode() {
+    return (
+      this._state.submode === Submodes.Code &&
+      this.codePathString?.endsWith('.json')
+    );
+  }
+
+  getOpenCardIds(): string[] {
+    if (this._state.submode === Submodes.Code) {
       let openCardsInCodeMode = [];
-      // selectedCardRef is only needed for determining open playground card id in code submode
-      if (selectedCardRef) {
-        let moduleId = internalKeyFor(selectedCardRef, undefined);
-        openCardsInCodeMode.push(
-          this.playgroundPanelService.getSelection(moduleId)?.cardId,
-        );
+      if (this.playgroundPanelSelection) {
+        openCardsInCodeMode.push(this.playgroundPanelSelection.cardId);
       }
       // Alternatively we may simply be looking at a card in code mode
-      if (this.state.codePath?.href.endsWith('.json')) {
-        let cardId = this.state.codePath.href.replace(/\.json$/, '');
+      if (this.isViewingCardInCodeMode) {
+        let cardId = this.codePathString!.replace(/\.json$/, '');
         if (!openCardsInCodeMode.includes(cardId)) {
           openCardsInCodeMode.push(cardId);
         }
@@ -322,8 +383,8 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
-  getOpenCards = restartableTask(async (selectedCardRef?: ResolvedCodeRef) => {
-    let cardIds = this.getOpenCardIds(selectedCardRef);
+  getOpenCards = restartableTask(async () => {
+    let cardIds = this.getOpenCardIds();
     if (!cardIds) {
       return;
     }
@@ -334,14 +395,14 @@ export default class OperatorModeStateService extends Service {
   });
 
   get openFileURL(): string | undefined {
-    if (this.state.submode === Submodes.Code) {
-      return this.state.codePath?.href;
+    if (this._state.submode === Submodes.Code) {
+      return this._state.codePath?.href;
     }
     return undefined;
   }
 
   stackIsEmpty(stackIndex: number) {
-    return this.state.stacks[stackIndex].length === 0;
+    return this._state.stacks[stackIndex].length === 0;
   }
 
   shiftStack(stack: StackItem[], destinationIndex: number) {
@@ -360,7 +421,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   async updateSubmode(submode: Submode) {
-    this.state.submode = submode;
+    this._state.submode = submode;
     this.schedulePersist();
 
     if (submode === Submodes.Code) {
@@ -371,7 +432,17 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
-  updateCodePathWithSelection({
+  async updateModuleInspectorView(view: ModuleInspectorView) {
+    this._state.moduleInspector = view;
+    this.moduleInspectorHistory[this.state.codePath?.href ?? ''] = view;
+    window.localStorage.setItem(
+      ModuleInspectorSelections,
+      JSON.stringify(this.moduleInspectorHistory),
+    );
+    this.schedulePersist();
+  }
+
+  async updateCodePathWithSelection({
     codeRef,
     localName,
     fieldName,
@@ -385,8 +456,8 @@ export default class OperatorModeStateService extends Service {
     //moving from one definition to another
     if (codeRef && isResolvedCodeRef(codeRef)) {
       //(possibly) in a different module
-      this.state.codeSelection = codeRef.name;
-      this.updateCodePath(new URL(codeRef.module));
+      this._state.codeSelection = codeRef.name;
+      await this.updateCodePath(new URL(codeRef.module));
     } else if (
       codeRef &&
       'type' in codeRef &&
@@ -394,25 +465,25 @@ export default class OperatorModeStateService extends Service {
       'card' in codeRef &&
       isResolvedCodeRef(codeRef.card)
     ) {
-      this.state.fieldSelection = codeRef.field;
-      this.state.codeSelection = codeRef.card.name;
-      this.updateCodePath(new URL(codeRef.card.module));
+      this._state.fieldSelection = codeRef.field;
+      this._state.codeSelection = codeRef.card.name;
+      await this.updateCodePath(new URL(codeRef.card.module));
     } else if (localName && onLocalSelection) {
       //in the same module
-      this.state.codeSelection = localName;
-      this.state.fieldSelection = fieldName;
+      this._state.codeSelection = localName;
+      this._state.fieldSelection = fieldName;
       this.schedulePersist();
       onLocalSelection(localName, fieldName);
     }
   }
 
   get codePathRelativeToRealm() {
-    if (this.state.codePath && this.realmURL) {
+    if (this._state.codePath && this.realmURL) {
       let realmPath = new RealmPaths(this.realmURL);
 
-      if (realmPath.inRealm(this.state.codePath)) {
+      if (realmPath.inRealm(this._state.codePath)) {
         try {
-          return realmPath.local(this.state.codePath!);
+          return realmPath.local(this._state.codePath!);
         } catch (err: any) {
           if (err.status === 404) {
             return undefined;
@@ -426,19 +497,62 @@ export default class OperatorModeStateService extends Service {
   }
 
   get codePathString() {
-    return this.state.codePath?.toString();
+    return this._state.codePath?.toString();
   }
 
-  onFileSelected = (entryPath: LocalPath) => {
+  onFileSelected = async (entryPath: LocalPath) => {
     let fileUrl = new RealmPaths(this.realmURL).fileURL(entryPath);
-    this.updateCodePath(fileUrl);
+    await this.updateCodePath(fileUrl);
   };
 
-  updateCodePath(codePath: URL | null) {
-    this.state.codePath = codePath;
+  async updateCodePath(codePath: URL | null) {
+    let canonicalCodePath = await this.determineCanonicalCodePath(codePath);
+    this._state.codePath = canonicalCodePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
+
+    let moduleInspectorView =
+      this.moduleInspectorHistory[canonicalCodePath?.href ?? ''] ??
+      DEFAULT_MODULE_INSPECTOR_VIEW;
+
+    this.updateModuleInspectorView(moduleInspectorView);
+
     this.specPanelService.setSelection(null);
+  }
+
+  persistModuleInspectorView(
+    codePath: string | null,
+    moduleInspector: ModuleInspectorView,
+  ) {
+    if (codePath) {
+      this.moduleInspectorHistory[codePath] = moduleInspector;
+      window.localStorage.setItem(
+        ModuleInspectorSelections,
+        JSON.stringify(this.moduleInspectorHistory),
+      );
+    }
+  }
+
+  private async determineCanonicalCodePath(codePath: URL | null) {
+    if (!codePath) {
+      return codePath;
+    }
+
+    let response;
+    try {
+      response = await this.network.authedFetch(codePath, {
+        method: 'HEAD',
+        headers: { Accept: SupportedMimeType.CardSource },
+      });
+
+      if (response.ok) {
+        return new URL(response.url);
+      }
+
+      return codePath;
+    } catch (_e) {
+      return codePath;
+    }
   }
 
   replaceCodePath(codePath: URL | null) {
@@ -446,7 +560,7 @@ export default class OperatorModeStateService extends Service {
     // typically used when, serving a redirect in the code path
     // solve UX issues with back button referring back to request url of redirect
     // when it should refer back to the previous code path
-    this.state.codePath = codePath;
+    this._state.codePath = codePath;
     this.router.replaceWith('index', {
       queryParams: {
         operatorModeState: this.serialize(),
@@ -467,7 +581,7 @@ export default class OperatorModeStateService extends Service {
 
   @cached
   get title() {
-    if (this.state.submode === Submodes.Code) {
+    if (this._state.submode === Submodes.Code) {
       return `${this.codePathRelativeToRealm} in ${
         this.realm.info(this.realmURL.href).name
       }`;
@@ -509,12 +623,17 @@ export default class OperatorModeStateService extends Service {
   }
 
   updateFileView(fileView: FileView) {
-    this.state.fileView = fileView;
+    this._state.fileView = fileView;
+    this.schedulePersist();
+  }
+
+  updateCardPreviewFormat(format: Format) {
+    this._state.cardPreviewFormat = format;
     this.schedulePersist();
   }
 
   clearStacks() {
-    this.state.stacks.splice(0);
+    this._state.stacks.splice(0);
     this.schedulePersist();
   }
 
@@ -522,7 +641,7 @@ export default class OperatorModeStateService extends Service {
   // TODO make test for reloading after card has been saved
   handleCardIdAssignment(localId: string) {
     if (
-      this.state.stacks.find((stack) =>
+      this._state.stacks.find((stack) =>
         stack.find((item) => item.id === localId),
       )
     ) {
@@ -553,16 +672,18 @@ export default class OperatorModeStateService extends Service {
   rawStateWithSavedCardsOnly() {
     let state: SerializedState = {
       stacks: [],
-      submode: this.state.submode,
-      codePath: this.state.codePath?.toString(),
-      fileView: this.state.fileView?.toString() as FileView,
-      openDirs: Object.fromEntries(this.state.openDirs.entries()),
-      codeSelection: this.state.codeSelection,
-      fieldSelection: this.state.fieldSelection,
-      aiAssistantOpen: this.state.aiAssistantOpen,
+      submode: this._state.submode,
+      codePath: this._state.codePath?.toString(),
+      fileView: this._state.fileView?.toString() as FileView,
+      openDirs: Object.fromEntries(this._state.openDirs.entries()),
+      codeSelection: this._state.codeSelection,
+      fieldSelection: this._state.fieldSelection,
+      aiAssistantOpen: this._state.aiAssistantOpen,
+      moduleInspector: this._state.moduleInspector,
+      cardPreviewFormat: this._state.cardPreviewFormat,
     };
 
-    for (let stack of this.state.stacks) {
+    for (let stack of this._state.stacks) {
       let serializedStack: SerializedStack = [];
       for (let item of stack) {
         if (item.format !== 'isolated' && item.format !== 'edit') {
@@ -621,7 +742,17 @@ export default class OperatorModeStateService extends Service {
       codeSelection: rawState.codeSelection,
       fieldSelection: rawState.fieldSelection,
       aiAssistantOpen: rawState.aiAssistantOpen ?? false,
+      moduleInspector:
+        rawState.moduleInspector ?? DEFAULT_MODULE_INSPECTOR_VIEW,
+      cardPreviewFormat: rawState.cardPreviewFormat ?? 'isolated',
     });
+
+    if (rawState.codePath && rawState.moduleInspector) {
+      this.persistModuleInspectorView(
+        rawState.codePath,
+        rawState.moduleInspector,
+      );
+    }
 
     let stackIndex = 0;
     for (let stack of rawState.stacks) {
@@ -644,7 +775,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   get openDirs() {
-    return this.state.openDirs ?? new TrackedMap();
+    return this._state.openDirs ?? new TrackedMap();
   }
 
   toggleOpenDir = (entryPath: string): void => {
@@ -682,7 +813,7 @@ export default class OperatorModeStateService extends Service {
       return this.openFile.current;
     }
     throw new Error(
-      `cannot access file contents ${this.state.codePath} before file is open`,
+      `cannot access file contents ${this._state.codePath} before file is open`,
     );
   }
 
@@ -690,20 +821,69 @@ export default class OperatorModeStateService extends Service {
     return isReady(this.openFile.current);
   }
 
-  get realmURL() {
-    // i think we only want to use this logic in code mode (?)
-    if (isReady(this.openFile.current)) {
-      return new URL(this.readyFile.realmURL);
-    } else if (this.cachedRealmURL) {
-      return this.cachedRealmURL;
+  get realmURL(): URL {
+    let { submode } = this._state;
+    if (submode === Submodes.Code) {
+      if (isReady(this.openFile.current)) {
+        return new URL(this.readyFile.realmURL);
+      }
     }
 
     // For interact mode, the idea of "current realm" is a bit abstract. the
     // realm background that you see in interact mode is the realm of the
     // bottom-most card in the stack. however you can have cards of differing
     // realms in the same stack and keep in mind you can have multiple stacks...
+    if (submode === Submodes.Interact) {
+      // Precedence rules for determining "current realm" for READ purposes:
+      // 1. cardURL of the index card to determine current realm
+      // 2. If no index card available, the realm of the top-most card
+      let stack = this.rightMostStack(); // using right-most stack
+      if (stack) {
+        let cardId =
+          stack[0]?.id &&
+          this.realmServer.availableRealmIndexCardIds.includes(stack[0]?.id)
+            ? stack[0].id
+            : stack[stack.length - 1]?.id;
+        if (cardId) {
+          let realm = this.realm.url(cardId);
+          if (realm) {
+            return new URL(realm);
+          }
+        }
+      }
+    }
+
+    if (this.cachedRealmURL) {
+      return this.cachedRealmURL;
+    }
+
     return new URL(this.realm.defaultReadableRealm.path);
   }
+
+  getWritableRealmURL = (preferredURLs: string[] = []) => {
+    // Optional `preferredURLs` argument with highest priority with fallback options below
+    // Precedence rules for determining "current realm" for WRITE purposes:
+    // 1. cardURL of the index card to determine current realm
+    // 2. If no index card available, the realm of the top-most card if the realm is writable.
+    // 3. Otherwise, fallback to the last opened writable realm, especially if the opening click is from dashboard.
+    let urlsToCheck = [
+      ...preferredURLs,
+      this.realmURL.href,
+      this.cachedRealmURL?.href,
+    ].filter(Boolean) as string[];
+
+    let foundURL = urlsToCheck.find((url) => this.realm.canWrite(url));
+
+    if (foundURL) {
+      return new URL(this.realm.url(foundURL)!);
+    }
+
+    if (this.realm.defaultWritableRealm) {
+      return new URL(this.realm.defaultWritableRealm.path);
+    }
+
+    return undefined; // no writable realm found
+  };
 
   subscribeToOpenFileStateChanges(subscriber: OpenFileSubscriber) {
     this.openFileSubscribers.push(subscriber);
@@ -718,7 +898,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   openFile = maybe(this, (context: object) => {
-    let codePath = this.state.codePath;
+    let codePath = this._state.codePath;
 
     if (!codePath) {
       return undefined;
@@ -747,16 +927,22 @@ export default class OperatorModeStateService extends Service {
 
   openCardInInteractMode(id: string, format: Format = 'isolated') {
     this.clearStacks();
+    let indexItem = new StackItem({
+      id: `${this.realm.url(id)}index`,
+      stackIndex: 0,
+      format: 'isolated',
+    });
     let newItem = new StackItem({
       id,
       stackIndex: 0,
       format,
     });
+    this.addItemToStack(indexItem);
     this.addItemToStack(newItem);
     this.updateSubmode(Submodes.Interact);
   }
 
-  openWorkspace = (realmUrl: string) => {
+  openWorkspace = async (realmUrl: string) => {
     let id = `${realmUrl}index`;
     let stackItem = new StackItem({
       id,
@@ -769,13 +955,15 @@ export default class OperatorModeStateService extends Service {
     let lastOpenedFile = this.recentFilesService.recentFiles.find(
       (file: RecentFile) => file.realmURL.href === realmUrl,
     );
-    this.updateCodePath(
+    await this.updateCodePath(
       lastOpenedFile
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
         : new URL(id),
     );
+    this.updateSubmode(Submodes.Interact);
 
     this.operatorModeController.workspaceChooserOpened = false;
+    this.cachedRealmURL = new URL(realmUrl);
   };
 
   get workspaceChooserOpened() {
@@ -795,20 +983,66 @@ export default class OperatorModeStateService extends Service {
     return controller;
   }
 
+  get moduleInspectorPanel() {
+    return (
+      JSON.parse(
+        window.localStorage.getItem(ModuleInspectorSelections) ?? '{}',
+      )[this.codePathString ?? ''] ?? DEFAULT_MODULE_INSPECTOR_VIEW
+    );
+  }
+
+  get playgroundPanelSelection(): PlaygroundSelection | undefined {
+    if (this.moduleInspectorPanel === 'preview') {
+      let playgroundSelections = JSON.parse(
+        window.localStorage.getItem(PlaygroundSelections) ?? '{}',
+      );
+      if (this.codePathString && playgroundSelections[this.codePathString]) {
+        return playgroundSelections[this.codePathString];
+      }
+      let selectedCodeRefUrl = this.codeSemanticsService.selectedCodeRef
+        ? internalKeyFor(this.codeSemanticsService.selectedCodeRef!, undefined)
+        : null;
+      if (selectedCodeRefUrl && playgroundSelections[selectedCodeRefUrl]) {
+        return playgroundSelections[selectedCodeRefUrl];
+      }
+    }
+    return undefined;
+  }
+
   getSummaryForAIBot(
-    openCardIds: Set<string> = new Set([...this.getOpenCardIds()]),
+    openCardIdsSet: Set<string> = new Set([...this.getOpenCardIds()]),
   ): BoxelContext {
-    return {
-      submode: this.state.submode,
-      debug: this.operatorModeController.debug,
-      openCardIds: this.makeRemoteIdsList([...openCardIds]),
-      realmUrl: this.realmURL.href,
-      codeMode:
-        this.state.submode === Submodes.Code
+    let codeMode: BoxelContext['codeMode'] = undefined;
+    if (this._state.submode === Submodes.Code) {
+      codeMode = {
+        currentFile: this.codePathString,
+      };
+      if (this.isViewingCardInCodeMode) {
+        codeMode.moduleInspectorPanel = 'preview';
+        codeMode.previewPanelSelection = {
+          cardId: this.codePathString!.replace(/\.json$/, ''),
+          format: this._state.cardPreviewFormat ?? 'isolated',
+        };
+      } else {
+        codeMode.moduleInspectorPanel = this.moduleInspectorPanel;
+        codeMode.previewPanelSelection = this.playgroundPanelSelection
           ? {
-              currentFile: this.codePathString,
+              cardId: this.playgroundPanelSelection.cardId,
+              format: this.playgroundPanelSelection.format,
             }
-          : undefined,
+          : undefined;
+        codeMode.selectedCodeRef = this.codeSemanticsService.selectedCodeRef;
+      }
+    }
+
+    let openCardIds = this.makeRemoteIdsList([...openCardIdsSet]);
+    return {
+      agentId: this.matrixService.agentId,
+      submode: this._state.submode,
+      debug: this.operatorModeController.debug,
+      openCardIds,
+      realmUrl: this.realmURL.href,
+      codeMode,
     };
   }
 

@@ -15,6 +15,7 @@ import * as emberConcurrency from 'ember-concurrency';
 import * as emberConcurrencyAsyncArrowRuntime from 'ember-concurrency/-private/async-arrow-runtime';
 import * as cssUrl from 'ember-css-url';
 import * as emberModifier2 from 'ember-modifier';
+import * as emberModifyClassBasedResource from 'ember-modify-based-class-resource';
 import * as emberProvideConsumeContext from 'ember-provide-consume-context';
 import * as emberProvideConsumeContextContextConsumer from 'ember-provide-consume-context/components/context-consumer';
 import * as emberProvideConsumeContextContextProvider from 'ember-provide-consume-context/components/context-provider';
@@ -56,6 +57,10 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@ember/object/internals', emberObjectInternals);
   virtualNetwork.shimModule('@ember/helper', emberHelper);
   virtualNetwork.shimModule('@ember/modifier', emberModifier);
+  virtualNetwork.shimModule(
+    'ember-modify-based-class-resource',
+    emberModifyClassBasedResource,
+  );
   virtualNetwork.shimModule('ember-resources', emberResources);
   virtualNetwork.shimModule('ember-concurrency', emberConcurrency);
   virtualNetwork.shimModule(

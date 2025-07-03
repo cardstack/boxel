@@ -36,8 +36,13 @@ export default class FormatChooser extends Component<Signature> {
     </div>
     <style scoped>
       .format-chooser {
+        height: var(
+          --boxel-format-chooser-height,
+          var(--boxel-form-control-height)
+        );
         display: flex;
         justify-content: center;
+        align-items: center;
         background-color: var(--boxel-dark);
       }
 
@@ -58,7 +63,7 @@ export default class FormatChooser extends Component<Signature> {
         --boxel-button-text-color: var(--boxel-light);
         min-height: unset;
         min-width: unset;
-        padding: var(--boxel-sp-xxxs);
+        padding-inline: var(--boxel-sp-xs);
         border-color: transparent;
         border-radius: var(--boxel-border-radius);
         text-transform: capitalize;

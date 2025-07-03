@@ -8,7 +8,6 @@ import { task, timeout, all } from 'ember-concurrency';
 import { IEvent } from 'matrix-js-sdk';
 
 import { TrackedSet } from 'tracked-built-ins';
-import { v4 as uuidv4 } from 'uuid';
 
 import {
   Command,
@@ -17,7 +16,6 @@ import {
   delay,
   getClass,
   identifyCard,
-  isCardInstance,
   type PatchData,
 } from '@cardstack/runtime-common';
 
@@ -28,8 +26,6 @@ import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
-
-import { shortenUuid } from '../utils/uuid';
 
 import type LoaderService from './loader-service';
 import type OperatorModeStateService from './operator-mode-state-service';
@@ -56,20 +52,6 @@ export default class CommandService extends Service {
   executedCommandRequestIds = new TrackedSet<string>();
   private commandProcessingEventQueue: string[] = [];
   private flushCommandProcessingQueue: Promise<void> | undefined;
-
-  private commands: Map<
-    string,
-    {
-      command: GenericCommand;
-      autoExecute: boolean;
-    }
-  > = new Map();
-
-  public registerCommand(command: GenericCommand, autoExecute: boolean) {
-    let name = `${command.name}_${shortenUuid(uuidv4())}`;
-    this.commands.set(name, { command, autoExecute });
-    return name;
-  }
 
   public queueEventForCommandProcessing(event: Partial<IEvent>) {
     let eventId = event.event_id;
@@ -143,6 +125,10 @@ export default class CommandService extends Service {
       if (!message) {
         continue;
       }
+      if (message.agentId !== this.matrixService.agentId) {
+        // This command was sent by another agent, so we will not auto-execute it
+        continue;
+      }
       for (let messageCommand of message.commands) {
         if (this.currentlyExecutingCommandRequestIds.has(messageCommand.id!)) {
           continue;
@@ -156,12 +142,7 @@ export default class CommandService extends Service {
         if (!messageCommand.name) {
           continue;
         }
-        let { command, autoExecute } =
-          this.commands.get(messageCommand.name) ?? {};
-        if (
-          messageCommand.requiresApproval === false ||
-          (command && autoExecute)
-        ) {
+        if (messageCommand.requiresApproval === false) {
           this.run.perform(messageCommand);
         }
       }
@@ -182,25 +163,28 @@ export default class CommandService extends Service {
   run = task(async (command: MessageCommand) => {
     let { arguments: payload, eventId, id: commandRequestId } = command;
     let resultCard: CardDef | undefined;
+    // There may be some race conditions where the command is already being executed when this task starts
+    if (
+      this.currentlyExecutingCommandRequestIds.has(commandRequestId!) ||
+      this.executedCommandRequestIds.has(commandRequestId!)
+    ) {
+      return; // already executing this command
+    }
     try {
       this.matrixService.failedCommandState.delete(commandRequestId!);
       this.currentlyExecutingCommandRequestIds.add(commandRequestId!);
 
-      // lookup command
-      let { command: commandToRun } =
-        this.commands.get(command.commandRequest.name ?? '') ?? {};
+      let commandToRun;
 
       // If we don't find it in the one-offs, start searching for
       // one in the skills we can construct
-      if (!commandToRun) {
-        let commandCodeRef = command.codeRef;
-        if (commandCodeRef) {
-          let CommandConstructor = (await getClass(
-            commandCodeRef,
-            this.loaderService.loader,
-          )) as { new (context: CommandContext): Command<any, any> };
-          commandToRun = new CommandConstructor(this.commandContext);
-        }
+      let commandCodeRef = command.codeRef;
+      if (commandCodeRef) {
+        let CommandConstructor = (await getClass(
+          commandCodeRef,
+          this.loaderService.loader,
+        )) as { new (context: CommandContext): Command<any, any> };
+        commandToRun = new CommandConstructor(this.commandContext);
       }
 
       if (commandToRun) {
@@ -233,22 +217,17 @@ export default class CommandService extends Service {
       await this.matrixService.updateSkillsAndCommandsIfNeeded(
         command.message.roomId,
       );
-      let cardIds = [
-        payload?.attributes?.cardId,
-        ...(payload?.attributes?.cardIds ?? []),
-      ].filter(Boolean);
-      let cards = (await Promise.all(cardIds.map((id) => this.store.get(id))))
-        .filter(Boolean)
-        .filter(isCardInstance) as CardDef[];
+      let userContextForAiBot =
+        this.operatorModeStateService.getSummaryForAIBot();
 
       await this.matrixService.sendCommandResultEvent(
         command.message.roomId,
         eventId,
         commandRequestId!,
         resultCard,
-        cards,
         [],
-        this.operatorModeStateService.getSummaryForAIBot(),
+        [],
+        userContextForAiBot,
       );
     } catch (e) {
       let error =
@@ -319,12 +298,13 @@ export default class CommandService extends Service {
     }
     try {
       let patchCodeCommand = new PatchCodeCommand(this.commandContext);
-      await patchCodeCommand.execute({
+      let { finalFileUrl } = await patchCodeCommand.execute({
         fileUrl,
         codeBlocks: codeDataItems.map(
           (codeData) => codeData.searchReplaceBlock!,
         ),
       });
+
       for (const codeBlock of codeDataItems) {
         this.executedCommandRequestIds.add(
           `${codeBlock.eventId}:${codeBlock.codeBlockIndex}`,
@@ -332,7 +312,7 @@ export default class CommandService extends Service {
       }
       await this.matrixService.updateSkillsAndCommandsIfNeeded(roomId);
       let fileDef = this.matrixService.fileAPI.createFileDef({
-        sourceUrl: fileUrl,
+        sourceUrl: finalFileUrl,
         name: fileUrl.split('/').pop(),
       });
 
@@ -345,7 +325,7 @@ export default class CommandService extends Service {
             codeData.eventId,
             codeData.codeBlockIndex,
             'applied',
-            [], // TODO: this should show be what is open in playground, if anything
+            [],
             [fileDef],
             context,
           ),
@@ -380,23 +360,6 @@ export default class CommandService extends Service {
     );
   }
 
-  private getCodePatchResult(codeData: {
-    roomId: string;
-    eventId: string;
-    codeBlockIndex: number;
-  }): MessageCodePatchResult | undefined {
-    let roomResource = this.matrixService.roomResources.get(codeData.roomId);
-    if (!roomResource) {
-      return undefined;
-    }
-    let message = roomResource.messages.find(
-      (m) => m.eventId === codeData.eventId,
-    );
-    return message?.codePatchResults?.find(
-      (c) => c.index === codeData.codeBlockIndex,
-    );
-  }
-
   getCodePatchStatus = (codeData: {
     roomId: string;
     eventId: string;
@@ -409,6 +372,23 @@ export default class CommandService extends Service {
       return 'applied';
     }
     return this.getCodePatchResult(codeData)?.status ?? 'ready';
+  };
+
+  getCodePatchResult = (codeData: {
+    roomId: string;
+    eventId: string;
+    codeBlockIndex: number;
+  }): MessageCodePatchResult | undefined => {
+    let roomResource = this.matrixService.roomResources.get(codeData.roomId);
+    if (!roomResource) {
+      return undefined;
+    }
+    let message = roomResource.messages.find(
+      (m) => m.eventId === codeData.eventId,
+    );
+    return message?.codePatchResults?.find(
+      (c) => c.index === codeData.codeBlockIndex,
+    );
   };
 }
 

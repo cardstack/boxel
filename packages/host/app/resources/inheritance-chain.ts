@@ -3,7 +3,7 @@ import { getOwner } from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
-import { Resource } from 'ember-resources';
+import { Resource } from 'ember-modify-based-class-resource';
 
 import { type Loader, loadCardDef } from '@cardstack/runtime-common';
 

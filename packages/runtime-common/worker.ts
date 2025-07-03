@@ -14,11 +14,13 @@ import {
   unixTime,
   logger,
   jobIdentity,
+  userIdFromUsername,
   type QueueRunner,
   type TextFileRef,
   type VirtualNetwork,
   type ResponseWithNodeStream,
   type RealmInfo,
+  type LintArgs,
 } from '.';
 import { MatrixClient } from './matrix-client';
 import { lintFix } from './lint';
@@ -47,6 +49,14 @@ export interface JobInfo extends JSONTypes.Object {
   reservationId: number;
 }
 
+export interface StatusArgs {
+  jobId?: string;
+  status: 'start' | 'finish';
+  realm?: string;
+  url?: string;
+  deps?: string[];
+}
+
 export type RunnerRegistration = (
   fromScratch: (realmURL: URL) => Promise<IndexResults>,
   incremental: (
@@ -63,6 +73,7 @@ export interface RunnerOpts {
   registerRunner: RunnerRegistration;
   indexWriter: IndexWriter;
   jobInfo?: JobInfo;
+  reportStatus?: (args: StatusArgs) => void;
 }
 
 export interface WorkerArgs extends JSONTypes.Object {
@@ -139,6 +150,7 @@ export class Worker {
   #virtualNetwork: VirtualNetwork;
   #matrixURL: URL;
   #matrixClientCache: Map<string, MatrixClient> = new Map();
+  #realmAuthCache: Map<string, RealmAuthDataSource> = new Map();
   #secretSeed: string;
   #fromScratch:
     | ((realmURL: URL, boom?: true) => Promise<IndexResults>)
@@ -151,6 +163,8 @@ export class Worker {
         ignoreData: Record<string, string>,
       ) => Promise<IndexResults>)
     | undefined;
+  #reportStatus: ((args: StatusArgs) => void) | undefined;
+  #realmServerMatrixUsername;
 
   constructor({
     indexWriter,
@@ -159,7 +173,9 @@ export class Worker {
     runnerOptsManager,
     virtualNetwork,
     matrixURL,
+    realmServerMatrixUsername,
     secretSeed,
+    reportStatus,
   }: {
     indexWriter: IndexWriter;
     queue: QueueRunner;
@@ -167,7 +183,9 @@ export class Worker {
     runnerOptsManager: RunnerOptionsManager;
     virtualNetwork: VirtualNetwork;
     matrixURL: URL;
+    realmServerMatrixUsername: string;
     secretSeed: string;
+    reportStatus?: (args: StatusArgs) => void;
   }) {
     this.#queue = queue;
     this.#indexWriter = indexWriter;
@@ -176,6 +194,8 @@ export class Worker {
     this.#secretSeed = secretSeed;
     this.runnerOptsMgr = runnerOptsManager;
     this.#runner = indexRunner;
+    this.#reportStatus = reportStatus;
+    this.#realmServerMatrixUsername = realmServerMatrixUsername;
   }
 
   async run() {
@@ -183,15 +203,17 @@ export class Worker {
       this.#queue.register(`from-scratch-index`, this.fromScratch),
       this.#queue.register(`incremental-index`, this.incremental),
       this.#queue.register(`copy-index`, this.copy),
-      this.#queue.register(`lint-source`, lintFix),
+      this.#queue.register(`lint-source`, this.lintSource),
     ]);
     await this.#queue.start();
   }
 
   private async makeAuthedFetch(args: WorkerArgs) {
     let matrixClient: MatrixClient;
-    if (this.#matrixClientCache.has(args.realmUsername)) {
-      matrixClient = this.#matrixClientCache.get(args.realmUsername)!;
+    if (this.#matrixClientCache.has(this.#realmServerMatrixUsername)) {
+      matrixClient = this.#matrixClientCache.get(
+        this.#realmServerMatrixUsername,
+      )!;
 
       if (!(await matrixClient.isTokenValid())) {
         await matrixClient.login();
@@ -199,27 +221,40 @@ export class Worker {
     } else {
       matrixClient = new MatrixClient({
         matrixURL: new URL(this.#matrixURL),
-        username: args.realmUsername,
+        username: this.#realmServerMatrixUsername,
         seed: this.#secretSeed,
       });
 
-      this.#matrixClientCache.set(args.realmUsername, matrixClient);
+      this.#matrixClientCache.set(
+        this.#realmServerMatrixUsername,
+        matrixClient,
+      );
     }
 
     let _fetch: typeof globalThis.fetch | undefined;
     function getFetch() {
       return _fetch!;
     }
+    let realmAuthDataSource = this.#realmAuthCache.get(args.realmURL);
+    if (!realmAuthDataSource) {
+      realmAuthDataSource = new RealmAuthDataSource(matrixClient, getFetch);
+      this.#realmAuthCache.set(args.realmURL, realmAuthDataSource);
+    }
+    let realmUserId = userIdFromUsername(
+      args.realmUsername,
+      this.#matrixURL.href,
+    );
     _fetch = fetcher(this.#virtualNetwork.fetch, [
       async (req, next) => {
         req.headers.set('X-Boxel-Building-Index', 'true');
+        req.headers.set('X-Boxel-Assume-User', realmUserId);
         return next(req);
       },
       // TODO do we need this in our indexer?
       async (req, next) => {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
       },
-      authorizationMiddleware(new RealmAuthDataSource(matrixClient, getFetch)),
+      authorizationMiddleware(realmAuthDataSource),
     ]);
     return _fetch;
   }
@@ -235,6 +270,7 @@ export class Worker {
       jobInfo: args.jobInfo,
       reader: getReader(_fetch, new URL(args.realmURL)),
       indexWriter: this.#indexWriter,
+      reportStatus: this.#reportStatus,
       registerRunner: async (fromScratch, incremental) => {
         this.#fromScratch = fromScratch;
         this.#incremental = incremental;
@@ -279,10 +315,34 @@ export class Worker {
     return result;
   }
 
+  private reportStatus(
+    jobInfo: JobInfo | undefined,
+    status: 'start' | 'finish',
+  ) {
+    if (jobInfo?.jobId) {
+      this.#reportStatus?.({ jobId: String(jobInfo.jobId), status });
+    }
+  }
+
+  private lintSource = async (args: LintArgs & { jobInfo?: JobInfo }) => {
+    let { source: _remove, ...displayableArgs } = args;
+    this.#log.debug(
+      `${jobIdentity(args.jobInfo)} starting lint-source for job: ${JSON.stringify(displayableArgs)}`,
+    );
+    this.reportStatus(args.jobInfo, 'start');
+    let result = await lintFix(args);
+    this.#log.debug(
+      `${jobIdentity(args.jobInfo)} completed lint-source for job: ${JSON.stringify(displayableArgs)}`,
+    );
+    this.reportStatus(args.jobInfo, 'finish');
+    return result;
+  };
+
   private copy = async (args: CopyArgs & { jobInfo?: JobInfo }) => {
     this.#log.debug(
       `${jobIdentity(args.jobInfo)} starting copy indexing for job: ${JSON.stringify(args)}`,
     );
+    this.reportStatus(args.jobInfo, 'start');
     let authedFetch = await this.makeAuthedFetch(args);
     let realmInfoResponse = await authedFetch(`${args.realmURL}_info`, {
       headers: { Accept: SupportedMimeType.RealmInfo },
@@ -302,6 +362,7 @@ export class Worker {
       )}`,
     );
     let { totalIndexEntries: totalNonErrorIndexEntries } = result;
+    this.reportStatus(args.jobInfo, 'finish');
     return {
       invalidations,
       totalNonErrorIndexEntries,
@@ -314,6 +375,7 @@ export class Worker {
     this.#log.debug(
       `${jobIdentity(args.jobInfo)} starting from-scratch indexing for job: ${JSON.stringify(args)}`,
     );
+    this.reportStatus(args.jobInfo, 'start');
     return await this.prepareAndRunJob<FromScratchResult>(args, async () => {
       if (!this.#fromScratch) {
         throw new Error(`Index runner has not been registered`);
@@ -326,6 +388,7 @@ export class Worker {
           args.realmURL
         }:\n${JSON.stringify(stats, null, 2)}`,
       );
+      this.reportStatus(args.jobInfo, 'finish');
       return {
         ignoreData: { ...ignoreData },
         stats,
@@ -339,6 +402,7 @@ export class Worker {
     this.#log.debug(
       `${jobIdentity(args.jobInfo)} starting incremental indexing for job: ${JSON.stringify(args)}`,
     );
+    this.reportStatus(args.jobInfo, 'start');
     return await this.prepareAndRunJob<IncrementalResult>(args, async () => {
       if (!this.#incremental) {
         throw new Error(`Index runner has not been registered`);
@@ -356,6 +420,7 @@ export class Worker {
           2,
         )}`,
       );
+      this.reportStatus(args.jobInfo, 'finish');
       return {
         ignoreData: { ...ignoreData },
         invalidations,

@@ -3,6 +3,7 @@
 
 import AccordionUsage from './components/accordion/usage.gts';
 import AddButtonUsage from './components/add-button/usage.gts';
+import AlertUsage from './components/alert/usage.gts';
 import AvatarUsage from './components/avatar/usage.gts';
 import BasicFittedUsage from './components/basic-fitted/usage.gts';
 import ButtonUsage from './components/button/usage.gts';
@@ -42,12 +43,14 @@ import SelectUsage from './components/select/usage.gts';
 import SkeletonPlaceholderUsage from './components/skeleton-placeholder/usage.gts';
 import SwitchUsage from './components/switch/usage.gts';
 import TabbedHeaderUsage from './components/tabbed-header/usage.gts';
+import TagListUsage from './components/tag-list/usage.gts';
 import TooltipUsage from './components/tooltip/usage.gts';
 import ViewSelectorUsage from './components/view-selector/usage.gts';
 
 export const ALL_USAGE_COMPONENTS = [
   ['Accordion', AccordionUsage],
   ['AddButton', AddButtonUsage],
+  ['Alert', AlertUsage],
   ['Avatar', AvatarUsage],
   ['BasicFitted', BasicFittedUsage],
   ['Button', ButtonUsage],
@@ -87,6 +90,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['SkeletonPlaceholder', SkeletonPlaceholderUsage],
   ['Switch', SwitchUsage],
   ['TabbedHeader', TabbedHeaderUsage],
+  ['TagList', TagListUsage],
   ['Tooltip', TooltipUsage],
   ['ViewSelector', ViewSelectorUsage],
 ];

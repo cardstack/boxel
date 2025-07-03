@@ -1,11 +1,11 @@
 import { registerDestructor } from '@ember/destroyable';
-import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { cached } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import {
   enqueueTask,
@@ -28,7 +28,7 @@ import { TrackedObject, TrackedArray } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { BoxelButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -60,6 +60,7 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 import type { Skill } from 'https://cardstack.com/base/skill';
 
+import AiAssistantActionBar from '../ai-assistant/action-bar';
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
 import LLMSelect from '../ai-assistant/llm-select';
@@ -75,6 +76,7 @@ import type RoomData from '../../lib/matrix-classes/room';
 import type { RoomSkill } from '../../resources/room';
 
 interface Signature {
+  Element: HTMLElement;
   Args: {
     roomId: string;
     roomResource: RoomResource;
@@ -99,6 +101,7 @@ export default class Room extends Component<Signature> {
         data-test-room-name={{@roomResource.name}}
         data-test-room={{@roomId}}
         data-room-id={{@roomId}}
+        ...attributes
       >
         <AiAssistantConversation
           @registerConversationScroller={{this.registerConversationScroller}}
@@ -126,63 +129,80 @@ export default class Room extends Component<Signature> {
               <NewSession @sendPrompt={{this.sendMessage}} />
             {{/each}}
           {{/if}}
-          {{#if this.room}}
-            {{#if this.showUnreadIndicator}}
-              <div class='unread-indicator'>
-                <BoxelButton
-                  @size='tall'
-                  @kind='primary'
-                  class='unread-button'
-                  data-test-unread-messages-button
-                  {{on 'click' this.scrollToFirstUnread}}
-                >{{this.unreadMessageText}}</BoxelButton>
-              </div>
-            {{else}}
-              <AiAssistantSkillMenu
-                class='skills'
-                @skills={{this.sortedSkills}}
-                @onChooseCard={{perform this.attachSkillTask}}
-                @onUpdateSkillIsActive={{perform this.updateSkillIsActiveTask}}
-                data-test-skill-menu
-              />
-            {{/if}}
-          {{/if}}
         </AiAssistantConversation>
 
         <footer class='room-actions'>
-          <div class='chat-input-area' data-test-chat-input-area>
-            <AiAssistantChatInput
-              @value={{this.messageToSend}}
-              @onInput={{this.setMessage}}
-              @onSend={{this.sendMessage}}
-              @canSend={{this.canSend}}
-              data-test-message-field={{@roomId}}
-            />
-            <div class='chat-input-area__bottom-section'>
-              <AiAssistantAttachmentPicker
-                @autoAttachedCardIds={{this.autoAttachedCardIds}}
-                @cardIdsToAttach={{this.cardIdsToAttach}}
-                @chooseCard={{this.chooseCard}}
-                @removeCard={{this.removeCard}}
-                @chooseFile={{this.chooseFile}}
-                @removeFile={{this.removeFile}}
-                @submode={{this.operatorModeStateService.state.submode}}
-                @autoAttachedFile={{this.autoAttachedFile}}
-                @filesToAttach={{this.filesToAttach}}
-                @autoAttachedCardTooltipMessage={{if
-                  (eq this.operatorModeStateService.state.submode Submodes.Code)
-                  'Current card is shared automatically'
-                  'Topmost card is shared automatically'
-                }}
+          <AiAssistantAttachmentPicker
+            @autoAttachedCardIds={{this.autoAttachedCardIds}}
+            @cardIdsToAttach={{this.cardIdsToAttach}}
+            @chooseCard={{this.chooseCard}}
+            @removeCard={{this.removeCard}}
+            @chooseFile={{this.chooseFile}}
+            @removeFile={{this.removeFile}}
+            @autoAttachedFile={{this.autoAttachedFile}}
+            @filesToAttach={{this.filesToAttach}}
+            @autoAttachedCardTooltipMessage={{if
+              (eq this.operatorModeStateService.state.submode Submodes.Code)
+              'Current card is shared automatically'
+              'Topmost card is shared automatically'
+            }}
+            as |AttachedItems AttachButton|
+          >
+            {{#if this.displayActionBar}}
+              <AiAssistantActionBar
+                @acceptAll={{perform this.executeAllReadyActionsTask}}
+                @cancel={{this.cancelActionBar}}
+                @acceptingAll={{this.executeAllReadyActionsTask.isRunning}}
+                @acceptingAllLabel={{this.acceptingAllLabel}}
+                @generatingResults={{this.generatingResults}}
+                @stop={{perform this.stopGeneratingTask}}
+                @stopping={{this.stopGeneratingTask.isRunning}}
+                @showUnreadIndicator={{this.showUnreadIndicator}}
+                @unreadMessageText={{this.unreadMessageText}}
+                @scrollToFirstUnread={{this.scrollToFirstUnread}}
               />
-              <LLMSelect
-                @selected={{@roomResource.activeLLM}}
-                @onChange={{perform @roomResource.activateLLMTask}}
-                @options={{this.supportedLLMs}}
-                @disabled={{@roomResource.isActivatingLLM}}
+            {{/if}}
+            <div class='chat-input-area' data-test-chat-input-area>
+              <AiAssistantChatInput
+                @attachButton={{AttachButton}}
+                @value={{this.messageToSend}}
+                @onInput={{this.setMessage}}
+                @onSend={{this.sendMessage}}
+                @canSend={{this.canSend}}
+                data-test-message-field={{@roomId}}
               />
+              {{#if this.displayAttachedItems}}
+                <AttachedItems />
+              {{/if}}
+
+              <div class='chat-input-area__bottom-actions'>
+                {{#if this.displaySkillMenu}}
+                  <AiAssistantSkillMenu
+                    class='skill-menu'
+                    @skills={{this.sortedSkills}}
+                    @onChooseCard={{perform this.attachSkillTask}}
+                    @onUpdateSkillIsActive={{perform
+                      this.updateSkillIsActiveTask
+                    }}
+                    @onExpand={{fn this.setSelectedBottomAction 'skill-menu'}}
+                    @onCollapse={{fn this.setSelectedBottomAction undefined}}
+                    data-test-skill-menu
+                  />
+                {{/if}}
+                {{#if this.displayLLMSelect}}
+                  <LLMSelect
+                    class='llm-select'
+                    @selected={{@roomResource.activeLLM}}
+                    @onChange={{perform @roomResource.activateLLMTask}}
+                    @options={{this.llmsForSelectMenu}}
+                    @disabled={{@roomResource.isActivatingLLM}}
+                    @onExpand={{fn this.setSelectedBottomAction 'llm-select'}}
+                    @onCollapse={{fn this.setSelectedBottomAction undefined}}
+                  />
+                {{/if}}
+              </div>
             </div>
-          </div>
+          </AiAssistantAttachmentPicker>
         </footer>
       </section>
     {{/if}}
@@ -193,56 +213,104 @@ export default class Room extends Component<Signature> {
         grid-template-rows: 1fr auto;
         height: 100%;
         overflow: hidden;
-      }
-      .skills {
-        position: sticky;
-        bottom: 0;
-        margin-left: auto;
-      }
-      .unread-indicator {
-        position: sticky;
-        bottom: 0;
-        margin-left: auto;
-        width: 100%;
-      }
-      .unread-button {
-        width: 100%;
+        position: relative;
+
+        --chat-input-area-border-radius: var(--boxel-border-radius-xxl);
       }
       .room-actions {
-        padding: var(--boxel-sp-xxs) var(--boxel-sp) var(--boxel-sp);
+        position: relative;
+        padding: 0 var(--ai-assistant-panel-padding)
+          var(--ai-assistant-panel-padding);
         box-shadow: var(--boxel-box-shadow);
       }
+
+      .room-actions::before {
+        content: '';
+        position: absolute;
+
+        width: 100%;
+        height: calc(
+          var(--ai-assistant-panel-bottom-gradient-height) +
+            var(--chat-input-area-border-radius)
+        );
+        left: 0;
+        bottom: calc(100% - var(--chat-input-area-border-radius));
+
+        background: linear-gradient(
+          to top,
+          var(--boxel-ai-purple),
+          var(--boxel-ai-purple) 20%,
+          transparent 100%
+        );
+
+        z-index: 0;
+      }
+
       .chat-input-area {
+        --boxel-pill-menu-header-padding: 0;
+        --boxel-pill-menu-content-padding: var(--boxel-sp) 0;
+        --boxel-pill-menu-footer-padding: 0;
+        --boxel-pill-menu-button-padding: 2px 6px;
+
         background-color: var(--boxel-light);
-        border-radius: var(--boxel-border-radius);
-        overflow: hidden;
+        border-radius: var(--chat-input-area-border-radius);
+
+        position: relative;
+        z-index: 2;
       }
-      .chat-input-area__bottom-section {
+      .chat-input-area__bottom-actions {
         display: flex;
-        justify-content: space-between;
-        padding-right: var(--boxel-sp-xxs);
-        gap: var(--boxel-sp-xxl);
+        align-items: center;
+        padding: var(--boxel-sp-sm);
+        gap: var(--boxel-sp-sm);
+        background-color: var(--boxel-light-100);
+        border-top: 1px solid var(--boxel-200);
+        border-bottom-left-radius: var(--chat-input-area-border-radius);
+        border-bottom-right-radius: var(--chat-input-area-border-radius);
       }
-      .chat-input-area__bottom-section
-        :deep(.ember-basic-dropdown-content-wormhole-origin) {
-        position: absolute; /* This prevents layout shift when menu opens */
+
+      .chat-input-area__bottom-actions:not(:has(.menu-content)) {
+        height: 40px;
       }
+
       :deep(.ai-assistant-conversation > *:first-child) {
         margin-top: auto;
       }
-      :deep(.ai-assistant-conversation > *:nth-last-of-type(2)) {
-        padding-bottom: var(--boxel-sp-xl);
-      }
+
       .loading-indicator {
         margin-top: auto;
         margin-bottom: auto;
         margin-left: auto;
         margin-right: auto;
       }
+
+      .chat-input-area :deep(.pill-menu-button) {
+        height: 22px;
+        gap: var(--boxel-sp-xxxs);
+      }
+
+      .chat-input-area :deep(.pill-menu-button:hover) {
+        border-color: var(--boxel-dark);
+      }
+
+      .llm-select :deep(.menu-content) {
+        margin-right: calc(-2 * var(--boxel-sp-sm));
+        padding-right: var(--boxel-sp-sm);
+      }
+
+      .chat-input-area :deep(.minimized-arrow) {
+        margin-left: 0;
+      }
     </style>
   </template>
 
   @consume(GetCardContextName) private declare getCard: getCard;
+  @tracked private selectedBottomAction:
+    | 'skill-menu'
+    | 'llm-select'
+    | undefined;
+  @tracked lastCanceledActionMessageId: string | undefined;
+  @tracked acceptingAllLabel: string | undefined;
 
   @service private declare store: StoreService;
   @service private declare cardService: CardService;
@@ -254,6 +322,8 @@ export default class Room extends Component<Signature> {
 
   private autoAttachmentResource = getAutoAttachment(this, {
     submode: () => this.operatorModeStateService.state.submode,
+    moduleInspectorPanel: () =>
+      this.operatorModeStateService.moduleInspectorPanel,
     autoAttachedFileUrl: () => this.autoAttachedFileUrl,
     playgroundPanelCardId: () => this.playgroundPanelCardId,
     topMostStackItems: () => this.topMostStackItems,
@@ -486,9 +556,9 @@ export default class Room extends Component<Signature> {
     return !this.userHasScrolled || this.isScrolledToBottom;
   }
 
-  // For efficiency, read receipts are implemented using “up to” markers. This
-  // marker indicates that the acknowledgement applies to all events “up to and
-  // including” the event specified. For example, marking an event as “read” would
+  // For efficiency, read receipts are implemented using "up to" markers. This
+  // marker indicates that the acknowledgement applies to all events "up to and
+  // including" the event specified. For example, marking an event as "read" would
   // indicate that the user had read all events up to the referenced event.
   @cached private get lastReadMessageIndex() {
     let readReceiptIndicies: number[] = [];
@@ -531,8 +601,8 @@ export default class Room extends Component<Signature> {
   }
 
   private get unreadMessageText() {
-    return `${this.numberOfUnreadMessages} unread ${pluralize(
-      'message',
+    return `${this.numberOfUnreadMessages} New ${pluralize(
+      'Message',
       this.numberOfUnreadMessages,
     )}`;
   }
@@ -587,8 +657,12 @@ export default class Room extends Component<Signature> {
     return this.args.roomResource.skills;
   }
 
-  private get supportedLLMs(): string[] {
-    return DEFAULT_LLM_LIST.sort();
+  private get llmsForSelectMenu() {
+    return [
+      ...new Set([...DEFAULT_LLM_LIST, ...this.args.roomResource.usedLLMs]),
+    ]
+      .filter(Boolean)
+      .sort();
   }
 
   private get sortedSkills(): RoomSkill[] {
@@ -757,9 +831,7 @@ export default class Room extends Component<Signature> {
         this.matrixService.cardsToSend.set(this.args.roomId, undefined);
       }
       let openCardIds = new Set([
-        ...(this.operatorModeStateService.getOpenCardIds(
-          this.args.selectedCardRef,
-        ) || []),
+        ...(this.operatorModeStateService.getOpenCardIds() || []),
         ...this.autoAttachedCardIds,
       ]);
       let context =
@@ -859,6 +931,133 @@ export default class Room extends Component<Signature> {
         skills: [skillCard],
       });
     }
+  });
+
+  @action
+  private setSelectedBottomAction(
+    action: 'skill-menu' | 'llm-select' | undefined,
+  ) {
+    this.selectedBottomAction = action;
+  }
+
+  private get displaySkillMenu() {
+    return (
+      !this.selectedBottomAction || this.selectedBottomAction === 'skill-menu'
+    );
+  }
+
+  private get displayLLMSelect() {
+    return (
+      !this.selectedBottomAction || this.selectedBottomAction === 'llm-select'
+    );
+  }
+
+  private get displayAttachedItems() {
+    return (
+      this.filesToAttach?.length ||
+      this.cardIdsToAttach?.length ||
+      this.autoAttachedFile ||
+      this.autoAttachedCardIds?.size
+    );
+  }
+
+  @cached
+  private get readyCommands() {
+    let lastMessage = this.messages[this.messages.length - 1];
+    if (!lastMessage || !lastMessage.commands) return [];
+    return lastMessage.commands.filter(
+      (command) =>
+        (command.status === 'ready' || command.status === undefined) &&
+        !this.commandService.currentlyExecutingCommandRequestIds.has(
+          command.id!,
+        ) &&
+        !this.commandService.executedCommandRequestIds.has(command.id!),
+    );
+  }
+
+  @cached
+  private get readyCodePatches() {
+    let lastMessage = this.messages[this.messages.length - 1];
+    if (!lastMessage || !lastMessage.htmlParts) return [];
+    let result = [];
+    for (let i = 0; i < lastMessage.htmlParts.length; i++) {
+      let htmlPart = lastMessage.htmlParts[i];
+      let codeData = htmlPart.codeData;
+      if (!codeData) continue;
+      let status = this.commandService.getCodePatchStatus(codeData);
+      if (status && status === 'ready') {
+        result.push(codeData);
+      }
+    }
+    return result;
+  }
+
+  private get generatingResults() {
+    return (
+      this.messages[this.messages.length - 1] &&
+      !this.messages[this.messages.length - 1].isStreamingFinished
+    );
+  }
+
+  @cached
+  private get displayActionBar() {
+    let lastMessage = this.messages[this.messages.length - 1];
+    if (
+      (this.lastCanceledActionMessageId &&
+        lastMessage?.eventId === this.lastCanceledActionMessageId) ||
+      lastMessage?.isCanceled
+    ) {
+      return false;
+    }
+    return (
+      this.showUnreadIndicator ||
+      this.generatingResults ||
+      this.readyCommands.length > 0 ||
+      this.readyCodePatches.length > 0 ||
+      this.executeAllReadyActionsTask.isRunning
+    );
+  }
+
+  private async executeReadyCommands() {
+    for (let command of this.readyCommands) {
+      this.acceptingAllLabel = command.actionVerb;
+      await this.commandService.run.unlinked().perform(command);
+      this.acceptingAllLabel = undefined;
+    }
+  }
+
+  private async executeReadyCodePatches() {
+    // Group code patches by fileUrl
+    let grouped: Record<string, typeof this.readyCodePatches> = {};
+    for (let codeData of this.readyCodePatches) {
+      if (!codeData.fileUrl) continue;
+      if (!grouped[codeData.fileUrl]) grouped[codeData.fileUrl] = [];
+      grouped[codeData.fileUrl].push(codeData);
+    }
+    for (let [fileUrl, codeDataItems] of Object.entries(grouped)) {
+      await this.commandService.patchCode(
+        codeDataItems[0].roomId,
+        fileUrl,
+        codeDataItems,
+      );
+    }
+  }
+
+  private executeAllReadyActionsTask = task(async () => {
+    await this.executeReadyCodePatches();
+    await this.executeReadyCommands();
+  });
+
+  @action
+  private cancelActionBar() {
+    let lastMessage = this.messages[this.messages.length - 1];
+    if (lastMessage) {
+      this.lastCanceledActionMessageId = lastMessage.eventId;
+    }
+  }
+
+  private stopGeneratingTask = task(async () => {
+    await this.matrixService.sendStopGeneratingEvent(this.args.roomId);
   });
 }
 

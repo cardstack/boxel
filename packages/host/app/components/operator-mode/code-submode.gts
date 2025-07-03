@@ -3,7 +3,7 @@ import { hash } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
+import { capitalize } from '@ember/string';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
@@ -18,18 +18,17 @@ import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { consume, provide } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
+import startCase from 'lodash/startCase';
+
 import {
   LoadingIndicator,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
-import { not, bool } from '@cardstack/boxel-ui/helpers';
+import { not, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
-  identifyCard,
   isCardDocumentString,
-  isResolvedCodeRef,
-  hasExecutableExtension,
   RealmPaths,
   PermissionsContextName,
   GetCardContextName,
@@ -44,15 +43,13 @@ import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode
 import ModuleInspector from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
-import { isReady, type FileResource } from '@cardstack/host/resources/file';
+import { type FileResource } from '@cardstack/host/resources/file';
 import {
-  isCardOrFieldDeclaration,
-  moduleContentsResource,
   type ModuleDeclaration,
   type State as ModuleState,
-  findDeclarationByName,
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
+import type CodeSemanticsService from '@cardstack/host/services/code-semantics-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
@@ -71,16 +68,20 @@ import {
 } from '../../utils/local-storage-keys';
 import FileTree from '../editor/file-tree';
 
-import AttachFileModal from './attach-file-modal';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
-import CreateFileModal, { type FileType } from './create-file-modal';
+import CreateFileModal, {
+  type FileType,
+  newFileTypes,
+} from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
-import NewFileButton from './new-file-button';
+
 import SubmodeLayout from './submode-layout';
+
+import type { NewFileOptions } from './new-file-button';
 
 interface Signature {
   Args: {
@@ -132,6 +133,7 @@ export default class CodeSubmode extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
 
   @service private declare cardService: CardService;
+  @service private declare codeSemanticsService: CodeSemanticsService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
   @service private declare recentFilesService: RecentFilesService;
@@ -143,7 +145,6 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;
   @tracked private sourceFileIsSaving = false;
-  @tracked private previewFormat: Format = 'isolated';
   @tracked private isCreateModalOpen = false;
   @tracked private itemToDelete: CardDef | URL | null | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
@@ -155,17 +156,11 @@ export default class CodeSubmode extends Component<Signature> {
     | undefined;
 
   private createFileModal: CreateFileModal | undefined;
-  private moduleContentsResource = moduleContentsResource(
-    this,
-    () => {
-      return this.isModule ? this.readyFile : undefined;
-    },
-    this.onModuleEdit,
-  );
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.operatorModeStateService.subscribeToOpenFileStateChanges(this);
+    this.codeSemanticsService.setOnModuleEditCallback(this.onModuleEdit);
 
     let persistedDefaultPanelWidths = window.localStorage.getItem(
       CodeModePanelWidths,
@@ -233,31 +228,12 @@ export default class CodeSubmode extends Component<Signature> {
       : undefined;
   }
 
-  private backgroundURLStyle(backgroundURL: string | null) {
-    let possibleStyle = backgroundURL
-      ? `background-image: url(${backgroundURL});`
-      : '';
-    return htmlSafe(possibleStyle);
-  }
-
   @action setFileView(view: FileView) {
     this.operatorModeStateService.updateFileView(view);
   }
 
   private get realmURL() {
     return this.operatorModeStateService.realmURL;
-  }
-
-  private get isIncompatibleFile() {
-    return this.readyFile.isBinary || this.isNonCardJson;
-  }
-
-  private get isModule() {
-    return (
-      this.isReady &&
-      hasExecutableExtension(this.readyFile.url) &&
-      !this.isIncompatibleFile
-    );
   }
 
   private get isCard() {
@@ -268,27 +244,23 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
-  private get isNonCardJson() {
-    return (
-      this.readyFile.name.endsWith('.json') &&
-      !isCardDocumentString(this.readyFile.content)
-    );
-  }
-
   get fileView() {
     return this.operatorModeStateService.state.fileView;
   }
 
   private get isFileOpen() {
-    return !!(this.codePath && this.currentOpenFile?.state !== 'not-found');
+    return !!(
+      this.codeSemanticsService.codePath &&
+      this.currentOpenFile?.state !== 'not-found'
+    );
   }
 
   private get currentOpenFile() {
-    return this.operatorModeStateService.openFile.current;
+    return this.codeSemanticsService.currentOpenFile;
   }
 
   private get isReady() {
-    return isReady(this.currentOpenFile);
+    return this.codeSemanticsService.isReady;
   }
 
   private get isLoading() {
@@ -296,16 +268,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get readyFile() {
-    if (isReady(this.currentOpenFile)) {
-      return this.currentOpenFile;
-    }
-    throw new Error(
-      `cannot access file contents ${this.codePath} before file is open`,
-    );
-  }
-
-  private get codePath() {
-    return this.operatorModeStateService.state.codePath;
+    return this.codeSemanticsService.readyFile;
   }
 
   @action private resetLoadFileError() {
@@ -333,41 +296,28 @@ export default class CodeSubmode extends Component<Signature> {
     }
   }
 
-  private get declarations() {
-    return this.moduleContentsResource?.declarations;
-  }
+  // Adapter getter for components that expect the resource interface
+  private get moduleAnalysis() {
+    let file = this.isModule ? this.readyFile : undefined;
+    let isModule = this.isModule;
 
-  private get _selectedDeclaration() {
-    let codeSelection = this.operatorModeStateService.state.codeSelection;
-    if (codeSelection === undefined) return undefined;
-    return findDeclarationByName(codeSelection, this.declarations);
-  }
-
-  private get selectedDeclaration() {
-    if (!this.isModule || this.moduleContentsResource.moduleError) {
-      return undefined;
-    }
-    if (this._selectedDeclaration) {
-      return this._selectedDeclaration;
-    } else {
-      // default to 1st selection
-      return this.declarations.length > 0 ? this.declarations[0] : undefined;
-    }
+    return {
+      declarations: this.codeSemanticsService.getDeclarations(file, isModule),
+      moduleError: this.codeSemanticsService.getModuleError(file, isModule),
+      isLoading: this.codeSemanticsService.getIsLoading(file, isModule),
+      isLoadingNewModule: this.codeSemanticsService.getIsLoadingNewModule(
+        file,
+        isModule,
+      ),
+    };
   }
 
   private get selectedCardOrField() {
-    if (
-      this.selectedDeclaration !== undefined &&
-      isCardOrFieldDeclaration(this.selectedDeclaration)
-    ) {
-      return this.selectedDeclaration;
-    }
-    return undefined;
+    return this.codeSemanticsService.selectedCardOrField;
   }
 
   private get selectedCodeRef(): ResolvedCodeRef | undefined {
-    let codeRef = identifyCard(this.selectedCardOrField?.cardOrField);
-    return isResolvedCodeRef(codeRef) ? codeRef : undefined;
+    return this.codeSemanticsService.selectedCodeRef;
   }
 
   private get itemToDeleteAsCard() {
@@ -384,12 +334,12 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
-  private goToDefinitionAndResetCursorPosition(
+  private async goToDefinitionAndResetCursorPosition(
     codeRef: CodeRef | undefined,
     localName: string | undefined,
     fieldName?: string,
   ) {
-    this.goToDefinition(codeRef, localName, fieldName);
+    await this.goToDefinition(codeRef, localName, fieldName);
     if (this.codePath) {
       let urlString = this.codePath.toString();
       this.recentFilesService.updateCursorPositionByURL(
@@ -400,12 +350,12 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
-  private goToDefinition(
+  private async goToDefinition(
     codeRef: CodeRef | undefined,
     localName: string | undefined,
     fieldName?: string,
   ) {
-    this.operatorModeStateService.updateCodePathWithSelection({
+    await this.operatorModeStateService.updateCodePathWithSelection({
       codeRef,
       localName,
       fieldName,
@@ -453,9 +403,29 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
-  @action
-  private onSelectNewFileType(fileType: FileType) {
-    this.createFile.perform(fileType);
+  private get menuItems(): MenuItem[] {
+    return newFileTypes.flatMap(({ id, icon, description, extension }) => {
+      if (id === 'duplicate-instance' || id === 'spec-instance') {
+        return [];
+      }
+      let displayName = capitalize(startCase(id));
+      return [
+        new MenuItem(displayName, 'action', {
+          action: () => this.createFile.perform({ id, displayName }),
+          subtext: description,
+          icon,
+          postscript: extension,
+        }),
+      ];
+    });
+  }
+
+  private get newFileOptions(): NewFileOptions {
+    return {
+      menuItems: this.menuItems,
+      isDisabled: this.isCreateModalOpen,
+      onClose: this.operatorModeStateService.setNewFileDropdownClosed,
+    };
   }
 
   onStateChange(state: FileResource['state']) {
@@ -522,9 +492,11 @@ export default class CodeSubmode extends Component<Signature> {
     if (recentFile) {
       let recentFileUrl = `${recentFile.realmURL}${recentFile.filePath}`;
 
-      this.operatorModeStateService.updateCodePath(new URL(recentFileUrl));
+      await this.operatorModeStateService.updateCodePath(
+        new URL(recentFileUrl),
+      );
     } else {
-      this.operatorModeStateService.updateCodePath(null);
+      await this.operatorModeStateService.updateCodePath(null);
     }
 
     await timeout(500); // task running message can be displayed long enough for the user to read it
@@ -546,22 +518,13 @@ export default class CodeSubmode extends Component<Signature> {
         throw new Error(`bug: CreateFileModal not instantiated`);
       }
 
-      let destinationRealm: string | undefined;
+      let sourceURLs = [
+        sourceInstance?.id,
+        definitionClass?.ref?.module,
+      ].filter(Boolean) as string[] | [];
 
-      if (sourceInstance && this.realm.canWrite(sourceInstance.id)) {
-        destinationRealm = this.realm.url(sourceInstance.id);
-      } else if (
-        definitionClass?.ref &&
-        this.realm.canWrite(definitionClass.ref.module)
-      ) {
-        destinationRealm = this.realm.url(definitionClass.ref.module);
-      } else if (
-        this.realm.canWrite(this.operatorModeStateService.realmURL.href)
-      ) {
-        destinationRealm = this.operatorModeStateService.realmURL.href;
-      } else if (this.realm.defaultWritableRealm) {
-        destinationRealm = this.realm.defaultWritableRealm.path;
-      }
+      let destinationRealm =
+        this.operatorModeStateService.getWritableRealmURL(sourceURLs);
 
       if (!destinationRealm) {
         throw new Error('No writable realm found');
@@ -576,8 +539,8 @@ export default class CodeSubmode extends Component<Signature> {
       );
       this.isCreateModalOpen = false;
       if (url) {
-        this.operatorModeStateService.updateCodePath(url);
-        this.setPreviewFormat('edit');
+        await this.operatorModeStateService.updateCodePath(url);
+        this.setCardPreviewFormat('edit');
       }
     },
   );
@@ -607,15 +570,19 @@ export default class CodeSubmode extends Component<Signature> {
     this.updateCursorByName = updateCursorByName;
   };
 
-  @action private openSearchResultInEditor(cardId: string) {
+  @action private async openSearchResultInEditor(cardId: string) {
     let codePath = cardId.endsWith('.json')
       ? new URL(cardId)
       : new URL(cardId + '.json');
-    this.operatorModeStateService.updateCodePath(codePath);
+    await this.operatorModeStateService.updateCodePath(codePath);
   }
 
-  @action private setPreviewFormat(format: Format) {
-    this.previewFormat = format;
+  get cardPreviewFormat() {
+    return this.operatorModeStateService.state.cardPreviewFormat;
+  }
+
+  @action private setCardPreviewFormat(format: Format) {
+    this.operatorModeStateService.updateCardPreviewFormat(format);
   }
 
   get isReadOnly() {
@@ -636,18 +603,30 @@ export default class CodeSubmode extends Component<Signature> {
       : this.itemToDelete.id;
   }
 
+  get selectedDeclaration(): ModuleDeclaration | undefined {
+    return this.codeSemanticsService.selectedDeclaration;
+  }
+
+  get isIncompatibleFile() {
+    return this.codeSemanticsService.isIncompatibleFile;
+  }
+
+  get isModule() {
+    return this.codeSemanticsService.isModule;
+  }
+
+  get codePath() {
+    return this.codeSemanticsService.codePath;
+  }
+
   <template>
     {{consumeContext this.makeCardResource}}
-    <AttachFileModal />
-    {{#let (this.realm.info this.realmURL.href) as |realmInfo|}}
-      <div
-        class='code-mode-background'
-        style={{this.backgroundURLStyle realmInfo.backgroundURL}}
-      ></div>
-    {{/let}}
     <SubmodeLayout
+      class='code-submode-layout'
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
       @selectedCardRef={{this.selectedCodeRef}}
+      @newFileOptions={{this.newFileOptions}}
+      data-test-code-submode
       as |search|
     >
       <div
@@ -662,10 +641,6 @@ export default class CodeSubmode extends Component<Signature> {
             @userHasDismissedError={{this.userHasDismissedURLError}}
             @dismissURLError={{this.dismissURLError}}
             @realmURL={{this.realmURL}}
-          />
-          <NewFileButton
-            @onSelectNewFileType={{this.onSelectNewFileType}}
-            @isCreateModalShown={{bool this.isCreateModalOpen}}
           />
         </div>
         <ResizablePanelGroup
@@ -686,6 +661,7 @@ export default class CodeSubmode extends Component<Signature> {
                   @defaultSize={{this.defaultPanelHeights.filePanel}}
                 >
                   <CodeSubmodeLeftPanelToggle
+                    @realmURL={{this.realmURL}}
                     @fileView={{this.fileView}}
                     @setFileView={{this.setFileView}}
                     @isFileOpen={{this.isFileOpen}}
@@ -694,7 +670,7 @@ export default class CodeSubmode extends Component<Signature> {
                     <:inspector>
                       {{#if this.isReady}}
                         <DetailPanel
-                          @moduleContentsResource={{this.moduleContentsResource}}
+                          @moduleAnalysis={{this.moduleAnalysis}}
                           @cardInstance={{this.card}}
                           @readyFile={{this.readyFile}}
                           @selectedDeclaration={{this.selectedDeclaration}}
@@ -720,7 +696,7 @@ export default class CodeSubmode extends Component<Signature> {
                     </:browser>
                   </CodeSubmodeLeftPanelToggle>
                 </VerticallyResizablePanel>
-                <VerticallyResizeHandle />
+                <VerticallyResizeHandle class='handle' />
                 <VerticallyResizablePanel
                   @defaultSize={{this.defaultPanelHeights.recentPanel}}
                   @minSize={{20}}
@@ -740,7 +716,7 @@ export default class CodeSubmode extends Component<Signature> {
               </ResizablePanelGroup>
             </div>
           </ResizablePanel>
-          <ResizeHandle />
+          <ResizeHandle class='handle' />
           {{#if this.codePath}}
             <ResizablePanel
               @defaultSize={{this.defaultPanelWidths.codeEditorPanel}}
@@ -750,7 +726,7 @@ export default class CodeSubmode extends Component<Signature> {
                 {{#if this.isReady}}
                   <CodeEditor
                     @file={{this.currentOpenFile}}
-                    @moduleContentsResource={{this.moduleContentsResource}}
+                    @moduleAnalysis={{this.moduleAnalysis}}
                     @selectedDeclaration={{this.selectedDeclaration}}
                     @saveSourceOnClose={{@saveSourceOnClose}}
                     @selectDeclaration={{this.selectDeclaration}}
@@ -768,13 +744,13 @@ export default class CodeSubmode extends Component<Signature> {
                 {{/if}}
               </InnerContainer>
             </ResizablePanel>
-            <ResizeHandle />
+            <ResizeHandle class='handle' />
             <ResizablePanel
               @defaultSize={{this.defaultPanelWidths.rightPanel}}
               {{! TODO in CS-8713: make this have a minimum width }}
               @collapsible={{false}}
             >
-              <InnerContainer>
+              <InnerContainer class='module-inspector-container'>
                 {{#if this.isReady}}
                   <ModuleInspector
                     @card={{this.card}}
@@ -785,13 +761,13 @@ export default class CodeSubmode extends Component<Signature> {
                     @isIncompatibleFile={{this.isIncompatibleFile}}
                     @isModule={{this.isModule}}
                     @isReadOnly={{this.isReadOnly}}
-                    @moduleContentsResource={{this.moduleContentsResource}}
-                    @previewFormat={{this.previewFormat}}
+                    @moduleAnalysis={{this.moduleAnalysis}}
+                    @previewFormat={{this.cardPreviewFormat}}
                     @readyFile={{this.readyFile}}
                     @selectedCardOrField={{this.selectedCardOrField}}
                     @selectedCodeRef={{this.selectedCodeRef}}
                     @selectedDeclaration={{this.selectedDeclaration}}
-                    @setPreviewFormat={{this.setPreviewFormat}}
+                    @setPreviewFormat={{this.setCardPreviewFormat}}
                   />
                 {{else if this.isLoading}}
                   <LoadingIndicator class='loading-indicator' />
@@ -843,13 +819,18 @@ export default class CodeSubmode extends Component<Signature> {
         --code-mode-panel-background-color: #ebeaed;
         --code-mode-container-border-radius: 10px;
         --code-mode-realm-icon-size: 1.125rem;
-        --code-mode-active-box-shadow: 0 3px 5px 0 rgba(0, 0, 0, 0.35);
+        --code-mode-active-box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.16);
         --code-mode-padding-top: calc(
           var(--operator-mode-top-bar-item-height) +
             (2 * (var(--operator-mode-spacing)))
         );
         --monaco-background: var(--boxel-600);
         --monaco-readonly-background: #606060;
+      }
+
+      .code-submode-layout {
+        --submode-bar-item-outline: 2px solid transparent;
+        --submode-bar-item-box-shadow: none;
       }
 
       .code-mode {
@@ -860,17 +841,7 @@ export default class CodeSubmode extends Component<Signature> {
         padding-top: var(--code-mode-padding-top);
         overflow: auto;
         flex: 1;
-      }
-
-      .code-mode-background {
-        position: fixed;
-        left: 0;
-        right: 0;
-        display: block;
-        width: 100%;
-        height: 100%;
-        filter: blur(15px);
-        background-size: cover;
+        background-color: #74707d;
       }
 
       .columns {
@@ -878,6 +849,7 @@ export default class CodeSubmode extends Component<Signature> {
         flex-direction: row;
         flex-shrink: 0;
         height: 100%;
+        border-top: 1px solid var(--boxel-dark);
       }
 
       .column {
@@ -887,8 +859,8 @@ export default class CodeSubmode extends Component<Signature> {
         height: 100%;
       }
 
-      .recent-files-panel {
-        background-color: var(--code-mode-panel-background-color);
+      .handle {
+        --boxel-panel-resize-separator-background-color: var(--boxel-dark);
       }
 
       .monaco-editor-panel {
@@ -907,17 +879,22 @@ export default class CodeSubmode extends Component<Signature> {
       }
 
       .code-mode-top-bar {
-        --code-mode-top-bar-left-offset: calc(
-          var(--operator-mode-left-column) - var(--operator-mode-spacing)
-        ); /* subtract additional padding */
-
         position: absolute;
         top: 0;
         right: 0;
-        left: var(--code-mode-top-bar-left-offset);
-        padding: var(--operator-mode-spacing);
+        left: var(--operator-mode-left-column);
+        padding-block: var(--operator-mode-spacing);
+        padding-right: var(--operator-mode-spacing);
         display: flex;
         z-index: 1;
+      }
+      .code-mode-top-bar
+        > :deep(* + *:not(.ember-basic-dropdown-content-wormhole-origin)) {
+        margin-left: var(--operator-mode-spacing);
+      }
+
+      .module-inspector-container {
+        background-color: transparent;
       }
 
       .loading {
@@ -928,11 +905,6 @@ export default class CodeSubmode extends Component<Signature> {
         background-color: var(--boxel-light-100);
         align-items: center;
         justify-content: center;
-      }
-
-      :deep(.boxel-panel, .separator-vertical, .separator-horizontal) {
-        box-shadow: var(--boxel-deep-box-shadow);
-        border-radius: var(--boxel-border-radius-xl);
       }
 
       .loading-indicator {

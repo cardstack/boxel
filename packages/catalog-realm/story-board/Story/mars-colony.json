@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "First Self-Sustaining Mars Colony Achieves Food Independence",
+      "url": "https://www.nature.com/articles/mars-colony-food-independence-2025",
+      "description": "The Mars Colony Alpha has reached a historic milestone by achieving complete food self-sufficiency. Using advanced hydroponic systems and genetically modified crops adapted to Martian conditions, the colony now produces enough food to sustain its 50 residents without Earth resupply missions. The breakthrough comes after three years of experimentation with Martian soil enrichment and atmospheric processing. This achievement marks a crucial step toward permanent human settlement on the Red Planet.",
+      "author": "Dr. Maya Patel, Mars Colony Director",
+      "upvotes": 724,
+      "downvotes": 28,
+      "commentUrl": "https://news.ycombinator.com/item?id=39284752",
+      "commentCount": 189,
+      "submittedAt": "2025-06-17T08:30:00.000Z",
+      "thumbnailURL": "https://images.unsplash.com/photo-1614728894747-a83421e2b9c9?w=400&h=300&fit=crop"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../story-board",
+        "name": "Story"
+      }
+    }
+  }
+}

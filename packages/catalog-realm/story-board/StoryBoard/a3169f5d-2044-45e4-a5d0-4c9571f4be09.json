@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "boardName": "Future Frontiers",
+      "description": "A curated collection of breakthrough stories in science, technology, and human achievement. From space exploration to medical innovations, discover the cutting-edge developments shaping our future.",
+      "thumbnailURL": "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=400&h=300&fit=crop"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../story-board",
+        "name": "StoryBoard"
+      }
+    }
+  }
+} 

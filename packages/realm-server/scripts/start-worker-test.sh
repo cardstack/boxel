@@ -9,6 +9,7 @@ NODE_ENV=test \
   PGDATABASE=boxel_test \
   NODE_NO_WARNINGS=1 \
   REALM_SECRET_SEED="shhh! it's a secret" \
+  REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \
   --transpileOnly worker-manager \
   --port=4211 \
@@ -21,4 +22,6 @@ NODE_ENV=test \
   --fromUrl='http://localhost:4202/test/' \
   --toUrl='http://localhost:4202/test/' \
   --fromUrl='https://cardstack.com/base/' \
-  --toUrl='http://localhost:4201/base/'
+  --toUrl='http://localhost:4201/base/' \
+  --fromUrl='http://localhost:4201/skills/' \
+  --toUrl='http://localhost:4201/skills/'

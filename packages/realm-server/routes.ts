@@ -1,4 +1,9 @@
-import { DBAdapter, Realm, VirtualNetwork } from '@cardstack/runtime-common';
+import {
+  type DBAdapter,
+  type QueuePublisher,
+  type Realm,
+  type VirtualNetwork,
+} from '@cardstack/runtime-common';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
 import handleCreateSessionRequest from './handlers/handle-create-session';
@@ -6,32 +11,41 @@ import handleCreateRealmRequest from './handlers/handle-create-realm';
 import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms';
 import handleFetchUserRequest from './handlers/handle-fetch-user';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook';
-import { healthCheck, jwtMiddleware, livenessCheck } from './middleware';
+import {
+  healthCheck,
+  jwtMiddleware,
+  livenessCheck,
+  grafanaAuthorization,
+} from './middleware';
 import Koa from 'koa';
 import handleStripeLinksRequest from './handlers/handle-stripe-links';
 import handleCreateUserRequest from './handlers/handle-create-user';
 import handleQueueStatusRequest from './handlers/handle-queue-status';
+import handleReindex from './handlers/handle-reindex';
+import handleRemoveJob from './handlers/handle-remove-job';
+import handleAddCredit from './handlers/handle-add-credit';
 
 export type CreateRoutesArgs = {
+  serverURL: string;
   dbAdapter: DBAdapter;
   matrixClient: MatrixClient;
   realmServerSecretSeed: string;
+  grafanaSecret: string;
   realmSecretSeed: string;
   virtualNetwork: VirtualNetwork;
+  queue: QueuePublisher;
   createRealm: ({
     ownerUserId,
     endpoint,
     name,
     backgroundURL,
     iconURL,
-    copyFromSeedRealm,
   }: {
     ownerUserId: string;
     endpoint: string;
     name: string;
     backgroundURL?: string;
     iconURL?: string;
-    copyFromSeedRealm?: boolean;
   }) => Promise<Realm>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
@@ -63,6 +77,23 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleCreateUserRequest(args),
   );
   router.get('/_stripe-links', handleStripeLinksRequest());
+
+  // it's awkward that these are GET's but we are working around grafana's limitations
+  router.get(
+    '/_grafana-reindex',
+    grafanaAuthorization(args.grafanaSecret),
+    handleReindex(args),
+  );
+  router.get(
+    '/_grafana-complete-job',
+    grafanaAuthorization(args.grafanaSecret),
+    handleRemoveJob(args),
+  );
+  router.get(
+    '/_grafana-add-credit',
+    grafanaAuthorization(args.grafanaSecret),
+    handleAddCredit(args),
+  );
 
   return router.routes();
 }

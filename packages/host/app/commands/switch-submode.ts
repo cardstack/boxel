@@ -44,13 +44,15 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
   ): Promise<undefined> {
     switch (input.submode) {
       case Submodes.Interact:
-        this.operatorModeStateService.updateCodePath(null);
+        await this.operatorModeStateService.updateCodePath(null);
         break;
       case Submodes.Code:
         if (input.codePath) {
-          this.operatorModeStateService.updateCodePath(new URL(input.codePath));
+          await this.operatorModeStateService.updateCodePath(
+            new URL(input.codePath),
+          );
         } else {
-          this.operatorModeStateService.updateCodePath(
+          await this.operatorModeStateService.updateCodePath(
             this.lastCardInRightMostStack
               ? new URL(this.lastCardInRightMostStack + '.json')
               : null,

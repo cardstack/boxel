@@ -4,7 +4,7 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
-import { Resource } from 'ember-resources';
+import { Resource } from 'ember-modify-based-class-resource';
 
 import {
   logger,
@@ -84,7 +84,7 @@ export class DirectoryResource extends Resource<Args> {
             let segments = updatedFile.split('/');
             segments.pop();
             let updatedDir = segments.join('/').replace(/([^/])$/, '$1/'); // directories always end in '/'
-            if (updatedDir === this.directoryURL.href) {
+            if (updatedDir.startsWith(this.directoryURL.href)) {
               this.readdir.perform();
             }
           },

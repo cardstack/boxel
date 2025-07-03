@@ -4,10 +4,11 @@ import { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
 
 import { TaskInstance, restartableTask, timeout } from 'ember-concurrency';
-import { Resource } from 'ember-resources';
+import { Resource } from 'ember-modify-based-class-resource';
 
 import difference from 'lodash/difference';
 
+import { IRoomEvent } from 'matrix-js-sdk';
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -17,6 +18,7 @@ import {
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
+  APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -40,6 +42,7 @@ import type {
   CommandResultEvent,
   RealmServerEvent,
   CodePatchResultEvent,
+  ActiveLLMEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import type { Skill } from 'https://cardstack.com/base/skill';
@@ -243,8 +246,12 @@ export class RoomResource extends Resource<Args> {
     return -1;
   }
 
-  private get events() {
+  get events() {
     return this.matrixRoom?.events ?? [];
+  }
+
+  async waitForNextEvent() {
+    return this.matrixRoom?.waitForNextEvent();
   }
 
   @cached
@@ -332,6 +339,20 @@ export class RoomResource extends Resource<Args> {
 
   get activeLLM(): string {
     return this.llmBeingActivated ?? this.matrixRoom?.activeLLM ?? DEFAULT_LLM;
+  }
+
+  @cached
+  get usedLLMs(): string[] {
+    let usedLLMs = new Set<string>();
+    for (let event of this.events) {
+      if (event.type === APP_BOXEL_ACTIVE_LLM) {
+        let activeLLMEvent = event as ActiveLLMEvent;
+        if (activeLLMEvent.content.model) {
+          usedLLMs.add(activeLLMEvent.content.model);
+        }
+      }
+    }
+    return Array.from(usedLLMs);
   }
 
   get isActivatingLLM() {
@@ -428,6 +449,19 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
+  private getAggregatedReplacement(event: IRoomEvent) {
+    let finalRawEvent;
+    const originalEventId = event.event_id;
+    let replacedRawEvent = event.unsigned?.['m.relations']?.['m.replace'];
+    if (!event.content['m.relates_to']?.rel_type && replacedRawEvent) {
+      finalRawEvent = replacedRawEvent;
+      finalRawEvent.event_id = originalEventId;
+    } else {
+      finalRawEvent = event;
+    }
+    return finalRawEvent;
+  }
+
   private async loadRoomMessage({
     roomId,
     event,
@@ -438,6 +472,8 @@ export class RoomResource extends Resource<Args> {
     index: number;
   }) {
     let effectiveEventId = this.getEffectiveEventId(event);
+    event = this.getAggregatedReplacement(event);
+
     let message = this._messageCache.get(effectiveEventId);
     if (!message?.isStreamingOfEventFinished) {
       let author = this.upsertRoomMember({

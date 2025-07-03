@@ -24,13 +24,13 @@ import {
   realmServerTestMatrix,
   realmServerSecretSeed,
   realmSecretSeed,
+  grafanaSecret,
   createVirtualNetwork,
   createVirtualNetworkAndLoader,
   matrixURL,
   closeServer,
   getFastbootState,
   matrixRegistrationSecret,
-  seedPath,
   testRealmInfo,
   waitUntil,
   testRealmHref,
@@ -66,7 +66,6 @@ module(basename(__filename), function () {
     let publisher: QueuePublisher;
     let runner: QueueRunner;
     let testRealmDir: string;
-    let seedRealm: Realm | undefined;
 
     function onRealmSetup(args: {
       testRealm: Realm;
@@ -117,20 +116,17 @@ module(basename(__filename), function () {
       if (testRealm2) {
         virtualNetwork.unmount(testRealm2.handle);
       }
-      ({
-        seedRealm,
-        testRealm: testRealm2,
-        testRealmHttpServer: testRealmHttpServer2,
-      } = await runTestRealmServer({
-        virtualNetwork,
-        testRealmDir,
-        realmsRootPath: join(dir.name, 'realm_server_2'),
-        realmURL: testRealm2URL,
-        dbAdapter,
-        publisher,
-        runner,
-        matrixURL,
-      }));
+      ({ testRealm: testRealm2, testRealmHttpServer: testRealmHttpServer2 } =
+        await runTestRealmServer({
+          virtualNetwork,
+          testRealmDir,
+          realmsRootPath: join(dir.name, 'realm_server_2'),
+          realmURL: testRealm2URL,
+          dbAdapter,
+          publisher,
+          runner,
+          matrixURL,
+        }));
 
       await testRealm.logInToMatrix();
     }
@@ -146,9 +142,6 @@ module(basename(__filename), function () {
         await startRealmServer(dbAdapter2, publisher, runner);
       },
       afterEach: async () => {
-        if (seedRealm) {
-          virtualNetwork.unmount(seedRealm.handle);
-        }
         await closeServer(testRealmHttpServer2);
       },
     });
@@ -727,9 +720,25 @@ module(basename(__filename), function () {
                   kind: 'directory',
                 },
               },
+              'friend-with-used-link.gts': {
+                links: {
+                  related: `${testRealmHref}friend-with-used-link.gts`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
               'friend.gts': {
                 links: {
                   related: `${testRealmHref}friend.gts`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
+              'hassan-x.json': {
+                links: {
+                  related: `${testRealmHref}hassan-x.json`,
                 },
                 meta: {
                   kind: 'file',
@@ -754,6 +763,14 @@ module(basename(__filename), function () {
               'index.json': {
                 links: {
                   related: `${testRealmHref}index.json`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
+              'jade-x.json': {
+                links: {
+                  related: `${testRealmHref}jade-x.json`,
                 },
                 meta: {
                   kind: 'file',
@@ -944,12 +961,12 @@ module(basename(__filename), function () {
           matrixClient,
           realmServerSecretSeed,
           realmSecretSeed,
+          grafanaSecret,
           matrixRegistrationSecret,
           realmsRootPath: dir.name,
           dbAdapter,
           queue: publisher,
           getIndexHTML,
-          seedPath,
           serverURL: new URL('http://127.0.0.1:4446'),
           assetsURL: new URL(`http://example.com/notional-assets-host/`),
         }).listen(parseInt(localBaseRealmURL.port));

@@ -37,6 +37,7 @@ import {
   insertJob,
   testRealmURL,
   createJWT,
+  grafanaSecret,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { RealmServer } from '../server';
@@ -44,7 +45,10 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import jwt from 'jsonwebtoken';
 import { type CardCollectionDocument } from '@cardstack/runtime-common/card-document';
 import { type PgAdapter } from '@cardstack/postgres';
-import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
+import {
+  getUserByMatrixUserId,
+  sumUpCreditsLedger,
+} from '@cardstack/billing/billing-queries';
 import {
   createJWT as createRealmServerJWT,
   RealmServerTokenClaim,
@@ -105,7 +109,6 @@ module(basename(__filename), function () {
         let runner: QueueRunner;
         let request2: SuperTest<Test>;
         let testRealmDir: string;
-        let seedRealm: Realm | undefined;
 
         setupPermissionedRealm(hooks, {
           permissions: {
@@ -123,7 +126,6 @@ module(basename(__filename), function () {
             virtualNetwork.unmount(testRealm2.handle);
           }
           ({
-            seedRealm,
             testRealm: testRealm2,
             testRealmServer: testRealmServer2,
             testRealmHttpServer: testRealmHttpServer2,
@@ -151,9 +153,6 @@ module(basename(__filename), function () {
             await startRealmServer(dbAdapter, publisher, runner);
           },
           afterEach: async () => {
-            if (seedRealm) {
-              virtualNetwork.unmount(seedRealm.handle);
-            }
             await closeServer(testRealmHttpServer2);
           },
         });
@@ -163,7 +162,7 @@ module(basename(__filename), function () {
           // test state--there is no "delete user" matrix API
           let endpoint = `test-realm-${uuidv4()}`;
           let owner = 'mango';
-          let ownerUserId = '@mango:boxel.ai';
+          let ownerUserId = '@mango:localhost';
           let response = await request2
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
@@ -223,32 +222,6 @@ module(basename(__filename), function () {
             existsSync(join(realmPath, 'index.json')),
             'seed file index.json exists',
           );
-          assert.ok(
-            existsSync(
-              join(
-                realmPath,
-                'HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0.json',
-              ),
-            ),
-            'seed file HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0.json exists',
-          );
-          assert.notOk(
-            existsSync(join(realmPath, 'package.json')),
-            'ignored seed file package.json does not exist',
-          );
-          assert.notOk(
-            existsSync(join(realmPath, 'node_modules')),
-            'ignored seed file node_modules/ does not exist',
-          );
-          assert.notOk(
-            existsSync(join(realmPath, '.gitignore')),
-            'ignored seed file .gitignore does not exist',
-          );
-          assert.notOk(
-            existsSync(join(realmPath, 'tsconfig.json')),
-            'ignored seed file tsconfig.json does not exist',
-          );
-
           let permissions = await fetchUserPermissions(
             dbAdapter,
             new URL(json.data.id),
@@ -266,28 +239,6 @@ module(basename(__filename), function () {
           let realm = testRealmServer2.testingOnlyRealms.find(
             (r) => r.url === json.data.id,
           )!;
-          {
-            // owner can get a seeded instance
-            let response = await request2
-              .get(`/${owner}/${endpoint}/jade`)
-              .set('Accept', 'application/vnd.card+json')
-              .set(
-                'Authorization',
-                `Bearer ${createJWT(realm, ownerUserId, [
-                  'read',
-                  'write',
-                  'realm-owner',
-                ])}`,
-              );
-
-            assert.strictEqual(response.status, 200, 'HTTP 200 status');
-            let doc = response.body as SingleCardDocument;
-            assert.strictEqual(
-              doc.data.attributes?.title,
-              'Jade',
-              'instance data is correct',
-            );
-          }
           {
             // owner can create an instance
             let response = await request2
@@ -374,104 +325,10 @@ module(basename(__filename), function () {
           }
         });
 
-        test('POST /_create-realm without copying seed realm', async function (assert) {
-          // we randomize the realm and owner names so that we can isolate matrix
-          // test state--there is no "delete user" matrix API
-          let endpoint = `test-realm-${uuidv4()}`;
-          let owner = 'mango';
-          let ownerUserId = '@mango:boxel.ai';
-          let response = await request2
-            .post('/_create-realm')
-            .set('Accept', 'application/vnd.api+json')
-            .set('Content-Type', 'application/json')
-            .set(
-              'Authorization',
-              `Bearer ${createRealmServerJWT(
-                { user: ownerUserId, sessionRoom: 'session-room-test' },
-                realmSecretSeed,
-              )}`,
-            )
-            .send(
-              JSON.stringify({
-                data: {
-                  type: 'realm',
-                  attributes: {
-                    ...testRealmInfo,
-                    endpoint,
-                    backgroundURL: 'http://example.com/background.jpg',
-                    iconURL: 'http://example.com/icon.jpg',
-                    copyFromSeedRealm: false,
-                  },
-                },
-              }),
-            );
-
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
-          let json = response.body;
-          assert.deepEqual(
-            json,
-            {
-              data: {
-                type: 'realm',
-                id: `${testRealm2URL.origin}/${owner}/${endpoint}/`,
-                attributes: {
-                  ...testRealmInfo,
-                  endpoint,
-                  backgroundURL: 'http://example.com/background.jpg',
-                  iconURL: 'http://example.com/icon.jpg',
-                  copyFromSeedRealm: false,
-                },
-              },
-            },
-            'realm creation JSON is correct',
-          );
-
-          let realmPath = join(dir.name, 'realm_server_2', owner, endpoint);
-          let realmJSON = readJSONSync(join(realmPath, '.realm.json'));
-          assert.deepEqual(
-            realmJSON,
-            {
-              name: 'Test Realm',
-              backgroundURL: 'http://example.com/background.jpg',
-              iconURL: 'http://example.com/icon.jpg',
-            },
-            '.realm.json is correct',
-          );
-          assert.ok(
-            existsSync(join(realmPath, 'index.json')),
-            'seed file index.json exists',
-          );
-          assert.notOk(
-            existsSync(
-              join(
-                realmPath,
-                'HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0.json',
-              ),
-            ),
-            'seed file HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0.json exists',
-          );
-          assert.notOk(
-            existsSync(join(realmPath, 'package.json')),
-            'ignored seed file package.json does not exist',
-          );
-          assert.notOk(
-            existsSync(join(realmPath, 'node_modules')),
-            'ignored seed file node_modules/ does not exist',
-          );
-          assert.notOk(
-            existsSync(join(realmPath, '.gitignore')),
-            'ignored seed file .gitignore does not exist',
-          );
-          assert.notOk(
-            existsSync(join(realmPath, 'tsconfig.json')),
-            'ignored seed file tsconfig.json does not exist',
-          );
-        });
-
         test('dynamically created realms are not publicly readable or writable', async function (assert) {
           let endpoint = `test-realm-${uuidv4()}`;
           let owner = 'mango';
-          let ownerUserId = '@mango:boxel.ai';
+          let ownerUserId = '@mango:localhost';
           let response = await request2
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
@@ -544,7 +401,7 @@ module(basename(__filename), function () {
         test('can restart a realm that was created dynamically', async function (assert) {
           let endpoint = `test-realm-${uuidv4()}`;
           let owner = 'mango';
-          let ownerUserId = '@mango:boxel.ai';
+          let ownerUserId = '@mango:localhost';
           let realmURL: string;
           {
             let response = await request2
@@ -554,7 +411,10 @@ module(basename(__filename), function () {
               .set(
                 'Authorization',
                 `Bearer ${createRealmServerJWT(
-                  { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+                  {
+                    user: '@mango:localhost',
+                    sessionRoom: 'session-room-test',
+                  },
                   realmSecretSeed,
                 )}`,
               )
@@ -608,11 +468,20 @@ module(basename(__filename), function () {
             id = response.body.data.id;
           }
 
+          let jobsBeforeRestart = await dbAdapter.execute('select * from jobs');
+
           // Stop and restart the server
           testRealmServer2.testingOnlyUnmountRealms();
           await closeServer(testRealmHttpServer2);
           await startRealmServer(dbAdapter, publisher, runner);
           await testRealmServer2.start();
+
+          let jobsAfterRestart = await dbAdapter.execute('select * from jobs');
+          assert.strictEqual(
+            jobsBeforeRestart.length,
+            jobsAfterRestart.length,
+            'no new indexing jobs were created on boot for the created realm',
+          );
 
           {
             let response = await request2
@@ -698,7 +567,7 @@ module(basename(__filename), function () {
             .set(
               'Authorization',
               `Bearer ${createRealmServerJWT(
-                { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+                { user: '@mango:localhost', sessionRoom: 'session-room-test' },
                 realmSecretSeed,
               )}`,
             )
@@ -719,7 +588,7 @@ module(basename(__filename), function () {
             .set(
               'Authorization',
               `Bearer ${createRealmServerJWT(
-                { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+                { user: '@mango:localhost', sessionRoom: 'session-room-test' },
                 realmSecretSeed,
               )}`,
             )
@@ -744,7 +613,7 @@ module(basename(__filename), function () {
             .set(
               'Authorization',
               `Bearer ${createRealmServerJWT(
-                { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+                { user: '@mango:localhost', sessionRoom: 'session-room-test' },
                 realmSecretSeed,
               )}`,
             )
@@ -775,7 +644,7 @@ module(basename(__filename), function () {
             .set(
               'Authorization',
               `Bearer ${createRealmServerJWT(
-                { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+                { user: '@mango:localhost', sessionRoom: 'session-room-test' },
                 realmSecretSeed,
               )}`,
             )
@@ -805,7 +674,7 @@ module(basename(__filename), function () {
             .set(
               'Authorization',
               `Bearer ${createRealmServerJWT(
-                { user: '@mango:boxel.ai', sessionRoom: 'session-room-test' },
+                { user: '@mango:localhost', sessionRoom: 'session-room-test' },
                 realmSecretSeed,
               )}`,
             )
@@ -832,7 +701,7 @@ module(basename(__filename), function () {
 
         test('cannot create a new realm that collides with an existing realm', async function (assert) {
           let endpoint = `test-realm-${uuidv4()}`;
-          let ownerUserId = '@mango:boxel.ai';
+          let ownerUserId = '@mango:localhost';
           let response = await request2
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
@@ -889,7 +758,7 @@ module(basename(__filename), function () {
         });
 
         test('cannot create a realm with invalid characters in endpoint', async function (assert) {
-          let ownerUserId = '@mango:boxel.ai';
+          let ownerUserId = '@mango:localhost';
           {
             let response = await request2
               .post('/_create-realm')
@@ -952,13 +821,373 @@ module(basename(__filename), function () {
           }
         });
 
+        test('can force job completion by job_id via grafana endpoint', async function (assert) {
+          let [{ id }] = (await dbAdapter.execute(`INSERT INTO jobs
+            (args, job_type, concurrency_group, timeout, priority)
+            VALUES
+            (
+              '{"realmURL": "${testRealm2URL.href}", "realmUsername":"node-test_realm"}',
+              'from-scratch-index',
+              'indexing:${testRealm2URL.href}',
+              180,
+              0
+            ) RETURNING id`)) as { id: string }[];
+          let response = await request2
+            .get(
+              `/_grafana-complete-job?authHeader=${grafanaSecret}&job_id=${id}`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 204, 'HTTP 204 response');
+          let [job] = await dbAdapter.execute(
+            `SELECT * FROM jobs WHERE id = ${id}`,
+          );
+          assert.strictEqual(job.status, 'rejected', 'job status is correct');
+          assert.deepEqual(
+            job.result,
+            {
+              status: 418,
+              message: 'User initiated job cancellation',
+            },
+            'job result is correct',
+          );
+          assert.ok(job.finished_at, 'job was marked with finish time');
+        });
+
+        test('can force job completion by reservation_id via grafana endpoint', async function (assert) {
+          let [{ id: jobId }] = (await dbAdapter.execute(`INSERT INTO jobs
+            (args, job_type, concurrency_group, timeout, priority)
+            VALUES
+            (
+              '{"realmURL": "${testRealm2URL.href}", "realmUsername":"node-test_realm"}',
+              'from-scratch-index',
+              'indexing:${testRealm2URL.href}',
+              180,
+              0
+            ) RETURNING id`)) as { id: string }[];
+          let [{ id: reservationId }] =
+            (await dbAdapter.execute(`INSERT INTO job_reservations
+            (job_id, locked_until ) VALUES (${jobId}, NOW() + INTERVAL '3 minutes') RETURNING id `)) as {
+              id: string;
+            }[];
+          let response = await request2
+            .get(
+              `/_grafana-complete-job?authHeader=${grafanaSecret}&reservation_id=${reservationId}`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 204, 'HTTP 204 response');
+          let [reservation] = await dbAdapter.execute(
+            `SELECT * FROM job_reservations WHERE id = ${reservationId}`,
+          );
+          assert.ok(reservation.completed_at, 'completed_at time set');
+          let [job] = await dbAdapter.execute(
+            `SELECT * FROM jobs WHERE id = ${jobId}`,
+          );
+          assert.strictEqual(job.status, 'rejected', 'job status is correct');
+          assert.deepEqual(
+            job.result,
+            {
+              status: 418,
+              message: 'User initiated job cancellation',
+            },
+            'job result is correct',
+          );
+          assert.ok(job.finished_at, 'job was marked with finish time');
+        });
+
+        test('can force job completion by job_id where reservation id exists via grafana endpoint', async function (assert) {
+          let [{ id: jobId }] = (await dbAdapter.execute(`INSERT INTO jobs
+            (args, job_type, concurrency_group, timeout, priority)
+            VALUES
+            (
+              '{"realmURL": "${testRealm2URL.href}", "realmUsername":"node-test_realm"}',
+              'from-scratch-index',
+              'indexing:${testRealm2URL.href}',
+              180,
+              0
+            ) RETURNING id`)) as { id: string }[];
+          let [{ id: reservationId }] =
+            (await dbAdapter.execute(`INSERT INTO job_reservations
+            (job_id, locked_until ) VALUES (${jobId}, NOW() + INTERVAL '3 minutes') RETURNING id `)) as {
+              id: string;
+            }[];
+          let response = await request2
+            .get(
+              `/_grafana-complete-job?authHeader=${grafanaSecret}&job_id=${jobId}`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 204, 'HTTP 204 response');
+          let [reservation] = await dbAdapter.execute(
+            `SELECT * FROM job_reservations WHERE id = ${reservationId}`,
+          );
+          assert.ok(reservation.completed_at, 'completed_at time set');
+          let [job] = await dbAdapter.execute(
+            `SELECT * FROM jobs WHERE id = ${jobId}`,
+          );
+          assert.strictEqual(job.status, 'rejected', 'job status is correct');
+          assert.deepEqual(
+            job.result,
+            {
+              status: 418,
+              message: 'User initiated job cancellation',
+            },
+            'job result is correct',
+          );
+          assert.ok(job.finished_at, 'job was marked with finish time');
+        });
+
+        test('returns 401 when calling grafana job completion endpoint without a grafana secret', async function (assert) {
+          let [{ id }] = (await dbAdapter.execute(`INSERT INTO jobs
+            (args, job_type, concurrency_group, timeout, priority)
+            VALUES
+            (
+              '{"realmURL": "${testRealm2URL.href}", "realmUsername":"node-test_realm"}',
+              'from-scratch-index',
+              'indexing:${testRealm2URL.href}',
+              180,
+              0
+            ) RETURNING id`)) as { id: string }[];
+          let response = await request2
+            .get(`/_grafana-complete-job?job_id=${id}`)
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+          let [job] = await dbAdapter.execute(
+            `SELECT * FROM jobs WHERE id = ${id}`,
+          );
+          assert.strictEqual(
+            job.status,
+            'unfulfilled',
+            'job status is correct',
+          );
+          assert.strictEqual(
+            job.finished_at,
+            null,
+            'job was not marked with finish time',
+          );
+        });
+
+        test('can add user credit via grafana endpoint', async function (assert) {
+          let user = await insertUser(
+            dbAdapter,
+            'user@test',
+            'cus_123',
+            'user@test.com',
+          );
+          let sum = await sumUpCreditsLedger(dbAdapter, {
+            creditType: ['extra_credit', 'extra_credit_used'],
+            userId: user.id,
+          });
+          assert.strictEqual(sum, 0, `user has 0 extra credit`);
+
+          let response = await request2
+            .get(
+              `/_grafana-add-credit?authHeader=${grafanaSecret}&user=${user.matrixUserId}&credit=1000`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.deepEqual(
+            response.body,
+            {
+              message: `Added 1000 credits to user '${user.matrixUserId}'`,
+            },
+            `response body is correct`,
+          );
+          sum = await sumUpCreditsLedger(dbAdapter, {
+            creditType: ['extra_credit', 'extra_credit_used'],
+            userId: user.id,
+          });
+          assert.strictEqual(sum, 1000, `user has 1000 extra credit`);
+        });
+
+        test('returns 400 when calling grafana add credit endpoint without a user', async function (assert) {
+          let response = await request2
+            .get(`/_grafana-add-credit?authHeader=${grafanaSecret}&credit=1000`)
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        });
+
+        test('returns 400 when calling grafana add credit endpoint with credit amount that is not a number', async function (assert) {
+          let user = await insertUser(
+            dbAdapter,
+            'user@test',
+            'cus_123',
+            'user@test.com',
+          );
+          let response = await request2
+            .get(
+              `/_grafana-add-credit?authHeader=${grafanaSecret}&user=${user.matrixUserId}&credit=a+million+dollars`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+          let sum = await sumUpCreditsLedger(dbAdapter, {
+            creditType: ['extra_credit', 'extra_credit_used'],
+            userId: user.id,
+          });
+          assert.strictEqual(sum, 0, `user has 0 extra credit`);
+        });
+
+        test("returns 400 when calling grafana add credit endpoint when user doesn't exist", async function (assert) {
+          let response = await request2
+            .get(
+              `/_grafana-add-credit?authHeader=${grafanaSecret}&user=nobody&credit=1000`,
+            )
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        });
+
+        test('returns 401 when calling grafana add credit endpoint without a grafana secret', async function (assert) {
+          let user = await insertUser(
+            dbAdapter,
+            'user@test',
+            'cus_123',
+            'user@test.com',
+          );
+          let response = await request2
+            .get(`/_grafana-add-credit?user=${user.matrixUserId}&credit=1000`)
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+          let sum = await sumUpCreditsLedger(dbAdapter, {
+            creditType: ['extra_credit', 'extra_credit_used'],
+            userId: user.id,
+          });
+          assert.strictEqual(sum, 0, `user has 0 extra credit`);
+        });
+
+        test('can reindex a realm via grafana endpoint', async function (assert) {
+          let endpoint = `test-realm-${uuidv4()}`;
+          let owner = 'mango';
+          let ownerUserId = `@${owner}:localhost`;
+          let realmURL: string;
+          {
+            let response = await request2
+              .post('/_create-realm')
+              .set('Accept', 'application/vnd.api+json')
+              .set('Content-Type', 'application/json')
+              .set(
+                'Authorization',
+                `Bearer ${createRealmServerJWT(
+                  { user: ownerUserId, sessionRoom: 'session-room-test' },
+                  realmSecretSeed,
+                )}`,
+              )
+              .send(
+                JSON.stringify({
+                  data: {
+                    type: 'realm',
+                    attributes: {
+                      name: 'Test Realm',
+                      endpoint,
+                    },
+                  },
+                }),
+              );
+            assert.strictEqual(response.status, 201, 'HTTP 201 status');
+            realmURL = response.body.data.id;
+          }
+          let initialJobs = await dbAdapter.execute('select * from jobs');
+          assert.strictEqual(
+            initialJobs.length,
+            2,
+            'number of jobs initially is correct',
+          );
+          {
+            let realmPath = realmURL.substring(
+              new URL(testRealm2URL.origin).href.length,
+            );
+            let response = await request2
+              .get(
+                `/_grafana-reindex?authHeader=${grafanaSecret}&realm=${realmPath}`,
+              )
+              .set('Content-Type', 'application/json');
+            assert.deepEqual(response.body, {
+              moduleErrors: 0,
+              instanceErrors: 0,
+              modulesIndexed: 0,
+              instancesIndexed: 0,
+              totalIndexEntries: 1,
+            });
+          }
+          let finalJobs = await dbAdapter.execute('select * from jobs');
+          assert.strictEqual(finalJobs.length, 3, 'an index job was created');
+          let job = finalJobs.pop()!;
+          assert.strictEqual(
+            job.job_type,
+            'from-scratch-index',
+            'job type is correct',
+          );
+          assert.strictEqual(
+            job.concurrency_group,
+            `indexing:${realmURL}`,
+            'concurrency group is correct',
+          );
+          assert.strictEqual(
+            job.status,
+            'resolved',
+            'job completed successfully',
+          );
+          assert.ok(job.finished_at, 'job was marked with a finish time');
+          assert.deepEqual(
+            job.args,
+            {
+              realmURL,
+              realmUsername: owner,
+            },
+            'realm args are correct',
+          );
+        });
+
+        test('returns 401 when calling grafana reindex endpoint without a grafana secret', async function (assert) {
+          let endpoint = `test-realm-${uuidv4()}`;
+          let owner = 'mango';
+          let ownerUserId = `@${owner}:localhost`;
+          let realmURL: string;
+          {
+            let response = await request2
+              .post('/_create-realm')
+              .set('Accept', 'application/vnd.api+json')
+              .set('Content-Type', 'application/json')
+              .set(
+                'Authorization',
+                `Bearer ${createRealmServerJWT(
+                  { user: ownerUserId, sessionRoom: 'session-room-test' },
+                  realmSecretSeed,
+                )}`,
+              )
+              .send(
+                JSON.stringify({
+                  data: {
+                    type: 'realm',
+                    attributes: {
+                      name: 'Test Realm',
+                      endpoint,
+                    },
+                  },
+                }),
+              );
+            assert.strictEqual(response.status, 201, 'HTTP 201 status');
+            realmURL = response.body.data.id;
+          }
+          let initialJobs = await dbAdapter.execute('select * from jobs');
+          {
+            let response = await request2
+              .get(`/_grafana-reindex?realm=${encodeURIComponent(realmURL)}`)
+              .set('Content-Type', 'application/json');
+            assert.strictEqual(response.status, 401, 'HTTP 401 status');
+          }
+          let finalJobs = await dbAdapter.execute('select * from jobs');
+          assert.strictEqual(
+            finalJobs.length,
+            initialJobs.length,
+            'an index job was not created',
+          );
+        });
+
         test('returns 404 for request that has malformed URI', async function (assert) {
           let response = await request2.get('/%c0').set('Accept', '*/*');
           assert.strictEqual(response.status, 404, 'HTTP 404 status');
         });
 
         test('can create a user', async function (assert) {
-          let ownerUserId = '@mango:boxel.ai';
+          let ownerUserId = '@mango:localhost';
           let response = await request2
             .post('/_user')
             .set('Accept', 'application/json')
@@ -1018,13 +1247,6 @@ module(basename(__filename), function () {
                   ...testRealmInfo,
                   realmUserId: '@node-test_realm:localhost',
                 },
-              },
-              // the seed realm is automatically added to the realm server running
-              // on port 4445 as a public realm
-              {
-                type: 'catalog-realm',
-                id: `${new URL('/seed/', testRealm2URL)}`,
-                attributes: testRealmInfo,
               },
             ],
           });
@@ -1506,8 +1728,6 @@ module(basename(__filename), function () {
           assert.strictEqual(subscriptions[0].status, 'expired');
           assert.strictEqual(subscriptions[0].planId, creatorPlan.id);
 
-          // ensures the subscription info is null,
-          // so the host can use that to redirect user to checkout free plan page
           let response = await request
             .get(`/_user`)
             .set('Accept', 'application/vnd.api+json')
@@ -1532,13 +1752,23 @@ module(basename(__filename), function () {
                   stripeCustomerEmail: user.stripeCustomerEmail,
                   creditsAvailableInPlanAllowance: null,
                   creditsIncludedInPlanAllowance: null,
-                  extraCreditsAvailableInBalance: null,
+                  extraCreditsAvailableInBalance: 0,
                 },
                 relationships: {
                   subscription: null,
                 },
               },
-              included: null,
+              included: [
+                {
+                  type: 'plan',
+                  id: 'free',
+                  attributes: {
+                    name: 'Free',
+                    monthlyPrice: 0,
+                    creditsIncluded: 0,
+                  },
+                },
+              ],
             },
             '/_user response is correct',
           );

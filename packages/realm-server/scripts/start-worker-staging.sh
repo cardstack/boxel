@@ -1,6 +1,7 @@
 #! /bin/sh
 
 NODE_NO_WARNINGS=1 \
+  REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \
   --transpileOnly worker-manager \
   --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
@@ -14,8 +15,10 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='https://realms-staging.stack.cards/experiments/' \
   --toUrl='https://realms-staging.stack.cards/experiments/' \
   \
-  --fromUrl='https://realms-staging.stack.cards/seed/' \
-  --toUrl='https://realms-staging.stack.cards/seed/' \
-  \
   --fromUrl='https://realms-staging.stack.cards/catalog/' \
-  --toUrl='https://realms-staging.stack.cards/catalog/'
+  --toUrl='https://realms-staging.stack.cards/catalog/' \
+  \
+  --fromUrl='https://realms-staging.stack.cards/skills/' \
+  --toUrl='https://realms-staging.stack.cards/skills/' \
+  
+

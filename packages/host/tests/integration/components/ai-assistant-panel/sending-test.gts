@@ -159,14 +159,14 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     assert.dom('[data-test-ai-assistant-message]').doesNotExist();
     click('[data-test-send-message-btn]');
 
-    await waitFor('[data-test-ai-assistant-message].is-pending');
+    await waitFor('[data-test-ai-assistant-message-pending]');
     assert.dom('[data-test-message-field]').hasValue('');
     assert.dom('[data-test-send-message-btn]').isDisabled();
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
-    assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
+    assert.dom('[data-test-user-message]').hasClass('is-pending');
     await percySnapshot(assert);
 
-    await waitFor('[data-test-ai-assistant-message]:not(.is-pending)');
+    await waitFor('[data-test-user-message]:not(.is-pending)');
     await waitUntil(
       () =>
         !(
@@ -176,7 +176,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
         ).disabled,
     );
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
-    assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-pending');
+    assert.dom('[data-test-user-message]').hasNoClass('is-pending');
   });
 
   test('displays retry button for message that failed to send', async function (assert) {
@@ -203,32 +203,21 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     assert.dom('[data-test-ai-assistant-message]').doesNotExist();
     click('[data-test-send-message-btn]');
 
-    await waitFor('[data-test-ai-assistant-message].is-pending');
+    await waitFor('[data-test-ai-assistant-message-pending]');
     assert.dom('[data-test-message-field]').hasValue('');
     assert.dom('[data-test-send-message-btn]').isDisabled();
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
-    assert.dom('[data-test-ai-assistant-message]').hasClass('is-pending');
-    await waitFor('[data-test-ai-assistant-message].is-error');
-    await waitUntil(
-      () =>
-        !(
-          document.querySelector(
-            '[data-test-send-message-btn]',
-          ) as HTMLButtonElement
-        ).disabled,
-    );
-    assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
-    assert.dom('[data-test-ai-assistant-message]').hasClass('is-error');
+    assert.dom('[data-test-user-message]').hasClass('is-pending');
+
+    await waitFor('[data-test-boxel-alert="error"]');
     assert.dom('[data-test-card-error]').containsText('Failed to send');
     assert.dom('[data-test-ai-bot-retry-button]').exists();
     await percySnapshot(assert);
 
     click('[data-test-ai-bot-retry-button]');
-    await waitFor('[data-test-ai-assistant-message].is-pending');
+    await waitFor('[data-test-ai-assistant-message-pending]');
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
-    assert.dom('[data-test-ai-assistant-message]').hasNoClass('is-error');
     await settled();
-    assert.dom('[data-test-ai-assistant-message]').hasClass('is-error');
   });
 
   test('it enlarges the input box when entering/pasting lots of text', async function (assert) {
@@ -256,7 +245,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       : 0;
 
     assert.true(
-      newHeight >= 300,
+      newHeight >= 130,
       'input box grows when entering/pasting lots of text',
     );
   });

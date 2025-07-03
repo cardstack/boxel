@@ -2,6 +2,7 @@ import {
   Component,
   CardDef,
   CardContext,
+  realmURL,
 } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
 
@@ -27,6 +28,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     context: CardContext | undefined;
+    id: string | undefined;
     items: string[];
     examples?: CardDef[];
   };
@@ -64,11 +66,11 @@ class CarouselComponent extends GlimmerComponent<Signature> {
   }
 
   @action
-  stopPropagation(e: MouseEvent) {
+  _stopPropagation(e: MouseEvent) {
     e.stopPropagation();
   }
 
-  @action preview(e: MouseEvent) {
+  @action previewExample(e: MouseEvent) {
     e.stopPropagation();
 
     if (!this.hasExample) {
@@ -78,9 +80,20 @@ class CarouselComponent extends GlimmerComponent<Signature> {
     this.args.context?.actions?.viewCard?.(this.args.examples![0]);
   }
 
+  @action viewListingDetails(e: MouseEvent) {
+    e.stopPropagation();
+
+    if (!this.args.id) {
+      throw new Error('No card id');
+    }
+
+    this.args.context?.actions?.viewCard?.(new URL(this.args.id), 'isolated');
+  }
+
   @action
   updateCurrentIndex(index: number, e: MouseEvent) {
     e.stopPropagation();
+
     if (index < 0 || index >= this.totalSlides) {
       return;
     }
@@ -88,24 +101,44 @@ class CarouselComponent extends GlimmerComponent<Signature> {
   }
 
   <template>
-    <div class='carousel'>
-      {{#if this.hasExample}}
-        <div class='preview-button-container'>
+    <div
+      class='carousel'
+      tabindex='0'
+      data-test-catalog-listing-fitted-preview
+      aria-label='Preview Example'
+      {{on 'click' this.previewExample}}
+    >
+      <div
+        class='actions-buttons-container'
+        {{on 'mouseenter' this._stopPropagation}}
+      >
+        {{#if this.hasExample}}
           <BoxelButton
             @kind='secondary-dark'
             class='preview-button'
-            {{on 'click' this.preview}}
-            aria-label='Preview'
+            data-test-catalog-listing-fitted-preview-button
+            aria-label='Preview Example'
+            {{on 'click' this.previewExample}}
           >
             Preview
           </BoxelButton>
-        </div>
-      {{/if}}
+        {{/if}}
+
+        <BoxelButton
+          @kind='secondary-dark'
+          class='details-button'
+          data-test-catalog-listing-fitted-details-button
+          aria-label='View Listing Details'
+          {{on 'click' this.viewListingDetails}}
+        >
+          Details
+        </BoxelButton>
+      </div>
 
       <div class='carousel-items'>
         {{#each @items as |item index|}}
           <div
-            class='carousel-item
+            class='carousel-item carousel-item-{{index}}
               {{if (eq this.currentIndex index) "is-active"}}'
             aria-hidden={{if (eq this.currentIndex index) 'false' 'true'}}
           >
@@ -121,24 +154,22 @@ class CarouselComponent extends GlimmerComponent<Signature> {
         <div
           class='carousel-nav'
           role='presentation'
-          {{on 'mouseenter' this.stopPropagation}}
+          {{on 'mouseenter' this._stopPropagation}}
         >
-          <div
+          <button
             class='carousel-arrow carousel-arrow-prev'
-            {{on 'click' (fn this.updateCurrentIndex this.prevIndex)}}
-            role='button'
             aria-label='Previous slide'
+            {{on 'click' (fn this.updateCurrentIndex this.prevIndex)}}
           >
             &#10094;
-          </div>
-          <div
+          </button>
+          <button
             class='carousel-arrow carousel-arrow-next'
-            {{on 'click' (fn this.updateCurrentIndex this.nextIndex)}}
-            role='button'
             aria-label='Next slide'
+            {{on 'click' (fn this.updateCurrentIndex this.nextIndex)}}
           >
             &#10095;
-          </div>
+          </button>
         </div>
       {{/if}}
 
@@ -146,7 +177,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
         <div
           class='carousel-dots'
           role='presentation'
-          {{on 'mouseenter' this.stopPropagation}}
+          {{on 'mouseenter' this._stopPropagation}}
         >
           {{#each @items as |_ index|}}
             <div
@@ -215,6 +246,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
         }
 
         .carousel-arrow {
+          all: unset;
           cursor: pointer;
           user-select: none;
           padding: 0px;
@@ -269,7 +301,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
           border: 1px solid var(--boxel-700);
         }
 
-        .preview-button-container {
+        .actions-buttons-container {
           position: absolute;
           top: 0;
           left: 0;
@@ -279,8 +311,9 @@ class CarouselComponent extends GlimmerComponent<Signature> {
           display: flex;
           justify-content: center;
           align-items: center;
+          gap: var(--boxel-sp-sm);
           opacity: 0;
-          background-color: rgba(0, 0, 0, 0.5);
+          background-color: rgba(0, 0, 0, 0.6);
           transition: opacity 0.3s ease;
         }
 
@@ -289,34 +322,47 @@ class CarouselComponent extends GlimmerComponent<Signature> {
             0 15px 20px rgba(0, 0, 0, 0.2),
             0 7px 10px rgba(0, 0, 0, 0.12);
         }
-        .carousel:hover .preview-button-container {
+        .carousel:hover .actions-buttons-container {
           opacity: 1;
         }
         .carousel:hover .carousel-arrow {
           color: var(--boxel-200);
         }
 
-        .preview-button {
+        .preview-button,
+        .details-button {
           --boxel-button-font: 600 var(--boxel-font-sm);
           --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
           --boxel-button-border: 1px solid var(--boxel-light);
-          --boxel-button-color: var(--boxel-purple);
           --boxel-button-text-color: var(--boxel-100);
           box-shadow:
             0 15px 20px rgba(0, 0, 0, 0.12),
             0 5px 10px rgba(0, 0, 0, 0.1);
           pointer-events: auto;
         }
-        .preview-button:hover {
+        .preview-button:hover,
+        .details-button:hover {
           --boxel-button-text-color: var(--boxel-light);
+          --boxel-button-color: var(--boxel-purple);
           box-shadow:
             0 15px 25px rgba(0, 0, 0, 0.2),
             0 7px 15px rgba(0, 0, 0, 0.15);
+          cursor: pointer;
+        }
+
+        @container (max-width: 250px) {
+          .actions-buttons-container {
+            flex-direction: column;
+          }
+          .preview-button,
+          .details-button {
+            --boxel-button-font: 600 var(--boxel-font-xs);
+            --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp);
+          }
         }
 
         @container (max-height: 100px) {
           .carousel-nav,
-          .preview-button-container,
           .carousel-dots {
             display: none;
           }
@@ -346,14 +392,16 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
   }
 
   get remixRealmOptions() {
-    return this.writableRealms.map((realm) => {
-      return new MenuItem(realm.name, 'action', {
-        action: () => {
-          this.remix(realm.url);
-        },
-        iconURL: realm.iconURL ?? '/default-realm-icon.png',
+    return this.writableRealms
+      .filter((realm) => realm.url !== this.args.model[realmURL]?.href)
+      .map((realm) => {
+        return new MenuItem(realm.name, 'action', {
+          action: () => {
+            this.remix(realm.url);
+          },
+          iconURL: realm.iconURL ?? '/default-realm-icon.png',
+        });
       });
-    });
   }
 
   get firstImage() {
@@ -389,6 +437,19 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     this._openRoomWithSkillAndPrompt.perform(realmUrl);
   }
 
+  @action viewListingDetails(e: MouseEvent) {
+    e.stopPropagation();
+
+    if (!this.args.model.id) {
+      throw new Error('No card id');
+    }
+
+    this.args.context?.actions?.viewCard?.(
+      new URL(this.args.model.id),
+      'isolated',
+    );
+  }
+
   @action
   _stopPropagation(e: MouseEvent) {
     e.stopPropagation();
@@ -400,6 +461,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
         {{#if @model.images}}
           <CarouselComponent
             @context={{@context}}
+            @id={{@model.id}}
             @items={{@model.images}}
             @examples={{@model.examples}}
           />
@@ -410,7 +472,13 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           />
         {{/if}}
       </div>
-      <div class='info-section'>
+      <div
+        class='info-section'
+        tabindex='0'
+        data-test-catalog-listing-fitted-details
+        aria-label='View Listing Details'
+        {{on 'click' this.viewListingDetails}}
+      >
         <div class='card-content'>
           <h3 class='card-title' data-test-card-title={{@model.name}}>
             {{@model.name}}
@@ -423,16 +491,17 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           {{#if this.hasTags}}
             <span class='card-tags'># {{this.firstTagName}}</span>
           {{/if}}
-          <BoxelDropdown>
+          <BoxelDropdown @autoClose={{true}}>
             <:trigger as |bindings|>
               <BoxelButton
-                data-test-catalog-listing-remix-button
+                data-test-catalog-listing-fitted-remix-button
                 @kind='primary'
                 @size='extra-small'
                 class='card-remix-button'
                 @loading={{this._openRoomWithSkillAndPrompt.isRunning}}
                 {{on 'click' this._stopPropagation}}
                 {{bindings}}
+                aria-label='Remix listing'
               >
                 Remix
               </BoxelButton>
@@ -442,7 +511,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
                 class='realm-dropdown-menu'
                 @closeMenu={{dd.close}}
                 @items={{this.remixRealmOptions}}
-                data-test-catalog-listing-remix-dropdown
+                data-test-catalog-listing-fitted-remix-dropdown
               />
             </:content>
           </BoxelDropdown>

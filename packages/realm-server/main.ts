@@ -6,6 +6,7 @@ import {
   logger,
   RunnerOptionsManager,
   Deferred,
+  userIdFromUsername,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -35,6 +36,14 @@ const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
 if (!REALM_SECRET_SEED) {
   console.error(
     `The REALM_SECRET_SEED environment variable is not set. Please make sure this env var has a value`,
+  );
+  process.exit(-1);
+}
+
+const GRAFANA_SECRET = process.env.GRAFANA_SECRET;
+if (!GRAFANA_SECRET) {
+  console.error(
+    `The GRAFANA_SECRET environment variable is not set. Please make sure this env var has a value`,
   );
   process.exit(-1);
 }
@@ -77,8 +86,6 @@ let {
   toUrl: toUrls,
   username: usernames,
   useRegistrationSecretFunction,
-  seedPath,
-  seedRealmURL,
   migrateDB,
   workerManagerPort,
 } = yargs(process.argv.slice(2))
@@ -116,15 +123,6 @@ let {
     distURL: {
       description:
         'the URL of a deployed host app. (This can be provided instead of the --distPath)',
-      type: 'string',
-    },
-    seedPath: {
-      description:
-        'the path of the seed realm which is used to seed new realms',
-      type: 'string',
-    },
-    seedRealmURL: {
-      description: 'The URL of the seed realm',
       type: 'string',
     },
     matrixURL: {
@@ -211,6 +209,11 @@ let autoMigrate = migrateDB || undefined;
     await waitForWorkerManager(workerManagerPort);
   }
 
+  let realmServerMatrixUserId = userIdFromUsername(
+    REALM_SERVER_MATRIX_USERNAME,
+    MATRIX_URL,
+  );
+
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
 
@@ -234,8 +237,10 @@ let autoMigrate = migrateDB || undefined;
         virtualNetwork,
         dbAdapter,
         queue,
+        realmServerMatrixUserId,
       },
       {
+        fullIndexOnStartup: true,
         ...(process.env.DISABLE_MODULE_CACHING === 'true'
           ? { disableModuleCaching: true }
           : {}),
@@ -269,13 +274,12 @@ let autoMigrate = migrateDB || undefined;
     realmsRootPath,
     realmServerSecretSeed: REALM_SERVER_SECRET_SEED,
     realmSecretSeed: REALM_SECRET_SEED,
+    grafanaSecret: GRAFANA_SECRET,
     dbAdapter,
     queue,
     assetsURL: dist,
     getIndexHTML,
     serverURL: new URL(serverURL),
-    seedPath,
-    seedRealmURL: seedRealmURL ? new URL(seedRealmURL) : undefined,
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
     enableFileWatcher: ENABLE_FILE_WATCHER,
     getRegistrationSecret: useRegistrationSecretFunction

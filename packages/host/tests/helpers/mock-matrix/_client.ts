@@ -53,7 +53,11 @@ type Plural<T> = {
   [K in keyof T]: T[K][];
 };
 
-const publicRealmURLs = [baseRealm.url, 'http://localhost:4201/catalog/'];
+const publicRealmURLs = [
+  baseRealm.url,
+  'http://localhost:4201/catalog/',
+  'http://localhost:4201/skills/',
+];
 
 export class MockClient implements ExtendedClient {
   private listeners: Partial<Plural<MatrixSDK.ClientEventHandlerMap>> = {};
@@ -244,6 +248,13 @@ export class MockClient implements ExtendedClient {
     _room: MatrixSDK.Room,
     _limit?: number | undefined,
   ): Promise<MatrixSDK.Room> {
+    throw new Error('Method not implemented.');
+  }
+
+  paginateEventTimeline(
+    _timeline: MatrixSDK.EventTimeline,
+    _opts?: MatrixSDK.IPaginateOpts | undefined,
+  ): Promise<boolean> {
     throw new Error('Method not implemented.');
   }
 
@@ -438,6 +449,10 @@ export class MockClient implements ExtendedClient {
     let hit = this.serverState.rooms.find((r) => r.id === roomId);
     if (hit) {
       return {
+        roomId,
+        client: this,
+        myUserId: this.loggedInAs!,
+        opts: {},
         getMember(_userId: string) {
           return {
             membership: 'join',
@@ -456,7 +471,34 @@ export class MockClient implements ExtendedClient {
                 .map((e) => new MatrixEvent(e)),
           };
         },
-      } as MatrixSDK.Room;
+        getOrCreateFilteredTimelineSet: (
+          filter: MatrixSDK.Filter,
+          _opts = {},
+        ) => {
+          return {
+            getLiveTimeline: () => ({
+              getEvents: () => [],
+              getPaginationToken: () => null,
+              setPaginationToken: () => {},
+              getNeighbouringTimeline: () => null,
+            }),
+            addLiveEvent: () => {},
+            getTimelines: () => [],
+            getFilter: () => filter,
+            setFilter: () => {},
+            getTimelineForEvent: () => null,
+            addTimeline: () => ({
+              getEvents: () => [],
+              getPaginationToken: () => null,
+              setPaginationToken: () => {},
+              getNeighbouringTimeline: () => null,
+            }),
+            addEventsToTimeline: () => {},
+            handleRemoteEcho: () => {},
+            canContain: () => true,
+          };
+        },
+      } as unknown as MatrixSDK.Room;
     }
     return null;
   }

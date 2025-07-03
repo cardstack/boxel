@@ -81,20 +81,23 @@ export interface RealmPrerenderedCards {
 // TODO should we use the secure form once we start letting lid's drive the id
 // on the server? address in CS-8343
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
-import { RealmPaths, type LocalPath } from './paths';
+import { type LocalPath } from './paths';
 import { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
+export * from './paths';
 export * from './cached-fetch';
 export * from './catalog';
 export * from './commands';
 export * from './constants';
 export * from './matrix-constants';
+export * from './matrix-client';
 export * from './queue';
 export * from './expression';
 export * from './index-query-engine';
 export * from './index-writer';
 export * from './index-structure';
 export * from './db';
+export * from './lint';
 export * from './worker';
 export * from './stream';
 export * from './realm';
@@ -104,9 +107,10 @@ export * from './utils';
 export * from './authorization-middleware';
 export * from './query';
 export * from './formats';
+export * from './db-types';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
-export { RealmPaths, Loader, type LocalPath };
+export { Loader };
 export { NotLoaded, isNotLoadedError } from './not-loaded';
 export {
   cardTypeDisplayName,
@@ -444,7 +448,10 @@ export interface CardActions {
     card: CardDef,
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
-  changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
+  changeSubmode: (
+    url: URL,
+    submode: 'code' | 'interact',
+  ) => Promise<void> | void;
 }
 
 export interface CopyCardsWithCodeRef {

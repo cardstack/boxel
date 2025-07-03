@@ -6,6 +6,7 @@ import {
   logger,
   RunnerOptionsManager,
   IndexWriter,
+  type StatusArgs,
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import { makeFastBootIndexRunner } from './fastboot';
@@ -19,6 +20,13 @@ const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
 if (!REALM_SECRET_SEED) {
   log.error(
     `The REALM_SECRET_SEED environment variable is not set. Please make sure this env var has a value`,
+  );
+  process.exit(-1);
+}
+const REALM_SERVER_MATRIX_USERNAME = process.env.REALM_SERVER_MATRIX_USERNAME;
+if (!REALM_SERVER_MATRIX_USERNAME) {
+  console.error(
+    `The REALM_SERVER_MATRIX_USERNAME environment variable is not set. Please make sure this env var has a value`,
   );
   process.exit(-1);
 }
@@ -99,6 +107,14 @@ let dist: URL = new URL(distURL);
 let autoMigrate = migrateDB || undefined;
 
 (async () => {
+  function reportStatus({ jobId, status, realm, url, deps }: StatusArgs) {
+    if (process.send) {
+      process.send(
+        `status|${JSON.stringify({ jobId, status, realm, url, deps })}`,
+      );
+    }
+  }
+
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueueRunner({ adapter: dbAdapter, workerId, priority });
   let manager = new RunnerOptionsManager();
@@ -114,6 +130,8 @@ let autoMigrate = migrateDB || undefined;
     matrixURL: new URL(matrixURL),
     secretSeed: REALM_SECRET_SEED,
     indexRunner: getRunner,
+    reportStatus,
+    realmServerMatrixUsername: REALM_SERVER_MATRIX_USERNAME,
   });
 
   await worker.run();

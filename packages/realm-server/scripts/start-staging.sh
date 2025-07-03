@@ -1,8 +1,8 @@
 #! /bin/sh
 pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
-pnpm setup:seed-in-deployment
 pnpm setup:catalog-in-deployment
+pnpm setup:skills-in-deployment
 NODE_NO_WARNINGS=1 \
   MATRIX_URL=https://matrix-staging.stack.cards \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
@@ -12,8 +12,6 @@ NODE_NO_WARNINGS=1 \
   --matrixURL='https://matrix-staging.stack.cards' \
   --realmsRootPath='/persistent/realms' \
   --serverURL='https://realms-staging.stack.cards' \
-  --seedPath='/persistent/seed' \
-  --seedRealmURL='https://realms-staging.stack.cards/seed/' \
   \
   --path='/persistent/base' \
   --username='base_realm' \
@@ -26,12 +24,12 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='https://realms-staging.stack.cards/experiments/' \
   --toUrl='https://realms-staging.stack.cards/experiments/' \
   \
-  --path='/persistent/seed' \
-  --username='seed_realm' \
-  --fromUrl='https://realms-staging.stack.cards/seed/' \
-  --toUrl='https://realms-staging.stack.cards/seed/' \
-  \
   --path='/persistent/catalog' \
   --username='catalog_realm' \
   --fromUrl='https://realms-staging.stack.cards/catalog/' \
-  --toUrl='https://realms-staging.stack.cards/catalog/'
+  --toUrl='https://realms-staging.stack.cards/catalog/'\
+  \
+  --path='/persistent/skills' \
+  --username='skills_realm' \
+  --fromUrl='https://realms-staging.stack.cards/skills/' \
+  --toUrl='https://realms-staging.stack.cards/skills/'

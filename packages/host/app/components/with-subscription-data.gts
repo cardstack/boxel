@@ -6,10 +6,9 @@ import Component from '@glimmer/component';
 import { task } from 'ember-concurrency';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { cn, formatNumber } from '@cardstack/boxel-ui/helpers';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
-import { formatNumber } from '../helpers/format-number';
 import BillingService from '../services/billing-service';
 
 import type { ComponentLike } from '@glint/template';
@@ -60,7 +59,6 @@ interface WithSubscriptionDataSignature {
   Blocks: {
     default: [
       {
-        hasActiveSubscription: boolean;
         plan: ComponentLike;
         monthlyCredit: ComponentLike;
         additionalCredit: ComponentLike;
@@ -103,10 +101,12 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
   private get monthlyCreditText() {
     return this.creditsAvailableInPlanAllowance != null &&
       this.creditsIncludedInPlanAllowance != null
-      ? `${formatNumber(
-          this.creditsAvailableInPlanAllowance,
-        )} of ${formatNumber(this.creditsIncludedInPlanAllowance)} left`
-      : null;
+      ? `${formatNumber(this.creditsAvailableInPlanAllowance, {
+          size: 'short',
+        })} of ${formatNumber(this.creditsIncludedInPlanAllowance, {
+          size: 'short',
+        })} left`
+      : 'Not available on Free plan';
   }
 
   private get isOutOfCredit() {
@@ -132,7 +132,6 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
   <template>
     {{yield
       (hash
-        hasActiveSubscription=(if this.plan true false)
         plan=(component
           Value
           tag='plan'
@@ -152,7 +151,7 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
         additionalCredit=(component
           Value
           tag='additional-credit'
-          value=(formatNumber this.extraCreditsAvailableInBalance)
+          value=(formatNumber this.extraCreditsAvailableInBalance size='short')
           isLoading=this.isLoading
           isOutOfCredit=this.isOutOfCredit
           displayCreditIcon=true

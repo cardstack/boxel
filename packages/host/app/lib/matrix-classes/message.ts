@@ -49,6 +49,7 @@ interface RoomMessageOptional {
   isDebugMessage?: boolean;
   hasContinuation?: boolean;
   continuationOf?: string | null;
+  agentId?: string;
 }
 
 export class Message implements RoomMessageInterface {
@@ -58,6 +59,7 @@ export class Message implements RoomMessageInterface {
   @tracked codePatchResults: TrackedArray<MessageCodePatchResult>;
   @tracked created: Date;
   @tracked _isStreamingFinished?: boolean;
+  @tracked _isCanceled?: boolean;
   @tracked hasContinuation?: boolean;
   @tracked continuedInMessage?: Message | null;
   continuationOf?: string | null;
@@ -76,6 +78,7 @@ export class Message implements RoomMessageInterface {
   _updated: Date;
   eventId: string;
   roomId: string;
+  agentId?: string;
 
   //This property is used for testing purpose
   instanceId: string;
@@ -90,6 +93,7 @@ export class Message implements RoomMessageInterface {
     this._updated = init.updated;
     this.status = init.status;
     this.roomId = init.roomId;
+    this.agentId = init.agentId;
     this.attachedFiles = init.attachedFiles;
     this.hasContinuation = init.hasContinuation;
     this.continuationOf = init.continuationOf;
@@ -156,6 +160,16 @@ export class Message implements RoomMessageInterface {
     }
   }
 
+  setIsCanceled(isCanceled: boolean | undefined) {
+    if (this._isCanceled !== isCanceled) {
+      this._isCanceled = isCanceled;
+    }
+  }
+
+  get isCanceled(): boolean {
+    return this._isCanceled ?? false;
+  }
+
   get isStreamingFinished(): boolean | undefined {
     if (this.hasContinuation) {
       return this.continuedInMessage?.isStreamingFinished ?? false;
@@ -207,6 +221,14 @@ export class Message implements RoomMessageInterface {
   */
   @cached
   get htmlParts(): HtmlTagGroup[] {
-    return parseHtmlContent(this.bodyHTML, this.roomId, this.eventId);
+    let htmlParts = parseHtmlContent(this.bodyHTML, this.roomId, this.eventId);
+    if (this._isCanceled) {
+      htmlParts.push({
+        type: 'non_pre_tag',
+        content: '<p style="font-weight: bold;">{Generation Cancelled}</p>',
+        codeData: null,
+      });
+    }
+    return htmlParts;
   }
 }

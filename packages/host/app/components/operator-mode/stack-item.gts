@@ -494,9 +494,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private get canEdit() {
     return (
       this.card &&
+      this.card[realmURL] &&
       !this.isBuried &&
       !this.isEditing &&
-      this.realm.canWrite(this.card.id)
+      this.realm.canWrite(this.card[realmURL].href)
     );
   }
 
@@ -621,6 +622,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <CardHeader
               @cardTypeDisplayName={{this.headerTitle}}
               @cardTypeIcon={{cardTypeIcon this.card}}
+              @cardTitle={{this.card.title}}
               @isSaving={{this.cardResource.autoSaveState.isSaving}}
               @isTopCard={{this.isTopCard}}
               @lastSavedMessage={{this.cardResource.autoSaveState.lastSavedErrorMsg}}

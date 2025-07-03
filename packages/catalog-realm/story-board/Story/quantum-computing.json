@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Google's Quantum Computer Solves 30-Year-Old Mathematical Problem in Minutes",
+      "url": "https://www.nature.com/articles/quantum-breakthrough-mathematical-proof-2025",
+      "description": "Google's latest quantum processor, Sycamore-3, has successfully solved the Busemann-Petty problem, a geometric conjecture that has puzzled mathematicians since 1995. The quantum algorithm completed the proof in just 47 minutes, a calculation that would take classical supercomputers an estimated 10,000 years. Lead researcher Dr. Sarah Martinez explains that this breakthrough demonstrates quantum computing's potential to revolutionize not just cryptography, but fundamental mathematical research. The achievement marks a crucial step toward practical quantum applications in drug discovery, climate modeling, and artificial intelligence.",
+      "author": "Prof. Alan Turing Institute",
+      "upvotes": 567,
+      "downvotes": 43,
+      "commentUrl": "https://www.nature.com/articles/quantum-breakthrough-mathematical-proof-2025#discussion",
+      "commentCount": 156,
+      "submittedAt": "2025-01-14T09:45:00Z",
+      "thumbnailURL": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400&h=300&fit=crop"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../story-board",
+        "name": "Story"
+      }
+    }
+  }
+}

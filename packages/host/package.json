@@ -50,6 +50,7 @@
     "@embroider/core": "^3.4.15",
     "@embroider/macros": "^1.16.5",
     "@embroider/webpack": "^4.0.4",
+    "eventemitter3": "catalog:",
     "@floating-ui/dom": "catalog:",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.1.2",
@@ -128,7 +129,7 @@
     "ember-provide-consume-context": "^0.7.0",
     "ember-qunit": "catalog:",
     "ember-resolver": "^11.0.1",
-    "ember-resources": "^6.5.1",
+    "ember-resources": "catalog:",
     "ember-route-template": "^1.0.3",
     "ember-source": "~5.4.0",
     "ember-template-imports": "^4.1.1",
@@ -181,6 +182,10 @@
     "uuid": "catalog:",
     "wait-for-localhost-cli": "catalog:",
     "webpack": "catalog:"
+  },
+  "dependencies": {
+    "reactiveweb": "catalog:",
+    "ember-modify-based-class-resource": "catalog:"
   },
   "engines": {
     "node": ">= 20"

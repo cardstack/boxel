@@ -469,6 +469,24 @@ module('Integration | operator-mode', function (hooks) {
             }),
             pet: petMango,
           }),
+          'Person/hassan.json': {
+            data: {
+              attributes: {
+                firstName: 'Hassan',
+              },
+              relationships: {
+                friends: {
+                  links: { self: null },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
           'Person/burcu.json': new Person({
             firstName: 'Burcu',
             friends: [petJackie, petWoody, petBuzz],
@@ -533,6 +551,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           } as LooseSingleCardDocument,
           'grid.json': new CardsGrid(),
+          'index.json': new CardsGrid(),
           'Spec/publishing-packet.json': new Spec({
             title: 'Publishing Packet',
             description: 'Spec for PublishingPacket',
@@ -598,7 +617,9 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
-    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
+    assert
+      .dom('[data-test-boxel-card-header-title]')
+      .hasText('Person - Fadhlan');
     assert
       .dom(
         `[data-test-card-header-realm-icon="https://boxel-images.boxel.ai/icons/Letter-o.png"]`,
@@ -1523,6 +1544,33 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-field="friends"]').containsText('Jackie');
   });
 
+  test('can add a card to linksToMany field that has a null value for relationship', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/hassan"]`);
+    await click('[data-test-edit-button]');
+
+    assert.dom('[data-test-field="friends"] [data-test-pet]').doesNotExist();
+    assert
+      .dom('[data-test-field="friends"] [data-test-add-new]')
+      .hasText('Add Pets');
+    await click('[data-test-field="friends"] [data-test-add-new]');
+    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
+    await click(`[data-test-select="${testRealmURL}Pet/jackie"]`);
+    await click('[data-test-card-catalog-go-button]');
+
+    await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+    assert.dom('[data-test-field="friends"]').containsText('Jackie');
+  });
+
   test('can change the item selection in a linksToMany field', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(
@@ -2390,7 +2438,9 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await waitFor('[data-test-card-header-realm-icon]');
-    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
+    assert
+      .dom('[data-test-boxel-card-header-title]')
+      .hasText('Person - Fadhlan');
     assert
       .dom(
         `[data-test-card-header-realm-icon="https://boxel-images.boxel.ai/icons/Letter-o.png"]`,
@@ -2401,7 +2451,9 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-tooltip-content]')
       .hasText('In Operator Mode Workspace');
     await triggerEvent(`[data-test-card-header-realm-icon]`, 'mouseleave');
-    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
+    assert
+      .dom('[data-test-boxel-card-header-title]')
+      .hasText('Person - Fadhlan');
   });
 
   test(`it has an option to copy the card url`, async function (assert) {
@@ -2672,7 +2724,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}BlogPost/1.json`);
 
-    operatorModeStateService.updateCodePath(
+    await operatorModeStateService.updateCodePath(
       new URL(`${testRealmURL}person.gts`),
     );
 
@@ -2720,7 +2772,7 @@ module('Integration | operator-mode', function (hooks) {
     let someRandomText = 'I am still typing a url';
     await typeIn('[data-test-card-url-bar-input]', someRandomText);
 
-    operatorModeStateService.updateCodePath(
+    await operatorModeStateService.updateCodePath(
       new URL(`${testRealmURL}person.gts`),
     );
 
@@ -2923,7 +2975,8 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-boxel-menu-item-text="Open in Interact Mode"]`);
 
     await waitFor(`[data-test-stack-card]`);
-    assert.dom(`[data-test-stack-card]`).exists({ count: 1 });
+    assert.dom(`[data-test-stack-card]`).exists({ count: 2 });
+    assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
     assert.dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`).exists();
   });
 

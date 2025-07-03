@@ -4,7 +4,8 @@ import {
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
   loadCardDef,
-  listingNameWithUuid,
+  generateInstallFolderName,
+  RealmPaths,
 } from '@cardstack/runtime-common';
 
 import * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -37,9 +38,11 @@ export default class ListingUseCommand extends HostBaseCommand<
     input: BaseCommandModule.ListingInput,
   ): Promise<undefined> {
     let realmUrls = this.realmServer.availableRealmURLs;
-    let { realm: realmUrl, listing: listingInput } = input;
+    let { realm, listing: listingInput } = input;
 
     const listing = listingInput as Listing;
+
+    let realmUrl = new RealmPaths(new URL(realm)).url;
 
     // Make sure realm is valid
     if (!realmUrls.includes(realmUrl)) {
@@ -51,7 +54,7 @@ export default class ListingUseCommand extends HostBaseCommand<
       (spec) => spec.specType !== 'field',
     );
 
-    const localDir = listingNameWithUuid(listing.name);
+    const localDir = generateInstallFolderName(listing.name);
 
     for (const spec of specsWithoutFields) {
       if (spec.isComponent) {

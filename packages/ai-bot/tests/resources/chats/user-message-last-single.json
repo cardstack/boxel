@@ -1,0 +1,264 @@
+[
+  {
+    "type": "m.room.create",
+    "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "room_version": "10",
+      "creator": "@admin:localhost"
+    },
+    "state_key": "",
+    "origin_server_ts": 1749132084518,
+    "unsigned": {
+      "membership": "leave",
+      "age": 1027961
+    },
+    "event_id": "$EnsuBBgQFyi_SdQaElw00-wx0o_MbJ7OJ53Tk2NDVz0",
+    "user_id": "@admin:localhost",
+    "age": 1027961
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "displayname": "admin",
+      "membership": "join"
+    },
+    "state_key": "@admin:localhost",
+    "origin_server_ts": 1749132084553,
+    "unsigned": {
+      "membership": "leave",
+      "age": 1027926
+    },
+    "event_id": "$Lj4Js7rGZFJBIcdAb4RCXO3orelKnJ7n_8OzLIH9O3g",
+    "user_id": "@admin:localhost",
+    "age": 1027926
+  },
+  {
+    "type": "m.room.power_levels",
+    "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "users": {
+        "@admin:localhost": 100,
+        "@aibot:localhost": 50
+      },
+      "users_default": 0,
+      "events": {
+        "m.room.name": 50,
+        "m.room.power_levels": 100,
+        "m.room.history_visibility": 100,
+        "m.room.canonical_alias": 50,
+        "m.room.avatar": 50,
+        "m.room.tombstone": 100,
+        "m.room.server_acl": 100,
+        "m.room.encryption": 100
+      },
+      "events_default": 0,
+      "state_default": 50,
+      "ban": 50,
+      "kick": 50,
+      "redact": 50,
+      "invite": 0,
+      "historical": 100
+    },
+    "state_key": "",
+    "origin_server_ts": 1749132084591,
+    "unsigned": {
+      "membership": "leave",
+      "age": 1027888
+    },
+    "event_id": "$HJzBKiPAVmcQKAgpGTwg4W-FVsNsIj5AZ8BJhfMllD4",
+    "user_id": "@admin:localhost",
+    "age": 1027888
+  },
+  {
+    "type": "m.room.canonical_alias",
+    "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "alias": "#New%20AI%20Assistant%20Chat%20-%202025-06-05T15%3A01%3A24.509%2B01%3A00%20-%20%40admin%3Alocalhost:localhost"
+    },
+    "state_key": "",
+    "origin_server_ts": 1749132084605,
+    "unsigned": {
+      "membership": "leave",
+      "age": 1027874
+    },
+    "event_id": "$PeNyJFrfKXpRQMjiHrgY6nRpazwxJWL3lNOtHZv6JuY",
+    "user_id": "@admin:localhost",
+    "age": 1027874
+  },
+  {
+    "type": "m.room.join_rules",
+    "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "join_rule": "invite"
+    },
+    "state_key": "",
+    "origin_server_ts": 1749132084606,
+    "unsigned": {
+      "membership": "leave",
+      "age": 1027873
+    },
+    "event_id": "$e2YmZXkGXl4UuQMh3dQGqYu38znmBsHpDIl3GnH1hGA",
+    "user_id": "@admin:localhost",
+    "age": 1027873
+  },
+  {
+    "type": "m.room.history_visibility",
+    "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "history_visibility": "shared"
+    },
+    "state_key": "",
+    "origin_server_ts": 1749132084607,
+    "unsigned": {
+      "membership": "leave",
+      "age": 1027872
+    },
+    "event_id": "$58yAVMfyUOcYjgA7bpEFg7fRnXA2ZeJG1xYGDfp3WE4",
+    "user_id": "@admin:localhost",
+    "age": 1027872
+  },
+  {
+    "type": "m.room.guest_access",
+    "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "guest_access": "can_join"
+    },
+    "state_key": "",
+    "origin_server_ts": 1749132084608,
+    "unsigned": {
+      "membership": "leave",
+      "age": 1027871
+    },
+    "event_id": "$cxwolzC--gBkRsVtOA0bYFuoT5DlkONyqnYI4A-T29Q",
+    "user_id": "@admin:localhost",
+    "age": 1027871
+  },
+  {
+    "type": "app.boxel.active-llm",
+    "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "model": "openai/gpt-4.1"
+    },
+    "state_key": "",
+    "origin_server_ts": 1749132084608,
+    "unsigned": {
+      "membership": "leave",
+      "age": 1027871
+    },
+    "event_id": "$lgbjP4dwZG7ez0yNXLhLIHTbh1Iw5QIspH-p5Txrvqw",
+    "user_id": "@admin:localhost",
+    "age": 1027871
+  },
+  {
+    "type": "app.boxel.room.skills",
+    "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "enabledSkillCards": [],
+      "disabledSkillCards": [],
+      "commandDefinitions": []
+    },
+    "state_key": "",
+    "origin_server_ts": 1749132084609,
+    "unsigned": {
+      "membership": "leave",
+      "age": 1027870
+    },
+    "event_id": "$NXcTZoNb8kLbu6hMfeBqo66db8Iflanj1OhXrDvyiP4",
+    "user_id": "@admin:localhost",
+    "age": 1027870
+  },
+  {
+    "type": "m.room.name",
+    "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "name": "New AI Assistant Chat"
+    },
+    "state_key": "",
+    "origin_server_ts": 1749132084609,
+    "unsigned": {
+      "membership": "leave",
+      "age": 1027870
+    },
+    "event_id": "$kes5MK3H9WPReZNJ-zpsPwJp_dlJkOLwjf7zWDBYGn8",
+    "user_id": "@admin:localhost",
+    "age": 1027870
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "displayname": "aibot",
+      "membership": "invite"
+    },
+    "state_key": "@aibot:localhost",
+    "origin_server_ts": 1749132084741,
+    "unsigned": {
+      "membership": "invite",
+      "age": 1027738
+    },
+    "event_id": "$5TNIdqZz-WdDNIZ9WEYMrfD6iuW1LZhnQ0lwsBglvII",
+    "user_id": "@admin:localhost",
+    "age": 1027738
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "displayname": "aibot",
+      "membership": "join"
+    },
+    "state_key": "@aibot:localhost",
+    "origin_server_ts": 1749132086912,
+    "unsigned": {
+      "replaces_state": "$5TNIdqZz-WdDNIZ9WEYMrfD6iuW1LZhnQ0lwsBglvII",
+      "prev_content": {
+        "displayname": "aibot",
+        "membership": "invite"
+      },
+      "prev_sender": "@admin:localhost",
+      "membership": "join",
+      "age": 1025567
+    },
+    "event_id": "$NVUggs4-xNDgZIcUC0q6C08dOCLmWPxYDGvHKDhSZNg",
+    "user_id": "@aibot:localhost",
+    "age": 1025567,
+    "replaces_state": "$5TNIdqZz-WdDNIZ9WEYMrfD6iuW1LZhnQ0lwsBglvII",
+    "prev_content": {
+      "displayname": "aibot",
+      "membership": "invite"
+    }
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!CyqwGPWBCpFNYnVVzN:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.message",
+      "body": "hi how's it going?",
+      "format": "org.matrix.custom.html",
+      "clientGeneratedId": "33045439-95d8-49a3-9146-07332a65805c",
+      "data": "{\"attachedFiles\":[],\"attachedCards\":[],\"context\":{\"submode\":\"interact\",\"debug\":false,\"openCardIds\":[],\"realmUrl\":\"http://localhost:4201/admin/personal/\",\"tools\":[],\"functions\":[]}}"
+    },
+    "origin_server_ts": 1749132090009,
+    "unsigned": {
+      "membership": "join",
+      "age": 1022470
+    },
+    "event_id": "$h3zcymAF2cuvZANouKYCtxJKYdmDOBisfY1yQDhlTks",
+    "user_id": "@admin:localhost",
+    "age": 1022470
+  }
+]

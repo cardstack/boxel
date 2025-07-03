@@ -1,4 +1,10 @@
-import { waitFor, waitUntil, click } from '@ember/test-helpers';
+/* eslint-disable no-irregular-whitespace */
+import {
+  waitFor,
+  waitUntil,
+  click,
+  RenderingTestContext,
+} from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
@@ -440,7 +446,7 @@ const data = {
     await percySnapshot(assert);
   });
 
-  test('handles HTML tags outside backticks', async function (assert) {
+  test('handles HTML tags outside backticks', async function (this: RenderingTestContext, assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
     let messageWithHtmlOutsideBackticks = `Here's some HTML outside of code blocks:
 
@@ -489,12 +495,13 @@ And another code block without language specified:
     await waitFor('[data-test-message-idx="0"]');
 
     // Check that HTML outside backticks is displayed as actual HTML
-    assert
-      .dom('[data-test-ai-message-content]')
-      .hasText(
-        'Here\'s some HTML outside of code blocks: <p>This is a paragraph with <strong>bold text</strong> and <em>italic text</em>.</p> <ul> <li>List item 1</li> <li>List item 2 with <a href="https://example.com">a link</a></li> </ul> <div class="container"> <h1>Heading 1</h1> <p>Another paragraph with <code>inline code</code>.</p> </div> And here\'s a code block with HTML inside: Copy <div class="example"> And another code block without language specified: Copy <div class="example">',
-        'HTML content should be displayed correctly with proper formatting',
-      );
+    assert.ok(
+      (
+        this.element.querySelector('.message') as HTMLElement
+      )?.innerText.includes(
+        `Here's some HTML outside of code blocks:\n\n<p>This is a paragraph with <strong>bold text</strong> and <em>italic text</em>.</p>\n\n<ul> <li>List item 1</li> <li>List item 2 with <a href="https://example.com">a link</a></li> </ul>\n\n<div class="container"> <h1>Heading 1</h1> <p>Another paragraph with <code>inline code</code>.</p> </div>\n\nAnd here's a code block with HTML inside:`,
+      ),
+    );
 
     // Check that code blocks are preserved
     assert
@@ -514,7 +521,7 @@ And another code block without language specified:
     await percySnapshot(assert);
   });
 
-  test('handles HTML inside backticks without language name', async function (assert) {
+  test('handles HTML inside backticks without language name', async function (this: RenderingTestContext, assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
     let messageWithHtmlInBackticksNoLang = `Here's some HTML inside backticks without a language name:
 
@@ -569,12 +576,14 @@ And some regular text with <b>HTML tags</b> that should be displayed as actual H
     );
 
     // Check that inline code with HTML is preserved
-    assert
-      .dom('[data-test-ai-message-content]')
-      .hasText(
-        'Here\'s some HTML inside backticks without a language name: Copy <div class="container"> And here\'s some inline code with HTML: <span>inline HTML</span> And some regular text with <b>HTML tags</b> that should be displayed as actual HTML.',
-        'HTML content should be displayed correctly with proper formatting',
+
+    await waitUntil(() => {
+      let messageText = (this.element.querySelector('.message') as HTMLElement)
+        ?.innerText;
+      return messageText?.includes(
+        `Here's some HTML inside backticks without a language name:\n\n<div class="container">\n  <h1>Hello World</h1>\n  <p>This is a paragraph with <strong>bold text</strong>.</p>\n  <ul>\n    <li>Item 1</li>\n    <li>Item 2</li>\n  </ul>\n</div>\n\nAnd here's some inline code with HTML: <span>inline HTML</span>\n\nAnd some regular text with <b>HTML tags</b> that should be displayed as actual HTML.`,
       );
+    });
 
     await percySnapshot(assert);
   });
@@ -638,7 +647,11 @@ Above code blocks are now complete`;
         document.querySelectorAll('.code-block-diff .cdr.line-delete').length >
         1,
     );
-    await waitFor('.code-block-diff .cdr.line-insert');
+    await waitUntil(
+      () =>
+        document.querySelectorAll('.code-block-diff .cdr.line-insert').length >
+        4,
+    );
 
     assert.dom('.cdr.line-delete').exists({ count: 4 });
     assert.dom('.cdr.line-insert').exists({ count: 5 });

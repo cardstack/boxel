@@ -1,9 +1,12 @@
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
-import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { CheckMark } from '@cardstack/boxel-ui/icons';
+
+import PillMenu from '@cardstack/host/components/pill-menu';
+import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 
 interface Signature {
   Args: {
@@ -11,112 +14,114 @@ interface Signature {
     options: string[];
     onChange: (selectedLLM: string) => void;
     disabled?: boolean;
+    onExpand?: () => void;
+    onCollapse?: () => void;
   };
   Element: HTMLElement;
 }
 
-const LLMSelect: TemplateOnlyComponent<Signature> = <template>
-  <BoxelSelect
-    class='llm-select'
-    @selected={{@selected}}
-    @verticalPosition='above'
-    @onChange={{@onChange}}
-    @options={{@options}}
-    @disabled={{@disabled}}
-    @matchTriggerWidth={{false}}
-    @selectedItemComponent={{component SelectedItem selected=@selected}}
-    @dropdownClass='llm-select__dropdown'
-    as |item|
-  >
-    <div class='item-container'>
-      <div class='check-mark'>
-        {{#if (eq @selected item)}}
-          <CheckMark width='12' height='12' />
-        {{/if}}
-      </div>
-      <span class='item' data-test-llm-select-item={{item}}>{{item}}</span>
-    </div>
-  </BoxelSelect>
-  <style scoped>
-    .llm-select {
-      border: none;
-      padding: 0;
-      width: auto;
-      height: 43.5px;
-      min-width: 120px;
-      flex: 1;
-      padding-right: var(--boxel-sp-xxs);
-      cursor: pointer;
-    }
-    .llm-select :deep(.boxel-trigger) {
-      padding: 0;
-    }
-    .llm-select :deep(.boxel-trigger-content) {
-      flex: 1;
-    }
-    .llm-select[aria-disabled='true'],
-    .llm-select[aria-disabled='true'] :deep(.boxel-trigger-content .llm-name) {
-      background-color: var(--boxel-light);
-      color: var(--boxel-500);
-    }
-    .item-container {
-      display: grid;
-      grid-template-columns: 12px 1fr;
-      gap: var(--boxel-sp-xs);
-      width: 100%;
-    }
-    .check-mark {
-      height: 12px;
-    }
-    .item {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      text-wrap: nowrap;
-      color: var(--boxel-dark);
-      font: 500 var(--boxel-font-sm);
-    }
-
-    :global(
-      .llm-select__dropdown .ember-power-select-option[aria-current='true']
-    ) {
-      background-color: var(--boxel-teal) !important;
-    }
-  </style>
-</template>;
-
-export default LLMSelect;
-
-interface SelectedItemSignature {
-  Args: {
-    selected: string;
-  };
-  Element: HTMLDivElement;
-}
-
-class SelectedItem extends Component<SelectedItemSignature> {
+export default class LLMSelect extends Component<Signature> {
   <template>
-    <div class='selected'>
-      <span data-test-llm-select-selected={{@selected}}>{{this.model}}</span>
-    </div>
-
+    <PillMenu
+      class='llm-select'
+      @onExpand={{@onExpand}}
+      @onCollapse={{@onCollapse}}
+      ...attributes
+    >
+      <:headerDetail>
+        <div class='selected-llm-wrapper'>
+          <span
+            class='selected-llm'
+            data-test-llm-select-selected={{@selected}}
+          >
+            {{this.displayName}}
+          </span>
+        </div>
+      </:headerDetail>
+      <:content>
+        <ul class='llm-list'>
+          {{#each @options as |option|}}
+            <li
+              class='llm-option {{if (eq @selected option) "selected"}}'
+              data-test-llm-select-item={{option}}
+              {{scrollIntoViewModifier
+                (eq @selected option)
+                container='llm-select'
+                key=option
+              }}
+            >
+              <button
+                type='button'
+                class='llm-button'
+                {{on 'click' (fn this.handleOptionClick option)}}
+              >
+                {{option}}
+              </button>
+            </li>
+          {{/each}}
+        </ul>
+      </:content>
+    </PillMenu>
     <style scoped>
-      .selected {
-        display: grid;
-        grid-template-columns: 1fr;
-        width: 100%;
+      .llm-select {
+        background-color: transparent;
+        box-shadow: none;
       }
-      .selected span {
+
+      .selected-llm-wrapper {
         overflow: hidden;
         text-overflow: ellipsis;
-        text-wrap: nowrap;
+        white-space: nowrap;
+        min-width: 0;
+      }
+
+      .selected-llm {
         color: var(--boxel-dark);
-        font: 500 var(--boxel-font-sm);
-        text-align: right;
+        font: 600 var(--boxel-font-xs);
+      }
+
+      .llm-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: grid;
+        gap: var(--boxel-sp-xs);
+        max-height: 300px;
+        overflow-y: auto;
+      }
+
+      .llm-option {
+        border-radius: var(--boxel-border-radius);
+        border: 1px solid var(--boxel-400);
+      }
+
+      .llm-option:hover {
+        border: 1px solid var(--boxel-dark);
+      }
+
+      .llm-option.selected {
+        background-color: var(--boxel-teal);
+      }
+
+      .llm-button {
+        width: 100%;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        text-align: left;
+        background: none;
+        border: none;
+        color: var(--boxel-dark);
+        font: 500 var(--boxel-font-xs);
+        cursor: pointer;
       }
     </style>
   </template>
 
-  private get model() {
+  private get displayName() {
     return this.args.selected.split('/')[1] ?? this.args.selected;
+  }
+
+  @action
+  private handleOptionClick(option: string) {
+    this.args.onChange(option);
   }
 }

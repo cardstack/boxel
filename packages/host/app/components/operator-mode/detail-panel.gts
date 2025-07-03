@@ -47,7 +47,6 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 import { lastModifiedDate } from '../../resources/last-modified-date';
-import { ModuleContentsResource } from '../../resources/module-contents';
 
 import { PanelSection } from './code-submode/inner-container';
 import { type FileType, type NewFileType } from './create-file-modal';
@@ -64,12 +63,14 @@ import Selector from './detail-panel-selector';
 
 import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
 
+import type { ModuleAnalysis } from '../../resources/module-contents';
+
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
-    moduleContentsResource: ModuleContentsResource;
+    moduleAnalysis: ModuleAnalysis;
     readyFile: Ready;
     cardInstance: CardDef | undefined;
     selectedDeclaration?: ModuleDeclaration;
@@ -78,7 +79,7 @@ interface Signature {
     goToDefinition: (
       codeRef: ResolvedCodeRef | undefined,
       localName: string | undefined,
-    ) => void;
+    ) => Promise<void>;
     createFile: (
       fileType: FileType,
       definitionClass?: {
@@ -106,7 +107,7 @@ export default class DetailPanel extends Component<Signature> {
   });
 
   private get declarations() {
-    return this.args.moduleContentsResource.declarations;
+    return this.args.moduleAnalysis.declarations;
   }
 
   private get showInThisFilePanel() {
@@ -144,7 +145,7 @@ export default class DetailPanel extends Component<Signature> {
 
   private get isLoading() {
     return (
-      this.args.moduleContentsResource.isLoadingNewModule ||
+      this.args.moduleAnalysis.isLoadingNewModule ||
       this.declarations.some((dec) => {
         if (isCardOrFieldDeclaration(dec)) {
           return dec.cardType?.isLoading;

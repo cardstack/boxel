@@ -1,4 +1,4 @@
-import { concat, hash } from '@ember/helper';
+import { concat, fn, hash } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import BasicDropdown, {
@@ -32,7 +32,10 @@ export type DropdownAPI = Dropdown;
 
 interface Signature {
   Args: {
+    autoClose?: boolean;
     contentClass?: string;
+    initiallyOpened?: boolean;
+    matchTriggerWidth?: boolean;
     onClose?: () => void;
     registerAPI?: (publicAPI: Dropdown) => void;
   };
@@ -58,6 +61,12 @@ class BoxelDropdown extends Component<Signature> {
     this.args.registerAPI?.(publicAPI);
   }
 
+  @action onMouseLeave(dropdown?: Dropdown) {
+    if (this.args.autoClose && dropdown) {
+      dropdown.actions.close();
+    }
+  }
+
   <template>
     {{!--
       Note:
@@ -67,6 +76,8 @@ class BoxelDropdown extends Component<Signature> {
     <BasicDropdown
       @registerAPI={{this.registerAPI}}
       @onClose={{@onClose}}
+      @matchTriggerWidth={{@matchTriggerWidth}}
+      @initiallyOpened={{@initiallyOpened}}
       as |dd|
     >
       {{#let
@@ -83,6 +94,7 @@ class BoxelDropdown extends Component<Signature> {
       {{/let}}
 
       <dd.Content
+        @onMouseLeave={{fn this.onMouseLeave dd}}
         data-test-boxel-dropdown-content
         class={{cn 'boxel-dropdown__content' @contentClass}}
         {{focusTrap
@@ -99,12 +111,16 @@ class BoxelDropdown extends Component<Signature> {
         {{yield (hash close=dd.actions.close) to='content'}}
       </dd.Content>
     </BasicDropdown>
+
     <style scoped>
       @layer {
         .boxel-dropdown__content {
           --boxel-dropdown-content-border-radius: var(--boxel-border-radius);
           border-radius: var(--boxel-dropdown-content-border-radius);
           box-shadow: 0 5px 15px 0 rgb(0 0 0 / 25%);
+        }
+        .ember-basic-dropdown-content--below.gap-above {
+          margin-top: 4px;
         }
 
         @media (prefers-reduced-motion: no-preference) {

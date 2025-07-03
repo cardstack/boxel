@@ -7,7 +7,9 @@ import {
   query as _query,
   param,
   separatedByCommas,
+  IndexWriter,
   type Expression,
+  type StatusArgs,
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
@@ -18,7 +20,7 @@ import Koa from 'koa';
 import Router from '@koa/router';
 import { ecsMetadata, fullRequestURL, livenessCheck } from './middleware';
 import { Server } from 'http';
-import { PgAdapter, serializableError } from '@cardstack/postgres';
+import { PgAdapter } from '@cardstack/postgres';
 
 /* About the Worker Manager
  *
@@ -226,7 +228,7 @@ async function monitorWorker(workerId: string, worker: ChildProcess) {
   let stuckJobs = (await query([
     `SELECT id, job_id FROM job_reservations WHERE worker_id=`,
     param(workerId),
-    `AND completed_at IS NULL AND locked_until < NOW()`,
+    `AND completed_at IS NULL AND locked_until < NOW() - INTERVAL '30 seconds'`,
   ])) as { id: string; job_id: string }[];
 
   if (stuckJobs.length > 0) {
@@ -236,34 +238,108 @@ async function monitorWorker(workerId: string, worker: ChildProcess) {
     log.error(`detected stuck jobs for worker ${workerId}`);
     for (let { id, job_id: jobId } of stuckJobs) {
       log.info(`marking job ${jobId} as timed-out for worker ${workerId}`);
-      await query([
-        `UPDATE jobs SET `,
-        ...separatedByCommas([
-          [
-            `result =`,
-            param(
-              serializableError(
-                new Error(
-                  `Timed-out. Worker manager killed unresponsive worker ${workerId} for job reservation ${id}`,
-                ),
-              ),
-            ),
-          ],
-          [`status = 'rejected'`],
-          [`finished_at = NOW()`],
-        ]),
-        'WHERE id =',
-        param(jobId),
-      ] as Expression);
-      await query([
-        `UPDATE job_reservations SET completed_at = NOW() WHERE id =`,
-        param(id),
-      ]);
-      await query([`NOTIFY jobs_finished`]);
+      let currentState =
+        ((worker as any).__boxelIndexState as IndexState | undefined) ?? {};
+      let { url, realm, deps } = currentState;
+      if (url && realm && deps) {
+        await markFailedIndexEntry({
+          url,
+          realm,
+          deps,
+          message: `worker time-out encountered while indexing ${url}`,
+        });
+      }
+      await markFailedJob({
+        reservationId: id,
+        workerId,
+        jobId,
+        message: `Timed-out. Worker manager killed unresponsive worker ${workerId} for job reservation ${id}`,
+      });
     }
     log.info(`killing worker ${workerId} due to stuck jobs`);
     worker.kill();
   }
+}
+
+async function markFailedIndexEntry({
+  url,
+  realm,
+  message,
+  deps,
+}: {
+  url: string;
+  realm: string;
+  message: string;
+  deps?: string[];
+}) {
+  log.info(`marking index entry ${url} with an error doc`);
+  let indexWriter = new IndexWriter(adapter);
+  let batch = await indexWriter.createBatch(new URL(realm));
+  let invalidations = await batch.invalidate([new URL(url)]);
+  for (let file of [url, ...invalidations]) {
+    await batch.updateEntry(new URL(file), {
+      type: 'error',
+      error: {
+        message,
+        status: 500,
+        additionalErrors: null,
+        deps: file === url ? deps : [url],
+      },
+    });
+  }
+  await batch.done();
+}
+
+async function markFailedJob({
+  workerId,
+  jobId,
+  reservationId,
+  message,
+}: {
+  workerId: string | undefined;
+  jobId: string;
+  message: string;
+  reservationId?: string;
+}) {
+  log.info(`marking job ${jobId} as failed for worker ${workerId}`);
+  let id: string;
+  if (!reservationId) {
+    [{ id }] = (await query([
+      `SELECT id FROM job_reservations WHERE job_id=`,
+      param(jobId),
+      `AND completed_at IS NULL`,
+    ])) as { id: string }[];
+    if (!id) {
+      log.error(
+        `Cannot determine job_reservation id for failed job ${jobId} of worker ${workerId}`,
+      );
+      return;
+    }
+  } else {
+    id = reservationId;
+  }
+
+  await query([
+    `UPDATE jobs SET `,
+    ...separatedByCommas([
+      [
+        `result =`,
+        param({
+          status: 500,
+          message: `Worker manager detected fatal error in worker ${workerId} for job ${jobId} with job_reservation id ${id}: ${message}`,
+        }),
+      ],
+      [`status = 'rejected'`],
+      [`finished_at = NOW()`],
+    ]),
+    'WHERE id =',
+    param(jobId),
+  ] as Expression);
+  await query([
+    `UPDATE job_reservations SET completed_at = NOW() WHERE id =`,
+    param(id),
+  ]);
+  await query([`NOTIFY jobs_finished`]);
 }
 
 async function startWorker(priority: number, urlMappings: URL[][]) {
@@ -293,6 +369,8 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
   );
 
   let watchdog: NodeJS.Timeout;
+  let workerId: string | undefined;
+  let currentState: IndexState | undefined;
 
   worker.on('exit', () => {
     clearInterval(watchdog);
@@ -308,9 +386,32 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
     );
   }
   if (worker.stderr) {
-    worker.stderr.on('data', (data: Buffer) =>
-      log.error(`[worker ${name} priority ${priority}]: ${data.toString()}`),
-    );
+    worker.stderr.on('data', (data: Buffer) => {
+      let message = data.toString();
+      log.error(`[worker ${name} priority ${priority}]: ${message}`);
+      if (message.includes('FATAL ERROR')) {
+        (async () => {
+          if (currentState?.url && currentState?.realm) {
+            let { url, realm, deps } = currentState;
+            message = `encountered fatal error indexing ${url}: ${message}`;
+            await markFailedIndexEntry({ url, realm, deps, message });
+          }
+          if (workerId && currentState?.jobId) {
+            await markFailedJob({
+              workerId,
+              jobId: currentState.jobId,
+              message,
+            });
+          }
+        })().catch((e) => {
+          Sentry.captureException(e);
+          log.error(
+            `worker: Unexpected error encountered trying to mark a failed job for worker ${workerId} with job id ${currentState?.jobId}`,
+            e,
+          );
+        });
+      }
+    });
   }
 
   let timeout = await Promise.race([
@@ -318,9 +419,30 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
       worker.on('message', (message) => {
         if (typeof message === 'string' && message.startsWith('ready:')) {
           let id = message.substring('ready:'.length);
+          workerId = id;
           watchdog = setInterval(() => monitorWorker(id, worker), 60_000);
           log.info(`[worker ${name} priority ${priority}]: worker ready`);
           r();
+        } else if (
+          typeof message === 'string' &&
+          message.startsWith('status|')
+        ) {
+          let [_, args] = message.split('|');
+          let { jobId, status, realm, url, deps } = JSON.parse(
+            args,
+          ) as StatusArgs;
+          if (status === 'start') {
+            currentState = {
+              jobId,
+              url,
+              realm,
+              deps,
+            };
+            (worker as any).__boxelIndexState = currentState;
+          } else {
+            currentState = undefined;
+            (worker as any).__boxelIndexState = undefined;
+          }
         }
       });
     }),
@@ -336,4 +458,11 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
 
 async function query(expression: Expression) {
   return await _query(adapter, expression);
+}
+
+interface IndexState {
+  jobId?: string;
+  url?: string;
+  realm?: string;
+  deps?: string[];
 }

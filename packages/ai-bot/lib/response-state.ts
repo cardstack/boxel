@@ -8,6 +8,7 @@ export default class ResponseState {
   toolCalls: ChatCompletionSnapshot.Choice.Message.ToolCall[] = [];
   private toolCallsJson: string | undefined;
   isStreamingFinished = false;
+  isCanceled = false;
 
   update(
     newReasoning: string | undefined,
@@ -66,9 +67,13 @@ export default class ResponseState {
     return false;
   }
 
-  updateIsStreamingFinished(isStreamingFinished: boolean) {
+  updateIsStreamingFinished(
+    isStreamingFinished: boolean,
+    isCanceled?: boolean,
+  ) {
     if (this.isStreamingFinished !== isStreamingFinished) {
       this.isStreamingFinished = isStreamingFinished;
+      this.isCanceled = isCanceled ?? false;
       return true;
     }
     return false;
@@ -80,6 +85,7 @@ export default class ResponseState {
       content: this.latestContent,
       toolCalls: this.toolCalls,
       isStreamingFinished: this.isStreamingFinished,
+      isCanceled: this.isCanceled,
     };
   }
 }

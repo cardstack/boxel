@@ -22,6 +22,8 @@ import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+  CodeRef,
 } from '@cardstack/runtime-common';
 import { type SerializedFile } from './file-api';
 
@@ -120,6 +122,7 @@ export interface MessageEvent extends BaseMatrixEvent {
     format: 'org.matrix.custom.html';
     body: string;
     isStreamingFinished: boolean;
+    isCanceled?: boolean;
     errorMessage?: string;
   };
   unsigned: {
@@ -167,6 +170,7 @@ export type EncodedCommandRequest = Omit<CommandRequest, 'arguments'> & {
 };
 
 export interface BoxelContext {
+  agentId?: string;
   openCardIds?: string[];
   realmUrl?: string;
   tools?: Tool[];
@@ -174,6 +178,12 @@ export interface BoxelContext {
   submode?: string;
   codeMode?: {
     currentFile?: string;
+    moduleInspectorPanel?: string;
+    previewPanelSelection?: {
+      cardId: string;
+      format: string;
+    };
+    selectedCodeRef?: CodeRef;
   };
   debug?: boolean;
   requireToolCall?: boolean;
@@ -189,10 +199,11 @@ export interface CardMessageContent {
   format: 'org.matrix.custom.html';
   body: string;
   isStreamingFinished?: boolean;
+  isCanceled?: boolean;
   [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]?: boolean;
   [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]?: string; // event_id of the message we are continuing
   [APP_BOXEL_REASONING_CONTENT_KEY]?: string;
-  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[]; // TODO
+  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[];
   errorMessage?: string;
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.
@@ -368,6 +379,15 @@ export interface FileRemovedEventContent {
   eventName: 'update';
   removed: string;
 }
+
+export interface StopGeneratingEvent extends BaseMatrixEvent {
+  type: typeof APP_BOXEL_STOP_GENERATING_EVENT_TYPE;
+}
+
+export type MatrixEventWithBoxelContext =
+  | CardMessageEvent
+  | CommandResultEvent
+  | CodePatchResultEvent;
 
 export type MatrixEvent =
   | ActiveLLMEvent

@@ -87,6 +87,8 @@ export default class MessageBuilder {
     return new Message({
       roomId: this.builderContext.roomId,
       author: this.builderContext.author,
+      agentId: (this.event.content as CardMessageContent)?.data?.context
+        ?.agentId,
       created: new Date(this.event.origin_server_ts),
       updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
       body: this.event.content.body,
@@ -155,6 +157,7 @@ export default class MessageBuilder {
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
       message.clientGeneratedId = this.clientGeneratedId;
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
+      message.setIsCanceled(!!event.content.isCanceled);
       message.attachedCardIds = this.attachedCardIds;
       if (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY]) {
         message.setCommands(await this.buildMessageCommands(message));
@@ -162,6 +165,7 @@ export default class MessageBuilder {
       message.codePatchResults = this.buildMessageCodePatchResults(message);
     } else if (event.content.msgtype === 'm.text') {
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
+      message.setIsCanceled(!!event.content.isCanceled);
     }
     if (event.type === APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE) {
       message.isDebugMessage = true;
@@ -185,6 +189,11 @@ export default class MessageBuilder {
     message.setIsStreamingFinished(
       'isStreamingFinished' in this.event.content
         ? this.event.content.isStreamingFinished
+        : undefined,
+    );
+    message.setIsCanceled(
+      'isCanceled' in this.event.content
+        ? this.event.content.isCanceled
         : undefined,
     );
     message.hasContinuation = hasContinuation(this.event);
@@ -344,12 +353,22 @@ export default class MessageBuilder {
 
     let codePatchResults = new TrackedArray<MessageCodePatchResult>();
     for (let codePatchResultEvent of codePatchResultEvents) {
+      let finalFileUrlAfterCodePatching =
+        codePatchResultEvent.content.data.attachedFiles?.[0]?.sourceUrl;
+      if (!finalFileUrlAfterCodePatching) {
+        console.error(
+          'Bug: no final file url found for code patch result event - it should have been set',
+          codePatchResultEvent,
+        );
+        continue;
+      }
       codePatchResults.push(
         new MessageCodePatchResult(
           message,
           this.builderContext.effectiveEventId,
           codePatchResultEvent.content['m.relates_to'].key,
           codePatchResultEvent.content.codeBlockIndex,
+          finalFileUrlAfterCodePatching,
           getOwner(this)!,
         ),
       );

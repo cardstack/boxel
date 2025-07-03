@@ -24,6 +24,7 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
+  percySnapshot,
   testRealmURL,
   setupCardLogs,
   setupIntegrationTestRealm,
@@ -159,9 +160,10 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        'pet.gts': { Pet },
         'address.gts': { Address },
+        'hello.txt': 'Hello, world!',
         'person.gts': { Person },
+        'pet.gts': { Pet },
         'Pet/mango.json': petMango,
         'Pet/jackie.json': petJackie,
         'Person/fadhlan.json': new Person({
@@ -231,7 +233,9 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
 
     await waitFor('[data-test-person]');
-    assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
+    assert
+      .dom('[data-test-boxel-card-header-title]')
+      .hasText('Person - Fadhlan');
     assert.dom('[data-test-person]').hasText('Fadhlan');
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
@@ -562,23 +566,13 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert.deepEqual(
       JSON.parse(commandResultEvents[0].content.data).context,
       {
+        agentId: getService('matrix-service').agentId,
         submode: 'interact',
         debug: false,
         openCardIds: ['http://test-realm/test/Person/fadhlan'],
         realmUrl: 'http://test-realm/test/',
       },
       'command result event contains the context',
-    );
-    assert.deepEqual(
-      JSON.parse(commandResultEvents[0].content.data).attachedCards[0].name,
-      'Evie',
-      'command result event contains cards whose ID was reference in the input of the command as attached cards 1',
-    );
-    assert.deepEqual(
-      JSON.parse(commandResultEvents[0].content.data).attachedCards[0]
-        .sourceUrl,
-      'http://test-realm/test/Person/fadhlan',
-      'command result event contains cards whose ID was reference in the input of the command as attached cards 2',
     );
   });
 
@@ -646,6 +640,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert.deepEqual(
       JSON.parse(commandResultEvents[0].content.data).context,
       {
+        agentId: getService('matrix-service').agentId,
         submode: 'interact',
         debug: false,
         openCardIds: ['http://test-realm/test/Person/fadhlan'],
@@ -679,6 +674,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           }),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await settled();
     assert
@@ -719,6 +719,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           }),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await settled();
     assert
@@ -758,6 +763,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           }),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await settled();
     assert.dom('.result-list li:nth-child(6)').doesNotExist();
@@ -810,6 +820,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           arguments: JSON.stringify(toolArgs),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await settled();
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
@@ -831,7 +846,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
     assert
       .dom(`${rightStackItem} [data-test-boxel-card-header-title]`)
-      .hasText('Search Results');
+      .hasText('Search Results - Search Results');
 
     const savedCardId = document
       .querySelector(rightStackItem)
@@ -877,6 +892,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           arguments: JSON.stringify(toolArgs),
         },
       ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
     });
     await settled();
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
@@ -906,7 +926,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Copy to Workspace"]');
     assert
       .dom(`${stackItem} [data-test-boxel-card-header-title]`)
-      .hasText('Search Results');
+      .hasText('Search Results - Search Results');
 
     const savedCardId = document
       .querySelector(stackItem)
@@ -985,6 +1005,8 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert
       .dom('[data-test-ai-message-content] [data-test-editor]')
       .exists('View Code panel should remain open');
+
+    await percySnapshot(assert); // can preview code in ViewCode panel
   });
 
   test('when command in a message with continuations is done streaming, apply button is shown in ready state', async function (assert) {
@@ -1135,5 +1157,201 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert
       .dom('[data-test-message-idx="0"] [data-test-command-apply="ready"]')
       .exists({ count: 2 });
+  });
+
+  test('command that returns a FileForAttachmentCard result is specially handled to attach the file', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
+    await settled();
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]', { timeout: 10000 });
+
+    // add environment skill
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click(
+      '[data-test-card-catalog-item="https://cardstack.com/base/Skill/boxel-environment"]',
+    );
+    await click('[data-test-card-catalog-go-button]');
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Reading hello file',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '0ce51dc1-c819-4d6d-9f4f-77fbf60e9a0a',
+          name: 'read-file-for-ai-assistant_a831',
+          arguments: JSON.stringify({
+            attributes: {
+              fileUrl: `${testRealmURL}hello.txt`,
+            },
+          }),
+        },
+      ],
+    });
+    let commandResultEvents = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
+        event.content['m.relates_to']?.key === 'applied',
+    );
+    assert.equal(
+      commandResultEvents.length,
+      0,
+      'command result event is not dispatched',
+    );
+
+    await settled();
+
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-command-card-idle]');
+
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists();
+
+    commandResultEvents = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
+        event.content['m.relates_to']?.key === 'applied',
+    );
+    assert.equal(
+      commandResultEvents.length,
+      1,
+      'command result event is dispatched',
+    );
+    assert.deepEqual(
+      JSON.parse(commandResultEvents[0].content.data).attachedFiles.length,
+      1,
+      'command result event contains an attached file',
+    );
+    assert.deepEqual(
+      JSON.parse(commandResultEvents[0].content.data).attachedFiles[0].name,
+      'hello.txt',
+      'command result event contains attached file',
+    );
+    assert.deepEqual(
+      JSON.parse(commandResultEvents[0].content.data).attachedFiles[0]
+        .sourceUrl,
+      'http://test-realm/test/hello.txt',
+      'command result event contains file whose url was reference in the input of the command as an attached file',
+    );
+  });
+
+  test('command that returns a CardForAttachmentCard result is specially handled to attach the card', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
+    await settled();
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]', { timeout: 10000 });
+
+    // add environment skill
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click(
+      '[data-test-card-catalog-item="https://cardstack.com/base/Skill/boxel-environment"]',
+    );
+    await click('[data-test-card-catalog-go-button]');
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Reading card',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '1ef9a66a-2201-4874-a156-9705acb1ac13',
+          name: 'read-card-for-ai-assistant_dd38',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Pet/mango`,
+            },
+          }),
+        },
+      ],
+    });
+    let commandResultEvents = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
+        event.content['m.relates_to']?.key === 'applied',
+    );
+    assert.equal(
+      commandResultEvents.length,
+      0,
+      'command result event is not dispatched',
+    );
+
+    await settled();
+
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-command-card-idle]');
+
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists();
+
+    commandResultEvents = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
+        event.content['m.relates_to']?.key === 'applied',
+    );
+    assert.equal(
+      commandResultEvents.length,
+      1,
+      'command result event is dispatched',
+    );
+    assert.deepEqual(
+      JSON.parse(commandResultEvents[0].content.data).attachedCards.length,
+      1,
+      'command result event contains an attached file',
+    );
+    assert.deepEqual(
+      JSON.parse(commandResultEvents[0].content.data).attachedCards[0].name,
+      'Mango',
+      'command result event contains attached card',
+    );
+    assert.deepEqual(
+      JSON.parse(commandResultEvents[0].content.data).attachedCards[0]
+        .sourceUrl,
+      'http://test-realm/test/Pet/mango',
+      'command result event contains file whose url was reference in the input of the command as an attached file',
+    );
   });
 });

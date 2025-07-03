@@ -68,11 +68,11 @@
   --boxel-border-card: 1px solid rgba(0, 0, 0, 0.1);
   --boxel-border-radius-xxs: 1.5px;
   --boxel-border-radius-xs: 4px;
-  --boxel-border-radius-sm: 6px;
-  --boxel-border-radius: 7.5px;
-  --boxel-border-radius-lg: 11.25px;
+  --boxel-border-radius-sm: 7px;
+  --boxel-border-radius: 10px;
+  --boxel-border-radius-lg: 12px;
   --boxel-border-radius-xl: 15px;
-  --boxel-border-radius-xxl: 22px;
+  --boxel-border-radius-xxl: 20px;
   --boxel-transition: 0.2s ease;
   --boxel-box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
   --boxel-box-shadow-hover: 0 3px 10px rgb(0 0 0 / 15%);
@@ -99,7 +99,9 @@
   --boxel-400: #afafb7;
   --boxel-450: #919191;
   --boxel-500: #5a586a;
+  --boxel-550: #525252;
   --boxel-600: #413e4e;
+  --boxel-650: #3b394b;
   --boxel-700: #272330;
 
   --boxel-cyan: #00ebe5;
@@ -158,6 +160,7 @@
   --boxel-error-100: #dc0202; /* alert - attention - error */
   --boxel-error-200: #ed0000;
   --boxel-error-300: #ff0000;
+  --boxel-error-400: #ff5050;
   --boxel-warning-100: var(--boxel-yellow); /* warning - notification */
   --boxel-warning-200: #ffba00;
   --boxel-success-100: var(--boxel-green);

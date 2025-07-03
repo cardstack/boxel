@@ -1,18 +1,31 @@
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { tracked } from '@glimmer/tracking';
+
+import { restartableTask } from 'ember-concurrency';
+
+import pluralize from 'pluralize';
+
+import { Button } from '@cardstack/boxel-ui/components';
 
 import { skillCardRef } from '@cardstack/runtime-common';
+import { chooseCard } from '@cardstack/runtime-common';
 
-import PillMenu, { PillMenuItem } from '@cardstack/host/components/pill-menu';
+import CardPill from '@cardstack/host/components/card-pill';
+import PillMenu from '@cardstack/host/components/pill-menu';
 
 import { RoomSkill } from '@cardstack/host/resources/room';
 
 interface Signature {
-  Element: HTMLDivElement;
+  Element: HTMLDivElement | HTMLButtonElement;
   Args: {
     skills: RoomSkill[];
-    onChooseCard?: (cardId: string) => void;
+    onExpand?: () => void;
+    onCollapse?: () => void;
+    onChooseCard?: (cardId: string) => Promise<unknown>;
     onUpdateSkillIsActive?: (isActive: boolean, skillCardId: string) => void;
   };
 }
@@ -21,94 +34,159 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
   <template>
     <PillMenu
       class='skill-menu'
-      @query={{this.query}}
-      @items={{@skills}}
-      @itemDisplayName='Skill'
-      @isExpandableHeader={{true}}
-      @canAttachCard={{true}}
-      @onChooseCard={{this.attachSkill}}
-      @onChangeItemIsActive={{this.updateItemIsActive}}
-      tabindex='0'
+      @onExpand={{fn this.setExpanded true}}
+      @onCollapse={{fn this.setExpanded false}}
       ...attributes
     >
-      <:headerIcon>
-        <span class='header-icon' />
-      </:headerIcon>
       <:headerDetail>
-        <span data-test-active-skills-count>{{this.activeSkills.length}}</span>
-        <span class='skills-length'>of
-          {{@skills.length}}
-          {{if (eq @skills.length 1) 'Skill' 'Skills'}}
-          Active
-        </span>
+        <span
+          class='skills-length'
+          data-test-active-skills-count
+        >{{this.headerText}}</span>
       </:headerDetail>
+      <:content>
+        <ul class='skill-list'>
+          {{#each @skills key='cardId' as |skill|}}
+            <li>
+              <CardPill
+                @cardId={{skill.cardId}}
+                @onToggle={{fn this.toggleSkill skill}}
+                @isEnabled={{skill.isActive}}
+                @urlForRealmLookup={{this.urlForRealmLookup skill}}
+                data-test-pill-menu-item={{skill.cardId}}
+              />
+            </li>
+          {{/each}}
+        </ul>
+      </:content>
+      <:footer>
+        <Button
+          class='attach-button'
+          @kind='primary'
+          {{on 'click' this.attachSkillCard}}
+          @disabled={{this.doAttachSkillCard.isRunning}}
+          @loading={{this.isAttachingSkill}}
+          data-test-pill-menu-add-button
+        >
+          {{#if this.isAttachingSkill}}
+            Adding Skill
+          {{else}}
+            Choose a Skill to add
+          {{/if}}
+        </Button>
+      </:footer>
     </PillMenu>
     <style scoped>
       .skill-menu {
-        --boxel-header-gap: var(--boxel-sp-xxs);
-        --boxel-header-detail-margin-left: 0;
+        background-color: transparent;
+        box-shadow: none;
       }
-      .skill-menu.pill-menu--minimized {
-        --boxel-pill-menu-width: 3.75rem;
-        white-space: nowrap;
-        transition: width 0.2s ease-in;
+      .skill-list {
+        display: grid;
+        gap: var(--boxel-sp-xs);
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+        overflow-y: auto;
       }
-      .skill-menu.pill-menu--minimized:focus {
-        outline: 0;
+      .skill-list :deep(.card-pill) {
+        --pill-gap: var(--boxel-sp-xxxs);
+        display: inline-grid;
+        grid-template-columns: auto 1fr auto;
+        width: 100%;
       }
-      .skill-menu.pill-menu--minimized:hover,
-      .skill-menu.pill-menu--minimized:focus-within {
-        --boxel-pill-menu-width: 100%;
+      .skill-list :deep(.card-content) {
+        max-width: initial;
+        font: 600 var(--boxel-font-xs);
       }
-      .skill-menu.pill-menu--minimized :deep(.expandable-header-button),
-      .skill-menu.pill-menu--minimized :deep(.skills-length) {
-        visibility: collapse;
-        transition: visibility 0.2s ease-in;
+      .attach-button {
+        --boxel-button-font: 600 var(--boxel-font-xs);
+        --boxel-button-border: 1px solid var(--boxel-400);
+        --boxel-button-color: var(--boxel-dark);
+        border-radius: var(--boxel-border-radius);
+
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-xs);
+        background: none;
+        width: 100%;
       }
-      .skill-menu.pill-menu--minimized:hover :deep(.expandable-header-button),
-      .skill-menu.pill-menu--minimized:hover :deep(.skills-length),
-      .skill-menu.pill-menu--minimized:focus-within
-        :deep(.expandable-header-button),
-      .skill-menu.pill-menu--minimized:focus-within :deep(.skills-length) {
-        visibility: visible;
+      .attach-button:hover:not(:disabled),
+      .attach-button:focus:not(:disabled) {
+        --icon-color: var(--boxel-600);
+        color: var(--boxel-600);
+        background: none;
+        box-shadow: none;
       }
-      .header-icon {
-        width: 20px;
-        height: 18px;
-        background-image: url('./robot-head@2x.webp');
-        background-position: left center;
-        background-repeat: no-repeat;
-        background-size: contain;
-        flex-shrink: 0;
+      .attach-button:disabled {
+        --boxel-button-text-color: var(--boxel-300);
+        --boxel-button-border: 1px solid var(--boxel-300);
+      }
+      .attach-button > :deep(svg > path) {
+        stroke: none;
       }
     </style>
   </template>
 
-  private get query() {
-    let selectedCardIds =
-      this.args.skills?.map((skill: RoomSkill) => ({
-        not: { eq: { id: skill.cardId } },
-      })) ?? [];
-    // query for only displaying skill cards that are not already selected
-    return {
-      filter: {
-        every: [{ type: skillCardRef }, ...selectedCardIds],
-      },
-    };
+  @tracked private isExpanded = false;
+  @tracked private isAttachingSkill = false;
+
+  private urlForRealmLookup(skill: RoomSkill) {
+    return skill.fileDef.sourceUrl;
+  }
+
+  @action
+  private setExpanded(isExpanded: boolean) {
+    this.isExpanded = isExpanded;
+    if (isExpanded) {
+      this.args.onExpand?.();
+    } else {
+      this.args.onCollapse?.();
+    }
+  }
+
+  private get headerText() {
+    if (this.isExpanded) {
+      return `Skills: ${this.activeSkills.length} of ${this.args.skills.length} active`;
+    }
+    return `${this.activeSkills.length} ${pluralize(
+      'Skills',
+      this.activeSkills.length,
+    )}`;
   }
 
   private get activeSkills() {
     return this.args.skills?.filter((skill) => skill.isActive) ?? [];
   }
 
-  attachSkill = (skillCardId: string) => {
-    this.args.onChooseCard?.(skillCardId);
-  };
+  @action
+  private attachSkillCard() {
+    this.doAttachSkillCard.perform();
+  }
 
-  updateItemIsActive = (item: PillMenuItem, isActive: boolean) => {
-    this.args.onUpdateSkillIsActive?.(
-      isActive,
-      (item as RoomSkill).fileDef.sourceUrl,
-    );
-  };
+  private doAttachSkillCard = restartableTask(async () => {
+    let selectedCardIds =
+      this.args.skills?.map((skill: RoomSkill) => ({
+        not: { eq: { id: skill.cardId } },
+      })) ?? [];
+    // query for only displaying skill cards that are not already selected
+    let query = {
+      filter: {
+        every: [{ type: skillCardRef }, ...selectedCardIds],
+      },
+    };
+    let cardId = await chooseCard(query);
+    if (cardId) {
+      try {
+        this.isAttachingSkill = true;
+        await this.args.onChooseCard?.(cardId);
+      } finally {
+        this.isAttachingSkill = false;
+      }
+    }
+  });
+
+  @action
+  private toggleSkill(skill: RoomSkill) {
+    this.args.onUpdateSkillIsActive?.(!skill.isActive, skill.fileDef.sourceUrl);
+  }
 }

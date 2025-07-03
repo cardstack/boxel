@@ -115,7 +115,6 @@ export default class RealmServerService extends Service {
     name: string;
     iconURL?: string;
     backgroundURL?: string;
-    copyFromSeedRealm?: boolean;
   }) {
     await this.login();
 
@@ -176,11 +175,19 @@ export default class RealmServerService extends Service {
       .map((r) => r.url);
   }
 
+  @cached
+  get availableRealmIndexCardIds() {
+    return this.availableRealmURLs.map((url) => `${url}index`);
+  }
+
   async setAvailableRealmURLs(userRealmURLs: string[]) {
     await this.ready.promise;
     userRealmURLs.forEach((userRealmURL) => {
       if (!this.availableRealms.find((r) => r.url === userRealmURL)) {
-        this.availableRealms.push({ type: 'user', url: userRealmURL });
+        this.availableRealms.push({
+          type: 'user',
+          url: userRealmURL,
+        });
       }
     });
 
@@ -213,7 +220,10 @@ export default class RealmServerService extends Service {
     let { data } = await response.json();
     data.forEach((publicRealm: { id: string }) => {
       if (!this.availableRealms.find((r) => r.url === publicRealm.id)) {
-        this.availableRealms.push({ type: 'catalog', url: publicRealm.id });
+        this.availableRealms.push({
+          type: 'catalog',
+          url: publicRealm.id,
+        });
       }
     });
     this.ready.fulfill();

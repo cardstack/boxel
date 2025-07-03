@@ -7,12 +7,13 @@ import {
   SupportedMimeType,
   insertPermissions,
   Deferred,
+  userIdFromUsername,
   type VirtualNetwork,
   type DBAdapter,
   type QueuePublisher,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
-import { ensureDirSync, writeJSONSync, readdirSync, copySync } from 'fs-extra';
+import { ensureDirSync, writeJSONSync, readdirSync } from 'fs-extra';
 import { setupCloseHandler } from './node-realm';
 import {
   httpLogging,
@@ -45,16 +46,6 @@ const DEFAULT_PERMISSIONS = Object.freeze([
   'realm-owner',
 ]) as RealmPermissions['user'];
 
-const IGNORE_SEED_FILES = [
-  'node_modules',
-  '.gitignore',
-  '.realm.json',
-  '.template-lintrc.js',
-  'package.json',
-  'TODO.md',
-  'tsconfig.json',
-];
-
 export class RealmServer {
   private log = logger('realm-server');
   private realms: Realm[];
@@ -62,20 +53,20 @@ export class RealmServer {
   private matrixClient: MatrixClient;
   private realmServerSecretSeed: string;
   private realmSecretSeed: string;
+  private grafanaSecret: string;
   private realmsRootPath: string;
   private dbAdapter: DBAdapter;
   private queue: QueuePublisher;
   private assetsURL: URL;
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
-  private seedPath: string | undefined;
-  private seedRealmURL: URL | undefined;
   private matrixRegistrationSecret: string | undefined;
   private promiseForIndexHTML: Promise<string> | undefined;
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
   private enableFileWatcher: boolean;
+  private matrixUserId: string;
 
   constructor({
     serverURL,
@@ -84,6 +75,7 @@ export class RealmServer {
     matrixClient,
     realmServerSecretSeed,
     realmSecretSeed,
+    grafanaSecret,
     realmsRootPath,
     dbAdapter,
     queue,
@@ -91,8 +83,6 @@ export class RealmServer {
     getIndexHTML,
     matrixRegistrationSecret,
     getRegistrationSecret,
-    seedPath,
-    seedRealmURL,
     enableFileWatcher,
   }: {
     serverURL: URL;
@@ -101,13 +91,12 @@ export class RealmServer {
     matrixClient: MatrixClient;
     realmServerSecretSeed: string;
     realmSecretSeed: string;
+    grafanaSecret: string;
     realmsRootPath: string;
     dbAdapter: DBAdapter;
     queue: QueuePublisher;
     assetsURL: URL;
     getIndexHTML: () => Promise<string>;
-    seedPath?: string;
-    seedRealmURL?: URL;
     matrixRegistrationSecret?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
     enableFileWatcher?: boolean;
@@ -120,14 +109,18 @@ export class RealmServer {
     detectRealmCollision(realms);
     ensureDirSync(realmsRootPath);
 
+    this.matrixUserId = userIdFromUsername(
+      matrixClient.username,
+      matrixClient.matrixURL.href,
+    );
+
     this.serverURL = serverURL;
     this.virtualNetwork = virtualNetwork;
     this.matrixClient = matrixClient;
     this.realmSecretSeed = realmSecretSeed;
     this.realmServerSecretSeed = realmServerSecretSeed;
+    this.grafanaSecret = grafanaSecret;
     this.realmsRootPath = realmsRootPath;
-    this.seedPath = seedPath;
-    this.seedRealmURL = seedRealmURL;
     this.dbAdapter = dbAdapter;
     this.queue = queue;
     this.assetsURL = assetsURL;
@@ -147,7 +140,7 @@ export class RealmServer {
         cors({
           origin: '*',
           allowHeaders:
-            'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Building-Index, X-HTTP-Method-Override',
+            'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Building-Index, X-Boxel-Assume-User, X-HTTP-Method-Override',
         }),
       )
       .use(async (ctx, next) => {
@@ -175,14 +168,17 @@ export class RealmServer {
       .use(
         createRoutes({
           dbAdapter: this.dbAdapter,
+          serverURL: this.serverURL.href,
           matrixClient: this.matrixClient,
           realmServerSecretSeed: this.realmServerSecretSeed,
           realmSecretSeed: this.realmSecretSeed,
+          grafanaSecret: this.grafanaSecret,
           virtualNetwork: this.virtualNetwork,
           createRealm: this.createRealm,
           serveIndex: this.serveIndex,
           serveFromRealm: this.serveFromRealm,
           sendEvent: this.sendEvent,
+          queue: this.queue,
         }),
       )
       .use(this.serveIndex)
@@ -291,14 +287,12 @@ export class RealmServer {
     name,
     backgroundURL,
     iconURL,
-    copyFromSeedRealm = true,
   }: {
     ownerUserId: string; // note matrix userIDs look like "@mango:boxel.ai"
     endpoint: string;
     name: string;
     backgroundURL?: string;
     iconURL?: string;
-    copyFromSeedRealm?: boolean;
   }): Promise<Realm> => {
     if (
       this.realms.find(
@@ -361,52 +355,31 @@ export class RealmServer {
       ...(iconURL ? { iconURL } : {}),
       ...(backgroundURL ? { backgroundURL } : {}),
     });
-    if (this.seedPath && copyFromSeedRealm) {
-      let ignoreList = IGNORE_SEED_FILES.map((file) =>
-        join(this.seedPath!.replace(/\/$/, ''), file),
-      );
-
-      copySync(this.seedPath, realmPath, {
-        filter: (src, _dest) => {
-          return !ignoreList.includes(src);
-        },
-      });
-      this.log.debug(`seed files for new realm ${url} copied to ${realmPath}`);
-    } else {
-      writeJSONSync(join(realmPath, 'index.json'), {
-        data: {
-          type: 'card',
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/cards-grid',
-              name: 'CardsGrid',
-            },
+    writeJSONSync(join(realmPath, 'index.json'), {
+      data: {
+        type: 'card',
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/cards-grid',
+            name: 'CardsGrid',
           },
         },
-      });
-    }
+      },
+    });
 
-    let realm = new Realm(
-      {
-        url,
-        adapter,
-        secretSeed: this.realmSecretSeed,
-        virtualNetwork: this.virtualNetwork,
-        dbAdapter: this.dbAdapter,
-        queue: this.queue,
-        matrix: {
-          url: this.matrixClient.matrixURL,
-          username,
-        },
+    let realm = new Realm({
+      url,
+      adapter,
+      secretSeed: this.realmSecretSeed,
+      virtualNetwork: this.virtualNetwork,
+      dbAdapter: this.dbAdapter,
+      queue: this.queue,
+      matrix: {
+        url: this.matrixClient.matrixURL,
+        username,
       },
-      {
-        ...(this.seedRealmURL && copyFromSeedRealm
-          ? {
-              copiedFromRealm: this.seedRealmURL,
-            }
-          : {}),
-      },
-    );
+      realmServerMatrixUserId: this.matrixUserId,
+    });
     this.realms.push(realm);
     this.virtualNetwork.mount(realm.handle);
     return realm;
@@ -458,6 +431,7 @@ export class RealmServer {
               url: this.matrixClient.matrixURL,
               username,
             },
+            realmServerMatrixUserId: this.matrixUserId,
           });
           this.virtualNetwork.mount(realm.handle);
           realms.push(realm);

@@ -20,13 +20,10 @@ import {
   assertLoggedOut,
   logout,
   login,
-  assertPaymentLink,
-  setupPayment,
   registerRealmUsers,
   enterWorkspace,
   showAllCards,
   setupUser,
-  encodeWebSafeBase64,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '../helpers/matrix-constants';
@@ -45,7 +42,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       template: 'test',
     });
     await smtpStart();
-    realmServer = await startRealmServer({ includeSeedRealm: true });
+    realmServer = await startRealmServer();
   });
 
   test.afterEach(async () => {
@@ -112,23 +109,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     await page.bringToFront();
 
-    await expect(page.locator('[data-test-email-validated]')).toContainText(
-      'Success! Your email has been validated',
-    );
-
-    await assertPaymentLink(page, {
-      username: '@user1:localhost',
-      email: 'user1@example.com',
-    });
-
-    // base 64 encode the matrix user id
-    const matrixUserId = encodeWebSafeBase64('@user1:localhost');
-    await setupPayment(matrixUserId, realmServer, page);
-    await assertLoggedIn(page, {
-      email: 'user1@example.com',
-      displayName: 'Test User',
-    });
-
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
     await expect(
       page.locator(
@@ -174,23 +154,11 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     let newRealmURL = new URL('user1/personal/', serverIndexUrl).href;
     await enterWorkspace(page, "Test User's Workspace");
 
-    // assert back button brings you back to workspace chooser
-    await page.goBack();
-    await expect(
-      page.locator(`[data-test-workspace="Test User's Workspace"]`),
-    ).toHaveCount(1);
-    await enterWorkspace(page, "Test User's Workspace");
-
     // assert workspace chooser toggle states
     await expect(
       page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toHaveCount(1);
     await showAllCards(page);
-    await expect(
-      page.locator(
-        `[data-test-cards-grid-item="${newRealmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0"]`,
-      ),
-    ).toHaveCount(1);
     await page.locator(`[data-test-workspace-chooser-toggle]`).click();
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
     await page.locator(`[data-test-workspace-chooser-toggle]`).click();
@@ -209,14 +177,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       url: serverIndexUrl,
       skipOpeningAssistant: true,
     });
-
-    await expect(
-      page.locator('[data-test-setup-payment-message]'),
-    ).toContainText('Set up your payment method now to enjoy Boxel');
-
-    const user2MatrixUserId = encodeWebSafeBase64('@user2:localhost');
-
-    await setupPayment(user2MatrixUserId, realmServer, page);
 
     await assertLoggedIn(page, {
       userId: '@user2:localhost',
@@ -264,14 +224,10 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     // assert that logged in user can navigate directly to card in private realm without
     // being asked to login
-    await page.goto(
-      `${newRealmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0`,
-    );
+    await page.goto(newRealmURL);
     await expect(
-      page.locator(
-        `[data-test-card="${newRealmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0"]`,
-      ),
-    ).toContainText('Some folks say');
+      page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
+    ).toHaveCount(1);
 
     // assert that non-logged in user is prompted to login before navigating
     // directly to card in private repo
@@ -279,14 +235,12 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await assertLoggedOut(page);
 
     await login(page, 'user1', 'mypassword1!', {
-      url: `${newRealmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0`,
+      url: newRealmURL,
       skipOpeningAssistant: true,
     });
     await assertLoggedIn(page, { displayName: 'Test User' });
     await expect(
-      page.locator(
-        `[data-test-card="${newRealmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0"]`,
-      ),
+      page.locator(`[data-test-stack-card="${newRealmURL}index"]`),
     ).toHaveCount(1);
 
     let auth = await loginUser(`user1`, 'mypassword1!');

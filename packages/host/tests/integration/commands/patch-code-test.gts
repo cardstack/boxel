@@ -107,6 +107,6 @@ export class Task extends CardDef {
     {{/if}}
   </template>
 }`;
-    assert.strictEqual(result.output, expectedResult);
+    assert.strictEqual(result.patchedContent, expectedResult);
   });
 });

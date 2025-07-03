@@ -31,6 +31,9 @@ import {
   type QueuePublisher,
   type QueueRunner,
   type IndexRunner,
+  User,
+  Subscription,
+  Plan,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
@@ -46,7 +49,7 @@ import {
 import { Server } from 'http';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { shimExternals } from '../../lib/externals';
-import { Plan, Subscription, User } from '@cardstack/billing/billing-queries';
+
 import supertest, { SuperTest, Test } from 'supertest';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {
@@ -58,6 +61,9 @@ import type {
 
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
+
+export const testRealmServerMatrixUsername = 'node-test_realm-server';
+export const testRealmServerMatrixUserId = `@${testRealmServerMatrixUsername}:localhost`;
 
 export { testRealmHref, testRealmURL };
 
@@ -110,12 +116,10 @@ export const realmServerTestMatrix: MatrixConfig = {
 };
 export const realmServerSecretSeed = "mum's the word";
 export const realmSecretSeed = `shhh! it's a secret`;
+export const grafanaSecret = `shhh! it's a secret`;
 export const matrixRegistrationSecret: string =
   getSynapseConfig()!.registration_shared_secret; // as long as synapse has been started at least once, this will always exist
 
-export const seedPath = resolve(
-  join(__dirname, '..', '..', '..', 'seed-realm'),
-);
 const basePath = resolve(join(__dirname, '..', '..', '..', 'base'));
 
 let manager = new RunnerOptionsManager();
@@ -287,6 +291,7 @@ export async function createRealm({
       virtualNetwork,
       matrixURL: matrixConfig.url,
       secretSeed: realmSecretSeed,
+      realmServerMatrixUsername: testRealmServerMatrixUsername,
     });
   }
   let realm = new Realm({
@@ -297,6 +302,7 @@ export async function createRealm({
     virtualNetwork,
     dbAdapter,
     queue: publisher,
+    realmServerMatrixUserId: testRealmServerMatrixUserId,
   });
   if (worker) {
     virtualNetwork.mount(realm.handle);
@@ -350,6 +356,7 @@ export async function runBaseRealmServer(
     virtualNetwork,
     matrixURL,
     secretSeed: realmSecretSeed,
+    realmServerMatrixUsername: testRealmServerMatrixUsername,
   });
   let testBaseRealm = await createRealm({
     dir: basePath,
@@ -379,6 +386,7 @@ export async function runBaseRealmServer(
     dbAdapter,
     queue: publisher,
     getIndexHTML,
+    grafanaSecret,
     serverURL: new URL(localBaseRealmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
@@ -421,6 +429,7 @@ export async function runTestRealmServer({
     virtualNetwork,
     matrixURL,
     secretSeed: realmSecretSeed,
+    realmServerMatrixUsername: testRealmServerMatrixUsername,
   });
   await worker.run();
   let testRealm = await createRealm({
@@ -439,24 +448,6 @@ export async function runTestRealmServer({
 
   virtualNetwork.mount(testRealm.handle);
   let realms = [testRealm];
-  let seedRealmURL: URL | undefined;
-  let seedRealm: Realm | undefined;
-  if (realmURL.pathname && realmURL.pathname !== '/') {
-    seedRealmURL = new URL('/seed/', realmURL);
-    seedRealm = await createRealm({
-      dir: testRealmDir,
-      fileSystem,
-      realmURL: seedRealmURL.href,
-      permissions,
-      virtualNetwork,
-      matrixConfig,
-      publisher,
-      dbAdapter,
-      enableFileWatcher,
-    });
-    virtualNetwork.mount(seedRealm.handle);
-    realms.push(seedRealm);
-  }
   let matrixClient = new MatrixClient({
     matrixURL: realmServerTestMatrix.url,
     username: realmServerTestMatrix.username,
@@ -474,8 +465,7 @@ export async function runTestRealmServer({
     dbAdapter,
     queue: publisher,
     getIndexHTML,
-    seedPath,
-    seedRealmURL,
+    grafanaSecret,
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
   });
@@ -484,7 +474,6 @@ export async function runTestRealmServer({
   return {
     testRealmDir,
     testRealm,
-    seedRealm,
     testRealmServer,
     testRealmHttpServer,
     matrixClient,

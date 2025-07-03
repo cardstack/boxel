@@ -55,8 +55,8 @@ class File extends Component<FileArgs> {
   @service declare realm: RealmService;
 
   @action
-  openFile() {
-    this.operatorModeStateService.updateCodePath(new URL(this.fullUrl));
+  async openFile() {
+    await this.operatorModeStateService.updateCodePath(new URL(this.fullUrl));
   }
 
   get realmPaths() {
@@ -75,6 +75,21 @@ class File extends Component<FileArgs> {
     );
   }
 
+  get fileName() {
+    const path = this.args.recentFile.filePath;
+    const lastDotIndex = path.lastIndexOf('.');
+    return lastDotIndex !== -1 ? path.substring(0, lastDotIndex) : path;
+  }
+
+  get fileExtension() {
+    const path = this.args.recentFile.filePath;
+    const lastSlashIndex = path.lastIndexOf('/');
+    const fileName =
+      lastSlashIndex !== -1 ? path.substring(lastSlashIndex + 1) : path;
+    const lastDotIndex = fileName.lastIndexOf('.');
+    return lastDotIndex !== -1 ? fileName.substring(lastDotIndex) : '';
+  }
+
   <template>
     {{#unless this.isSelected}}
       {{! template-lint-disable require-presentational-children }}
@@ -86,7 +101,10 @@ class File extends Component<FileArgs> {
           {{on 'click' this.openFile}}
         >
           <RealmIcon @realmInfo={{realm.info}} />
-          {{@recentFile.filePath}}
+          <span class='file-name'>{{this.fileName}}</span>
+          {{#if this.fileExtension}}
+            <span class='file-extension'>{{this.fileExtension}}</span>
+          {{/if}}
         </li>
       </WithLoadedRealm>
     {{/unless}}
@@ -95,13 +113,28 @@ class File extends Component<FileArgs> {
         background-color: var(--boxel-light);
         padding: var(--boxel-sp-xxs);
         font-weight: 600;
-        margin-bottom: var(--boxel-sp-xs);
+        margin-bottom: 4px;
         border-radius: var(--code-mode-container-border-radius);
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
         overflow-wrap: anywhere;
         overflow: hidden;
+        --boxel-realm-icon-size: 18px;
+      }
+
+      .file-name {
+        flex: 1;
+        min-width: 0;
+        font: 600 var(--boxel-font-xs);
+      }
+
+      .file-extension {
+        color: var(--boxel-450);
+        font-weight: 400;
+        flex-shrink: 0;
+        text-transform: uppercase;
+        font: 500 var(--boxel-font-xs);
       }
     </style>
   </template>

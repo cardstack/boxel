@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -16,21 +17,38 @@ import get from 'lodash/get';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import { Tooltip } from '@cardstack/boxel-ui/components';
-import { cn, eq, lt, gt, and } from '@cardstack/boxel-ui/helpers';
-import { Download } from '@cardstack/boxel-ui/icons';
+import {
+  cn,
+  eq,
+  gte,
+  MenuItem,
+  MenuDivider,
+} from '@cardstack/boxel-ui/helpers';
+import {
+  Download,
+  IconCode,
+  IconSearch,
+  type Icon,
+} from '@cardstack/boxel-ui/icons';
 
 import {
+  chooseCard,
   CardContextName,
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
   Deferred,
+  cardTypeDisplayName,
+  cardTypeIcon,
   codeRefWithAbsoluteURL,
+  identifyCard,
   isCardInstance,
+  isResolvedCodeRef,
   CardError,
   loadCardDef,
   localId as localIdSymbol,
   realmURL as realmURLSymbol,
+  specRef,
   type getCard,
   type getCards,
   type getCardCollection,
@@ -40,6 +58,8 @@ import {
   type CodeRef,
   type LooseSingleCardDocument,
   type LocalPath,
+  type ResolvedCodeRef,
+  type Filter,
 } from '@cardstack/runtime-common';
 
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
@@ -51,17 +71,22 @@ import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgr
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import {
-  type CardContext,
-  type CardDef,
-  type Format,
+import type {
+  CardContext,
+  CardDef,
+  Format,
 } from 'https://cardstack.com/base/card-api';
+import type { Spec } from 'https://cardstack.com/base/spec';
+
+import consumeContext from '../../helpers/consume-context';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
 import OperatorModeStack from './stack';
 import { CardDefOrId } from './stack-item';
 import SubmodeLayout from './submode-layout';
+
+import type { NewFileOptions } from './new-file-button';
 
 import type { StackItemComponentAPI } from './stack-item';
 
@@ -70,6 +95,8 @@ import type CommandService from '../../services/command-service';
 import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type Realm from '../../services/realm';
+import type RealmServer from '../../services/realm-server';
+import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
 
 import type { Submode } from '../submode-switcher';
@@ -129,15 +156,14 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
         height: var(--container-button-size);
         padding: 0;
         border-radius: 50%;
-        background-color: var(--boxel-light-100);
-        border-color: transparent;
+        background-color: var(--boxel-700);
+        border: var(--boxel-border-flexible);
         box-shadow: var(--boxel-deep-box-shadow);
         z-index: var(--boxel-layer-floating-button);
       }
       .add-card-to-neighbor-stack:hover,
       .add-card-to-neighbor-stack--active {
         --icon-color: var(--boxel-highlight);
-        background-color: var(--boxel-light);
       }
       .add-card-to-neighbor-stack--left {
         margin-left: var(--operator-mode-spacing);
@@ -148,6 +174,21 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
     </style>
   </template>
 }
+
+const CodeSubmodeNewFileOptions: TemplateOnlyComponent = <template>
+  <ul class='code-mode-file-options'>
+    <li>Card Definition .GTS</li>
+    <li>Field Definition .GTS</li>
+    <li>Card Instance .JSON</li>
+  </ul>
+  <style scoped>
+    .code-mode-file-options {
+      list-style-type: disc;
+      padding-left: var(--boxel-sp);
+      line-height: calc(18 / 11);
+    }
+  </style>
+</template>;
 
 interface CardToDelete {
   id: string;
@@ -166,10 +207,15 @@ export default class InteractSubmode extends Component {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare store: StoreService;
   @service private declare realm: Realm;
+  @service private declare realmServer: RealmServer;
+  @service private declare recentCardsService: RecentCardsService;
   @service private declare loaderService: LoaderService;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked private cardToDelete: CardToDelete | undefined = undefined;
+  @tracked private recentCardCollection:
+    | ReturnType<getCardCollection>
+    | undefined;
 
   get stacks() {
     return this.operatorModeStateService.state?.stacks ?? [];
@@ -232,7 +278,7 @@ export default class InteractSubmode extends Component {
         opts?: { openCardInRightMostStack?: boolean },
       ): void => {
         if (opts?.openCardInRightMostStack) {
-          stackIndex = this.stacks.length;
+          stackIndex = here.stacks.length;
         }
         let newItem = new StackItem({
           id: cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id,
@@ -329,8 +375,11 @@ export default class InteractSubmode extends Component {
         }
         await changeSizeCallback();
       },
-      changeSubmode: (url: URL, submode: Submode = 'code'): void => {
-        here.operatorModeStateService.updateCodePath(url);
+      changeSubmode: async (
+        url: URL,
+        submode: Submode = 'code',
+      ): Promise<void> => {
+        await here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
       },
     };
@@ -648,14 +697,130 @@ export default class InteractSubmode extends Component {
     openSearchCallback();
   }
 
+  private getRecentCardCollection = () => {
+    this.recentCardCollection = this.cardContext?.getCardCollection(
+      this,
+      () => this.recentCardsService.recentCardIds,
+    );
+  };
+
+  private getRecentCardMenuItems = () => {
+    let recentCards = this.recentCardCollection?.cards;
+    if (!recentCards) {
+      return;
+    }
+
+    let items: { name: string; icon: Icon; ref: ResolvedCodeRef }[] = [];
+    const excludedCardIds = this.realmServer.availableRealmIndexCardIds;
+
+    recentCards
+      .filter((card) => !excludedCardIds.includes(card.id)) // filter out realm index cards
+      .map((card) => {
+        let ref = identifyCard(card.constructor);
+        let name = cardTypeDisplayName(card);
+        if (isResolvedCodeRef(ref)) {
+          if (items.find((item) => item.ref === ref && item.name === name)) {
+            // do not add duplicate of the same card type
+            return;
+          }
+          items.push({
+            name,
+            icon: cardTypeIcon(card) as Icon,
+            ref,
+          });
+        }
+      });
+
+    let cardTypes = [...new Set(items)].slice(0, 2); // need only the 2 most-recent
+
+    let menuItems: (MenuItem | MenuDivider)[] = [];
+    if (cardTypes.length) {
+      cardTypes.map(({ name, icon, ref }) => {
+        menuItems.push(
+          new MenuItem(name, 'action', {
+            action: () => this.createNewFromRecentType.perform(ref),
+            icon,
+          }),
+        );
+      });
+    }
+    return menuItems;
+  };
+
+  private get createNewMenuItems(): (MenuItem | MenuDivider)[] {
+    let recentCardMenuItems = this.getRecentCardMenuItems();
+    let menuItems = [
+      new MenuItem('Choose a card type...', 'action', {
+        action: () => this.createCardInstance.perform(),
+        icon: IconSearch,
+      }),
+      new MenuDivider(),
+      new MenuItem('Open Code Mode', 'action', {
+        action: this.createFileInCodeSubmode,
+        subtextComponent: CodeSubmodeNewFileOptions,
+        icon: IconCode,
+      }),
+    ];
+    if (recentCardMenuItems) {
+      return [...recentCardMenuItems, ...menuItems];
+    }
+    return menuItems;
+  }
+
+  private get newFileOptions(): NewFileOptions {
+    return {
+      menuItems: this.createNewMenuItems,
+    };
+  }
+
+  private createFileInCodeSubmode = () => {
+    this.operatorModeStateService.setNewFileDropdownOpen();
+    this.operatorModeStateService.updateSubmode('code');
+  };
+
+  private createCardInstance = restartableTask(async () => {
+    let specFilter: Filter = {
+      on: specRef,
+      every: [{ eq: { isCard: true } }],
+    };
+    let specId = await chooseCard({ filter: specFilter });
+    if (!specId) {
+      return;
+    }
+
+    let spec = await this.store.get<Spec>(specId);
+
+    if (!spec) {
+      throw new Error(`Could not find spec "${specId}" in the store`);
+    }
+    if (!isCardInstance<Spec>(spec)) {
+      console.error(spec);
+      throw new Error(`"${specId}" is not a card instance.`);
+    }
+
+    await this.cardContext.actions?.createCard?.(spec.ref, new URL(specId), {
+      realmURL: this.operatorModeStateService.getWritableRealmURL(),
+    });
+  });
+
+  private createNewFromRecentType = restartableTask(
+    async (codeRef: ResolvedCodeRef) => {
+      this.cardContext.actions?.createCard(codeRef, undefined, {
+        realmURL: this.operatorModeStateService.getWritableRealmURL(),
+      });
+    },
+  );
+
   @provide(CardContextName)
-  // @ts-ignore "cardContext is declared but not used"
   private get cardContext(): Omit<
     CardContext,
     'prerenderedCardSearchComponent'
   > {
+    // assumption: take actions in the right-most stack
+    let stackCount = this.operatorModeStateService.numberOfStacks();
+    let rightMostStackIndex = stackCount > 0 ? stackCount - 1 : 0;
     return {
-      actions: this.publicAPI(this, 0),
+      actions: this.publicAPI(this, rightMostStackIndex),
       getCard: this.getCard,
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
@@ -666,9 +831,13 @@ export default class InteractSubmode extends Component {
   }
 
   <template>
+    {{consumeContext this.getRecentCardCollection}}
     <SubmodeLayout
+      class='interact-submode-layout'
       @onSearchSheetClosed={{this.clearSearchSheetTrigger}}
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
+      @newFileOptions={{this.newFileOptions}}
+      data-test-interact-submode
       as |search|
     >
       <div class='interact-submode' style={{this.backgroundImageStyle}}>
@@ -703,10 +872,8 @@ export default class InteractSubmode extends Component {
                 data-test-operator-mode-stack={{stackIndex}}
                 class={{cn
                   stack-with-bg-image=backgroundImageURLSpecificToThisStack
-                  stack-medium-padding-top=(and
-                    (gt stack.length 1) (lt stack.length 3)
-                  )
-                  stack-small-padding-top=(gt stack.length 2)
+                  stack-medium-padding-top=(eq stack.length 2)
+                  stack-small-padding-top=(gte stack.length 3)
                 }}
                 style={{if
                   backgroundImageURLSpecificToThisStack
@@ -771,6 +938,10 @@ export default class InteractSubmode extends Component {
     </SubmodeLayout>
 
     <style scoped>
+      .interact-submode-layout {
+        --submode-bar-item-outline: var(--boxel-border-flexible);
+        --submode-bar-item-box-shadow: var(--boxel-deep-box-shadow);
+      }
       .interact-submode {
         display: flex;
         justify-content: center;

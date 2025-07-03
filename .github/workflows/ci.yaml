@@ -25,6 +25,7 @@ jobs:
       matrix: ${{ steps.filter.outputs.matrix }}
       realm-server: ${{ steps.filter.outputs.realm-server }}
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
+      workspace-sync-cli: ${{ steps.filter.outputs.workspace-sync-cli }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # 3.0.2
@@ -69,6 +70,7 @@ jobs:
               - 'packages/boxel-icons/**'
               - 'packages/boxel-ui/**'
               - 'packages/host/**'
+              - 'packages/matrix/**'
               - 'packages/realm-server/**'
             realm-server:
               - *shared
@@ -77,9 +79,13 @@ jobs:
               - 'packages/boxel-ui/**'
               - 'packages/eslint-plugin-boxel/**'
               - 'packages/postgres/**'
+              - 'packages/realm-server/**'
             vscode-boxel-tools:
               - *shared
               - 'packages/vscode-boxel-tools/**'
+            workspace-sync-cli:
+              - *shared
+              - 'packages/workspace-sync-cli/**'
 
   ai-bot-test:
     name: AI bot Tests
@@ -213,6 +219,9 @@ jobs:
       - name: Run Playwright tests
         run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/matrix
+      - name: Print realm server logs
+        if: always()
+        run: cat /tmp/server.log
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
@@ -337,6 +346,7 @@ jobs:
             "index-writer-test.ts",
             "indexing-test.ts",
             "loader-test.ts",
+            "transpile-test.ts",
             "module-syntax-test.ts",
             "permissions/permission-checker-test.ts",
             "prerendering-test.ts",
@@ -384,8 +394,12 @@ jobs:
         working-directory: packages/realm-server
         env:
           TEST_MODULE: ${{matrix.testModule}}
-      - name: prepare_artifact_name
+      - name: Print realm server logs
+        if: always()
+        run: cat /tmp/server.log
+      - name: Prepare artifact name
         id: artifact_name
+        if: always()
         run: |
           export SAFE_ARTIFACT_NAME=$(echo ${{ matrix.testModule }} |  sed 's/[/]/_/g')
           echo "artifact_name=$SAFE_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
@@ -425,6 +439,68 @@ jobs:
         with:
           name: vscode-boxel-tools
           path: packages/vscode-boxel-tools/boxel-tools*vsix
+
+  workspace-sync-cli-build:
+    name: Workspace Sync CLI Build
+    needs: change-check
+    if: needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: workspace-sync-cli-build-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: ./.github/actions/init
+      - name: Build workspace-sync-cli
+        run: pnpm build
+        working-directory: packages/workspace-sync-cli
+
+  workspace-sync-cli-test:
+    name: Workspace Sync CLI Integration Tests
+    needs: change-check
+    if: needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: workspace-sync-cli-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: ./.github/actions/init
+      - name: Build boxel-icons
+        run: pnpm build
+        working-directory: packages/boxel-icons
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
+      - name: Build workspace-sync-cli
+        run: pnpm build
+        working-directory: packages/workspace-sync-cli
+      - name: Start host to serve assets
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
+          working-directory: packages/host
+          wait-for: 3m
+          wait-on: http-get://localhost:4200
+      - name: Start PostgreSQL for tests
+        run: pnpm start:pg | tee -a /tmp/test-services.log &
+        working-directory: packages/realm-server
+      - name: Start Matrix services for tests
+        run: pnpm start:matrix | tee -a /tmp/test-services.log &
+        working-directory: packages/realm-server
+      - name: Register realm users for tests
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
+      - name: Run integration tests
+        run: pnpm test
+        working-directory: packages/workspace-sync-cli
+      - name: Upload test services log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: always()
+        with:
+          name: workspace-sync-cli-test-services-log
+          path: /tmp/test-services.log
+          retention-days: 30
 
   deploy:
     name: Deploy boxel to staging

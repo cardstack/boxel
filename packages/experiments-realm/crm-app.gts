@@ -539,11 +539,11 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
     this.activeFilter = this.activeFilter;
   }
 
-  @action viewCard() {
+  @action editCard() {
     if (!this.args.model.id) {
       throw new Error('No card id');
     }
-    this.args.context?.actions?.viewCard?.(new URL(this.args.model.id), 'edit');
+    this.args.context?.actions?.editCard?.(this.args.model as CardDef);
   }
 
   <template>
@@ -643,7 +643,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
             @model={{@model}}
             @context={{@context}}
             @realmURL={{this.currentRealm}}
-            @viewCard={{this.viewCard}}
+            @editCard={{this.editCard}}
             @searchFilter={{this.searchFilter}}
             @taskFilter={{this.taskFilter}}
             @sort={{this.taskSort}}

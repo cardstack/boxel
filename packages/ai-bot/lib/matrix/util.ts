@@ -1,5 +1,10 @@
 import { IContent, Method } from 'matrix-js-sdk';
-import { logger } from '@cardstack/runtime-common';
+import {
+  logger,
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+} from '@cardstack/runtime-common';
 import { OpenAIError } from 'openai/error';
 import * as Sentry from '@sentry/node';
 import {
@@ -11,10 +16,14 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import { MatrixEvent } from 'matrix-js-sdk';
 import { PromptParts, mxcUrlToHttp } from '../../helpers';
 import { encodeUri } from 'matrix-js-sdk/lib/utils';
+import { SerializedFileDef } from 'https://cardstack.com/base/file-api';
 
 let log = logger('ai-bot');
 
@@ -44,15 +53,6 @@ export interface MatrixClient {
   setRoomName(roomId: string, title: string): Promise<{ event_id: string }>;
 
   getAccessToken(): string | null;
-}
-
-export interface SerializedFileDef {
-  url: string;
-  sourceUrl: string;
-  name: string;
-  contentType: string;
-  content?: string;
-  error?: string;
 }
 
 export async function sendMatrixEvent(
@@ -131,27 +131,35 @@ export async function sendErrorEvent(
   }
 }
 
-export async function sendPromptAndEventList(
+export async function sendDebugMessage(
   client: MatrixClient,
   roomId: string,
-  promptParts: PromptParts,
+  body: string,
+  data: any = {},
+) {
+  await client.sendEvent(roomId, APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE, {
+    msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+    body,
+    isStreamingFinished: true,
+    data: JSON.stringify(data),
+  });
+}
+
+export async function sendEventListAsDebugMessage(
+  client: MatrixClient,
+  roomId: string,
   eventList: DiscreteMatrixEvent[],
   customMessage: string = '',
 ) {
-  let stringContent = JSON.stringify({
-    promptParts,
-    eventList,
-  });
+  let stringContent = JSON.stringify(eventList);
   let sharedFile = await client.uploadContent(stringContent, {
     type: 'text/plain',
   });
-  await client.sendEvent(roomId, APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE, {
-    msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-    body:
-      'Debug: attached the prompt sent to the AI and the raw event list.\n\n' +
-      customMessage,
-    isStreamingFinished: true,
-    data: JSON.stringify({
+  await sendDebugMessage(
+    client,
+    roomId,
+    'Debug: attached the raw event list.\n\n' + customMessage,
+    {
       attachedFiles: [
         {
           sourceUrl: '',
@@ -160,8 +168,35 @@ export async function sendPromptAndEventList(
           contentType: 'text/plain',
         },
       ],
-    }),
+    },
+  );
+}
+
+export async function sendPromptAsDebugMessage(
+  client: MatrixClient,
+  roomId: string,
+  promptParts: PromptParts,
+  customMessage: string = '',
+) {
+  let stringContent = JSON.stringify(promptParts);
+  let sharedFile = await client.uploadContent(stringContent, {
+    type: 'text/plain',
   });
+  await sendDebugMessage(
+    client,
+    roomId,
+    'Debug: attached the prompt sent to the AI.\n\n' + customMessage,
+    {
+      attachedFiles: [
+        {
+          sourceUrl: '',
+          url: mxcUrlToHttp(sharedFile.content_uri, client.baseUrl),
+          name: 'debug-event.json',
+          contentType: 'text/plain',
+        },
+      ],
+    },
+  );
 }
 
 function getErrorMessage(error: any): string {
@@ -237,13 +272,16 @@ export async function downloadFile(
   client: MatrixClient,
   attachedFile: SerializedFileDef,
 ): Promise<string> {
-  if (!attachedFile?.contentType?.includes('text/')) {
+  if (
+    !attachedFile?.contentType?.includes('text/') &&
+    !attachedFile.contentType?.includes('application/vnd.card+json')
+  ) {
     throw new Error(
       `Unsupported file type: ${attachedFile.contentType}. For now, only text files are supported.`,
     );
   }
 
-  const cachedEntry = fileCache.get(attachedFile.url);
+  const cachedEntry = fileCache.get(attachedFile.url!);
   if (cachedEntry) {
     cachedEntry.timestamp = Date.now();
     return cachedEntry.content;
@@ -261,7 +299,7 @@ export async function downloadFile(
 
   const content = await response.text();
 
-  fileCache.set(attachedFile.url, {
+  fileCache.set(attachedFile.url!, {
     content,
     timestamp: Date.now(),
   });
@@ -271,4 +309,27 @@ export async function downloadFile(
   }
 
   return content;
+}
+
+export function isCommandOrCodePatchResult(
+  event: MatrixEvent | DiscreteMatrixEvent,
+): boolean {
+  let type =
+    (event as DiscreteMatrixEvent).type || (event as MatrixEvent).getType?.();
+  return (
+    type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE ||
+    type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE
+  );
+}
+
+export function extractCodePatchBlocks(s: string) {
+  let matches = [
+    ...s.matchAll(
+      new RegExp(
+        `${SEARCH_MARKER}.*?${SEPARATOR_MARKER}.*?${REPLACE_MARKER}`,
+        'gs',
+      ),
+    ),
+  ];
+  return matches.map((match) => match[0]);
 }

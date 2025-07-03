@@ -85,10 +85,6 @@ export class RealmIndexUpdater {
     return await this.#indexWriter.isNewIndex(this.realmURL);
   }
 
-  async run() {
-    await this.fullIndex();
-  }
-
   indexing() {
     return this.#indexingDeferred?.promise;
   }
@@ -106,7 +102,7 @@ export class RealmIndexUpdater {
       let job = await this.#queue.publish<FromScratchResult>({
         jobType: `from-scratch-index`,
         concurrencyGroup: `indexing:${this.#realm.url}`,
-        timeout: 5 * 60,
+        timeout: 3 * 60,
         priority: systemInitiatedPriority,
         args,
       });
@@ -122,8 +118,7 @@ export class RealmIndexUpdater {
         )}`,
       );
     } catch (e: any) {
-      this.#indexingDeferred.reject(e);
-      throw e;
+      this.#log.error(`Error running from-scratch-index: ${e.message}`);
     } finally {
       this.#indexingDeferred.fulfill();
     }
@@ -217,13 +212,16 @@ export class RealmIndexUpdater {
       this.#dbAdapter,
       this.realmURL,
     );
-    let owners = Object.entries(permissions)
+
+    let userIds = Object.entries(permissions)
       .filter(([_, permissions]) => permissions?.includes('realm-owner'))
       .map(([userId]) => userId);
-    let realmUserId =
-      owners.length === 1
-        ? owners[0]
-        : owners.find((userId) => userId.startsWith('@realm/'));
+    if (userIds.length > 1) {
+      // we want to use the realm's human owner for the realm and not the bot
+      userIds = userIds.filter((userId) => !userId.startsWith('@realm/'));
+    }
+
+    let [realmUserId] = userIds;
     // real matrix user ID's always start with an '@', if it doesn't that
     // means we are testing
     if (realmUserId?.startsWith('@')) {
@@ -233,8 +231,6 @@ export class RealmIndexUpdater {
     // hard coded test URLs
     if ((globalThis as any).__environment === 'test') {
       switch (this.realmURL.href) {
-        case 'http://localhost:4205/seed/':
-          return 'seed_realm';
         case 'http://127.0.0.1:4441/':
           return 'base_realm';
         case 'http://127.0.0.1:4444/':

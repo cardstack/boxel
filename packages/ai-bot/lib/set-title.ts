@@ -6,6 +6,7 @@ import {
 import OpenAI from 'openai';
 import {
   type OpenAIPromptMessage,
+  isCodePatchResultStatusApplied,
   isCommandResultStatusApplied,
   attachedCardsToMessage,
   getRelevantCards,
@@ -167,6 +168,7 @@ export function shouldSetRoomTitle(
 ) {
   return (
     (isCommandResultStatusApplied(event) ||
+      isCodePatchResultStatusApplied(event) ||
       userAlreadyHasSentNMessages(rawEventLog, aiBotUserId)) &&
     !roomTitleAlreadySet(rawEventLog)
   );

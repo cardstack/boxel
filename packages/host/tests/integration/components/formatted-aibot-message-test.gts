@@ -21,9 +21,12 @@ import {
   REPLACE_MARKER,
 } from '@cardstack/runtime-common';
 
-import FormattedAiBotMessage from '@cardstack/host/components/ai-assistant/formatted-aibot-message';
+import FormattedAiBotMessage from '@cardstack/host/components/ai-assistant/message/aibot-message';
 
-import { parseHtmlContent } from '@cardstack/host/lib/formatted-message/utils';
+import {
+  makeCodeDiffStats,
+  parseHtmlContent,
+} from '@cardstack/host/lib/formatted-message/utils';
 import CardService from '@cardstack/host/services/card-service';
 import MonacoService from '@cardstack/host/services/monaco-service';
 
@@ -35,6 +38,7 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
 
   let monacoService: MonacoService;
   let cardService: CardService;
+
   let roomId = '!abcd';
   let eventId = '1234';
 
@@ -56,6 +60,7 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
 
     await render(<template>
       <FormattedAiBotMessage
+        class='test-component'
         @monacoSDK={{monacoSDK}}
         @roomId={{testScenario.roomId}}
         @eventId={{testScenario.eventId}}
@@ -63,6 +68,11 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
         @isStreaming={{testScenario.isStreaming}}
         @isLastAssistantMessage={{testScenario.isLastAssistantMessage}}
       />
+      <style scoped>
+        .test-component {
+          max-width: 350px; /* to observe overflow */
+        }
+      </style>
     </template>);
   }
 
@@ -86,31 +96,22 @@ puts "💎"
       isStreaming: false,
       isLastAssistantMessage: true,
     });
-
     let messageElement = (this as RenderingTestContext).element.querySelector(
       '.message',
     ) as HTMLElement;
     let directChildren = messageElement.children;
-
     assert.ok(directChildren[0]?.tagName == 'P');
     assert.ok(
-      directChildren[1]?.tagName == 'DIV' &&
-        directChildren[1]?.classList.contains('code-block-actions'),
+      directChildren[1]?.tagName == 'SECTION' &&
+        directChildren[1]?.classList.contains('code-block'),
     );
+    assert.ok(directChildren[2]?.tagName == 'P');
     assert.ok(
-      directChildren[2]?.tagName == 'DIV' &&
-        directChildren[2]?.classList.contains('code-block'),
+      directChildren[3]?.tagName == 'SECTION' &&
+        directChildren[3]?.classList.contains('code-block'),
     );
-    assert.ok(directChildren[3]?.tagName == 'P');
-    assert.ok(
-      directChildren[4]?.tagName == 'DIV' &&
-        directChildren[4]?.classList.contains('code-block-actions'),
-    );
-    assert.ok(
-      directChildren[5]?.tagName == 'DIV' &&
-        directChildren[5]?.classList.contains('code-block'),
-    );
-    assert.ok(directChildren[6]?.tagName == 'P');
+    assert.ok(directChildren[4]?.tagName == 'P');
+
     assert.dom('.monaco-editor').exists({ count: 2 });
     assert.dom('pre').doesNotExist();
   });
@@ -229,7 +230,7 @@ ${REPLACE_MARKER}
       htmlParts: parseHtmlContent(
         `
 <pre data-code-language="typescript">
-https://example.com/file.ts
+https://example.com/diff-editor-preview-code-block-file.ts
 ${SEARCH_MARKER}
 let a = 1;
 let b = 2;
@@ -239,7 +240,7 @@ ${REPLACE_MARKER}
 </pre>
 <p>the above block is now complete, now I am sending you another one:</p>
 <pre data-code-language="typescript">
-https://example.com/file.ts
+https://example.com/code-editor-preview-code-block-file.ts
 ${SEARCH_MARKER}
 let a = 1;
 let c = 3;
@@ -252,76 +253,47 @@ let c = 3;
       isLastAssistantMessage: true,
     });
 
-    // First editor is a diff editor, the second is a standard code block
-    assert.dom('[data-test-apply-code-button]').exists({ count: 1 });
-    assert.dom('.code-block').exists({ count: 2 });
-    assert.dom('.code-block-diff').exists({ count: 1 });
+    // First editor is a diff editor
+    assert
+      .dom('[data-test-code-block-index="0"] [data-test-code-diff-editor]')
+      .exists();
+    assert
+      .dom('[data-test-code-block-index="0"] [data-test-file-mode]')
+      .hasText('Edit');
+    assert
+      .dom('[data-test-code-block-index="0"] [data-test-file-name]')
+      .containsText('file.ts');
+    await waitFor('[data-test-code-block-index="0"] [data-test-removed-lines]');
+    assert
+      .dom('[data-test-code-block-index="0"] [data-test-removed-lines]')
+      .hasText('-2');
+    assert
+      .dom('[data-test-code-block-index="0"] [data-test-added-lines]')
+      .hasText('+1');
+    assert
+      .dom('[data-test-code-block-index="0"] [data-test-apply-code-button]')
+      .exists();
+
+    // The second is a standard code block
+    assert.dom('[data-test-code-block-index="1"] [data-test-editor]').exists();
+    assert
+      .dom('[data-test-code-block-index="1"] [data-test-file-mode]')
+      .hasText('Edit');
+    assert
+      .dom('[data-test-code-block-index="1"] [data-test-removed-lines]')
+      .doesNotExist();
+    assert
+      .dom('[data-test-code-block-index="1"] [data-test-added-lines]')
+      .doesNotExist();
+    assert
+      .dom('[data-test-code-block-index="1"] [data-test-file-name]')
+      .containsText('file.ts');
+    assert
+      .dom('[data-test-code-block-index="1"] [data-test-apply-code-button]')
+      .doesNotExist();
+    assert.dom('[data-test-code-block-index="1"] [data-test-editor]').exists();
 
     await percySnapshot(assert);
-  });
-
-  test('it will render "Accept All" button when there are code patch actions and it is not streaming', async function (assert) {
-    await renderFormattedAiBotMessage({
-      htmlParts: parseHtmlContent(
-        `<p>We need to fix this:</p>
-<pre data-code-language="typescript">
-https://example.com/file.ts
-${SEARCH_MARKER}
-let a = 1;
-${SEPARATOR_MARKER}
-let a = 2;
-${REPLACE_MARKER}
-</pre>
-<p>We need to fix this too:</p>
-<pre data-code-language="typescript">
-https://example.com/file.ts
-${SEARCH_MARKER}
-let c = 1;
-${SEPARATOR_MARKER}
-let c = 2;
-${REPLACE_MARKER}
-</pre>
-`,
-        roomId,
-        eventId,
-      ),
-      isStreaming: false,
-      isLastAssistantMessage: true,
-    });
-
-    assert.dom('[data-test-apply-all-code-patches-button]').exists();
-  });
-
-  test('it will not render "Accept All" button when there are code patch actions and it is streaming', async function (assert) {
-    await renderFormattedAiBotMessage({
-      htmlParts: parseHtmlContent(
-        `<p>We need to fix this:</p>
-<pre data-code-language="typescript">
-https://example.com/file.ts
-${SEARCH_MARKER}
-let a = 1;
-${SEPARATOR_MARKER}
-let a = 2;
-${REPLACE_MARKER}
-</pre>
-<p>We need to fix this too:</p>
-<pre data-code-language="typescript">
-https://example.com/file.ts
-${SEARCH_MARKER}
-let c = 1;
-${SEPARATOR_MARKER}
-let c = 2;
-${REPLACE_MARKER}
-</pre>
-`,
-        roomId,
-        eventId,
-      ),
-      isStreaming: true,
-      isLastAssistantMessage: true,
-    });
-
-    assert.dom('[data-test-apply-all-code-patches-button]').doesNotExist();
   });
 
   test('unincremental updates are handled gracefully', async function (assert) {
@@ -496,5 +468,53 @@ ${REPLACE_MARKER}
         `[data-test-error-message="Failed to load code from malformed file url"]`,
       )
       .exists();
+  });
+
+  test('utils: makeCodeDiffStats', function (assert) {
+    // A couple of real world examples where I got lineChanges from the monaco
+    // diff editor (using editor.getLineChanges()) and I counted
+    // the green and red lines manually and compared the results.
+
+    let lineChanges = [
+      {
+        originalStartLineNumber: 308,
+        originalEndLineNumber: 0,
+        modifiedStartLineNumber: 309,
+        modifiedEndLineNumber: 309,
+        charChanges: [],
+      },
+    ];
+    assert.deepEqual(makeCodeDiffStats(lineChanges), {
+      linesAdded: 1,
+      linesRemoved: 0,
+    });
+
+    lineChanges = [
+      {
+        originalStartLineNumber: 83,
+        originalEndLineNumber: 84,
+        modifiedStartLineNumber: 83,
+        modifiedEndLineNumber: 85,
+        charChanges: [],
+      },
+      {
+        originalStartLineNumber: 90,
+        originalEndLineNumber: 90,
+        modifiedStartLineNumber: 91,
+        modifiedEndLineNumber: 92,
+        charChanges: [],
+      },
+      {
+        originalStartLineNumber: 96,
+        originalEndLineNumber: 96,
+        modifiedStartLineNumber: 98,
+        modifiedEndLineNumber: 99,
+        charChanges: [],
+      },
+    ];
+    assert.deepEqual(makeCodeDiffStats(lineChanges), {
+      linesAdded: 7,
+      linesRemoved: 4,
+    });
   });
 });

@@ -4,6 +4,8 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 wait_for_postgres
 
+pnpm --dir=../skills-realm skills:setup
+
 if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
   MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly "$SCRIPTS_DIR/matrix-registration-secret.ts")
   export MATRIX_REGISTRATION_SHARED_SECRET
@@ -15,6 +17,7 @@ NODE_ENV=test \
   NODE_NO_WARNINGS=1 \
   REALM_SERVER_SECRET_SEED="mum's the word" \
   REALM_SECRET_SEED="shhh! it's a secret" \
+  GRAFANA_SECRET="shhh! it's a secret" \
   MATRIX_URL=http://localhost:8008 \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \

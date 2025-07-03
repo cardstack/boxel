@@ -3,15 +3,16 @@ import Service from '@ember/service';
 import { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { trackedFunction } from 'ember-resources/util/function';
+import { trackedFunction } from 'reactiveweb/function';
+
+import { formatNumber } from '@cardstack/boxel-ui/helpers';
 
 import {
   SupportedMimeType,
   encodeWebSafeBase64,
 } from '@cardstack/runtime-common';
 
-import { formatNumber } from '../helpers/format-number';
-
+import MatrixService from './matrix-service';
 import NetworkService from './network';
 import RealmServerService from './realm-server';
 import ResetService from './reset';
@@ -42,6 +43,7 @@ export default class BillingService extends Service {
   @service declare private realmServer: RealmServerService;
   @service declare private network: NetworkService;
   @service declare private reset: ResetService;
+  @service declare private matrixService: MatrixService;
 
   constructor(owner: Owner) {
     super(owner);
@@ -75,8 +77,8 @@ export default class BillingService extends Service {
     return `${customerPortalLink}?prefilled_email=${encodedEmail}`;
   }
 
-  get freePlanPaymentLink() {
-    return this.stripeLinks.value?.freePlanPaymentLink;
+  get starterPlanPaymentLink() {
+    return this.stripeLinks.value?.starterPlanPaymentLink;
   }
 
   get extraCreditsPaymentLinks() {
@@ -91,9 +93,9 @@ export default class BillingService extends Service {
       .sort((a, b) => a.creditReloadAmount - b.creditReloadAmount)
       .map((link) => ({
         ...link,
-        amountFormatted: `${formatNumber(
-          link.creditReloadAmount,
-        )} credits for $${formatNumber(link.price)}`,
+        amountFormatted: `${formatNumber(link.creditReloadAmount, {
+          size: 'short',
+        })} credits for $${formatNumber(link.price)}`,
       }));
   }
 
@@ -143,8 +145,14 @@ export default class BillingService extends Service {
       customerPortalLink: links.find(
         (link) => link.type === 'customer-portal-link',
       ),
-      freePlanPaymentLink: links.find(
-        (link) => link.type === 'free-plan-payment-link',
+      starterPlanPaymentLink: links.find(
+        (link) => link.type === 'starter-plan-payment-link',
+      ),
+      creatorPlanPaymentLink: links.find(
+        (link) => link.type === 'creator-plan-payment-link',
+      ),
+      powerUserPlanPaymentLink: links.find(
+        (link) => link.type === 'power-user-plan-payment-link',
       ),
       extraCreditsPaymentLinks: links.filter(
         (link) => link.type === 'extra-credits-payment-link',
@@ -152,14 +160,34 @@ export default class BillingService extends Service {
     };
   });
 
-  getStripePaymentLink(matrixUserId: string, matrixUserEmail: string): string {
+  stripePaymentLinkWithClientReference(stripeUrl: string): string {
+    let matrixUserId = this.matrixService.userId || '';
+    let matrixUserEmail = this.matrixService.profile.email || '';
     // We use the matrix user id (@username:example.com) as the client reference id for stripe
     // so we can identify the user payment in our system when we get the webhook
     // the client reference id must be alphanumeric, so we encode the matrix user id
     // https://docs.stripe.com/payment-links/url-parameters#streamline-reconciliation-with-a-url-parameter
     const clientReferenceId = encodeWebSafeBase64(matrixUserId);
     const encodedEmail = encodeURIComponent(matrixUserEmail);
-    return `${this.freePlanPaymentLink?.url}?client_reference_id=${clientReferenceId}&prefilled_email=${encodedEmail}`;
+    return `${stripeUrl}?client_reference_id=${clientReferenceId}&prefilled_email=${encodedEmail}`;
+  }
+
+  get stripeStarterPlanPaymentLink(): string {
+    return this.stripePaymentLinkWithClientReference(
+      this.stripeLinks.value?.starterPlanPaymentLink?.url || '',
+    );
+  }
+
+  get stripeCreatorPlanPaymentLink(): string {
+    return this.stripePaymentLinkWithClientReference(
+      this.stripeLinks.value?.creatorPlanPaymentLink?.url || '',
+    );
+  }
+
+  get stripePowerUserPlanPaymentLink(): string {
+    return this.stripePaymentLinkWithClientReference(
+      this.stripeLinks.value?.powerUserPlanPaymentLink?.url || '',
+    );
   }
 
   @cached
@@ -188,6 +216,7 @@ export default class BillingService extends Service {
           Authorization: `Bearer ${await this.getToken()}`,
         },
       });
+
       if (!response.ok) {
         console.error(
           `Failed to fetch user for realm server ${this.url.origin}: ${response.status}`,

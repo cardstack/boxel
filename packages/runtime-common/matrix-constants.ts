@@ -1,3 +1,4 @@
+export const APP_BOXEL_STOP_GENERATING_EVENT_TYPE = 'app.boxel.stopGenerating';
 export const APP_BOXEL_MESSAGE_MSGTYPE = 'app.boxel.message';
 export const APP_BOXEL_CARD_FORMAT = 'app.boxel.card';
 export const APP_BOXEL_COMMAND_REQUESTS_KEY = 'app.boxel.commandRequests';
@@ -26,6 +27,7 @@ export const APP_BOXEL_CONTINUATION_OF_CONTENT_KEY =
   'app.boxel.continuation-of';
 export const DEFAULT_LLM = 'openai/gpt-4.1';
 export const DEFAULT_CODING_LLM = 'anthropic/claude-sonnet-4';
+export const DEFAULT_REMIX_LLM = 'openai/gpt-4.1-nano';
 export const DEFAULT_LLM_LIST = [
   'anthropic/claude-3.5-sonnet',
   'anthropic/claude-3.7-sonnet',
@@ -44,3 +46,9 @@ export const DEFAULT_LLM_LIST = [
   'openai/gpt-4o-mini',
   'x-ai/grok-3-mini-beta',
 ];
+
+export const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
+export const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
+export const SLIDING_SYNC_LIST_RANGE_END = 9;
+export const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
+export const SLIDING_SYNC_TIMEOUT = 30000;

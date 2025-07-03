@@ -1,5 +1,6 @@
 import Accordion from './components/accordion/index.gts';
 import AddButton from './components/add-button/index.gts';
+import Alert from './components/alert/index.gts';
 import Avatar from './components/avatar/index.gts';
 import BasicFitted from './components/basic-fitted/index.gts';
 import Button from './components/button/index.gts';
@@ -60,6 +61,7 @@ import SortDropdown, {
 } from './components/sort-dropdown/index.gts';
 import Switch from './components/switch/index.gts';
 import TabbedHeader from './components/tabbed-header/index.gts';
+import TagList from './components/tag-list/index.gts';
 import Tooltip from './components/tooltip/index.gts';
 import ViewSelector, {
   type ViewItem,
@@ -71,6 +73,7 @@ export {
   type ViewItem,
   Accordion,
   AddButton,
+  Alert,
   Avatar,
   BasicFitted,
   BoxelButton,
@@ -124,6 +127,7 @@ export {
   SortDropdown,
   Switch,
   TabbedHeader,
+  TagList,
   Tooltip,
   ViewSelector,
 };
