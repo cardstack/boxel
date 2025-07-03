@@ -280,7 +280,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
       await click('[data-test-close-ai-assistant]');
 
-      // Set the test value to all localStorage items that begin with CurrentRoomIdPersistenceKey
       const testValue =
         "room-id-that-doesn't-exist-and-should-not-break-the-implementation";
 

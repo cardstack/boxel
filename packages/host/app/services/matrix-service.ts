@@ -1746,8 +1746,6 @@ function saveAuth(auth: LoginResponse) {
 
 function clearAuth() {
   window.localStorage.removeItem('auth');
-  // Note: We can't use localStorageService here since this is a standalone function
-  // The service will handle this when the service is available
 }
 
 function getAuth(): LoginResponse | undefined {
