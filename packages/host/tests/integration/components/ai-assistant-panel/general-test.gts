@@ -29,6 +29,8 @@ import {
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
+import type LocalStorageService from '@cardstack/host/services/local-storage-service';
+
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
@@ -55,7 +57,6 @@ import {
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
-import LocalStorageService from '@cardstack/host/services/local-storage-service';
 
 module('Integration | ai-assistant-panel | general', function (hooks) {
   const realmName = 'Operator Mode Workspace';
