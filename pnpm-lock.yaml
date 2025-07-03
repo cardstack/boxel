@@ -2909,6 +2909,8 @@ importers:
         specifier: 'catalog:'
         version: 2.0.1
 
+  packages/skills-realm: {}
+
   packages/template-lint:
     devDependencies:
       ember-template-lint:

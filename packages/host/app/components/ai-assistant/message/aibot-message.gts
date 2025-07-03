@@ -71,7 +71,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
   };
 
   <template>
-    <Message class='ai-bot-message'>
+    <Message class='ai-bot-message' ...attributes>
       {{#if @reasoning}}
         <div class='reasoning-content'>
           {{#if (eq 'Thinking...' @reasoning.content)}}

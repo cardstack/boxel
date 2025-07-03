@@ -60,6 +60,7 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
 
     await render(<template>
       <FormattedAiBotMessage
+        class='test-component'
         @monacoSDK={{monacoSDK}}
         @roomId={{testScenario.roomId}}
         @eventId={{testScenario.eventId}}
@@ -67,6 +68,11 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
         @isStreaming={{testScenario.isStreaming}}
         @isLastAssistantMessage={{testScenario.isLastAssistantMessage}}
       />
+      <style scoped>
+        .test-component {
+          max-width: 350px; /* to observe overflow */
+        }
+      </style>
     </template>);
   }
 
@@ -224,7 +230,7 @@ ${REPLACE_MARKER}
       htmlParts: parseHtmlContent(
         `
 <pre data-code-language="typescript">
-https://example.com/file.ts
+https://example.com/diff-editor-preview-code-block-file.ts
 ${SEARCH_MARKER}
 let a = 1;
 let b = 2;
@@ -234,7 +240,7 @@ ${REPLACE_MARKER}
 </pre>
 <p>the above block is now complete, now I am sending you another one:</p>
 <pre data-code-language="typescript">
-https://example.com/file.ts
+https://example.com/code-editor-preview-code-block-file.ts
 ${SEARCH_MARKER}
 let a = 1;
 let c = 3;
@@ -256,7 +262,7 @@ let c = 3;
       .hasText('Edit');
     assert
       .dom('[data-test-code-block-index="0"] [data-test-file-name]')
-      .hasText('file.ts');
+      .containsText('file.ts');
     await waitFor('[data-test-code-block-index="0"] [data-test-removed-lines]');
     assert
       .dom('[data-test-code-block-index="0"] [data-test-removed-lines]')
@@ -281,7 +287,7 @@ let c = 3;
       .doesNotExist();
     assert
       .dom('[data-test-code-block-index="1"] [data-test-file-name]')
-      .hasText('file.ts');
+      .containsText('file.ts');
     assert
       .dom('[data-test-code-block-index="1"] [data-test-apply-code-button]')
       .doesNotExist();
