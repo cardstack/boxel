@@ -781,8 +781,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
         assert.dom('[data-test-no-results]').exists();
       });
-
-      // shows zero results when filtering with a non-matching or invalid search input
     });
   });
 
