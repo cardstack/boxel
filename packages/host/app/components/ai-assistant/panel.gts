@@ -191,6 +191,12 @@ export default class AiAssistantPanel extends Component<Signature> {
     {{/if}}
 
     <style scoped>
+      :global(:root) {
+        --past-sessions-background: #4f4b57;
+        --past-sessions-divider-color: #75707e;
+        --past-sessions-hover-background: #797788;
+      }
+
       .left-border {
         border-left: 1px solid var(--boxel-600);
       }

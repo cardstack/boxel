@@ -128,7 +128,7 @@ export default class PastSessionItem extends Component<Signature> {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        border-top: 1px solid #75707e;
+        border-top: 1px solid var(--past-sessions-divider-color);
         padding: var(--boxel-sp) var(--boxel-sp-sm);
         margin-right: var(--boxel-sp-xs);
         margin-left: var(--boxel-sp-xs);
@@ -140,11 +140,11 @@ export default class PastSessionItem extends Component<Signature> {
       }
 
       .session:hover {
-        background-color: #797788;
+        background-color: var(--past-sessions-hover-background);
         cursor: pointer;
       }
       .session[data-is-current-room] {
-        border: 1px solid #75707e;
+        border: 1px solid var(--past-sessions-divider-color);
       }
       .session:hover + .session:not([data-is-current-room]),
       .session[data-is-current-room] + .session {
@@ -191,8 +191,8 @@ export default class PastSessionItem extends Component<Signature> {
         --boxel-menu-item-content-padding: var(--boxel-sp-xxs)
           var(--boxel-sp-sm);
 
-        background: #4f4b57;
-        border: 1px solid #75707e;
+        background: var(--past-sessions-background);
+        border: 1px solid var(--past-sessions-divider-color);
         color: var(--boxel-light);
         padding: var(--boxel-sp-xs);
         box-shadow: var(--boxel-deep-box-shadow);
@@ -210,7 +210,7 @@ export default class PastSessionItem extends Component<Signature> {
       }
 
       .menu :deep(.boxel-menu__item:hover) {
-        background-color: #797788;
+        background-color: var(--past-sessions-hover-background);
         border-radius: var(--boxel-border-radius-xs);
       }
 
