@@ -564,7 +564,7 @@ export async function assertRooms(page: Page, rooms: string[]) {
       `joined rooms are not displayed`,
     ).toHaveCount(0);
   }
-  await page.locator(`body`).click();
+  await page.locator('[data-test-ai-assistant-panel]').click();
 }
 
 export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
