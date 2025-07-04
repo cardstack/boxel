@@ -537,7 +537,8 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
       }),
     ];
 
-    if (this.args.originalUploadedFileUrl) {
+    // todo: add a property canRestoreContent (which checks if patch has been applied)
+    if (this.args.originalUploadedFileUrl && !this.args.codeData.isNewFile) {
       items.push(
         new MenuItem('Restore Content', 'action', {
           action: this.restoreContent,
