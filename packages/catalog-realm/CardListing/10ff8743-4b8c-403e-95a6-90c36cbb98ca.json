@@ -11,6 +11,11 @@
       "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/blackjack-listing/thumbnail.png"
     },
     "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
       "specs.0": {
         "links": {
           "self": "../Spec/5cef210f-cb2d-43d5-83ee-d5144deb3671"
@@ -28,12 +33,7 @@
       },
       "tags.0": {
         "links": {
-          "self": "../Tag/631d1b5d-fcd0-465c-964e-e535fc6bb893"
-        }
-      },
-      "tags.1": {
-        "links": {
-          "self": "../Tag/4d0f9ae2-048e-4ce0-b263-7006602ce6a4"
+          "self": "../Tag/51de249c-516a-4c4d-bd88-76e88274c483"
         }
       },
       "license": {
