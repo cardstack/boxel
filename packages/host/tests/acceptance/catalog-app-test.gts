@@ -1,7 +1,7 @@
 import { click, waitFor, waitUntil, fillIn } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { module, skip, test } from 'qunit';
+import { module, test } from 'qunit';
 
 import { validate as uuidValidate } from 'uuid';
 
@@ -632,9 +632,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
     });
 
-    module('filters', async function (hooks) {
-      hooks.beforeEach(async function () {
-        // filter by search
+    module('filters', async function () {
+      test('list view is shown if filters are applied', async function (assert) {
         await waitFor('[data-test-filter-search-input]');
         await click('[data-test-filter-search-input]');
         await fillIn('[data-test-filter-search-input]', 'Mortgage');
@@ -645,9 +644,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         if (tagPill) {
           await click(tagPill);
         }
-      });
 
-      test('list view is shown if filters are applied', async function (assert) {
         await waitFor('[data-test-catalog-list-view]');
         assert
           .dom('[data-test-catalog-list-view]')
@@ -657,6 +654,17 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
 
       test('should be reset when clicking "Catalog Home" button', async function (assert) {
+        await waitFor('[data-test-filter-search-input]');
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'Mortgage');
+        // filter by category
+        await click('[data-test-filter-list-item="All"]');
+        // filter by tag
+        let tagPill = document.querySelector('[data-test-tag-list-pill]');
+        if (tagPill) {
+          await click(tagPill);
+        }
+
         assert
           .dom('[data-test-showcase-view]')
           .doesNotExist('Should be in list view after applying filter');
@@ -678,12 +686,22 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .doesNotExist('No tag should be selected after reset');
       });
 
-      // TODO: CS-9002 this test is flaky
-      skip('should be reset when clicking "All Apps" button', async function (assert) {
+      test('should be reset when clicking "All Apps" button', async function (assert) {
         await click('[data-tab-label="Apps"]');
         assert
           .dom('[data-tab-label="Apps"]')
           .hasClass('active', 'Apps tab should be active');
+
+        await waitFor('[data-test-filter-search-input]');
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'Mortgage');
+        // filter by category
+        await click('[data-test-filter-list-item="All"]');
+        // filter by tag
+        let tagPill = document.querySelector('[data-test-tag-list-pill]');
+        if (tagPill) {
+          await click(tagPill);
+        }
 
         await click('[data-test-navigation-reset-button="app"]');
         assert
