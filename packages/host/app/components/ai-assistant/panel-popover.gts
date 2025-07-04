@@ -57,7 +57,7 @@ const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
 
       box-shadow: var(--box-shadow-start);
 
-      animation: scroll-past-sessions linear;
+      animation: scroll-past-sessions linear forwards;
       animation-timeline: --past-sessions-scroll-timeline;
     }
     .header :deep(button) {
