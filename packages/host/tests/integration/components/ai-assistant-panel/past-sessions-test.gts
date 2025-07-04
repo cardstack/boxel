@@ -313,7 +313,7 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
     assert
       .dom('[data-test-past-sessions-button][data-test-has-active-sessions]')
       .doesNotExist(
-        "'All Sessions button' is not animated anymore because the other active session was seen",
+        "'Past Sessions button' is not animated anymore because the other active session was seen",
       );
 
     await click('[data-test-past-sessions-button]');

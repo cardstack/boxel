@@ -18,25 +18,47 @@ const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
       top: 0;
       left: 0;
       margin-top: var(--boxel-sp-sm);
-      width: 24.5rem;
+      width: 320px;
       min-height: 12.5rem;
       max-height: 75vh;
-      background-color: var(--boxel-light);
-      border-radius: var(--boxel-border-radius-xl);
-      color: var(--boxel-dark);
+      background: var(--past-sessions-background);
+      border: 1px solid var(--past-sessions-divider-color);
+      border-radius: var(--boxel-border-radius);
+      color: var(--boxel-light);
       box-shadow: 0 5px 15px 0 rgba(0, 0, 0, 0.5);
       z-index: var(--host-ai-panel-popover-z-index);
       display: flex;
       flex-direction: column;
+      timeline-scope: --past-sessions-scroll-timeline;
     }
 
     .header {
+      --box-shadow-offset-x: 0;
+      --box-shadow-offset-y: 7px;
+      --box-shadow-blur-radius: 15px;
+      --box-shadow-spread-radius: -7px;
+      --box-shadow-color-start: rgba(0, 0, 0, 0);
+      --box-shadow-color-end: rgba(0, 0, 0, 0.75);
+
+      --box-shadow-start: var(--box-shadow-offset-x) var(--box-shadow-offset-y)
+        var(--box-shadow-blur-radius) var(--box-shadow-spread-radius)
+        var(--box-shadow-color-start);
+
+      --box-shadow-end: var(--box-shadow-offset-x) var(--box-shadow-offset-y)
+        var(--box-shadow-blur-radius) var(--box-shadow-spread-radius)
+        var(--box-shadow-color-end);
+
       position: relative;
-      padding: var(--boxel-sp);
-      font-size: 1.125rem;
+      padding: var(--boxel-sp-xs);
+      color: var(--boxel-200);
       font-weight: 600;
       letter-spacing: var(--boxel-lsp-xs);
       line-height: 1.2;
+
+      box-shadow: var(--box-shadow-start);
+
+      animation: scroll-past-sessions linear forwards;
+      animation-timeline: --past-sessions-scroll-timeline;
     }
     .header :deep(button) {
       transform: rotate(180deg);
@@ -49,6 +71,18 @@ const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
       overflow-y: auto;
       flex-grow: 1;
     }
+
+    @keyframes scroll-past-sessions {
+      0% {
+        box-shadow: var(--box-shadow-start);
+      }
+      1% {
+        box-shadow: var(--box-shadow-end);
+      }
+      100% {
+        box-shadow: var(--box-shadow-end);
+      }
+    }
   </style>
 
   <div
@@ -56,9 +90,9 @@ const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
     class='panel-popover'
     ...attributes
   >
-    <div class='header'>
+    <header class='header'>
       {{yield to='header'}}
-    </div>
+    </header>
     <div class='body'>
       {{yield to='body'}}
     </div>

@@ -4,6 +4,8 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import ExternalLink from '@cardstack/boxel-icons/external-link';
+
 import { format as formatDate, isSameDay, isSameYear } from 'date-fns';
 
 import {
@@ -14,7 +16,6 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { menuItem } from '@cardstack/boxel-ui/helpers';
 import {
-  Upload,
   IconPencil,
   IconTrash,
   ThreeDotsHorizontal,
@@ -86,8 +87,8 @@ export default class PastSessionItem extends Component<Signature> {
             <:trigger>
               <IconButton
                 @icon={{ThreeDotsHorizontal}}
-                @width='20px'
-                @height='20px'
+                @width='16px'
+                @height='16px'
                 class='menu-button'
                 aria-label='Options'
                 data-test-past-session-options-button={{@session.roomId}}
@@ -105,7 +106,9 @@ export default class PastSessionItem extends Component<Signature> {
             @closeMenu={{dd.close}}
             @items={{array
               (menuItem
-                'Open Session' (fn @actions.open @session.roomId) icon=Upload
+                'Open Session'
+                (fn @actions.open @session.roomId)
+                icon=ExternalLink
               )
               (menuItem 'Rename' (fn @actions.rename @session) icon=IconPencil)
               (menuItem 'Delete' (fn @actions.delete @session) icon=IconTrash)
@@ -125,21 +128,23 @@ export default class PastSessionItem extends Component<Signature> {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        border-top: 1px solid var(--boxel-300);
-        padding-top: var(--boxel-sp-sm);
-        padding-left: var(--boxel-sp-xs);
-        padding-bottom: var(--boxel-sp-sm);
+        border-top: 1px solid var(--past-sessions-divider-color);
+        padding: var(--boxel-sp) var(--boxel-sp-sm);
         margin-right: var(--boxel-sp-xs);
         margin-left: var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius-xs);
       }
+
+      .session:first-child {
+        border-top: none;
+      }
+
       .session:hover {
-        background-color: var(--boxel-200);
+        background-color: var(--past-sessions-hover-background);
         cursor: pointer;
-        border-radius: 8px;
       }
       .session[data-is-current-room] {
-        border: 1px solid var(--boxel-highlight);
-        border-radius: 8px;
+        border: 1px solid var(--past-sessions-divider-color);
       }
       .session:hover + .session:not([data-is-current-room]),
       .session[data-is-current-room] + .session {
@@ -149,24 +154,66 @@ export default class PastSessionItem extends Component<Signature> {
         font-weight: 600;
       }
       .date {
-        margin-top: var(--boxel-sp-4xs);
-        color: var(--boxel-450);
+        margin-top: var(--boxel-sp-xxs);
+        color: var(--boxel-400);
       }
       .view-session-button {
+        color: var(--boxel-light);
         background-color: transparent;
         border: none;
         width: 100%;
         text-align: left;
       }
-      .menu-button:hover:not(:disabled) {
-        --icon-color: var(--boxel-highlight);
+
+      .menu-button {
+        visibility: hidden;
+        display: flex;
+        width: auto;
+        height: auto;
+        padding: 2px;
+        border-radius: var(--boxel-border-radius-xs);
       }
+
+      .session:hover .menu-button {
+        visibility: visible;
+      }
+
+      .menu-button:hover:not(:disabled) {
+        background-color: var(--boxel-highlight);
+      }
+
+      .menu-button :deep(svg) {
+        stroke: var(--boxel-dark);
+        stroke-width: 1px;
+      }
+
+      .menu {
+        --boxel-menu-item-content-padding: var(--boxel-sp-xxs)
+          var(--boxel-sp-sm);
+
+        background: var(--past-sessions-background);
+        border: 1px solid var(--past-sessions-divider-color);
+        color: var(--boxel-light);
+        padding: var(--boxel-sp-xs);
+        box-shadow: var(--boxel-deep-box-shadow);
+      }
+
       .menu :deep(svg) {
         --icon-stroke-width: 1.5px;
+        --icon-color: var(--boxel-light);
+
+        margin-right: var(--boxel-sp-xs);
       }
+
       .menu :deep(.boxel-menu__item:nth-child(2) svg) {
         --icon-stroke-width: 0.5px;
       }
+
+      .menu :deep(.boxel-menu__item:hover) {
+        background-color: var(--past-sessions-hover-background);
+        border-radius: var(--boxel-border-radius-xs);
+      }
+
       .icon-recency-indicator {
         display: inline-block;
         margin-right: 4px;
