@@ -102,6 +102,7 @@ const CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
   </section>
   <style scoped>
     .code-block {
+      --code-block-max-height: 15.625rem; /* 250px */
       background-color: var(--boxel-dark);
       color: var(--boxel-light);
       border: 1px solid var(--boxel-550);
@@ -155,7 +156,7 @@ class CodeBlockEditor extends Component<Signature> {
     </div>
     <style scoped>
       .code-block-editor {
-        max-height: 250px;
+        max-height: var(--code-block-max-height);
       }
     </style>
   </template>
@@ -203,6 +204,11 @@ class CodeBlockDiffEditor extends Component<Signature> {
     >
       {{! Don't put anything here in this div as monaco modifier will override this element }}
     </div>
+    <style scoped>
+      .code-block-diff {
+        max-height: var(--code-block-max-height);
+      }
+    </style>
   </template>
 }
 

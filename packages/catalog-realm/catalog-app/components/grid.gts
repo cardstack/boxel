@@ -16,7 +16,6 @@ import {
 } from '@cardstack/runtime-common';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
-import SearchOff from '@cardstack/boxel-icons/search-off';
 import ListingFittedSkeleton from './listing-fitted-skeleton';
 
 interface CardsGridSignature {
@@ -76,14 +75,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
         </:loading>
         <:response as |cards|>
           {{#if (eq cards.length 0)}}
-            <div class='no-results'>
-              <SearchOff class='no-results-icon' />
-              <h3 class='no-results-title'>No results found</h3>
-              <p class='no-results-description'>
-                Try adjusting your search terms or filters to find what you're
-                looking for.
-              </p>
-            </div>
+            <p class='no-results'>No results found</p>
           {{else}}
             <ul
               class='cards {{@selectedView}}-view'
@@ -196,36 +188,9 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
       }
 
       .no-results {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        height: 30cqh;
-        background: var(--boxel-100);
-        border-radius: var(--boxel-border-radius);
-        border: 1px solid var(--boxel-border-color);
-        padding: var(--boxel-sp-xl);
-        text-align: center;
-      }
-      .no-results-icon {
-        width: 64px;
-        height: 64px;
-        color: var(--layout-theme-color);
-        margin-bottom: var(--boxel-sp-lg);
-      }
-
-      .no-results-title {
-        font: 600 var(--boxel-font);
-        color: var(--boxel-dark);
-        margin: 0 0 var(--boxel-sp-sm) 0;
-      }
-
-      .no-results-description {
-        font: 400 var(--boxel-font-sm);
-        color: var(--boxel-500);
-        margin: 0;
-        max-width: 400px;
-        line-height: 1.5;
+        font: 600 var(--boxel-font-lg);
+        text-align: left;
+        padding: var(--boxel-sp-6xs);
       }
     </style>
   </template>

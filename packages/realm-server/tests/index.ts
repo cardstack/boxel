@@ -26,3 +26,4 @@ import './server-endpoints-test';
 import './types-endpoint-test';
 import './virtual-network-test';
 import './billing-test';
+import './prerendering-test';

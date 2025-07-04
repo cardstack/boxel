@@ -254,10 +254,6 @@ const employeeCardSource = `
   import BooleanField from 'https://cardstack.com/base/boolean';
   import { Person } from './person';
 
-  export function isHourly (this: Employee) {
-    return !this.isSalaried;
-  }
-
   export class Isolated extends Component<typeof Employee> {
     <template>
       <@fields.firstName /> <@fields.lastName />
@@ -277,6 +273,10 @@ const employeeCardSource = `
         Department: <@fields.department />
       </template>
     };
+  }
+
+  export function isHourly (this: Employee) {
+    return !this.isSalaried;
   }
 `;
 
@@ -1247,17 +1247,17 @@ module('Acceptance | code submode tests', function (_hooks) {
       await waitFor('[data-test-card-inspector-panel]');
       await waitFor('[data-test-current-module-name]');
       await waitFor('[data-test-in-this-file-selector]');
-      //default is the 1st index
-      let elementName = 'AClassWithExportName (LocalClass) class';
+      //default is the last index
+      let elementName = 'default (DefaultClass) class';
       assert
-        .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
+        .dom('[data-test-boxel-selector-item]:nth-of-type(11)')
         .hasText(elementName);
       assert
         .dom('[data-test-boxel-selector-item-selected]')
         .hasText(elementName);
       assert.true(
-        monacoService.getLineCursorOn()?.includes('LocalClass'),
-        'cursor is on LocalClass line',
+        monacoService.getLineCursorOn()?.includes('DefaultClass'),
+        'cursor is on DefaultClass line',
       );
 
       // clicking on a card
@@ -1295,15 +1295,15 @@ module('Acceptance | code submode tests', function (_hooks) {
       await waitFor('[data-test-card-inspector-panel]');
       await waitFor('[data-test-current-module-name]');
       await waitFor('[data-test-in-this-file-selector]');
-      //default is the 1st index
-      let elementName = 'AClassWithExportName (LocalClass) class';
+      //default is the last index
+      let elementName = 'default (DefaultClass) class';
       assert
-        .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
+        .dom('[data-test-boxel-selector-item]:nth-of-type(11)')
         .hasText(elementName);
       assert
         .dom('[data-test-boxel-selector-item-selected]')
         .hasText(elementName);
-      assert.true(monacoService.getLineCursorOn()?.includes('LocalClass'));
+      assert.true(monacoService.getLineCursorOn()?.includes('DefaultClass'));
 
       elementName = 'ExportedFieldInheritLocalField';
       let position = new MonacoSDK.Position(45, 0);
