@@ -768,7 +768,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         await click('[data-test-filter-search-input]');
         await fillIn('[data-test-filter-search-input]', 'Blackjack');
         await new Promise((resolve) => setTimeout(resolve, 350));
-
+        await waitFor('[data-test-cards-grid-cards]');
         assert
           .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
           .exists({ count: 1 });
