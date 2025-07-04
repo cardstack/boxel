@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { baseRealm, isCardInstance } from '@cardstack/runtime-common';
+import { isCardInstance } from '@cardstack/runtime-common';
 import { DEFAULT_REMIX_LLM } from '@cardstack/runtime-common/matrix-constants';
 
 import * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -8,6 +8,7 @@ import * as BaseCommandModule from 'https://cardstack.com/base/command';
 import type { Skill } from 'https://cardstack.com/base/skill';
 
 import HostBaseCommand from '../lib/host-base-command';
+import { skillCardURL } from '../lib/utils';
 
 import AddSkillsToRoomCommand from './add-skills-to-room';
 import CreateAiAssistantRoomCommand from './create-ai-assistant-room';
@@ -62,7 +63,7 @@ export default class ListingActionInitCommand extends HostBaseCommand<
       name: roomName,
     });
 
-    const listingSkillCardId = `${baseRealm.url}Skill/catalog-listing`;
+    const listingSkillCardId = skillCardURL('catalog-listing');
     const fetchSkillCard = await this.store.get<Skill>(listingSkillCardId);
     let listingSkillCard = isCardInstance(fetchSkillCard)
       ? fetchSkillCard
