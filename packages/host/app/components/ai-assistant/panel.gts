@@ -54,7 +54,11 @@ interface Signature {
 
 export default class AiAssistantPanel extends Component<Signature> {
   <template>
-    <Velcro @placement='bottom' @offsetOptions={{-50}} as |popoverVelcro|>
+    <Velcro
+      @placement='bottom-end'
+      @offsetOptions={{this.velcroOffsetOptions}}
+      as |popoverVelcro|
+    >
       <div
         class='ai-assistant-panel'
         data-test-ai-assistant-panel
@@ -365,6 +369,13 @@ export default class AiAssistantPanel extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.loadMonaco.perform();
+  }
+
+  get velcroOffsetOptions() {
+    return {
+      mainAxis: 10,
+      crossAxis: 50,
+    };
   }
 
   get hasOtherActiveSessions() {
