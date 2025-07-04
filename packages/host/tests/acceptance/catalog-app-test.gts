@@ -31,6 +31,8 @@ const catalogRealmURL = 'http://localhost:4201/catalog/';
 const testRealm2URL = `http://test-realm/test2/`;
 const mortgageCalculatorCardId = `${catalogRealmURL}CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`;
 const leafletMapCardId = `${catalogRealmURL}CardListing/552da558-5642-4541-89b0-28622db3bc84`;
+const calculatorTagId = `${catalogRealmURL}Tag/c1fe433a-b3df-41f4-bdcf-d98686ee42d7`;
+const gameTagId = `${catalogRealmURL}Tag/51de249c-516a-4c4d-bd88-76e88274c483`;
 
 const authorCardSource = `
   import { field, contains, CardDef } from 'https://cardstack.com/base/card-api';
@@ -722,6 +724,65 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .dom('[data-test-tag-list-pill].selected')
           .doesNotExist('No tag should be selected after reset');
       });
+
+      test('updates the card count correctly when filtering by a category', async function (assert) {
+        await click(
+          '[data-test-boxel-filter-list-button="Education and Learning"]',
+        );
+        assert
+          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+          .exists({ count: 1 });
+      });
+
+      test('updates the card count correctly when filtering by a search input', async function (assert) {
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'Mortgage');
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        await waitFor('[data-test-cards-grid-cards]');
+        assert
+          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+          .exists({ count: 1 });
+      });
+
+      test('updates the card count correctly when filtering by a single tag', async function (assert) {
+        await click(`[data-test-tag-list-pill="${gameTagId}"]`);
+        assert
+          .dom(`[data-test-tag-list-pill="${gameTagId}"]`)
+          .hasClass('selected');
+        assert
+          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+          .exists({ count: 2 });
+      });
+
+      test('updates the card count correctly when filtering by multiple tags', async function (assert) {
+        await click(`[data-test-tag-list-pill="${calculatorTagId}"]`);
+        await click(`[data-test-tag-list-pill="${gameTagId}"]`);
+        assert
+          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+          .exists({ count: 3 });
+      });
+
+      test('updates the card count correctly when multiple filters are applied together', async function (assert) {
+        await click('[data-test-boxel-filter-list-button="All"]');
+        await click(`[data-test-tag-list-pill="${gameTagId}"]`);
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'Blackjack');
+        await new Promise((resolve) => setTimeout(resolve, 350));
+
+        assert
+          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+          .exists({ count: 1 });
+      });
+
+      test('shows zero results when filtering with a non-matching or invalid search input', async function (assert) {
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'asdfasdf');
+        await new Promise((resolve) => setTimeout(resolve, 350));
+
+        assert.dom('[data-test-no-results]').exists();
+      });
+
+      // shows zero results when filtering with a non-matching or invalid search input
     });
   });
 
