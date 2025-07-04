@@ -48,10 +48,21 @@ export default class LocalStorageService extends Service {
 
   setCurrentRoomId(roomId: string) {
     window.localStorage.setItem(CurrentRoomIdPersistenceKey, roomId);
+
+    this.deleteOldEntries();
     window.localStorage.setItem(
       `${CurrentRoomIdPersistenceKey}-${this.browserTabId}`,
       roomId,
     );
+  }
+
+  deleteOldEntries() {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      let key = window.localStorage.key(i);
+      if (key && key.startsWith(CurrentRoomIdPersistenceKey + '-')) {
+        window.localStorage.removeItem(key);
+      }
+    }
   }
 
   removeCurrentRoomId() {
