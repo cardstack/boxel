@@ -9,7 +9,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask, timeout } from 'ember-concurrency';
+import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
 import Modifier from 'ember-modifier';
@@ -47,6 +47,8 @@ import type { ComponentLike } from '@glint/template';
 import type * as _MonacoSDK from 'monaco-editor';
 import MatrixService from '@cardstack/host/services/matrix-service';
 import CardService from '@cardstack/host/services/card-service';
+import RestorePatchedFileModal from './restore-patched-file-modal';
+import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 
 const commonEditorOptions: MonacoEditorOptions = {
   theme: 'vs-dark',
@@ -519,6 +521,7 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service private declare cardService: CardService;
+  @tracked isRestorePatchedFileModalOpen = false;
   get fileUrl() {
     return (
       this.args.finalFileUrlAfterCodePatching ?? this.args.codeData.fileUrl
@@ -541,7 +544,7 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
     if (this.args.originalUploadedFileUrl && !this.args.codeData.isNewFile) {
       items.push(
         new MenuItem('Restore Content', 'action', {
-          action: this.restoreContent,
+          action: this.toggleRestorePatchedFileModal,
           icon: IconPencil,
           dangerous: true,
         }),
@@ -555,23 +558,31 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
     this.operatorModeStateService.updateCodePath(new URL(this.fileUrl!));
   };
 
-  restoreContent = async () => {
-    // TODO: Implement restore content functionality
-    console.log('Restore content clicked');
-
-    // TODO: Are you sure you want to restore the content that was in this file before the patch was applied?
+  restoreContent = dropTask(async () => {
     let originalUploadedFileUrl = this.args.originalUploadedFileUrl;
+    if (!originalUploadedFileUrl) {
+      throw new Error('bug: originalUploadedFileUrl should be present');
+    }
+    let finalFileUrlAfterCodePatching = this.args.finalFileUrlAfterCodePatching;
+    if (!finalFileUrlAfterCodePatching) {
+      throw new Error('bug: finalFileUrlAfterCodePatching should be present');
+    }
+
     let response = await this.matrixService.fetchMatrixHostedFile(
       originalUploadedFileUrl,
     );
     let content = await response.text();
-    let finalFileUrlAfterCodePatching = this.args.finalFileUrlAfterCodePatching;
+
     await this.cardService.saveSource(
-      new URL(finalFileUrlAfterCodePatching),
+      new URL(finalFileUrlAfterCodePatching!),
       content,
       'bot-patch',
     );
-    alert(content);
+    this.isRestorePatchedFileModalOpen = false;
+  });
+
+  toggleRestorePatchedFileModal = () => {
+    this.isRestorePatchedFileModalOpen = !this.isRestorePatchedFileModalOpen;
   };
 
   <template>
@@ -681,6 +692,19 @@ class CodeBlockHeader extends Component<CodeBlockHeaderSignature> {
         --icon-color: var(--boxel-light);
       }
     </style>
+
+    {{#if this.isRestorePatchedFileModalOpen}}
+      <ToElsewhere
+        @named='restore-patched-file-modal'
+        @send={{component
+          RestorePatchedFileModal
+          onConfirm=(perform this.restoreContent)
+          onCancel=this.toggleRestorePatchedFileModal
+          isRestoreRunning=this.restoreContent.isRunning
+        }}
+      />
+    {{/if}}
+
     <div class='code-block-diff-header'>
       <div class='left-section'>
         <div class='mode' data-test-file-mode>
