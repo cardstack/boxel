@@ -306,6 +306,7 @@ test.describe('Room creation', () => {
     // Here, past sessions could be rerendered because in one case we're creating a new room when opening an AI panel, so we need to wait for the past sessions to settle
     await page.waitForTimeout(500); // Wait for the sessions to settle after new room is created
 
+    await page.locator(`[data-test-joined-room="${room}"]`).hover();
     await page
       .locator(`[data-test-past-session-options-button="${room}"]`)
       .click();

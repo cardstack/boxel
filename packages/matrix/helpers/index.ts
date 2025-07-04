@@ -342,6 +342,7 @@ export async function deleteRoom(page: Page, roomId: string) {
 
   // Here, past sessions could be rerendered because in one case we're creating a new room when opening an AI panel, so we need to wait for the past sessions to settle
   await page.waitForTimeout(500);
+  await page.locator(`[data-test-joined-room="${roomId}"]`).hover();
   await page
     .locator(`[data-test-past-session-options-button="${roomId}"]`)
     .click();
@@ -363,6 +364,7 @@ export async function openRoom(page: Page, roomId: string) {
 export async function openRenameMenu(page: Page, roomId: string) {
   await page.locator(`[data-test-past-sessions-button]`).click();
   await page.waitForTimeout(500); // without this, the click on the options button result in the menu staying open
+  await page.locator(`[data-test-joined-room="${roomId}"]`).hover();
   await page
     .locator(`[data-test-past-session-options-button="${roomId}"]`)
     .click();
