@@ -1,4 +1,3 @@
-#!/usr/bin/env tsx
 import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import * as path from 'path';
@@ -69,6 +68,11 @@ async function createRealmContent(realmDir: string) {
   await fs.writeFile(
     path.join(realmDir, 'card1.json'),
     JSON.stringify({ title: 'Test Card 1', type: 'card' }, null, 2),
+  );
+
+  await fs.writeFile(
+    path.join(realmDir, '.realm.json'),
+    JSON.stringify({ name: 'Test Realm', version: '1.0.0' }, null, 2),
   );
 
   await fs.mkdir(path.join(realmDir, 'nested'), {
@@ -407,6 +411,95 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
       .then(() => true)
       .catch(() => false);
     assert.false(dryRunExists, '--dry-run should not have pushed the file');
+  });
+
+  test('Syncs .realm.json files in both directions', async function (assert) {
+    const pushCmd = path.join(__dirname, '..', 'dist', 'push.js');
+    const pullCmd = path.join(__dirname, '..', 'dist', 'pull.js');
+
+    // Test pulling .realm.json
+    const pullResult = await runCommand(
+      'node',
+      [pullCmd, `http://localhost:${REALM_PORT}/test/`, context.localDir],
+      process.cwd(),
+    );
+
+    assert.strictEqual(
+      pullResult.code,
+      0,
+      `Pull .realm.json should succeed: ${pullResult.stderr}`,
+    );
+
+    // Verify .realm.json was pulled
+    const realmJsonExists = await fs
+      .access(path.join(context.localDir, '.realm.json'))
+      .then(() => true)
+      .catch(() => false);
+    assert.true(realmJsonExists, '.realm.json should be pulled from realm');
+
+    const realmJsonContent = await fs.readFile(
+      path.join(context.localDir, '.realm.json'),
+      'utf-8',
+    );
+    const realmConfig = JSON.parse(realmJsonContent);
+    assert.strictEqual(
+      realmConfig.name,
+      'Test Realm',
+      '.realm.json content should match after pull',
+    );
+
+    // Modify .realm.json locally and push it back
+    await fs.writeFile(
+      path.join(context.localDir, '.realm.json'),
+      JSON.stringify(
+        { name: 'Modified Test Realm', version: '1.1.0', modified: true },
+        null,
+        2,
+      ),
+    );
+
+    const pushResult = await runCommand(
+      'node',
+      [pushCmd, context.localDir, `http://localhost:${REALM_PORT}/test/`],
+      process.cwd(),
+    );
+
+    assert.strictEqual(
+      pushResult.code,
+      0,
+      `Push .realm.json should succeed: ${pushResult.stderr}`,
+    );
+
+    // Verify the modification was pushed by pulling to a new directory
+    const verifyDir = path.join(context.tempDir, 'realm-json-verify');
+    await fs.mkdir(verifyDir, { recursive: true });
+
+    const verifyPullResult = await runCommand(
+      'node',
+      [pullCmd, `http://localhost:${REALM_PORT}/test/`, verifyDir],
+      process.cwd(),
+    );
+
+    assert.strictEqual(
+      verifyPullResult.code,
+      0,
+      `Verification pull for .realm.json should succeed: ${verifyPullResult.stderr}`,
+    );
+
+    const verifyRealmJsonContent = await fs.readFile(
+      path.join(verifyDir, '.realm.json'),
+      'utf-8',
+    );
+    const verifyRealmConfig = JSON.parse(verifyRealmJsonContent);
+    assert.true(
+      verifyRealmConfig.modified,
+      '.realm.json modifications should be properly pushed',
+    );
+    assert.strictEqual(
+      verifyRealmConfig.version,
+      '1.1.0',
+      '.realm.json version should be updated',
+    );
   });
 
   test('Respects .boxelignore patterns', async function (assert) {

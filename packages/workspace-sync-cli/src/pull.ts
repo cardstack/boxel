@@ -59,11 +59,6 @@ class RealmPuller extends RealmSyncBase {
 
     // Download remote files
     for (const [relativePath] of remoteFiles) {
-      // Skip metadata files
-      if (relativePath === '.realm.json' || relativePath.startsWith('.')) {
-        continue;
-      }
-
       try {
         const localPath = path.join(this.options.localDir, relativePath);
         await this.downloadFile(relativePath, localPath);
@@ -86,11 +81,6 @@ class RealmPuller extends RealmSyncBase {
       }
 
       for (const relativePath of filesToDelete) {
-        // Skip metadata files
-        if (relativePath === '.realm.json' || relativePath.startsWith('.')) {
-          continue;
-        }
-
         try {
           const localPath = localFiles.get(relativePath);
           if (localPath) {
