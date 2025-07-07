@@ -1,5 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { fn } from '@ember/helper';
+
 import { on } from '@ember/modifier';
 
 import { BoxelButton, Modal } from '@cardstack/boxel-ui/components';

@@ -364,6 +364,14 @@ export default class MessageBuilder {
         );
         continue;
       }
+      if (!originalUploadedFileUrl) {
+        console.error(
+          'Bug: no original uploaded file url found for code patch result event - it should have been set',
+          codePatchResultEvent,
+        );
+        continue;
+      }
+
       codePatchResults.push(
         new MessageCodePatchResult(
           message,

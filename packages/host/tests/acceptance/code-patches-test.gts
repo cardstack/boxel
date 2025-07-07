@@ -626,7 +626,13 @@ ${REPLACE_MARKER}
     assert.dom('[data-code-patch-dropdown-button="hi-1.txt"]').exists();
 
     await click('[data-code-patch-dropdown-button="file1.gts"]');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Restore Content"]')
+      .doesNotExist(
+        'Restore Content menu item should not be shown for new files',
+      );
     await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
+
     assert.strictEqual(
       getMonacoContent(),
       'I am a newly created file1',
@@ -634,6 +640,11 @@ ${REPLACE_MARKER}
     );
 
     await click('[data-code-patch-dropdown-button="file2.gts"]');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Restore Content"]')
+      .doesNotExist(
+        'Restore Content menu item should not be shown for new files',
+      );
     await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
     assert.strictEqual(
       getMonacoContent(),
@@ -642,6 +653,11 @@ ${REPLACE_MARKER}
     );
 
     await click('[data-code-patch-dropdown-button="hi-1.txt"]');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Restore Content"]')
+      .doesNotExist(
+        'Restore Content menu item should not be shown for new files',
+      );
     await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
     assert.strictEqual(
       getMonacoContent(),
@@ -675,6 +691,16 @@ ${REPLACE_MARKER}
       isStreamingFinished: true,
     });
 
+    await waitFor('[data-code-patch-dropdown-button="hello.txt"]', {
+      timeout: 4000,
+    });
+    await click('[data-code-patch-dropdown-button="hello.txt"]');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Restore Content"]')
+      .doesNotExist(
+        'Restore Content menu item should not be shown when patch has not been applied',
+      );
+
     // User applies the code patch
     await waitFor('[data-test-apply-code-button]');
     assert.dom('[data-test-code-diff-editor]').exists();
@@ -682,6 +708,13 @@ ${REPLACE_MARKER}
     await waitFor('[data-test-apply-state="applied"]');
     assert.dom('[data-test-code-diff-editor]').doesNotExist();
     assert.dom('[data-test-editor]').exists();
+
+    await click('[data-code-patch-dropdown-button="hello.txt"]');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Restore Content"]')
+      .exists(
+        'Restore Content menu item should be shown when patch has been applied',
+      );
 
     // User moves on to the next message
     simulateRemoteMessage(roomId, '@testuser:localhost', {
@@ -755,5 +788,57 @@ ${REPLACE_MARKER}
     assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
     assert.dom('[data-test-editor]').exists({ count: 4 });
     assert.dom('[data-test-code-diff-editor]').exists({ count: 1 });
+  });
+
+  test('user can restore content of a patched file to its original state', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    let codeBlock = `\`\`\`
+http://test-realm/test/hello.txt
+${SEARCH_MARKER}
+Hello, world!
+${SEPARATOR_MARKER}
+Hi, world!
+${REPLACE_MARKER}
+\`\`\``;
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    await waitFor('[data-test-apply-code-button]');
+    await click('[data-test-apply-code-button]');
+    await waitFor('[data-test-apply-state="applied"]');
+
+    await click('[data-code-patch-dropdown-button="hello.txt"]');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Restore Content"]')
+      .exists(
+        'Restore Content menu item should be shown when patch has been applied',
+      );
+
+    let matrixServer = getService('matrix-service');
+    let originalFetchMatrixHostedFile = matrixServer.fetchMatrixHostedFile;
+    let originalContent =
+      'Original content of the file before the code patch was applied';
+    matrixServer.fetchMatrixHostedFile = async (_url) => {
+      return new Response(originalContent);
+    };
+
+    await click('[data-test-boxel-menu-item-text="Restore Content"]');
+    await click('[data-test-confirm-restore-button]');
+
+    await waitUntil(() => getMonacoContent() === originalContent);
+
+    matrixServer.fetchMatrixHostedFile = originalFetchMatrixHostedFile;
   });
 });
