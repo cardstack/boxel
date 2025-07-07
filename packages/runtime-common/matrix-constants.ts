@@ -29,7 +29,7 @@ export const DEFAULT_LLM = 'openai/gpt-4.1';
 export const DEFAULT_CODING_LLM = 'anthropic/claude-sonnet-4';
 export const DEFAULT_REMIX_LLM = 'openai/gpt-4.1-nano';
 
-export const DEFAULT_LLM_ID_TO_NAME = {
+export const DEFAULT_LLM_ID_TO_NAME: Record<string, string> = {
   'anthropic/claude-3.5-sonnet': 'Anthropic: Claude 3.5 Sonnet',
   'anthropic/claude-3.7-sonnet': 'Anthropic: Claude 3.7 Sonnet',
   'anthropic/claude-3.7-sonnet:thinking':

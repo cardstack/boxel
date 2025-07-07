@@ -38,7 +38,10 @@ import {
   internalKeyFor,
   isCardInstance,
 } from '@cardstack/runtime-common';
-import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
+import {
+  DEFAULT_LLM_LIST,
+  DEFAULT_LLM_ID_TO_NAME,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
 import UpdateSkillActivationCommand from '@cardstack/host/commands/update-skill-activation';
@@ -658,11 +661,16 @@ export default class Room extends Component<Signature> {
   }
 
   private get llmsForSelectMenu() {
-    return [
+    let ids = [
       ...new Set([...DEFAULT_LLM_LIST, ...this.args.roomResource.usedLLMs]),
     ]
       .filter(Boolean)
       .sort();
+
+    return ids.reduce((acc: Record<string, string>, id) => {
+      acc[id] = DEFAULT_LLM_ID_TO_NAME[id] ?? id;
+      return acc;
+    }, {});
   }
 
   private get sortedSkills(): RoomSkill[] {

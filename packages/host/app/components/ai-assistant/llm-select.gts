@@ -13,7 +13,7 @@ import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 interface Signature {
   Args: {
     selected: string;
-    options: string[];
+    options: Record<string, string>;
     onChange: (selectedLLM: string) => void;
     disabled?: boolean;
     onExpand?: () => void;
@@ -42,28 +42,28 @@ export default class LLMSelect extends Component<Signature> {
       </:headerDetail>
       <:content>
         <ul class='llm-list'>
-          {{#each @options as |option|}}
+          {{#each-in @options as |id name|}}
             <li
-              class='llm-option {{if (eq @selected option) "selected"}}'
-              data-test-llm-select-item={{option}}
+              class='llm-option {{if (eq @selected id) "selected"}}'
+              data-test-llm-select-item={{id}}
               {{scrollIntoViewModifier
-                (eq @selected option)
+                (eq @selected id)
                 container='llm-select'
-                key=option
+                key=id
               }}
             >
               <button
                 type='button'
                 class='llm-button'
-                {{on 'click' (fn this.handleOptionClick option)}}
+                {{on 'click' (fn this.handleOptionClick id)}}
               >
-                {{option}}
-                {{#if (eq @selected option)}}
+                {{name}}
+                {{#if (eq @selected id)}}
                   <Check class='selected-icon' />
                 {{/if}}
               </button>
             </li>
-          {{/each}}
+          {{/each-in}}
         </ul>
       </:content>
     </PillMenu>
@@ -136,7 +136,7 @@ export default class LLMSelect extends Component<Signature> {
   </template>
 
   private get displayName() {
-    return this.args.selected.split('/')[1] ?? this.args.selected;
+    return this.args.options[this.args.selected];
   }
 
   @action
