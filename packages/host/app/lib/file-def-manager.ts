@@ -2,7 +2,6 @@ import type Owner from '@ember/owner';
 import { setOwner } from '@ember/owner';
 import { inject as service } from '@ember/service';
 
-import * as MatrixSDK from 'matrix-js-sdk';
 import { md5 } from 'super-fast-md5';
 
 import {
@@ -34,6 +33,7 @@ import type {
 import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 
+import { ExtendedClient } from '../services/matrix-sdk-loader';
 import NetworkService from '../services/network';
 
 import type CardService from '../services/card-service';
@@ -68,8 +68,6 @@ export interface FileDefManager {
 
   uploadFiles(files: FileDef[]): Promise<FileDef[]>;
 
-  uploadContent(content: string, contentType: string): Promise<string>;
-
   /**
    * Downloads content from a file definition
    * @param fileDef File definition to download from
@@ -80,6 +78,8 @@ export interface FileDefManager {
   ): Promise<LooseSingleCardDocument>;
 
   cacheContentHashIfNeeded(event: MatrixEvent): Promise<void>;
+  recacheContentHash(contentHash: string, url: string): Promise<void>;
+
   /**
    * Downloads content from a file definition as a file in the browser
    * @param serializedFile File definition to download from
@@ -88,10 +88,19 @@ export interface FileDefManager {
   downloadAsFileInBrowser(serializedFile: SerializedFile): Promise<void>;
 }
 
-export default class FileDefManagerImpl implements FileDefManager {
+export interface PrivilegedFileDefManager extends FileDefManager {
+  contentHashCache: Map<string, string>;
+  invalidUrlCache: Set<string>;
+  getContentHash(content: string): Promise<string>;
+}
+
+export default class FileDefManagerImpl
+  implements FileDefManager, PrivilegedFileDefManager
+{
   private downloadCache: Map<string, CacheEntry> = new Map();
-  private contentHashCache: Map<string, string> = new Map(); // Maps content hash to URL
-  private client: MatrixSDK.MatrixClient;
+  contentHashCache: Map<string, string> = new Map(); // Maps content hash to URL
+  invalidUrlCache: Set<string> = new Set(); // Cache for URLs where content hash validation failed
+  private client: ExtendedClient;
   private getCardAPI: () => typeof CardAPI;
   private getFileAPI: () => typeof FileAPI;
 
@@ -107,7 +116,7 @@ export default class FileDefManagerImpl implements FileDefManager {
     getFileAPI,
   }: {
     owner: Owner;
-    client: MatrixSDK.MatrixClient;
+    client: ExtendedClient;
     getCardAPI: () => typeof CardAPI;
     getFileAPI: () => typeof FileAPI;
   }) {
@@ -125,7 +134,7 @@ export default class FileDefManagerImpl implements FileDefManager {
     return this.getCardAPI();
   }
 
-  private async getContentHash(content: string): Promise<string> {
+  async getContentHash(content: string): Promise<string> {
     return md5(content);
   }
 
@@ -136,12 +145,18 @@ export default class FileDefManagerImpl implements FileDefManager {
     return this.contentHashCache.get(hash) || null;
   }
 
-  async uploadContent(content: string, contentType: string): Promise<string> {
+  async uploadContentWithCaching(
+    content: string,
+    contentType: string,
+  ): Promise<string> {
     // Check if we already have this content cached
+    console.log(`Checking cache for content hash...`, content);
     const cachedUrl = await this.getCachedUrlForContent(content);
     if (cachedUrl) {
+      console.log(`Found cached URL for content: ${cachedUrl}`);
       return cachedUrl;
     }
+    console.log(`No cached URL for content found: ${content}. Uploading...`);
 
     let response = await this.client.uploadContent(content, {
       type: contentType,
@@ -156,6 +171,26 @@ export default class FileDefManagerImpl implements FileDefManager {
     this.contentHashCache.set(hash, url);
 
     return url;
+  }
+
+  // Validates the content hash against the contents of the URL and then updates the cache
+  async recacheContentHash(contentHash: string, url: string) {
+    if (this.invalidUrlCache.has(url)) {
+      // Skipping re-caching for this url as it was previously checked and is invalid
+      return;
+    }
+    let content = await this.downloadContentAsText(url);
+    const fetchedContentHash = await this.getContentHash(content);
+    if (fetchedContentHash !== contentHash) {
+      console.warn(
+        `Content hash mismatch for URL: ${url}, skipping re-caching step`,
+      );
+      this.invalidUrlCache.add(url);
+      return;
+    }
+
+    // Update the cache with the new URL for the content hash
+    this.contentHashCache.set(contentHash, url);
   }
 
   async uploadCards(cards: CardDef[]): Promise<FileDef[]> {
@@ -195,7 +230,10 @@ export default class FileDefManagerImpl implements FileDefManager {
           contentType: SupportedMimeType.CardJson,
           contentHash,
         });
-        fileDef.url = await this.uploadContent(content, fileDef.contentType);
+        fileDef.url = await this.uploadContentWithCaching(
+          content,
+          fileDef.contentType,
+        );
         return fileDef;
       }),
     );
@@ -262,7 +300,10 @@ export default class FileDefManagerImpl implements FileDefManager {
           contentHash,
         });
 
-        fileDef.url = await this.uploadContent(content, fileDef.contentType);
+        fileDef.url = await this.uploadContentWithCaching(
+          content,
+          fileDef.contentType,
+        );
         return fileDef;
       }),
     );
@@ -292,7 +333,7 @@ export default class FileDefManagerImpl implements FileDefManager {
         if (!contentType) {
           throw new Error(`File has no content type: ${file.sourceUrl}`);
         }
-        file.url = await this.uploadContent(text, contentType);
+        file.url = await this.uploadContentWithCaching(text, contentType);
         file.contentType = contentType;
         file.contentHash = await this.getContentHash(text);
 
@@ -313,6 +354,18 @@ export default class FileDefManagerImpl implements FileDefManager {
       throw new Error(`HTTP error. Status: ${response.status}`);
     }
     return await response.blob();
+  }
+
+  async downloadContentAsText(url: string): Promise<string> {
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${this.client.getAccessToken()}`,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error. Status: ${response.status}`);
+    }
+    return await response.text();
   }
 
   async downloadAsFileInBrowser(serializedFile: SerializedFile) {
@@ -357,16 +410,7 @@ export default class FileDefManagerImpl implements FileDefManager {
       return JSON.parse(cachedEntry.content) as LooseSingleCardDocument;
     }
 
-    // Download if not in cache or expired
-    const response = await fetch(serializedFile.url, {
-      headers: {
-        Authorization: `Bearer ${this.client.getAccessToken()}`,
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP error. Status: ${response.status}`);
-    }
-    const content = await response.text();
+    const content = await this.downloadContentAsText(serializedFile.url);
 
     // Update cache
     this.downloadCache.set(serializedFile.url, {
@@ -395,6 +439,7 @@ export default class FileDefManagerImpl implements FileDefManager {
   }
 
   async cacheContentHashIfNeeded(event: MatrixEvent) {
+    const recachingPromises: Promise<void>[] = [];
     if (
       event.type === 'm.room.message' &&
       event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
@@ -404,7 +449,9 @@ export default class FileDefManagerImpl implements FileDefManager {
       if (data?.attachedFiles) {
         for (const file of data.attachedFiles) {
           if (file.contentHash && file.url) {
-            this.contentHashCache.set(file.contentHash, file.url);
+            recachingPromises.push(
+              this.client.recacheContentHash(file.contentHash, file.url),
+            );
           }
         }
       }
@@ -412,7 +459,9 @@ export default class FileDefManagerImpl implements FileDefManager {
       if (data?.attachedCards) {
         for (const card of data.attachedCards) {
           if (card.contentHash && card.url) {
-            this.contentHashCache.set(card.contentHash, card.url);
+            recachingPromises.push(
+              this.client.recacheContentHash(card.contentHash, card.url),
+            );
           }
         }
       }
@@ -427,12 +476,15 @@ export default class FileDefManagerImpl implements FileDefManager {
 
       for (const skillOrCommand of skillsAndCommands) {
         if (skillOrCommand.contentHash && skillOrCommand.url) {
-          this.contentHashCache.set(
-            skillOrCommand.contentHash,
-            skillOrCommand.url,
+          recachingPromises.push(
+            this.client.recacheContentHash(
+              skillOrCommand.contentHash,
+              skillOrCommand.url,
+            ),
           );
         }
       }
     }
+    await Promise.all(recachingPromises);
   }
 }
