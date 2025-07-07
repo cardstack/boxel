@@ -42,6 +42,8 @@ import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmServerService from '../../services/realm-server';
 
+import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
+
 const waiter = buildWaiter('operator-mode-container:saveCard-waiter');
 
 interface Signature {
@@ -121,6 +123,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     >
       <ChooseFileModal />
       <CardCatalogModal />
+      <FromElseWhere @name='restore-patched-file-modal' />
 
       {{#if
         (or
