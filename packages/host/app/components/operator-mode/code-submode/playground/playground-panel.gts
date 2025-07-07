@@ -73,6 +73,7 @@ import type { Spec } from 'https://cardstack.com/base/spec';
 
 import PrerenderedCardSearch from '../../../prerendered-card-search';
 import CardError from '../../card-error';
+import CardErrorDetail from '../../card-error-detail';
 import FormatChooser from '../format-chooser';
 
 import AiAssistantIcon from './ai-assistant-icon-bw';
@@ -83,7 +84,6 @@ import InstanceSelectDropdown, {
 } from './instance-chooser-dropdown';
 import PlaygroundPreview from './playground-preview';
 import SpecSearch from './spec-search';
-import CardErrorDetail from '../../card-error-detail';
 
 export type SelectedInstance = {
   card: CardDef;

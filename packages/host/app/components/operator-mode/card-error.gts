@@ -76,11 +76,7 @@ export default class CardErrorComponent extends Component<Signature> {
           @viewInCodeMode={{@viewInCodeMode}}
           @fileToFixWithAi={{@fileToFixWithAi}}
           class='card-error-detail'
-        >
-          <:error>
-            {{yield to='error'}}
-          </:error>
-        </CardErrorDetail>
+        />
       {{/unless}}
     </div>
 
