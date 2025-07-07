@@ -32,6 +32,8 @@ For a quickstart, see [here](./QUICKSTART.md)
 
 `packages/vscode-boxel-tools` is a VS Code extension for browsing Boxel workspaces, published as [Boxel Tools](https://marketplace.visualstudio.com/items?itemName=cardstack.boxel-tools). It can be deployed via the bot, with `staging` environment producing a pre-release version.
 
+`packages/skills-realm` is a realm that hosts AI skills. Skills are maintained in the [boxel-skills](https://github.com/cardstack/boxel-skills) repository and cloned locally for development. See the [Skills Realm README](./packages/skills-realm/README.md) for setup and development workflows.
+
 To learn more about Boxel and Cards, see our [documentation](./docs/README.md)
 
 ## Running the Host App
