@@ -17,7 +17,6 @@ import {
   SupportedMimeType,
   loadCardDef,
   identifyCard,
-  moduleFrom,
   isCardDef,
   IndexWriter,
   unixTime,
@@ -61,6 +60,8 @@ import {
   type Render,
   IdentityContextWithErrors,
 } from '../services/render-service';
+
+import { directModuleDeps, recursiveModuleDeps } from './prerender-util';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
@@ -524,7 +525,7 @@ export class CurrentRun {
         this.#realmPaths.fileURL(path).href.replace(/\.json$/, ''),
       );
 
-      let moduleDeps = getModuleDeps(resource, instanceURL);
+      let moduleDeps = directModuleDeps(resource, instanceURL);
       let typesMaybeError: TypesWithErrors | undefined;
       let uncaughtError: Error | undefined;
       let doc: SingleCardDocument | undefined;
@@ -720,16 +721,10 @@ export class CurrentRun {
             displayNames: typesMaybeError.types.map(
               ({ displayName }) => displayName,
             ),
-            deps: new Set([
-              ...moduleDeps,
-              ...(
-                await Promise.all(
-                  moduleDeps.map((moduleDep) =>
-                    this.loaderService.loader.getConsumedModules(moduleDep),
-                  ),
-                )
-              ).flat(),
-            ]),
+            deps: await recursiveModuleDeps(
+              moduleDeps,
+              this.loaderService.loader,
+            ),
           });
         } else {
           log.error(
@@ -916,34 +911,4 @@ function getDisplayName(card: typeof CardDef) {
   } else {
     return card.displayName;
   }
-}
-
-function getModuleDeps(
-  resource: LooseCardResource,
-  instanceURL: URL,
-): string[] {
-  let result = [
-    // we always depend on our own adoptsFrom
-    new URL(moduleFrom(resource.meta.adoptsFrom), instanceURL).href,
-  ];
-
-  // we might also depend on any polymorphic types in meta.fields
-  if (resource.meta.fields) {
-    for (let fieldMeta of Object.values(resource.meta.fields)) {
-      if (Array.isArray(fieldMeta)) {
-        for (let meta of fieldMeta) {
-          if (meta.adoptsFrom) {
-            result.push(new URL(moduleFrom(meta.adoptsFrom), instanceURL).href);
-          }
-        }
-      } else {
-        if (fieldMeta.adoptsFrom) {
-          result.push(
-            new URL(moduleFrom(fieldMeta.adoptsFrom), instanceURL).href,
-          );
-        }
-      }
-    }
-  }
-  return result;
 }

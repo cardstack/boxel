@@ -32,9 +32,8 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
-import CodeBlock from '../code-block';
-
 import Message from './text-content';
+import CodeBlock from '@cardstack/host/components/ai-assistant/code-block';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -274,7 +273,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
       {{#if (bool @codeData.searchReplaceBlock)}}
         {{#if this.isAppliedOrIgnoredCodePatch}}
           <div>
-            <codeBlock.editorHeader
+            <codeBlock.diffEditorHeader
               @codeData={{@codeData}}
               @diffEditorStats={{null}}
               @finalFileUrlAfterCodePatching={{this.codePatchfinalFileUrlAfterCodePatching}}
@@ -305,7 +304,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
             />
           {{/if}}
           {{#if this.codeDiffResource.isDataLoaded}}
-            <codeBlock.editorHeader
+            <codeBlock.diffEditorHeader
               @codeData={{@codeData}}
               @diffEditorStats={{this.diffEditorStats}}
             />
@@ -329,7 +328,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
         {{/if}}
       {{else}}
         {{#if @codeData.fileUrl}}
-          <codeBlock.editorHeader
+          <codeBlock.diffEditorHeader
             @codeData={{@codeData}}
             @diffEditorStats={{null}}
           />

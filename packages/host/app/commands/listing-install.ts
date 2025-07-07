@@ -6,7 +6,7 @@ import {
   CommandContext,
   RealmPaths,
   join,
-  type InstallPlan,
+  type FinalInstallPlan,
   InstallOptions,
   planModuleInstall,
   planInstanceInstall,
@@ -51,7 +51,7 @@ interface InstallResults {
 }
 
 async function install(
-  plan: InstallPlan,
+  plan: FinalInstallPlan,
   opts: InstallOptions,
   commandContext: CommandContext,
 ): Promise<InstallResults> {
@@ -59,10 +59,10 @@ async function install(
     modules: [],
     instances: [],
   };
-  for (const { sourceCodeRef, targetCodeRef } of plan.modulesCopy) {
+  for (const { sourceModule, targetModule } of plan.modulesToInstall) {
     let { url } = await new CopySourceCommand(commandContext).execute({
-      fromRealmUrl: sourceCodeRef.module,
-      toRealmUrl: targetCodeRef.module,
+      fromRealmUrl: sourceModule,
+      toRealmUrl: targetModule,
     });
     r.modules.push(url);
   }

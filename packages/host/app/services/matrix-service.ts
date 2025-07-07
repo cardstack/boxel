@@ -55,6 +55,11 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+  SLIDING_SYNC_AI_ROOM_LIST_NAME,
+  SLIDING_SYNC_AUTH_ROOM_LIST_NAME,
+  SLIDING_SYNC_LIST_RANGE_END,
+  SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+  SLIDING_SYNC_TIMEOUT,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -120,11 +125,6 @@ import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
-const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
-const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
-const SLIDING_SYNC_LIST_RANGE_END = 9;
-const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
-const SLIDING_SYNC_TIMEOUT = 30000;
 
 const realmEventsLogger = logger('realm:events');
 
@@ -915,7 +915,6 @@ export default class MatrixService extends Service {
     context?: BoxelContext,
   ): Promise<void> {
     let tools: Tool[] = [];
-    let attachedOpenCards: CardDef[] = [];
     // Open cards are attached automatically
     // If they are not attached, the user is not allowing us to
     // modify them
@@ -949,7 +948,6 @@ export default class MatrixService extends Service {
         attachedCards: contentData.attachedCards,
         context: {
           ...contentData.context,
-          openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
           debug: context?.debug,
           functions: [],
@@ -1621,12 +1619,14 @@ export default class MatrixService extends Service {
           'Ignoring realm event because no realm found',
           event,
         );
-      } else if (realmResourceForEvent.info?.realmUserId !== event.sender) {
-        realmEventsLogger.debug(
-          `Ignoring realm event because sender ${event.sender} is not the realm user ${realmResourceForEvent.info?.realmUserId}`,
-          event,
-        );
       } else {
+        if (realmResourceForEvent.info?.realmUserId !== event.sender) {
+          realmEventsLogger.warn(
+            `Realm event sender ${event.sender} is not the realm user ${realmResourceForEvent.info?.realmUserId}`,
+            event,
+          );
+        }
+
         (event.content as any).origin_server_ts = event.origin_server_ts;
         this.messageService.relayRealmEvent(
           realmResourceForEvent.url,

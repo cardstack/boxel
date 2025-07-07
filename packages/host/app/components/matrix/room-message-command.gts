@@ -1,5 +1,4 @@
 import { array, hash } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -14,7 +13,6 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import {
   Alert,
-  Button,
   CardContainer,
   CardHeader,
 } from '@cardstack/boxel-ui/components';
@@ -38,7 +36,6 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import CodeBlock from '../ai-assistant/code-block';
 import CardRenderer from '../card-renderer';
@@ -173,46 +170,32 @@ export default class RoomMessageCommand extends Component<Signature> {
       data-test-command-id={{@messageCommand.commandRequest.id}}
       ...attributes
     >
-      {{#if @messageCommand.description}}
-        <div class='command-description'>{{@messageCommand.description}}</div>
-      {{/if}}
       {{#if @isStreaming}}
         <PreparingRoomMessageCommand />
       {{else}}
-        <div
-          class='command-button-bar'
+        <CodeBlock
+          class='command-code-block'
+          {{this.scrollBottomIntoView}}
+          @monacoSDK={{@monacoSDK}}
+          @codeData={{hash code=this.previewCommandCode language='json'}}
           data-test-command-card-idle={{not
             (eq @messageCommand.status 'applying')
           }}
+          as |codeBlock|
         >
-          <Button
-            class='view-code-button'
-            {{on 'click' this.toggleViewCode}}
-            @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
-            @size='extra-small'
-            data-test-view-code-button
-          >
-            {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
-          </Button>
-          <ApplyButton
-            @state={{this.applyButtonState}}
-            {{on 'click' @runCommand}}
-            data-test-command-apply={{this.applyButtonState}}
-          >{{@messageCommand.actionVerb}}</ApplyButton>
-        </div>
-        {{#if this.isDisplayingCode}}
-          <CodeBlock
-            {{this.scrollBottomIntoView}}
-            @monacoSDK={{@monacoSDK}}
-            @codeData={{hash code=this.previewCommandCode language='json'}}
-            as |codeBlock|
-          >
+          <codeBlock.commandHeader
+            @commandDescription={{@messageCommand.description}}
+            @action={{@runCommand}}
+            @actionVerb={{@messageCommand.actionVerb}}
+            @code={{this.previewCommandCode}}
+            @commandState={{this.applyButtonState}}
+            @isDisplayingCode={{this.isDisplayingCode}}
+            @toggleCode={{this.toggleViewCode}}
+          />
+          {{#if this.isDisplayingCode}}
             <codeBlock.editor />
-            <codeBlock.actions as |actions|>
-              <actions.copyCode />
-            </codeBlock.actions>
-          </CodeBlock>
-        {{/if}}
+          {{/if}}
+        </CodeBlock>
         {{#if this.failedCommandState}}
           <Alert
             @type='error'
@@ -230,7 +213,7 @@ export default class RoomMessageCommand extends Component<Signature> {
               @cardTypeDisplayName={{this.headerTitle}}
               @cardTypeIcon={{cardTypeIcon this.commandResultCard.card}}
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
-              class='header'
+              class='command-result-card-header'
               data-test-command-result-header
             />
             <CardRenderer
@@ -244,79 +227,21 @@ export default class RoomMessageCommand extends Component<Signature> {
       {{/if}}
     </div>
 
-    {{! template-lint-disable no-whitespace-for-layout  }}
-    {{! ignore the above error because ember-template-lint complains about the whitespace in the multi-line comment below }}
     <style scoped>
       .room-message-command > * + * {
         margin-top: var(--boxel-sp-xs);
       }
-      .command-description {
-        font-size: var(--boxel-font-sm);
-        font-weight: 500;
-        line-height: 1.25rem;
-        letter-spacing: var(--boxel-lsp-xs);
-        color: var(--boxel-light);
-        /* the below font-smoothing options are only recommended for light-colored
-          text on dark background (otherwise not good for accessibility) */
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-      }
-      .is-pending .view-code-button,
-      .is-error .view-code-button {
-        background: var(--boxel-200);
-        color: var(--boxel-500);
-      }
-      .command-button-bar {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--boxel-sp-xs);
-      }
-      .view-code-button {
-        --boxel-button-font: 600 var(--boxel-font-xs);
-        --boxel-button-min-height: 1.5rem;
-        --boxel-button-padding: 0 var(--boxel-sp-xs);
-        min-width: initial;
-        width: auto;
-        max-height: 1.5rem;
-      }
-      .view-code-button:hover:not(:disabled) {
-        filter: brightness(1.1);
-      }
       .command-result-card-preview {
         margin-top: var(--boxel-sp);
       }
-      .code-copy-button {
-        --boxel-button-font: 600 var(--boxel-font-xs);
-        --boxel-button-padding: 0 var(--boxel-sp-xs);
-        --icon-color: var(--boxel-highlight);
-        --icon-stroke-width: 2px;
-        margin-left: var(--spacing);
-        margin-bottom: var(--spacing);
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: var(--spacing);
-      }
-      .code-copy-button > .copy-text {
-        color: transparent;
-      }
-      .code-copy-button:hover:not(:disabled) > .copy-text {
-        color: var(--boxel-highlight);
-      }
-      .header {
+      .command-result-card-header {
         --boxel-label-color: var(--boxel-450);
         --boxel-label-font: 600 var(--boxel-font-xs);
         --boxel-header-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxxs) 0
           var(--left-padding);
       }
-      .header :deep(.content) {
+      .command-result-card-header :deep(.content) {
         gap: 0;
-      }
-      .options-menu :deep(.boxel-menu__item__content) {
-        padding-right: var(--boxel-sp-xxs);
-        padding-left: var(--boxel-sp-xxs);
-      }
-      .options-menu :deep(.check-icon) {
-        display: none;
       }
     </style>
   </template>

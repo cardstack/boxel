@@ -322,6 +322,8 @@ export default class Room extends Component<Signature> {
 
   private autoAttachmentResource = getAutoAttachment(this, {
     submode: () => this.operatorModeStateService.state.submode,
+    moduleInspectorPanel: () =>
+      this.operatorModeStateService.moduleInspectorPanel,
     autoAttachedFileUrl: () => this.autoAttachedFileUrl,
     playgroundPanelCardId: () => this.playgroundPanelCardId,
     topMostStackItems: () => this.topMostStackItems,
@@ -829,9 +831,7 @@ export default class Room extends Component<Signature> {
         this.matrixService.cardsToSend.set(this.args.roomId, undefined);
       }
       let openCardIds = new Set([
-        ...(this.operatorModeStateService.getOpenCardIds(
-          this.args.selectedCardRef,
-        ) || []),
+        ...(this.operatorModeStateService.getOpenCardIds() || []),
         ...this.autoAttachedCardIds,
       ]);
       let context =

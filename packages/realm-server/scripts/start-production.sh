@@ -2,6 +2,7 @@
 pnpm setup:base-in-deployment
 pnpm setup:experiments-in-deployment
 pnpm setup:catalog-in-deployment
+pnpm setup:skills-in-deployment
 NODE_NO_WARNINGS=1 \
   MATRIX_URL=https://matrix.boxel.ai \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
@@ -26,4 +27,10 @@ NODE_NO_WARNINGS=1 \
   --path='/persistent/catalog' \
   --username='catalog_realm' \
   --fromUrl='https://app.boxel.ai/catalog/' \
-  --toUrl='https://app.boxel.ai/catalog/'
+  --toUrl='https://app.boxel.ai/catalog/' \
+  \
+  --path='/persistent/skills' \
+  --username='skills_realm' \
+  --fromUrl='https://app.boxel.ai/skills/' \
+  --toUrl='https://app.boxel.ai/skills/'
+

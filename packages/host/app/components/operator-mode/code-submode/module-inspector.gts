@@ -57,7 +57,7 @@ import { type Ready } from '@cardstack/host/resources/file';
 import type { FileResource } from '@cardstack/host/resources/file';
 import {
   type CardOrFieldDeclaration,
-  type ModuleContentsResource,
+  type ModuleAnalysis,
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
@@ -99,7 +99,7 @@ interface ModuleInspectorSignature {
     isIncompatibleFile: boolean;
     isModule: boolean;
     isReadOnly: boolean;
-    moduleContentsResource: ModuleContentsResource;
+    moduleAnalysis: ModuleAnalysis;
     previewFormat: Format;
     readyFile: Ready;
     selectedCardOrField: CardOrFieldDeclaration | undefined;
@@ -125,7 +125,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
   private get declarations() {
-    return this.args.moduleContentsResource?.declarations;
+    return this.args.moduleAnalysis?.declarations;
   }
 
   get showSpecPreview() {
@@ -158,7 +158,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       }
     }
 
-    if (this.args.moduleContentsResource.moduleError) {
+    if (this.args.moduleAnalysis.moduleError) {
       return null; // Handled in code-submode schema editor
     }
 
@@ -169,7 +169,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     // If the module is incompatible
     if (this.args.isModule) {
       //this will prevent displaying message during a page refresh
-      if (this.args.moduleContentsResource.isLoading) {
+      if (this.args.moduleAnalysis.isLoading) {
         return null;
       }
       if (!this.hasCardDefOrFieldDef) {
@@ -445,7 +445,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
       <SchemaEditor
         @file={{@readyFile}}
-        @moduleContentsResource={{@moduleContentsResource}}
+        @moduleAnalysis={{@moduleAnalysis}}
         @card={{@selectedCardOrField.cardOrField}}
         @cardTypeResource={{@selectedCardOrField.cardType}}
         @goToDefinition={{@goToDefinitionAndResetCursorPosition}}
@@ -498,13 +498,13 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
             <Playground
               @isOpen={{eq this.activePanel 'preview'}}
               @codeRef={{@selectedCodeRef}}
-              @isUpdating={{@moduleContentsResource.isLoading}}
+              @isUpdating={{@moduleAnalysis.isLoading}}
               @cardOrField={{@selectedCardOrField.cardOrField}}
             />
           {{else if (eq this.activePanel 'spec')}}
             <SpecPreview
               @selectedDeclaration={{@selectedDeclaration}}
-              @isLoadingNewModule={{@moduleContentsResource.isLoadingNewModule}}
+              @isLoadingNewModule={{@moduleAnalysis.isLoadingNewModule}}
               @setActiveModuleInspectorPanel={{this.setActivePanel}}
               @isPanelOpen={{eq this.activePanel 'spec'}}
               @selectedDeclarationAsCodeRef={{this.selectedDeclarationAsCodeRef}}
@@ -529,9 +529,9 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           {{/if}}
         </section>
       </SchemaEditor>
-    {{else if @moduleContentsResource.moduleError}}
+    {{else if @moduleAnalysis.moduleError}}
       <SyntaxErrorDisplay
-        @syntaxErrors={{@moduleContentsResource.moduleError.message}}
+        @syntaxErrors={{@moduleAnalysis.moduleError.message}}
       />
     {{else if @card}}
       <CardRendererPanel
