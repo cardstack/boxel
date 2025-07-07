@@ -91,6 +91,7 @@ export default class LLMSelect extends Component<Signature> {
       }
 
       .llm-option {
+        background: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
         border: 1px solid var(--boxel-400);
       }
