@@ -68,8 +68,6 @@ export interface FileDefManager {
 
   uploadFiles(files: FileDef[]): Promise<FileDef[]>;
 
-  uploadContent(content: string, contentType: string): Promise<string>;
-
   /**
    * Downloads content from a file definition
    * @param fileDef File definition to download from
