@@ -147,12 +147,18 @@ export default class FileDefManagerImpl
     return this.contentHashCache.get(hash) || null;
   }
 
-  async uploadContent(content: string, contentType: string): Promise<string> {
+  async uploadContentWithCaching(
+    content: string,
+    contentType: string,
+  ): Promise<string> {
     // Check if we already have this content cached
+    console.log(`Checking cache for content hash...`, content);
     const cachedUrl = await this.getCachedUrlForContent(content);
     if (cachedUrl) {
+      console.log(`Found cached URL for content: ${cachedUrl}`);
       return cachedUrl;
     }
+    console.log(`No cached URL for content found: ${content}. Uploading...`);
 
     let response = await this.client.uploadContent(content, {
       type: contentType,
@@ -226,7 +232,10 @@ export default class FileDefManagerImpl
           contentType: SupportedMimeType.CardJson,
           contentHash,
         });
-        fileDef.url = await this.uploadContent(content, fileDef.contentType);
+        fileDef.url = await this.uploadContentWithCaching(
+          content,
+          fileDef.contentType,
+        );
         return fileDef;
       }),
     );
@@ -293,7 +302,10 @@ export default class FileDefManagerImpl
           contentHash,
         });
 
-        fileDef.url = await this.uploadContent(content, fileDef.contentType);
+        fileDef.url = await this.uploadContentWithCaching(
+          content,
+          fileDef.contentType,
+        );
         return fileDef;
       }),
     );
@@ -323,7 +335,7 @@ export default class FileDefManagerImpl
         if (!contentType) {
           throw new Error(`File has no content type: ${file.sourceUrl}`);
         }
-        file.url = await this.uploadContent(text, contentType);
+        file.url = await this.uploadContentWithCaching(text, contentType);
         file.contentType = contentType;
         file.contentHash = await this.getContentHash(text);
 
