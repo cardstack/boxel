@@ -562,7 +562,6 @@ export default class MatrixService extends Service {
         state: SlidingSyncState | null,
         resp: MSC3575SlidingSyncResponse | null,
       ) => {
-        console.log('SlidingSync lifecycle event', { state, resp });
         if (
           state === SlidingSyncState.Complete &&
           resp &&
