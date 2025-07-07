@@ -237,7 +237,7 @@ test.describe('Room creation', () => {
     await page.locator('[data-test-open-ai-assistant]').click();
     await expect(page.locator(`[data-test-close-ai-assistant]`)).toHaveCount(1);
     await expect(page.locator(`[data-test-chat-title]`)).not.toHaveText(
-      'New AI Assistant Chat',
+      newRoomName,
     );
   });
 
