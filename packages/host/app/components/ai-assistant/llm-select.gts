@@ -85,7 +85,7 @@ export default class LLMSelect extends Component<Signature> {
         padding: 0;
         margin: 0;
         display: grid;
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xxxs);
         max-height: 300px;
         overflow-y: auto;
       }
