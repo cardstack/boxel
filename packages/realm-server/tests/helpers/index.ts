@@ -294,6 +294,11 @@ export async function createRealm({
       realmServerMatrixUsername: testRealmServerMatrixUsername,
     });
   }
+  let realmServerMatrixClient = new MatrixClient({
+    matrixURL: realmServerTestMatrix.url,
+    username: realmServerTestMatrix.username,
+    seed: realmSecretSeed,
+  });
   let realm = new Realm({
     url: realmURL,
     adapter,
@@ -302,7 +307,7 @@ export async function createRealm({
     virtualNetwork,
     dbAdapter,
     queue: publisher,
-    realmServerMatrixUserId: testRealmServerMatrixUserId,
+    realmServerMatrixClient,
   });
   if (worker) {
     virtualNetwork.mount(realm.handle);

@@ -15,6 +15,7 @@ import {
   type QueueRunner,
   encodeWebSafeBase64,
 } from '@cardstack/runtime-common';
+import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
 import { stringify } from 'qs';
 import { v4 as uuidv4 } from 'uuid';
 import { Query } from '@cardstack/runtime-common/query';
@@ -817,6 +818,153 @@ module(basename(__filename), function () {
             assert.ok(
               error.match(/contains invalid characters/),
               'error message is correct',
+            );
+          }
+        });
+
+        test('can create instance in private realm using card def from a different private realm both owned by the same user', async function (assert) {
+          let owner = 'mango';
+          let ownerUserId = '@mango:localhost';
+          let providerEndpoint = `test-realm-provider-${uuidv4()}`;
+          let providerRealmURL: string;
+          {
+            let response = await request2
+              .post('/_create-realm')
+              .set('Accept', 'application/vnd.api+json')
+              .set('Content-Type', 'application/json')
+              .set(
+                'Authorization',
+                `Bearer ${createRealmServerJWT(
+                  {
+                    user: '@mango:localhost',
+                    sessionRoom: 'session-room-test',
+                  },
+                  realmSecretSeed,
+                )}`,
+              )
+              .send(
+                JSON.stringify({
+                  data: {
+                    type: 'realm',
+                    attributes: {
+                      name: 'Test Provider Realm',
+                      endpoint: providerEndpoint,
+                    },
+                  },
+                }),
+              );
+            assert.strictEqual(response.status, 201, 'HTTP 201 status');
+            providerRealmURL = response.body.data.id;
+          }
+          let providerRealm = testRealmServer2.testingOnlyRealms.find(
+            (r) => r.url === providerRealmURL,
+          )!;
+          {
+            // create a card def
+            let response = await request2
+              .post(`/${owner}/${providerEndpoint}/test-card.gts`)
+              .set('Accept', 'application/vnd.card+source')
+              .set(
+                'Authorization',
+                `Bearer ${createJWT(providerRealm, ownerUserId, [
+                  'read',
+                  'write',
+                  'realm-owner',
+                ])}`,
+              )
+              .send(cardSrc);
+            assert.strictEqual(response.status, 204, 'HTTP 204 status');
+          }
+
+          let consumerEndpoint = `test-realm-consumer-${uuidv4()}`;
+          let consumerRealmURL: string;
+          {
+            let response = await request2
+              .post('/_create-realm')
+              .set('Accept', 'application/vnd.api+json')
+              .set('Content-Type', 'application/json')
+              .set(
+                'Authorization',
+                `Bearer ${createRealmServerJWT(
+                  {
+                    user: '@mango:localhost',
+                    sessionRoom: 'session-room-test',
+                  },
+                  realmSecretSeed,
+                )}`,
+              )
+              .send(
+                JSON.stringify({
+                  data: {
+                    type: 'realm',
+                    attributes: {
+                      name: 'Test Consumer Realm',
+                      endpoint: consumerEndpoint,
+                    },
+                  },
+                }),
+              );
+            assert.strictEqual(response.status, 201, 'HTTP 201 status');
+            consumerRealmURL = response.body.data.id;
+          }
+
+          let consumerRealm = testRealmServer2.testingOnlyRealms.find(
+            (r) => r.url === consumerRealmURL,
+          )!;
+          let id: string;
+          {
+            // create an instance using card def in different private realm
+            let response = await request2
+              .post(`/${owner}/${consumerEndpoint}/`)
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Mango',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: `${providerRealmURL}test-card`,
+                      name: 'Person',
+                    },
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json')
+              .set(
+                'Authorization',
+                `Bearer ${createJWT(consumerRealm, ownerUserId, [
+                  'read',
+                  'write',
+                  'realm-owner',
+                ])}`,
+              );
+
+            assert.strictEqual(response.status, 201, 'HTTP 201 status');
+            let doc = response.body as SingleCardDocument;
+            id = doc.data.id!;
+          }
+
+          {
+            // get the instance
+            let response = await request2
+              .get(new URL(id).pathname)
+              .set('Accept', 'application/vnd.card+json')
+              .set(
+                'Authorization',
+                `Bearer ${createJWT(consumerRealm, ownerUserId, [
+                  'read',
+                  'write',
+                  'realm-owner',
+                ])}`,
+              );
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+            let doc = response.body as SingleCardDocument;
+            assert.strictEqual(
+              doc.data.attributes?.firstName,
+              'Mango',
+              'instance data is correct',
             );
           }
         });
