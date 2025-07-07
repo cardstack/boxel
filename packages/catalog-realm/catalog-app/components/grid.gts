@@ -75,7 +75,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
         </:loading>
         <:response as |cards|>
           {{#if (eq cards.length 0)}}
-            <p class='no-results'>No results found</p>
+            <p class='no-results' data-test-no-results>No results found</p>
           {{else}}
             <ul
               class='cards {{@selectedView}}-view'
