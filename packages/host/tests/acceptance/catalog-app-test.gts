@@ -647,7 +647,13 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           await click(tagPill);
         }
 
-        await waitFor('[data-test-catalog-list-view]');
+        await waitUntil(() => {
+          const cards = document.querySelectorAll(
+            '[data-test-catalog-list-view]',
+          );
+          return cards.length === 1;
+        });
+
         assert
           .dom('[data-test-catalog-list-view]')
           .exists(
@@ -709,7 +715,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         assert
           .dom('[data-test-showcase-view]')
           .doesNotExist('Should remain in list view, not return to showcase');
-        await waitFor('[data-test-catalog-list-view]');
+        await waitUntil(() => {
+          const cards = document.querySelectorAll(
+            '[data-test-catalog-list-view]',
+          );
+          return cards.length === 1;
+        });
         assert
           .dom('[data-test-catalog-list-view]')
           .exists('Catalog list view should still be visible');
@@ -737,8 +748,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       test('updates the card count correctly when filtering by a search input', async function (assert) {
         await click('[data-test-filter-search-input]');
         await fillIn('[data-test-filter-search-input]', 'Mortgage');
-        await new Promise((resolve) => setTimeout(resolve, 350));
-        await waitFor('[data-test-cards-grid-cards]');
+        await waitUntil(() => {
+          const cards = document.querySelectorAll(
+            '[data-test-cards-grid-cards] [data-test-cards-grid-item]',
+          );
+          return cards.length === 1;
+        });
         assert
           .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
           .exists({ count: 1 });
@@ -767,8 +782,14 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         await click(`[data-test-tag-list-pill="${gameTagId}"]`);
         await click('[data-test-filter-search-input]');
         await fillIn('[data-test-filter-search-input]', 'Blackjack');
-        await new Promise((resolve) => setTimeout(resolve, 350));
-        await waitFor('[data-test-cards-grid-cards]');
+
+        await waitUntil(() => {
+          const cards = document.querySelectorAll(
+            '[data-test-cards-grid-cards] [data-test-cards-grid-item]',
+          );
+          return cards.length === 1;
+        });
+
         assert
           .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
           .exists({ count: 1 });
@@ -777,7 +798,10 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       test('shows zero results when filtering with a non-matching or invalid search input', async function (assert) {
         await click('[data-test-filter-search-input]');
         await fillIn('[data-test-filter-search-input]', 'asdfasdf');
-        await new Promise((resolve) => setTimeout(resolve, 350));
+        await waitUntil(() => {
+          const cards = document.querySelectorAll('[data-test-no-results]');
+          return cards.length === 1;
+        });
 
         assert.dom('[data-test-no-results]').exists();
       });
