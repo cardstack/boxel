@@ -1,6 +1,6 @@
 import { concat, fn, hash } from '@ember/helper';
 import { action } from '@ember/object';
-import { cancel, later } from '@ember/runloop';
+import { later } from '@ember/runloop';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import BasicDropdown, {
@@ -65,14 +65,6 @@ class BoxelDropdown extends Component<Signature> {
     this.args.registerAPI?.(publicAPI);
   }
 
-  // @action
-  // onMouseEnterContent() {
-  //   if (this.closeTimer) {
-  //     cancel(this.closeTimer);
-  //     this.closeTimer = null;
-  //   }
-  // }
-
   @action
   onMouseLeaveContent(dropdown: Dropdown) {
     this.closeTimer = later(() => {
@@ -81,14 +73,6 @@ class BoxelDropdown extends Component<Signature> {
       }
     }, 500);
   }
-
-  // willDestroy() {
-  //   super.willDestroy();
-  //   if (this.closeTimer) {
-  //     cancel(this.closeTimer);
-  //     this.closeTimer = null;
-  //   }
-  // }
 
   <template>
     {{!--
