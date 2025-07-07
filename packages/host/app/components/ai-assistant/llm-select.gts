@@ -3,6 +3,8 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
+import Check from '@cardstack/boxel-icons/check';
+
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import PillMenu from '@cardstack/host/components/pill-menu';
@@ -56,6 +58,9 @@ export default class LLMSelect extends Component<Signature> {
                 {{on 'click' (fn this.handleOptionClick option)}}
               >
                 {{option}}
+                {{#if (eq @selected option)}}
+                  <Check class='selected-icon' />
+                {{/if}}
               </button>
             </li>
           {{/each}}
@@ -104,15 +109,28 @@ export default class LLMSelect extends Component<Signature> {
         background-color: var(--boxel-teal);
       }
 
+      .selected-icon {
+        width: var(--boxel-font-size);
+        height: auto;
+        stroke-width: 3px;
+      }
+
       .llm-button {
         width: 100%;
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        text-align: left;
         background: none;
         border: none;
         color: var(--boxel-dark);
         font: 500 var(--boxel-font-xs);
         cursor: pointer;
+
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .llm-option.selected .llm-button {
+        font-weight: 600;
       }
     </style>
   </template>
