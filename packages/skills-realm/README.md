@@ -111,9 +111,3 @@ This workflow is ideal for rapid iteration and testing of skills:
 
 - Run `pnpm skills:update` to pull latest changes
 - For a complete reset: `pnpm skills:reset`
-
-## Related Documentation
-
-- [Main Boxel README](../../README.md) - Overall system setup and architecture
-- [boxel-skills Repository](https://github.com/cardstack/boxel-skills) - Skills source code and documentation
-- [Boxel Documentation](../../docs/README.md) - Comprehensive Boxel platform documentation
