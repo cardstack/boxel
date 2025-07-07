@@ -150,14 +150,10 @@ export default class FileDefManagerImpl
     contentType: string,
   ): Promise<string> {
     // Check if we already have this content cached
-    console.log(`Checking cache for content hash...`, content);
     const cachedUrl = await this.getCachedUrlForContent(content);
     if (cachedUrl) {
-      console.log(`Found cached URL for content: ${cachedUrl}`);
       return cachedUrl;
     }
-    console.log(`No cached URL for content found: ${content}. Uploading...`);
-
     let response = await this.client.uploadContent(content, {
       type: contentType,
     });
