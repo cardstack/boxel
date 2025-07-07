@@ -28,6 +28,7 @@ import {
   getRoomsFromSync,
   initialRoomName,
   setupUserSubscribed,
+  waitUntil,
 } from '../helpers';
 
 test.describe('Room creation', () => {
@@ -220,6 +221,10 @@ test.describe('Room creation', () => {
     const newRoomName = 'Room 1';
     await page.locator(`[data-test-name-field]`).fill(newRoomName);
     await page.locator('[data-test-save-name-button]').click();
+    await waitUntil(
+      async () =>
+        (await page.locator('[data-test-rename-session]').count()) === 0,
+    );
     await page.locator('[data-test-ai-assistant-panel]').click();
 
     await openRoom(page, room);
