@@ -9,6 +9,8 @@ import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
 
+import CodeBlock from '@cardstack/host/components/ai-assistant/code-block';
+
 import { sanitizedHtml } from '@cardstack/host/helpers/sanitized-html';
 
 import {
@@ -33,7 +35,6 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import Message from './text-content';
-import CodeBlock from '@cardstack/host/components/ai-assistant/code-block';
 
 interface Signature {
   Element: HTMLDivElement;

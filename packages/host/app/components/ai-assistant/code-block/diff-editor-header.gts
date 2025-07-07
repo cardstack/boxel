@@ -1,6 +1,12 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+
 import { dropTask } from 'ember-concurrency';
+
+import perform from 'ember-concurrency/helpers/perform';
+
+import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 
 import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
@@ -10,14 +16,15 @@ import {
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
 
-import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RestorePatchedFileModal from '@cardstack/host/components/ai-assistant/restore-patched-file-modal';
-import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
-import MatrixService from '@cardstack/host/services/matrix-service';
+
+import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
+
 import CardService from '@cardstack/host/services/card-service';
-import { tracked } from '@glimmer/tracking';
-import perform from 'ember-concurrency/helpers/perform';
+
+import MatrixService from '@cardstack/host/services/matrix-service';
+
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 export interface CodeBlockDiffEditorHeaderSignature {
   Args: {

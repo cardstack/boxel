@@ -517,6 +517,7 @@ ${REPLACE_MARKER}
             {
               name: 'hi.txt',
               sourceUrl: 'http://test-realm/test/hi.txt',
+              url: 'https://matrix-storage/hi.txt',
             },
           ],
         },
@@ -790,7 +791,7 @@ ${REPLACE_MARKER}
     assert.dom('[data-test-code-diff-editor]').exists({ count: 1 });
   });
 
-  test('user can restore content of a patched file to its original state', async function (assert) {
+  test('can restore content of a patched file to its original state', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}hello.txt`,

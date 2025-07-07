@@ -9,6 +9,8 @@ import Component from '@glimmer/component';
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
+import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
+
 import { provide } from 'ember-provide-consume-context';
 
 import { Modal } from '@cardstack/boxel-ui/components';
@@ -41,8 +43,6 @@ import type CardService from '../../services/card-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmServerService from '../../services/realm-server';
-
-import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 
 const waiter = buildWaiter('operator-mode-container:saveCard-waiter');
 
