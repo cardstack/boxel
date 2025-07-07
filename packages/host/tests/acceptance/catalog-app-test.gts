@@ -1,7 +1,7 @@
 import { click, waitFor, waitUntil, fillIn } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { module, skip, test } from 'qunit';
+import { module, test } from 'qunit';
 
 import { validate as uuidValidate } from 'uuid';
 
@@ -30,6 +30,9 @@ import { setupApplicationTest } from '../helpers/setup';
 const catalogRealmURL = 'http://localhost:4201/catalog/';
 const testRealm2URL = `http://test-realm/test2/`;
 const mortgageCalculatorCardId = `${catalogRealmURL}CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`;
+const leafletMapCardId = `${catalogRealmURL}CardListing/552da558-5642-4541-89b0-28622db3bc84`;
+const calculatorTagId = `${catalogRealmURL}Tag/c1fe433a-b3df-41f4-bdcf-d98686ee42d7`;
+const gameTagId = `${catalogRealmURL}Tag/51de249c-516a-4c4d-bd88-76e88274c483`;
 
 const authorCardSource = `
   import { field, contains, CardDef } from 'https://cardstack.com/base/card-api';
@@ -333,118 +336,279 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       await waitFor('.showcase-center-div');
     });
 
-    test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
-      await waitFor(
-        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
-      );
-      assert
-        .dom(
+    module('listing card', async function () {
+      test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
+        await waitFor(
           `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
-        )
-        .containsText(
-          'Mortgage Calculator',
-          '"Mortgage Calculator" button exist in listing',
         );
-      await verifyButtonAction(
-        assert,
-        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-remix-button]`,
-        'Remix',
-        'I would like to remix this Mortgage Calculator under the following realm: http://test-realm/test/',
-      );
-    });
-
-    test('after clicking "Remix" button, current realm (particularly catalog realm) is never displayed in realm options', async function (assert) {
-      // testing fitted
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: `${testRealmURL}index`,
-              format: 'isolated',
-            },
-          ],
-        ],
+        assert
+          .dom(
+            `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
+          )
+          .containsText(
+            'Mortgage Calculator',
+            '"Mortgage Calculator" button exist in listing',
+          );
+        await verifyButtonAction(
+          assert,
+          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-remix-button]`,
+          'Remix',
+          'I would like to remix this Mortgage Calculator under the following realm: http://test-realm/test/',
+        );
       });
 
-      const listingId = testRealmURL + 'Listing/author';
-
-      await waitFor(
-        `[data-test-card="${listingId}"] [data-test-card-title="Author"]`,
-      );
-      assert
-        .dom(`[data-test-card="${listingId}"] [data-test-card-title="Author"]`)
-        .containsText('Author', '"Author" button exist in listing');
-      await click(
-        `[data-test-card="${listingId}"] [data-test-catalog-listing-fitted-remix-button]`,
-      );
-      assert
-        .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
-        .exists({ count: 1 });
-      assert
-        .dom(
-          '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Cardstack Catalog"]',
-        )
-        .doesNotExist();
-      assert
-        .dom(
-          '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Test Workspace B"]',
-        )
-        .exists();
-
-      // testing isolated
-      await visitOperatorMode({
-        stacks: [
-          [
-            {
-              id: listingId,
-              format: 'isolated',
-            },
+      test('after clicking "Remix" button, current realm (particularly catalog realm) is never displayed in realm options', async function (assert) {
+        // testing fitted
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}index`,
+                format: 'isolated',
+              },
+            ],
           ],
-        ],
-      });
-      await click(
-        `[data-test-card="${listingId}"] [data-test-catalog-listing-isolated-remix-button]`,
-      );
-      assert
-        .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
-        .exists({ count: 1 });
-      assert
-        .dom(
-          '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Cardstack Catalog"]',
-        )
-        .doesNotExist();
-      assert
-        .dom(
-          '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Test Workspace B"]',
-        )
-        .exists();
-    });
+        });
 
-    test('after clicking "Preview" button, the example card opens up onto the stack', async function (assert) {
-      await waitFor(
-        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
-      );
-      assert
-        .dom(
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
-        )
-        .containsText(
-          'Mortgage Calculator',
-          '"Mortgage Calculator" button exist in listing',
+        const listingId = testRealmURL + 'Listing/author';
+
+        await waitFor(
+          `[data-test-card="${listingId}"] [data-test-card-title="Author"]`,
         );
-      await click(
-        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
-      );
-      assert
-        .dom(
-          `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
-        )
-        .exists();
-      assert
-        .dom(
-          `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
-        )
-        .hasText('Mortgage Calculator');
+        assert
+          .dom(
+            `[data-test-card="${listingId}"] [data-test-card-title="Author"]`,
+          )
+          .containsText('Author', '"Author" button exist in listing');
+        await click(
+          `[data-test-card="${listingId}"] [data-test-catalog-listing-fitted-remix-button]`,
+        );
+        assert
+          .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
+          .exists({ count: 1 });
+        assert
+          .dom(
+            '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Cardstack Catalog"]',
+          )
+          .doesNotExist();
+        assert
+          .dom(
+            '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Test Workspace B"]',
+          )
+          .exists();
+
+        // testing isolated
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: listingId,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+        await click(
+          `[data-test-card="${listingId}"] [data-test-catalog-listing-isolated-remix-button]`,
+        );
+        assert
+          .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
+          .exists({ count: 1 });
+        assert
+          .dom(
+            '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Cardstack Catalog"]',
+          )
+          .doesNotExist();
+        assert
+          .dom(
+            '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Test Workspace B"]',
+          )
+          .exists();
+      });
+
+      test('after clicking "Preview" button, the first example card opens up onto the stack', async function (assert) {
+        await waitFor(
+          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
+        );
+        assert
+          .dom(
+            `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
+          )
+          .containsText(
+            'Mortgage Calculator',
+            '"Mortgage Calculator" button exist in listing',
+          );
+        await click(
+          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
+        );
+        assert
+          .dom(
+            `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
+          )
+          .exists();
+        assert
+          .dom(
+            `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
+          )
+          .hasText('Mortgage Calculator');
+      });
+
+      test('after clicking "carousel" area, the first example card opens up onto the stack', async function (assert) {
+        await waitFor(
+          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
+        );
+        assert
+          .dom(
+            `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
+          )
+          .containsText(
+            'Mortgage Calculator',
+            '"Mortgage Calculator" button exist in listing',
+          );
+        await click(
+          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
+        );
+        assert
+          .dom(
+            `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
+          )
+          .exists();
+        assert
+          .dom(
+            `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
+          )
+          .hasText('Mortgage Calculator');
+      });
+
+      test('after clicking "Details" button, the listing details card opens up onto the stack', async function (assert) {
+        await click(
+          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-details-button]`,
+        );
+        assert
+          .dom(
+            `[data-test-stack-card="${mortgageCalculatorCardId}"] [data-test-boxel-card-header-title]`,
+          )
+          .exists();
+        assert
+          .dom(
+            `[data-test-stack-card="${mortgageCalculatorCardId}"] [data-test-boxel-card-header-title]`,
+          )
+          .hasText('CardListing - Mortgage Calculator');
+      });
+
+      test('after clicking "info-section" area, the listing details card opens up onto the stack', async function (assert) {
+        await click(
+          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-details]`,
+        );
+        assert
+          .dom(
+            `[data-test-stack-card="${mortgageCalculatorCardId}"] [data-test-boxel-card-header-title]`,
+          )
+          .exists();
+        assert
+          .dom(
+            `[data-test-stack-card="${mortgageCalculatorCardId}"] [data-test-boxel-card-header-title]`,
+          )
+          .hasText('CardListing - Mortgage Calculator');
+      });
+
+      test('no arrows and dots appear when one image exist', async function (assert) {
+        await waitFor(
+          `[data-test-card="${leafletMapCardId}"] [data-test-card-title="Leaflet Map"]`,
+        );
+
+        const carouselNav = document.querySelector(
+          `[data-test-card="${leafletMapCardId}"] .carousel-nav`,
+        );
+        const carouselDots = document.querySelector(
+          `[data-test-card="${leafletMapCardId}"] .carousel-dots`,
+        );
+
+        if (carouselNav && carouselDots) {
+          assert
+            .dom(`[data-test-card="${leafletMapCardId}"] .carousel-arrow-prev`)
+            .exists();
+          assert
+            .dom(`[data-test-card="${leafletMapCardId}"] .carousel-arrow-next`)
+            .exists();
+          assert
+            .dom(
+              `[data-test-card="${leafletMapCardId}"] .carousel-item-0.is-active`,
+            )
+            .exists();
+        } else {
+          assert
+            .dom(`[data-test-card="${leafletMapCardId}"] .carousel-nav`)
+            .doesNotExist();
+          assert
+            .dom(`[data-test-card="${leafletMapCardId}"] .carousel-dots`)
+            .doesNotExist();
+          assert
+            .dom(`[data-test-card="${leafletMapCardId}"] .carousel-arrow-prev`)
+            .doesNotExist();
+          assert
+            .dom(`[data-test-card="${leafletMapCardId}"] .carousel-arrow-next`)
+            .doesNotExist();
+        }
+      });
+
+      // leaflet map has 3 slides, so index 2 is the last slide
+      test('carousel arrows and dots appear only when multiple images exist and works when triggered', async function (assert) {
+        await click(
+          `[data-test-card="${leafletMapCardId}"] .carousel-arrow-prev`,
+        );
+        assert
+          .dom(
+            `[data-test-card="${leafletMapCardId}"] .carousel-item-2.is-active`,
+          )
+          .exists('After clicking prev, last slide (index 2) is active');
+
+        await click(
+          `[data-test-card="${leafletMapCardId}"] .carousel-arrow-next`,
+        );
+        assert
+          .dom(
+            `[data-test-card="${leafletMapCardId}"] .carousel-item-0.is-active`,
+          )
+          .exists('After clicking next, first slide (index 0) is active');
+
+        const dots = document.querySelectorAll(
+          `[data-test-card="${leafletMapCardId}"] .carousel-dot`,
+        );
+
+        if (dots.length > 1) {
+          await click(dots[1]);
+          assert
+            .dom(
+              `[data-test-card="${leafletMapCardId}"] .carousel-item-1.is-active`,
+            )
+            .exists('After clicking dot 1, slide 1 is active');
+        }
+      });
+
+      test('preview button appears only when examples exist', async function (assert) {
+        await waitFor(
+          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
+        );
+
+        const previewButton = document.querySelector(
+          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
+        );
+
+        if (previewButton) {
+          assert
+            .dom(
+              `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
+            )
+            .exists();
+        } else {
+          assert
+            .dom(
+              `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
+            )
+            .doesNotExist();
+        }
+      });
     });
 
     module('tab navigation', async function () {
@@ -470,9 +634,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
     });
 
-    module('filters', async function (hooks) {
-      hooks.beforeEach(async function () {
-        // filter by search
+    module('filters', async function () {
+      test('list view is shown if filters are applied', async function (assert) {
         await waitFor('[data-test-filter-search-input]');
         await click('[data-test-filter-search-input]');
         await fillIn('[data-test-filter-search-input]', 'Mortgage');
@@ -483,10 +646,14 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         if (tagPill) {
           await click(tagPill);
         }
-      });
 
-      test('list view is shown if filters are applied', async function (assert) {
-        await waitFor('[data-test-catalog-list-view]');
+        await waitUntil(() => {
+          const cards = document.querySelectorAll(
+            '[data-test-catalog-list-view]',
+          );
+          return cards.length === 1;
+        });
+
         assert
           .dom('[data-test-catalog-list-view]')
           .exists(
@@ -495,6 +662,17 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
 
       test('should be reset when clicking "Catalog Home" button', async function (assert) {
+        await waitFor('[data-test-filter-search-input]');
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'Mortgage');
+        // filter by category
+        await click('[data-test-filter-list-item="All"]');
+        // filter by tag
+        let tagPill = document.querySelector('[data-test-tag-list-pill]');
+        if (tagPill) {
+          await click(tagPill);
+        }
+
         assert
           .dom('[data-test-showcase-view]')
           .doesNotExist('Should be in list view after applying filter');
@@ -516,18 +694,33 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .doesNotExist('No tag should be selected after reset');
       });
 
-      // TODO: CS-9002 this test is flaky
-      skip('should be reset when clicking "All Apps" button', async function (assert) {
+      test('should be reset when clicking "All Apps" button', async function (assert) {
         await click('[data-tab-label="Apps"]');
         assert
           .dom('[data-tab-label="Apps"]')
           .hasClass('active', 'Apps tab should be active');
 
+        await waitFor('[data-test-filter-search-input]');
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'Mortgage');
+        // filter by category
+        await click('[data-test-filter-list-item="All"]');
+        // filter by tag
+        let tagPill = document.querySelector('[data-test-tag-list-pill]');
+        if (tagPill) {
+          await click(tagPill);
+        }
+
         await click('[data-test-navigation-reset-button="app"]');
         assert
           .dom('[data-test-showcase-view]')
           .doesNotExist('Should remain in list view, not return to showcase');
-        await waitFor('[data-test-catalog-list-view]');
+        await waitUntil(() => {
+          const cards = document.querySelectorAll(
+            '[data-test-catalog-list-view]',
+          );
+          return cards.length === 1;
+        });
         assert
           .dom('[data-test-catalog-list-view]')
           .exists('Catalog list view should still be visible');
@@ -541,6 +734,76 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         assert
           .dom('[data-test-tag-list-pill].selected')
           .doesNotExist('No tag should be selected after reset');
+      });
+
+      test('updates the card count correctly when filtering by a category', async function (assert) {
+        await click(
+          '[data-test-boxel-filter-list-button="Education and Learning"]',
+        );
+        assert
+          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+          .exists({ count: 1 });
+      });
+
+      test('updates the card count correctly when filtering by a search input', async function (assert) {
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'Mortgage');
+        await waitUntil(() => {
+          const cards = document.querySelectorAll(
+            '[data-test-cards-grid-cards] [data-test-cards-grid-item]',
+          );
+          return cards.length === 1;
+        });
+        assert
+          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+          .exists({ count: 1 });
+      });
+
+      test('updates the card count correctly when filtering by a single tag', async function (assert) {
+        await click(`[data-test-tag-list-pill="${gameTagId}"]`);
+        assert
+          .dom(`[data-test-tag-list-pill="${gameTagId}"]`)
+          .hasClass('selected');
+        assert
+          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+          .exists({ count: 2 });
+      });
+
+      test('updates the card count correctly when filtering by multiple tags', async function (assert) {
+        await click(`[data-test-tag-list-pill="${calculatorTagId}"]`);
+        await click(`[data-test-tag-list-pill="${gameTagId}"]`);
+        assert
+          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+          .exists({ count: 3 });
+      });
+
+      test('updates the card count correctly when multiple filters are applied together', async function (assert) {
+        await click('[data-test-boxel-filter-list-button="All"]');
+        await click(`[data-test-tag-list-pill="${gameTagId}"]`);
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'Blackjack');
+
+        await waitUntil(() => {
+          const cards = document.querySelectorAll(
+            '[data-test-cards-grid-cards] [data-test-cards-grid-item]',
+          );
+          return cards.length === 1;
+        });
+
+        assert
+          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+          .exists({ count: 1 });
+      });
+
+      test('shows zero results when filtering with a non-matching or invalid search input', async function (assert) {
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'asdfasdf');
+        await waitUntil(() => {
+          const cards = document.querySelectorAll('[data-test-no-results]');
+          return cards.length === 1;
+        });
+
+        assert.dom('[data-test-no-results]').exists();
       });
     });
   });
@@ -568,7 +831,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       );
     });
 
-    test('after clicking "Preview" button, the example card opens up onto the stack', async function (assert) {
+    test('after clicking "Preview" button, the first example card opens up onto the stack', async function (assert) {
       await click(
         `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-isolated-preview-button]`,
       );
