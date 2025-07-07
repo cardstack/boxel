@@ -295,7 +295,7 @@ export default class Room extends Component<Signature> {
 
       .llm-select :deep(.menu-content) {
         margin-right: calc(-2 * var(--boxel-sp-sm));
-        padding-right: var(--boxel-sp-sm);
+        width: 100%;
       }
 
       .chat-input-area :deep(.minimized-arrow) {
