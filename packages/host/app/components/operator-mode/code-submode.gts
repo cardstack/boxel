@@ -812,7 +812,6 @@ export default class CodeSubmode extends Component<Signature> {
       />
       <FromElseWhere @name='schema-editor-modal' />
       <FromElseWhere @name='playground-field-picker' />
-
     </SubmodeLayout>
 
     <style scoped>

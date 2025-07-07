@@ -2,6 +2,8 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import Undo2 from '@cardstack/boxel-icons/undo-2';
+
 import { dropTask } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
@@ -10,11 +12,7 @@ import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 
 import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
-import {
-  IconCode,
-  IconPencil,
-  ThreeDotsHorizontal,
-} from '@cardstack/boxel-ui/icons';
+import { IconCode, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 
 import RestorePatchedFileModal from '@cardstack/host/components/ai-assistant/restore-patched-file-modal';
 
@@ -197,7 +195,7 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
       items.push(
         new MenuItem('Restore Content', 'action', {
           action: this.toggleRestorePatchedFileModal,
-          icon: IconPencil,
+          icon: Undo2,
           dangerous: true,
         }),
       );

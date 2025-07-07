@@ -386,7 +386,6 @@ export default class CommandService extends Service {
     let message = roomResource.messages.find(
       (m) => m.eventId === codeData.eventId,
     );
-
     return message?.codePatchResults?.find(
       (c) => c.index === codeData.codeBlockIndex,
     );
