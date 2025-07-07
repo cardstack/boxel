@@ -83,6 +83,7 @@ import InstanceSelectDropdown, {
 } from './instance-chooser-dropdown';
 import PlaygroundPreview from './playground-preview';
 import SpecSearch from './spec-search';
+import CardErrorDetail from '../../card-error-detail';
 
 export type SelectedInstance = {
   card: CardDef;
@@ -900,14 +901,20 @@ export default class PlaygroundPanel extends Component<Signature> {
                       @error={{this.cardError}}
                       @cardCreationError={{this.cardError.meta.isCreationError}}
                       @fileToFixWithAi={{this.currentFileDef}}
-                    >
-                      <:error>
-                        <div class='instance-chooser-container'>
-                          <InstanceChooser />
-                        </div>
-                      </:error>
-                    </CardError>
+                      @hideErrorDetail={{true}}
+                    />
                   </CardContainer>
+                  <CardErrorDetail
+                    @error={{this.cardError}}
+                    @fileToFixWithAi={{this.currentFileDef}}
+                    class='card-error-detail'
+                  >
+                    <:error>
+                      <div class='instance-chooser-container'>
+                        <InstanceChooser />
+                      </div>
+                    </:error>
+                  </CardErrorDetail>
                 {{/if}}
               {{else if card}}
                 <div
@@ -1009,6 +1016,15 @@ export default class PlaygroundPanel extends Component<Signature> {
       .error-container :deep(.instance-chooser) {
         border-radius: var(--boxel-border-radius);
         box-shadow: var(--boxel-deep-box-shadow);
+      }
+      .card-error-detail {
+        position: sticky;
+        bottom: var(--boxel-sp);
+        margin: var(--boxel-sp);
+        max-height: calc(100% - var(--boxel-sp-lg));
+      }
+      .card-error-detail :deep(.instance-chooser) {
+        border-radius: var(--boxel-border-radius);
       }
     </style>
   </template>

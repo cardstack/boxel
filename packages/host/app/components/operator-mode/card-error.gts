@@ -29,13 +29,11 @@ interface Signature {
       moreOptionsMenuItems?: MenuItem[];
       onClose?: () => void;
     };
+    hideErrorDetail?: boolean;
     fileToFixWithAi?: FileDef;
     message?: string;
   };
   Element: HTMLElement;
-  Blocks: {
-    error: [];
-  };
 }
 
 export default class CardErrorComponent extends Component<Signature> {
@@ -52,35 +50,39 @@ export default class CardErrorComponent extends Component<Signature> {
       />
     {{/unless}}
 
-    <div class='card-error' data-test-card-error>
-      {{#if this.lastKnownGoodHtml}}
-        <this.lastKnownGoodHtml />
-      {{else}}
-        <div class='card-error-default'>
-          <FileAlert class='icon' />
-          <div class='message'>
-            {{#if @message}}
-              {{@message}}
-            {{else if @cardCreationError}}
-              Failed to create card.
-            {{else}}
-              This card contains an error.
-            {{/if}}
+    <div class='card-error-container'>
+      <div class='card-error' data-test-card-error>
+        {{#if this.lastKnownGoodHtml}}
+          <this.lastKnownGoodHtml />
+        {{else}}
+          <div class='card-error-default'>
+            <FileAlert class='icon' />
+            <div class='message'>
+              {{#if @message}}
+                {{@message}}
+              {{else if @cardCreationError}}
+                Failed to create card.
+              {{else}}
+                This card contains an error.
+              {{/if}}
+            </div>
           </div>
-        </div>
-      {{/if}}
+        {{/if}}
+      </div>
+      {{#unless @hideErrorDetail}}
+        <CardErrorDetail
+          @error={{@error}}
+          @title={{this.errorTitle}}
+          @viewInCodeMode={{@viewInCodeMode}}
+          @fileToFixWithAi={{@fileToFixWithAi}}
+          class='card-error-detail'
+        >
+          <:error>
+            {{yield to='error'}}
+          </:error>
+        </CardErrorDetail>
+      {{/unless}}
     </div>
-
-    <CardErrorDetail
-      @error={{@error}}
-      @title={{this.errorTitle}}
-      @viewInCodeMode={{@viewInCodeMode}}
-      @fileToFixWithAi={{@fileToFixWithAi}}
-    >
-      <:error>
-        {{yield to='error'}}
-      </:error>
-    </CardErrorDetail>
 
     <style scoped>
       .icon {
@@ -114,6 +116,16 @@ export default class CardErrorComponent extends Component<Signature> {
         min-height: var(--boxel-form-control-height);
         background-color: var(--boxel-100);
         box-shadow: 0 1px 0 0 rgba(0 0 0 / 15%);
+      }
+      .card-error-container {
+        position: relative;
+        overflow: auto;
+      }
+      .card-error-detail {
+        position: sticky;
+        bottom: var(--boxel-sp);
+        margin: var(--boxel-sp);
+        max-height: calc(100% - var(--boxel-sp-lg));
       }
     </style>
   </template>
