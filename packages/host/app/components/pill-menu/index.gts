@@ -169,41 +169,38 @@ export default class PillMenu extends Component<Signature> {
         min-height: 0;
       }
 
-      .menu-content::before {
-        content: '';
-        display: block;
-        width: 100%;
-        height: 5px;
-        margin-top: -2px;
-        position: absolute;
-        left: 0;
-        opacity: 0;
-        background: linear-gradient(
-          to bottom,
-          var(--boxel-400) 0%,
-          transparent 100%
-        );
-        animation: scroll-pill-menu-content linear forwards;
-        animation-timeline: --pill-menu-content-scroll-timeline;
-      }
-
+      .menu-content::before,
       .menu-content::after {
         content: '';
         display: block;
         width: 100%;
         height: 5px;
-        bottom: var(--boxel-sp-sm);
-        margin-bottom: 12px;
         position: absolute;
         left: 0;
         opacity: 0;
+        animation: scroll-pill-menu-content linear forwards;
+        animation-timeline: --pill-menu-content-scroll-timeline;
+      }
+
+      .menu-content::before {
+        background: linear-gradient(
+          to bottom,
+          var(--boxel-400) 0%,
+          transparent 100%
+        );
+
+        margin-top: -2px;
+      }
+
+      .menu-content::after {
         background: linear-gradient(
           to top,
           var(--boxel-400) 0%,
           transparent 100%
         );
-        animation: scroll-pill-menu-content linear forwards;
-        animation-timeline: --pill-menu-content-scroll-timeline;
+
+        bottom: var(--boxel-sp-sm);
+        margin-bottom: 12px;
       }
 
       .menu-footer {
