@@ -983,7 +983,7 @@ export default class Room extends Component<Signature> {
     for (let i = 0; i < lastMessage.htmlParts.length; i++) {
       let htmlPart = lastMessage.htmlParts[i];
       let codeData = htmlPart.codeData;
-      if (!codeData) continue;
+      if (!codeData || !codeData.searchReplaceBlock) continue;
       let status = this.commandService.getCodePatchStatus(codeData);
       if (status && status === 'ready') {
         result.push(codeData);

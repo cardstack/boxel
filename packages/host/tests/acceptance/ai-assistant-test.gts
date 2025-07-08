@@ -1031,6 +1031,41 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       );
   });
 
+  test(`should not display action bar when there is no code patch block`, async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      codePath: `${testRealmURL}index.json`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    // In interact mode, auto-attached cards must be the top most cards in the stack
+    // unless the card is manually chosen
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    let codeBlock = `\`\`\`
+  { "name": "test" }
+\`\`\``;
+
+    simulateRemoteMessage(matrixRoomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    await waitFor('[data-test-ai-assistant-message]');
+    assert.dom('[data-test-ai-assistant-action-bar]').doesNotExist();
+  });
+
   test('code mode context sent with message', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
