@@ -32,16 +32,21 @@ export async function handleCheckoutSessionCompleted(
 
     let stripeCustomerId = event.data.object.customer;
     let encodedMatrixId = event.data.object.client_reference_id;
-    let stripeCustomerEmail = event.data.object.customer_details?.email;
-    let matrixUserId = decodeWebSafeBase64(encodedMatrixId);
 
-    if (!matrixUserId) {
+    if (!encodedMatrixId) {
       throw new Error(
         'No matrix user id found in checkout session completed event - this should be populated using client_reference_id query param in the payment link',
       );
     }
 
-    // Stripe customer id will be present when user is subscribing to the free plan, but not when they are adding extra credits
+    let matrixUserId = decodeWebSafeBase64(encodedMatrixId);
+    let stripeCustomerEmail = event.data.object.customer_details?.email;
+    let user = await getUserByMatrixUserId(dbAdapter, matrixUserId);
+    if (!user) {
+      throw new Error(`User not found for matrix user id: ${matrixUserId}`);
+    }
+
+    // Stripe customer id will be present when user is subscribing to a stripe plan, but not when they are adding extra credits
     if (stripeCustomerId) {
       await updateUserStripeCustomerId(
         dbAdapter,
@@ -49,20 +54,8 @@ export async function handleCheckoutSessionCompleted(
         stripeCustomerId,
       );
     } else {
-      let user = await getUserByMatrixUserId(dbAdapter, matrixUserId);
-
-      if (!user) {
-        throw new Error(`User not found for matrix user id: ${matrixUserId}`);
-      }
-
       stripeCustomerId = user.stripeCustomerId;
     }
-
-    await updateUserStripeCustomerEmail(
-      dbAdapter,
-      stripeCustomerId,
-      stripeCustomerEmail,
-    );
 
     let creditReloadAmount =
       'credit_reload_amount' in event.data.object.metadata
@@ -70,34 +63,35 @@ export async function handleCheckoutSessionCompleted(
         : null;
 
     if (creditReloadAmount) {
-      let user = await getUserByStripeId(dbAdapter, stripeCustomerId);
-      if (!user) {
-        throw new Error(
-          `User not found for stripe customer id: ${stripeCustomerId}`,
-        );
-      }
+      let subscriptionCycleId;
 
-      let subscription = await getCurrentActiveSubscription(dbAdapter, user.id);
-      if (!subscription) {
-        throw new Error(
-          `User ${user.id} has no subscription, cannot add extra credits`,
+      if (stripeCustomerId) {
+        await updateUserStripeCustomerEmail(
+          dbAdapter,
+          stripeCustomerId,
+          stripeCustomerEmail,
         );
-      }
-      let subscriptionCycle = await getMostRecentSubscriptionCycle(
-        dbAdapter,
-        subscription!.id,
-      );
-      if (!subscriptionCycle) {
-        throw new Error(
-          `User ${user.id} has no subscription cycle, cannot add extra credits`,
+
+        let subscription = await getCurrentActiveSubscription(
+          dbAdapter,
+          user.id,
         );
+
+        if (subscription) {
+          let subscriptionCycle = await getMostRecentSubscriptionCycle(
+            dbAdapter,
+            subscription!.id,
+          );
+
+          subscriptionCycleId = subscriptionCycle?.id;
+        }
       }
 
       await addToCreditsLedger(dbAdapter, {
         userId: user.id,
         creditAmount: creditReloadAmount,
         creditType: 'extra_credit',
-        subscriptionCycleId: subscriptionCycle.id,
+        subscriptionCycleId: subscriptionCycleId ?? null,
       });
     }
   });
