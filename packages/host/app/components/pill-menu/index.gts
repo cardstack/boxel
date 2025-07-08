@@ -185,7 +185,7 @@ export default class PillMenu extends Component<Signature> {
       .menu-content::before {
         background: linear-gradient(
           to bottom,
-          var(--boxel-400) 0%,
+          rgba(0, 0, 0, 0.25) 0%,
           transparent 100%
         );
 
@@ -198,7 +198,7 @@ export default class PillMenu extends Component<Signature> {
       .menu-content::after {
         background: linear-gradient(
           to top,
-          var(--boxel-400) 0%,
+          rgba(0, 0, 0, 0.25) 0%,
           transparent 100%
         );
 
