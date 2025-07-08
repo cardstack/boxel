@@ -232,7 +232,7 @@ export default class PillMenu extends Component<Signature> {
         0% {
           opacity: 0;
         }
-        10% {
+        1% {
           opacity: 1;
         }
         100% {
@@ -241,6 +241,16 @@ export default class PillMenu extends Component<Signature> {
       }
     </style>
   </template>
+
+  constructor(owner: unknown, args: Signature['Args']) {
+    super(owner, args);
+
+    if (args.title === 'SENTINEL') {
+      timeout(500).then(() => {
+        this.expandMenu();
+      });
+    }
+  }
 
   @tracked isExpanded = false;
 
