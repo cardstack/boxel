@@ -7,10 +7,7 @@ import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
 import { Header } from '@cardstack/boxel-ui/components';
 
-import {
-  DropdownArrowFilled,
-  DropdownArrowUp,
-} from '@cardstack/boxel-ui/icons';
+import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
 
 export type PillMenuItem = {
   cardId: string;
@@ -57,7 +54,7 @@ export default class PillMenu extends Component<Signature> {
               class='header-button'
               data-test-pill-menu-button
             >
-              <DropdownArrowUp class='rotate-left' width='8px' height='8px' />
+              <DropdownArrowFilled width='8px' height='8px' />
             </button>
           </:actions>
         </Header>
@@ -87,7 +84,7 @@ export default class PillMenu extends Component<Signature> {
     {{/if}}
     <style scoped>
       .pill-menu {
-        --boxel-header-gap: var(--boxel-sp-xxs);
+        --boxel-header-gap: var(--boxel-sp-4xs);
         --boxel-header-detail-margin-left: 0;
         --pill-menu-spacing: var(--boxel-pill-menu-spacing, var(--boxel-sp-xs));
         --boxel-header-padding: 0 0 0 var(--pill-menu-spacing);
@@ -189,10 +186,6 @@ export default class PillMenu extends Component<Signature> {
       .pill-menu :deep(.menu-header .content) {
         order: 1;
         margin-left: 0;
-      }
-      .rotate-left {
-        transform: rotate(-90deg);
-        transform-origin: center;
       }
       .minimized-arrow {
         transform: rotate(180deg);
