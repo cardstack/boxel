@@ -73,7 +73,6 @@ import type { Spec } from 'https://cardstack.com/base/spec';
 
 import PrerenderedCardSearch from '../../../prerendered-card-search';
 import CardError from '../../card-error';
-import CardErrorDetail from '../../card-error-detail';
 import FormatChooser from '../format-chooser';
 
 import AiAssistantIcon from './ai-assistant-icon-bw';
@@ -901,20 +900,14 @@ export default class PlaygroundPanel extends Component<Signature> {
                       @error={{this.cardError}}
                       @cardCreationError={{this.cardError.meta.isCreationError}}
                       @fileToFixWithAi={{this.currentFileDef}}
-                      @hideErrorDetail={{true}}
-                    />
+                    >
+                      <:error>
+                        <div class='instance-chooser-container'>
+                          <InstanceChooser />
+                        </div>
+                      </:error>
+                    </CardError>
                   </CardContainer>
-                  <CardErrorDetail
-                    @error={{this.cardError}}
-                    @fileToFixWithAi={{this.currentFileDef}}
-                    class='card-error-detail'
-                  >
-                    <:error>
-                      <div class='instance-chooser-container'>
-                        <InstanceChooser />
-                      </div>
-                    </:error>
-                  </CardErrorDetail>
                 {{/if}}
               {{else if card}}
                 <div
@@ -961,7 +954,6 @@ export default class PlaygroundPanel extends Component<Signature> {
 
     <style scoped>
       .playground-panel {
-        position: relative;
         background-image: url('./playground-background.png');
         background-position: left top;
         background-repeat: repeat;
@@ -1012,16 +1004,15 @@ export default class PlaygroundPanel extends Component<Signature> {
         flex-grow: 1;
         display: grid;
         grid-template-rows: max-content 1fr;
+        position: unset;
+
+        --card-error-header-height: calc(
+          40px + var(--boxel-form-control-height) + var(--boxel-sp)
+        );
       }
       .error-container :deep(.instance-chooser) {
         border-radius: var(--boxel-border-radius);
         box-shadow: var(--boxel-deep-box-shadow);
-      }
-      .card-error-detail {
-        position: sticky;
-        bottom: var(--boxel-sp);
-        margin: var(--boxel-sp);
-        max-height: calc(100% - var(--boxel-sp-lg));
       }
       .card-error-detail :deep(.instance-chooser) {
         border-radius: var(--boxel-border-radius);
