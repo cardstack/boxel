@@ -9,6 +9,8 @@ import Component from '@glimmer/component';
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
+import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
+
 import { provide } from 'ember-provide-consume-context';
 
 import { Modal } from '@cardstack/boxel-ui/components';
@@ -121,6 +123,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     >
       <ChooseFileModal />
       <CardCatalogModal />
+      <FromElseWhere @name='restore-patched-file-modal' />
 
       {{#if
         (or
