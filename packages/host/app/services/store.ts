@@ -8,6 +8,7 @@ import { isTesting } from '@embroider/macros';
 import { formatDistanceToNow } from 'date-fns';
 import { task } from 'ember-concurrency';
 
+import { flatMap } from 'lodash';
 import cloneDeep from 'lodash/cloneDeep';
 import isEqual from 'lodash/isEqual';
 import merge from 'lodash/merge';
@@ -67,9 +68,8 @@ import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
-import type ResetService from './reset';
 import type RealmServerService from './realm-server';
-import { flatMap } from 'lodash';
+import type ResetService from './reset';
 
 export { CardErrorJSONAPI, CardSaveSubscriber };
 
