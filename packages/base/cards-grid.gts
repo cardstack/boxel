@@ -161,7 +161,7 @@ class Isolated extends Component<typeof CardsGrid> {
 
     let spec: Spec | CardErrorJSONAPI | undefined;
     if (activeFilterRef) {
-      let preselectedCardTypeQuery = {
+      let instances = await this.args.context?.store.search({
         filter: {
           on: specRef,
           eq: { ref: activeFilterRef },
@@ -172,10 +172,7 @@ class Isolated extends Component<typeof CardsGrid> {
             direction: 'desc',
           },
         ],
-      } as Query;
-      let instances = await this.args.context?.store.search(
-        preselectedCardTypeQuery,
-      );
+      } as Query);
       if (instances?.[0]?.id) {
         spec = instances[0] as Spec;
       }
