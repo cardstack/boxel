@@ -9,6 +9,8 @@ import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
 
+import CodeBlock from '@cardstack/host/components/ai-assistant/code-block';
+
 import { sanitizedHtml } from '@cardstack/host/helpers/sanitized-html';
 
 import {
@@ -31,8 +33,6 @@ import CommandService from '@cardstack/host/services/command-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
-
-import CodeBlock from '../code-block';
 
 import Message from './text-content';
 
@@ -71,7 +71,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
   };
 
   <template>
-    <Message class='ai-bot-message' ...attributes>
+    <Message class='ai-bot-message'>
       {{#if @reasoning}}
         <div class='reasoning-content'>
           {{#if (eq 'Thinking...' @reasoning.content)}}
@@ -258,6 +258,12 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
       : null;
   }
 
+  private get originalUploadedFileUrl() {
+    return this.args.codePatchStatus === 'applied'
+      ? this.args.codePatchResult?.originalUploadedFileUrl
+      : null;
+  }
+
   <template>
     <CodeBlock
       @monacoSDK={{@monacoSDK}}
@@ -272,6 +278,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               @codeData={{@codeData}}
               @diffEditorStats={{null}}
               @finalFileUrlAfterCodePatching={{this.codePatchfinalFileUrlAfterCodePatching}}
+              @originalUploadedFileUrl={{this.originalUploadedFileUrl}}
             />
             <codeBlock.editor @code={{this.codeForEditor}} />
             <codeBlock.actions as |actions|>

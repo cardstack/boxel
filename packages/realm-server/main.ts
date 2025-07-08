@@ -6,7 +6,6 @@ import {
   logger,
   RunnerOptionsManager,
   Deferred,
-  userIdFromUsername,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
@@ -209,10 +208,11 @@ let autoMigrate = migrateDB || undefined;
     await waitForWorkerManager(workerManagerPort);
   }
 
-  let realmServerMatrixUserId = userIdFromUsername(
-    REALM_SERVER_MATRIX_USERNAME,
-    MATRIX_URL,
-  );
+  let realmServerMatrixClient = new MatrixClient({
+    matrixURL: new URL(MATRIX_URL),
+    username: REALM_SERVER_MATRIX_USERNAME,
+    seed: REALM_SECRET_SEED,
+  });
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
@@ -237,7 +237,7 @@ let autoMigrate = migrateDB || undefined;
         virtualNetwork,
         dbAdapter,
         queue,
-        realmServerMatrixUserId,
+        realmServerMatrixClient,
       },
       {
         fullIndexOnStartup: true,
@@ -249,12 +249,6 @@ let autoMigrate = migrateDB || undefined;
     realms.push(realm);
     virtualNetwork.mount(realm.handle);
   }
-
-  let matrixClient = new MatrixClient({
-    matrixURL: new URL(MATRIX_URL),
-    username: REALM_SERVER_MATRIX_USERNAME,
-    seed: REALM_SECRET_SEED,
-  });
 
   let registrationSecretDeferred: Deferred<string>;
   async function getRegistrationSecret() {
@@ -270,7 +264,7 @@ let autoMigrate = migrateDB || undefined;
   let server = new RealmServer({
     realms,
     virtualNetwork,
-    matrixClient,
+    matrixClient: realmServerMatrixClient,
     realmsRootPath,
     realmServerSecretSeed: REALM_SERVER_SECRET_SEED,
     realmSecretSeed: REALM_SECRET_SEED,

@@ -954,7 +954,6 @@ export default class PlaygroundPanel extends Component<Signature> {
 
     <style scoped>
       .playground-panel {
-        position: relative;
         background-image: url('./playground-background.png');
         background-position: left top;
         background-repeat: repeat;
@@ -1005,10 +1004,18 @@ export default class PlaygroundPanel extends Component<Signature> {
         flex-grow: 1;
         display: grid;
         grid-template-rows: max-content 1fr;
+        position: unset;
+
+        --card-error-header-height: calc(
+          40px + var(--boxel-form-control-height) + var(--boxel-sp)
+        );
       }
       .error-container :deep(.instance-chooser) {
         border-radius: var(--boxel-border-radius);
         box-shadow: var(--boxel-deep-box-shadow);
+      }
+      .card-error-detail :deep(.instance-chooser) {
+        border-radius: var(--boxel-border-radius);
       }
     </style>
   </template>
