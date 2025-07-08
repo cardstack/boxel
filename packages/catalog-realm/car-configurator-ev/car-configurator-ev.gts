@@ -16,6 +16,7 @@ import { on } from '@ember/modifier';
 import { BoxelButton, BoxelSelect } from '@cardstack/boxel-ui/components';
 import { eq, and, not, or } from '@cardstack/boxel-ui/helpers';
 import { concat, fn } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
 import CarIcon from '@cardstack/boxel-icons/car';
 
 // Custom field for configuration options
@@ -79,8 +80,6 @@ export class CarConfiguratorEV extends CardDef {
 
   static isolated = class Isolated extends Component<typeof this> {
     @tracked selectedSection = 'color';
-    // No need for separate tracked properties since we're using the model fields directly
-    
 
     get sections() {
       return [
@@ -179,18 +178,18 @@ export class CarConfiguratorEV extends CardDef {
           <!-- Vehicle Preview -->
           <section
             class='vehicle-preview'
-            style={{concat
+            style={{htmlSafe (concat
               'background: linear-gradient(135deg, '
               (if
                 @model.selectedColor @model.selectedColor.colorValue '#3b82f6'
               )
               '22, #0a0a0a)'
-            }}
+            )}}
           >
             <div class='preview-content'>
               <div
                 class='vehicle-silhouette'
-                style={{concat
+                style={{htmlSafe (concat
                   'filter: drop-shadow(0 20px 40px '
                   (if
                     @model.selectedColor
@@ -198,7 +197,7 @@ export class CarConfiguratorEV extends CardDef {
                     '#3b82f6'
                   )
                   '99)'
-                }}
+                )}}
               >
                 <svg viewBox='0 0 400 150' class='car-svg'>
                   <path
@@ -487,7 +486,6 @@ export class CarConfiguratorEV extends CardDef {
                   Interior</span>
               </div>
             </div>
-
             <div class='price-total'>
               <span class='total-label'>Total Price</span>
               <span class='total-amount'>$ {{@model.totalPrice}}</span>
@@ -496,10 +494,8 @@ export class CarConfiguratorEV extends CardDef {
             <BoxelButton class='configure-button'>
               Reserve Now $1,000
             </BoxelButton>
-
           </div>
         </aside>
-
       </div>
 
       <style scoped>
@@ -924,17 +920,13 @@ export class CarConfiguratorEV extends CardDef {
       this.isOptionsPanelCollapsed = !this.isOptionsPanelCollapsed;
     }
 
- 
-
-
-   get selectedColorOption() {
-  let selected = this.args.model.selectedColor;
-  // If selected is not set or doesn't have a name, treat as not selected
-  if (!selected || !selected.name) {
-    return null;
-  }
-  return selected;
-}
+    get selectedColorOption() {
+      let selected = this.args.model.selectedColor;
+      if (!selected || !selected.name) {
+        return null;
+      }
+      return selected;
+    }
 
     get selectedTrimOption() {
       let selected = this.args.model.selectedTrim;
@@ -967,8 +959,6 @@ export class CarConfiguratorEV extends CardDef {
       }
       return selected;
     }
-
-
 
     <template>
       <div class="edit-container">
@@ -1045,7 +1035,6 @@ export class CarConfiguratorEV extends CardDef {
               <h4>🎨 Exterior Configuration</h4>
               <div class="config-field">
                 <label class="field-label">Model Color</label>
-
                   <BoxelSelect
                     @options={{this.colorOptions}}
                     @selected={{this.selectedColorOption}}
@@ -1068,7 +1057,6 @@ export class CarConfiguratorEV extends CardDef {
               <h4>⚡ Performance Configuration</h4>
               <div class="config-field">
                 <label class="field-label">Trim Level</label>
-              
                   <BoxelSelect
                     @options={{this.trimOptions}}
                     @selected={{this.selectedTrimOption}}
@@ -1085,7 +1073,6 @@ export class CarConfiguratorEV extends CardDef {
               </div>
               <div class="config-field">
                 <label class="field-label">Battery Range</label>
-              
                   <BoxelSelect
                     @options={{this.rangeOptions}}
                     @selected={{this.selectedRangeOption}}
@@ -1107,7 +1094,6 @@ export class CarConfiguratorEV extends CardDef {
               <h4>⚪ Wheels & Tires</h4>
               <div class="config-field">
                 <label class="field-label">Wheel Style</label>
-              
                   <BoxelSelect
                     @options={{this.wheelOptions}}
                     @selected={{this.selectedWheelOption}}
@@ -1129,7 +1115,6 @@ export class CarConfiguratorEV extends CardDef {
               <h4>🪑 Interior Configuration</h4>
               <div class="config-field">
                 <label class="field-label">Interior Style</label>
-             
                   <BoxelSelect
                     @options={{this.interiorOptions}}
                     @selected={{this.selectedInteriorOption}}
