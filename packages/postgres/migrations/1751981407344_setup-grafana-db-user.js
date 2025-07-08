@@ -1,6 +1,4 @@
-/* eslint-disable camelcase */
 
-exports.shorthands = undefined;
 
 const username = process.env.GRAFANA_DB_USER;
 
