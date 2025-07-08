@@ -105,6 +105,8 @@ export default class PillMenu extends Component<Signature> {
         letter-spacing: var(--boxel-lsp);
         box-shadow: var(--boxel-box-shadow);
         transition: width 0.2s ease-in;
+
+        timeline-scope: --pill-menu-content-scroll-timeline;
       }
       .pill-menu-button {
         display: flex;
