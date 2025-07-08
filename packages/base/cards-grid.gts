@@ -19,6 +19,7 @@ import {
   SupportedMimeType,
   subscribeToRealm,
   type Query,
+  CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
 import CardsGridLayout, {
@@ -155,11 +156,12 @@ class Isolated extends Component<typeof CardsGrid> {
   }
 
   private createCard = restartableTask(async () => {
-    let preselectedCardTypeQuery: Query | undefined;
     let filter = this.activeFilter?.query?.filter;
     let activeFilterRef = filter && 'type' in filter ? filter.type : undefined;
+
+    let spec: Spec | CardErrorJSONAPI | undefined;
     if (activeFilterRef) {
-      preselectedCardTypeQuery = {
+      let preselectedCardTypeQuery = {
         filter: {
           on: specRef,
           eq: { ref: activeFilterRef },
@@ -170,27 +172,32 @@ class Isolated extends Component<typeof CardsGrid> {
             direction: 'desc',
           },
         ],
-      };
-    }
-    let specId = await chooseCard(
-      {
+      } as Query;
+      let instances = await this.args.context?.store.search(
+        preselectedCardTypeQuery,
+      );
+      if (instances?.[0]?.id) {
+        spec = instances[0] as Spec;
+      }
+    } else {
+      let specId = await chooseCard({
         filter: {
           on: specRef,
           every: [{ eq: { isCard: true } }],
         },
-      },
-      { preselectedCardTypeQuery },
-    );
-    if (!specId) {
-      return;
-    }
+      });
 
-    let spec = await this.args.context?.store.get<Spec>(specId);
+      if (!specId) {
+        return;
+      }
+
+      spec = await this.args.context?.store.get<Spec>(specId);
+    }
 
     if (spec && isCardInstance<Spec>(spec)) {
       await this.args.context?.actions?.createCard?.(
         spec.ref,
-        new URL(specId),
+        new URL(spec.id!),
         {
           realmURL: this.args.model[realmURL],
         },
