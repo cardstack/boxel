@@ -168,6 +168,25 @@ export default class PillMenu extends Component<Signature> {
         overflow-y: auto;
         min-height: 0;
       }
+
+      .menu-content::before {
+        content: '';
+        display: block;
+        width: 100%;
+        height: 5px;
+        margin-top: -2px;
+        position: absolute;
+        left: 0;
+        opacity: 0;
+        background: linear-gradient(
+          to bottom,
+          var(--boxel-400) 0%,
+          transparent 100%
+        );
+        animation: scroll-pill-menu-content linear forwards;
+        animation-timeline: --pill-menu-content-scroll-timeline;
+      }
+
       .menu-footer {
         padding: var(
           --boxel-pill-menu-footer-padding,
@@ -191,6 +210,18 @@ export default class PillMenu extends Component<Signature> {
         transform: rotate(180deg);
         transform-origin: center;
         margin-left: var(--boxel-sp-xs);
+      }
+
+      @keyframes scroll-pill-menu-content {
+        0% {
+          opacity: 0;
+        }
+        10% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 1;
+        }
       }
     </style>
   </template>
