@@ -4,7 +4,6 @@ import {
   getCurrentActiveSubscription,
   getMostRecentSubscriptionCycle,
   getUserByMatrixUserId,
-  getUserByStripeId,
   insertStripeEvent,
   markStripeEventAsProcessed,
   updateUserStripeCustomerEmail,

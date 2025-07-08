@@ -1210,7 +1210,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           'href',
           `https://extra-credits-payment-link-1250?client_reference_id=${encodeWebSafeBase64(
             '@testuser:localhost',
-          )}`,
+          )}&prefilled_email=testuser%40example.com`,
         );
       assert.dom('[data-test-pay-button="0"]').hasAttribute('target', '_blank');
       assert
@@ -1219,7 +1219,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           'href',
           `https://extra-credits-payment-link-15000?client_reference_id=${encodeWebSafeBase64(
             '@testuser:localhost',
-          )}`,
+          )}&prefilled_email=testuser%40example.com`,
         );
       assert.dom('[data-test-pay-button="1"]').hasAttribute('target', '_blank');
       assert
@@ -1228,7 +1228,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           'href',
           `https://extra-credits-payment-link-80000?client_reference_id=${encodeWebSafeBase64(
             '@testuser:localhost',
-          )}`,
+          )}&prefilled_email=testuser%40example.com`,
         );
       assert.dom('[data-test-pay-button="2"]').hasAttribute('target', '_blank');
 
