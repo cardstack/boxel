@@ -1,12 +1,27 @@
-import { array } from '@ember/helper';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+
+import Undo2 from '@cardstack/boxel-icons/undo-2';
+
+import { dropTask } from 'ember-concurrency';
+
+import perform from 'ember-concurrency/helpers/perform';
+
+import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 
 import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
-import { menuItem } from '@cardstack/boxel-ui/helpers';
+import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { IconCode, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 
+import RestorePatchedFileModal from '@cardstack/host/components/ai-assistant/restore-patched-file-modal';
+
 import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
+
+import CardService from '@cardstack/host/services/card-service';
+
+import MatrixService from '@cardstack/host/services/matrix-service';
+
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 export interface CodeBlockDiffEditorHeaderSignature {
@@ -17,11 +32,23 @@ export interface CodeBlockDiffEditorHeaderSignature {
       linesAdded: number;
     } | null;
     finalFileUrlAfterCodePatching?: string | null;
+    originalUploadedFileUrl?: string | null;
   };
 }
 
 export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEditorHeaderSignature> {
   <template>
+    {{#if this.isRestorePatchedFileModalOpen}}
+      <ToElsewhere
+        @named='restore-patched-file-modal'
+        @send={{component
+          RestorePatchedFileModal
+          onConfirm=(perform this.restoreContent)
+          onCancel=this.toggleRestorePatchedFileModal
+          isRestoreRunning=this.restoreContent.isRunning
+        }}
+      />
+    {{/if}}
     <header class='code-block-diff-header'>
       <div class='left-section'>
         <div class='mode' data-test-file-mode>
@@ -49,9 +76,7 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
           <:content as |dd|>
             <Menu
               class='context-menu-list'
-              @items={{array
-                (menuItem 'Open in Code Mode' this.openInCodeMode icon=IconCode)
-              }}
+              @items={{this.menuItems}}
               @closeMenu={{dd.close}}
             />
           </:content>
@@ -140,6 +165,9 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
   </template>
 
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare matrixService: MatrixService;
+  @service private declare cardService: CardService;
+  @tracked isRestorePatchedFileModalOpen = false;
 
   private get fileUrl() {
     return (
@@ -153,5 +181,53 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
 
   private openInCodeMode = () => {
     this.operatorModeStateService.updateCodePath(new URL(this.fileUrl!));
+  };
+
+  private get menuItems(): MenuItem[] {
+    const items = [
+      new MenuItem('Open in Code Mode', 'action', {
+        action: this.openInCodeMode,
+        icon: IconCode,
+      }),
+    ];
+
+    if (this.args.originalUploadedFileUrl && !this.args.codeData.isNewFile) {
+      items.push(
+        new MenuItem('Restore Content', 'action', {
+          action: this.toggleRestorePatchedFileModal,
+          icon: Undo2,
+          dangerous: true,
+        }),
+      );
+    }
+
+    return items;
+  }
+
+  restoreContent = dropTask(async () => {
+    let originalUploadedFileUrl = this.args.originalUploadedFileUrl;
+    if (!originalUploadedFileUrl) {
+      throw new Error('bug: originalUploadedFileUrl should be present');
+    }
+    let finalFileUrlAfterCodePatching = this.args.finalFileUrlAfterCodePatching;
+    if (!finalFileUrlAfterCodePatching) {
+      throw new Error('bug: finalFileUrlAfterCodePatching should be present');
+    }
+
+    let response = await this.matrixService.fetchMatrixHostedFile(
+      originalUploadedFileUrl,
+    );
+    let content = await response.text();
+
+    await this.cardService.saveSource(
+      new URL(finalFileUrlAfterCodePatching!),
+      content,
+      'bot-patch',
+    );
+    this.isRestorePatchedFileModalOpen = false;
+  });
+
+  toggleRestorePatchedFileModal = () => {
+    this.isRestorePatchedFileModalOpen = !this.isRestorePatchedFileModalOpen;
   };
 }

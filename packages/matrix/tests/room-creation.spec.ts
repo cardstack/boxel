@@ -28,6 +28,7 @@ import {
   getRoomsFromSync,
   initialRoomName,
   setupUserSubscribed,
+  waitUntil,
 } from '../helpers';
 
 test.describe('Room creation', () => {
@@ -157,7 +158,7 @@ test.describe('Room creation', () => {
     await expect(
       page.locator(`[data-test-joined-room="${room1}"]`),
     ).toContainText(newRoom1);
-    await page.locator(`[data-test-close-past-sessions]`).click();
+    await page.locator('[data-test-ai-assistant-panel]').click();
     await assertRooms(page, [room1, room2, room3]);
 
     await openRoom(page, room1);
@@ -195,7 +196,7 @@ test.describe('Room creation', () => {
     await expect(
       page.locator(`[data-test-joined-room="${room1}"]`),
     ).toContainText(initialRoomName);
-    await page.locator(`[data-test-close-past-sessions]`).click();
+    await page.locator('[data-test-ai-assistant-panel]').click();
     await assertRooms(page, [room1, room2, room3]);
 
     await openRenameMenu(page, room1);
@@ -205,7 +206,7 @@ test.describe('Room creation', () => {
     await expect(page.locator('[data-test-save-name-button]')).toBeDisabled();
     await page.locator('[data-test-cancel-name-button]').click();
     await expect(page.locator(`[data-test-rename-session]`)).toHaveCount(0);
-    await page.locator(`[data-test-close-past-sessions]`).click();
+    await page.locator('[data-test-ai-assistant-panel]').click();
   });
 
   test('room names do not persist across different user sessions', async ({
@@ -220,7 +221,11 @@ test.describe('Room creation', () => {
     const newRoomName = 'Room 1';
     await page.locator(`[data-test-name-field]`).fill(newRoomName);
     await page.locator('[data-test-save-name-button]').click();
-    await page.locator(`[data-test-close-past-sessions]`).click();
+    await waitUntil(
+      async () =>
+        (await page.locator('[data-test-rename-session]').count()) === 0,
+    );
+    await page.locator('[data-test-ai-assistant-panel]').click();
 
     await openRoom(page, room);
     await expect(page.locator(`[data-test-chat-title]`)).toHaveText(
@@ -237,7 +242,7 @@ test.describe('Room creation', () => {
     await page.locator('[data-test-open-ai-assistant]').click();
     await expect(page.locator(`[data-test-close-ai-assistant]`)).toHaveCount(1);
     await expect(page.locator(`[data-test-chat-title]`)).not.toHaveText(
-      'New AI Assistant Chat',
+      newRoomName,
     );
   });
 
@@ -262,7 +267,7 @@ test.describe('Room creation', () => {
     await expect(
       page.locator(`[data-test-joined-room="${room3}"]`),
     ).toHaveCount(1);
-    await page.locator(`[data-test-close-past-sessions]`).click(); // close past sessions tab
+    await page.locator('[data-test-ai-assistant-panel]').click(); // close past sessions tab
 
     await deleteRoom(page, room2);
     await expect(
@@ -271,7 +276,7 @@ test.describe('Room creation', () => {
     await expect(
       page.locator(`[data-test-joined-room="${room3}"]`),
     ).toHaveCount(1);
-    await page.locator(`[data-test-close-past-sessions]`).click(); // close past sessions tab
+    await page.locator('[data-test-ai-assistant-panel]').click(); // close past sessions tab
 
     await deleteRoom(page, room3);
     await expect(page.locator(`[data-test-past-sessions]`)).toHaveCount(0);
@@ -306,6 +311,7 @@ test.describe('Room creation', () => {
     // Here, past sessions could be rerendered because in one case we're creating a new room when opening an AI panel, so we need to wait for the past sessions to settle
     await page.waitForTimeout(500); // Wait for the sessions to settle after new room is created
 
+    await page.locator(`[data-test-joined-room="${room}"]`).hover();
     await page
       .locator(`[data-test-past-session-options-button="${room}"]`)
       .click();
@@ -318,7 +324,7 @@ test.describe('Room creation', () => {
     await expect(page.locator(`[data-test-joined-room="${room}"]`)).toHaveCount(
       1,
     );
-    await page.locator(`[data-test-close-past-sessions]`).click();
+    await page.locator('[data-test-ai-assistant-panel]').click();
     await assertRooms(page, [room]);
   });
 
@@ -334,16 +340,16 @@ test.describe('Room creation', () => {
 
     await isInRoom(page, room3);
     await deleteRoom(page, room3); // current room is deleted
-    await page.locator(`[data-test-close-past-sessions]`).click();
+    await page.locator('[data-test-ai-assistant-panel]').click();
     await assertRooms(page, [room1, room2]);
     await isInRoom(page, room2); // is in latest available room
 
     await deleteRoom(page, room1); // a different room is deleted
-    await page.locator(`[data-test-close-past-sessions]`).click();
+    await page.locator('[data-test-ai-assistant-panel]').click();
     await assertRooms(page, [room2]);
     await isInRoom(page, room2); // remains in same room
     await deleteRoom(page, room2); // current room is deleted
-    await page.locator(`[data-test-close-past-sessions]`).click();
+    await page.locator('[data-test-ai-assistant-panel]').click();
 
     await page.waitForTimeout(500); // wait for new room to be created
     let newRoom = await getRoomId(page);
@@ -423,7 +429,7 @@ test.describe('Room creation', () => {
         .locator(`[data-test-joined-room]:nth-of-type(2) .view-session-button`)
         .getAttribute('data-test-enter-room'),
     ).toEqual(room3);
-    await page.locator(`[data-test-close-past-sessions]`).click();
+    await page.locator('[data-test-ai-assistant-panel]').click();
 
     await openRenameMenu(page, room3);
     await page.locator('[data-test-cancel-name-button]').click();
@@ -439,7 +445,7 @@ test.describe('Room creation', () => {
         .locator(`[data-test-joined-room]:nth-of-type(2) .view-session-button`)
         .getAttribute('data-test-enter-room'),
     ).toEqual(room3);
-    await page.locator(`[data-test-close-past-sessions]`).click();
+    await page.locator('[data-test-ai-assistant-panel]').click();
 
     await openRenameMenu(page, room3);
     await page.locator(`[data-test-name-field]`).fill('test room 3');
