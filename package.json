@@ -50,7 +50,8 @@
     },
     "onlyBuiltDependencies": [
       "esbuild",
-      "fsevents"
+      "fsevents",
+      "puppeteer"
     ]
   },
   "devDependencies": {

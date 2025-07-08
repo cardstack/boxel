@@ -1,12 +1,10 @@
-import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { modifier } from 'ember-modifier';
 
-import { IconButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
 
 import { SessionRoomData } from '../../services/ai-assistant-panel-service';
 
@@ -55,15 +53,7 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
       ...attributes
     >
       <:header>
-        All Sessions
-        <IconButton
-          @icon={{DropdownArrowFilled}}
-          @width='12px'
-          @height='12px'
-          {{on 'click' @onClose}}
-          aria-label='Close Past Sessions'
-          data-test-close-past-sessions
-        />
+        Past Sessions
       </:header>
       <:body>
         {{#if @sessions}}
@@ -103,6 +93,7 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
         margin-bottom: var(--boxel-sp-xs);
         max-height: 400px;
         overflow-y: auto;
+        scroll-timeline: --past-sessions-scroll-timeline block;
       }
       .empty-collection {
         padding: var(--boxel-sp-sm);

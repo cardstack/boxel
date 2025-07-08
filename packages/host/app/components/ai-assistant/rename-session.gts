@@ -7,11 +7,7 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 
-import {
-  FieldContainer,
-  BoxelInput,
-  Button,
-} from '@cardstack/boxel-ui/components';
+import { BoxelInput, Button } from '@cardstack/boxel-ui/components';
 
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import { SessionRoomData } from '@cardstack/host/services/ai-assistant-panel-service';
@@ -31,26 +27,26 @@ export default class RenameSession extends Component<Signature> {
   <template>
     <AiAssistantPanelPopover
       @onClose={{@onClose}}
+      class='rename-session'
       data-test-rename-session
       ...attributes
     >
       <:header>Rename Session</:header>
       <:body>
         <div class='rename-field'>
-          <FieldContainer @label='Session Name' @tag='label' @vertical={{true}}>
-            <BoxelInput
-              @state={{this.roomNameInputState}}
-              @value={{this.newRoomName}}
-              @errorMessage={{this.roomNameError}}
-              @onInput={{this.setName}}
-              data-test-name-field
-            />
-          </FieldContainer>
+          <BoxelInput
+            @state={{this.roomNameInputState}}
+            @value={{this.newRoomName}}
+            @errorMessage={{this.roomNameError}}
+            @onInput={{this.setName}}
+            aria-label='Session Name'
+            data-test-name-field
+          />
         </div>
         <footer class='footer'>
           <Button
             @kind='secondary'
-            @size='small'
+            @size='extra-small'
             {{on 'click' @onClose}}
             {{onKeyMod 'Escape' @onClose}}
             data-test-cancel-name-button
@@ -59,7 +55,7 @@ export default class RenameSession extends Component<Signature> {
           </Button>
           <Button
             @kind='primary'
-            @size='small'
+            @size='extra-small'
             @disabled={{this.isSaveRenameDisabled}}
             @loading={{this.doRenameRoom.isRunning}}
             {{on 'click' this.renameRoom}}
@@ -73,8 +69,14 @@ export default class RenameSession extends Component<Signature> {
     </AiAssistantPanelPopover>
 
     <style scoped>
+      .rename-session {
+        --boxel-button-color: var(--boxel-light);
+
+        min-height: unset;
+      }
+
       .rename-field {
-        padding: 0 var(--boxel-sp);
+        padding: 0 var(--boxel-sp-xs);
       }
       .rename-field :deep(.label) {
         font: 600 var(--boxel-font-sm);
@@ -83,7 +85,7 @@ export default class RenameSession extends Component<Signature> {
         display: flex;
         justify-content: flex-end;
         gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp);
+        padding: var(--boxel-sp-xs);
       }
       .footer :deep(.boxel-button:not(:disabled)) {
         --boxel-button-text-color: var(--boxel-dark);
