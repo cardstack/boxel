@@ -180,8 +180,6 @@ export default class PillMenu extends Component<Signature> {
         position: absolute;
         left: 0;
         opacity: 0;
-        animation: scroll-pill-menu-content linear forwards;
-        animation-timeline: --pill-menu-content-scroll-timeline;
       }
 
       .menu-content::before {
@@ -190,6 +188,9 @@ export default class PillMenu extends Component<Signature> {
           var(--boxel-400) 0%,
           transparent 100%
         );
+
+        animation: scroll-pill-menu-content linear forwards;
+        animation-timeline: --pill-menu-content-scroll-timeline;
 
         margin-top: -2px;
       }
@@ -200,6 +201,9 @@ export default class PillMenu extends Component<Signature> {
           var(--boxel-400) 0%,
           transparent 100%
         );
+
+        animation: scroll-pill-menu-content reverse linear backwards;
+        animation-timeline: --pill-menu-content-scroll-timeline;
 
         bottom: var(--boxel-sp-sm);
         margin-bottom: 12px;
