@@ -191,8 +191,6 @@ export default class PillMenu extends Component<Signature> {
 
         animation: scroll-pill-menu-content linear forwards;
         animation-timeline: --pill-menu-content-scroll-timeline;
-
-        margin-top: -2px;
       }
 
       .menu-content::after {
