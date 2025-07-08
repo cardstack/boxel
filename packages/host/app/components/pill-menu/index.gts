@@ -180,6 +180,7 @@ export default class PillMenu extends Component<Signature> {
         position: absolute;
         left: 0;
         opacity: 0;
+        pointer-events: none;
       }
 
       .menu-content::before {
