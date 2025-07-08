@@ -70,18 +70,17 @@ export default class CardErrorComponent extends Component<Signature> {
         </div>
       {{/if}}
     </div>
-
     <CardErrorDetail
       @error={{@error}}
       @title={{this.errorTitle}}
       @viewInCodeMode={{@viewInCodeMode}}
       @fileToFixWithAi={{@fileToFixWithAi}}
+      class='card-error-detail'
     >
       <:error>
         {{yield to='error'}}
       </:error>
     </CardErrorDetail>
-
     <style scoped>
       .icon {
         height: 100px;
@@ -114,6 +113,24 @@ export default class CardErrorComponent extends Component<Signature> {
         min-height: var(--boxel-form-control-height);
         background-color: var(--boxel-100);
         box-shadow: 0 1px 0 0 rgba(0 0 0 / 15%);
+      }
+      .card-error-detail {
+        position: absolute;
+        bottom: var(--boxel-sp);
+        left: var(--boxel-sp);
+        right: var(--boxel-sp);
+        max-height: calc(
+          100% -
+            calc(
+              calc(var(--boxel-sp) * 2) +
+                var(
+                  --card-error-header-height,
+                  var(--boxel-form-control-height)
+                )
+            )
+        );
+        z-index: 10;
+        margin: 0;
       }
     </style>
   </template>

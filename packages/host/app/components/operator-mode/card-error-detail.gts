@@ -49,9 +49,8 @@ export default class CardErrorDetail extends Component<Signature> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-lg);
-        flex: 1.5;
         overflow: visible;
-        max-height: fit-content;
+        max-height: 100%;
         margin: auto var(--boxel-sp) var(--boxel-sp) var(--boxel-sp);
       }
       @media (min-height: 800px) {

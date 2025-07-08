@@ -575,6 +575,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
     >
       <CardContainer
         class='stack-item-card'
+        style={{cssVar
+          card-error-header-height='var(--stack-item-header-height)'
+        }}
         {{ContentElement onSetup=this.setupContainerEl}}
       >
         {{#if (not this.cardResource.isLoaded)}}
