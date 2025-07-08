@@ -175,7 +175,7 @@ export class CarConfiguratorEV extends CardDef {
         </nav>
 
         <main class='configurator-main'>
-          <!-- Vehicle Preview -->
+          {{! Vehicle Preview }}
           <section
             class='vehicle-preview'
             style={{htmlSafe (concat
@@ -210,12 +210,12 @@ export class CarConfiguratorEV extends CardDef {
                     stroke='rgba(255,255,255,0.1)'
                     stroke-width='1'
                   />
-                  <!-- Windows -->
+                  {{! Windows }}
                   <path
                     d='M140,80 L260,80 Q265,85 265,90 L135,90 Q140,85 140,80 Z'
                     fill='rgba(100,150,255,0.3)'
                   />
-                  <!-- Wheels -->
+                  {{! Wheels }}
                   <circle
                     cx='110'
                     cy='130'
@@ -249,7 +249,7 @@ export class CarConfiguratorEV extends CardDef {
             </div>
           </section>
 
-          <!-- Configuration Panel -->
+          {{! Configuration Panel }}
           <section class='config-panel'>
             {{#if (eq this.selectedSection 'color')}}
               <div class='config-section'>
@@ -277,7 +277,7 @@ export class CarConfiguratorEV extends CardDef {
                       >
                         <div
                           class='color-swatch'
-                          style='background: {{colorOption.colorValue}}'
+                          style={{htmlSafe (concat 'background: ' colorOption.colorValue)}}
                         ></div>
                         <span>{{colorOption.name}}</span>
                         <span class='price'>{{this.getPriceDisplay
@@ -308,7 +308,7 @@ export class CarConfiguratorEV extends CardDef {
                           (fn this.selectOption 'trim' trimOption.name)
                         }}
                       >
-                        <h3>{{trimOption.name}}</h3>
+                        <span class="option-title">{{trimOption.name}}</span>
                         <p>{{trimOption.description}}</p>
                         <span class='price'>{{this.getPriceDisplay
                             trimOption.price
@@ -338,7 +338,7 @@ export class CarConfiguratorEV extends CardDef {
                           (fn this.selectOption 'range' rangeOption.name)
                         }}
                       >
-                        <h3>{{rangeOption.name}}</h3>
+                        <span class="option-title">{{rangeOption.name}}</span>
                         <p>{{rangeOption.description}}</p>
                         <span class='price'>{{this.getPriceDisplay
                             rangeOption.price
@@ -370,7 +370,7 @@ export class CarConfiguratorEV extends CardDef {
                           (fn this.selectOption 'wheels' wheelOption.name)
                         }}
                       >
-                        <h3>{{wheelOption.name}}</h3>
+                        <span class="option-title">{{wheelOption.name}}</span>
                         <p>{{wheelOption.description}}</p>
                         <span class='price'>{{this.getPriceDisplay
                             wheelOption.price
@@ -404,7 +404,7 @@ export class CarConfiguratorEV extends CardDef {
                           (fn this.selectOption 'interior' interiorOption.name)
                         }}
                       >
-                        <h3>{{interiorOption.name}}</h3>
+                        <span class="option-title">{{interiorOption.name}}</span>
                         <p>{{interiorOption.description}}</p>
                         <span class='price'>{{this.getPriceDisplay
                             interiorOption.price
@@ -971,7 +971,7 @@ export class CarConfiguratorEV extends CardDef {
         </header>
 
         <div class="edit-layout {{if this.isOptionsPanelCollapsed 'collapsed'}}">
-          <!-- Left Column: Options Management -->
+          {{! Left Column: Options Management }}
           <div class="options-panel">
             <div class="options-panel-header">
               <h3 class="panel-title">📋 Available Options Management</h3>
@@ -1013,11 +1013,11 @@ export class CarConfiguratorEV extends CardDef {
             </div>
           </div>
 
-          <!-- Right Column: Selected Configuration -->
+          {{! Right Column: Selected Configuration }}
           <div class="configuration-panel">
             <h3 class="panel-title">⚙️ Current Configuration</h3>
 
-            <!-- Basic Information -->
+            {{! Basic Information }}
             <div class="config-section">
               <h4>🚗 Basic Information</h4>
               <div class="config-field">
@@ -1030,7 +1030,7 @@ export class CarConfiguratorEV extends CardDef {
               </div>
             </div>
 
-            <!-- Exterior Configuration -->
+            {{! Exterior Configuration }}
             <div class="config-section">
               <h4>🎨 Exterior Configuration</h4>
               <div class="config-field">
@@ -1052,7 +1052,7 @@ export class CarConfiguratorEV extends CardDef {
               </div>
             </div>
 
-            <!-- Performance Configuration -->
+            {{! Performance Configuration }}
             <div class="config-section">
               <h4>⚡ Performance Configuration</h4>
               <div class="config-field">
@@ -1089,7 +1089,7 @@ export class CarConfiguratorEV extends CardDef {
               </div>
             </div>
 
-            <!-- Wheels & Tires -->
+            {{! Wheels & Tires }}
             <div class="config-section">
               <h4>⚪ Wheels & Tires</h4>
               <div class="config-field">
@@ -1110,7 +1110,7 @@ export class CarConfiguratorEV extends CardDef {
               </div>
             </div>
 
-            <!-- Interior Configuration -->
+            {{! Interior Configuration }}
             <div class="config-section">
               <h4>🪑 Interior Configuration</h4>
               <div class="config-field">
@@ -1132,7 +1132,7 @@ export class CarConfiguratorEV extends CardDef {
               </div>
             </div>
 
-            <!-- Premium Features -->
+            {{! Premium Features }}
             <div class="config-section">
               <h4>✨ Premium Features</h4>
               
