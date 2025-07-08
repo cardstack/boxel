@@ -246,16 +246,6 @@ export default class PillMenu extends Component<Signature> {
     </style>
   </template>
 
-  constructor(owner: unknown, args: Signature['Args']) {
-    super(owner, args);
-
-    if (args.title === 'SENTINEL') {
-      timeout(500).then(() => {
-        this.expandMenu();
-      });
-    }
-  }
-
   @tracked isExpanded = false;
 
   @action expandMenu() {
