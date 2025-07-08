@@ -16,7 +16,7 @@ export class MatrixClient {
   private access: MatrixAccess | undefined;
   private password?: string;
   private seed?: string;
-  private loggedIn = new Deferred<void>();
+  private loggedInDeferred: Deferred<void> | undefined;
 
   constructor({
     matrixURL,
@@ -48,10 +48,6 @@ export class MatrixClient {
     return this.access !== undefined;
   }
 
-  async waitForLogin() {
-    return this.loggedIn.promise;
-  }
-
   private async request(
     path: string,
     method: 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'GET' = 'GET',
@@ -74,6 +70,10 @@ export class MatrixClient {
   }
 
   async login() {
+    if (this.loggedInDeferred) {
+      return await this.loggedInDeferred.promise;
+    }
+    this.loggedInDeferred = new Deferred();
     let password: string | undefined;
     if (this.password) {
       password = this.password;
@@ -109,7 +109,7 @@ export class MatrixClient {
           this.username
         }: status ${response.status} - ${JSON.stringify(json)}`,
       );
-      this.loggedIn.reject(error);
+      this.loggedInDeferred.reject(error);
       throw error;
     }
     let {
@@ -118,7 +118,7 @@ export class MatrixClient {
       user_id: userId,
     } = json;
     this.access = { accessToken, deviceId, userId };
-    this.loggedIn.fulfill();
+    this.loggedInDeferred.fulfill();
   }
 
   async getJoinedRooms() {

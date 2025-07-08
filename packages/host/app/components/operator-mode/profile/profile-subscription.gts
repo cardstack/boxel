@@ -30,7 +30,9 @@ export default class ProfileSubscription extends Component<Signature> {
     let newUrl = `${url}?client_reference_id=${clientReferenceId}`;
 
     const stripeCustomerEmail =
-      this.billingService.subscriptionData?.stripeCustomerEmail;
+      this.billingService.subscriptionData?.stripeCustomerEmail ||
+      this.matrixService.profile.email;
+
     if (stripeCustomerEmail) {
       newUrl += `&prefilled_email=${encodeURIComponent(stripeCustomerEmail)}`;
     }

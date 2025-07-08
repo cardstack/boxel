@@ -3,7 +3,6 @@ import {
   IndexWriter,
   Deferred,
   logger,
-  fetchUserPermissions,
   systemInitiatedPriority,
   userInitiatedPriority,
   type Stats,
@@ -20,7 +19,6 @@ import { Realm } from './realm';
 import { RealmPaths } from './paths';
 import { Loader } from './loader';
 import ignore, { type Ignore } from 'ignore';
-import { getMatrixUsername } from './matrix-client';
 
 export class RealmIndexUpdater {
   #realm: Realm;
@@ -36,7 +34,6 @@ export class RealmIndexUpdater {
   };
   #indexWriter: IndexWriter;
   #queue: QueuePublisher;
-  #dbAdapter: DBAdapter;
   #indexingDeferred: Deferred<void> | undefined;
 
   constructor({
@@ -55,7 +52,6 @@ export class RealmIndexUpdater {
     }
     this.#indexWriter = new IndexWriter(dbAdapter);
     this.#queue = queue;
-    this.#dbAdapter = dbAdapter;
     this.#realm = realm;
     this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
   }
@@ -97,7 +93,7 @@ export class RealmIndexUpdater {
     try {
       let args: FromScratchArgs = {
         realmURL: this.#realm.url,
-        realmUsername: await this.getRealmUsername(),
+        realmUsername: await this.#realm.getRealmOwnerUsername(),
       };
       let job = await this.#queue.publish<FromScratchResult>({
         jobType: `from-scratch-index`,
@@ -133,7 +129,7 @@ export class RealmIndexUpdater {
       let args: IncrementalArgs = {
         urls: urls.map((u) => u.href),
         realmURL: this.#realm.url,
-        realmUsername: await this.getRealmUsername(),
+        realmUsername: await this.#realm.getRealmOwnerUsername(),
         operation: opts?.delete ? 'delete' : 'update',
         ignoreData: { ...this.#ignoreData },
       };
@@ -169,7 +165,7 @@ export class RealmIndexUpdater {
     try {
       let args: CopyArgs = {
         realmURL: this.#realm.url,
-        realmUsername: await this.getRealmUsername(),
+        realmUsername: await this.#realm.getRealmOwnerUsername(),
         sourceRealmURL: sourceRealmURL.href,
       };
       let job = await this.#queue.publish<CopyResult>({
@@ -205,47 +201,6 @@ export class RealmIndexUpdater {
       return true;
     }
     return isIgnored(this.realmURL, this.ignoreMap, url);
-  }
-
-  private async getRealmUsername(): Promise<string> {
-    let permissions = await fetchUserPermissions(
-      this.#dbAdapter,
-      this.realmURL,
-    );
-
-    let userIds = Object.entries(permissions)
-      .filter(([_, permissions]) => permissions?.includes('realm-owner'))
-      .map(([userId]) => userId);
-    if (userIds.length > 1) {
-      // we want to use the realm's human owner for the realm and not the bot
-      userIds = userIds.filter((userId) => !userId.startsWith('@realm/'));
-    }
-
-    let [realmUserId] = userIds;
-    // real matrix user ID's always start with an '@', if it doesn't that
-    // means we are testing
-    if (realmUserId?.startsWith('@')) {
-      return getMatrixUsername(realmUserId);
-    }
-
-    // hard coded test URLs
-    if ((globalThis as any).__environment === 'test') {
-      switch (this.realmURL.href) {
-        case 'http://127.0.0.1:4441/':
-          return 'base_realm';
-        case 'http://127.0.0.1:4444/':
-        case 'http://127.0.0.1:4445/':
-        case 'http://127.0.0.1:4445/test/':
-        case 'http://127.0.0.1:4446/demo/':
-        case 'http://127.0.0.1:4448/':
-          return 'node-test_realm';
-        default:
-          return 'test_realm';
-      }
-    }
-    throw new Error(
-      `Cannot determine realm owner for realm ${this.realmURL.href}.`,
-    );
   }
 }
 

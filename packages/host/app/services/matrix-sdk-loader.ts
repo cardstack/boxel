@@ -255,14 +255,9 @@ function extendedClient({
   getCardAPI: () => typeof CardAPI;
   getFileAPI: () => typeof FileAPI;
 }): ExtendedClient {
-  let fileDefManager = new FileDefManagerImpl({
-    owner,
-    client,
-    getCardAPI,
-    getFileAPI,
-  });
+  let fileDefManager: FileDefManagerImpl;
 
-  return new Proxy(client, {
+  let extendedClient = new Proxy(client, {
     get(target, key, receiver) {
       let extendedTarget = target as unknown as ExtendedClient;
       switch (key) {
@@ -280,19 +275,26 @@ function extendedClient({
           return fileDefManager.uploadCommandDefinitions.bind(fileDefManager);
         case 'uploadFiles':
           return fileDefManager.uploadFiles.bind(fileDefManager);
-        case 'uploadContent':
-          return fileDefManager.uploadContent.bind(fileDefManager);
         case 'downloadAsFileInBrowser':
           return fileDefManager.downloadAsFileInBrowser.bind(fileDefManager);
         case 'downloadCardFileDef':
           return fileDefManager.downloadCardFileDef.bind(fileDefManager);
         case 'cacheContentHashIfNeeded':
           return fileDefManager.cacheContentHashIfNeeded.bind(fileDefManager);
+        case 'recacheContentHash':
+          return fileDefManager.recacheContentHash.bind(fileDefManager);
         default:
           return Reflect.get(target, key, receiver);
       }
     },
   }) as unknown as ExtendedClient;
+  fileDefManager = new FileDefManagerImpl({
+    owner,
+    client: extendedClient,
+    getCardAPI,
+    getFileAPI,
+  });
+  return extendedClient;
 }
 
 export interface MessageOptions {

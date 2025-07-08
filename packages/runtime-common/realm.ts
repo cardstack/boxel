@@ -37,6 +37,7 @@ import {
   type FileMeta,
   type DirectoryMeta,
   userInitiatedPriority,
+  userIdFromUsername,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -64,7 +65,7 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
-import { MatrixClient } from './matrix-client';
+import { MatrixClient, getMatrixUsername } from './matrix-client';
 
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
@@ -210,6 +211,7 @@ export type RequestContext = { realm: Realm; permissions: RealmPermissions };
 export class Realm {
   #startedUp = new Deferred<void>();
   #matrixClient: MatrixClient;
+  #realmServerMatrixClient: MatrixClient;
   #realmIndexUpdater: RealmIndexUpdater;
   #realmIndexQueryEngine: RealmIndexQueryEngine;
   #adapter: RealmAdapter;
@@ -257,7 +259,7 @@ export class Realm {
       dbAdapter,
       queue,
       virtualNetwork,
-      realmServerMatrixUserId,
+      realmServerMatrixClient,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -266,22 +268,41 @@ export class Realm {
       dbAdapter: DBAdapter;
       queue: QueuePublisher;
       virtualNetwork: VirtualNetwork;
-      realmServerMatrixUserId: string;
+      realmServerMatrixClient: MatrixClient;
     },
     opts?: Options,
   ) {
     this.paths = new RealmPaths(new URL(url));
     let { username, url: matrixURL } = matrix;
     this.#realmSecretSeed = secretSeed;
+    this.#dbAdapter = dbAdapter;
+    this.#adapter = adapter;
+    this.#queue = queue;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
-    this.#realmServerMatrixUserId = realmServerMatrixUserId;
+    this.#realmServerMatrixClient = realmServerMatrixClient;
+    this.#realmServerMatrixUserId = userIdFromUsername(
+      realmServerMatrixClient.username,
+      realmServerMatrixClient.matrixURL.href,
+    );
     this.#matrixClient = new MatrixClient({
       matrixURL,
       username,
       seed: secretSeed,
     });
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
-    let fetch = fetcher(virtualNetwork.fetch, [
+    let owner: string | undefined;
+    let _fetch = fetcher(virtualNetwork.fetch, [
+      // when we run cards directly in node we do so under the authority of the
+      // realm server so that we can assume the user that owns this realm. this
+      // logic will eventually go away after we refactor to running cards only
+      // in headless chrome.
+      async (req, next) => {
+        if (!owner) {
+          owner = await this.getRealmOwnerUserId();
+        }
+        req.headers.set('X-Boxel-Assume-User', owner);
+        return next(req);
+      },
       async (req, next) => {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
       },
@@ -292,17 +313,18 @@ export class Realm {
         return await this.internalHandle(request, true);
       },
       authorizationMiddleware(
-        new RealmAuthDataSource(this.#matrixClient, () => virtualNetwork.fetch),
+        // ditto with above, we run cards under the authority of the realm
+        // server so that we can assume user that owns this realm. refactor this
+        // back to using the realm's own matrix client after running cards in
+        // headless chrome lands.
+        new RealmAuthDataSource(this.#realmServerMatrixClient, () => _fetch),
       ),
     ]);
 
-    let loader = new Loader(fetch, virtualNetwork.resolveImport);
+    let loader = new Loader(_fetch, virtualNetwork.resolveImport);
     adapter.setLoader?.(loader);
-
     this.#loaderTemplate = loader;
 
-    this.#adapter = adapter;
-    this.#queue = queue;
     this.#realmIndexUpdater = new RealmIndexUpdater({
       realm: this,
       dbAdapter,
@@ -311,10 +333,8 @@ export class Realm {
     this.#realmIndexQueryEngine = new RealmIndexQueryEngine({
       realm: this,
       dbAdapter,
-      fetch,
+      fetch: _fetch,
     });
-
-    this.#dbAdapter = dbAdapter;
 
     this.#router = new Router(new URL(url))
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
@@ -649,6 +669,49 @@ export class Realm {
     }
     return await this.internalHandle(request, false);
   };
+
+  async getRealmOwnerUserId(): Promise<string> {
+    let permissions = await fetchUserPermissions(
+      this.#dbAdapter,
+      new URL(this.url),
+    );
+
+    let userIds = Object.entries(permissions)
+      .filter(([_, permissions]) => permissions?.includes('realm-owner'))
+      .map(([userId]) => userId);
+    if (userIds.length > 1) {
+      // we want to use the realm's human owner for the realm and not the bot
+      userIds = userIds.filter((userId) => !userId.startsWith('@realm/'));
+    }
+
+    let [userId] = userIds;
+    // real matrix user ID's always start with an '@', if it doesn't that
+    // means we are testing
+    if (userId?.startsWith('@')) {
+      return userId;
+    }
+    // hard coded test URLs
+    if ((globalThis as any).__environment === 'test') {
+      switch (this.url) {
+        case 'http://127.0.0.1:4441/':
+          return '@base_realm:localhost';
+        case 'http://127.0.0.1:4444/':
+        case 'http://127.0.0.1:4445/':
+        case 'http://127.0.0.1:4445/test/':
+        case 'http://127.0.0.1:4446/demo/':
+        case 'http://127.0.0.1:4448/':
+          return '@node-test_realm:localhost';
+        default:
+          return '@test_realm:localhost';
+      }
+    }
+    throw new Error(`Cannot determine realm owner for realm ${this.url}.`);
+  }
+
+  async getRealmOwnerUsername(): Promise<string> {
+    let userId = await this.getRealmOwnerUserId();
+    return getMatrixUsername(userId);
+  }
 
   private async createSession(
     request: Request,
