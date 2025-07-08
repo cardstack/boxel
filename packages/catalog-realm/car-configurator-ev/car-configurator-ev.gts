@@ -1045,7 +1045,7 @@ export class CarConfiguratorEV extends CardDef {
                     as |colorOption|
                   >
                     <div class="select-option">
-                      <div class="color-swatch-small" style="background: {{colorOption.colorValue}}"></div>
+                      <div class="color-swatch-small" style={{htmlSafe (concat 'background: ' colorOption.colorValue)}}></div>
                       <span>{{colorOption.name}}</span>
                     </div>
                   </BoxelSelect>
