@@ -63,6 +63,60 @@ export class Flight extends CardDef {
     },
   });
 
+  @field displayAirline = contains(StringField, {
+    computeVia: function (this: Flight) {
+      return this.airline || 'Unknown Airline';
+    },
+  });
+
+  @field displayFlightNumber = contains(StringField, {
+    computeVia: function (this: Flight) {
+      return this.flightNumber || 'No Flight Number';
+    },
+  });
+
+  @field displayCabinClass = contains(StringField, {
+    computeVia: function (this: Flight) {
+      return this.cabinClass || 'No Cabin Class';
+    },
+  });
+
+  @field displayDepartureAirport = contains(StringField, {
+    computeVia: function (this: Flight) {
+      return this.departureAirport || 'Unknown Departure Airport';
+    },
+  });
+
+  @field displayDepartureCity = contains(StringField, {
+    computeVia: function (this: Flight) {
+      return this.departureCity || 'Unknown Departure City';
+    },
+  });
+
+  @field displayArrivalAirport = contains(StringField, {
+    computeVia: function (this: Flight) {
+      return this.arrivalAirport || 'Unknown Arrival Airport';
+    },
+  });
+
+  @field displayArrivalCity = contains(StringField, {
+    computeVia: function (this: Flight) {
+      return this.arrivalCity || 'Unknown Arrival City';
+    },
+  });
+
+  @field displayDuration = contains(StringField, {
+    computeVia: function (this: Flight) {
+      return this.duration || 'Unknown Duration';
+    },
+  });
+
+  @field displayRoute = contains(StringField, {
+    computeVia: function (this: Flight) {
+      return this.route || 'Unknown Route';
+    },
+  });
+
   static isolated = class Isolated extends Component<typeof Flight> {
     <template>
       <div class='flight-card'>
@@ -74,48 +128,58 @@ export class Flight extends CardDef {
                 alt={{@model.airline}}
                 class='airline-logo'
               />
+            {{else}}
+              <div class='airline-logo-placeholder'></div>
             {{/if}}
             <div>
-              <h2 class='airline-name'>{{@model.airline}}</h2>
-              <span class='flight-number'>{{@model.flightNumber}}</span>
+              <h2 class='airline-name'>{{@model.displayAirline}}</h2>
+              <span class='flight-number'>{{@model.displayFlightNumber}}</span>
             </div>
           </div>
           <div class='price-display'>
             <span class='price'>{{@model.formattedPrice}}</span>
-            <span class='cabin-class'>{{@model.cabinClass}}</span>
+            <span class='cabin-class'>{{@model.displayCabinClass}}</span>
           </div>
         </div>
 
         <div class='flight-details'>
           <div class='route-info'>
             <div class='departure'>
-              <div class='time'>{{dayjsFormat
-                  @model.departureTime
-                  'h:mm A'
-                }}</div>
-              <div class='airport'>{{@model.departureAirport}}</div>
-              <div class='city'>{{@model.departureCity}}</div>
+              <div class='time'>
+                {{#if @model.departureTime}}
+                  {{dayjsFormat @model.departureTime 'h:mm A'}}
+                {{else}}
+                  <span class='placeholder'>--:--</span>
+                {{/if}}</div>
+              <div class='airport'>{{@model.displayDepartureAirport}}</div>
+              <div class='city'>{{@model.displayDepartureCity}}</div>
             </div>
 
             <div class='flight-path'>
               <PlaneIcon width='24' height='24' class='plane-icon' />
-              <div class='duration'>{{@model.duration}}</div>
+              <div class='duration'>{{@model.displayDuration}}</div>
             </div>
 
             <div class='arrival'>
-              <div class='time'>{{dayjsFormat
-                  @model.arrivalTime
-                  'h:mm A'
-                }}</div>
-              <div class='airport'>{{@model.arrivalAirport}}</div>
-              <div class='city'>{{@model.arrivalCity}}</div>
+              <div class='time'>
+                {{#if @model.arrivalTime}}
+                  {{dayjsFormat @model.arrivalTime 'h:mm A'}}
+                {{else}}
+                  <span class='placeholder'>--:--</span>
+                {{/if}}</div>
+              <div class='airport'>{{@model.displayArrivalAirport}}</div>
+              <div class='city'>{{@model.displayArrivalCity}}</div>
             </div>
           </div>
 
           <div class='flight-meta'>
             <div class='meta-item'>
               <ClockIcon width='16' height='16' />
-              <span>{{dayjsFormat @model.departureTime 'MMM D, YYYY'}}</span>
+              <span>
+                {{#if @model.departureTime}}
+                  {{dayjsFormat @model.departureTime 'MMM D, YYYY'}}
+                {{/if}}
+              </span>
             </div>
             {{#if @model.aircraftType}}
               <div class='meta-item'>
@@ -135,10 +199,7 @@ export class Flight extends CardDef {
           --text-secondary: #6b7280;
           --border-color: #e5e7eb;
           background: white;
-          border: 2px solid var(--border-color);
-          border-radius: 16px;
           padding: 24px;
-          max-width: 600px;
         }
 
         .flight-header {
@@ -294,6 +355,19 @@ export class Flight extends CardDef {
         .meta-item svg {
           color: var(--expedia-blue);
         }
+
+        .airline-logo-placeholder {
+          width: 40px;
+          height: 40px;
+          background: #f3f4f6;
+          border-radius: 8px;
+          border: 2px dashed #d1d5db;
+        }
+
+        .placeholder {
+          color: #9ca3af;
+          font-style: italic;
+        }
       </style>
     </template>
   };
@@ -308,28 +382,37 @@ export class Flight extends CardDef {
               alt={{@model.airline}}
               class='airline-logo'
             />
+          {{else}}
+            <div class='airline-logo-placeholder-embedded'></div>
           {{/if}}
           <div class='airline-details'>
-            <div class='airline-name'>{{@model.airline}}</div>
-            <div class='flight-number'>{{@model.flightNumber}}</div>
+            <div class='airline-name'>{{@model.displayAirline}}</div>
+            <div class='flight-number'>{{@model.displayFlightNumber}}</div>
           </div>
         </div>
 
         <div class='route-section'>
-          <div class='route'>{{@model.route}}</div>
+          <div class='route'>{{@model.displayRoute}}</div>
           <div class='time-info'>
-            {{dayjsFormat @model.departureTime 'h:mm A'}}
+            {{#if @model.departureTime}}
+              {{dayjsFormat @model.departureTime 'h:mm A'}}
+            {{else}}
+              <span class='placeholder'>--:--</span>
+            {{/if}}
             -
-            {{dayjsFormat @model.arrivalTime 'h:mm A'}}
+            {{#if @model.arrivalTime}}
+              {{dayjsFormat @model.arrivalTime 'h:mm A'}}
+            {{else}}
+              <span class='placeholder'>--:--</span>
+            {{/if}}
           </div>
-          {{#if @model.duration}}
-            <div class='duration'>{{@model.duration}}</div>
-          {{/if}}
+
+          <div class='duration'>{{@model.displayDuration}}</div>
         </div>
 
         <div class='price-section'>
           <div class='price'>{{@model.formattedPrice}}</div>
-          <div class='cabin'>{{@model.cabinClass}}</div>
+          <div class='cabin'>{{@model.displayCabinClass}}</div>
         </div>
       </div>
 
@@ -413,6 +496,14 @@ export class Flight extends CardDef {
           color: var(--text-secondary);
           text-transform: uppercase;
           font-weight: 600;
+        }
+
+        .airline-logo-placeholder-embedded {
+          width: 32px;
+          height: 32px;
+          background: #f3f4f6;
+          border-radius: 6px;
+          border: 2px dashed #d1d5db;
         }
       </style>
     </template>
