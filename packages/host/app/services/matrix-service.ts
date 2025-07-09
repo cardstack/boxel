@@ -101,16 +101,14 @@ import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
 
-import {
-  CurrentRoomIdPersistenceKey,
-  clearLocalStorage,
-} from '../utils/local-storage-keys';
+import { clearLocalStorage } from '../utils/local-storage-keys';
 
 import { type SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
 
 import type CardService from './card-service';
 import type CommandService from './command-service';
 import type LoaderService from './loader-service';
+import type LocalPersistenceService from './local-persistence-service';
 import type LoggerService from './logger-service';
 import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
@@ -141,6 +139,7 @@ export default class MatrixService extends Service {
   @service declare private reset: ResetService;
   @service declare private network: NetworkService;
   @service declare private store: StoreService;
+  @service declare private localPersistenceService: LocalPersistenceService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
   @tracked private postLoginCompleted = false;
@@ -179,12 +178,17 @@ export default class MatrixService extends Service {
   private slidingSync: SlidingSync | undefined;
   private aiRoomIds: Set<string> = new Set();
   @tracked private _isLoadingMoreAIRooms = false;
-  agentId = uuidv4();
+  agentId: string | undefined;
 
   constructor(owner: Owner) {
     super(owner);
     this.setLoggerLevelFromEnvironment();
+    this.setAgentId();
     this.#ready = this.loadState.perform();
+  }
+
+  private setAgentId() {
+    this.agentId = this.localPersistenceService.getAgentId();
   }
 
   private setLoggerLevelFromEnvironment() {
@@ -204,10 +208,9 @@ export default class MatrixService extends Service {
     this._currentRoomId = value;
     if (value) {
       this.loadAllTimelineEvents(value);
-      window.localStorage.setItem(CurrentRoomIdPersistenceKey, value);
-    } else {
-      window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
     }
+
+    this.localPersistenceService.setCurrentRoomId(value);
   }
 
   get ready() {
@@ -1697,7 +1700,7 @@ function saveAuth(auth: LoginResponse) {
 
 function clearAuth() {
   window.localStorage.removeItem('auth');
-  window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
+  this.localPersistenceService.setCurrentRoomId(undefined);
 }
 
 function getAuth(): LoginResponse | undefined {
