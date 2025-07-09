@@ -63,6 +63,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         <Button
           class='attach-button'
           @kind='primary'
+          @size='extra-small'
           {{on 'click' this.attachSkillCard}}
           @disabled={{this.doAttachSkillCard.isRunning}}
           @loading={{this.isAttachingSkill}}
@@ -108,10 +109,8 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         --boxel-button-color: var(--boxel-dark);
         border-radius: var(--boxel-border-radius);
 
-        padding: var(--boxel-sp-4xs) var(--boxel-sp-xxxs);
         gap: var(--boxel-sp-xs);
         background: none;
-        width: 100%;
       }
       .attach-button:hover:not(:disabled),
       .attach-button:focus:not(:disabled) {
