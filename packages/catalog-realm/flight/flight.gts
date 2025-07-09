@@ -13,6 +13,7 @@ import { currencyFormat, dayjsFormat } from '@cardstack/boxel-ui/helpers';
 import PlaneIcon from '@cardstack/boxel-icons/plane';
 import ClockIcon from '@cardstack/boxel-icons/clock';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';
+import { BasicFitted } from '@cardstack/boxel-ui/components';
 
 export class Flight extends CardDef {
   static displayName = 'Flight';
@@ -660,6 +661,43 @@ export class Flight extends CardDef {
           }
         }
       </style>
+    </template>
+  };
+
+  static fitted = class Fitted extends Component<typeof Flight> {
+    get isEmpty() {
+      return !this.args.model;
+    }
+
+    get primary() {
+      return this.args.model?.route || 'Flight Route';
+    }
+
+    get secondary() {
+      if (!this.args.model) return '';
+
+      const departure = this.args.model.departureTime
+        ? dayjsFormat(this.args.model.departureTime, 'h:mm A')
+        : '--:--';
+      const arrival = this.args.model.arrivalTime
+        ? dayjsFormat(this.args.model.arrivalTime, 'h:mm A')
+        : '--:--';
+
+      return `${departure} - ${arrival}`;
+    }
+
+    get thumbnailURL() {
+      return this.args.model?.airlineLogo;
+    }
+
+    <template>
+      <BasicFitted
+        @primary={{this.primary}}
+        @secondary={{this.secondary}}
+        @thumbnailURL={{this.thumbnailURL}}
+        @iconComponent={{PlaneIcon}}
+        @isEmpty={{this.isEmpty}}
+      />
     </template>
   };
 }
