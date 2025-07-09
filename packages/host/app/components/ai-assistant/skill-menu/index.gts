@@ -88,6 +88,9 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         padding: 0;
         margin: 0;
         overflow-y: auto;
+        max-height: 100px;
+
+        scroll-timeline: --pill-menu-content-scroll-timeline;
       }
       .skill-list :deep(.card-pill) {
         --pill-gap: var(--boxel-sp-xxxs);

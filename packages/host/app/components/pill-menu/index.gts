@@ -92,6 +92,7 @@ export default class PillMenu extends Component<Signature> {
         --boxel-header-letter-spacing: var(--boxel-lsp);
         --button-outline: 2px;
         --boxel-header-min-height: fit-content;
+        --pill-menu-gradient-height: 5px;
 
         display: grid;
         grid-template-rows: auto 1fr auto;
@@ -175,7 +176,7 @@ export default class PillMenu extends Component<Signature> {
         content: '';
         display: block;
         width: 100%;
-        height: 5px;
+        height: var(--pill-menu-gradient-height);
         position: absolute;
         left: 0;
         opacity: 0;
@@ -224,7 +225,15 @@ export default class PillMenu extends Component<Signature> {
         animation: scroll-pill-menu-content reverse linear backwards;
         animation-timeline: --pill-menu-content-scroll-timeline;
 
-        bottom: 60px;
+        transform: translateY(
+          calc(
+            -1 *
+              (
+                var(--pill-menu-gradient-height) +
+                  var(--chat-input-area-bottom-padding)
+              )
+          )
+        );
       }
 
       .pill-menu :deep(.menu-header .detail) {
