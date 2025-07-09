@@ -231,7 +231,8 @@ export function getField<T extends BaseDef>(
     if (result !== undefined && isBaseDef(result.card)) {
       let fieldOverride = instance?.[fields]?.[fieldName];
       if (fieldOverride) {
-        let fieldCard = fieldOverride;
+        let cardThunk = fieldOverride;
+        let { computeVia, name, description, isUsed } = result;
         result = new (result.constructor as unknown as Field & {
           new (
             cardThunk: () => typeof BaseDef,
@@ -240,13 +241,7 @@ export function getField<T extends BaseDef>(
             description: string | undefined,
             isUsed: undefined | true,
           ): Field;
-        })(
-          () => fieldCard,
-          result.computeVia,
-          result.name,
-          result.description,
-          result.isUsed,
-        ) as Field;
+        })(() => cardThunk, computeVia, name, description, isUsed) as Field;
       }
       localIdentities.set(result.card, {
         type: 'fieldOf',

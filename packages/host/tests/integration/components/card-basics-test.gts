@@ -2101,7 +2101,7 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-customer-billAmount]').containsText('100');
     });
 
-    test('renders a card with polymorphic primitive field', async function (assert) {
+    test('re-renders a card with polymorphic primitive field', async function (assert) {
       class SpecialStringAEmbedded extends Component<typeof SpecialStringA> {
         <template>
           <span data-test-polymorphic='special-string-a'>{{@model}}</span>
