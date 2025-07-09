@@ -19,6 +19,22 @@ import { concat, fn } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import CarIcon from '@cardstack/boxel-icons/car';
 
+// TypeScript interfaces for configuration options
+interface ConfigOption {
+  name: string;
+  price: number;
+  description: string;
+  imageUrl: string;
+  colorValue: string | null;
+  isSelected: boolean;
+}
+
+interface ConfigSection {
+  id: string;
+  name: string;
+  icon: string;
+}
+
 // Custom field for configuration options
 export class ConfigOptionField extends FieldDef {
   static displayName = 'Configuration Option';
@@ -81,7 +97,7 @@ export class CarConfiguratorEV extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     @tracked selectedSection = 'color';
 
-    get sections() {
+    get sections(): ConfigSection[] {
       return [
         { id: 'color', name: 'Exterior', icon: '🎨' },
         { id: 'trim', name: 'Trim', icon: '⚡' },
@@ -92,18 +108,18 @@ export class CarConfiguratorEV extends CardDef {
       ];
     }
 
-    getPriceDisplay(price: number | null | undefined): string {
+    getPriceDisplay(price: number | null): string {
       if (price == null) return '';
       return price === 0 ? 'Included' : `+${price.toLocaleString()}`;
     }
 
-    getColorOptionClass(colorOption: any, selectedColorName: string): string {
+    getColorOptionClass(colorOption: ConfigOption, selectedColorName: string): string {
       return `color-option ${
         colorOption.name === selectedColorName ? 'selected' : ''
       }`;
     }
 
-    getOptionCardClass(option: any, selectedValue: string): string {
+    getOptionCardClass(option: ConfigOption, selectedValue: string): string {
       return `option-card ${option.name === selectedValue ? 'selected' : ''}`;
     }
 
@@ -113,8 +129,6 @@ export class CarConfiguratorEV extends CardDef {
       else if (feature === 'audio') this.args.model.premiumAudioEnabled = !this.args.model.premiumAudioEnabled;
       else if (feature === 'sunroof') this.args.model.sunroofEnabled = !this.args.model.sunroofEnabled;
     }
-
-
 
     @action
     selectSection(sectionId: string) {
@@ -869,49 +883,49 @@ export class CarConfiguratorEV extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     @tracked isOptionsPanelCollapsed = true;
 
-    get colorOptions() {
+    get colorOptions(): ConfigOption[] {
       return this.args.model.colorOptions || [];
     }
-    get trimOptions() {
+    get trimOptions(): ConfigOption[] {
       return this.args.model.trimOptions || [];
     }
-    get rangeOptions() {
+    get rangeOptions(): ConfigOption[] {
       return this.args.model.rangeOptions || [];
     }
-    get wheelOptions() {
+    get wheelOptions(): ConfigOption[] {
       return this.args.model.wheelOptions || [];
     }
-    get interiorOptions() {
+    get interiorOptions(): ConfigOption[] {
       return this.args.model.interiorOptions || [];
     }
 
-    getPriceDisplay(price: number | null | undefined): string {
+    getPriceDisplay(price: number | null): string {
       if (price == null) return '';
       return price === 0 ? 'Included' : `+${price.toLocaleString()}`;
     }
 
     @action
-    onColorChange(colorOption: any) {
+    onColorChange(colorOption: ConfigOption) {
       this.args.model.selectedColor = colorOption;
     }
 
     @action
-    onTrimChange(trimOption: any) {
+    onTrimChange(trimOption: ConfigOption) {
       this.args.model.selectedTrim = trimOption;
     }
 
     @action
-    onRangeChange(rangeOption: any) {
+    onRangeChange(rangeOption: ConfigOption) {
       this.args.model.selectedRange = rangeOption;
     }
 
     @action
-    onWheelChange(wheelOption: any) {
+    onWheelChange(wheelOption: ConfigOption) {
       this.args.model.selectedWheels = wheelOption;
     }
 
     @action
-    onInteriorChange(interiorOption: any) {
+    onInteriorChange(interiorOption: ConfigOption) {
       this.args.model.selectedInterior = interiorOption;
     }
 
@@ -920,7 +934,7 @@ export class CarConfiguratorEV extends CardDef {
       this.isOptionsPanelCollapsed = !this.isOptionsPanelCollapsed;
     }
 
-    get selectedColorOption() {
+    get selectedColorOption(): ConfigOption | null {
       let selected = this.args.model.selectedColor;
       if (!selected || !selected.name) {
         return null;
@@ -928,7 +942,7 @@ export class CarConfiguratorEV extends CardDef {
       return selected;
     }
 
-    get selectedTrimOption() {
+    get selectedTrimOption(): ConfigOption | null {
       let selected = this.args.model.selectedTrim;
       if (!selected || !selected.name) {
         return null;
@@ -936,7 +950,7 @@ export class CarConfiguratorEV extends CardDef {
       return selected;
     }
 
-    get selectedRangeOption() {
+    get selectedRangeOption(): ConfigOption | null {
       let selected = this.args.model.selectedRange;
       if (!selected || !selected.name) {
         return null;
@@ -944,7 +958,7 @@ export class CarConfiguratorEV extends CardDef {
       return selected;
     }
     
-    get selectedWheelOption() {
+    get selectedWheelOption(): ConfigOption | null {
       let selected = this.args.model.selectedWheels;
       if (!selected || !selected.name) {
         return null;
@@ -952,7 +966,7 @@ export class CarConfiguratorEV extends CardDef {
       return selected;
     }
     
-    get selectedInteriorOption() {
+    get selectedInteriorOption(): ConfigOption | null {
       let selected = this.args.model.selectedInterior;
       if (!selected || !selected.name) {
         return null;
