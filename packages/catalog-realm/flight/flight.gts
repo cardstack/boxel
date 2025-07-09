@@ -200,6 +200,9 @@ export class Flight extends CardDef {
           --border-color: #e5e7eb;
           background: white;
           padding: 24px;
+          border-radius: 12px;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          container-type: inline-size;
         }
 
         .flight-header {
@@ -209,12 +212,14 @@ export class Flight extends CardDef {
           margin-bottom: 24px;
           padding-bottom: 16px;
           border-bottom: 1px solid var(--border-color);
+          gap: 16px;
         }
 
         .airline-info {
           display: flex;
           align-items: center;
           gap: 12px;
+          flex: 1;
         }
 
         .airline-logo {
@@ -224,6 +229,7 @@ export class Flight extends CardDef {
           border-radius: 8px;
           background: #f9fafb;
           padding: 4px;
+          flex-shrink: 0;
         }
 
         .airline-name {
@@ -231,6 +237,9 @@ export class Flight extends CardDef {
           font-weight: 600;
           color: var(--text-primary);
           margin: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .flight-number {
@@ -240,6 +249,7 @@ export class Flight extends CardDef {
 
         .price-display {
           text-align: right;
+          flex-shrink: 0;
         }
 
         .price {
@@ -290,11 +300,17 @@ export class Flight extends CardDef {
           font-weight: 600;
           color: var(--expedia-blue);
           margin-bottom: 4px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .city {
           font-size: 14px;
           color: var(--text-secondary);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .flight-path {
@@ -304,6 +320,7 @@ export class Flight extends CardDef {
           align-items: center;
           gap: 8px;
           position: relative;
+          min-width: 80px;
         }
 
         .flight-path::before {
@@ -342,6 +359,7 @@ export class Flight extends CardDef {
           gap: 24px;
           padding-top: 16px;
           border-top: 1px solid var(--border-color);
+          flex-wrap: wrap;
         }
 
         .meta-item {
@@ -354,6 +372,7 @@ export class Flight extends CardDef {
 
         .meta-item svg {
           color: var(--expedia-blue);
+          flex-shrink: 0;
         }
 
         .airline-logo-placeholder {
@@ -362,11 +381,102 @@ export class Flight extends CardDef {
           background: #f3f4f6;
           border-radius: 8px;
           border: 2px dashed #d1d5db;
+          flex-shrink: 0;
         }
 
         .placeholder {
           color: #9ca3af;
           font-style: italic;
+        }
+
+        /* Container Query Breakpoints */
+        @container (max-width: 400px) {
+          .flight-card {
+            padding: 16px;
+          }
+
+          .route-info {
+            flex-direction: column;
+            gap: 20px;
+          }
+
+          .departure,
+          .arrival {
+            text-align: center;
+          }
+
+          .flight-path {
+            flex-direction: row;
+            justify-content: center;
+            gap: 30px;
+          }
+
+          .time {
+            font-size: 20px;
+          }
+
+          .airport {
+            font-size: 14px;
+          }
+
+          .city {
+            font-size: 12px;
+          }
+
+          .flight-meta {
+            gap: 16px;
+          }
+
+          .meta-item {
+            font-size: 13px;
+          }
+        }
+
+        @container (max-width: 400px) {
+          .flight-card {
+            padding: 12px;
+          }
+
+          .airline-info {
+            gap: 8px;
+          }
+
+          .airline-logo {
+            width: 32px;
+            height: 32px;
+          }
+
+          .airline-name {
+            font-size: 16px;
+          }
+
+          .flight-number {
+            font-size: 12px;
+          }
+
+          .price {
+            font-size: 20px;
+          }
+
+          .time {
+            font-size: 18px;
+          }
+
+          .airport {
+            font-size: 13px;
+          }
+
+          .city {
+            font-size: 11px;
+          }
+
+          .flight-meta {
+            gap: 12px;
+          }
+
+          .meta-item {
+            font-size: 12px;
+          }
         }
       </style>
     </template>
@@ -428,6 +538,8 @@ export class Flight extends CardDef {
           padding: 16px;
           background: #f9fafb;
           border-radius: 8px;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+          container-type: inline-size;
         }
 
         .airline-section {
@@ -435,6 +547,7 @@ export class Flight extends CardDef {
           align-items: center;
           gap: 12px;
           min-width: 140px;
+          flex-shrink: 0;
         }
 
         .airline-logo {
@@ -450,6 +563,9 @@ export class Flight extends CardDef {
           font-size: 14px;
           font-weight: 600;
           color: var(--text-primary);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .flight-number {
@@ -466,6 +582,9 @@ export class Flight extends CardDef {
           font-weight: 600;
           color: var(--text-primary);
           margin-bottom: 2px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .time-info {
@@ -483,6 +602,7 @@ export class Flight extends CardDef {
         .price-section {
           text-align: right;
           min-width: 80px;
+          flex-shrink: 0;
         }
 
         .price {
@@ -504,6 +624,40 @@ export class Flight extends CardDef {
           background: #f3f4f6;
           border-radius: 6px;
           border: 2px dashed #d1d5db;
+        }
+
+        /* Container Query Breakpoints */
+        @container (max-width: 400px) {
+          .flight-embedded {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 20px;
+            padding: 12px;
+          }
+
+          .route {
+            font-size: 13px;
+          }
+
+          .time-info {
+            font-size: 11px;
+          }
+
+          .duration {
+            font-size: 10px;
+          }
+
+          .price {
+            font-size: 14px;
+          }
+
+          .cabin {
+            font-size: 9px;
+          }
+
+          .price-section {
+            text-align: left;
+          }
         }
       </style>
     </template>
