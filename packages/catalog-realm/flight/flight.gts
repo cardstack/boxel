@@ -8,11 +8,9 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import UrlField from 'https://cardstack.com/base/url';
-import { eq, and, or, cn } from '@cardstack/boxel-ui/helpers';
-import { currencyFormat, dayjsFormat } from '@cardstack/boxel-ui/helpers';
+import { dayjsFormat } from '@cardstack/boxel-ui/helpers';
 import PlaneIcon from '@cardstack/boxel-icons/plane';
 import ClockIcon from '@cardstack/boxel-icons/clock';
-import MapPinIcon from '@cardstack/boxel-icons/map-pin';
 import { BasicFitted } from '@cardstack/boxel-ui/components';
 
 export class Flight extends CardDef {
