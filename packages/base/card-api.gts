@@ -1827,7 +1827,7 @@ export class BaseDef {
   // resolve relative links at the FieldDef level.
   [relativeTo]: URL | undefined = undefined;
   get [fields](): Record<string, typeof BaseDef> | undefined {
-    cardTracking.get(this);
+    // cardTracking.get(this);
     let overrides = getFieldOverrides(this);
     return overrides ? Object.fromEntries(getFieldOverrides(this)) : undefined;
   }
@@ -1837,7 +1837,7 @@ export class BaseDef {
       existingOverrides.set(fieldName, clazz);
     }
     // notify glimmer to rerender this card
-    cardTracking.set(this, true);
+    // cardTracking.set(this, true);
   }
   declare ['constructor']: BaseDefConstructor;
   static baseDef: undefined;
