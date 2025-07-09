@@ -89,7 +89,7 @@ export class CarConfiguratorEV extends CardDef {
         return total;
       } catch (e) {
         console.error('Error calculating total price:', e);
-        return 85000;
+        return 0;
       }
     },
   });
