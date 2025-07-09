@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "airline": null,
+      "flightNumber": null,
+      "departureCity": null,
+      "arrivalCity": null,
+      "departureAirport": null,
+      "arrivalAirport": null,
+      "departureTime": null,
+      "arrivalTime": null,
+      "duration": null,
+      "aircraftType": null,
+      "price": null,
+      "cabinClass": null,
+      "airlineLogo": null,
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../flight",
+        "name": "Flight"
+      }
+    }
+  }
+}
