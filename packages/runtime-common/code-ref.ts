@@ -6,7 +6,13 @@ import {
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import { Loader } from './loader';
-import { isField, primitive, fields, isBaseInstance } from './constants';
+import {
+  isField,
+  primitive,
+  fields,
+  fieldsUntracked,
+  isBaseInstance,
+} from './constants';
 import { CardError } from './error';
 import { meta } from './constants';
 import { isUrlLike, trimExecutableExtension } from './index';
@@ -210,6 +216,7 @@ export function identifyCard(
 export function getField<T extends BaseDef>(
   instanceOrClass: T | typeof BaseDef,
   fieldName: string,
+  opts?: { untracked?: true },
 ): Field<BaseDefConstructor> | undefined {
   let instance: BaseDef | undefined;
   let card: typeof BaseDef;
@@ -229,10 +236,18 @@ export function getField<T extends BaseDef>(
       isField
     ];
     if (result !== undefined && isBaseDef(result.card)) {
-      let fieldOverride =
-        instance && isCardInstance(instance)
-          ? instance[fields]?.[fieldName]
-          : undefined;
+      let fieldOverride: typeof BaseDef | undefined;
+      if (opts?.untracked) {
+        fieldOverride =
+          instance && isCardInstance(instance)
+            ? instance[fieldsUntracked]?.[fieldName]
+            : undefined;
+      } else {
+        fieldOverride =
+          instance && isCardInstance(instance)
+            ? instance[fields]?.[fieldName]
+            : undefined;
+      }
       if (fieldOverride) {
         let cardThunk = fieldOverride;
         let { computeVia, name, description, isUsed } = result;

@@ -42,6 +42,7 @@ import {
   formats,
   meta,
   fields,
+  fieldsUntracked,
   baseRef,
   getAncestor,
   isCardError,
@@ -109,6 +110,7 @@ export type PartialBaseInstanceType<T extends BaseDefConstructor> = T extends {
   : Partial<
       InstanceType<T> & {
         [fields]: Record<string, BaseDefConstructor>;
+        [fieldsUntracked]: Record<string, BaseDefConstructor>;
       }
     >;
 export type FieldsTypeFor<T extends BaseDef> = {
@@ -2091,10 +2093,13 @@ export class CardDef extends BaseDef {
   readonly [localId]: string = uuidv4();
   [isSavedInstance] = false;
   [meta]: CardResourceMeta | undefined = undefined;
-  get [fields](): Record<string, typeof BaseDef> | undefined {
-    cardTracking.get(this);
+  get [fieldsUntracked](): Record<string, typeof BaseDef> | undefined {
     let overrides = getFieldOverrides(this);
     return overrides ? Object.fromEntries(getFieldOverrides(this)) : undefined;
+  }
+  get [fields](): Record<string, typeof BaseDef> | undefined {
+    cardTracking.get(this);
+    return this[fieldsUntracked];
   }
   set [fields](overrides: Record<string, typeof BaseDef>) {
     let existingOverrides = getFieldOverrides(this);
@@ -3211,7 +3216,7 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
   let result: T[K] | T[K][] | undefined;
   let deserialized = getDataBucket(instance);
   let maybeStale = deserialized.get(fieldName as string);
-  let field = getField(instance, fieldName as string);
+  let field = getField(instance, fieldName as string, { untracked: true });
   if (!field) {
     throw new Error(
       `the field '${fieldName as string} does not exist in card ${
@@ -3311,7 +3316,9 @@ export function getFields(
       if (maybeFieldName === 'constructor') {
         return [];
       }
-      let maybeField = getField(cardInstanceOrClass, maybeFieldName);
+      let maybeField = getField(cardInstanceOrClass, maybeFieldName, {
+        untracked: true,
+      });
       if (!maybeField) {
         return [];
       }

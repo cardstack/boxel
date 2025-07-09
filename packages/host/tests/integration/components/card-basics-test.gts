@@ -2126,7 +2126,6 @@ module('Integration | card-basics', function (hooks) {
         static isolated = class Isolated extends Component<typeof TestCard> {
           setSubclass = () => {
             this.args.model[fields] = { specialField: SpecialStringB };
-            this.args.model.specialField = 'New Name';
           };
           <template>
             <button {{on 'click' this.setSubclass}} data-test-set-subclass>Set
@@ -2143,20 +2142,16 @@ module('Integration | card-basics', function (hooks) {
       });
 
       let card = new TestCard({
-        specialField: 'Old Name',
+        specialField: 'Mango',
         [fields]: {
           specialField: SpecialStringA,
         },
       });
 
       await renderCard(loader, card, 'isolated');
-      assert
-        .dom('[data-test-polymorphic="special-string-a"]')
-        .hasText('Old Name');
+      assert.dom('[data-test-polymorphic="special-string-a"]').hasText('Mango');
       await click('[data-test-set-subclass]');
-      assert
-        .dom('[data-test-polymorphic="special-string-b"]')
-        .hasText('New Name');
+      assert.dom('[data-test-polymorphic="special-string-b"]').hasText('Mango');
     });
 
     test('re-renders a card with a polymorphic "contains" field when the field instance changes', async function (assert) {
