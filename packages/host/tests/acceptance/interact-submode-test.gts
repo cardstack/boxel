@@ -1230,6 +1230,44 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click(`[data-test-card-catalog-go-button]`);
       await consumerSaved.promise;
     });
+
+    test<TestContextWithSave>('open a stack item of a new card instance when the "New Card of This Type" is clicked', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealm2URL}`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
+      assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
+      await click('[data-test-more-options-button]');
+      assert
+        .dom('[data-test-boxel-menu-item-text="New Card of This Type"]')
+        .doesNotExist();
+      await click(`[data-cards-grid-item="${testRealm2URL}Pet/ringo"]`);
+      assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
+
+      await click('[data-test-more-options-button]');
+      assert
+        .dom('[data-test-boxel-menu-item-text="New Card of This Type"]')
+        .exists();
+
+      await click('[data-test-boxel-menu-item-text="New Card of This Type"]');
+      assert.dom('[data-test-stack-card-index]').exists({ count: 3 });
+      assert
+        .dom('[data-test-stack-card-index="2"] [data-test-card-format="edit"]')
+        .exists();
+      assert
+        .dom(
+          '[data-test-stack-card-index="2"] [data-test-boxel-card-header-title]',
+        )
+        .containsText('Pet');
+    });
   });
 
   module('1 stack, when the user lacks write permissions', function (hooks) {
