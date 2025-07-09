@@ -213,6 +213,8 @@ export default class AiAssistantPanel extends Component<Signature> {
         color: var(--boxel-light);
         height: 100%;
         position: relative;
+
+        timeline-scope: --ai-assistant-chat-scroll-timeline;
       }
       :deep(.arrow) {
         display: none;
@@ -245,11 +247,14 @@ export default class AiAssistantPanel extends Component<Signature> {
         z-index: 10;
         background: linear-gradient(
           to bottom,
-          var(--boxel-ai-purple),
-          var(--boxel-ai-purple)
+          transparent,
+          transparent
             calc(var(--ai-assistant-panel-top-gradient-start-proportion) * 100%),
           transparent 100%
         );
+
+        animation: ai-assistant-chat-gradient-scroll-timeline linear forwards;
+        animation-timeline: --ai-assistant-chat-scroll-timeline;
       }
 
       .panel-title-text {
@@ -359,6 +364,42 @@ export default class AiAssistantPanel extends Component<Signature> {
 
       .ai-assistant-panel-resize-handle {
         z-index: calc(var(--host-ai-panel-z-index) + 1);
+      }
+
+      @keyframes ai-assistant-chat-gradient-scroll-timeline {
+        0% {
+          background: linear-gradient(
+            to bottom,
+            transparent,
+            transparent
+              calc(
+                var(--ai-assistant-panel-top-gradient-start-proportion) * 100%
+              ),
+            transparent 100%
+          );
+        }
+        1% {
+          background: linear-gradient(
+            to bottom,
+            var(--boxel-ai-purple),
+            var(--boxel-ai-purple)
+              calc(
+                var(--ai-assistant-panel-top-gradient-start-proportion) * 100%
+              ),
+            transparent 100%
+          );
+        }
+        100% {
+          background: linear-gradient(
+            to bottom,
+            var(--boxel-ai-purple),
+            var(--boxel-ai-purple)
+              calc(
+                var(--ai-assistant-panel-top-gradient-start-proportion) * 100%
+              ),
+            transparent 100%
+          );
+        }
       }
     </style>
   </template>
