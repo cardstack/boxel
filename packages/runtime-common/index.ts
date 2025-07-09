@@ -355,7 +355,7 @@ export interface Store {
     id: string,
     patchData: PatchData,
   ): Promise<T | CardErrorJSONAPI | undefined>;
-  search(query: Query, realmURL: URL): Promise<CardDef[]>;
+  search(query: Query, realmURL?: URL): Promise<CardDef[]>;
   getSaveState(id: string): AutoSaveState | undefined;
 }
 

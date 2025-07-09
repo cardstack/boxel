@@ -8,6 +8,7 @@ import { isTesting } from '@embroider/macros';
 import { formatDistanceToNow } from 'date-fns';
 import { task } from 'ember-concurrency';
 
+import { flatMap } from 'lodash';
 import cloneDeep from 'lodash/cloneDeep';
 import isEqual from 'lodash/isEqual';
 import merge from 'lodash/merge';
@@ -67,6 +68,7 @@ import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
+import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 
 export { CardErrorJSONAPI, CardSaveSubscriber };
@@ -84,6 +86,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private environmentService: EnvironmentService;
   @service declare private reset: ResetService;
   @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realmServer: RealmServerService;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
   private referenceCount: ReferenceCount = new Map();
   private newReferencePromises: Promise<void>[] = [];
@@ -371,7 +374,16 @@ export default class StoreService extends Service implements StoreInterface {
     return instance as T | CardErrorJSONAPI;
   }
 
-  async search(query: Query, realmURL: URL): Promise<CardDef[]> {
+  async search(query: Query, realmURL?: URL): Promise<CardDef[]> {
+    let realms = realmURL ? [realmURL] : this.realmServer.availableRealmURLs;
+    return flatMap(
+      await Promise.all(
+        realms.map((realmURL) => this._search(query, new URL(realmURL))),
+      ),
+    );
+  }
+
+  private async _search(query: Query, realmURL: URL): Promise<CardDef[]> {
     let json = await this.cardService.fetchJSON(`${realmURL}_search`, {
       method: 'QUERY',
       headers: {
