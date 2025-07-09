@@ -29,6 +29,8 @@ export const primitive = Symbol('cardstack-primitive');
 export const realmURL = Symbol.for('cardstack-realm-url');
 export const localId = Symbol.for('cardstack-local-id');
 export const meta = Symbol.for('cardstack-meta');
+export const fields = Symbol.for('cardstack-fields');
+export const isBaseInstance = Symbol.for('isBaseInstance');
 
 export const aiBotUsername = 'aibot';
 

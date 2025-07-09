@@ -412,7 +412,7 @@ function fieldsComponentsFor<T extends BaseDef>(
 
       let modelValue = model.value as T; // TS is not picking up the fact we already filtered out nulls and undefined above
       let maybeField: Field<BaseDefConstructor> | undefined = getField(
-        modelValue.constructor,
+        modelValue,
         property,
       );
       if (!maybeField) {
@@ -432,7 +432,7 @@ function fieldsComponentsFor<T extends BaseDef>(
     ownKeys(target) {
       let keys = Reflect.ownKeys(target);
       for (let name in model.value) {
-        let field = getField(model.value.constructor, name);
+        let field = getField(model.value, name);
         if (field) {
           keys.push(name);
         }
@@ -448,7 +448,7 @@ function fieldsComponentsFor<T extends BaseDef>(
         // don't handle symbols, undefined, or nulls
         return Reflect.getOwnPropertyDescriptor(target, property);
       }
-      let field = getField(model.value.constructor, property);
+      let field = getField(model.value, property);
       if (!field) {
         // field doesn't exist, fall back to normal property access behavior
         return Reflect.getOwnPropertyDescriptor(target, property);

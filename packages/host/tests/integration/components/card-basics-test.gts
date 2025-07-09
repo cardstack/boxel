@@ -26,6 +26,7 @@ import {
   primitive,
   localId,
   PermissionsContextName,
+  fields,
 } from '@cardstack/runtime-common';
 
 import { cardTypeDisplayName, type CodeRef } from '@cardstack/runtime-common';
@@ -2098,6 +2099,64 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-employee-department]').containsText('begging');
       assert.dom('[data-test-customer-firstName]').containsText('Van Gogh');
       assert.dom('[data-test-customer-billAmount]').containsText('100');
+    });
+
+    test('renders a card with polymorphic primitive field', async function (assert) {
+      class SpecialStringAEmbedded extends Component<typeof SpecialStringA> {
+        <template>
+          <span data-test-polymorphic='special-string-a'>{{@model}}</span>
+        </template>
+      }
+      class SpecialStringA extends StringField {
+        static displayName = 'SpecialStringA';
+        static embedded = SpecialStringAEmbedded;
+      }
+      class SpecialStringBEmbedded extends Component<typeof SpecialStringB> {
+        <template>
+          <span data-test-polymorphic='special-string-b'>{{@model}}</span>
+        </template>
+      }
+      class SpecialStringB extends StringField {
+        static displayName = 'SpecialStringB';
+        static embedded = SpecialStringBEmbedded;
+      }
+      class TestCard extends CardDef {
+        static displayName = 'TestCard';
+        @field specialField = contains(StringField);
+        static isolated = class Isolated extends Component<typeof TestCard> {
+          setSubclass = () => {
+            this.args.model[fields] = { specialField: SpecialStringB };
+            this.args.model.specialField = 'New Name';
+          };
+          <template>
+            <button {{on 'click' this.setSubclass}} data-test-set-subclass>Set
+              Subclass From Outside</button>
+            <@fields.specialField />
+          </template>
+        };
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, {
+        SpecialStringA,
+        SpecialStringB,
+        TestCard,
+      });
+
+      let card = new TestCard({
+        specialField: 'Old Name',
+        [fields]: {
+          specialField: SpecialStringA,
+        },
+      });
+
+      await renderCard(loader, card, 'isolated');
+      assert
+        .dom('[data-test-polymorphic="special-string-a"]')
+        .hasText('Old Name');
+      await click('[data-test-set-subclass]');
+      assert
+        .dom('[data-test-polymorphic="special-string-b"]')
+        .hasText('New Name');
     });
 
     test('re-renders a card with a polymorphic "contains" field when the field instance changes', async function (assert) {

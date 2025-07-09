@@ -29,6 +29,7 @@ import {
   primitive,
   identifyCard,
   isCardInstance as _isCardInstance,
+  isBaseInstance,
   loadCardDef,
   humanReadable,
   maybeURL,
@@ -40,6 +41,7 @@ import {
   localId,
   formats,
   meta,
+  fields,
   baseRef,
   getAncestor,
   isCardError,
@@ -104,7 +106,11 @@ export type PartialBaseInstanceType<T extends BaseDefConstructor> = T extends {
   [primitive]: infer P;
 }
   ? P | null
-  : Partial<InstanceType<T>>;
+  : Partial<
+      InstanceType<T> & {
+        [fields]: Record<string, BaseDefConstructor>;
+      }
+    >;
 export type FieldsTypeFor<T extends BaseDef> = {
   [Field in keyof T]: BoxComponent &
     (T[Field] extends ArrayLike<unknown>
@@ -194,6 +200,10 @@ const deserializedData = initSharedState(
   'deserializedData',
   () => new WeakMap<BaseDef, Map<string, any>>(),
 );
+const fieldOverrides = initSharedState(
+  'fieldOverrides',
+  () => new WeakMap<BaseDef, Map<string, any>>(),
+);
 const recomputePromises = initSharedState(
   'recomputePromises',
   () => new WeakMap<BaseDef, Promise<any>>(),
@@ -221,8 +231,6 @@ const cardTracking = initSharedState(
   'cardTracking',
   () => new TrackedWeakMap<object, any>(),
 );
-
-const isBaseInstance = Symbol.for('isBaseInstance');
 
 export function getFieldDescription(
   cardOrFieldKlass: typeof BaseDef,
@@ -386,8 +394,11 @@ function cardTypeFor(
   field: Field<typeof BaseDef>,
   boxedElement?: Box<BaseDef>,
 ): typeof BaseDef {
+  let override = boxedElement
+    ? getFieldOverrides(boxedElement.value)?.get(field.name)
+    : undefined;
   if (primitive in field.card) {
-    return field.card;
+    return override ?? field.card;
   }
   if (boxedElement === undefined || boxedElement.value == null) {
     return field.card;
@@ -852,6 +863,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
           ]),
       );
     }
+    // TODO we should populate the field overrides as necessary (when the instance class is not the same as this.card)
     return (await cardClassFromResource(resource, this.card, relativeTo))[
       deserialize
     ](resource, relativeTo, doc, identityContext, opts);
@@ -1691,11 +1703,15 @@ function fieldComponent(
 ): BoxComponent {
   let fieldName = field.name as keyof BaseDef;
   let card: typeof BaseDef;
+  let override = getFieldOverrides(model.value)?.get(field.name);
+
   if (primitive in field.card) {
-    card = field.card;
+    card = override ?? field.card;
   } else {
     card =
-      (model.value[fieldName]?.constructor as typeof BaseDef) ?? field.card;
+      (model.value[fieldName]?.constructor as typeof BaseDef) ??
+      override ??
+      field.card;
   }
   let innerModel = model.field(fieldName) as unknown as Box<BaseDef>;
   return getBoxComponent(card, innerModel, field);
@@ -1810,6 +1826,19 @@ export class BaseDef {
   // So we need a [relativeTo] property that derives from the root document ID in order to
   // resolve relative links at the FieldDef level.
   [relativeTo]: URL | undefined = undefined;
+  get [fields](): Record<string, typeof BaseDef> | undefined {
+    cardTracking.get(this);
+    let overrides = getFieldOverrides(this);
+    return overrides ? Object.fromEntries(getFieldOverrides(this)) : undefined;
+  }
+  set [fields](overrides: Record<string, typeof BaseDef>) {
+    let existingOverrides = getFieldOverrides(this);
+    for (let [fieldName, clazz] of Object.entries(overrides)) {
+      existingOverrides.set(fieldName, clazz);
+    }
+    // notify glimmer to rerender this card
+    cardTracking.set(this, true);
+  }
   declare ['constructor']: BaseDefConstructor;
   static baseDef: undefined;
   static data?: Record<string, any>; // TODO probably refactor this away all together
@@ -1937,8 +1966,18 @@ export class BaseDef {
     (instance as any)[fieldName] = value;
   }
 
-  constructor(data?: Record<string, any>) {
+  constructor(
+    data?: Record<string, any> & {
+      [fields]?: Record<string, BaseDefConstructor>;
+    },
+  ) {
     if (data !== undefined) {
+      if (fields in data && data[fields]) {
+        let overrides = getFieldOverrides(this);
+        for (let [fieldName, clazz] of Object.entries(data[fields])) {
+          overrides.set(fieldName, clazz);
+        }
+      }
       for (let [fieldName, value] of Object.entries(data)) {
         this.constructor.assignInitialFieldValue(this, fieldName, value);
       }
@@ -2173,9 +2212,7 @@ export function subscribeToChanges(
     includeComputeds: false,
   });
   Object.keys(fields).forEach((fieldName) => {
-    let field = getField(fieldOrCard.constructor, fieldName) as Field<
-      typeof BaseDef
-    >;
+    let field = getField(fieldOrCard, fieldName) as Field<typeof BaseDef>;
     if (
       field &&
       (field.fieldType === 'contains' || field.fieldType === 'containsMany')
@@ -2221,9 +2258,7 @@ export function unsubscribeFromChanges(
     includeComputeds: false,
   });
   Object.keys(fields).forEach((fieldName) => {
-    let field = getField(fieldOrCard.constructor, fieldName) as Field<
-      typeof BaseDef
-    >;
+    let field = getField(fieldOrCard, fieldName) as Field<typeof BaseDef>;
     if (
       field &&
       (field.fieldType === 'contains' || field.fieldType === 'containsMany')
@@ -2300,6 +2335,15 @@ function getDataBucket<T extends BaseDef>(instance: T): Map<string, any> {
   return deserialized;
 }
 
+function getFieldOverrides<T extends BaseDef>(instance: T): Map<string, any> {
+  let overrides = fieldOverrides.get(instance);
+  if (!overrides) {
+    overrides = new Map();
+    fieldOverrides.set(instance, overrides);
+  }
+  return overrides;
+}
+
 function getUsedFields(instance: BaseDef): string[] {
   return [...getDataBucket(instance)?.keys()];
 }
@@ -2345,10 +2389,7 @@ function assertScalar(
 }
 
 export function setId(instance: CardDef, id: string) {
-  let field = getField(
-    Reflect.getPrototypeOf(instance)!.constructor as typeof BaseDef,
-    'id',
-  );
+  let field = getField(instance, 'id');
   if (field) {
     setField(instance, field, id);
   }
@@ -2391,10 +2432,7 @@ export function formatQueryValue(
 }
 
 function peekAtField(instance: BaseDef, fieldName: string): any {
-  let field = getField(
-    Reflect.getPrototypeOf(instance)!.constructor as typeof BaseDef,
-    fieldName,
-  );
+  let field = getField(instance, fieldName);
   if (!field) {
     throw new Error(
       `the card ${instance.constructor.name} does not have a field '${fieldName}'`,
@@ -2428,10 +2466,7 @@ export function relationshipMeta(
   instance: CardDef,
   fieldName: string,
 ): RelationshipMeta | RelationshipMeta[] | undefined {
-  let field = getField(
-    Reflect.getPrototypeOf(instance)!.constructor as typeof BaseDef,
-    fieldName,
-  );
+  let field = getField(instance, fieldName);
   if (!field) {
     throw new Error(
       `the card ${instance.constructor.name} does not have a field '${fieldName}'`,
@@ -2474,7 +2509,7 @@ function serializedGet<CardT extends BaseDefConstructor>(
   visited: Set<string>,
   opts?: SerializeOpts,
 ): JSONAPIResource {
-  let field = getField(model.constructor, fieldName);
+  let field = getField(model, fieldName);
   if (!field) {
     throw new Error(
       `tried to serializedGet field ${fieldName} which does not exist in card ${model.constructor.name}`,
@@ -2506,7 +2541,7 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
   relativeTo: URL | undefined;
   opts?: DeserializeOpts;
 }): Promise<any> {
-  let field = getField(card, fieldName);
+  let field = getField(isCardInstance(value) ? value : card, fieldName);
   if (!field) {
     throw new Error(`could not find field ${fieldName} in card ${card.name}`);
   }
@@ -2785,7 +2820,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       ...linksToManyRelationships,
       ...(resource.id !== undefined ? { id: resource.id } : {}),
     }).map(async ([fieldName, value]) => {
-      let field = getField(card, fieldName);
+      let field = getField(instance, fieldName);
       if (!field) {
         // This happens when the instance has a field that is not in the definition. It can happen when
         // instance or definition is updated and the other is not. In this case we will just ignore the
@@ -3172,10 +3207,7 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
   let result: T[K] | T[K][] | undefined;
   let deserialized = getDataBucket(instance);
   let maybeStale = deserialized.get(fieldName as string);
-  let field = getField(
-    Reflect.getPrototypeOf(instance)!.constructor as typeof BaseDef,
-    fieldName as string,
-  );
+  let field = getField(instance, fieldName as string);
   if (!field) {
     throw new Error(
       `the field '${fieldName as string} does not exist in card ${
@@ -3206,9 +3238,7 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
       computeResult instanceof Promise ? await computeResult : computeResult;
   } catch (e: any) {
     if (isNotLoadedError(e)) {
-      let card = Reflect.getPrototypeOf(instance)!
-        .constructor as typeof BaseDef;
-      let field: Field = getField(card, fieldName as string)!;
+      let field: Field = getField(instance, fieldName as string)!;
       let result: T[K] | T[K][] | undefined;
       try {
         result = (await field.handleNotLoadedError(instance, e, {
@@ -3277,12 +3307,7 @@ export function getFields(
       if (maybeFieldName === 'constructor') {
         return [];
       }
-      let maybeField = getField(
-        (isCardOrField(cardInstanceOrClass)
-          ? cardInstanceOrClass.constructor
-          : cardInstanceOrClass) as typeof BaseDef,
-        maybeFieldName,
-      );
+      let maybeField = getField(cardInstanceOrClass, maybeFieldName);
       if (!maybeField) {
         return [];
       }

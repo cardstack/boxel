@@ -6,7 +6,7 @@ import {
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import { Loader } from './loader';
-import { isField, primitive } from './constants';
+import { isField, primitive, fields, isBaseInstance } from './constants';
 import { CardError } from './error';
 import { meta } from './constants';
 import { isUrlLike, trimExecutableExtension } from './index';
@@ -207,10 +207,21 @@ export function identifyCard(
   }
 }
 
-export function getField<CardT extends BaseDefConstructor>(
-  card: CardT,
+export function getField<T extends BaseDef>(
+  instanceOrClass: T | typeof BaseDef,
   fieldName: string,
 ): Field<BaseDefConstructor> | undefined {
+  let instance: BaseDef | undefined;
+  let card: typeof BaseDef;
+  if (
+    typeof instanceOrClass === 'object' &&
+    isBaseInstance in instanceOrClass
+  ) {
+    instance = instanceOrClass;
+    card = Reflect.getPrototypeOf(instance)!.constructor as typeof BaseDef;
+  } else {
+    card = instanceOrClass;
+  }
   let obj: object | null = card.prototype;
   while (obj) {
     let desc = Reflect.getOwnPropertyDescriptor(obj, fieldName);
@@ -218,6 +229,25 @@ export function getField<CardT extends BaseDefConstructor>(
       isField
     ];
     if (result !== undefined && isBaseDef(result.card)) {
+      let fieldOverride = instance?.[fields]?.[fieldName];
+      if (fieldOverride) {
+        let fieldCard = fieldOverride;
+        result = new (result.constructor as unknown as Field & {
+          new (
+            cardThunk: () => typeof BaseDef,
+            computeVia: undefined | (() => unknown),
+            name: string,
+            description: string | undefined,
+            isUsed: undefined | true,
+          ): Field;
+        })(
+          () => fieldCard,
+          result.computeVia,
+          result.name,
+          result.description,
+          result.isUsed,
+        ) as Field;
+      }
       localIdentities.set(result.card, {
         type: 'fieldOf',
         field: fieldName,
