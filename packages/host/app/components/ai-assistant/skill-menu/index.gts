@@ -84,7 +84,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       }
       .skill-list {
         display: grid;
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xxxs);
         list-style-type: none;
         padding: 0;
         margin: 0;
