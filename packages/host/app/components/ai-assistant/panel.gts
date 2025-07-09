@@ -369,7 +369,11 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
 
       .session-error {
-        padding: 0 var(--boxel-sp);
+        padding: var(--ai-assistant-panel-padding);
+      }
+
+      .session-error :deep(.intro) {
+        margin-top: calc(var(--ai-assistant-panel-header-height) * 0.5);
       }
 
       .ai-assistant-panel-resize-handle {
