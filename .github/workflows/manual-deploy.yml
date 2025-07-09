@@ -38,6 +38,7 @@ jobs:
 
   build-host:
     name: Build host
+    runs-on: ubuntu-latest-m
     uses: ./.github/workflows/build-host.yml
     secrets: inherit
     with:
