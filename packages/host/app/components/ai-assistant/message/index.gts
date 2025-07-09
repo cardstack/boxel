@@ -365,7 +365,7 @@ const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSign
       .ai-assistant-conversation {
         display: flex;
         flex-direction: column;
-        padding: 0 var(--ai-assistant-panel-padding)
+        padding: var(--boxel-sp) var(--ai-assistant-panel-padding)
           calc(
             var(--ai-assistant-panel-padding) +
               var(--chat-input-area-border-radius) +
