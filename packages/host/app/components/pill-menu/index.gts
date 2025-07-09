@@ -210,7 +210,7 @@ export default class PillMenu extends Component<Signature> {
         animation-timeline: --pill-menu-content-scroll-timeline;
 
         bottom: var(--boxel-sp-sm);
-        margin-bottom: 12px;
+        margin-bottom: 16px;
       }
 
       .menu-footer {
