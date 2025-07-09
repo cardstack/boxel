@@ -70,29 +70,24 @@ export class CarConfiguratorEV extends CardDef {
   @field interiorOptions = containsMany(ConfigOptionField);
 
   @field totalPrice = contains(NumberField, {
-    computeVia: function (this: CarConfiguratorEV) {
-      try {
-        let total = this.basePrice || 0;
+  computeVia: function (this: CarConfiguratorEV) {
+    let total = this.basePrice || 0;
 
-        // Add selected options prices
-        if (this.selectedColor) total += this.selectedColor.price || 0;
-        if (this.selectedTrim) total += this.selectedTrim.price || 0;
-        if (this.selectedRange) total += this.selectedRange.price || 0;
-        if (this.selectedWheels) total += this.selectedWheels.price || 0;
-        if (this.selectedInterior) total += this.selectedInterior.price || 0;
+    // Add selected options prices
+    if (this.selectedColor) total += this.selectedColor.price || 0;
+    if (this.selectedTrim) total += this.selectedTrim.price || 0;
+    if (this.selectedRange) total += this.selectedRange.price || 0;
+    if (this.selectedWheels) total += this.selectedWheels.price || 0;
+    if (this.selectedInterior) total += this.selectedInterior.price || 0;
 
-        // Add premium features
-        if (this.autopilotEnabled) total += 8000;
-        if (this.premiumAudioEnabled) total += 2500;
-        if (this.sunroofEnabled) total += 1500;
+    // Add premium features
+    if (this.autopilotEnabled) total += 8000;
+    if (this.premiumAudioEnabled) total += 2500;
+    if (this.sunroofEnabled) total += 1500;
 
-        return total;
-      } catch (e) {
-        console.error('Error calculating total price:', e);
-        return 0;
-      }
-    },
-  });
+    return total;
+  },
+});
 
   static isolated = class Isolated extends Component<typeof this> {
     @tracked selectedSection = 'color';
