@@ -37,7 +37,12 @@ export default class ListingActionInitCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.ListingActionInput,
   ): Promise<undefined> {
-    let { realm: realmUrl, actionType, listing: listingInput } = input;
+    let {
+      realm: realmUrl,
+      actionType,
+      listing: listingInput,
+      attachedCard,
+    } = input;
 
     const listing = listingInput as Listing;
 
@@ -51,6 +56,9 @@ export default class ListingActionInitCommand extends HostBaseCommand<
         break;
       case 'install':
         roomName = `Install of ${listing.name}`;
+        break;
+      case 'create':
+        roomName = `Create listing`;
         break;
       default:
         throw new Error(`Invalid listing action type: ${actionType}`);
@@ -75,6 +83,18 @@ export default class ListingActionInitCommand extends HostBaseCommand<
       });
     }
 
+    let prompt = `I would like to create a new listing`;
+    if (actionType !== 'create') {
+      prompt = `I would like to ${actionType} this ${listing.name} under the following realm: ${realmUrl}`;
+    }
+
+    let openCardIds: string[] = [];
+    if (actionType === 'create') {
+      openCardIds = [attachedCard.id!];
+    } else {
+      openCardIds = [listing.id!];
+    }
+
     if (roomId) {
       let setActiveLLMCommand = new SetActiveLLMCommand(this.commandContext);
 
@@ -85,9 +105,9 @@ export default class ListingActionInitCommand extends HostBaseCommand<
 
       await new SendAiAssistantMessageCommand(this.commandContext).execute({
         roomId,
-        prompt: `I would like to ${actionType} this ${listing.name} under the following realm: ${realmUrl}`,
-        openCardIds: [listing.id!],
-        attachedCards: [listing],
+        prompt,
+        openCardIds,
+        attachedCards: actionType === 'create' ? [attachedCard] : [listing],
       });
 
       await new OpenAiAssistantRoomCommand(this.commandContext).execute({

@@ -158,7 +158,16 @@ export class RealmIndexQueryEngine {
       };
     }
     doc = {
-      data: { ...instance.instance, ...{ links: { self: url.href } } },
+      data: {
+        ...instance.instance,
+        ...{
+          meta: {
+            ...instance.instance.meta,
+            deps: instance.deps ?? [],
+          },
+        },
+        ...{ links: { self: url.href } },
+      },
     };
     if (!doc) {
       throw new Error(
