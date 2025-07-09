@@ -351,10 +351,10 @@ export default class MatrixService extends Service {
       // card id's in the URL
       this.router.transitionTo('index', {
         queryParams: {
-          workspaceChooserOpened: 'true',
           operatorModeState: stringify({
             stacks: [],
             submode: Submodes.Interact,
+            workspaceChooserOpened: true,
           } as OperatorModeSerializedState),
         },
       });

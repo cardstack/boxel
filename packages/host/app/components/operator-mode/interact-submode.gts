@@ -286,7 +286,7 @@ export default class InteractSubmode extends Component {
           stackIndex,
         });
         here.addToStack(newItem);
-        here.operatorModeStateService.workspaceChooserOpened = false;
+        here.operatorModeStateService.closeWorkspaceChooser();
       },
       copyURLToClipboard: async (
         card: CardDef | URL | string,
@@ -671,7 +671,7 @@ export default class InteractSubmode extends Component {
           }
         }
 
-        this.operatorModeStateService.workspaceChooserOpened = false;
+        this.operatorModeStateService.closeWorkspaceChooser();
       } finally {
         waiter.endAsync(waiterToken);
       }

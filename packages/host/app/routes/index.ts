@@ -53,9 +53,8 @@ export default class Index extends Route<void> {
     cardPath?: string;
     path: string;
     operatorModeState: string;
-    workspaceChooserOpened?: boolean;
   }): Promise<void> {
-    let { operatorModeState, cardPath, workspaceChooserOpened } = params;
+    let { operatorModeState, cardPath } = params;
 
     if (!this.didMatrixServiceStart) {
       await this.matrixService.ready;
@@ -98,16 +97,16 @@ export default class Index extends Route<void> {
       !operatorModeStateObject ||
       (operatorModeStateObject.submode === Submodes.Interact &&
         operatorModeStateObject.stacks.length === 0 &&
-        workspaceChooserOpened !== true)
+        operatorModeStateObject.workspaceChooserOpened !== true)
     ) {
       this.router.transitionTo('index', {
         queryParams: {
           cardPath: undefined,
-          workspaceChooserOpened: stacks.length === 0,
           operatorModeState: stringify({
             stacks,
             submode: Submodes.Interact,
             aiAssistantOpen: this.operatorModeStateService.aiAssistantOpen,
+            workspaceChooserOpened: stacks.length === 0,
           } as OperatorModeSerializedState),
         },
       });
