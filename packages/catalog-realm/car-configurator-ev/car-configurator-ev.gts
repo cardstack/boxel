@@ -975,7 +975,7 @@ export class CarConfiguratorEV extends CardDef {
           <h2>🚗 EV Car Configurator</h2>
           <div class="price-display">
             <span class="price-label">Total Price:</span>
-            <span class="price-amount">${{@model.totalPrice}}</span>
+            <span class="price-amount">&#36;{{@model.totalPrice}}</span>
           </div>
         </header>
 
