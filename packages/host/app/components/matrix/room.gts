@@ -255,6 +255,8 @@ export default class Room extends Component<Signature> {
         --boxel-pill-menu-footer-padding: 0;
         --boxel-pill-menu-button-padding: 2px 6px;
 
+        --chat-input-area-bottom-padding: var(--boxel-sp-sm);
+
         background-color: var(--boxel-light);
         border-radius: var(--chat-input-area-border-radius);
 
@@ -264,7 +266,7 @@ export default class Room extends Component<Signature> {
       .chat-input-area__bottom-actions {
         display: flex;
         align-items: center;
-        padding: var(--boxel-sp-sm);
+        padding: var(--chat-input-area-bottom-padding);
         gap: var(--boxel-sp-sm);
         background-color: var(--boxel-light-100);
         border-top: 1px solid var(--boxel-200);
@@ -274,6 +276,10 @@ export default class Room extends Component<Signature> {
 
       .chat-input-area__bottom-actions:not(:has(.menu-content)) {
         height: 40px;
+      }
+
+      .chat-input-area__bottom-actions:has(.menu-content) {
+        padding: 0;
       }
 
       :deep(.ai-assistant-conversation > *:first-child) {
