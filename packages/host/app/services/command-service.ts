@@ -296,38 +296,49 @@ export default class CommandService extends Service {
         `${codeData.eventId}:${codeData.codeBlockIndex}`,
       );
     }
+    let finalFileUrl: string | undefined;
     try {
       let patchCodeCommand = new PatchCodeCommand(this.commandContext);
-      let { finalFileUrl } = await patchCodeCommand.execute({
+      let patchCodeResult = await patchCodeCommand.execute({
         fileUrl,
         codeBlocks: codeDataItems.map(
           (codeData) => codeData.searchReplaceBlock!,
         ),
       });
+      finalFileUrl = patchCodeResult.finalFileUrl;
 
-      for (const codeBlock of codeDataItems) {
-        this.executedCommandRequestIds.add(
-          `${codeBlock.eventId}:${codeBlock.codeBlockIndex}`,
-        );
+      for (let i = 0; i < codeDataItems.length; i++) {
+        const codeData = codeDataItems[i];
+        const patchResult = patchCodeResult.results[i];
+        if (patchResult.status === 'applied') {
+          this.executedCommandRequestIds.add(
+            `${codeData.eventId}:${codeData.codeBlockIndex}`,
+          );
+        }
       }
+
       await this.matrixService.updateSkillsAndCommandsIfNeeded(roomId);
       let fileDef = this.matrixService.fileAPI.createFileDef({
-        sourceUrl: finalFileUrl,
+        sourceUrl: finalFileUrl ?? fileUrl,
         name: fileUrl.split('/').pop(),
       });
 
       let context = this.operatorModeStateService.getSummaryForAIBot();
+
       let resultSends: Promise<unknown>[] = [];
-      for (const codeData of codeDataItems) {
+      for (let i = 0; i < codeDataItems.length; i++) {
+        const codeData = codeDataItems[i];
+        const result = patchCodeResult.results[i];
         resultSends.push(
           this.matrixService.sendCodePatchResultEvent(
             roomId,
             codeData.eventId,
             codeData.codeBlockIndex,
-            'applied',
+            result.status as CodePatchStatus,
             [],
             [fileDef],
             context,
+            result.failureReason,
           ),
         );
       }
