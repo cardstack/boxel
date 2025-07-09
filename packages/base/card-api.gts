@@ -394,9 +394,10 @@ function cardTypeFor(
   field: Field<typeof BaseDef>,
   boxedElement?: Box<BaseDef>,
 ): typeof BaseDef {
-  let override = boxedElement
-    ? getFieldOverrides(boxedElement.value)?.get(field.name)
-    : undefined;
+  let override =
+    boxedElement?.value && typeof boxedElement.value === 'object'
+      ? getFieldOverrides(boxedElement.value)?.get(field.name)
+      : undefined;
   if (primitive in field.card) {
     return override ?? field.card;
   }
@@ -1703,7 +1704,10 @@ function fieldComponent(
 ): BoxComponent {
   let fieldName = field.name as keyof BaseDef;
   let card: typeof BaseDef;
-  let override = getFieldOverrides(model.value)?.get(field.name);
+  let override =
+    model.value && typeof model.value === 'object'
+      ? getFieldOverrides(model.value)?.get(field.name)
+      : undefined;
 
   if (primitive in field.card) {
     card = override ?? field.card;
@@ -1826,19 +1830,6 @@ export class BaseDef {
   // So we need a [relativeTo] property that derives from the root document ID in order to
   // resolve relative links at the FieldDef level.
   [relativeTo]: URL | undefined = undefined;
-  get [fields](): Record<string, typeof BaseDef> | undefined {
-    // cardTracking.get(this);
-    let overrides = getFieldOverrides(this);
-    return overrides ? Object.fromEntries(getFieldOverrides(this)) : undefined;
-  }
-  set [fields](overrides: Record<string, typeof BaseDef>) {
-    let existingOverrides = getFieldOverrides(this);
-    for (let [fieldName, clazz] of Object.entries(overrides)) {
-      existingOverrides.set(fieldName, clazz);
-    }
-    // notify glimmer to rerender this card
-    // cardTracking.set(this, true);
-  }
   declare ['constructor']: BaseDefConstructor;
   static baseDef: undefined;
   static data?: Record<string, any>; // TODO probably refactor this away all together
@@ -1966,18 +1957,8 @@ export class BaseDef {
     (instance as any)[fieldName] = value;
   }
 
-  constructor(
-    data?: Record<string, any> & {
-      [fields]?: Record<string, BaseDefConstructor>;
-    },
-  ) {
+  constructor(data?: Record<string, any>) {
     if (data !== undefined) {
-      if (fields in data && data[fields]) {
-        let overrides = getFieldOverrides(this);
-        for (let [fieldName, clazz] of Object.entries(data[fields])) {
-          overrides.set(fieldName, clazz);
-        }
-      }
       for (let [fieldName, value] of Object.entries(data)) {
         this.constructor.assignInitialFieldValue(this, fieldName, value);
       }
@@ -2110,6 +2091,19 @@ export class CardDef extends BaseDef {
   readonly [localId]: string = uuidv4();
   [isSavedInstance] = false;
   [meta]: CardResourceMeta | undefined = undefined;
+  get [fields](): Record<string, typeof BaseDef> | undefined {
+    cardTracking.get(this);
+    let overrides = getFieldOverrides(this);
+    return overrides ? Object.fromEntries(getFieldOverrides(this)) : undefined;
+  }
+  set [fields](overrides: Record<string, typeof BaseDef>) {
+    let existingOverrides = getFieldOverrides(this);
+    for (let [fieldName, clazz] of Object.entries(overrides)) {
+      existingOverrides.set(fieldName, clazz);
+    }
+    // notify glimmer to rerender this card
+    cardTracking.set(this, true);
+  }
   @field id = contains(ReadOnlyField);
   @field title = contains(StringField);
   @field description = contains(StringField);
@@ -2150,10 +2144,20 @@ export class CardDef extends BaseDef {
   static prefersWideFormat = false; // whether the card is full-width in the stack
   static headerColor: string | null = null; // set string color value if the stack-item header has a background color
 
-  constructor(data?: Record<string, any>) {
+  constructor(
+    data?: Record<string, any> & {
+      [fields]?: Record<string, BaseDefConstructor>;
+    },
+  ) {
     super(data);
     if (data && localId in data && typeof data[localId] === 'string') {
       this[localId] = data[localId];
+    }
+    if (data && fields in data && data[fields]) {
+      let overrides = getFieldOverrides(this);
+      for (let [fieldName, clazz] of Object.entries(data[fields])) {
+        overrides.set(fieldName, clazz);
+      }
     }
   }
 

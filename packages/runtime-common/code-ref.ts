@@ -229,7 +229,10 @@ export function getField<T extends BaseDef>(
       isField
     ];
     if (result !== undefined && isBaseDef(result.card)) {
-      let fieldOverride = instance?.[fields]?.[fieldName];
+      let fieldOverride =
+        instance && isCardInstance(instance)
+          ? instance[fields]?.[fieldName]
+          : undefined;
       if (fieldOverride) {
         let cardThunk = fieldOverride;
         let { computeVia, name, description, isUsed } = result;
