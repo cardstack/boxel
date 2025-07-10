@@ -17,7 +17,6 @@ import {
 import {
   Query,
   isCardInstance,
-  EqFilter,
   AnyFilter,
   Filter,
 } from '@cardstack/runtime-common';
@@ -39,7 +38,6 @@ import BuildingIcon from '@cardstack/boxel-icons/building';
 import CategoryIcon from '@cardstack/boxel-icons/category';
 import HealthRecognition from '@cardstack/boxel-icons/health-recognition';
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
-import ShipWheelIcon from '@cardstack/boxel-icons/ship-wheel';
 import UsersIcon from '@cardstack/boxel-icons/users';
 import WorldIcon from '@cardstack/boxel-icons/world';
 import {
@@ -387,13 +385,6 @@ class Isolated extends Component<typeof Catalog> {
 
     // Define sphere names as a union type for better type safety
     type SphereName = 'BUILD' | 'LEARN' | 'LIFE' | 'PLAY' | 'WORK';
-    const sphereGroup: SphereName[] = [
-      'BUILD',
-      'LEARN',
-      'LIFE',
-      'PLAY',
-      'WORK',
-    ];
     // Define which icon to use for each sphere
     const sphereIconMap: Record<SphereName, typeof IconComponent> = {
       BUILD: BuildingIcon,
@@ -424,7 +415,6 @@ class Isolated extends Component<typeof Catalog> {
 
     // Loop through each category and organize them by sphere
     for (const category of categoryInstances) {
-      // Skip categories that aren't linked to a sphere
       if (!category.sphere?.name) {
         continue;
       }
@@ -435,7 +425,7 @@ class Isolated extends Component<typeof Catalog> {
         categoriesGroupedBySphere[sphereName] = {
           id: sphereName.toLowerCase(),
           displayName: sphereName,
-          icon: sphereIconMap[sphereName],
+          icon: sphereIconMap[sphereName as SphereName] || CategoryIcon,
           filters: [],
         };
       }
@@ -491,10 +481,10 @@ class Isolated extends Component<typeof Catalog> {
 
     // Show all items that belong to ANY category within this sphereUser selected a sphere (e.g., "BUILD", "LEARN", etc.)
     const isSphereSelected =
-      this.activeCategory.filters && this.activeCategory.filters.length > 0;
+      this.activeCategory?.filters && this.activeCategory.filters.length > 0;
 
     if (isSphereSelected) {
-      const categoryIdsInSphere = this.activeCategory.filters.map(
+      const categoryIdsInSphere = this.activeCategory!.filters!.map(
         (category) => category.id,
       );
 
@@ -509,9 +499,13 @@ class Isolated extends Component<typeof Catalog> {
       return sphereFilter;
     } else {
       const specificCategoryFilter = {
-        eq: {
-          'categories.id': this.activeCategory.id,
-        },
+        any: [
+          {
+            eq: {
+              'categories.id': this.activeCategory!.id,
+            },
+          },
+        ],
       };
 
       return specificCategoryFilter;

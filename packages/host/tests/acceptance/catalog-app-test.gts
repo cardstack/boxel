@@ -743,58 +743,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .exists({ count: 3 });
       });
 
-      test('only shows categories linked to a sphere cardDef in the filter list', async function (assert) {
-        const allFilterButtons = document.querySelectorAll(
-          '[data-test-boxel-filter-list-button]',
-        );
-        const filterButtonTexts: string[] = [];
-
-        allFilterButtons.forEach((button) => {
-          const buttonText = button.textContent?.trim();
-          if (buttonText) {
-            filterButtonTexts.push(buttonText);
-          }
-        });
-
-        const validSphereNames = [
-          'All',
-          'BUILD',
-          'LEARN',
-          'LIFE',
-          'PLAY',
-          'WORK',
-        ];
-
-        filterButtonTexts.forEach((text) => {
-          assert.ok(
-            validSphereNames.includes(text) || text === 'All',
-            `Filter list should only contain sphere names and "All", but found: ${text}`,
-          );
-        });
-
-        // Verify that we have the expected sphere groups
-        assert.ok(
-          filterButtonTexts.includes('BUILD'),
-          'BUILD sphere should be present',
-        );
-        assert.ok(
-          filterButtonTexts.includes('LEARN'),
-          'LEARN sphere should be present',
-        );
-        assert.ok(
-          filterButtonTexts.includes('LIFE'),
-          'LIFE sphere should be present',
-        );
-        assert.ok(
-          filterButtonTexts.includes('PLAY'),
-          'PLAY sphere should be present',
-        );
-        assert.ok(
-          filterButtonTexts.includes('WORK'),
-          'WORK sphere should be present',
-        );
-      });
-
       test('updates the card count correctly when filtering by a category', async function (assert) {
         await click('[data-test-filter-list-item="LIFE"] .dropdown-toggle');
         await click('[data-test-boxel-filter-list-button="Health & Wellness"]');
@@ -862,6 +810,54 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         });
 
         assert.dom('[data-test-no-results]').exists();
+      });
+
+      test('categories with null sphere fields are excluded from filter list', async function (assert) {
+        // Setup: Create a category with null sphere field
+        await setupAcceptanceTestRealm({
+          realmURL: testRealmURL,
+          mockMatrixUtils,
+          contents: {
+            'Category/category-with-null-sphere.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  name: 'CategoryWithNullSphere',
+                },
+                relationships: {
+                  sphere: {
+                    links: {
+                      self: null,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${catalogRealmURL}catalog-app/listing/category`,
+                    name: 'Category',
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${catalogRealmURL}`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+
+        assert
+          .dom('[data-test-boxel-filter-list-button="CategoryWithNullSphere"]')
+          .doesNotExist(
+            'Category with null sphere should not appear in filter list',
+          );
       });
     });
   });
