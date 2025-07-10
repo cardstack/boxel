@@ -898,6 +898,7 @@ export default class InteractSubmode extends Component {
         flex: 0;
         flex-basis: var(--container-button-size);
         position: absolute;
+        z-index: var(--boxel-layer-floating-button);
       }
       .stack-trigger-right {
         right: 1px;

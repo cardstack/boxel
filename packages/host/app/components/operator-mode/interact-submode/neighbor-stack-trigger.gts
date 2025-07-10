@@ -66,14 +66,13 @@ export default class NeighborStackTriggerButton extends Component<Signature> {
         --expanded-width: 20px;
         --expanded-height: 66px;
         --boxel-transition: 100ms ease;
-        --boxel-button-min-width: auto;
-        --boxel-button-min-height: auto;
+        --boxel-button-min-width: var(--expanded-width);
+        --boxel-button-min-height: var(--minimized-height);
         height: calc(var(--expanded-height) / 2);
         width: var(--expanded-width);
         background: none;
         border: none;
         padding: 0;
-        z-index: var(--boxel-layer-floating-button);
       }
       .add-card-to-neighbor-stack:hover,
       .add-card-to-neighbor-stack:focus:focus-visible,
