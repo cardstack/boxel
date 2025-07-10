@@ -1639,8 +1639,8 @@ module(basename(__filename), function () {
             attributes: { name: 'Paris' },
             meta: {
               adoptsFrom: {
-                module: './person',
-                name: 'Person',
+                module: './place',
+                name: 'Place',
               },
             },
           },
