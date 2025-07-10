@@ -22,6 +22,15 @@ export type PatchData = {
   };
 };
 
+// Shared type produced by the host app when visiting the render.meta route and
+// consumed by the server.
+export interface PrerenderMeta {
+  serialized: LooseSingleCardDocument;
+  searchDoc: Record<string, any>;
+  displayName: string;
+  types: string[];
+}
+
 export { Deferred } from './deferred';
 export {
   CardError,
@@ -346,7 +355,7 @@ export interface Store {
     id: string,
     patchData: PatchData,
   ): Promise<T | CardErrorJSONAPI | undefined>;
-  search(query: Query, realmURL: URL): Promise<CardDef[]>;
+  search(query: Query, realmURL?: URL): Promise<CardDef[]>;
   getSaveState(id: string): AutoSaveState | undefined;
 }
 

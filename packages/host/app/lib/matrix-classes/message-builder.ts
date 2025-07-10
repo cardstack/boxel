@@ -355,6 +355,8 @@ export default class MessageBuilder {
     for (let codePatchResultEvent of codePatchResultEvents) {
       let finalFileUrlAfterCodePatching =
         codePatchResultEvent.content.data.attachedFiles?.[0]?.sourceUrl;
+      let originalUploadedFileUrl =
+        codePatchResultEvent.content.data.attachedFiles?.[0]?.url;
       if (!finalFileUrlAfterCodePatching) {
         console.error(
           'Bug: no final file url found for code patch result event - it should have been set',
@@ -362,6 +364,14 @@ export default class MessageBuilder {
         );
         continue;
       }
+      if (!originalUploadedFileUrl) {
+        console.error(
+          'Bug: no original uploaded file url found for code patch result event - it should have been set',
+          codePatchResultEvent,
+        );
+        continue;
+      }
+
       codePatchResults.push(
         new MessageCodePatchResult(
           message,
@@ -369,6 +379,7 @@ export default class MessageBuilder {
           codePatchResultEvent.content['m.relates_to'].key,
           codePatchResultEvent.content.codeBlockIndex,
           finalFileUrlAfterCodePatching,
+          originalUploadedFileUrl,
           getOwner(this)!,
         ),
       );

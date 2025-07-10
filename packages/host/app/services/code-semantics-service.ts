@@ -100,7 +100,9 @@ export default class CodeSemanticsService extends Service {
     let found = codeSelection
       ? findDeclarationByName(codeSelection, declarations)
       : undefined;
-    return found ?? declarations[0];
+    // note: module inspector tools are not available for module with 0 exported declarations
+    // if not found, default to the last declaration in the module
+    return found ?? declarations[declarations.length - 1];
   }
 
   setOnModuleEditCallback(callback: (state: State) => void) {

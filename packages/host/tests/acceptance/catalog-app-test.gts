@@ -1,7 +1,7 @@
 import { click, waitFor, waitUntil, fillIn } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { module, skip, test } from 'qunit';
+import { module, test } from 'qunit';
 
 import { validate as uuidValidate } from 'uuid';
 
@@ -31,6 +31,8 @@ const catalogRealmURL = 'http://localhost:4201/catalog/';
 const testRealm2URL = `http://test-realm/test2/`;
 const mortgageCalculatorCardId = `${catalogRealmURL}CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`;
 const leafletMapCardId = `${catalogRealmURL}CardListing/552da558-5642-4541-89b0-28622db3bc84`;
+const calculatorTagId = `${catalogRealmURL}Tag/c1fe433a-b3df-41f4-bdcf-d98686ee42d7`;
+const gameTagId = `${catalogRealmURL}Tag/51de249c-516a-4c4d-bd88-76e88274c483`;
 
 const authorCardSource = `
   import { field, contains, CardDef } from 'https://cardstack.com/base/card-api';
@@ -632,9 +634,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
     });
 
-    module('filters', async function (hooks) {
-      hooks.beforeEach(async function () {
-        // filter by search
+    module('filters', async function () {
+      test('list view is shown if filters are applied', async function (assert) {
         await waitFor('[data-test-filter-search-input]');
         await click('[data-test-filter-search-input]');
         await fillIn('[data-test-filter-search-input]', 'Mortgage');
@@ -645,10 +646,14 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         if (tagPill) {
           await click(tagPill);
         }
-      });
 
-      test('list view is shown if filters are applied', async function (assert) {
-        await waitFor('[data-test-catalog-list-view]');
+        await waitUntil(() => {
+          const cards = document.querySelectorAll(
+            '[data-test-catalog-list-view]',
+          );
+          return cards.length === 1;
+        });
+
         assert
           .dom('[data-test-catalog-list-view]')
           .exists(
@@ -657,6 +662,17 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
 
       test('should be reset when clicking "Catalog Home" button', async function (assert) {
+        await waitFor('[data-test-filter-search-input]');
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'Mortgage');
+        // filter by category
+        await click('[data-test-filter-list-item="All"]');
+        // filter by tag
+        let tagPill = document.querySelector('[data-test-tag-list-pill]');
+        if (tagPill) {
+          await click(tagPill);
+        }
+
         assert
           .dom('[data-test-showcase-view]')
           .doesNotExist('Should be in list view after applying filter');
@@ -678,18 +694,33 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .doesNotExist('No tag should be selected after reset');
       });
 
-      // TODO: CS-9002 this test is flaky
-      skip('should be reset when clicking "All Apps" button', async function (assert) {
+      test('should be reset when clicking "All Apps" button', async function (assert) {
         await click('[data-tab-label="Apps"]');
         assert
           .dom('[data-tab-label="Apps"]')
           .hasClass('active', 'Apps tab should be active');
 
+        await waitFor('[data-test-filter-search-input]');
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'Mortgage');
+        // filter by category
+        await click('[data-test-filter-list-item="All"]');
+        // filter by tag
+        let tagPill = document.querySelector('[data-test-tag-list-pill]');
+        if (tagPill) {
+          await click(tagPill);
+        }
+
         await click('[data-test-navigation-reset-button="app"]');
         assert
           .dom('[data-test-showcase-view]')
           .doesNotExist('Should remain in list view, not return to showcase');
-        await waitFor('[data-test-catalog-list-view]');
+        await waitUntil(() => {
+          const cards = document.querySelectorAll(
+            '[data-test-catalog-list-view]',
+          );
+          return cards.length === 1;
+        });
         assert
           .dom('[data-test-catalog-list-view]')
           .exists('Catalog list view should still be visible');
@@ -703,6 +734,76 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         assert
           .dom('[data-test-tag-list-pill].selected')
           .doesNotExist('No tag should be selected after reset');
+      });
+
+      test('updates the card count correctly when filtering by a category', async function (assert) {
+        await click(
+          '[data-test-boxel-filter-list-button="Education and Learning"]',
+        );
+        assert
+          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+          .exists({ count: 1 });
+      });
+
+      test('updates the card count correctly when filtering by a search input', async function (assert) {
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'Mortgage');
+        await waitUntil(() => {
+          const cards = document.querySelectorAll(
+            '[data-test-cards-grid-cards] [data-test-cards-grid-item]',
+          );
+          return cards.length === 1;
+        });
+        assert
+          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+          .exists({ count: 1 });
+      });
+
+      test('updates the card count correctly when filtering by a single tag', async function (assert) {
+        await click(`[data-test-tag-list-pill="${gameTagId}"]`);
+        assert
+          .dom(`[data-test-tag-list-pill="${gameTagId}"]`)
+          .hasClass('selected');
+        assert
+          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+          .exists({ count: 2 });
+      });
+
+      test('updates the card count correctly when filtering by multiple tags', async function (assert) {
+        await click(`[data-test-tag-list-pill="${calculatorTagId}"]`);
+        await click(`[data-test-tag-list-pill="${gameTagId}"]`);
+        assert
+          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+          .exists({ count: 3 });
+      });
+
+      test('updates the card count correctly when multiple filters are applied together', async function (assert) {
+        await click('[data-test-boxel-filter-list-button="All"]');
+        await click(`[data-test-tag-list-pill="${gameTagId}"]`);
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'Blackjack');
+
+        await waitUntil(() => {
+          const cards = document.querySelectorAll(
+            '[data-test-cards-grid-cards] [data-test-cards-grid-item]',
+          );
+          return cards.length === 1;
+        });
+
+        assert
+          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+          .exists({ count: 1 });
+      });
+
+      test('shows zero results when filtering with a non-matching or invalid search input', async function (assert) {
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'asdfasdf');
+        await waitUntil(() => {
+          const cards = document.querySelectorAll('[data-test-no-results]');
+          return cards.length === 1;
+        });
+
+        assert.dom('[data-test-no-results]').exists();
       });
     });
   });

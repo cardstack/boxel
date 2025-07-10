@@ -1222,7 +1222,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
 
     test('can create new field instance (has preexisting Spec)', async function (assert) {
       await openFileInPlayground('pet.gts', additionalRealmURL, {
-        codeSelection: 'ToyField',
+        declaration: 'ToyField',
       });
       assert.dom('[data-test-selected-item]').containsText('Toy - Example 1');
       await selectFormat('atom');

@@ -14,6 +14,7 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   DEFAULT_LLM,
   DEFAULT_LLM_LIST,
+  DEFAULT_LLM_ID_TO_NAME,
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -382,26 +383,31 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
     assert
       .dom('[data-test-llm-select-selected]')
-      .hasText(DEFAULT_LLM.split('/')[1]);
+      .hasText(DEFAULT_LLM_ID_TO_NAME[DEFAULT_LLM]);
     await click('[data-test-llm-select-selected]');
 
     assert.dom('[data-test-llm-select-item]').exists({
       count: DEFAULT_LLM_LIST.length,
     });
+
+    let llmIdToChangeTo = 'anthropic/claude-3.7-sonnet';
+    let llmName = DEFAULT_LLM_ID_TO_NAME[llmIdToChangeTo];
+
     assert
-      .dom('[data-test-llm-select-item="anthropic/claude-3.7-sonnet"]')
-      .hasText('anthropic/claude-3.7-sonnet');
-    await click(
-      '[data-test-llm-select-item="anthropic/claude-3.7-sonnet"] button',
-    );
+      .dom(`[data-test-llm-select-item="${llmIdToChangeTo}"]`)
+      .hasText(llmName);
+    await click(`[data-test-llm-select-item="${llmIdToChangeTo}"] button`);
     await click('[data-test-pill-menu-button]');
-    assert.dom('[data-test-llm-select-selected]').hasText('claude-3.7-sonnet');
+    assert.dom('[data-test-llm-select-selected]').hasText(llmName);
 
     let roomState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
-    assert.strictEqual(roomState.model, 'anthropic/claude-3.7-sonnet');
+    assert.strictEqual(roomState.model, llmIdToChangeTo);
   });
 
   test('defaults to anthropic/claude-sonnet-4 in code mode', async function (assert) {
+    let defaultCodeLLMId = 'anthropic/claude-sonnet-4';
+    let defaultCodeLLMName = DEFAULT_LLM_ID_TO_NAME[defaultCodeLLMId];
+
     await visitOperatorMode({
       stacks: [
         [
@@ -417,7 +423,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    assert.dom('[data-test-llm-select-selected]').hasText('claude-sonnet-4');
+    assert.dom('[data-test-llm-select-selected]').hasText(defaultCodeLLMName);
 
     createAndJoinRoom({
       sender: '@testuser:localhost',
@@ -427,7 +433,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-past-sessions-button]');
     await waitFor("[data-test-enter-room='mock_room_1']");
     await click('[data-test-enter-room="mock_room_1"]');
-    assert.dom('[data-test-llm-select-selected]').hasText('claude-sonnet-4');
+    assert.dom('[data-test-llm-select-selected]').hasText(defaultCodeLLMName);
   });
 
   test('auto-attached file is not displayed in interact mode', async function (assert) {
@@ -1029,6 +1035,41 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .containsText(
         'This message will be cancelled before the reasoning is finished',
       );
+  });
+
+  test(`should not display action bar when there is no code patch block`, async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      codePath: `${testRealmURL}index.json`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    // In interact mode, auto-attached cards must be the top most cards in the stack
+    // unless the card is manually chosen
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    let codeBlock = `\`\`\`
+  { "name": "test" }
+\`\`\``;
+
+    simulateRemoteMessage(matrixRoomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    await waitFor('[data-test-ai-assistant-message]');
+    assert.dom('[data-test-ai-assistant-action-bar]').doesNotExist();
   });
 
   test('code mode context sent with message', async function (assert) {
