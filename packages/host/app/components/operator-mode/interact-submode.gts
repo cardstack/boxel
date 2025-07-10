@@ -896,7 +896,7 @@ export default class InteractSubmode extends Component {
         justify-content: center;
         align-items: center;
         padding-inline: var(--boxel-sp-lg);
-        gap: var(--boxel-sp-lg);
+        gap: var(--boxel-sp);
       }
       .stack-with-bg-image:before {
         content: ' ';
@@ -925,10 +925,10 @@ export default class InteractSubmode extends Component {
         position: absolute;
       }
       .stack-trigger-right {
-        right: 0;
+        right: 1px;
       }
       .stack-trigger-left {
-        left: 0;
+        left: 1px;
       }
     </style>
   </template>
