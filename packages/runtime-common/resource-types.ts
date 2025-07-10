@@ -90,6 +90,15 @@ export interface PrerenderedCardResource {
 }
 
 //validation - modules
+export function isModuleResource(resource: any): resource is ModuleResource {
+  if (typeof resource !== 'object' || resource == null) {
+    return false;
+  }
+  if ('id' in resource && typeof resource.id !== 'string') {
+    return resource.type === 'source';
+  }
+  return false;
+}
 
 //validation - cards
 export function isCardResource(resource: any): resource is CardResource {

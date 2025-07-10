@@ -91,6 +91,8 @@ import {
   AtomicOperation,
   AtomicOperationResult,
   AtomicPayloadValidationError,
+  filterOperationsWithCardData,
+  filterOperationsWithSourceData,
 } from './atomic-document';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
@@ -677,8 +679,8 @@ export class Realm {
     }
     let sourceFiles = new Map<LocalPath, string>();
     let instanceFiles = new Map<LocalPath, string>();
-    let sourceOperations = operations.filter((op) => op.data.type === 'source');
-    let instanceOperations = operations.filter((op) => op.data.type === 'card');
+    let sourceOperations = filterOperationsWithSourceData(operations);
+    let instanceOperations = filterOperationsWithCardData(operations);
     let instanceWriteResults: WriteResult[] = [];
     let sourceWriteResults: WriteResult[] = [];
 
@@ -687,7 +689,7 @@ export class Realm {
     for (let { data: resource, href } of sourceOperations) {
       let fileURL = this.paths.fileURL(href);
       let localPath = this.paths.local(fileURL);
-      let content = resource.attributes.content as string;
+      let content = resource.attributes?.content as string;
       sourceFiles.set(localPath, content);
     }
 
