@@ -9,8 +9,6 @@ import Component from '@glimmer/component';
 import { format as formatDate, formatISO, isAfter, subMinutes } from 'date-fns';
 import { cancelPoll, pollTask, runTask } from 'ember-lifeline';
 
-import window from 'ember-window-mock';
-
 import { TrackedObject } from 'tracked-built-ins';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';

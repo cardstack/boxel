@@ -344,7 +344,7 @@ export default class MatrixService extends Service {
   async logout() {
     try {
       await this.flushAll;
-      clearAuth();
+      this.clearAuth();
       this.postLoginCompleted = false;
       this.reset.resetAll();
       this.unbindEventListeners();
@@ -1588,6 +1588,11 @@ export default class MatrixService extends Service {
     }
   }
 
+  private clearAuth() {
+    window.localStorage.removeItem('auth');
+    this.localPersistenceService.setCurrentRoomId(undefined);
+  }
+
   async activateCodingSkill() {
     if (!this.currentRoomId) {
       return;
@@ -1696,11 +1701,6 @@ export default class MatrixService extends Service {
 
 function saveAuth(auth: LoginResponse) {
   window.localStorage.setItem('auth', JSON.stringify(auth));
-}
-
-function clearAuth() {
-  window.localStorage.removeItem('auth');
-  this.localPersistenceService.setCurrentRoomId(undefined);
 }
 
 function getAuth(): LoginResponse | undefined {
