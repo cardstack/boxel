@@ -17,30 +17,17 @@ interface IncrementalIndexEventTestContext {
 export async function waitForIncrementalIndexEvent(
   getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
   since: number,
-  expectedNumber?: number,
 ) {
-  const n = expectedNumber ?? 1;
+  await waitUntil(async () => {
+    let matrixMessages = await getMessagesSince(since);
 
-  await waitUntil(
-    async () => {
-      const matrixMessages = await getMessagesSince(since);
-      let count = 0;
-      for (const m of matrixMessages) {
-        if (
-          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
-          m.content.eventName === 'index' &&
-          m.content.indexType === 'incremental'
-        ) {
-          count++;
-          if (count >= n) return true;
-        }
-      }
-      return false;
-    },
-    {
-      timeout: 5000,
-    },
-  );
+    return matrixMessages.some(
+      (m) =>
+        m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+        m.content.eventName === 'index' &&
+        m.content.indexType === 'incremental',
+    );
+  });
 }
 
 export async function expectIncrementalIndexEvent(
@@ -53,7 +40,6 @@ export async function expectIncrementalIndexEvent(
   let endsWithSlash = url.endsWith('/'); // new card def is being created
 
   if (!url.endsWith('.json') && !url.endsWith('.gts') && !endsWithSlash) {
-    // TODO perhaps we can add support for other file types here
     throw new Error('Invalid file path');
   }
   await waitForIncrementalIndexEvent(getMessagesSince, since);
