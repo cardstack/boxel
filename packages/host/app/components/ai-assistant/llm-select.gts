@@ -93,6 +93,8 @@ export default class LLMSelect extends Component<Signature> {
         gap: var(--boxel-sp-xxxs);
         max-height: 300px;
         overflow-y: auto;
+
+        scroll-timeline: --pill-menu-content-scroll-timeline;
       }
 
       .llm-option {
