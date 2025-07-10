@@ -7,8 +7,8 @@ import {
   loadCardDef,
   specRef,
   ResolvedCodeRef,
-  meta,
   LooseSingleCardDocument,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 
 import {
@@ -30,6 +30,7 @@ import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 import HostBaseCommand from '../lib/host-base-command';
 
 import type CardService from '../services/card-service';
+import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
@@ -47,11 +48,19 @@ export default class ListingCreateCommand extends HostBaseCommand<
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
   @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private network: NetworkService;
 
   description = 'Create catalog listing command';
 
-  get currentRealm() {
-    return this.operatorModeStateService.realmURL;
+  #cardAPI?: typeof CardAPI;
+
+  async loadCardAPI() {
+    if (!this.#cardAPI) {
+      this.#cardAPI = await this.loaderService.loader.import<typeof CardAPI>(
+        'https://cardstack.com/base/card-api',
+      );
+    }
+    return this.#cardAPI;
   }
 
   get catalogRealm() {
@@ -139,7 +148,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
           'https://cardstack.com',
           'https://packages',
           'https://boxel-icons.boxel.ai',
-        ].some((domain) => dep.startsWith(domain))
+        ].some((urlStem) => dep.startsWith(urlStem))
       ) {
         return false;
       }
@@ -150,6 +159,8 @@ export default class ListingCreateCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.ListingCreateInput,
   ): Promise<undefined> {
+    const cardAPI = await this.loadCardAPI();
+
     let { openCardId } = input;
 
     if (!openCardId) {
@@ -162,8 +173,21 @@ export default class ListingCreateCommand extends HostBaseCommand<
       throw new Error('Instance is not a card');
     }
 
-    const targetRealm = instance[meta]?.realmURL;
-    const sanitizedDeps = this.sanitizeDeps(instance[meta]?.deps ?? []);
+    const targetRealm = instance[cardAPI.realmURL]?.href;
+
+    const response = await this.network.authedFetch(
+      `${targetRealm}_dependencies?url=${openCardId}`,
+      {
+        headers: {
+          Accept: SupportedMimeType.CardDependencies,
+        },
+      },
+    );
+    if (!response.ok) {
+      throw new Error('Failed to fetch dependencies');
+    }
+    const deps = (await response.json()) as string[];
+    const sanitizedDeps = this.sanitizeDeps(deps ?? []);
 
     let guessListingType: keyof typeof listingTypes = 'card';
     let moduleRefs: {

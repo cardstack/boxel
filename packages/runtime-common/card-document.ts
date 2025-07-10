@@ -37,7 +37,6 @@ export type Relationship = {
 };
 
 export type CardResourceMeta = Meta & {
-  deps?: string[];
   lastModified?: number;
   resourceCreatedAt?: number;
   realmInfo?: RealmInfo;
