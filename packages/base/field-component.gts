@@ -5,6 +5,7 @@ import {
   type Format,
   type FieldsTypeFor,
   type BaseDef,
+  type CardDef,
   type BaseDefComponent,
   type BaseDefConstructor,
   CardContext,
@@ -12,7 +13,6 @@ import {
   isCompoundField,
   formats,
   FieldFormats,
-  getFields,
 } from './card-api';
 import {
   CardContextName,
@@ -28,7 +28,7 @@ import {
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import Modifier from 'ember-modifier';
-import { isEqual } from 'lodash';
+import { isEqual, flatMap } from 'lodash';
 import { initSharedState } from './shared-state';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 import { consume, provide } from 'ember-provide-consume-context';
@@ -388,15 +388,38 @@ export function getBoxComponent(
       // This is yet another band-aid around component stability. Remove this
       // after field.value refactor lands.
       !isFastBoot && isCardInstance(model.value)
-        ? getFields(model.value, {
-            includeComputeds: true,
-            tracked: true,
-          })
+        ? getFields(cardOrField as typeof CardDef)
         : undefined,
   };
 
   componentCache.set(model, stable);
   return stable.component;
+}
+
+function getFields(card: typeof CardDef): {
+  [fieldName: string]: Field<BaseDefConstructor>;
+} {
+  let fields: { [fieldName: string]: Field<BaseDefConstructor> } = {};
+  let obj: object | null = card.prototype;
+  while (obj?.constructor.name && obj.constructor.name !== 'Object') {
+    let descs = Object.getOwnPropertyDescriptors(obj);
+    let currentFields = flatMap(Object.keys(descs), (maybeFieldName) => {
+      if (maybeFieldName === 'constructor') {
+        return [];
+      }
+      let maybeField = getField(card, maybeFieldName);
+      if (!maybeField) {
+        return [];
+      }
+      if (maybeField.computeVia) {
+        return [];
+      }
+      return [[maybeFieldName, maybeField]];
+    });
+    fields = { ...fields, ...Object.fromEntries(currentFields) };
+    obj = Reflect.getPrototypeOf(obj);
+  }
+  return fields;
 }
 
 function defaultFieldFormats(containingFormat: Format): FieldFormats {
