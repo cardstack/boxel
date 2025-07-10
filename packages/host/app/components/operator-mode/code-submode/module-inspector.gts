@@ -53,8 +53,9 @@ import ToggleButton from '@cardstack/host/components/operator-mode/code-submode/
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
-import { type Ready } from '@cardstack/host/resources/file';
 import type { FileResource } from '@cardstack/host/resources/file';
+import { type Ready } from '@cardstack/host/resources/file';
+import { isReady } from '@cardstack/host/resources/file';
 import {
   type CardOrFieldDeclaration,
   type ModuleAnalysis,
@@ -155,12 +156,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   private get sourceFileForCard(): FileDef | undefined {
-    if (
-      !this.args.cardError ||
-      !this.args.currentOpenFile ||
-      !('url' in this.args.currentOpenFile) ||
-      !('content' in this.args.currentOpenFile)
-    ) {
+    if (!this.args.cardError || !isReady(this.args.currentOpenFile)) {
       return undefined;
     }
 
@@ -171,9 +167,15 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       return undefined;
     }
 
+    let moduleURLWithExtension = new URL(
+      adoptsFrom.module.endsWith('.gts')
+        ? adoptsFrom.module
+        : `${adoptsFrom.module}.gts`,
+      this.args.currentOpenFile.url,
+    );
     return this.matrixService.fileAPI.createFileDef({
-      sourceUrl: new URL(adoptsFrom.module, this.args.currentOpenFile.url).href,
-      name: `${adoptsFrom.name}.gts`,
+      sourceUrl: moduleURLWithExtension.href,
+      name: moduleURLWithExtension.href.split('/').pop()!,
     });
   }
 
