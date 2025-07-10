@@ -1,5 +1,3 @@
-import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -8,32 +6,30 @@ import { tracked } from '@glimmer/tracking';
 import { consume } from 'ember-provide-consume-context';
 
 import {
-  IconButton,
   Pill,
   RealmIcon,
+  Switch,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { cn } from '@cardstack/boxel-ui/helpers';
-import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
-import RealmService from '../services/realm';
+import RealmService from '@cardstack/host/services/realm';
 
-interface CardPillSignature {
+interface SkillToggleSignature {
   Element: HTMLDivElement | HTMLButtonElement;
   Args: {
     cardId: string;
     urlForRealmLookup: string;
     isAutoAttachedCard?: boolean;
-    removeCard?: (cardId: string) => void;
+    onToggle: () => void;
     isEnabled?: boolean;
   };
 }
 
-export default class CardPill extends Component<CardPillSignature> {
+export default class SkillToggle extends Component<SkillToggleSignature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @service private declare realm: RealmService;
   @tracked private cardResource: ReturnType<getCard> | undefined;
@@ -41,10 +37,6 @@ export default class CardPill extends Component<CardPillSignature> {
   private makeCardResource = () => {
     this.cardResource = this.getCard(this, () => this.args.cardId);
   };
-
-  private get hideIconRight() {
-    return !this.args.removeCard;
-  }
 
   private get card() {
     return this.cardResource?.card;
@@ -61,11 +53,7 @@ export default class CardPill extends Component<CardPillSignature> {
         <LoadingIndicator />
       {{else}}
         <Pill
-          class={{cn
-            'card-pill'
-            is-autoattached=@isAutoAttachedCard
-            hide-icon-right=this.hideIconRight
-          }}
+          class='skill-toggle'
           data-test-attached-card={{@cardId}}
           data-test-autoattached-card={{@isAutoAttachedCard}}
           ...attributes
@@ -79,22 +67,22 @@ export default class CardPill extends Component<CardPillSignature> {
             </div>
           </:default>
           <:iconRight>
-            {{#if @removeCard}}
-              <IconButton
-                class='remove-button'
-                @icon={{IconX}}
-                @height='10'
-                @width='10'
-                {{on 'click' (fn @removeCard @cardId)}}
-                data-test-remove-card-btn
-              />
-            {{/if}}
+            <Switch
+              @isEnabled={{@isEnabled}}
+              @onChange={{@onToggle}}
+              @label={{this.card.title}}
+              data-test-card-pill-toggle='{{@cardId}}-{{if
+                @isEnabled
+                "on"
+                "off"
+              }}'
+            />
           </:iconRight>
         </Pill>
       {{/if}}
     {{/if}}
     <style scoped>
-      .card-pill {
+      .skill-toggle {
         --pill-gap: var(--boxel-sp-xxxs);
         --pill-icon-size: 18px;
         --boxel-realm-icon-size: var(--pill-icon-size);
@@ -105,9 +93,6 @@ export default class CardPill extends Component<CardPillSignature> {
       .is-autoattached {
         border-style: dashed;
       }
-      .hide-icon-right :deep(figure.icon):last-child {
-        display: none;
-      }
       .card-content {
         max-width: 100px;
         max-height: 100%;
@@ -115,13 +100,38 @@ export default class CardPill extends Component<CardPillSignature> {
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      .remove-button {
-        --boxel-icon-button-width: var(--boxel-icon-sm);
-        --boxel-icon-button-height: var(--boxel-icon-sm);
+      .toggle {
+        margin-left: auto;
+        width: 22px;
+        height: 12px;
+        background-color: var(--boxel-450);
+        border-radius: var(--boxel-border-radius-sm);
+        padding: 3px;
         display: flex;
         align-items: center;
-        justify-content: center;
-        border-radius: var(--boxel-border-radius-xs);
+        transition: background-color 0.1s ease-in;
+      }
+      input[type='checkbox'] {
+        appearance: none;
+      }
+      .toggle-switch {
+        margin: 0;
+        width: 6px;
+        height: 6px;
+        background-color: var(--boxel-light);
+        border-radius: 50%;
+        transform: translateX(0);
+        transition: transform 0.1s ease-in;
+      }
+      .toggle.checked {
+        background-color: var(--boxel-dark-green);
+      }
+      .toggle.checked .toggle-switch {
+        transform: translateX(10px);
+      }
+      .toggle:hover,
+      .toggle-switch:hover {
+        cursor: pointer;
       }
     </style>
   </template>

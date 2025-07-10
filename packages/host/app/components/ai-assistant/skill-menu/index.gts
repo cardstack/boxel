@@ -14,7 +14,7 @@ import { Button } from '@cardstack/boxel-ui/components';
 import { skillCardRef } from '@cardstack/runtime-common';
 import { chooseCard } from '@cardstack/runtime-common';
 
-import CardPill from '@cardstack/host/components/card-pill';
+import SkillToggle from '@cardstack/host/components/ai-assistant/skill-menu/skill-toggle';
 import PillMenu from '@cardstack/host/components/pill-menu';
 
 import { RoomSkill } from '@cardstack/host/resources/room';
@@ -48,7 +48,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         <ul class='skill-list'>
           {{#each @skills key='cardId' as |skill|}}
             <li>
-              <CardPill
+              <SkillToggle
                 @cardId={{skill.cardId}}
                 @onToggle={{fn this.toggleSkill skill}}
                 @isEnabled={{skill.isActive}}
@@ -93,7 +93,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
 
         scroll-timeline: --pill-menu-content-scroll-timeline;
       }
-      .skill-list :deep(.card-pill) {
+      .skill-list :deep(.skill-toggle) {
         --pill-gap: var(--boxel-sp-xxxs);
         display: inline-grid;
         grid-template-columns: auto 1fr auto;
