@@ -66,7 +66,7 @@ test.describe('Skills', () => {
     ).toHaveCount(1);
     await expect(
       page.locator(`[data-test-skill-toggle="${cardId}-on"]`),
-    ).toHaveClass('switch checked');
+    ).toContainClass('checked');
   }
 
   const environmentSkillCardId = `http://localhost:4205/skills/Skill/boxel-environment`;
@@ -116,7 +116,7 @@ test.describe('Skills', () => {
     await page.locator(`[data-test-skill-toggle="${skillCard1}-on"]`).click();
     await expect(
       page.locator(`[data-test-skill-toggle="${skillCard1}-off"]`),
-    ).toHaveClass('switch');
+    ).not.toContainClass('checked');
     await expect(
       page.locator(`[data-test-skill-toggle="${skillCard1}-on"]`),
     ).toHaveCount(0);
@@ -174,7 +174,7 @@ test.describe('Skills', () => {
       await expect(
         page.locator(`[data-test-skill-toggle="${skillCardURL}-on"]`),
         `Skill card ${skillCardURL} should be active`,
-      ).toHaveClass('switch checked');
+      ).toContainClass('checked');
     }
   });
 
