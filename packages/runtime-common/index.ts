@@ -1,4 +1,4 @@
-import { CardResource, Meta } from './card-document';
+import { CardResource, Meta } from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
@@ -152,27 +152,25 @@ export type { CodeRef };
 
 export * from './code-ref';
 
+export type { CardDocument, SingleCardDocument } from './document-types';
 export type {
   CardResource,
-  CardDocument,
-  CardFields,
-  SingleCardDocument,
-  Relationship,
+  CardResourceMeta,
   ResourceID,
   Meta,
   Saved,
-  CardResourceMeta,
-} from './card-document';
-export type { JWTPayload } from './realm-auth-client';
+  Relationship,
+  CardFields,
+} from './resource-types';
 export {
-  isMeta,
-  isCardResource,
   isCardDocument,
-  isRelationship,
   isCardCollectionDocument,
   isSingleCardDocument,
   isCardDocumentString,
-} from './card-document';
+} from './document-types';
+export { isMeta, isCardResource, isRelationship } from './resource-types';
+
+export type { JWTPayload } from './realm-auth-client';
 export { sanitizeHtml } from './dompurify-runtime';
 export { markedSync, markdownToHtml } from './marked-sync';
 export { getPlural } from './pluralize-runtime';

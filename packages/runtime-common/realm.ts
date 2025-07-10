@@ -3,8 +3,8 @@ import {
   makeCardTypeSummaryDoc,
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
-  type CardResource,
-} from './card-document';
+} from './document-types';
+import { type CardResource } from './resource-types';
 import { Loader } from './loader';
 import { RealmPaths, LocalPath, join } from './paths';
 import {
