@@ -69,7 +69,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
         align-items: center;
         min-height: 54px;
         gap: var(--boxel-sp-xxs);
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        padding: 0 var(--boxel-sp-sm);
         background-color: var(--boxel-light);
         border-top-left-radius: var(--chat-input-area-border-radius);
         border-top-right-radius: var(--chat-input-area-border-radius);
