@@ -285,7 +285,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get headerTitle() {
-    return this.card ? cardTypeDisplayName(this.card) : undefined;
+    if (this.isIndexCard) {
+      return 'Workspace';
+    } else if (this.card) {
+      return cardTypeDisplayName(this.card);
+    }
+    return undefined;
   }
 
   private get cardTitle() {
