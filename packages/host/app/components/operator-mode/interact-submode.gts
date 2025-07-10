@@ -778,7 +778,7 @@ export default class InteractSubmode extends Component {
     >
       <div class='interact-submode' style={{this.backgroundImageStyle}}>
         {{#if this.canCreateNeighborStack}}
-          <Tooltip @placement='right'>
+          <Tooltip class='stack-trigger stack-trigger-right' @placement='right'>
             <:trigger>
               <NeighborStackTriggerButton
                 data-test-add-card-left-stack
@@ -840,7 +840,7 @@ export default class InteractSubmode extends Component {
           />
         </div>
         {{#if this.canCreateNeighborStack}}
-          <Tooltip @placement='left'>
+          <Tooltip class='stack-trigger stack-trigger-left' @placement='left'>
             <:trigger>
               <NeighborStackTriggerButton
                 class='neighbor-stack-trigger'
@@ -895,6 +895,8 @@ export default class InteractSubmode extends Component {
         display: flex;
         justify-content: center;
         align-items: center;
+        padding-inline: var(--boxel-sp-lg);
+        gap: var(--boxel-sp-lg);
       }
       .stack-with-bg-image:before {
         content: ' ';
@@ -918,6 +920,15 @@ export default class InteractSubmode extends Component {
       .neighbor-stack-trigger {
         flex: 0;
         flex-basis: var(--container-button-size);
+      }
+      .stack-trigger {
+        position: absolute;
+      }
+      .stack-trigger-right {
+        right: 0;
+      }
+      .stack-trigger-left {
+        left: 0;
       }
     </style>
   </template>

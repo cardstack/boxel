@@ -24,22 +24,10 @@ interface Signature {
 }
 
 export default class NeighborStackTriggerButton extends Component<Signature> {
-  get triggerSideClass() {
-    switch (this.args.triggerSide) {
-      case SearchSheetTriggers.DropCardToLeftNeighborStackButton:
-        return 'add-card-to-neighbor-stack--left';
-      case SearchSheetTriggers.DropCardToRightNeighborStackButton:
-        return 'add-card-to-neighbor-stack--right';
-      default:
-        return undefined;
-    }
-  }
-
   <template>
     <Button
       class={{cn
         'add-card-to-neighbor-stack'
-        this.triggerSideClass
         add-card-to-neighbor-stack--active=(eq @activeTrigger @triggerSide)
       }}
       {{on 'click' (fn @onTrigger @triggerSide)}}
@@ -96,12 +84,6 @@ export default class NeighborStackTriggerButton extends Component<Signature> {
       .add-card-to-neighbor-stack:focus:focus-visible .add-icon,
       .add-card-to-neighbor-stack--active .add-icon {
         visibility: visible;
-      }
-      .add-card-to-neighbor-stack--left {
-        margin-left: calc(var(--operator-mode-spacing) / 2);
-      }
-      .add-card-to-neighbor-stack--right {
-        margin-right: calc(var(--operator-mode-spacing) / 2);
       }
     </style>
   </template>
