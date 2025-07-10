@@ -12,6 +12,7 @@ import Component from '@glimmer/component';
 
 import { tracked, cached } from '@glimmer/tracking';
 
+import Captions from '@cardstack/boxel-icons/captions';
 import {
   restartableTask,
   timeout,
@@ -49,6 +50,7 @@ import {
   cardTypeIcon,
   CommandContext,
   realmURL,
+  identifyCard,
 } from '@cardstack/runtime-common';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
@@ -285,7 +287,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get headerTitle() {
-    return this.card ? cardTypeDisplayName(this.card) : undefined;
+    if (this.isIndexCard) {
+      return 'Workspace';
+    } else if (this.card) {
+      return cardTypeDisplayName(this.card);
+    }
+    return undefined;
   }
 
   private get cardTitle() {
@@ -311,6 +318,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     if (this.isBuried) {
       return undefined;
     }
+
     let menuItems: MenuItem[] = [
       new MenuItem('Copy Card URL', 'action', {
         action: () =>
@@ -327,6 +335,22 @@ export default class OperatorModeStackItem extends Component<Signature> {
       this.realm.canWrite(this.url)
     ) {
       menuItems.push(
+        new MenuItem('New Card of This Type', 'action', {
+          action: () => {
+            if (!this.card) {
+              return;
+            }
+            let ref = identifyCard(this.card.constructor);
+            if (!ref) {
+              return;
+            }
+            this.args.publicAPI.createCard(ref, undefined, {
+              realmURL: this.operatorModeStateService.getWritableRealmURL(),
+            });
+          },
+          icon: this.card ? (cardTypeIcon(this.card) as any) : Captions,
+          disabled: !this.card,
+        }),
         new MenuItem('Delete', 'action', {
           action: () =>
             this.card ? this.args.publicAPI.delete(this.card) : undefined,

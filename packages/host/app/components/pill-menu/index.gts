@@ -34,7 +34,7 @@ export default class PillMenu extends Component<Signature> {
   <template>
     {{#if this.isExpanded}}
       <div
-        class='pill-menu'
+        class='pill-menu {{if (has-block "footer") "has-footer"}}'
         {{onClickOutside
           this.collapseMenu
           exceptSelector='.card-catalog-modal'
@@ -105,6 +105,8 @@ export default class PillMenu extends Component<Signature> {
         letter-spacing: var(--boxel-lsp);
         box-shadow: var(--boxel-box-shadow);
         transition: width 0.2s ease-in;
+
+        timeline-scope: --pill-menu-content-scroll-timeline;
       }
       .pill-menu-button {
         display: flex;
@@ -168,12 +170,69 @@ export default class PillMenu extends Component<Signature> {
         overflow-y: auto;
         min-height: 0;
       }
+
+      .menu-content::before,
+      .menu-content::after,
+      .menu-footer::before {
+        content: '';
+        display: block;
+        width: 100%;
+        height: 5px;
+        position: absolute;
+        left: 0;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .menu-content::before {
+        background: linear-gradient(
+          to bottom,
+          rgba(0, 0, 0, 0.25) 0%,
+          transparent 100%
+        );
+
+        animation: scroll-pill-menu-content linear forwards;
+        animation-timeline: --pill-menu-content-scroll-timeline;
+      }
+
+      .pill-menu.has-footer .menu-content::after {
+        display: none;
+      }
+
+      .menu-content::after {
+        background: linear-gradient(
+          to top,
+          rgba(0, 0, 0, 0.25) 0%,
+          transparent 100%
+        );
+
+        animation: scroll-pill-menu-content reverse linear backwards;
+        animation-timeline: --pill-menu-content-scroll-timeline;
+
+        bottom: var(--boxel-sp-sm);
+        margin-bottom: 16px;
+      }
+
       .menu-footer {
         padding: var(
           --boxel-pill-menu-footer-padding,
           var(--pill-menu-spacing)
         );
       }
+
+      .menu-footer::before {
+        background: linear-gradient(
+          to top,
+          rgba(0, 0, 0, 0.25) 0%,
+          transparent 100%
+        );
+
+        animation: scroll-pill-menu-content reverse linear backwards;
+        animation-timeline: --pill-menu-content-scroll-timeline;
+
+        bottom: 60px;
+      }
+
       .pill-menu :deep(.menu-header .detail) {
         font: 600 var(--boxel-font-xs);
       }
@@ -191,6 +250,18 @@ export default class PillMenu extends Component<Signature> {
         transform: rotate(180deg);
         transform-origin: center;
         margin-left: var(--boxel-sp-xs);
+      }
+
+      @keyframes scroll-pill-menu-content {
+        0% {
+          opacity: 0;
+        }
+        1% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 1;
+        }
       }
     </style>
   </template>

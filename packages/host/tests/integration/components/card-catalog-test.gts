@@ -309,7 +309,7 @@ module('Integration | card-catalog', function (hooks) {
         .dom(
           `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
         )
-        .hasText('Local Workspace - Local Workspace');
+        .hasText('Workspace - Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
       await waitFor('[data-test-card-catalog-modal]');
@@ -332,7 +332,7 @@ module('Integration | card-catalog', function (hooks) {
         .dom(
           `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
         )
-        .hasText('Local Workspace - Local Workspace');
+        .hasText('Workspace - Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
       await waitFor('[data-test-card-catalog-modal]');
@@ -361,7 +361,7 @@ module('Integration | card-catalog', function (hooks) {
         .dom(
           `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
         )
-        .hasText('Local Workspace - Local Workspace');
+        .hasText('Workspace - Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
       await waitFor('[data-test-card-catalog-modal]');
@@ -395,7 +395,7 @@ module('Integration | card-catalog', function (hooks) {
         .dom(
           `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
         )
-        .hasText('Local Workspace - Local Workspace');
+        .hasText('Workspace - Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
       await waitFor('[data-test-card-catalog-modal]');
@@ -417,7 +417,7 @@ module('Integration | card-catalog', function (hooks) {
         .dom(
           `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
         )
-        .hasText('Local Workspace - Local Workspace');
+        .hasText('Workspace - Local Workspace');
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
       await waitFor('[data-test-card-catalog-modal]');
