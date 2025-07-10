@@ -338,8 +338,6 @@ module(basename(__filename), function () {
           assert.strictEqual(json2.data.attributes?.firstName, 'Van Gogh');
         });
         test('can write multiple modules that depend on each other', async function (assert) {
-          // this is test is moot bcos indexing handles relationship between modules
-          // there is no pre-flight check like fileSerialization that does this
           let place1Source = `
             import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
             import StringField from "https://cardstack.com/base/string";
@@ -507,8 +505,6 @@ module(basename(__filename), function () {
             countrySource,
             'the card source is correct',
           );
-          //test starts here below
-
           let instanceDoc = {
             'atomic:operations': [
               {
