@@ -15,7 +15,6 @@ import { provide, consume } from 'ember-provide-consume-context';
 import get from 'lodash/get';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
-import { Tooltip } from '@cardstack/boxel-ui/components';
 import {
   cn,
   eq,
@@ -76,7 +75,10 @@ import consumeContext from '../../helpers/consume-context';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
-import NeighborStackTriggerButton from './interact-submode/neighbor-stack-trigger';
+import NeighborStackTriggerButton, {
+  SearchSheetTriggers,
+  type SearchSheetTrigger,
+} from './interact-submode/neighbor-stack-trigger';
 import OperatorModeStack from './stack';
 import { CardDefOrId } from './stack-item';
 import SubmodeLayout from './submode-layout';
@@ -99,14 +101,6 @@ import type { Submode } from '../submode-switcher';
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
 export type Stack = StackItem[];
-
-const SearchSheetTriggers = {
-  DropCardToLeftNeighborStackButton: 'drop-card-to-left-neighbor-stack-button',
-  DropCardToRightNeighborStackButton:
-    'drop-card-to-right-neighbor-stack-button',
-} as const;
-type Values<T> = T[keyof T];
-type SearchSheetTrigger = Values<typeof SearchSheetTriggers>;
 
 const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<CardDef>>();
 const stackItemComponentAPI = new WeakMap<StackItem, StackItemComponentAPI>();
@@ -778,23 +772,15 @@ export default class InteractSubmode extends Component {
     >
       <div class='interact-submode' style={{this.backgroundImageStyle}}>
         {{#if this.canCreateNeighborStack}}
-          <Tooltip class='stack-trigger stack-trigger-right' @placement='right'>
-            <:trigger>
-              <NeighborStackTriggerButton
-                data-test-add-card-left-stack
-                @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
-                @activeTrigger={{this.searchSheetTrigger}}
-                @onTrigger={{fn
-                  this.showSearchWithTrigger
-                  search.openSearchToPrompt
-                }}
-                aria-label='Add card to left stack'
-              />
-            </:trigger>
-            <:content>
-              {{neighborStackTooltipMessage 'left'}}
-            </:content>
-          </Tooltip>
+          <NeighborStackTriggerButton
+            class='neighbor-stack-trigger stack-trigger-left'
+            @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
+            @activeTrigger={{this.searchSheetTrigger}}
+            @onTrigger={{fn
+              this.showSearchWithTrigger
+              search.openSearchToPrompt
+            }}
+          />
         {{/if}}
         <div class='stacks'>
           {{#each this.stacks as |stack stackIndex|}}
@@ -840,24 +826,15 @@ export default class InteractSubmode extends Component {
           />
         </div>
         {{#if this.canCreateNeighborStack}}
-          <Tooltip class='stack-trigger stack-trigger-left' @placement='left'>
-            <:trigger>
-              <NeighborStackTriggerButton
-                class='neighbor-stack-trigger'
-                data-test-add-card-right-stack
-                @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
-                @activeTrigger={{this.searchSheetTrigger}}
-                @onTrigger={{fn
-                  this.showSearchWithTrigger
-                  search.openSearchToPrompt
-                }}
-                aria-label='Add card to right stack'
-              />
-            </:trigger>
-            <:content>
-              {{neighborStackTooltipMessage 'right'}}
-            </:content>
-          </Tooltip>
+          <NeighborStackTriggerButton
+            class='neighbor-stack-trigger stack-trigger-right'
+            @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
+            @activeTrigger={{this.searchSheetTrigger}}
+            @onTrigger={{fn
+              this.showSearchWithTrigger
+              search.openSearchToPrompt
+            }}
+          />
         {{/if}}
         {{#if this.cardToDelete}}
           <DeleteModal
@@ -920,8 +897,6 @@ export default class InteractSubmode extends Component {
       .neighbor-stack-trigger {
         flex: 0;
         flex-basis: var(--container-button-size);
-      }
-      .stack-trigger {
         position: absolute;
       }
       .stack-trigger-right {
@@ -933,7 +908,3 @@ export default class InteractSubmode extends Component {
     </style>
   </template>
 }
-
-const neighborStackTooltipMessage = (side: 'left' | 'right') => {
-  return `Open a card to the ${side} of the current card`;
-};
