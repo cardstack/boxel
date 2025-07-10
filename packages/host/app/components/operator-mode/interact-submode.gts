@@ -1,6 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat, fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
@@ -24,12 +23,7 @@ import {
   MenuItem,
   MenuDivider,
 } from '@cardstack/boxel-ui/helpers';
-import {
-  Download,
-  IconCode,
-  IconSearch,
-  type Icon,
-} from '@cardstack/boxel-ui/icons';
+import { IconCode, IconSearch, type Icon } from '@cardstack/boxel-ui/icons';
 
 import {
   chooseCard,
@@ -82,6 +76,7 @@ import consumeContext from '../../helpers/consume-context';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
+import NeighborStackTriggerButton from './interact-submode/neighbor-stack-trigger';
 import OperatorModeStack from './stack';
 import { CardDefOrId } from './stack-item';
 import SubmodeLayout from './submode-layout';
@@ -115,65 +110,6 @@ type SearchSheetTrigger = Values<typeof SearchSheetTriggers>;
 
 const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<CardDef>>();
 const stackItemComponentAPI = new WeakMap<StackItem, StackItemComponentAPI>();
-
-interface NeighborStackTriggerButtonSignature {
-  Element: HTMLButtonElement;
-  Args: {
-    triggerSide: SearchSheetTrigger;
-    activeTrigger: SearchSheetTrigger | null;
-    onTrigger: (triggerSide: SearchSheetTrigger) => void;
-  };
-}
-
-class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSignature> {
-  get triggerSideClass() {
-    switch (this.args.triggerSide) {
-      case SearchSheetTriggers.DropCardToLeftNeighborStackButton:
-        return 'add-card-to-neighbor-stack--left';
-      case SearchSheetTriggers.DropCardToRightNeighborStackButton:
-        return 'add-card-to-neighbor-stack--right';
-      default:
-        return undefined;
-    }
-  }
-
-  <template>
-    <button
-      class={{cn
-        'add-card-to-neighbor-stack'
-        this.triggerSideClass
-        add-card-to-neighbor-stack--active=(eq @activeTrigger @triggerSide)
-      }}
-      {{on 'click' (fn @onTrigger @triggerSide)}}
-      ...attributes
-    >
-      <Download width='19' height='19' />
-    </button>
-    <style scoped>
-      .add-card-to-neighbor-stack {
-        --icon-color: var(--boxel-highlight-hover);
-        width: var(--container-button-size);
-        height: var(--container-button-size);
-        padding: 0;
-        border-radius: 50%;
-        background-color: var(--boxel-700);
-        border: var(--boxel-border-flexible);
-        box-shadow: var(--boxel-deep-box-shadow);
-        z-index: var(--boxel-layer-floating-button);
-      }
-      .add-card-to-neighbor-stack:hover,
-      .add-card-to-neighbor-stack--active {
-        --icon-color: var(--boxel-highlight);
-      }
-      .add-card-to-neighbor-stack--left {
-        margin-left: var(--operator-mode-spacing);
-      }
-      .add-card-to-neighbor-stack--right {
-        margin-right: var(--operator-mode-spacing);
-      }
-    </style>
-  </template>
-}
 
 const CodeSubmodeNewFileOptions: TemplateOnlyComponent = <template>
   <ul class='code-mode-file-options'>
@@ -852,6 +788,7 @@ export default class InteractSubmode extends Component {
                   this.showSearchWithTrigger
                   search.openSearchToPrompt
                 }}
+                aria-label='Add card to left stack'
               />
             </:trigger>
             <:content>
@@ -914,6 +851,7 @@ export default class InteractSubmode extends Component {
                   this.showSearchWithTrigger
                   search.openSearchToPrompt
                 }}
+                aria-label='Add card to right stack'
               />
             </:trigger>
             <:content>
