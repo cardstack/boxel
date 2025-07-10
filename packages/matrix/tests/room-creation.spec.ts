@@ -208,7 +208,6 @@ test.describe('Room creation', () => {
     await expect(
       page.locator(`[data-test-joined-room="${room1}"]`),
     ).toContainText(initialRoomName);
-    await page.locator(`[data-test-close-past-sessions]`).click();
     await page.locator('[data-test-ai-assistant-panel]').click();
     await assertRooms(page, [room1, room2, room3]);
 
