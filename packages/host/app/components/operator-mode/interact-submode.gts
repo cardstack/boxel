@@ -1,6 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat, fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
@@ -24,12 +23,7 @@ import {
   MenuItem,
   MenuDivider,
 } from '@cardstack/boxel-ui/helpers';
-import {
-  Download,
-  IconCode,
-  IconSearch,
-  type Icon,
-} from '@cardstack/boxel-ui/icons';
+import { IconCode, IconSearch, type Icon } from '@cardstack/boxel-ui/icons';
 
 import {
   chooseCard,
@@ -99,6 +93,7 @@ import type RealmServer from '../../services/realm-server';
 import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
 
+import NeighborStackTriggerButton from './interact-submode/neighbor-stack-trigger';
 import type { Submode } from '../submode-switcher';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
@@ -115,65 +110,6 @@ type SearchSheetTrigger = Values<typeof SearchSheetTriggers>;
 
 const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<CardDef>>();
 const stackItemComponentAPI = new WeakMap<StackItem, StackItemComponentAPI>();
-
-interface NeighborStackTriggerButtonSignature {
-  Element: HTMLButtonElement;
-  Args: {
-    triggerSide: SearchSheetTrigger;
-    activeTrigger: SearchSheetTrigger | null;
-    onTrigger: (triggerSide: SearchSheetTrigger) => void;
-  };
-}
-
-class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSignature> {
-  get triggerSideClass() {
-    switch (this.args.triggerSide) {
-      case SearchSheetTriggers.DropCardToLeftNeighborStackButton:
-        return 'add-card-to-neighbor-stack--left';
-      case SearchSheetTriggers.DropCardToRightNeighborStackButton:
-        return 'add-card-to-neighbor-stack--right';
-      default:
-        return undefined;
-    }
-  }
-
-  <template>
-    <button
-      class={{cn
-        'add-card-to-neighbor-stack'
-        this.triggerSideClass
-        add-card-to-neighbor-stack--active=(eq @activeTrigger @triggerSide)
-      }}
-      {{on 'click' (fn @onTrigger @triggerSide)}}
-      ...attributes
-    >
-      <Download width='19' height='19' />
-    </button>
-    <style scoped>
-      .add-card-to-neighbor-stack {
-        --icon-color: var(--boxel-highlight-hover);
-        width: var(--container-button-size);
-        height: var(--container-button-size);
-        padding: 0;
-        border-radius: 50%;
-        background-color: var(--boxel-700);
-        border: var(--boxel-border-flexible);
-        box-shadow: var(--boxel-deep-box-shadow);
-        z-index: var(--boxel-layer-floating-button);
-      }
-      .add-card-to-neighbor-stack:hover,
-      .add-card-to-neighbor-stack--active {
-        --icon-color: var(--boxel-highlight);
-      }
-      .add-card-to-neighbor-stack--left {
-        margin-left: var(--operator-mode-spacing);
-      }
-      .add-card-to-neighbor-stack--right {
-        margin-right: var(--operator-mode-spacing);
-      }
-    </style>
-  </template>
-}
 
 const CodeSubmodeNewFileOptions: TemplateOnlyComponent = <template>
   <ul class='code-mode-file-options'>
@@ -842,22 +778,24 @@ export default class InteractSubmode extends Component {
     >
       <div class='interact-submode' style={{this.backgroundImageStyle}}>
         {{#if this.canCreateNeighborStack}}
-          <Tooltip @placement='right'>
-            <:trigger>
-              <NeighborStackTriggerButton
-                data-test-add-card-left-stack
-                @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
-                @activeTrigger={{this.searchSheetTrigger}}
-                @onTrigger={{fn
-                  this.showSearchWithTrigger
-                  search.openSearchToPrompt
-                }}
-              />
-            </:trigger>
-            <:content>
-              {{neighborStackTooltipMessage 'left'}}
-            </:content>
-          </Tooltip>
+          <div class='left-edge'>
+            <Tooltip @placement='right'>
+              <:trigger>
+                <NeighborStackTriggerButton
+                  data-test-add-card-left-stack
+                  @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
+                  @activeTrigger={{this.searchSheetTrigger}}
+                  @onTrigger={{fn
+                    this.showSearchWithTrigger
+                    search.openSearchToPrompt
+                  }}
+                />
+              </:trigger>
+              <:content>
+                {{neighborStackTooltipMessage 'left'}}
+              </:content>
+            </Tooltip>
+          </div>
         {{/if}}
         <div class='stacks'>
           {{#each this.stacks as |stack stackIndex|}}
@@ -903,23 +841,25 @@ export default class InteractSubmode extends Component {
           />
         </div>
         {{#if this.canCreateNeighborStack}}
-          <Tooltip @placement='left'>
-            <:trigger>
-              <NeighborStackTriggerButton
-                class='neighbor-stack-trigger'
-                data-test-add-card-right-stack
-                @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
-                @activeTrigger={{this.searchSheetTrigger}}
-                @onTrigger={{fn
-                  this.showSearchWithTrigger
-                  search.openSearchToPrompt
-                }}
-              />
-            </:trigger>
-            <:content>
-              {{neighborStackTooltipMessage 'right'}}
-            </:content>
-          </Tooltip>
+          <div class='right-edge'>
+            <Tooltip @placement='left'>
+              <:trigger>
+                <NeighborStackTriggerButton
+                  class='neighbor-stack-trigger'
+                  data-test-add-card-right-stack
+                  @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
+                  @activeTrigger={{this.searchSheetTrigger}}
+                  @onTrigger={{fn
+                    this.showSearchWithTrigger
+                    search.openSearchToPrompt
+                  }}
+                />
+              </:trigger>
+              <:content>
+                {{neighborStackTooltipMessage 'right'}}
+              </:content>
+            </Tooltip>
+          </div>
         {{/if}}
         {{#if this.cardToDelete}}
           <DeleteModal
