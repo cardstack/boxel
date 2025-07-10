@@ -78,7 +78,8 @@ export default class AiAssistantChatInput extends Component<Signature> {
         height: var(--chat-input-height);
         min-height: var(--chat-input-height);
         max-height: 300px;
-        border-color: transparent;
+        border: 0;
+        border-radius: 0;
         font-weight: 400;
         padding: var(--boxel-sp-4xs);
         padding-top: 10px;
