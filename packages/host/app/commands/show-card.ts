@@ -35,6 +35,9 @@ export default class ShowCardCommand extends HostBaseCommand<
 
   protected async run(input: BaseCommandModule.CardIdCard): Promise<undefined> {
     let { operatorModeStateService, store } = this;
+    if (operatorModeStateService.workspaceChooserOpened) {
+      operatorModeStateService.closeWorkspaceChooser();
+    }
     if (operatorModeStateService.state?.submode === 'interact') {
       let newStackIndex = Math.min(
         operatorModeStateService.numberOfStacks(),
