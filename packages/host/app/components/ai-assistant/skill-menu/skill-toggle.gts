@@ -52,40 +52,50 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
       {{#if this.isCreating}}
         <LoadingIndicator />
       {{else}}
-        <Pill
-          class='skill-toggle'
-          data-test-attached-card={{@cardId}}
-          data-test-autoattached-card={{@isAutoAttachedCard}}
-          ...attributes
-        >
-          <:iconLeft>
-            <RealmIcon @realmInfo={{this.realm.info @urlForRealmLookup}} />
-          </:iconLeft>
-          <:default>
-            <div class='card-content' title={{this.card.title}}>
-              {{this.card.title}}
-            </div>
-          </:default>
-          <:iconRight>
-            <Switch
-              @isEnabled={{@isEnabled}}
-              @onChange={{@onToggle}}
-              @label={{this.card.title}}
-              data-test-card-pill-toggle='{{@cardId}}-{{if
-                @isEnabled
-                "on"
-                "off"
-              }}'
-            />
-          </:iconRight>
-        </Pill>
+        <div class='toggle-and-realm-icon'>
+          <RealmIcon @realmInfo={{this.realm.info @urlForRealmLookup}} />
+          <Pill
+            class='skill-toggle'
+            data-test-attached-card={{@cardId}}
+            data-test-autoattached-card={{@isAutoAttachedCard}}
+            ...attributes
+          >
+            <:default>
+              <div class='card-content' title={{this.card.title}}>
+                {{this.card.title}}
+              </div>
+            </:default>
+            <:iconRight>
+              <Switch
+                @isEnabled={{@isEnabled}}
+                @onChange={{@onToggle}}
+                @label={{this.card.title}}
+                data-test-card-pill-toggle='{{@cardId}}-{{if
+                  @isEnabled
+                  "on"
+                  "off"
+                }}'
+              />
+            </:iconRight>
+          </Pill>
+        </div>
       {{/if}}
     {{/if}}
     <style scoped>
+      .toggle-and-realm-icon {
+        width: 100%;
+        display: inline-grid;
+        grid-template-columns: auto 1fr;
+        align-items: center;
+        gap: var(--boxel-sp-4xs);
+      }
+
       .skill-toggle {
         --pill-gap: var(--boxel-sp-xxxs);
         --pill-icon-size: 18px;
         --boxel-realm-icon-size: var(--pill-icon-size);
+        display: inline-grid;
+        grid-template-columns: auto 1fr;
         border: 1px solid var(--boxel-400);
         height: var(--pill-height, 1.875rem);
         overflow: hidden;

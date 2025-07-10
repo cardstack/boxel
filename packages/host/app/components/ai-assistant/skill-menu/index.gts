@@ -93,12 +93,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
 
         scroll-timeline: --pill-menu-content-scroll-timeline;
       }
-      .skill-list :deep(.skill-toggle) {
-        --pill-gap: var(--boxel-sp-xxxs);
-        display: inline-grid;
-        grid-template-columns: auto 1fr auto;
-        width: 100%;
-      }
+
       .skill-list :deep(.card-content) {
         max-width: initial;
         font: 600 var(--boxel-font-xs);
