@@ -1569,6 +1569,110 @@ module(basename(__filename), function () {
         'BlogApp module is in resolved module successfully',
       );
     });
+    test('can write several modules at once', async function (assert) {
+      let mapOfWrites = new Map();
+      mapOfWrites.set(
+        'place.gts',
+        `
+        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        export class Place extends CardDef {
+          @field name = contains(StringField);
+        }
+      `,
+      );
+      mapOfWrites.set(
+        'country.gts',
+        `
+        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        export class Country extends CardDef {
+          @field name = contains(StringField);
+        }
+      `,
+      );
+      let result = await realm.write(mapOfWrites);
+      assert.strictEqual(result.length, 2, '2 files were written');
+      assert.strictEqual(result[0].path, 'place.gts');
+      assert.strictEqual(result[1].path, 'country.gts');
+
+      let place = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}place`),
+      );
+      assert.ok(place, 'place module is in the index');
+
+      let country = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}country`),
+      );
+      assert.ok(country, 'country module is in the index');
+      assert.deepEqual(
+        // we splat because despite having the same shape, the constructors are different
+        { ...realm.realmIndexUpdater.stats },
+        {
+          instancesIndexed: 0,
+          instanceErrors: 0,
+          moduleErrors: 0,
+          modulesIndexed: 2,
+          totalIndexEntries: 18,
+        },
+        'indexed correct number of files',
+      );
+    });
+
+    test('can write instances and modules at once', async function (assert) {
+      let mapOfWrites = new Map();
+      mapOfWrites.set(
+        'place.gts',
+        `
+        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        export class Place extends CardDef {
+          @field name = contains(StringField);
+        }
+      `,
+      );
+      mapOfWrites.set(
+        'place.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { name: 'Paris' },
+            meta: {
+              adoptsFrom: {
+                module: './person',
+                name: 'Person',
+              },
+            },
+          },
+        }),
+      );
+      let result = await realm.write(mapOfWrites);
+      assert.strictEqual(result.length, 2, '2 files were written');
+      assert.strictEqual(result[0].path, 'place.gts');
+      assert.strictEqual(result[1].path, 'place.json');
+
+      let module = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}place`),
+      );
+      assert.ok(module, 'place module is in the index');
+
+      let instance = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}place`),
+      );
+      assert.ok(instance, 'place instance is in the index');
+      assert.deepEqual(
+        // we splat because despite having the same shape, the constructors are different
+        { ...realm.realmIndexUpdater.stats },
+        {
+          instancesIndexed: 1,
+          instanceErrors: 0,
+          moduleErrors: 0,
+          modulesIndexed: 1,
+          totalIndexEntries: 18,
+        },
+        'indexed correct number of files',
+      );
+    });
   });
 
   module('permissioned realm', function (hooks) {
