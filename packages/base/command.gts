@@ -125,9 +125,15 @@ export class LintAndFixResult extends CardDef {
   @field output = contains(StringField);
 }
 
+export class PatchCodeResultField extends FieldDef {
+  @field status = contains(StringField); // 'applied', 'failed'
+  @field failureReason = contains(StringField); // only present if status is 'failed'
+}
+
 export class PatchCodeCommandResult extends CardDef {
   @field patchedContent = contains(StringField);
   @field finalFileUrl = contains(StringField);
+  @field results = containsMany(PatchCodeResultField);
 }
 
 export class PatchCodeInput extends CardDef {

@@ -70,12 +70,16 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
       this.commandService.commandContext,
     );
 
-    let { resultContent: patchedCode } =
-      await applySearchReplaceBlockCommand.execute({
-        fileContent: this.originalCode,
-        codeBlock: searchReplaceBlock,
-      });
-    this.modifiedCode = patchedCode;
+    try {
+      let { resultContent: patchedCode } =
+        await applySearchReplaceBlockCommand.execute({
+          fileContent: this.originalCode,
+          codeBlock: searchReplaceBlock,
+        });
+      this.modifiedCode = patchedCode;
+    } catch (error) {
+      this.modifiedCode = this.originalCode;
+    }
   });
 }
 

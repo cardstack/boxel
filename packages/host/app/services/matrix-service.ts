@@ -801,6 +801,7 @@ export default class MatrixService extends Service {
     attachedCards: CardDef[] = [],
     attachedFiles: FileDef[] = [],
     context: BoxelContext,
+    failureReason?: string | undefined,
   ) {
     let contentData = await this.withContextAndAttachments(
       context,
@@ -810,6 +811,7 @@ export default class MatrixService extends Service {
     let content: CodePatchResultContent = {
       msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
       codeBlockIndex,
+      failureReason,
       'm.relates_to': {
         event_id: eventId,
         key: resultKey,

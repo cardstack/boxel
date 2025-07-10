@@ -83,7 +83,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     })(),
   });
 
-  let { getRoomState, simulateRemoteMessage } = mockMatrixUtils;
+  let { getRoomState, getRoomEvents, simulateRemoteMessage } = mockMatrixUtils;
 
   let noop = () => {};
 
@@ -570,7 +570,11 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
       '[data-test-boxel-input-id="ai-chat-input"]',
       'Hey, I updated the command',
     );
+    let room1EventsCount = getRoomEvents(roomId1).length;
     await click('[data-test-send-message-btn]');
+    await waitUntil(() => getRoomEvents(roomId1).length > room1EventsCount, {
+      timeoutMessage: 'timed out waiting for room events to increase',
+    });
 
     const room1State2SkillsJson = getRoomState(
       roomId1,
