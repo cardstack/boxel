@@ -36,6 +36,7 @@ import CatalogLayout from './layouts/catalog-layout';
 import type IconComponent from '@cardstack/boxel-icons/captions';
 import BuildingBank from '@cardstack/boxel-icons/building-bank';
 import BuildingIcon from '@cardstack/boxel-icons/building';
+import CategoryIcon from '@cardstack/boxel-icons/category';
 import HealthRecognition from '@cardstack/boxel-icons/health-recognition';
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import ShipWheelIcon from '@cardstack/boxel-icons/ship-wheel';
@@ -376,39 +377,103 @@ class Isolated extends Component<typeof Catalog> {
   );
 
   get categoryItems() {
-    let instances = (this.categorySearch?.instances ?? []) as Category[];
-    if (!instances) {
+    // Get all category instances from the database
+    const categoryInstances = (this.categorySearch?.instances ??
+      []) as Category[];
+
+    if (!categoryInstances) {
       return [];
     }
 
-    const iconMap: Record<string, typeof IconComponent> = {
-      All: LayoutGridPlusIcon,
-      'Accounting & Finance': BuildingBank,
-      Business: BuildingIcon,
-      'Content Management': UsersIcon,
-      'Games and Entertainment': WorldIcon,
-      'Health and Fitness': HealthRecognition,
-      'Travel and Lifestyle': ShipWheelIcon,
+    // Define sphere names as a union type for better type safety
+    type SphereName = 'BUILD' | 'LEARN' | 'LIFE' | 'PLAY' | 'WORK';
+    const sphereGroup: SphereName[] = [
+      'BUILD',
+      'LEARN',
+      'LIFE',
+      'PLAY',
+      'WORK',
+    ];
+    // Define which icon to use for each sphere
+    const sphereIconMap: Record<SphereName, typeof IconComponent> = {
+      BUILD: BuildingIcon,
+      LEARN: UsersIcon,
+      LIFE: HealthRecognition,
+      PLAY: WorldIcon,
+      WORK: BuildingBank,
     };
 
-    // Create nested structure with "All" as parent
-    const nestedCategories = instances.map((instance) => {
-      return {
-        id: instance.id,
-        displayName: instance.name,
-        icon: iconMap[instance.name] || LayoutGridPlusIcon,
-      };
-    });
+    // Define the structure for sphere groups
+    interface SphereGroupSignature {
+      id: string;
+      displayName: string;
+      icon: typeof IconComponent;
+      filters: CategoryFilterItemSignature[];
+    }
 
-    return [
+    // Define the structure for category filter items
+    interface CategoryFilterItemSignature {
+      id: string;
+      displayName: string;
+      icon: typeof IconComponent;
+      sphere?: string;
+    }
+
+    // Group categories by their sphere
+    const categoriesGroupedBySphere: Record<string, SphereGroupSignature> = {};
+
+    // Loop through each category and organize them by sphere
+    for (const category of categoryInstances) {
+      // Skip categories that aren't linked to a sphere
+      if (!category.sphere?.name) {
+        continue;
+      }
+
+      const sphereName = category.sphere.name;
+
+      if (!categoriesGroupedBySphere[sphereName]) {
+        categoriesGroupedBySphere[sphereName] = {
+          id: sphereName.toLowerCase(),
+          displayName: sphereName,
+          icon: sphereIconMap[sphereName],
+          filters: [],
+        };
+      }
+
+      const categoryFilterItem: CategoryFilterItemSignature = {
+        id: category.id,
+        displayName: category.name,
+        icon: CategoryIcon,
+        sphere: sphereName,
+      };
+
+      categoriesGroupedBySphere[sphereName].filters.push(categoryFilterItem);
+    }
+
+    // Sort categories within each sphere group
+    for (const sphereGroup of Object.values(categoriesGroupedBySphere)) {
+      sphereGroup.filters.sort((a, b) =>
+        a.displayName.localeCompare(b.displayName),
+      );
+    }
+
+    // Create the final list with "All" button at the top
+    // Sort categories by their display name
+    const allCategoriesList: (
+      | SphereGroupSignature
+      | CategoryFilterItemSignature
+    )[] = [
       {
         id: 'all',
         displayName: 'All',
-        icon: iconMap['All'],
-        filters: nestedCategories,
-        isExpanded: true,
+        icon: LayoutGridPlusIcon,
       },
+      ...Object.values(categoriesGroupedBySphere).sort((a, b) =>
+        a.displayName.localeCompare(b.displayName),
+      ),
     ];
+
+    return allCategoriesList;
   }
 
   @action
@@ -416,15 +481,41 @@ class Isolated extends Component<typeof Catalog> {
     this.activeCategory = category;
   }
 
-  get categoryFilter(): EqFilter | undefined {
-    if (this.activeCategory?.id === 'all' || !this.activeCategory) {
+  get categoryFilter(): AnyFilter | undefined {
+    const isNoFilterSelected =
+      this.activeCategory?.id === 'all' || !this.activeCategory;
+
+    if (isNoFilterSelected) {
       return;
     }
-    return {
-      eq: {
-        'categories.id': this.activeCategory.id,
-      },
-    };
+
+    // Show all items that belong to ANY category within this sphereUser selected a sphere (e.g., "BUILD", "LEARN", etc.)
+    const isSphereSelected =
+      this.activeCategory.filters && this.activeCategory.filters.length > 0;
+
+    if (isSphereSelected) {
+      const categoryIdsInSphere = this.activeCategory.filters.map(
+        (category) => category.id,
+      );
+
+      const sphereFilter = {
+        any: categoryIdsInSphere.map((categoryId) => ({
+          eq: {
+            'categories.id': categoryId,
+          },
+        })),
+      };
+
+      return sphereFilter;
+    } else {
+      const specificCategoryFilter = {
+        eq: {
+          'categories.id': this.activeCategory.id,
+        },
+      };
+
+      return specificCategoryFilter;
+    }
   }
 
   get tagQuery(): Query {
