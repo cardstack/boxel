@@ -176,6 +176,11 @@ export interface BoxelContext {
   tools?: Tool[];
   toolChoice?: ToolChoice;
   submode?: string;
+  workspaces?: {
+    url: string;
+    name: string;
+    type: 'user-workspace' | 'catalog-workspace';
+  }[];
   codeMode?: {
     currentFile?: string;
     moduleInspectorPanel?: string;
