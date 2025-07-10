@@ -20,9 +20,8 @@ import {
   isSingleCardDocument,
   type SingleCardDocument,
   type CardCollectionDocument,
-  type CardResource,
-  type Saved,
-} from './card-document';
+} from './document-types';
+import { type CardResource, type Saved } from './resource-types';
 
 type Options = {
   loadLinks?: true;
