@@ -27,6 +27,7 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
 
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {
@@ -38,7 +39,7 @@ class StubRealmService extends RealmService {
 }
 
 class MockOperatorModeStateService extends Service {
-  @tracked state = {
+  @tracked state: Partial<OperatorModeState> = {
     submode: 'interact' as 'interact' | 'code',
     codeSelection: undefined as string | undefined,
   };
@@ -78,6 +79,14 @@ class MockOperatorModeStateService extends Service {
     this.updatedCodePaths = [];
     this.state = { submode: 'interact', codeSelection: undefined };
     this.codePathString = undefined;
+  }
+
+  get workspaceChooserOpened() {
+    return this.state.workspaceChooserOpened ?? false;
+  }
+
+  closeWorkspaceChooser() {
+    this.state.workspaceChooserOpened = false;
   }
 }
 
@@ -301,6 +310,23 @@ module('Integration | Command | show-card', function (hooks) {
         mockOperatorModeStateService.addedStackItems[0].stackIndex,
         1,
         'Stack index is 1 when numberOfStacks returns 3 (minimum of 3 and 1)',
+      );
+    });
+
+    test('closes workspace chooser, if open', async function (assert) {
+      const cardId = `${testRealmURL}Person/alice`;
+      mockOperatorModeStateService.state = {
+        submode: 'interact',
+        codeSelection: undefined,
+        workspaceChooserOpened: true,
+      };
+
+      await command.execute({ cardId });
+
+      assert.strictEqual(
+        mockOperatorModeStateService.state.workspaceChooserOpened,
+        false,
+        'Workspace chooser is closed after showing card',
       );
     });
   });
