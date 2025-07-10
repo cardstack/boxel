@@ -179,17 +179,17 @@ export default class AiAssistantChatInput extends Component<Signature> {
   }
 
   get height() {
-    const lineHeight = 20;
+    const lineHeight = 18;
     const padding = 8;
     const minLines = 1;
-    const maxLines = 6;
+    const maxLines = 7;
 
     // Calculate actual line count from newlines in the content
     let newlineCount = (this.args.value.match(/\n/g) ?? []).length;
 
     // Also consider content length for lines that might wrap
     // This is a rough estimate that can be adjusted
-    const charsPerLine = 60;
+    const charsPerLine = 35;
     let charLineCount = Math.ceil(this.args.value.length / charsPerLine);
 
     // Use whichever count is higher (newlines or character-based estimate)
