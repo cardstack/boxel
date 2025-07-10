@@ -79,7 +79,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
           This adds a bottom border to this container when the input has overflowed.
         */
 
-        animation: detect-input-overflow linear;
+        animation: detect-input-overflow linear forwards;
         animation-timeline: --chat-input-scroll-timeline;
 
         --border-bottom-color-if-overflow: var(--has-overflow) var(--boxel-400);
