@@ -240,7 +240,7 @@ test.describe('Login', () => {
 
     await assertLoggedIn(page);
     await expect(page.locator('[data-test-workspace-visibility]')).toHaveCount(
-      1,
+      2,
     );
     let boxelSession = await page.evaluate(async () => {
       // playwright needs a beat before it get access local storage

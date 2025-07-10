@@ -32,6 +32,8 @@ For a quickstart, see [here](./QUICKSTART.md)
 
 `packages/vscode-boxel-tools` is a VS Code extension for browsing Boxel workspaces, published as [Boxel Tools](https://marketplace.visualstudio.com/items?itemName=cardstack.boxel-tools). It can be deployed via the bot, with `staging` environment producing a pre-release version.
 
+`packages/skills-realm` is a realm that hosts AI skills. Skills are maintained in the [boxel-skills](https://github.com/cardstack/boxel-skills) repository and cloned locally for development. See the [Skills Realm README](./packages/skills-realm/README.md) for setup and development workflows.
+
 To learn more about Boxel and Cards, see our [documentation](./docs/README.md)
 
 ## Running the Host App
@@ -73,19 +75,20 @@ Live reloads are not available in this mode, however, if you use start the serve
 
 Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. Use the environment variable `WORKER_HIGH_PRIORITY_COUNT` to add additional workers that service only user initiated requests and `WORKER_ALL_PRIORITY_COUNT` to add workers that service all jobs (system or user initiated). By default there is 1 all priority worker for each realm server. Here's what is spun up with `start:all`:
 
-| Port  | Description                                                   | Running `start:all` | Running `start:base` |
-| ----- | ------------------------------------------------------------- | ------------------- | -------------------- |
-| :4201 | `/base` base realm                                            | ✅                  | ✅                   |
-| :4201 | `/experiments` experiments realm                              | ✅                  | 🚫                   |
-| :4202 | `/test` host test realm, `/node-test` node test realm         | ✅                  | 🚫                   |
-| :4205 | `/test` realm for matrix client tests (playwright controlled) | 🚫                  | 🚫                   |
-| :4210 | Development Worker Manager (spins up 1 worker by default)     | ✅                  | 🚫                   |
-| :4211 | Test Worker Manager (spins up 1 worker by default)            | ✅                  | 🚫                   |
-| :4212 | Worker Manager for matrix client tests (playwright controlled - 1 worker) | ✅      | 🚫                   |
-| :4213 | Worker Manager for matrix client tests - base realm server (playwright controlled - 1 worker) | ✅ | 🚫    |
-| :5001 | Mail user interface for viewing emails sent to local SMTP     | ✅                  | 🚫                   |
-| :5435 | Postgres DB                                                   | ✅                  | 🚫                   |
-| :8008 | Matrix synapse server                                         | ✅                  | 🚫                   |
+| Port  | Description                                                                                   | Running `start:all` | Running `start:base` |
+| ----- | --------------------------------------------------------------------------------------------- | ------------------- | -------------------- |
+| :4201 | `/base` base realm                                                                            | ✅                  | ✅                   |
+| :4201 | `/skills` skills realm                                                                        | ✅                  | 🚫                   |
+| :4201 | `/experiments` experiments realm                                                              | ✅                  | 🚫                   |
+| :4202 | `/test` host test realm, `/node-test` node test realm                                         | ✅                  | 🚫                   |
+| :4205 | `/test` realm for matrix client tests (playwright controlled)                                 | 🚫                  | 🚫                   |
+| :4210 | Development Worker Manager (spins up 1 worker by default)                                     | ✅                  | 🚫                   |
+| :4211 | Test Worker Manager (spins up 1 worker by default)                                            | ✅                  | 🚫                   |
+| :4212 | Worker Manager for matrix client tests (playwright controlled - 1 worker)                     | ✅                  | 🚫                   |
+| :4213 | Worker Manager for matrix client tests - base realm server (playwright controlled - 1 worker) | ✅                  | 🚫                   |
+| :5001 | Mail user interface for viewing emails sent to local SMTP                                     | ✅                  | 🚫                   |
+| :5435 | Postgres DB                                                                                   | ✅                  | 🚫                   |
+| :8008 | Matrix synapse server                                                                         | ✅                  | 🚫                   |
 
 #### Using `start:development`
 

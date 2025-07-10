@@ -27,7 +27,6 @@ import { v4 as uuidv4 } from 'uuid';
 
 import {
   aiBotUsername,
-  baseRealm,
   LooseCardResource,
   logger,
   ResolvedCodeRef,
@@ -97,6 +96,7 @@ import type * as SkillModule from 'https://cardstack.com/base/skill';
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
 import { addPatchTools } from '../commands/utils';
 import { isSkillCard } from '../lib/file-def-manager';
+import { skillCardURL } from '../lib/utils';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
@@ -985,12 +985,12 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [`${baseRealm.url}Skill/boxel-environment`];
+    let interactModeDefaultSkills = [skillCardURL('boxel-environment')];
 
     let codeModeDefaultSkills = [
-      `${baseRealm.url}Skill/boxel-environment`,
-      `${baseRealm.url}Skill/boxel-development`,
-      `${baseRealm.url}Skill/source-code-editing`,
+      skillCardURL('boxel-environment'),
+      skillCardURL('boxel-development'),
+      skillCardURL('source-code-editing'),
     ];
 
     let defaultSkills;
