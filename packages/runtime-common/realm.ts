@@ -2048,7 +2048,9 @@ export class Realm {
         requestContext,
       });
     }
-    let url: string = Array.isArray(payload.url) ? payload.url[0] : payload.url;
+    let url = Array.isArray(payload.url)
+      ? String(payload.url[0])
+      : String(payload.url);
     const deps = await this.#realmIndexQueryEngine.getCardDependencies(
       new URL(url),
     );

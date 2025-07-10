@@ -175,6 +175,10 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
     const targetRealm = instance[cardAPI.realmURL]?.href;
 
+    if (!targetRealm) {
+      throw new Error('Realm not found');
+    }
+
     const response = await this.network.authedFetch(
       `${targetRealm}_dependencies?url=${openCardId}`,
       {
