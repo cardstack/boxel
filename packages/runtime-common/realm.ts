@@ -13,6 +13,7 @@ import {
   methodNotAllowed,
   badRequest,
   CardError,
+  ErrorDetails,
 } from './error';
 import { v4 as uuidV4 } from 'uuid';
 import { formatRFC7231 } from 'date-fns';
@@ -86,6 +87,11 @@ import type {
   UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 import type { LintArgs, LintResult } from './lint';
+import {
+  AtomicOperation,
+  AtomicOperationResult,
+  AtomicPayloadValidationError,
+} from './atomic-document';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -143,7 +149,14 @@ export interface RealmAdapter {
 
   exists(path: LocalPath): Promise<boolean>;
 
-  write(path: LocalPath, contents: string): Promise<{ lastModified: number }>;
+  write(
+    path: LocalPath,
+    contents: string,
+  ): Promise<{
+    lastModified: number;
+    created: number;
+    isNew: boolean;
+  }>;
 
   remove(path: LocalPath): Promise<void>;
 
@@ -204,6 +217,8 @@ export interface MatrixConfig {
 interface WriteResult {
   path: LocalPath;
   lastModified: number;
+  created: number;
+  isNew: boolean;
 }
 
 export type RequestContext = { realm: Realm; permissions: RealmPermissions };
@@ -382,6 +397,11 @@ export class Realm {
         SupportedMimeType.RealmInfo,
         this.readinessCheck.bind(this),
       )
+      .post(
+        '/_atomic',
+        SupportedMimeType.CardJson,
+        this.handleAtomicOperations.bind(this),
+      )
       .post('(/|/.+/)', SupportedMimeType.CardJson, this.createCard.bind(this))
       .get(
         '/|/.+(?<!.json)',
@@ -514,8 +534,11 @@ export class Realm {
       let url = this.paths.fileURL(path);
       this.sendIndexInitiationEvent(url.href);
       await this.trackOwnWrite(path);
-      let { lastModified } = await this.#adapter.write(path, content);
-      results.push({ path, lastModified });
+      let { lastModified, created, isNew } = await this.#adapter.write(
+        path,
+        content,
+      );
+      results.push({ path, lastModified, created, isNew });
       urls.push(url);
     }
     await this.#realmIndexUpdater.update(urls, {
@@ -529,6 +552,223 @@ export class Realm {
       },
     });
     return results;
+  }
+
+  validate(json: any): AtomicPayloadValidationError[] {
+    let operations = json['atomic:operations'];
+    let title = 'Invalid atomic:operations format';
+    let errors: AtomicPayloadValidationError[] = [];
+    if (!operations || !Array.isArray(operations)) {
+      let detail = `Request body must contain 'atomic:operations' array`;
+      errors.push({
+        title,
+        detail,
+        status: 400,
+      });
+      return errors;
+    }
+    for (let operation of operations) {
+      if (operation.op !== 'add') {
+        let detail = `You tried to use an unsupported operation type: '${operation.op}'. Only 'add' operations are currently supported`;
+        errors.push({
+          title,
+          detail,
+          status: 422,
+        });
+      }
+      if (!operation.href) {
+        let detail = `Request operation must contain 'href' property`;
+        errors.push({
+          title,
+          detail,
+          status: 400,
+        });
+      }
+      if (
+        operation.data &&
+        !(operation.data.type == 'card' || operation.data.type == 'source')
+      ) {
+        let detail = `You tried to use an unsupported resource type: '${operation.data.type}'. Only 'card' and 'source' resource types are currently supported`;
+        errors.push({
+          title,
+          detail,
+          status: 422,
+        });
+      }
+    }
+    return errors;
+  }
+
+  // this method carefully checks before writing with the intent of
+  // stopping failed operations that depend on others
+  private async checkBeforeAtomicWrite(
+    operations: AtomicOperation[],
+  ): Promise<ErrorDetails[]> {
+    let promises = [];
+    for (let { href } of operations) {
+      promises.push(this.#adapter.exists(href));
+    }
+    let booleanFlags = await Promise.all(promises);
+    return operations
+      .filter((_, i) => booleanFlags[i])
+      .map(({ href }) => {
+        return {
+          title: 'Resource already exists',
+          detail: `Resource ${href} already exists`,
+          status: 409,
+        };
+      });
+  }
+
+  private lowestStatusCode(errors: ErrorDetails[]): number {
+    let statuses = errors
+      .filter((e) => e.status)
+      .map((e) => e.status) as number[];
+    return Math.min(...statuses);
+  }
+
+  private async handleAtomicOperations(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let body = await request.text();
+    let json;
+    try {
+      json = JSON.parse(body);
+    } catch (e) {
+      return createResponse({
+        body: JSON.stringify({
+          errors: [
+            {
+              title: 'Invalid atomic:operations format',
+              detail: `Request body is not valid JSON`,
+            },
+          ],
+        }),
+        init: {
+          status: 400,
+          headers: {
+            'content-type': SupportedMimeType.CardJson,
+          },
+        },
+        requestContext,
+      });
+    }
+    let validationErrors = this.validate(json);
+    if (validationErrors.length > 0) {
+      return createResponse({
+        body: JSON.stringify({ errors: validationErrors }),
+        init: { status: 400, headers: { 'content-type': 'application/json' } }, //consolidate to 400
+        requestContext,
+      });
+    }
+    let operations = json['atomic:operations'] as AtomicOperation[];
+
+    let atomicCheckErrors = await this.checkBeforeAtomicWrite(operations);
+    if (atomicCheckErrors.length > 0) {
+      return createResponse({
+        body: JSON.stringify({ errors: atomicCheckErrors }),
+        init: {
+          status: this.lowestStatusCode(atomicCheckErrors),
+          headers: { 'content-type': 'application/json' },
+        },
+        requestContext,
+      });
+    }
+    let sourceFiles = new Map<LocalPath, string>();
+    let instanceFiles = new Map<LocalPath, string>();
+    let sourceOperations = operations.filter((op) => op.data.type === 'source');
+    let instanceOperations = operations.filter((op) => op.data.type === 'card');
+    let instanceWriteResults: WriteResult[] = [];
+    let sourceWriteResults: WriteResult[] = [];
+
+    // we intentionally write source files first so that fileSerialization can work
+
+    for (let { data: resource, href } of sourceOperations) {
+      let fileURL = this.paths.fileURL(href);
+      let localPath = this.paths.local(fileURL);
+      let content = resource.attributes.content as string;
+      sourceFiles.set(localPath, content);
+    }
+
+    if (sourceFiles.size > 0) {
+      sourceWriteResults = await this.write(
+        sourceFiles,
+        request.headers.get('X-Boxel-Client-Request-Id'),
+      );
+    }
+
+    for (let { data: resource, href } of instanceOperations) {
+      let fileURL = this.paths.fileURL(href);
+      let localPath = this.paths.local(fileURL);
+      if (!isCardResource(resource)) {
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                title: 'Invalid card resource',
+                detail: `Operation data is not a valid card resource`,
+              },
+            ],
+          }),
+          init: {
+            status: 409,
+            headers: { 'content-type': 'application/json' },
+          },
+          requestContext,
+        });
+      }
+      try {
+        let fileSerialization = await this.fileSerialization(
+          { data: merge(resource, { meta: { realmURL: this.url } }) },
+          fileURL,
+        );
+        instanceFiles.set(
+          localPath,
+          JSON.stringify(fileSerialization, null, 2),
+        );
+      } catch (err: any) {
+        return createResponse({
+          body: JSON.stringify({
+            errors: [{ title: 'Some error', detail: err.message }],
+          }),
+          init: {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          },
+          requestContext,
+        });
+      }
+    }
+
+    if (instanceFiles.size > 0) {
+      instanceWriteResults = await this.write(
+        instanceFiles,
+        request.headers.get('X-Boxel-Client-Request-Id'),
+      );
+    }
+
+    let results: AtomicOperationResult[] = [
+      ...instanceWriteResults,
+      ...sourceWriteResults,
+    ].map(({ path, created }) => ({
+      data: {
+        id: this.paths.fileURL(path).href,
+      },
+      meta: {
+        created,
+      },
+    }));
+    return createResponse({
+      body: JSON.stringify({ 'atomic:results': results }, null, 2),
+      init: {
+        status: 201,
+        headers: {
+          'content-type': SupportedMimeType.CardJson,
+        },
+      },
+      requestContext,
+    });
   }
 
   // we track our own writes so that we can eliminate echoes in the file watcher

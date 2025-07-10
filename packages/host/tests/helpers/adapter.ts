@@ -310,10 +310,11 @@ export class TestRealmAdapter implements RealmAdapter {
   async write(
     path: LocalPath,
     contents: string | object,
-  ): Promise<{ lastModified: number }> {
+  ): Promise<{ lastModified: number; created: number; isNew: boolean }> {
     let segments = path.split('/');
     let name = segments.pop()!;
     let dir = this.#traverse(segments, 'directory');
+    let exists = await this.exists(path);
     if (dir.kind === 'file') {
       throw new Error(`treated file as a directory`);
     }
@@ -352,7 +353,11 @@ export class TestRealmAdapter implements RealmAdapter {
 
     this.postUpdateEvent(updateEvent);
 
-    return { lastModified };
+    return {
+      lastModified,
+      created: lastModified,
+      isNew: !exists,
+    };
   }
 
   postUpdateEvent(data: UpdateRealmEventContent) {

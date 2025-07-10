@@ -176,12 +176,17 @@ export class NodeAdapter implements RealmAdapter {
   async write(
     path: string,
     contents: string,
-  ): Promise<{ lastModified: number }> {
+  ): Promise<{ lastModified: number; created: number; isNew: boolean }> {
     let absolutePath = join(this.realmDir, path);
+    let exists = await this.exists(path);
     ensureFileSync(absolutePath);
     writeFileSync(absolutePath, contents);
-    let { mtime } = statSync(absolutePath);
-    return { lastModified: unixTime(mtime.getTime()) };
+    let { mtime, birthtime } = statSync(absolutePath);
+    return {
+      lastModified: unixTime(mtime.getTime()),
+      created: unixTime(birthtime.getTime()),
+      isNew: !exists,
+    };
   }
 
   async remove(path: LocalPath): Promise<void> {
