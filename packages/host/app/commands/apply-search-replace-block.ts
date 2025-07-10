@@ -50,6 +50,9 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
       searchPattern,
       replacePattern,
     );
+    if (resultContent === input.fileContent) {
+      throw new Error('The patch did not cleanly apply.');
+    }
 
     return new ApplySearchReplaceBlockResult({
       resultContent,

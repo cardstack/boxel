@@ -28,6 +28,7 @@ import {
   getRoomsFromSync,
   initialRoomName,
   setupUserSubscribed,
+  setSkillsRedirect,
   waitUntil,
 } from '../helpers';
 
@@ -38,6 +39,7 @@ test.describe('Room creation', () => {
   test.beforeEach(async ({ page }) => {
     test.setTimeout(120_000);
     synapse = await synapseStart();
+    await setSkillsRedirect(page);
     await registerRealmUsers(synapse);
     realmServer = await startRealmServer();
     await registerUser(synapse, 'user1', 'pass');
