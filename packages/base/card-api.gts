@@ -3289,27 +3289,15 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
 
 export function getFields(
   card: typeof BaseDef,
-  opts?: {
-    usedLinksToFieldsOnly?: boolean;
-    includeComputeds?: boolean;
-    tracked?: boolean;
-  },
+  opts?: { usedLinksToFieldsOnly?: boolean; includeComputeds?: boolean },
 ): { [fieldName: string]: Field<BaseDefConstructor> };
 export function getFields<T extends BaseDef>(
   card: T,
-  opts?: {
-    usedLinksToFieldsOnly?: boolean;
-    includeComputeds?: boolean;
-    tracked?: boolean;
-  },
+  opts?: { usedLinksToFieldsOnly?: boolean; includeComputeds?: boolean },
 ): { [P in keyof T]?: Field<BaseDefConstructor> };
 export function getFields(
   cardInstanceOrClass: BaseDef | typeof BaseDef,
-  opts?: {
-    usedLinksToFieldsOnly?: boolean;
-    includeComputeds?: boolean;
-    tracked?: boolean;
-  },
+  opts?: { usedLinksToFieldsOnly?: boolean; includeComputeds?: boolean },
 ): { [fieldName: string]: Field<BaseDefConstructor> } {
   let obj: object | null;
   let usedFields: string[] = [];
@@ -3329,7 +3317,7 @@ export function getFields(
         return [];
       }
       let maybeField = getField(cardInstanceOrClass, maybeFieldName, {
-        ...(!opts?.tracked ? { untracked: true } : {}),
+        untracked: true,
       });
       if (!maybeField) {
         return [];
