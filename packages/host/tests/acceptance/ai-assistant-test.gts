@@ -1135,6 +1135,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       undefined,
       'Context sent with message contains correct selectedCodeRef',
     );
+    assert.deepEqual(
+      contextSent.realmPermissions,
+      {
+        canRead: true,
+        canWrite: true,
+      },
+      'Context sent with message contains correct realmPermissions',
+    );
     await click('[data-test-clickable-definition-container]');
 
     await fillIn('[data-test-message-field]', `Message - 2`);
@@ -1181,6 +1189,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         name: 'Plant',
       },
       'Context sent with message contains correct selectedCodeRef',
+    );
+    assert.deepEqual(
+      contextSent.realmPermissions,
+      {
+        canRead: true,
+        canWrite: true,
+      },
+      'Context sent with message contains correct realmPermissions',
     );
 
     await click(
@@ -1235,6 +1251,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       },
       'Context sent with message contains correct selectedCodeRef',
     );
+    assert.deepEqual(
+      contextSent.realmPermissions,
+      {
+        canRead: true,
+        canWrite: true,
+      },
+      'Context sent with message contains correct realmPermissions',
+    );
 
     await click(
       '[data-test-boxel-button][data-test-module-inspector-view="spec"]',
@@ -1283,6 +1307,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         name: 'Plant',
       },
       'Context sent with message contains correct selectedCodeRef',
+    );
+    assert.deepEqual(
+      contextSent.realmPermissions,
+      {
+        canRead: true,
+        canWrite: true,
+      },
+      'Context sent with message contains correct realmPermissions',
     );
   });
 });

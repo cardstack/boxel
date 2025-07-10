@@ -1036,12 +1036,19 @@ export default class OperatorModeStateService extends Service {
     }
 
     let openCardIds = this.makeRemoteIdsList([...openCardIdsSet]);
+    let realmUrl = this.realmURL.href;
+    let realmPermissions = {
+      canRead: this.realm.canRead(realmUrl),
+      canWrite: this.realm.canWrite(realmUrl),
+    };
+
     return {
       agentId: this.matrixService.agentId,
       submode: this._state.submode,
       debug: this.operatorModeController.debug,
       openCardIds,
-      realmUrl: this.realmURL.href,
+      realmUrl,
+      realmPermissions,
       codeMode,
     };
   }
