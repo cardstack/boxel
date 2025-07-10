@@ -11,7 +11,6 @@ import {
   IconButton,
   Pill,
   RealmIcon,
-  Switch,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
@@ -30,7 +29,6 @@ interface CardPillSignature {
     urlForRealmLookup: string;
     isAutoAttachedCard?: boolean;
     removeCard?: (cardId: string) => void;
-    onToggle?: () => void;
     isEnabled?: boolean;
   };
 }
@@ -45,7 +43,7 @@ export default class CardPill extends Component<CardPillSignature> {
   };
 
   private get hideIconRight() {
-    return !this.args.onToggle && !this.args.removeCard;
+    return !this.args.removeCard;
   }
 
   private get card() {
@@ -81,18 +79,6 @@ export default class CardPill extends Component<CardPillSignature> {
             </div>
           </:default>
           <:iconRight>
-            {{#if @onToggle}}
-              <Switch
-                @isEnabled={{@isEnabled}}
-                @onChange={{@onToggle}}
-                @label={{this.card.title}}
-                data-test-card-pill-toggle='{{@cardId}}-{{if
-                  @isEnabled
-                  "on"
-                  "off"
-                }}'
-              />
-            {{/if}}
             {{#if @removeCard}}
               <IconButton
                 class='remove-button'
@@ -136,39 +122,6 @@ export default class CardPill extends Component<CardPillSignature> {
         align-items: center;
         justify-content: center;
         border-radius: var(--boxel-border-radius-xs);
-      }
-      .toggle {
-        margin-left: auto;
-        width: 22px;
-        height: 12px;
-        background-color: var(--boxel-450);
-        border-radius: var(--boxel-border-radius-sm);
-        padding: 3px;
-        display: flex;
-        align-items: center;
-        transition: background-color 0.1s ease-in;
-      }
-      input[type='checkbox'] {
-        appearance: none;
-      }
-      .toggle-switch {
-        margin: 0;
-        width: 6px;
-        height: 6px;
-        background-color: var(--boxel-light);
-        border-radius: 50%;
-        transform: translateX(0);
-        transition: transform 0.1s ease-in;
-      }
-      .toggle.checked {
-        background-color: var(--boxel-dark-green);
-      }
-      .toggle.checked .toggle-switch {
-        transform: translateX(10px);
-      }
-      .toggle:hover,
-      .toggle-switch:hover {
-        cursor: pointer;
       }
     </style>
   </template>
