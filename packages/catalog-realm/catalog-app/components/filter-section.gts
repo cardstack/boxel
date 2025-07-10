@@ -28,7 +28,6 @@ interface FilterCategoryGroupArgs {
 
 export class FilterCategoryGroup extends GlimmerComponent<FilterCategoryGroupArgs> {
   <template>
-    {{log @categories}}
     <FilterGroupWrapper @title={{@title}} ...attributes>
       {{#if @isLoading}}
         <SkeletonPlaceholder class='skeleton-placeholder-filter-list' />

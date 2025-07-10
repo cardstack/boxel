@@ -736,10 +736,68 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .doesNotExist('No tag should be selected after reset');
       });
 
-      test('updates the card count correctly when filtering by a category', async function (assert) {
-        await click(
-          '[data-test-boxel-filter-list-button="Education and Learning"]',
+      test('updates the card count correctly when filtering by a sphere group', async function (assert) {
+        await click('[data-test-boxel-filter-list-button="LIFE"]');
+        assert
+          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+          .exists({ count: 3 });
+      });
+
+      test('only shows categories linked to a sphere cardDef in the filter list', async function (assert) {
+        const allFilterButtons = document.querySelectorAll(
+          '[data-test-boxel-filter-list-button]',
         );
+        const filterButtonTexts: string[] = [];
+
+        allFilterButtons.forEach((button) => {
+          const buttonText = button.textContent?.trim();
+          if (buttonText) {
+            filterButtonTexts.push(buttonText);
+          }
+        });
+
+        const validSphereNames = [
+          'All',
+          'BUILD',
+          'LEARN',
+          'LIFE',
+          'PLAY',
+          'WORK',
+        ];
+
+        filterButtonTexts.forEach((text) => {
+          assert.ok(
+            validSphereNames.includes(text) || text === 'All',
+            `Filter list should only contain sphere names and "All", but found: ${text}`,
+          );
+        });
+
+        // Verify that we have the expected sphere groups
+        assert.ok(
+          filterButtonTexts.includes('BUILD'),
+          'BUILD sphere should be present',
+        );
+        assert.ok(
+          filterButtonTexts.includes('LEARN'),
+          'LEARN sphere should be present',
+        );
+        assert.ok(
+          filterButtonTexts.includes('LIFE'),
+          'LIFE sphere should be present',
+        );
+        assert.ok(
+          filterButtonTexts.includes('PLAY'),
+          'PLAY sphere should be present',
+        );
+        assert.ok(
+          filterButtonTexts.includes('WORK'),
+          'WORK sphere should be present',
+        );
+      });
+
+      test('updates the card count correctly when filtering by a category', async function (assert) {
+        await click('[data-test-filter-list-item="LIFE"] .dropdown-toggle');
+        await click('[data-test-boxel-filter-list-button="Health & Wellness"]');
         assert
           .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
           .exists({ count: 1 });
