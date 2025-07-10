@@ -65,7 +65,7 @@ test.describe('Skills', () => {
       page.locator(`[data-test-pill-menu-item="${cardId}"]`),
     ).toHaveCount(1);
     await expect(
-      page.locator(`[data-test-card-pill-toggle="${cardId}-on"]`),
+      page.locator(`[data-test-skill-toggle="${cardId}-on"]`),
     ).toHaveClass('switch checked');
   }
 
@@ -99,9 +99,7 @@ test.describe('Skills', () => {
       page.locator(`[data-test-pill-menu-item="${environmentSkillCardId}"]`),
     ).toHaveCount(1);
     await expect(
-      page.locator(
-        `[data-test-card-pill-toggle="${environmentSkillCardId}-on"]`,
-      ),
+      page.locator(`[data-test-skill-toggle="${environmentSkillCardId}-on"]`),
     ).toHaveCount(1);
     await expect(page.locator('[data-test-pill-menu-add-button]')).toHaveCount(
       1,
@@ -115,14 +113,12 @@ test.describe('Skills', () => {
       'Skills: 2 of 2 active',
     );
 
-    await page
-      .locator(`[data-test-card-pill-toggle="${skillCard1}-on"]`)
-      .click();
+    await page.locator(`[data-test-skill-toggle="${skillCard1}-on"]`).click();
     await expect(
-      page.locator(`[data-test-card-pill-toggle="${skillCard1}-off"]`),
+      page.locator(`[data-test-skill-toggle="${skillCard1}-off"]`),
     ).toHaveClass('switch');
     await expect(
-      page.locator(`[data-test-card-pill-toggle="${skillCard1}-on"]`),
+      page.locator(`[data-test-skill-toggle="${skillCard1}-on"]`),
     ).toHaveCount(0);
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
       'Skills: 1 of 2 active',
@@ -136,9 +132,7 @@ test.describe('Skills', () => {
       'Skills: 2 of 3 active',
     );
 
-    await page
-      .locator(`[data-test-card-pill-toggle="${skillCard1}-off"]`)
-      .click();
+    await page.locator(`[data-test-skill-toggle="${skillCard1}-off"]`).click();
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
       'Skills: 3 of 3 active',
     );
@@ -151,9 +145,7 @@ test.describe('Skills', () => {
       'Skills: 4 of 4 active',
     );
 
-    await page
-      .locator(`[data-test-card-pill-toggle="${skillCard3}-on"]`)
-      .click();
+    await page.locator(`[data-test-skill-toggle="${skillCard3}-on"]`).click();
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
       'Skills: 3 of 4 active',
     );
@@ -180,7 +172,7 @@ test.describe('Skills', () => {
       ).toHaveCount(1);
 
       await expect(
-        page.locator(`[data-test-card-pill-toggle="${skillCardURL}-on"]`),
+        page.locator(`[data-test-skill-toggle="${skillCardURL}-on"]`),
         `Skill card ${skillCardURL} should be active`,
       ).toHaveClass('switch checked');
     }
@@ -216,9 +208,7 @@ test.describe('Skills', () => {
     );
     await attachSkill(page, skillCard3, true);
     await attachSkill(page, skillCard2);
-    await page
-      .locator(`[data-test-card-pill-toggle="${skillCard2}-on"]`)
-      .click();
+    await page.locator(`[data-test-skill-toggle="${skillCard2}-on"]`).click();
     await expect(page.locator('[data-test-skill-menu]')).toContainText(
       'Skills: 2 of 3 active',
     );
@@ -273,24 +263,18 @@ test.describe('Skills', () => {
       .locator('[data-test-skill-menu][data-test-pill-menu-button]')
       .click();
     await page
-      .locator(`[data-test-card-pill-toggle="${environmentSkillCardId}-on"]`)
+      .locator(`[data-test-skill-toggle="${environmentSkillCardId}-on"]`)
       .click(); // toggle off default skill card
-    await page
-      .locator(`[data-test-card-pill-toggle="${skillCard1}-on"]`)
-      .click(); // toggle off skill 1
-    await page
-      .locator(`[data-test-card-pill-toggle="${skillCard2}-on"]`)
-      .click(); // toggle off skill 2
+    await page.locator(`[data-test-skill-toggle="${skillCard1}-on"]`).click(); // toggle off skill 1
+    await page.locator(`[data-test-skill-toggle="${skillCard2}-on"]`).click(); // toggle off skill 2
     await expect(
-      page.locator(
-        `[data-test-card-pill-toggle="${environmentSkillCardId}-off"]`,
-      ),
+      page.locator(`[data-test-skill-toggle="${environmentSkillCardId}-off"]`),
     ).toHaveCount(1);
     await expect(
-      page.locator(`[data-test-card-pill-toggle="${skillCard1}-off"]`),
+      page.locator(`[data-test-skill-toggle="${skillCard1}-off"]`),
     ).toHaveCount(1);
     await expect(
-      page.locator(`[data-test-card-pill-toggle="${skillCard2}-off"]`),
+      page.locator(`[data-test-skill-toggle="${skillCard2}-off"]`),
     ).toHaveCount(1);
     await sendMessage(page, room1, 'Message 2');
     await assertMessages(page, [
@@ -307,11 +291,9 @@ test.describe('Skills', () => {
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard1, true);
     await attachSkill(page, skillCard2);
-    await page
-      .locator(`[data-test-card-pill-toggle="${skillCard2}-on"]`)
-      .click(); // toggle off skill 2
+    await page.locator(`[data-test-skill-toggle="${skillCard2}-on"]`).click(); // toggle off skill 2
     await expect(
-      page.locator(`[data-test-card-pill-toggle="${skillCard2}-off"]`),
+      page.locator(`[data-test-skill-toggle="${skillCard2}-off"]`),
     ).toHaveCount(1);
     await sendMessage(page, room1, 'Message 1');
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
@@ -320,11 +302,9 @@ test.describe('Skills', () => {
     await page
       .locator('[data-test-skill-menu][data-test-pill-menu-button]')
       .click();
-    await page
-      .locator(`[data-test-card-pill-toggle="${skillCard2}-off"]`)
-      .click(); // toggle on skill 2
+    await page.locator(`[data-test-skill-toggle="${skillCard2}-off"]`).click(); // toggle on skill 2
     await expect(
-      page.locator(`[data-test-card-pill-toggle="${skillCard2}-on"]`),
+      page.locator(`[data-test-skill-toggle="${skillCard2}-on"]`),
     ).toHaveCount(1);
     await sendMessage(page, room1, 'Message 2');
     await assertMessages(page, [
@@ -340,9 +320,7 @@ test.describe('Skills', () => {
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard1, true);
     await attachSkill(page, skillCard2);
-    await page
-      .locator(`[data-test-card-pill-toggle="${skillCard1}-on"]`)
-      .click();
+    await page.locator(`[data-test-skill-toggle="${skillCard1}-on"]`).click();
     await expect(page.locator('[data-test-skill-menu]')).toContainText(
       'Skills: 2 of 3 active',
     );
