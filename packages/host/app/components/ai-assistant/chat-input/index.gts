@@ -73,6 +73,23 @@ export default class AiAssistantChatInput extends Component<Signature> {
         background-color: var(--boxel-light);
         border-top-left-radius: var(--chat-input-area-border-radius);
         border-top-right-radius: var(--chat-input-area-border-radius);
+
+        /*
+          Detecting overflow with CSS: https://csscade.com/can-you-detect-overflow-with-css/
+          This adds a bottom border to this container when the input has overflowed.
+        */
+
+        animation: detect-input-overflow linear;
+        animation-timeline: --chat-input-scroll-timeline;
+
+        --border-bottom-color-if-overflow: var(--has-overflow) var(--boxel-400);
+        --border-bottom-color-no-overflow: transparent;
+
+        border-bottom: 1px solid
+          var(
+            --border-bottom-color-if-overflow,
+            var(--border-bottom-color-no-overflow)
+          );
       }
       .chat-input {
         height: var(--chat-input-height);
@@ -87,7 +104,17 @@ export default class AiAssistantChatInput extends Component<Signature> {
         outline: 0;
         transition: height 0.2s ease-in-out;
         overflow-y: auto;
+
+        scroll-timeline: --chat-input-scroll-timeline block;
       }
+
+      @keyframes detect-input-overflow {
+        from,
+        to {
+          --has-overflow: ;
+        }
+      }
+
       .chat-input::placeholder {
         color: var(--boxel-400);
       }
