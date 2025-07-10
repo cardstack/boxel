@@ -76,6 +76,7 @@ import consumeContext from '../../helpers/consume-context';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
+import NeighborStackTriggerButton from './interact-submode/neighbor-stack-trigger';
 import OperatorModeStack from './stack';
 import { CardDefOrId } from './stack-item';
 import SubmodeLayout from './submode-layout';
@@ -93,7 +94,6 @@ import type RealmServer from '../../services/realm-server';
 import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
 
-import NeighborStackTriggerButton from './interact-submode/neighbor-stack-trigger';
 import type { Submode } from '../submode-switcher';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
@@ -778,24 +778,23 @@ export default class InteractSubmode extends Component {
     >
       <div class='interact-submode' style={{this.backgroundImageStyle}}>
         {{#if this.canCreateNeighborStack}}
-          <div class='left-edge'>
-            <Tooltip @placement='right'>
-              <:trigger>
-                <NeighborStackTriggerButton
-                  data-test-add-card-left-stack
-                  @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
-                  @activeTrigger={{this.searchSheetTrigger}}
-                  @onTrigger={{fn
-                    this.showSearchWithTrigger
-                    search.openSearchToPrompt
-                  }}
-                />
-              </:trigger>
-              <:content>
-                {{neighborStackTooltipMessage 'left'}}
-              </:content>
-            </Tooltip>
-          </div>
+          <Tooltip @placement='right'>
+            <:trigger>
+              <NeighborStackTriggerButton
+                data-test-add-card-left-stack
+                @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
+                @activeTrigger={{this.searchSheetTrigger}}
+                @onTrigger={{fn
+                  this.showSearchWithTrigger
+                  search.openSearchToPrompt
+                }}
+                aria-label='Add card to left stack'
+              />
+            </:trigger>
+            <:content>
+              {{neighborStackTooltipMessage 'left'}}
+            </:content>
+          </Tooltip>
         {{/if}}
         <div class='stacks'>
           {{#each this.stacks as |stack stackIndex|}}
@@ -841,25 +840,24 @@ export default class InteractSubmode extends Component {
           />
         </div>
         {{#if this.canCreateNeighborStack}}
-          <div class='right-edge'>
-            <Tooltip @placement='left'>
-              <:trigger>
-                <NeighborStackTriggerButton
-                  class='neighbor-stack-trigger'
-                  data-test-add-card-right-stack
-                  @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
-                  @activeTrigger={{this.searchSheetTrigger}}
-                  @onTrigger={{fn
-                    this.showSearchWithTrigger
-                    search.openSearchToPrompt
-                  }}
-                />
-              </:trigger>
-              <:content>
-                {{neighborStackTooltipMessage 'right'}}
-              </:content>
-            </Tooltip>
-          </div>
+          <Tooltip @placement='left'>
+            <:trigger>
+              <NeighborStackTriggerButton
+                class='neighbor-stack-trigger'
+                data-test-add-card-right-stack
+                @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
+                @activeTrigger={{this.searchSheetTrigger}}
+                @onTrigger={{fn
+                  this.showSearchWithTrigger
+                  search.openSearchToPrompt
+                }}
+                aria-label='Add card to right stack'
+              />
+            </:trigger>
+            <:content>
+              {{neighborStackTooltipMessage 'right'}}
+            </:content>
+          </Tooltip>
         {{/if}}
         {{#if this.cardToDelete}}
           <DeleteModal
