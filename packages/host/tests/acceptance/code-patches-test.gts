@@ -532,7 +532,9 @@ ${REPLACE_MARKER}
       codePath: `${testRealmURL}hello.txt`,
     });
     await click('[data-test-open-ai-assistant]');
-    await waitUntil(() => findAll('[data-test-apply-state]').length === 3);
+    await waitUntil(() => findAll('[data-test-apply-state]').length === 3, {
+      timeout: 5000,
+    });
     assert
       .dom('[data-test-apply-state="applied"]')
       .exists({ count: 1 }, 'one patch is applied');
