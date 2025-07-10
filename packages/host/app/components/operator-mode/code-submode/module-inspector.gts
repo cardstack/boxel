@@ -63,6 +63,7 @@ import {
 } from '@cardstack/host/resources/module-contents';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import { DEFAULT_MODULE_INSPECTOR_VIEW } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { ModuleInspectorView } from '@cardstack/host/services/operator-mode-state-service';
@@ -75,6 +76,7 @@ import type StoreService from '@cardstack/host/services/store';
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import type { ComponentLike } from '@glint/template';
@@ -111,6 +113,7 @@ interface ModuleInspectorSignature {
 
 export default class ModuleInspector extends Component<ModuleInspectorSignature> {
   @service private declare loaderService: LoaderService;
+  @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
   @service private declare realm: RealmService;
@@ -149,6 +152,29 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       return undefined;
     }
     return !isCardOrFieldDeclaration(this.args.selectedDeclaration);
+  }
+
+  private get sourceFileForCard(): FileDef | undefined {
+    if (
+      !this.args.cardError ||
+      !this.args.currentOpenFile ||
+      !('url' in this.args.currentOpenFile) ||
+      !('content' in this.args.currentOpenFile)
+    ) {
+      return undefined;
+    }
+
+    const fileContent = JSON.parse(this.args.currentOpenFile.content);
+    const adoptsFrom = fileContent?.data?.meta?.adoptsFrom;
+
+    if (!adoptsFrom) {
+      return undefined;
+    }
+
+    return this.matrixService.fileAPI.createFileDef({
+      sourceUrl: new URL(adoptsFrom.module, this.args.currentOpenFile.url).href,
+      name: `${adoptsFrom.name}.gts`,
+    });
   }
 
   private get fileIncompatibilityMessage() {
@@ -426,7 +452,10 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       {{! this is here to make TS happy, this is always true }}
       {{#if @cardError}}
         <section class='module-inspector-content error'>
-          <CardError @error={{@cardError}} />
+          <CardError
+            @error={{@cardError}}
+            @fileToFixWithAi={{this.sourceFileForCard}}
+          />
         </section>
       {{/if}}
     {{else if this.isEmptyFile}}
