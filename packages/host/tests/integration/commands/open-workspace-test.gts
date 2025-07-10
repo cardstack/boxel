@@ -1,37 +1,16 @@
-import { getOwner } from '@ember/owner';
-import { RenderingTestContext } from '@ember/test-helpers';
-
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { localId } from '@cardstack/runtime-common';
-
 import OpenWorkspaceCommand from '@cardstack/host/commands/open-workspace';
-import RealmService from '@cardstack/host/services/realm';
-import type StoreService from '@cardstack/host/services/store';
-
-import { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
-  testRealmInfo,
 } from '../../helpers';
-import { CardDef, setupBaseRealm } from '../../helpers/base-realm';
+import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
-
-let store: StoreService;
-
-class StubRealmService extends RealmService {
-  get defaultReadableRealm() {
-    return {
-      path: testRealmURL,
-      info: testRealmInfo,
-    };
-  }
-}
 
 module('Integration | commands | open-workspace', function (hooks) {
   setupRenderingTest(hooks);
@@ -42,11 +21,6 @@ module('Integration | commands | open-workspace', function (hooks) {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
-  });
-
-  hooks.beforeEach(function (this: RenderingTestContext) {
-    getOwner(this)!.register('service:realm', StubRealmService);
-    store = getService('store');
   });
 
   hooks.beforeEach(async function () {

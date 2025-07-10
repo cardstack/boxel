@@ -15,6 +15,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import ShowCardCommand from '@cardstack/host/commands/show-card';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
+import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
 
 import {
@@ -27,7 +28,6 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
-import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
 
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {
