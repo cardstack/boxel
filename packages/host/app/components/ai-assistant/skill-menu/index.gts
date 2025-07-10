@@ -102,7 +102,8 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         --boxel-button-font: 600 var(--boxel-font-xs);
         --boxel-button-border: 1px solid var(--boxel-400);
         --boxel-button-color: var(--boxel-dark);
-        border-radius: var(--boxel-border-radius);
+        --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-sm);
+        --boxel-button-min-height: unset;
 
         gap: var(--boxel-sp-xs);
         background: none;
