@@ -872,8 +872,12 @@ export default class InteractSubmode extends Component {
         display: flex;
         justify-content: center;
         align-items: center;
-        padding-inline: var(--boxel-sp-lg);
-        gap: var(--boxel-sp);
+      }
+      .stacks > :deep(.operator-mode-stack:first-child) {
+        padding-left: var(--boxel-sp-lg);
+      }
+      .stacks > :deep(.operator-mode-stack:last-child) {
+        padding-right: var(--boxel-sp-lg);
       }
       .stack-with-bg-image:before {
         content: ' ';
@@ -889,7 +893,7 @@ export default class InteractSubmode extends Component {
         display: none;
       }
       .stack-medium-padding-top {
-        padding-top: var(--operator-mode-top-bar-item-height);
+        padding-top: calc(var(--stack-padding-top) / 2);
       }
       .stack-small-padding-top {
         padding-top: var(--operator-mode-spacing);
@@ -901,10 +905,10 @@ export default class InteractSubmode extends Component {
         z-index: var(--boxel-layer-floating-button);
       }
       .stack-trigger-right {
-        right: 1px;
+        right: 0;
       }
       .stack-trigger-left {
-        left: 1px;
+        left: 0;
       }
     </style>
   </template>
