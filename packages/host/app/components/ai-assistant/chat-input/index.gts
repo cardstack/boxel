@@ -6,9 +6,8 @@ import Component from '@glimmer/component';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 
 import { BoxelInput, IconButton } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { not, pick } from '@cardstack/boxel-ui/helpers';
 import { ArrowUp } from '@cardstack/boxel-ui/icons';
-import { setCssVar } from '@cardstack/boxel-ui/modifiers';
 
 import AttachButton from '../attachment-picker/attach-button';
 
@@ -37,18 +36,20 @@ export default class AiAssistantChatInput extends Component<Signature> {
       {{#if @attachButton}}
         <@attachButton />
       {{/if}}
-      <BoxelInput
-        class='chat-input'
-        @id='ai-chat-input'
-        @type='textarea'
-        @value={{@value}}
-        @onInput={{this.onInput}}
-        @placeholder='Enter a prompt'
-        {{onKeyMod 'Shift+Enter' this.insertNewLine}}
-        {{onKeyMod 'Enter' this.onSend}}
-        {{setCssVar chat-input-heixxght=this.height}}
-        ...attributes
-      />
+      <div class='input-and-clone'>
+        <textarea
+          class='chat-input'
+          id='ai-chat-input'
+          value={{@value}}
+          placeholder='Enter a prompt'
+          rows='1'
+          {{on 'input' (pick 'target.value' @onInput)}}
+          {{onKeyMod 'Shift+Enter' this.insertNewLine}}
+          {{onKeyMod 'Enter' this.onSend}}
+          ...attributes
+        />
+        <div class='clone'>{{@value}}</div>
+      </div>
       <IconButton
         {{on 'click' this.onSend}}
         {{! TODO we should visually surface this loading state }}
@@ -92,30 +93,26 @@ export default class AiAssistantChatInput extends Component<Signature> {
           );
       }
 
-      /* Autoexpanding textarea: https://chriscoyier.net/2023/09/29/css-solves-auto-expanding-textareas-probably-eventually/ */
-      .chat-input-container :deep(.input-container) {
+      /* Adapted autoexpanding textarea: https://chriscoyier.net/2023/09/29/css-solves-auto-expanding-textareas-probably-eventually/ */
+      .input-and-clone {
         display: grid;
-        grid-template-columns: unset;
-        grid-template-areas: unset;
       }
 
-      .chat-input-container :deep(.input-container::after) {
-        content: attr(data-replicated-value) ' ';
+      .clone {
         white-space: pre-wrap;
         visibility: hidden;
 
-        overflow-y: auto;
-
         scroll-timeline: --chat-input-scroll-timeline block;
-
-        /* The pseudoelement is rendering 14px taller than the one it clones! */
-        max-height: 136px;
       }
 
       .chat-input,
-      .chat-input-container :deep(.input-container::after) {
+      .clone {
+        width: 100%;
         padding: var(--boxel-sp-4xs);
         padding-top: 10px;
+
+        max-height: 150px;
+        overflow-y: auto;
 
         font: var(--boxel-font-sm);
         font-weight: 400;
@@ -130,12 +127,8 @@ export default class AiAssistantChatInput extends Component<Signature> {
         background: transparent;
         border: 0;
         border-radius: 0;
-        font-weight: 400;
-        padding: var(--boxel-sp-4xs);
-        padding-top: 10px;
         resize: none;
         outline: 0;
-        overflow-y: auto;
       }
 
       @keyframes detect-input-overflow {
@@ -174,12 +167,6 @@ export default class AiAssistantChatInput extends Component<Signature> {
     </style>
   </template>
 
-  @action onInput(value: string) {
-    let inputContainer = document.querySelector('#ai-chat-input').parentNode;
-    inputContainer.dataset.replicatedValue = value;
-    this.args.onInput(value);
-  }
-
   @action onSend(ev: Event) {
     ev.preventDefault();
     if ('shiftKey' in ev && ev.shiftKey) {
@@ -212,27 +199,5 @@ export default class AiAssistantChatInput extends Component<Signature> {
     next(() => {
       textarea.selectionStart = textarea.selectionEnd = startPos + 2;
     });
-  }
-
-  get height() {
-    const lineHeight = 18;
-    const padding = 8;
-    const minLines = 1;
-    const maxLines = 7;
-
-    // Calculate actual line count from newlines in the content
-    let newlineCount = (this.args.value.match(/\n/g) ?? []).length;
-
-    // Also consider content length for lines that might wrap
-    // This is a rough estimate that can be adjusted
-    const charsPerLine = 35;
-    let charLineCount = Math.ceil(this.args.value.length / charsPerLine);
-
-    // Use whichever count is higher (newlines or character-based estimate)
-    let estimatedLineCount = Math.max(newlineCount + 1, charLineCount);
-    let lineCount = Math.min(Math.max(estimatedLineCount, minLines), maxLines);
-
-    let height = lineCount * lineHeight + 2 * padding;
-    return `${height}px`;
   }
 }
