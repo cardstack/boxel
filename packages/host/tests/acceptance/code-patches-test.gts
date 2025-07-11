@@ -820,6 +820,8 @@ ${REPLACE_MARKER}
       codePath: `${testRealmURL}hello.txt`,
     });
     await click('[data-test-open-ai-assistant]');
+    await click('[data-test-past-sessions-button]');
+    await click(`[data-test-enter-room="${roomId}"]`);
     await waitUntil(() => findAll('[data-test-apply-state]').length === 3);
     assert
       .dom('[data-test-apply-state="applied"]')
