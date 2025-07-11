@@ -11,10 +11,14 @@ export default async function visitOperatorMode({
   fileView,
   openDirs,
   moduleInspector,
+  workspaceChooserOpened,
 }: Partial<SerializedState>) {
   let operatorModeState = {
     stacks: stacks || [],
     submode: submode || 'interact',
+    workspaceChooserOpened: workspaceChooserOpened
+      ? workspaceChooserOpened
+      : false,
     ...(codePath ? { codePath } : {}),
     ...(fileView ? { fileView } : {}),
     ...(openDirs ? { openDirs } : {}),

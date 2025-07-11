@@ -766,7 +766,12 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     url = currentURL().split('?')[1].replace(/^\/\?/, '') ?? '';
     urlParameters = new URLSearchParams(url);
-    assert.true(Boolean(urlParameters.get('workspaceChooserOpened')));
+    let operatorModeStateParam = urlParameters.get('operatorModeState');
+
+    assert.true(
+      operatorModeStateParam &&
+        JSON.parse(operatorModeStateParam).workspaceChooserOpened,
+    );
     await percySnapshot(assert);
   });
 

@@ -42,26 +42,39 @@ export default class PatchCodeCommand extends HostBaseCommand<
     let fileInfo = await this.getFileInfo(fileUrl);
     let hasEmptySearchPortion = this.hasEmptySearchPortion(codeBlocks);
     let sourceContent = hasEmptySearchPortion ? '' : fileInfo.content;
-    let patchedCode = await this.applyCodeBlocks(sourceContent, codeBlocks);
-    let lintResult = await this.lintAndFix(fileUrl, patchedCode);
-    let finalFileUrl = await this.determineFinalFileUrl(
-      fileUrl,
-      fileInfo,
-      hasEmptySearchPortion,
+    let { patchedCode, results } = await this.applyCodeBlocks(
+      sourceContent,
+      codeBlocks,
     );
+    let finalFileUrl = fileUrl;
+    if (results.some((r) => r.status === 'applied')) {
+      let lintResult = await this.lintAndFix(fileUrl, patchedCode);
+      patchedCode = lintResult.output;
+      finalFileUrl = await this.determineFinalFileUrl(
+        fileUrl,
+        fileInfo,
+        hasEmptySearchPortion,
+      );
 
-    await this.cardService.saveSource(
-      new URL(finalFileUrl),
-      lintResult.output,
-      'bot-patch',
-    );
+      await this.cardService.saveSource(
+        new URL(finalFileUrl),
+        patchedCode,
+        'bot-patch',
+      );
+    }
 
     let commandModule = await this.loadCommandModule();
-    const { PatchCodeCommandResult } = commandModule;
+    const { PatchCodeCommandResult, PatchCodeResultField } = commandModule;
 
     return new PatchCodeCommandResult({
-      patchedContent: lintResult.output,
+      patchedContent: patchedCode,
       finalFileUrl,
+      results: results.map((result) => {
+        return new PatchCodeResultField({
+          status: result.status,
+          failureReason: result.failureReason,
+        });
+      }),
     });
   }
 
@@ -87,19 +100,32 @@ export default class PatchCodeCommand extends HostBaseCommand<
   private async applyCodeBlocks(
     initialContent: string,
     codeBlocks: string[],
-  ): Promise<string> {
+  ): Promise<{
+    patchedCode: string;
+    results: { status: 'applied' | 'failed'; failureReason?: string }[];
+  }> {
     let applyCommand = new ApplySearchReplaceBlockCommand(this.commandContext);
-
     let content = initialContent;
+    let results: { status: 'applied' | 'failed'; failureReason?: string }[] =
+      [];
     for (let codeBlock of codeBlocks) {
-      let { resultContent } = await applyCommand.execute({
-        fileContent: content,
-        codeBlock: codeBlock,
-      });
-      content = resultContent;
+      try {
+        let { resultContent } = await applyCommand.execute({
+          fileContent: content,
+          codeBlock: codeBlock,
+        });
+        content = resultContent;
+        results.push({ status: 'applied' });
+      } catch (error) {
+        results.push({
+          status: 'failed',
+          failureReason: error instanceof Error ? error.message : String(error),
+        });
+        continue;
+      }
     }
 
-    return content;
+    return { patchedCode: content, results };
   }
 
   private async lintAndFix(
