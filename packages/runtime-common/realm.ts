@@ -2051,16 +2051,25 @@ export class Realm {
     let url = Array.isArray(payload.url)
       ? String(payload.url[0])
       : String(payload.url);
-    const deps = await this.#realmIndexQueryEngine.getCardDependencies(
-      new URL(url),
-    );
-    return createResponse({
-      body: JSON.stringify(deps, null, 2),
-      init: {
-        headers: { 'content-type': SupportedMimeType.CardDependencies },
-      },
-      requestContext,
-    });
+
+    try {
+      const deps = await this.#realmIndexQueryEngine.getCardDependencies(
+        new URL(url),
+      );
+
+      return createResponse({
+        body: JSON.stringify(deps, null, 2),
+        init: {
+          headers: { 'content-type': SupportedMimeType.CardDependencies },
+        },
+        requestContext,
+      });
+    } catch (e) {
+      if (e instanceof Error) {
+        return notFound(request, requestContext);
+      }
+      throw e;
+    }
   }
 
   private async realmMtimes(
