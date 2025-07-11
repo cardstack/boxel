@@ -868,6 +868,26 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     assert
       .dom('[data-test-message-idx="1"] [data-test-ai-message-content]')
       .containsText('I sent a message from the background.');
+
+    // Send another message that will open a toast
+    await click('[data-test-close-ai-assistant]');
+    simulateRemoteMessage(
+      anotherRoomId,
+      '@aibot:localhost',
+      {
+        body: 'Toasty!',
+        msgtype: 'm.text',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      {
+        origin_server_ts: fourteenMinutesAgo.getTime(),
+      },
+    );
+    await waitFor('[data-test-ai-assistant-toast]');
+    assert.dom('[data-test-ai-assistant-toast]').containsText('Toasty!');
+    await click('[data-test-close-toast]');
+    assert.dom('[data-test-ai-assistant-toast]').doesNotExist();
   });
 
   test('continuation events should be combined into one message that uses `created` from the oldest message', async function (assert) {
