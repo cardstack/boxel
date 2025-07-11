@@ -401,7 +401,7 @@ export class Realm {
       )
       .post(
         '/_atomic',
-        SupportedMimeType.CardJson,
+        SupportedMimeType.JSONAPI,
         this.handleAtomicOperations.bind(this),
       )
       .post('(/|/.+/)', SupportedMimeType.CardJson, this.createCard.bind(this))
