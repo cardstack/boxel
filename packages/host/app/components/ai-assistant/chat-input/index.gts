@@ -42,11 +42,11 @@ export default class AiAssistantChatInput extends Component<Signature> {
         @id='ai-chat-input'
         @type='textarea'
         @value={{@value}}
-        @onInput={{@onInput}}
+        @onInput={{this.onInput}}
         @placeholder='Enter a prompt'
         {{onKeyMod 'Shift+Enter' this.insertNewLine}}
         {{onKeyMod 'Enter' this.onSend}}
-        {{setCssVar chat-input-height=this.height}}
+        {{setCssVar chat-input-heixxght=this.height}}
         ...attributes
       />
       <IconButton
@@ -91,10 +91,43 @@ export default class AiAssistantChatInput extends Component<Signature> {
             var(--border-bottom-color-no-overflow)
           );
       }
+
+      /* Autoexpanding textarea: https://chriscoyier.net/2023/09/29/css-solves-auto-expanding-textareas-probably-eventually/ */
+      .chat-input-container :deep(.input-container) {
+        display: grid;
+        grid-template-columns: unset;
+        grid-template-areas: unset;
+      }
+
+      .chat-input-container :deep(.input-container::after) {
+        content: attr(data-replicated-value) ' ';
+        white-space: pre-wrap;
+        visibility: hidden;
+
+        overflow-y: auto;
+
+        scroll-timeline: --chat-input-scroll-timeline block;
+
+        /* The pseudoelement is rendering 14px taller than the one it clones! */
+        max-height: 136px;
+      }
+
+      .chat-input,
+      .chat-input-container :deep(.input-container::after) {
+        padding: var(--boxel-sp-4xs);
+        padding-top: 10px;
+
+        font: var(--boxel-font-sm);
+        font-weight: 400;
+        letter-spacing: var(--boxel-lsp-xs);
+
+        grid-area: 1 / 1 / 2 / 2;
+      }
+
       .chat-input {
-        height: var(--chat-input-height);
-        min-height: var(--chat-input-height);
-        max-height: 300px;
+        max-height: 150px;
+
+        background: transparent;
         border: 0;
         border-radius: 0;
         font-weight: 400;
@@ -102,10 +135,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
         padding-top: 10px;
         resize: none;
         outline: 0;
-        transition: height 0.2s ease-in-out;
         overflow-y: auto;
-
-        scroll-timeline: --chat-input-scroll-timeline block;
       }
 
       @keyframes detect-input-overflow {
@@ -143,6 +173,12 @@ export default class AiAssistantChatInput extends Component<Signature> {
       }
     </style>
   </template>
+
+  @action onInput(value: string) {
+    let inputContainer = document.querySelector('#ai-chat-input').parentNode;
+    inputContainer.dataset.replicatedValue = value;
+    this.args.onInput(value);
+  }
 
   @action onSend(ev: Event) {
     ev.preventDefault();
