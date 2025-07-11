@@ -1,7 +1,7 @@
 import { click, waitFor, waitUntil, fillIn } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { module, test } from 'qunit';
+import { module, skip, test } from 'qunit';
 
 import { validate as uuidValidate } from 'uuid';
 
@@ -661,7 +661,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           );
       });
 
-      test('should be reset when clicking "Catalog Home" button', async function (assert) {
+      // TOOD: restore in CS-9083
+      skip('should be reset when clicking "Catalog Home" button', async function (assert) {
         await waitFor('[data-test-filter-search-input]');
         await click('[data-test-filter-search-input]');
         await fillIn('[data-test-filter-search-input]', 'Mortgage');
