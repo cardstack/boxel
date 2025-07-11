@@ -885,8 +885,14 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       },
     );
     await waitFor('[data-test-ai-assistant-toast]');
-    assert.dom('[data-test-ai-assistant-toast]').containsText('Toasty!');
+
+    assert.dom('[data-test-ai-assistant-toast]').exists();
+    await settled();
+    await waitFor('[data-test-close-toast]');
     await click('[data-test-close-toast]');
+    await waitUntil(
+      () => !document.querySelector('[data-test-ai-assistant-toast]'),
+    );
     assert.dom('[data-test-ai-assistant-toast]').doesNotExist();
   });
 

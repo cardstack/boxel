@@ -9,6 +9,8 @@ import Component from '@glimmer/component';
 import { format as formatDate, formatISO, isAfter, subMinutes } from 'date-fns';
 import { cancelPoll, pollTask, runTask } from 'ember-lifeline';
 
+import { MatrixEvent } from 'matrix-js-sdk';
+
 import { TrackedObject } from 'tracked-built-ins';
 
 import { BoxelButton, IconButton } from '@cardstack/boxel-ui/components';
@@ -21,7 +23,6 @@ import LocalPersistenceService from '@cardstack/host/services/local-persistence-
 import MatrixService from '@cardstack/host/services/matrix-service';
 
 import assistantIcon from './ai-assist-icon.webp';
-import { MatrixEvent } from 'matrix-js-sdk';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -47,8 +48,8 @@ export default class AiAssistantToast extends Component<Signature> {
 
         <IconButton
           @icon={{IconX}}
-          @width='12'
-          @height='12'
+          @width='10'
+          @height='10'
           {{on 'click' this.closeToast}}
           class='toast-close-button'
           aria-label='close toast'
@@ -117,9 +118,13 @@ export default class AiAssistantToast extends Component<Signature> {
         --icon-color: var(--boxel-450);
         border: none;
         background: none;
-        padding: 2px;
+        padding: 1px;
         border-radius: var(--boxel-border-radius-xs);
         transition: background-color 0.2s ease;
+        width: 16px;
+        height: 16px;
+        min-width: 16px;
+        min-height: 16px;
       }
       .toast-close-button:hover {
         --icon-color: var(--boxel-light);
