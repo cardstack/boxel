@@ -395,11 +395,20 @@ function callSerializeHook(
 function cardTypeFor(
   field: Field<typeof BaseDef>,
   boxedElement?: Box<BaseDef>,
+  overrides?: () => Map<string, typeof BaseDef> | undefined,
 ): typeof BaseDef {
-  let override =
-    boxedElement?.value && typeof boxedElement.value === 'object'
-      ? getFieldOverrides(boxedElement.value)?.get(field.name)
-      : undefined;
+  let override: typeof BaseDef | undefined;
+  if (overrides) {
+    let valueKey = `${field.name}${
+      boxedElement ? '.' + boxedElement.name : ''
+    }`;
+    override = boxedElement?.value ? overrides()?.get(valueKey) : undefined;
+  } else {
+    override =
+      boxedElement?.value && typeof boxedElement.value === 'object'
+        ? getFieldOverrides(boxedElement.value)?.get(field.name)
+        : undefined;
+  }
   if (primitive in field.card) {
     return override ?? field.card;
   }
@@ -866,7 +875,6 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
           ]),
       );
     }
-    // TODO we should populate the field overrides as necessary (when the instance class is not the same as this.card)
     return (await cardClassFromResource(resource, this.card, relativeTo))[
       deserialize
     ](resource, relativeTo, doc, identityContext, opts);
