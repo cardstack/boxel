@@ -176,6 +176,10 @@ ${REPLACE_MARKER}\n\`\`\``;
         debug: false,
         openCardIds: [],
         realmUrl: 'http://test-realm/test/',
+        realmPermissions: {
+          canRead: true,
+          canWrite: true,
+        },
       },
       'patch code result event contains the context',
     );

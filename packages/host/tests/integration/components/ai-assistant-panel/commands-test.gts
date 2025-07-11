@@ -571,6 +571,10 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         debug: false,
         openCardIds: ['http://test-realm/test/Person/fadhlan'],
         realmUrl: 'http://test-realm/test/',
+        realmPermissions: {
+          canRead: true,
+          canWrite: true,
+        },
       },
       'command result event contains the context',
     );
@@ -645,6 +649,10 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         debug: false,
         openCardIds: ['http://test-realm/test/Person/fadhlan'],
         realmUrl: 'http://test-realm/test/',
+        realmPermissions: {
+          canRead: true,
+          canWrite: true,
+        },
       },
       'command result event contains the context',
     );
