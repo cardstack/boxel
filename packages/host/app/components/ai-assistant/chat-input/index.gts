@@ -122,8 +122,6 @@ export default class AiAssistantChatInput extends Component<Signature> {
       }
 
       .chat-input {
-        max-height: 150px;
-
         background: transparent;
         border: 0;
         border-radius: 0;
