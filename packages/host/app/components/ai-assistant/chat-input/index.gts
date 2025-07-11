@@ -14,7 +14,7 @@ import AttachButton from '../attachment-picker/attach-button';
 import type { WithBoundArgs } from '@glint/template';
 
 interface Signature {
-  Element: HTMLDivElement;
+  Element: HTMLTextAreaElement;
   Args: {
     value: string;
     onInput: (val: string) => void;
