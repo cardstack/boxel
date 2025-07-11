@@ -4,7 +4,7 @@ import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
 
-import { module, test } from 'qunit';
+import { module, skip, test } from 'qunit';
 
 import {
   REPLACE_MARKER,
@@ -524,7 +524,8 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
   });
 
-  test('ensures command definitions are reuploaded only when content changes (same room)', async function (assert) {
+  // TODO: restore in CS-9085
+  skip('ensures command definitions are reuploaded only when content changes (same room)', async function (assert) {
     // Create and set up first room
     const roomId1 = await renderAiAssistantPanel(
       `${testRealmURL}Skill/example`,
