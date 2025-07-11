@@ -2,17 +2,16 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
-import { Button } from '@cardstack/boxel-ui/components';
+import { Button, Tooltip } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
-const SearchSheetTriggers = {
-  DropCardToLeftNeighborStackButton: 'drop-card-to-left-neighbor-stack-button',
-  DropCardToRightNeighborStackButton:
-    'drop-card-to-right-neighbor-stack-button',
+export const SearchSheetTriggers = {
+  DropCardToLeftNeighborStackButton: 'left',
+  DropCardToRightNeighborStackButton: 'right',
 } as const;
 type Values<T> = T[keyof T];
-type SearchSheetTrigger = Values<typeof SearchSheetTriggers>;
+export type SearchSheetTrigger = Values<typeof SearchSheetTriggers>;
 
 interface Signature {
   Element: HTMLButtonElement;
@@ -24,49 +23,70 @@ interface Signature {
 }
 
 export default class NeighborStackTriggerButton extends Component<Signature> {
-  get triggerSideClass() {
-    switch (this.args.triggerSide) {
-      case SearchSheetTriggers.DropCardToLeftNeighborStackButton:
-        return 'add-card-to-neighbor-stack--left';
-      case SearchSheetTriggers.DropCardToRightNeighborStackButton:
-        return 'add-card-to-neighbor-stack--right';
-      default:
-        return undefined;
-    }
+  private get tooltipPlacement() {
+    return this.args.triggerSide ===
+      SearchSheetTriggers.DropCardToRightNeighborStackButton
+      ? SearchSheetTriggers.DropCardToLeftNeighborStackButton
+      : SearchSheetTriggers.DropCardToRightNeighborStackButton;
   }
-
   <template>
-    <Button
-      class={{cn
-        'add-card-to-neighbor-stack'
-        this.triggerSideClass
-        add-card-to-neighbor-stack--active=(eq @activeTrigger @triggerSide)
-      }}
-      {{on 'click' (fn @onTrigger @triggerSide)}}
-      ...attributes
-    >
-      <span class='icon-container'>
-        <IconPlus class='add-icon' width='12' height='12' />
-      </span>
-    </Button>
+    <Tooltip @placement={{this.tooltipPlacement}} ...attributes>
+      <:trigger>
+        <Button
+          class={{cn
+            'add-card-to-neighbor-stack'
+            add-card-to-neighbor-stack--active=(eq @activeTrigger @triggerSide)
+          }}
+          {{on 'click' (fn @onTrigger @triggerSide)}}
+          aria-label='Add card to {{@triggerSide}} stack'
+          data-test-add-card-right-stack={{eq
+            @triggerSide
+            SearchSheetTriggers.DropCardToRightNeighborStackButton
+          }}
+          data-test-add-card-left-stack={{eq
+            @triggerSide
+            SearchSheetTriggers.DropCardToLeftNeighborStackButton
+          }}
+        >
+          <span class='icon-container'>
+            <IconPlus class='add-icon' width='12' height='12' />
+          </span>
+        </Button>
+      </:trigger>
+      <:content>
+        Open a card to the
+        {{@triggerSide}}
+        of the current card
+      </:content>
+    </Tooltip>
     <style scoped>
       .add-card-to-neighbor-stack {
+        --minimized-width: 8px;
+        --minimized-height: 20px;
+        --expanded-width: 20px;
+        --expanded-height: 66px;
         --boxel-transition: 100ms ease;
-        --boxel-button-min-width: auto;
-        --boxel-button-min-height: auto;
-        height: 35px;
-        width: 20px;
+        --boxel-button-min-width: var(--expanded-width);
+        --boxel-button-min-height: var(--minimized-height);
+        height: calc(var(--expanded-height) / 2);
+        width: var(--expanded-width);
         background: none;
         border: none;
         padding: 0;
-        z-index: var(--boxel-layer-floating-button);
+      }
+      .add-card-to-neighbor-stack:hover,
+      .add-card-to-neighbor-stack:focus:focus-visible,
+      .add-card-to-neighbor-stack--active {
+        padding: 0;
+        height: var(--expanded-height);
+        outline-offset: 2px;
       }
       .icon-container {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 8px;
-        height: 20px;
+        width: var(--minimized-width);
+        height: var(--minimized-height);
         border-radius: inherit;
         background-color: var(--boxel-highlight);
         border: 2px solid rgba(0 0 0 / 50%);
@@ -75,33 +95,20 @@ export default class NeighborStackTriggerButton extends Component<Signature> {
           height var(--boxel-transition),
           width var(--boxel-transition);
       }
-      .add-card-to-neighbor-stack:hover,
-      .add-card-to-neighbor-stack:focus:focus-visible,
-      .add-card-to-neighbor-stack--active {
-        padding: 0;
-        height: 66px;
-        outline-offset: 2px;
+      .add-card-to-neighbor-stack:hover .icon-container,
+      .add-card-to-neighbor-stack:focus:focus-visible .icon-container,
+      .add-card-to-neighbor-stack--active .icon-container {
+        width: var(--expanded-width);
+        height: var(--expanded-height);
       }
       .add-icon {
         visibility: collapse;
         transition: visibility var(--boxel-transition);
       }
-      .add-card-to-neighbor-stack:hover .icon-container,
-      .add-card-to-neighbor-stack:focus:focus-visible .icon-container,
-      .add-card-to-neighbor-stack--active .icon-container {
-        width: 20px;
-        height: 66px;
-      }
       .add-card-to-neighbor-stack:hover .add-icon,
       .add-card-to-neighbor-stack:focus:focus-visible .add-icon,
       .add-card-to-neighbor-stack--active .add-icon {
         visibility: visible;
-      }
-      .add-card-to-neighbor-stack--left {
-        margin-left: calc(var(--operator-mode-spacing) / 2);
-      }
-      .add-card-to-neighbor-stack--right {
-        margin-right: calc(var(--operator-mode-spacing) / 2);
       }
     </style>
   </template>
