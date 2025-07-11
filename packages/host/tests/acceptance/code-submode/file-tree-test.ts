@@ -412,8 +412,8 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await waitFor('[data-test-realm-name="Test Workspace B"]');
     assert.dom('[data-test-realm-name]').hasText('In Test Workspace B');
 
-    await waitFor('[data-test-file-tree-realm-dropdown-button]');
-    await click('[data-test-file-tree-realm-dropdown-button]');
+    await waitFor('[data-test-realm-dropdown-trigger]');
+    await click('[data-test-realm-dropdown-trigger]');
 
     assert.dom('[data-test-boxel-menu-item-text="Base Workspace"]').exists();
     await click('[data-test-boxel-menu-item-text="Base Workspace"]');
@@ -453,8 +453,8 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       'Enter',
     );
 
-    await waitFor('[data-test-file-tree-realm-dropdown-button]');
-    await click('[data-test-file-tree-realm-dropdown-button]');
+    await waitFor('[data-test-realm-dropdown-trigger]');
+    await click('[data-test-realm-dropdown-trigger]');
 
     assert.dom('[data-test-boxel-menu-item-text="Test Workspace B"]').exists();
     await click('[data-test-boxel-menu-item-text="Test Workspace B"]');

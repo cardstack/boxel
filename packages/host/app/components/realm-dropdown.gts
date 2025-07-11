@@ -7,7 +7,7 @@ import {
   Menu,
   RealmIcon,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem } from '@cardstack/boxel-ui/helpers';
+import { MenuItem, and, not } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
 import { RealmPaths } from '@cardstack/runtime-common';
@@ -18,6 +18,7 @@ import RealmService from '../services/realm';
 
 export interface RealmDropdownItem extends EnhancedRealmInfo {
   path: string;
+  canWrite?: boolean;
 }
 
 interface Signature {
@@ -26,6 +27,8 @@ interface Signature {
     selectedRealmURL: URL | undefined;
     disabled?: boolean;
     contentClass?: string;
+    selectedRealmPrefix?: string;
+    displayReadOnlyTag?: boolean;
   };
   Element: HTMLElement;
 }
@@ -46,13 +49,17 @@ export default class RealmDropdown extends Component<Signature> {
           {{bindings}}
           data-test-realm-dropdown-trigger
           data-test-realm-name={{this.selectedRealm.name}}
+          title={{this.selectedItemText}}
           ...attributes
         >
           {{#if this.selectedRealm}}
             <RealmIcon class='icon' @realmInfo={{this.selectedRealm}} />
             <div class='selected-item' data-test-selected-realm>
-              {{this.selectedRealm.name}}
+              {{this.selectedItemText}}
             </div>
+            {{#if (and @displayReadOnlyTag (not this.selectedRealm.canWrite))}}
+              <span class='read-only-tag' data-test-realm-read-only>READ ONLY</span>
+            {{/if}}
           {{else}}
             Select a workspace
           {{/if}}
@@ -74,7 +81,7 @@ export default class RealmDropdown extends Component<Signature> {
         width: 100%;
         max-width: 100%;
         display: grid;
-        grid-template-columns: auto 1fr auto;
+        grid-template-columns: auto 1fr auto auto;
         justify-items: flex-start;
         gap: var(--boxel-sp-xxs);
         padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
@@ -95,6 +102,13 @@ export default class RealmDropdown extends Component<Signature> {
         overflow: hidden;
         white-space: nowrap;
       }
+      .read-only-tag {
+        color: #777;
+        font: 500 var(--boxel-font-xs);
+        overflow: hidden;
+        white-space: nowrap;
+        margin-left: auto;
+      }
       .realm-dropdown-menu {
         --boxel-menu-item-content-padding: var(--boxel-sp-xs);
         --boxel-menu-item-gap: var(--boxel-sp-xs);
@@ -105,22 +119,37 @@ export default class RealmDropdown extends Component<Signature> {
       .realm-dropdown-menu :deep(.menu-item__icon-url) {
         border-radius: var(--boxel-border-radius-xs);
       }
+      .realm-dropdown-menu :deep(.menu-item .subtext) {
+        margin-left: auto;
+        font: 500 var(--boxel-font-xs);
+        color: var(--boxel-secondary-text-color, #777);
+        text-align: right;
+      }
     </style>
   </template>
 
   defaultRealmIcon = '/default-realm-icon.png';
   @service declare realm: RealmService;
 
+  get selectedItemText() {
+    if (this.args.selectedRealmPrefix) {
+      return `${this.args.selectedRealmPrefix} ${this.selectedRealm?.name}`;
+    }
+    return this.selectedRealm?.name;
+  }
+
   get realms(): RealmDropdownItem[] {
     let items: RealmDropdownItem[] | [] = [];
     for (let [url, realmMeta] of Object.entries(this.realm.allRealmsInfo)) {
-      if (!realmMeta.canWrite) {
+      // Skip read-only realms unless explicitly displaying read-only tags
+      if (!realmMeta.canWrite && !this.args.displayReadOnlyTag) {
         continue;
       }
       let item: RealmDropdownItem = {
         path: url,
         ...realmMeta.info,
         iconURL: realmMeta.info.iconURL ?? this.defaultRealmIcon,
+        canWrite: realmMeta.canWrite,
       };
       items = [item, ...items];
     }
@@ -135,6 +164,7 @@ export default class RealmDropdown extends Component<Signature> {
           action: () => this.args.onSelect(realm),
           selected: realm.name === this.selectedRealm?.name,
           iconURL: realm.iconURL ?? undefined,
+          subtext: !realm.canWrite ? 'READ ONLY' : undefined,
         }),
     );
   }
