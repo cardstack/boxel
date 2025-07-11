@@ -5,7 +5,7 @@ import Component from '@glimmer/component';
 
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 
-import { BoxelInput, IconButton } from '@cardstack/boxel-ui/components';
+import { IconButton } from '@cardstack/boxel-ui/components';
 import { not, pick } from '@cardstack/boxel-ui/helpers';
 import { ArrowUp } from '@cardstack/boxel-ui/icons';
 
