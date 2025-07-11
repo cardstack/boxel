@@ -22,6 +22,22 @@ import PlantIcon from '@cardstack/boxel-icons/plant';
 
 class Isolated extends Component<typeof GardenDesign> {
   <template>
+  <div class="svg-example">
+    
+              <h3>Circular Progress</h3>
+              <div class="icon-container">
+                <svg viewBox="0 0 24 24" width="48" height="48">
+                  <defs>
+                    <radialGradient id="progressGrad" cx="50%" cy="50%" r="50%">
+                      <stop offset="0%" style="stop-color:#10b981" />
+                      <stop offset="100%" style="stop-color:#059669" />
+                    </radialGradient>
+                  </defs>
+                  <circle cx="12" cy="12" r="10" fill="url(#progressGrad)" opacity="0.8" />
+                  <circle cx="12" cy="12" r="6" fill="white" />
+                </svg>
+              </div>
+            </div>
     <section
       class='garden-design'
       {{on 'dragover' this.dragover}}
