@@ -21,7 +21,7 @@ class UnsupportedMessage extends Component<UnsupportedMessageSignature> {
     if (isPrimitive(this.args.cardOrField)) {
       return 'Playground is not currently supported for primitive fields.';
     }
-    return 'Playground is not currently supported for this file type.';
+    return 'Playground is not currently supported for this type.';
   }
 
   <template>
