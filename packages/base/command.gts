@@ -68,6 +68,10 @@ export class FileUrlCard extends CardDef {
   @field fileUrl = contains(StringField);
 }
 
+export class RealmUrlCard extends CardDef {
+  @field realmUrl = contains(StringField);
+}
+
 export class ReadTextFileInput extends CardDef {
   @field realm = contains(StringField);
   @field path = contains(StringField);

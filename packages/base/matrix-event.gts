@@ -173,6 +173,10 @@ export interface BoxelContext {
   agentId?: string;
   openCardIds?: string[];
   realmUrl?: string;
+  realmPermissions?: {
+    canRead: boolean;
+    canWrite: boolean;
+  };
   tools?: Tool[];
   toolChoice?: ToolChoice;
   submode?: string;
