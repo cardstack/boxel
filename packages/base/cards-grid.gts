@@ -224,6 +224,7 @@ class Isolated extends Component<typeof CardsGrid> {
       id: string;
       attributes: {
         displayName: string;
+        uniqueDisplayName: string;
         total: number;
         iconHTML: string | null;
       };
@@ -241,7 +242,7 @@ class Isolated extends Component<typeof CardsGrid> {
       }
       const lastIndex = summary.id.lastIndexOf('/');
       this.cardTypeFilters.push({
-        displayName: summary.attributes.displayName,
+        displayName: summary.attributes.uniqueDisplayName,
         icon: summary.attributes.iconHTML ?? Captions,
         query: {
           filter: {

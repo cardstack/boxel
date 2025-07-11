@@ -275,6 +275,14 @@ module('Integration | operator-mode', function (hooks) {
       };
     }
 
+    class PersonDup1 extends CardDef {
+      static displayName = 'Person'; //intentionally set same display name
+    }
+
+    class PersonDup2 extends CardDef {
+      static displayName = 'Person'; //intentionally set same display name
+    }
+
     // this field explodes when serialized (saved)
     class BoomField extends StringField {
       static [serialize](_boom: any) {
@@ -592,6 +600,29 @@ module('Integration | operator-mode', function (hooks) {
             title: 'Space Story',
             blogPost,
           }),
+          'person-dup.gts': { PersonDup1, PersonDup2 },
+          'PersonDup1/justin.json': {
+            data: {
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: '../person-dup',
+                  name: 'PersonDup1',
+                },
+              },
+            },
+          },
+          'PersonDup2/daren.json': {
+            data: {
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: '../person-dup',
+                  name: 'PersonDup2',
+                },
+              },
+            },
+          },
           '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
           ...Object.fromEntries(personCards),
         },
@@ -1050,6 +1081,32 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}Spec/pet-room"]`)
       .exists('pet-room spec instance is displayed on cards-grid');
+  });
+
+  test('cards with same display name but different code ref get displayed inside the card grid with distinguishing count number', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    assert.dom(`[data-test-filter-list-item="Person"]`).exists({ count: 1 });
+    assert.dom(`[data-test-filter-list-item="Person 1"]`).exists({ count: 1 });
+    assert.dom(`[data-test-filter-list-item="Person 2"]`).exists({ count: 1 });
+    await click(`[data-test-filter-list-item="Person"]`);
+    assert.dom(`[data-test-cards-grid-cards]`).exists({ count: 14 });
+    await click(`[data-test-filter-list-item="Person 1"]`);
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}PersonDup1/justin"]`)
+      .exists({ count: 1 });
+    await click(`[data-test-filter-list-item="Person 2"]`);
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}PersonDup2/daren"]`)
+      .exists({ count: 1 });
   });
 
   test<TestContextWithSave>('can optimistically create a card using the cards-grid', async function (assert) {

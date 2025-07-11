@@ -42,6 +42,7 @@ export interface CardTypeSummary {
   display_name: string;
   total: number;
   icon_html: string;
+  unique_display_name: string;
 }
 
 export interface RealmMetaTable {
