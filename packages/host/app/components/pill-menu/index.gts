@@ -92,6 +92,7 @@ export default class PillMenu extends Component<Signature> {
         --boxel-header-letter-spacing: var(--boxel-lsp);
         --button-outline: 2px;
         --boxel-header-min-height: fit-content;
+        --pill-menu-gradient-height: 5px;
 
         display: grid;
         grid-template-rows: auto 1fr auto;
@@ -129,10 +130,7 @@ export default class PillMenu extends Component<Signature> {
       }
       .menu-header {
         overflow: hidden;
-        padding: var(
-          --boxel-pill-menu-header-padding,
-          var(--pill-menu-spacing)
-        );
+        padding: var(--chat-input-area-bottom-padding);
       }
       .menu-header :deep(.title) {
         font: 600 var(--boxel-font);
@@ -161,14 +159,15 @@ export default class PillMenu extends Component<Signature> {
         text-transform: uppercase;
       }
       .menu-content {
-        padding: var(
-          --boxel-pill-menu-content-padding,
-          var(--pill-menu-spacing)
-        );
+        padding: 0 var(--chat-input-area-bottom-padding);
         display: grid;
         gap: var(--pill-menu-spacing);
         overflow-y: auto;
         min-height: 0;
+      }
+
+      .pill-menu:not(:has(.menu-footer)) .menu-content {
+        padding-bottom: var(--chat-input-area-bottom-padding);
       }
 
       .menu-content::before,
@@ -177,7 +176,7 @@ export default class PillMenu extends Component<Signature> {
         content: '';
         display: block;
         width: 100%;
-        height: 5px;
+        height: var(--pill-menu-gradient-height);
         position: absolute;
         left: 0;
         opacity: 0;
@@ -209,15 +208,11 @@ export default class PillMenu extends Component<Signature> {
         animation: scroll-pill-menu-content reverse linear backwards;
         animation-timeline: --pill-menu-content-scroll-timeline;
 
-        bottom: var(--boxel-sp-sm);
-        margin-bottom: 16px;
+        bottom: var(--chat-input-area-bottom-padding);
       }
 
       .menu-footer {
-        padding: var(
-          --boxel-pill-menu-footer-padding,
-          var(--pill-menu-spacing)
-        );
+        padding: var(--chat-input-area-bottom-padding);
       }
 
       .menu-footer::before {
@@ -230,7 +225,15 @@ export default class PillMenu extends Component<Signature> {
         animation: scroll-pill-menu-content reverse linear backwards;
         animation-timeline: --pill-menu-content-scroll-timeline;
 
-        bottom: 60px;
+        transform: translateY(
+          calc(
+            -1 *
+              (
+                var(--pill-menu-gradient-height) +
+                  var(--chat-input-area-bottom-padding)
+              )
+          )
+        );
       }
 
       .pill-menu :deep(.menu-header .detail) {

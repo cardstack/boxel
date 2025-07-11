@@ -99,4 +99,28 @@ module('Integration | commands | switch-submode', function (hooks) {
       `${instance.id}.json`,
     );
   });
+
+  test('when workspace chooser is open, close it when switching', async function (assert) {
+    let instance = (await store.add(new CardDef())) as CardDefType;
+    let commandService = getService('command-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    operatorModeStateService.restore({
+      stacks: [[{ id: instance[localId], format: 'isolated' }]],
+      submode: 'interact',
+      workspaceChooserOpened: true,
+    });
+    let switchSubmodeCommand = new SwitchSubmodeCommand(
+      commandService.commandContext,
+    );
+    assert.strictEqual(operatorModeStateService.state?.submode, 'interact');
+    assert.true(operatorModeStateService.workspaceChooserOpened);
+    await switchSubmodeCommand.execute({
+      submode: 'code',
+    });
+    assert.strictEqual(operatorModeStateService.state?.submode, 'code');
+    assert.false(
+      operatorModeStateService.workspaceChooserOpened,
+      'Workspace chooser should be closed after switching submode',
+    );
+  });
 });

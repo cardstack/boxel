@@ -110,8 +110,9 @@ export default class OperatorModeStack extends Component<Signature> {
         width: 100%;
         background-position: center;
         background-size: cover;
-        padding: var(--stack-padding-top) var(--operator-mode-spacing)
-          var(--stack-padding-bottom);
+        padding-top: var(--stack-padding-top);
+        padding-inline: calc(var(--operator-mode-spacing) / 2);
+        padding-bottom: var(--stack-padding-bottom);
         position: relative;
         transition: padding-top var(--boxel-transition);
       }

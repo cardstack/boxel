@@ -2,6 +2,8 @@ import deburr from 'lodash/deburr';
 
 import { realmURL } from '@cardstack/runtime-common';
 
+import ENV from '@cardstack/host/config/environment';
+
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 export function stripFileExtension(path: string): string {
@@ -139,4 +141,20 @@ export function urlForRealmLookup(card: CardDef) {
     );
   }
   return urlForRealmLookup;
+}
+
+/**
+ * Safely constructs a URL to a skill card in the skills realm.
+ * Uses the URL constructor to handle path joining safely.
+ *
+ * @param skillId - The ID of the skill (e.g., 'boxel-environment', 'catalog-listing')
+ * @returns The complete URL to the skill card
+ *
+ * @example
+ * skillCardURL('boxel-environment') // 'http://localhost:4201/skills/Skill/boxel-environment'
+ * skillCardURL('catalog-listing')   // 'http://localhost:4201/skills/Skill/catalog-listing'
+ */
+export function skillCardURL(skillId: string): string {
+  const skillsRealmURL = ENV.resolvedSkillsRealmURL;
+  return new URL(`Skill/${skillId}`, skillsRealmURL).href;
 }

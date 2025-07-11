@@ -26,8 +26,6 @@ test.describe('Realm URLs in Matrix account data', () => {
     synapse = await synapseStart({
       template: 'test',
     });
-    realmServer = await startRealmServer();
-    await smtpStart();
 
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerRealmUsers(synapse);
@@ -35,6 +33,8 @@ test.describe('Realm URLs in Matrix account data', () => {
     await updateUser(admin.accessToken, '@user1:localhost', {
       emailAddresses: ['user1@localhost'],
     });
+    realmServer = await startRealmServer();
+    await smtpStart();
 
     await updateAccountData(
       '@user1:localhost',
