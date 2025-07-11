@@ -423,6 +423,10 @@ ${REPLACE_MARKER}\n\`\`\``;
         submode: 'code',
         debug: false,
         openCardIds: [],
+        realmPermissions: {
+          canRead: true,
+          canWrite: true,
+        },
         realmUrl: 'http://test-realm/test/',
       },
       'patch code result event contains the context',
