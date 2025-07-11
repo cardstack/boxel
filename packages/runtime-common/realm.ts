@@ -645,7 +645,7 @@ export class Realm {
         init: {
           status: 400,
           headers: {
-            'content-type': SupportedMimeType.CardJson,
+            'content-type': SupportedMimeType.JSONAPI,
           },
         },
         requestContext,
@@ -655,7 +655,10 @@ export class Realm {
     if (validationErrors.length > 0) {
       return createResponse({
         body: JSON.stringify({ errors: validationErrors }),
-        init: { status: 400, headers: { 'content-type': 'application/json' } }, //consolidate to 400
+        init: {
+          status: 400,
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        }, //consolidate to 400
         requestContext,
       });
     }
@@ -667,7 +670,7 @@ export class Realm {
         body: JSON.stringify({ errors: atomicCheckErrors }),
         init: {
           status: this.lowestStatusCode(atomicCheckErrors),
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
         },
         requestContext,
       });
@@ -710,7 +713,7 @@ export class Realm {
           }),
           init: {
             status: 409,
-            headers: { 'content-type': 'application/json' },
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
           },
           requestContext,
         });
@@ -731,7 +734,7 @@ export class Realm {
           }),
           init: {
             status: 400,
-            headers: { 'content-type': 'application/json' },
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
           },
           requestContext,
         });
@@ -761,7 +764,7 @@ export class Realm {
       init: {
         status: 201,
         headers: {
-          'content-type': SupportedMimeType.CardJson,
+          'content-type': SupportedMimeType.JSONAPI,
         },
       },
       requestContext,

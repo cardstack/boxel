@@ -78,7 +78,7 @@ module(basename(__filename), function () {
           };
           let response = await request
             .post('/_atomic')
-            .set('Accept', 'application/vnd.card+json')
+            .set('Accept', 'application/vnd.api+json')
             .set(
               'Authorization',
               `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
@@ -173,7 +173,7 @@ module(basename(__filename), function () {
           };
           let response = await request
             .post('/_atomic')
-            .set('Accept', 'application/vnd.card+json')
+            .set('Accept', 'application/vnd.api+json')
             .set(
               'Authorization',
               `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
@@ -264,7 +264,7 @@ module(basename(__filename), function () {
           };
           let response = await request
             .post('/_atomic')
-            .set('Accept', 'application/vnd.card+json')
+            .set('Accept', 'application/vnd.api+json')
             .set(
               'Authorization',
               `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
@@ -274,7 +274,7 @@ module(basename(__filename), function () {
           assert.strictEqual(response.body['atomic:results'].length, 1);
           let cardResponse = await request
             .get('/new-person-1')
-            .set('Accept', 'application/vnd.card+json');
+            .set('Accept', 'application/vnd.api+json');
           let json = cardResponse.body as LooseSingleCardDocument;
           assert.strictEqual(json.data.attributes?.firstName, 'Mango');
         });
@@ -318,7 +318,7 @@ module(basename(__filename), function () {
 
           let response = await request
             .post('/_atomic')
-            .set('Accept', 'application/vnd.card+json')
+            .set('Accept', 'application/vnd.api+json')
             .set(
               'Authorization',
               `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
@@ -328,12 +328,12 @@ module(basename(__filename), function () {
           assert.strictEqual(response.body['atomic:results'].length, 2);
           let cardResponse1 = await request
             .get('/new-person-1')
-            .set('Accept', 'application/vnd.card+json');
+            .set('Accept', 'application/vnd.api+json');
           let json1 = cardResponse1.body as LooseSingleCardDocument;
           assert.strictEqual(json1.data.attributes?.firstName, 'Mango');
           let cardResponse2 = await request
             .get('/new-person-2')
-            .set('Accept', 'application/vnd.card+json');
+            .set('Accept', 'application/vnd.api+json');
           let json2 = cardResponse2.body as LooseSingleCardDocument;
           assert.strictEqual(json2.data.attributes?.firstName, 'Van Gogh');
         });
@@ -382,7 +382,7 @@ module(basename(__filename), function () {
           };
           let response = await request
             .post('/_atomic')
-            .set('Accept', 'application/vnd.card+json')
+            .set('Accept', 'application/vnd.api+json')
             .set(
               'Authorization',
               `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
@@ -478,7 +478,7 @@ module(basename(__filename), function () {
           };
           let response = await request
             .post('/_atomic')
-            .set('Accept', 'application/vnd.card+json')
+            .set('Accept', 'application/vnd.api+json')
             .set(
               'Authorization',
               `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
@@ -554,7 +554,7 @@ module(basename(__filename), function () {
           };
           let instanceResponse = await request
             .post('/_atomic')
-            .set('Accept', 'application/vnd.card+json')
+            .set('Accept', 'application/vnd.api+json')
             .set(
               'Authorization',
               `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
@@ -605,7 +605,7 @@ module(basename(__filename), function () {
           };
           let response = await request
             .post('/_atomic')
-            .set('Accept', 'application/vnd.card+json')
+            .set('Accept', 'application/vnd.api+json')
             .set(
               'Authorization',
               `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
@@ -617,7 +617,7 @@ module(basename(__filename), function () {
           assert.strictEqual(response.body['atomic:results'].length, 2);
           let cardResponse = await request
             .get('/place')
-            .set('Accept', 'application/vnd.card+json');
+            .set('Accept', 'application/vnd.api+json');
           let json = cardResponse.body as LooseSingleCardDocument;
           assert.strictEqual(json.data.attributes?.name, 'Kuala Lumpur');
           let sourceResponse = await request
@@ -663,7 +663,7 @@ module(basename(__filename), function () {
           };
           let response = await request
             .post('/_atomic')
-            .set('Accept', 'application/vnd.card+json')
+            .set('Accept', 'application/vnd.api+json')
             .set(
               'Authorization',
               `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
@@ -691,7 +691,7 @@ module(basename(__filename), function () {
         test('rejects non-array atomic:operations', async function (assert) {
           let response = await request
             .post('/_atomic')
-            .set('Accept', 'application/vnd.card+json')
+            .set('Accept', 'application/vnd.api+json')
             .send({ 'atomic:operations': 'not-an-array' })
             .expect(400);
           assert.strictEqual(response.status, 400);
@@ -710,7 +710,7 @@ module(basename(__filename), function () {
         test('rejects request without atomic:operations array', async function (assert) {
           let response = await request
             .post('/_atomic')
-            .set('Accept', 'application/vnd.card+json')
+            .set('Accept', 'application/vnd.api+json')
             .send({ data: { something: 'else' } })
             .expect(400);
           assert.strictEqual(response.body.errors.length, 1);
@@ -725,7 +725,7 @@ module(basename(__filename), function () {
         test('rejects if href is not present', async function (assert) {
           let response = await request
             .post('/_atomic')
-            .set('Accept', 'application/vnd.card+json')
+            .set('Accept', 'application/vnd.api+json')
             .send({
               'atomic:operations': [{ op: 'add', data: { type: 'card' } }],
             })
@@ -743,7 +743,7 @@ module(basename(__filename), function () {
         test('rejects unsupported operation types', async function (assert) {
           let response = await request
             .post('/_atomic')
-            .set('Accept', 'application/vnd.card+json')
+            .set('Accept', 'application/vnd.api+json')
             .send({
               'atomic:operations': [{ op: 'delete', data: { type: 'card' } }],
             })
@@ -766,7 +766,7 @@ module(basename(__filename), function () {
         test('rejects unsupported resource types', async function (assert) {
           let response = await request
             .post('/_atomic')
-            .set('Accept', 'application/vnd.card+json')
+            .set('Accept', 'application/vnd.api+json')
             .send({
               'atomic:operations': [
                 { op: 'add', href: '/file.json', data: { type: 'file' } },
