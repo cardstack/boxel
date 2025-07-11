@@ -364,7 +364,7 @@ interface CopiedIndexEventContent {
   sourceRealmURL: string;
 }
 
-interface IncrementalIndexInitiationContent {
+export interface IncrementalIndexInitiationContent {
   eventName: 'index';
   indexType: 'incremental-index-initiation';
   updatedFile: string;

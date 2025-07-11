@@ -37,6 +37,7 @@ import {
   testRealmURL,
   createJWT,
 } from './helpers';
+import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { RealmServer } from '../server';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -432,32 +433,15 @@ module(basename(__filename), function () {
           }),
         );
 
-      await waitForIncrementalIndexEvent(
-        getMessagesSince,
+      await expectIncrementalIndexEvent(
+        `${testRealmHref}person-1.json`,
         realmEventTimestampStart,
+        {
+          assert,
+          getMessagesSince,
+          realm: testRealmHref,
+        },
       );
-
-      let messages = await getMessagesSince(realmEventTimestampStart);
-
-      let incrementalIndexInitiationEvent = findRealmEvent(
-        messages,
-        'index',
-        'incremental-index-initiation',
-      );
-      let incrementalEvent = findRealmEvent(messages, 'index', 'incremental');
-
-      assert.deepEqual(incrementalIndexInitiationEvent?.content, {
-        eventName: 'index',
-        indexType: 'incremental-index-initiation',
-        updatedFile: `${testRealmHref}person-1.json`,
-      });
-
-      assert.deepEqual(incrementalEvent?.content, {
-        eventName: 'index',
-        indexType: 'incremental',
-        invalidations: [`${testRealmHref}person-1`],
-        clientRequestId: null,
-      });
 
       {
         let response = await request
