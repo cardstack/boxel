@@ -6,7 +6,13 @@ import {
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import { Loader } from './loader';
-import { isField, primitive } from './constants';
+import {
+  isField,
+  primitive,
+  fields,
+  fieldsUntracked,
+  isBaseInstance,
+} from './constants';
 import { CardError } from './error';
 import { meta } from './constants';
 import { isUrlLike, trimExecutableExtension } from './index';
@@ -207,10 +213,22 @@ export function identifyCard(
   }
 }
 
-export function getField<CardT extends BaseDefConstructor>(
-  card: CardT,
+export function getField<T extends BaseDef>(
+  instanceOrClass: T | typeof BaseDef,
   fieldName: string,
+  opts?: { untracked?: true },
 ): Field<BaseDefConstructor> | undefined {
+  let instance: BaseDef | undefined;
+  let card: typeof BaseDef;
+  if (
+    typeof instanceOrClass === 'object' &&
+    isBaseInstance in instanceOrClass
+  ) {
+    instance = instanceOrClass;
+    card = Reflect.getPrototypeOf(instance)!.constructor as typeof BaseDef;
+  } else {
+    card = instanceOrClass;
+  }
   let obj: object | null = card.prototype;
   while (obj) {
     let desc = Reflect.getOwnPropertyDescriptor(obj, fieldName);
@@ -218,6 +236,31 @@ export function getField<CardT extends BaseDefConstructor>(
       isField
     ];
     if (result !== undefined && isBaseDef(result.card)) {
+      let fieldOverride: typeof BaseDef | undefined;
+      if (opts?.untracked) {
+        fieldOverride =
+          instance && isCardInstance(instance)
+            ? instance[fieldsUntracked]?.[fieldName]
+            : undefined;
+      } else {
+        fieldOverride =
+          instance && isCardInstance(instance)
+            ? instance[fields]?.[fieldName]
+            : undefined;
+      }
+      if (fieldOverride) {
+        let cardThunk = fieldOverride;
+        let { computeVia, name, description, isUsed } = result;
+        result = new (result.constructor as unknown as Field & {
+          new (
+            cardThunk: () => typeof BaseDef,
+            computeVia: undefined | (() => unknown),
+            name: string,
+            description: string | undefined,
+            isUsed: undefined | true,
+          ): Field;
+        })(() => cardThunk, computeVia, name, description, isUsed) as Field;
+      }
       localIdentities.set(result.card, {
         type: 'fieldOf',
         field: fieldName,

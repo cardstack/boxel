@@ -9,7 +9,9 @@ import {
   type Field,
   type FieldDef,
   type BaseDef,
+  type CardDef,
 } from './card-api';
+import { initSharedState } from './shared-state';
 import {
   type BoxComponentSignature,
   getBoxComponent,
@@ -19,9 +21,11 @@ import {
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import {
   getPlural,
+  fields,
   type ResolvedCodeRef,
   Loader,
   loadCardDef,
+  isCardInstance,
 } from '@cardstack/runtime-common';
 import { IconTrash } from '@cardstack/boxel-ui/icons';
 import { TemplateOnlyComponent } from '@ember/component/template-only';
@@ -35,6 +39,7 @@ interface ContainsManyEditorSignature {
     cardTypeFor(
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
+      overrides?: () => Map<string, typeof BaseDef> | undefined,
     ): typeof BaseDef;
     typeConstraint?: ResolvedCodeRef;
   };
@@ -174,6 +179,21 @@ function coalesce<T>(arg1: T | undefined, arg2: T): T {
   return arg1 ?? arg2;
 }
 
+const overridesCache = initSharedState(
+  'overridesCache',
+  () => new WeakMap<CardDef, Map<string, typeof BaseDef>>(),
+);
+
+function setOverrides(maybeInstance: any) {
+  if (isCardInstance(maybeInstance)) {
+    let instance = maybeInstance;
+    let overrides = new Map<string, typeof BaseDef>(
+      Object.entries(instance[fields]!),
+    );
+    overridesCache.set(instance, overrides);
+  }
+}
+
 export function getContainsManyComponent({
   model,
   arrayField,
@@ -186,12 +206,23 @@ export function getContainsManyComponent({
   cardTypeFor(
     field: Field<typeof BaseDef>,
     boxedElement: Box<BaseDef>,
+    overrides?: () => Map<string, typeof BaseDef> | undefined,
   ): typeof BaseDef;
 }): BoxComponent {
+  // Wrap the the components in a function so that the template is reactive
+  // to changes in the model (this is essentially a helper)
   let getComponents = () =>
     arrayField.children.map((child) =>
-      getBoxComponent(cardTypeFor(field, child), child, field),
-    ); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
+      getBoxComponent(
+        cardTypeFor(field, child, () =>
+          isCardInstance(model.value as CardDef)
+            ? overridesCache.get(model.value as CardDef)
+            : undefined,
+        ),
+        child,
+        field,
+      ),
+    );
   let isComputed = !!field.computeVia;
   function shouldRenderEditor(
     format: Format | undefined,
@@ -212,6 +243,7 @@ export function getContainsManyComponent({
   let containsManyComponent: TemplateOnlyComponent<BoxComponentSignature> =
     <template>
       <DefaultFormatsConsumer as |defaultFormats|>
+        {{setOverrides model.value}}
         {{#if (shouldRenderEditor @format defaultFormats.fieldDef isComputed)}}
           <ContainsManyEditor
             @model={{model}}

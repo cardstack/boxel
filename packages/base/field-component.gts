@@ -5,6 +5,7 @@ import {
   type Format,
   type FieldsTypeFor,
   type BaseDef,
+  type CardDef,
   type BaseDefComponent,
   type BaseDefConstructor,
   CardContext,
@@ -19,6 +20,7 @@ import {
   PermissionsContextName,
   getField,
   Loader,
+  isCardInstance,
   type CodeRef,
   type Permissions,
   ResolvedCodeRef,
@@ -26,7 +28,7 @@ import {
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import Modifier from 'ember-modifier';
-import { isEqual } from 'lodash';
+import { isEqual, flatMap } from 'lodash';
 import { initSharedState } from './shared-state';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 import { consume, provide } from 'ember-provide-consume-context';
@@ -45,6 +47,8 @@ export interface BoxComponentSignature {
 }
 
 export type BoxComponent = ComponentLike<BoxComponentSignature>;
+
+const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
 interface CardContextConsumerSignature {
   Blocks: { default: [CardContext] };
@@ -124,7 +128,11 @@ const componentCache = initSharedState(
   () =>
     new WeakMap<
       Box<BaseDef>,
-      { component: BoxComponent; cardOrField: typeof BaseDef }
+      {
+        component: BoxComponent;
+        cardOrField: typeof BaseDef;
+        fields: { [fieldName: string]: Field<BaseDefConstructor> } | undefined;
+      }
     >(),
 );
 
@@ -376,10 +384,42 @@ export function getBoxComponent(
   stable = {
     component: externalFields as unknown as typeof component,
     cardOrField: cardOrField,
+    fields:
+      // This is yet another band-aid around component stability. Remove this
+      // after field.value refactor lands.
+      !isFastBoot && isCardInstance(model.value)
+        ? getFields(cardOrField as typeof CardDef)
+        : undefined,
   };
 
   componentCache.set(model, stable);
   return stable.component;
+}
+
+function getFields(card: typeof CardDef): {
+  [fieldName: string]: Field<BaseDefConstructor>;
+} {
+  let fields: { [fieldName: string]: Field<BaseDefConstructor> } = {};
+  let obj: object | null = card.prototype;
+  while (obj?.constructor.name && obj.constructor.name !== 'Object') {
+    let descs = Object.getOwnPropertyDescriptors(obj);
+    let currentFields = flatMap(Object.keys(descs), (maybeFieldName) => {
+      if (maybeFieldName === 'constructor') {
+        return [];
+      }
+      let maybeField = getField(card, maybeFieldName);
+      if (!maybeField) {
+        return [];
+      }
+      if (maybeField.computeVia) {
+        return [];
+      }
+      return [[maybeFieldName, maybeField]];
+    });
+    fields = { ...fields, ...Object.fromEntries(currentFields) };
+    obj = Reflect.getPrototypeOf(obj);
+  }
+  return fields;
 }
 
 function defaultFieldFormats(containingFormat: Format): FieldFormats {
@@ -411,10 +451,9 @@ function fieldsComponentsFor<T extends BaseDef>(
       }
 
       let modelValue = model.value as T; // TS is not picking up the fact we already filtered out nulls and undefined above
-      let maybeField: Field<BaseDefConstructor> | undefined = getField(
-        modelValue.constructor,
-        property,
-      );
+      let cached = componentCache.get(model);
+      let maybeField =
+        cached?.fields?.[property] ?? getField(modelValue, property);
       if (!maybeField) {
         // field doesn't exist, fall back to normal property access behavior
         return Reflect.get(target, property, received);
@@ -432,7 +471,7 @@ function fieldsComponentsFor<T extends BaseDef>(
     ownKeys(target) {
       let keys = Reflect.ownKeys(target);
       for (let name in model.value) {
-        let field = getField(model.value.constructor, name);
+        let field = getField(model.value, name);
         if (field) {
           keys.push(name);
         }
@@ -448,7 +487,7 @@ function fieldsComponentsFor<T extends BaseDef>(
         // don't handle symbols, undefined, or nulls
         return Reflect.getOwnPropertyDescriptor(target, property);
       }
-      let field = getField(model.value.constructor, property);
+      let field = getField(model.value, property);
       if (!field) {
         // field doesn't exist, fall back to normal property access behavior
         return Reflect.getOwnPropertyDescriptor(target, property);
