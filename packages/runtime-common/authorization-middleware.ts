@@ -25,6 +25,9 @@ export function authorizationMiddleware(
         if (token) {
           req.headers.set('Authorization', token);
           response = await next(req);
+        } else {
+          console.log('trying again');
+          response = await next(req);
         }
       }
     }
