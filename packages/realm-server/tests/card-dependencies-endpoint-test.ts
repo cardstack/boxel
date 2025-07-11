@@ -21,9 +21,7 @@ module(basename(__filename), function () {
     'Realm-specific Endpoints | card dependencies requests',
     function (hooks) {
       let testRealm: Realm;
-      let testRealmHttpServer: Server;
       let request: SuperTest<Test>;
-      let dir: DirResult;
 
       function onRealmSetup(args: {
         testRealm: Realm;
@@ -32,9 +30,7 @@ module(basename(__filename), function () {
         dir: DirResult;
       }) {
         testRealm = args.testRealm;
-        testRealmHttpServer = args.testRealmHttpServer;
         request = args.request;
-        dir = args.dir;
       }
 
       let { virtualNetwork, loader } = createVirtualNetworkAndLoader();

@@ -7,6 +7,7 @@ import { validate as uuidValidate } from 'uuid';
 
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
+import ListingCreateCommand from '@cardstack/host/commands/listing-create';
 import ListingInstallCommand from '@cardstack/host/commands/listing-install';
 import ListingRemixCommand from '@cardstack/host/commands/listing-remix';
 import ListingUseCommand from '@cardstack/host/commands/listing-use';
@@ -26,6 +27,8 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+
+import type { CardListing } from '@cardstack/catalog/listing/listing';
 
 const catalogRealmURL = 'http://localhost:4201/catalog/';
 const testRealm2URL = `http://test-realm/test2/`;
@@ -853,6 +856,47 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       // we always run a command inside interact mode
       await visitOperatorMode({
         stacks: [[]],
+      });
+    });
+    module('"create"', async function () {
+      test('card listing', async function (assert) {
+        const cardId = testRealmURL + 'author/Author/example';
+        const commandService = getService('command-service');
+        const command = new ListingCreateCommand(commandService.commandContext);
+        await command.execute({
+          openCardId: cardId,
+        });
+        await visitOperatorMode({
+          submode: 'code',
+          fileView: 'browser',
+          codePath: `${testRealmURL}index`,
+        });
+        await waitForCodeEditor();
+        await verifySubmode(assert, 'code');
+        const instanceFolder = 'CardListing/';
+        await verifyFolderInFileTree(assert, instanceFolder);
+        if (instanceFolder) {
+          await openDir(assert, instanceFolder);
+        }
+        const listingId = await verifyJSONWithUUIDInFolder(
+          assert,
+          instanceFolder,
+        );
+        if (listingId) {
+          const listing = (await getService('store').get(
+            listingId,
+          )) as CardListing;
+          assert.ok(listing, 'Listing should be created');
+          assert.ok(listing.specs.length === 1, 'Listing should have one spec');
+          assert.ok(
+            listing.specs[0].ref.name === 'Author',
+            'Listing should have an Author spec',
+          );
+          assert.ok(
+            listing.examples.length === 1,
+            'Listing should have one example',
+          );
+        }
       });
     });
     module('"use"', async function () {
