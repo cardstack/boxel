@@ -13,7 +13,7 @@ const CardContentContainer: TemplateOnlyComponent<Signature> = <template>
   </div>
   <style scoped>
     .card-content-container {
-      padding: 10px;
+      padding: var(--boxel-sp);
     }
   </style>
 </template>;

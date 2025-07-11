@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Tag",
+      "description": "A tag card",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/tag",
+        "name": "Tag"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
