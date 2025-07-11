@@ -1,4 +1,4 @@
-import { concat, fn } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -6,15 +6,14 @@ import Component from '@glimmer/component';
 import FileCheck from '@cardstack/boxel-icons/file-check';
 import FolderTree from '@cardstack/boxel-icons/folder-tree';
 
-import { Label, RealmIcon } from '@cardstack/boxel-ui/components';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
 
+import RealmDropdown from '@cardstack/host/components/realm-dropdown';
 import RestoreScrollPosition from '@cardstack/host/modifiers/restore-scroll-position';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
-import RealmDropdown from '@cardstack/host/components/realm-dropdown';
 
 import InnerContainer from './inner-container';
 import ToggleButton from './toggle-button';

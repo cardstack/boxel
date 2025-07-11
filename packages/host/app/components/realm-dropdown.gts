@@ -1,6 +1,8 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { trackedFunction } from 'reactiveweb/function';
+
 import {
   BoxelDropdown,
   Button,
@@ -138,9 +140,19 @@ export default class RealmDropdown extends Component<Signature> {
     return this.selectedRealm?.name;
   }
 
+  allRealmsInfo = trackedFunction(this, async () => {
+    if (this.args.selectedRealmURL) {
+      await this.realm.ensureRealmMeta(this.args.selectedRealmURL.href);
+    }
+    return this.realm.allRealmsInfo;
+  });
+
   get realms(): RealmDropdownItem[] {
+    if (!this.allRealmsInfo.value) {
+      return [];
+    }
     let items: RealmDropdownItem[] | [] = [];
-    for (let [url, realmMeta] of Object.entries(this.realm.allRealmsInfo)) {
+    for (let [url, realmMeta] of Object.entries(this.allRealmsInfo.value)) {
       // Skip read-only realms unless explicitly displaying read-only tags
       if (!realmMeta.canWrite && !this.args.displayReadOnlyTag) {
         continue;
