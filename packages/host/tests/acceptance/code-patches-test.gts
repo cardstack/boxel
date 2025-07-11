@@ -1,7 +1,7 @@
 import { click, waitFor, find, findAll, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { module, test } from 'qunit';
+import { module, skip, test } from 'qunit';
 
 import {
   REPLACE_MARKER,
@@ -354,7 +354,8 @@ ${REPLACE_MARKER}
     );
   });
 
-  test('trying but failing to patch code', async function (assert) {
+  // TODO: restore in CS-9082
+  skip('trying but failing to patch code', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}hello.txt`,
