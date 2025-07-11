@@ -131,7 +131,6 @@ export default class AttachedItems extends Component<Signature> {
     </div>
     <style scoped>
       .attached-items {
-        border-top: 1px solid var(--boxel-400);
         background-color: var(--boxel-light);
         color: var(--boxel-dark);
         display: flex;
