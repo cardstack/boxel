@@ -46,6 +46,7 @@ export default class AiAssistantChatInput extends Component<Signature> {
           {{on 'input' (pick 'target.value' @onInput)}}
           {{onKeyMod 'Shift+Enter' this.insertNewLine}}
           {{onKeyMod 'Enter' this.onSend}}
+          data-test-boxel-input-id='ai-chat-input'
           ...attributes
         />
         <div class='clone'>{{@value}}</div>
