@@ -339,6 +339,7 @@ jobs:
           [
             "auth-client-test.ts",
             "billing-test.ts",
+            "card-dependencies-endpoint-test.ts",
             "card-endpoints-test.ts",
             "card-source-endpoints-test.ts",
             "file-watcher-events-test.ts",

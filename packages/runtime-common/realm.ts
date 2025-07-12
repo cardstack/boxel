@@ -357,6 +357,11 @@ export class Realm {
         SupportedMimeType.CardTypeSummary,
         this.fetchCardTypeSummary.bind(this),
       )
+      .get(
+        '/_dependencies',
+        SupportedMimeType.CardDependencies,
+        this.getCardDependencies.bind(this),
+      )
       .post(
         '/_session',
         SupportedMimeType.Session,
@@ -2029,6 +2034,42 @@ export class Realm {
       },
       requestContext,
     });
+  }
+
+  private async getCardDependencies(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let href = new URL(request.url).search.slice(1);
+    let payload = parseQuery(href);
+    if (!payload.url) {
+      return badRequest({
+        message: `The request body is missing the url parameter`,
+        requestContext,
+      });
+    }
+    let url = Array.isArray(payload.url)
+      ? String(payload.url[0])
+      : String(payload.url);
+
+    try {
+      const deps = await this.#realmIndexQueryEngine.getCardDependencies(
+        new URL(url),
+      );
+
+      return createResponse({
+        body: JSON.stringify(deps, null, 2),
+        init: {
+          headers: { 'content-type': SupportedMimeType.CardDependencies },
+        },
+        requestContext,
+      });
+    } catch (e) {
+      if (e instanceof Error) {
+        return notFound(request, requestContext);
+      }
+      throw e;
+    }
   }
 
   private async realmMtimes(
