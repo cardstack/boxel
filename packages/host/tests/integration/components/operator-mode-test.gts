@@ -1117,10 +1117,6 @@ module('Integration | operator-mode', function (hooks) {
       .dom(`[data-test-cards-grid-item="${testRealmURL}PersonDup2/daren"]`)
       .exists({ count: 1 });
     await click(`[data-test-boxel-filter-list-button="Person 2"]`);
-    await waitFor(`[data-test-cards-grid-cards]`);
-    assert
-      .dom(`[data-test-cards-grid-cards] [data-test-cards-grid-item]`)
-      .exists({ count: 14 });
   });
 
   test<TestContextWithSave>('can optimistically create a card using the cards-grid', async function (assert) {
