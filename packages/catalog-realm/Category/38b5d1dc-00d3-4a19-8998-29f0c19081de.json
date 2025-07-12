@@ -6,6 +6,13 @@
       "description": null,
       "thumbnailURL": null
     },
+    "relationships": {
+      "sphere": {
+        "links": {
+          "self": "../Sphere/5d7420dc-c8f6-491d-9570-60c01e07b14c"
+        }
+      }
+    },
     "meta": {
       "adoptsFrom": {
         "module": "../catalog-app/listing/category",

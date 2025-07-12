@@ -3,18 +3,15 @@ import {
   field,
   contains,
   StringField,
-  linksTo,
 } from 'https://cardstack.com/base/card-api';
 
-import { Sphere } from './sphere';
-
-export class Category extends CardDef {
-  static displayName = 'Category';
+export class Sphere extends CardDef {
+  static displayName = 'Sphere';
   static headerColor = '#00ebac';
   @field name = contains(StringField);
-  @field sphere = linksTo(() => Sphere);
+  @field description = contains(StringField);
   @field title = contains(StringField, {
-    computeVia: function (this: Category) {
+    computeVia: function (this: Sphere) {
       return this.name;
     },
   });
