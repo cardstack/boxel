@@ -396,7 +396,22 @@ export class Batch {
 
   private async updateRealmMeta() {
     let results = await this.#query([
-      `SELECT CAST(count(i.url) AS INTEGER) as total, i.display_names->>0 as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
+      `SELECT CAST(count(i.url) AS INTEGER) as total, 
+              i.display_names->>0 as display_name, 
+              i.types->>0 as code_ref, 
+              MAX(i.icon_html) as icon_html,
+              CASE 
+                WHEN ROW_NUMBER() OVER (
+                  PARTITION BY i.display_names->>0 
+                  ORDER BY MIN(i.indexed_at)
+                ) = 1 
+                THEN i.display_names->>0
+                ELSE i.display_names->>0 || ' ' || (
+                  ROW_NUMBER() OVER (
+                    PARTITION BY i.display_names->>0 
+                    ORDER BY MIN(i.indexed_at)
+                  ) - 1)
+              END as unique_display_name
        FROM boxel_index_working as i
           WHERE`,
       ...every([

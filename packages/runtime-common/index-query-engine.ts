@@ -625,6 +625,7 @@ export class IndexQueryEngine {
        FROM realm_meta rm
        WHERE`,
       ...every([['rm.realm_url =', param(realmURL.href)]]),
+      `ORDER BY indexed_at DESC`,
     ] as Expression)) as Pick<RealmMetaTable, 'value'>[];
 
     return (results[0]?.value ?? []) as unknown as CardTypeSummary[];
