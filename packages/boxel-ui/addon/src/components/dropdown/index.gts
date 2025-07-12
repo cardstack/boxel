@@ -1,6 +1,8 @@
 import { concat, fn, hash } from '@ember/helper';
 import { action } from '@ember/object';
+import { later } from '@ember/runloop';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import BasicDropdown, {
   type Dropdown,
 } from 'ember-basic-dropdown/components/basic-dropdown';
@@ -57,14 +59,19 @@ interface Signature {
 
 // Needs to be class, BasicDropdown doesn't work with const
 class BoxelDropdown extends Component<Signature> {
+  @tracked closeTimer: ReturnType<typeof later> | null = null;
+
   @action registerAPI(publicAPI: DropdownAPI) {
     this.args.registerAPI?.(publicAPI);
   }
 
-  @action onMouseLeave(dropdown?: Dropdown) {
-    if (this.args.autoClose && dropdown) {
-      dropdown.actions.close();
-    }
+  @action
+  onMouseLeaveContent(dropdown: Dropdown) {
+    this.closeTimer = later(() => {
+      if (this.args.autoClose && dropdown.isOpen) {
+        dropdown.actions.close();
+      }
+    }, 500);
   }
 
   <template>
@@ -94,7 +101,8 @@ class BoxelDropdown extends Component<Signature> {
       {{/let}}
 
       <dd.Content
-        @onMouseLeave={{fn this.onMouseLeave dd}}
+        {{!-- @onMouseEnter={{fn this.onMouseEnterContent dd}} --}}
+        @onMouseLeave={{fn this.onMouseLeaveContent dd}}
         data-test-boxel-dropdown-content
         class={{cn 'boxel-dropdown__content' @contentClass}}
         {{focusTrap
