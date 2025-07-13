@@ -31,20 +31,11 @@ export interface AtomicOperationResult {
   };
 }
 
-export function filterOperationsWithCardData(
+export function filterAtomicOperations(
   operations: AtomicOperation[],
-): (AtomicOperation & { data: CardResource })[] {
+): (AtomicOperation & { data: CardResource | ModuleResource })[] {
   return operations.filter(
     (op): op is AtomicOperation & { data: CardResource } =>
-      op.data != null && isCardResource(op.data),
-  );
-}
-
-export function filterOperationsWithSourceData(
-  operations: AtomicOperation[],
-): (AtomicOperation & { data: ModuleResource })[] {
-  return operations.filter(
-    (op): op is AtomicOperation & { data: ModuleResource } =>
-      op.data != null && isModuleResource(op.data),
+      (op.data != null && isCardResource(op.data)) || isModuleResource(op.data),
   );
 }

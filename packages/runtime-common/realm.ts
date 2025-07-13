@@ -19,6 +19,7 @@ import { v4 as uuidV4 } from 'uuid';
 import { formatRFC7231 } from 'date-fns';
 import {
   isCardResource,
+  isModuleResource,
   executableExtensions,
   hasExecutableExtension,
   isNode,
@@ -91,8 +92,7 @@ import {
   AtomicOperation,
   AtomicOperationResult,
   AtomicPayloadValidationError,
-  filterOperationsWithCardData,
-  filterOperationsWithSourceData,
+  filterAtomicOperations,
 } from './atomic-document';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
@@ -660,8 +660,7 @@ export class Realm {
         requestContext,
       });
     }
-    let operations = json['atomic:operations'] as AtomicOperation[];
-
+    let operations = filterAtomicOperations(json['atomic:operations']);
     let atomicCheckErrors = await this.checkBeforeAtomicWrite(operations);
     if (atomicCheckErrors.length > 0) {
       return createResponse({
@@ -673,71 +672,58 @@ export class Realm {
         requestContext,
       });
     }
-    let sourceFiles = new Map<LocalPath, string>();
-    let instanceFiles = new Map<LocalPath, string>();
-    let sourceOperations = filterOperationsWithSourceData(operations);
-    let instanceOperations = filterOperationsWithCardData(operations);
-    let instanceWriteResults: FileWriteResult[] = [];
-    let sourceWriteResults: FileWriteResult[] = [];
+    let files = new Map<LocalPath, string>();
+    let writeResults: FileWriteResult[] = [];
 
-    // we intentionally write source files first so that fileSerialization can work
+    for (let operation of operations) {
+      let resource = operation.data;
+      let href = operation.href;
 
-    for (let { data: resource, href } of sourceOperations) {
-      let fileURL = this.paths.fileURL(href);
-      let localPath = this.paths.local(fileURL);
-      let content = resource.attributes?.content as string;
-      sourceFiles.set(localPath, content);
-    }
-
-    if (sourceFiles.size > 0) {
-      sourceWriteResults = await this.writeMany(
-        sourceFiles,
-        request.headers.get('X-Boxel-Client-Request-Id'),
-      );
-    }
-
-    for (let { data: resource, href } of instanceOperations) {
-      let fileURL = this.paths.fileURL(href);
-      let localPath = this.paths.local(fileURL);
-      if (!isCardResource(resource)) {
+      if (isModuleResource(resource)) {
+        let fileURL = this.paths.fileURL(href);
+        let localPath = this.paths.local(fileURL);
+        let content = resource.attributes?.content as string;
+        files.set(localPath, content);
+      } else if (isCardResource(resource)) {
+        let fileURL = this.paths.fileURL(href);
+        let localPath = this.paths.local(fileURL);
+        try {
+          let fileSerialization = await this.fileSerialization(
+            { data: merge(resource, { meta: { realmURL: this.url } }) },
+            fileURL,
+          );
+          files.set(localPath, JSON.stringify(fileSerialization, null, 2));
+        } catch (err: any) {
+          return createResponse({
+            body: JSON.stringify({
+              errors: [
+                {
+                  status: '500',
+                  title: 'Serialization Error',
+                  detail: err.message,
+                },
+              ],
+            }),
+            init: {
+              status: 500,
+              headers: { 'content-type': SupportedMimeType.JSONAPI },
+            },
+            requestContext,
+          });
+        }
+      } else {
         return createResponse({
           body: JSON.stringify({
             errors: [
               {
-                title: 'Invalid card resource',
-                detail: `Operation data is not a valid card resource`,
+                status: 400,
+                title: 'Invalid resource',
+                detail: `Operation data is not a valid card resource or module resource`,
               },
             ],
           }),
           init: {
-            status: 409,
-            headers: { 'content-type': SupportedMimeType.JSONAPI },
-          },
-          requestContext,
-        });
-      }
-      try {
-        let fileSerialization = await this.fileSerialization(
-          { data: merge(resource, { meta: { realmURL: this.url } }) },
-          fileURL,
-        );
-        instanceFiles.set(
-          localPath,
-          JSON.stringify(fileSerialization, null, 2),
-        );
-      } catch (err: any) {
-        return createResponse({
-          body: JSON.stringify({
-            errors: [
-              {
-                status: '500',
-                title: 'Serialization Error',
-                detail: err.message,
-              },
-            ],
-          }),
-          init: {
-            status: 500,
+            status: 400,
             headers: { 'content-type': SupportedMimeType.JSONAPI },
           },
           requestContext,
@@ -745,24 +731,23 @@ export class Realm {
       }
     }
 
-    if (instanceFiles.size > 0) {
-      instanceWriteResults = await this.writeMany(
-        instanceFiles,
+    if (files.size > 0) {
+      writeResults = await this.writeMany(
+        files,
         request.headers.get('X-Boxel-Client-Request-Id'),
       );
     }
 
-    let results: AtomicOperationResult[] = [
-      ...instanceWriteResults,
-      ...sourceWriteResults,
-    ].map(({ path, created }) => ({
-      data: {
-        id: this.paths.fileURL(path).href,
-      },
-      meta: {
-        created,
-      },
-    }));
+    let results: AtomicOperationResult[] = writeResults.map(
+      ({ path, created }) => ({
+        data: {
+          id: this.paths.fileURL(path).href,
+        },
+        meta: {
+          created,
+        },
+      }),
+    );
     return createResponse({
       body: JSON.stringify({ 'atomic:results': results }, null, 2),
       init: {

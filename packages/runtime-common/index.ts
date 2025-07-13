@@ -155,6 +155,7 @@ export * from './code-ref';
 export type { CardDocument, SingleCardDocument } from './document-types';
 export type {
   CardResource,
+  ModuleResource,
   CardResourceMeta,
   ResourceID,
   Meta,
@@ -168,7 +169,12 @@ export {
   isSingleCardDocument,
   isCardDocumentString,
 } from './document-types';
-export { isMeta, isCardResource, isRelationship } from './resource-types';
+export {
+  isMeta,
+  isCardResource,
+  isModuleResource,
+  isRelationship,
+} from './resource-types';
 
 export type { JWTPayload } from './realm-auth-client';
 export { sanitizeHtml } from './dompurify-runtime';
