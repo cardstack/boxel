@@ -728,10 +728,16 @@ export class Realm {
       } catch (err: any) {
         return createResponse({
           body: JSON.stringify({
-            errors: [{ title: 'Some error', detail: err.message }],
+            errors: [
+              {
+                status: '500',
+                title: 'Serialization Error',
+                detail: err.message,
+              },
+            ],
           }),
           init: {
-            status: 400,
+            status: 500,
             headers: { 'content-type': SupportedMimeType.JSONAPI },
           },
           requestContext,
