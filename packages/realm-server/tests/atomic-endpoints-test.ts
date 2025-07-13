@@ -1,4 +1,4 @@
-import { module, test, only } from 'qunit';
+import { module, test } from 'qunit';
 import { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import { Server } from 'http';
@@ -681,49 +681,46 @@ module(basename(__filename), function () {
             `Resource /person.gts already exists`,
           );
         });
-        only(
-          'returns error when failing to serialize a card resource',
-          async function (assert) {
-            let doc = {
-              'atomic:operations': [
-                {
-                  op: 'add',
-                  href: '/place.json',
-                  data: {
-                    type: 'card',
-                    attributes: {
-                      name: 'Kuala Lumpur',
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '/place-modules/place',
-                        name: 'Place',
-                      },
+        test('returns error when failing to serialize a card resource', async function (assert) {
+          let doc = {
+            'atomic:operations': [
+              {
+                op: 'add',
+                href: '/place.json',
+                data: {
+                  type: 'card',
+                  attributes: {
+                    name: 'Kuala Lumpur',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '/place-modules/place',
+                      name: 'Place',
                     },
                   },
                 },
-              ],
-            };
-            let response = await request
-              .post('/_atomic')
-              .set('Accept', SupportedMimeType.JSONAPI)
-              .set(
-                'Authorization',
-                `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
-              )
-              .send(JSON.stringify(doc));
-            assert.strictEqual(response.status, 500);
-            assert.strictEqual(response.body.errors.length, 1);
-            assert.strictEqual(
-              response.body.errors[0].title,
-              'Serialization Error',
-            );
-            assert.strictEqual(
-              response.body.errors[0].detail,
-              `${testRealmHref}place-modules/place not found`,
-            );
-          },
-        );
+              },
+            ],
+          };
+          let response = await request
+            .post('/_atomic')
+            .set('Accept', SupportedMimeType.JSONAPI)
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+            )
+            .send(JSON.stringify(doc));
+          assert.strictEqual(response.status, 500);
+          assert.strictEqual(response.body.errors.length, 1);
+          assert.strictEqual(
+            response.body.errors[0].title,
+            'Serialization Error',
+          );
+          assert.strictEqual(
+            response.body.errors[0].detail,
+            `${testRealmHref}place-modules/place not found`,
+          );
+        });
       });
       module('validation', function (hooks) {
         setupPermissionedRealm(hooks, {
