@@ -135,6 +135,13 @@ export interface RealmPermissions {
   [username: string]: RealmAction[] | null;
 }
 
+export interface FileWriteResult {
+  path: string;
+  lastModified: number;
+  created: number;
+  isNew: boolean;
+}
+
 export interface RealmAdapter {
   readdir(
     path: LocalPath,
@@ -151,14 +158,7 @@ export interface RealmAdapter {
 
   exists(path: LocalPath): Promise<boolean>;
 
-  write(
-    path: LocalPath,
-    contents: string,
-  ): Promise<{
-    lastModified: number;
-    created: number;
-    isNew: boolean;
-  }>;
+  write(path: LocalPath, contents: string): Promise<FileWriteResult>;
 
   remove(path: LocalPath): Promise<void>;
 
@@ -214,13 +214,6 @@ interface UpdateItem {
 export interface MatrixConfig {
   url: URL;
   username: string;
-}
-
-interface WriteResult {
-  path: LocalPath;
-  lastModified: number;
-  created: number;
-  isNew: boolean;
 }
 
 export type RequestContext = { realm: Realm; permissions: RealmPermissions };
@@ -510,31 +503,31 @@ export class Realm {
     path: LocalPath,
     contents: string,
     clientRequestId?: string | null,
-  ): Promise<WriteResult[]>;
-  async write(
+  ): Promise<FileWriteResult> {
+    let results = await this._batchWrite(
+      new Map([[path, contents]]),
+      clientRequestId,
+    );
+    return results[0];
+  }
+
+  async writeMany(
     files: Map<LocalPath, string>,
     clientRequestId?: string | null,
-  ): Promise<WriteResult[]>;
-  async write(
-    pathOrFiles: LocalPath | Map<LocalPath, string>,
-    contentsOrClientRequestId: string,
-    maybeClientRequestId?: string | null,
-  ): Promise<WriteResult[]> {
-    let files = new Map<LocalPath, string>();
-    let clientRequestId: string | undefined | null;
-    if (typeof pathOrFiles === 'string') {
-      files.set(pathOrFiles, contentsOrClientRequestId);
-      clientRequestId = maybeClientRequestId ?? null;
-    } else {
-      files = pathOrFiles;
-      clientRequestId = contentsOrClientRequestId ?? null;
-    }
+  ): Promise<FileWriteResult[]> {
+    return this._batchWrite(files, clientRequestId);
+  }
+
+  private async _batchWrite(
+    files: Map<LocalPath, string>,
+    clientRequestId?: string | null, //check if clientRequestId effects anything
+  ): Promise<FileWriteResult[]> {
     await this.indexing();
-    let results: WriteResult[] = [];
+    let results: FileWriteResult[] = [];
     let urls: URL[] = [];
     for (let [path, content] of files) {
       let url = this.paths.fileURL(path);
-      this.sendIndexInitiationEvent(url.href);
+      this.sendIndexInitiationEvent(url.href); //check if this does anything
       await this.trackOwnWrite(path);
       let { lastModified, created, isNew } = await this.#adapter.write(
         path,
@@ -549,7 +542,7 @@ export class Realm {
           eventName: 'index',
           indexType: 'incremental',
           invalidations: invalidatedURLs.map((u) => u.href),
-          clientRequestId: clientRequestId ?? null, // use null instead of undefined for valid JSON serialization
+          clientRequestId: clientRequestId ?? null,
         });
       },
     });
@@ -684,8 +677,8 @@ export class Realm {
     let instanceFiles = new Map<LocalPath, string>();
     let sourceOperations = filterOperationsWithSourceData(operations);
     let instanceOperations = filterOperationsWithCardData(operations);
-    let instanceWriteResults: WriteResult[] = [];
-    let sourceWriteResults: WriteResult[] = [];
+    let instanceWriteResults: FileWriteResult[] = [];
+    let sourceWriteResults: FileWriteResult[] = [];
 
     // we intentionally write source files first so that fileSerialization can work
 
@@ -697,7 +690,7 @@ export class Realm {
     }
 
     if (sourceFiles.size > 0) {
-      sourceWriteResults = await this.write(
+      sourceWriteResults = await this.writeMany(
         sourceFiles,
         request.headers.get('X-Boxel-Client-Request-Id'),
       );
@@ -747,7 +740,7 @@ export class Realm {
     }
 
     if (instanceFiles.size > 0) {
-      instanceWriteResults = await this.write(
+      instanceWriteResults = await this.writeMany(
         instanceFiles,
         request.headers.get('X-Boxel-Client-Request-Id'),
       );
@@ -1358,7 +1351,7 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let [{ lastModified }] = await this.write(
+    let { lastModified } = await this.write(
       this.paths.local(new URL(request.url)),
       await request.text(),
       request.headers.get('X-Boxel-Client-Request-Id'),
@@ -1649,7 +1642,7 @@ export class Realm {
         lid: primaryResource.lid,
       });
     }
-    let [{ lastModified }] = await this.write(
+    let [{ lastModified }] = await this.writeMany(
       files,
       request.headers.get('X-Boxel-Client-Request-Id'),
     );
@@ -1845,7 +1838,7 @@ export class Realm {
       let path = this.paths.local(fileURL);
       files.set(path, JSON.stringify(fileSerialization, null, 2));
     }
-    let [{ lastModified }] = await this.write(
+    let [{ lastModified }] = await this.writeMany(
       files,
       request.headers.get('X-Boxel-Client-Request-Id'),
     );

@@ -1591,7 +1591,7 @@ module(basename(__filename), function () {
         }
       `,
       );
-      let result = await realm.write(mapOfWrites);
+      let result = await realm.writeMany(mapOfWrites);
       assert.strictEqual(result.length, 2, '2 files were written');
       assert.strictEqual(result[0].path, 'place.gts');
       assert.strictEqual(result[1].path, 'country.gts');
@@ -1646,7 +1646,7 @@ module(basename(__filename), function () {
           },
         }),
       );
-      let result = await realm.write(mapOfWrites);
+      let result = await realm.writeMany(mapOfWrites);
       assert.strictEqual(result.length, 2, '2 files were written');
       assert.strictEqual(result[0].path, 'place.gts');
       assert.strictEqual(result[1].path, 'place.json');

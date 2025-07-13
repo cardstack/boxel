@@ -10,6 +10,7 @@ import {
   hasExecutableExtension,
   Deferred,
   unixTime,
+  FileWriteResult,
 } from '@cardstack/runtime-common';
 
 import { LintResult } from '@cardstack/runtime-common/lint';
@@ -310,7 +311,7 @@ export class TestRealmAdapter implements RealmAdapter {
   async write(
     path: LocalPath,
     contents: string | object,
-  ): Promise<{ lastModified: number; created: number; isNew: boolean }> {
+  ): Promise<FileWriteResult> {
     let segments = path.split('/');
     let name = segments.pop()!;
     let dir = this.#traverse(segments, 'directory');
@@ -354,6 +355,7 @@ export class TestRealmAdapter implements RealmAdapter {
     this.postUpdateEvent(updateEvent);
 
     return {
+      path,
       lastModified,
       created: lastModified,
       isNew: !exists,
