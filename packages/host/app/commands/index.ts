@@ -8,6 +8,7 @@ import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
 import * as ListingInitCommandModule from './listing-action-init';
+import * as ListingCreateCommandModule from './listing-create';
 import * as ListingInstallCommandModule from './listing-install';
 import * as ListingRemixCommandModule from './listing-remix';
 import * as ListingUseCommandModule from './listing-use';
@@ -62,6 +63,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/listing-action-init',
     ListingInitCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/listing-create',
+    ListingCreateCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/listing-install',
