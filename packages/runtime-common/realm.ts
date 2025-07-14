@@ -538,8 +538,10 @@ export class Realm {
           );
           content = JSON.stringify(serialized, null, 2);
         }
-      } catch (e) {
-        console.error(`ignoring error: ${e}`);
+      } catch (e: any) {
+        if (e.message.includes('not found')) {
+          throw new Error(e);
+        }
       }
       let { lastModified, created, isNew } = await this.#adapter.write(
         path,
@@ -721,10 +723,23 @@ export class Realm {
     }
 
     if (files.size > 0) {
-      writeResults = await this.writeMany(
-        files,
-        request.headers.get('X-Boxel-Client-Request-Id'),
-      );
+      try {
+        writeResults = await this.writeMany(
+          files,
+          request.headers.get('X-Boxel-Client-Request-Id'),
+        );
+      } catch (e) {
+        return createResponse({
+          body: JSON.stringify({
+            errors: [{ title: 'Write Error', detail: e.message }],
+          }),
+          init: {
+            status: 500,
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
+          },
+          requestContext,
+        });
+      }
     }
 
     let results: AtomicOperationResult[] = writeResults.map(

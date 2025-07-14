@@ -712,13 +712,10 @@ module(basename(__filename), function () {
             .send(JSON.stringify(doc));
           assert.strictEqual(response.status, 500);
           assert.strictEqual(response.body.errors.length, 1);
-          assert.strictEqual(
-            response.body.errors[0].title,
-            'Serialization Error',
-          );
+          assert.strictEqual(response.body.errors[0].title, 'Write Error');
           assert.strictEqual(
             response.body.errors[0].detail,
-            `${testRealmHref}place-modules/place not found`,
+            `Error: ${testRealmHref}place-modules/place not found`,
           );
         });
       });
