@@ -740,10 +740,16 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .doesNotExist('No tag should be selected after reset');
       });
 
+      test('updates the card count correctly when filtering by a sphere group', async function (assert) {
+        await click('[data-test-boxel-filter-list-button="LIFE"]');
+        assert
+          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+          .exists({ count: 3 });
+      });
+
       test('updates the card count correctly when filtering by a category', async function (assert) {
-        await click(
-          '[data-test-boxel-filter-list-button="Education and Learning"]',
-        );
+        await click('[data-test-filter-list-item="LIFE"] .dropdown-toggle');
+        await click('[data-test-boxel-filter-list-button="Health & Wellness"]');
         assert
           .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
           .exists({ count: 1 });
@@ -808,6 +814,54 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         });
 
         assert.dom('[data-test-no-results]').exists();
+      });
+
+      test('categories with null sphere fields are excluded from filter list', async function (assert) {
+        // Setup: Create a category with null sphere field
+        await setupAcceptanceTestRealm({
+          realmURL: testRealmURL,
+          mockMatrixUtils,
+          contents: {
+            'Category/category-with-null-sphere.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  name: 'CategoryWithNullSphere',
+                },
+                relationships: {
+                  sphere: {
+                    links: {
+                      self: null,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${catalogRealmURL}catalog-app/listing/category`,
+                    name: 'Category',
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${catalogRealmURL}`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+
+        assert
+          .dom('[data-test-boxel-filter-list-button="CategoryWithNullSphere"]')
+          .doesNotExist(
+            'Category with null sphere should not appear in filter list',
+          );
       });
     });
   });
