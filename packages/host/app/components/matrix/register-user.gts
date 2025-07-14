@@ -45,6 +45,7 @@ import { AuthMode } from './auth';
 const MATRIX_REGISTRATION_TYPES = {
   sendToken: 'm.login.registration_token',
   login: 'm.login.dummy',
+  waitForAccountCreation: undefined,
   waitForEmailValidation: 'm.login.email.identity',
   askForToken: undefined,
   register: undefined,
