@@ -28,6 +28,7 @@ export default class InputUsage extends Component {
   @tracked disabled = false;
   @tracked required = false;
   @tracked optional = false;
+  @tracked autogrow = false;
   @tracked placeholder = '';
   @tracked errorMessage = '';
   @tracked helperText = '';
@@ -78,6 +79,7 @@ export default class InputUsage extends Component {
           @id={{this.id}}
           @value={{this.value}}
           @onInput={{this.logValue}}
+          @autogrow={{this.autogrow}}
           @disabled={{this.disabled}}
           @required={{this.required}}
           @optional={{this.optional}}
@@ -119,6 +121,12 @@ export default class InputUsage extends Component {
           @options={{validStates}}
           @onInput={{fn (mut this.state)}}
           @value={{this.state}}
+        />
+        <Args.Bool
+          @name='autogrow'
+          @description='Grows a textarea with its value'
+          @value={{this.autogrow}}
+          @onInput={{fn (mut this.autogrow)}}
         />
         <Args.Bool
           @name='disabled'

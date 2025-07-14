@@ -5,7 +5,7 @@ import Component from '@glimmer/component';
 
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 
-import { IconButton } from '@cardstack/boxel-ui/components';
+import { BoxelInput, IconButton } from '@cardstack/boxel-ui/components';
 import { not, pick } from '@cardstack/boxel-ui/helpers';
 import { ArrowUp } from '@cardstack/boxel-ui/icons';
 
@@ -14,7 +14,7 @@ import AttachButton from '../attachment-picker/attach-button';
 import type { WithBoundArgs } from '@glint/template';
 
 interface Signature {
-  Element: HTMLTextAreaElement;
+  Element: HTMLDivElement;
   Args: {
     value: string;
     onInput: (val: string) => void;
@@ -36,21 +36,18 @@ export default class AiAssistantChatInput extends Component<Signature> {
       {{#if @attachButton}}
         <@attachButton />
       {{/if}}
-      <div class='input-and-clone'>
-        <textarea
-          class='chat-input'
-          id='ai-chat-input'
-          value={{@value}}
-          placeholder='Enter a prompt'
-          rows='1'
-          {{on 'input' (pick 'target.value' @onInput)}}
-          {{onKeyMod 'Shift+Enter' this.insertNewLine}}
-          {{onKeyMod 'Enter' this.onSend}}
-          data-test-boxel-input-id='ai-chat-input'
-          ...attributes
-        />
-        <div class='clone'>{{@value}}</div>
-      </div>
+      <BoxelInput
+        class='chat-input'
+        @id='ai-chat-input'
+        @type='textarea'
+        @autogrow={{true}}
+        @value={{@value}}
+        @onInput={{@onInput}}
+        @placeholder='Enter a prompt'
+        {{onKeyMod 'Shift+Enter' this.insertNewLine}}
+        {{onKeyMod 'Enter' this.onSend}}
+        ...attributes
+      />
       <IconButton
         {{on 'click' this.onSend}}
         {{! TODO we should visually surface this loading state }}
@@ -94,20 +91,12 @@ export default class AiAssistantChatInput extends Component<Signature> {
           );
       }
 
-      /* Adapted autoexpanding textarea: https://chriscoyier.net/2023/09/29/css-solves-auto-expanding-textareas-probably-eventually/ */
-      .input-and-clone {
-        display: grid;
-      }
-
-      .clone {
-        white-space: pre-wrap;
-        visibility: hidden;
-
+      .chat-input-container :deep(.textarea-clone) {
         scroll-timeline: --chat-input-scroll-timeline block;
       }
 
-      .chat-input,
-      .clone {
+      .chat-input-container :deep(.chat-input),
+      .chat-input-container :deep(.textarea-clone) {
         width: 100%;
         padding: var(--boxel-sp-4xs);
         padding-top: 10px;

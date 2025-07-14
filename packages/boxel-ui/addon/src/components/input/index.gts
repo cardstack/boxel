@@ -56,6 +56,7 @@ export type InputBottomTreatment = Values<typeof InputBottomTreatments>;
 export interface Signature {
   Args: {
     autocomplete?: string;
+    autogrow?: boolean;
     bottomTreatment?: InputBottomTreatment;
     disabled?: boolean;
     errorMessage?: string;
@@ -87,6 +88,10 @@ export default class BoxelInput extends Component<Signature> {
 
   private get isMultiline() {
     return this.args.type === 'textarea';
+  }
+
+  private get isAutogrow() {
+    return this.isMultiline && this.args.autogrow;
   }
 
   get isSearch() {
@@ -145,45 +150,55 @@ export default class BoxelInput extends Component<Signature> {
         <div class='optional'>Optional</div>
       {{/if}}
       {{#let (element (if this.isMultiline 'textarea' 'input')) as |InputTag|}}
-        <InputTag
+        <div
           class={{cn
-            'boxel-input'
-            has-validation=this.hasValidation
-            invalid=this.isInvalid
-            search=this.isSearch
-            boxel-input--large=(eq @variant 'large')
-            boxel-input--bottom-flat=(eq @bottomTreatment 'flat')
+            'maybe-autogrow-container'
+            autogrow-container=this.isAutogrow
           }}
-          id={{this.id}}
-          type={{this.type}}
-          value={{@value}}
-          checked={{if (and (eq @type 'checkbox') (bool @value)) @value}}
-          placeholder={{@placeholder}}
-          max={{@max}}
-          required={{@required}}
-          disabled={{@disabled}}
-          autocomplete={{@autocomplete}}
-          aria-describedby={{if
-            @helperText
-            (concat 'helper-text-' this.guid)
-            false
-          }}
-          aria-invalid={{if this.isInvalid 'true'}}
-          aria-errormessage={{if
-            this.shouldShowErrorMessage
-            (concat 'error-message-' this.guid)
-            false
-          }}
-          data-test-boxel-input
-          data-test-boxel-input-id={{@id}}
-          data-test-boxel-input-validation-state={{if @disabled false @state}}
-          {{on 'input' (pick 'target.value' (optional @onInput))}}
-          {{on 'blur' (optional @onBlur)}}
-          {{on 'keypress' (optional @onKeyPress)}}
-          {{on 'focus' (optional @onFocus)}}
-          {{on 'change' (optional @onChange)}}
-          ...attributes
-        />
+        >
+          <InputTag
+            class={{cn
+              'boxel-input'
+              has-validation=this.hasValidation
+              invalid=this.isInvalid
+              search=this.isSearch
+              boxel-input--large=(eq @variant 'large')
+              boxel-input--bottom-flat=(eq @bottomTreatment 'flat')
+            }}
+            id={{this.id}}
+            type={{this.type}}
+            value={{@value}}
+            checked={{if (and (eq @type 'checkbox') (bool @value)) @value}}
+            placeholder={{@placeholder}}
+            max={{@max}}
+            required={{@required}}
+            disabled={{@disabled}}
+            autocomplete={{@autocomplete}}
+            aria-describedby={{if
+              @helperText
+              (concat 'helper-text-' this.guid)
+              false
+            }}
+            aria-invalid={{if this.isInvalid 'true'}}
+            aria-errormessage={{if
+              this.shouldShowErrorMessage
+              (concat 'error-message-' this.guid)
+              false
+            }}
+            data-test-boxel-input
+            data-test-boxel-input-id={{@id}}
+            data-test-boxel-input-validation-state={{if @disabled false @state}}
+            {{on 'input' (pick 'target.value' (optional @onInput))}}
+            {{on 'blur' (optional @onBlur)}}
+            {{on 'keypress' (optional @onKeyPress)}}
+            {{on 'focus' (optional @onFocus)}}
+            {{on 'change' (optional @onChange)}}
+            ...attributes
+          />
+          {{#if this.isAutogrow}}
+            <div class='textarea-clone'>{{@value}}</div>
+          {{/if}}
+        </div>
         {{#if this.isSearch}}
           <div
             class={{cn
@@ -234,7 +249,8 @@ export default class BoxelInput extends Component<Signature> {
         width: 100%;
       }
 
-      .boxel-input {
+      .boxel-input,
+      .textarea-clone {
         --boxel-input-height: var(--boxel-form-control-height);
 
         grid-column: 1 / span 3;
@@ -250,6 +266,11 @@ export default class BoxelInput extends Component<Signature> {
         font-weight: 400;
         letter-spacing: var(--boxel-lsp-xs);
         transition: border-color var(--boxel-transition);
+      }
+
+      .maybe-autogrow-container {
+        grid-column: 1 / span 3;
+        grid-row: 2;
       }
 
       .boxel-input--large {
@@ -286,6 +307,21 @@ export default class BoxelInput extends Component<Signature> {
 
       .invalid:hover:not(:disabled) {
         border-color: var(--boxel-error-100);
+      }
+
+      /* Adapted autoexpanding textarea: https://chriscoyier.net/2023/09/29/css-solves-auto-expanding-textareas-probably-eventually/ */
+      .autogrow-container {
+        display: grid;
+      }
+
+      .textarea-clone {
+        white-space: pre-wrap;
+        visibility: hidden;
+      }
+
+      .autogrow-container .boxel-input,
+      .autogrow-container .textarea-clone {
+        grid-area: 1 / 1 / 2 / 2;
       }
 
       .search {
