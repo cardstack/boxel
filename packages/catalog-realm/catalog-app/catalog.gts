@@ -58,26 +58,6 @@ import { Tag } from './listing/tag';
 type ViewOption = 'strip' | 'grid';
 type SphereName = 'BUILD' | 'LEARN' | 'LIFE' | 'PLAY' | 'WORK';
 
-// Base interface for all category and sphere filter items
-interface BaseFilterItem {
-  id: string;
-  displayName: string;
-  icon: typeof IconComponent;
-}
-
-// Individual category filter
-interface CategoryFilter extends BaseFilterItem {
-  sphere?: string;
-}
-
-// Sphere filter that contains multiple categories
-interface SphereFilter extends BaseFilterItem {
-  filters: CategoryFilter[];
-}
-
-// Union type for category and sphere filter items
-type CategorySphereFilterItem = CategoryFilter | SphereFilter;
-
 // Showcase View
 interface ShowcaseViewArgs {
   Args: {
@@ -398,7 +378,7 @@ class Isolated extends Component<typeof Catalog> {
   // Returns a list of filter items for the category sidebar:
   // - "All" button (CategoryFilter)
   // - Sphere groups (SphereFilter) containing individual categories
-  get categoryItems(): CategorySphereFilterItem[] {
+  get categoryItems(): FilterItem[] {
     const categoryInstances = (this.categorySearch?.instances ??
       []) as Category[];
 
@@ -453,7 +433,7 @@ class Isolated extends Component<typeof Catalog> {
     }
 
     // Sort categories by their display name
-    const filterItems: CategorySphereFilterItem[] = [
+    const filterItems = [
       {
         id: 'all',
         displayName: 'All',
@@ -533,7 +513,7 @@ class Isolated extends Component<typeof Catalog> {
     },
   );
 
-  get tagItems() {
+  get tagItems(): FilterItem[] {
     let instances = (this.tagSearch?.instances ?? []) as Tag[];
     if (!instances) {
       return [];
