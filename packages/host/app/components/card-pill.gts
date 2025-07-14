@@ -46,17 +46,25 @@ export default class CardPill extends Component<CardPillSignature> {
     return !this.args.removeCard;
   }
 
+  private get cardTitle() {
+    return this.card?.title || this.cardError?.meta.cardTitle;
+  }
+
   private get card() {
     return this.cardResource?.card;
   }
 
+  private get cardError() {
+    return this.cardResource?.cardError;
+  }
+
   private get isCreating() {
-    return this.card && !this.card.id;
+    return this.card && !this.card.id && !this.cardError;
   }
 
   <template>
     {{consumeContext this.makeCardResource}}
-    {{#if this.card}}
+    {{#if this.cardTitle}}
       {{#if this.isCreating}}
         <LoadingIndicator />
       {{else}}
@@ -74,8 +82,8 @@ export default class CardPill extends Component<CardPillSignature> {
             <RealmIcon @realmInfo={{this.realm.info @urlForRealmLookup}} />
           </:iconLeft>
           <:default>
-            <div class='card-content' title={{this.card.title}}>
-              {{this.card.title}}
+            <div class='card-content' title={{this.cardTitle}}>
+              {{this.cardTitle}}
             </div>
           </:default>
           <:iconRight>
