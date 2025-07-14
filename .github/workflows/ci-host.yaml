@@ -134,8 +134,8 @@ jobs:
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
-      - name: host test suite (shard ${{ matrix.shardIndex }})
-        run: seq 50 | xargs -I{} pnpm test:wait-for-servers --filter="trying but failing to patch code"
+      - name: host test rerun
+        run: seq 50 | xargs -I{} pnpm test:wait-for-servers
         working-directory: packages/host
 
   host-merge-reports-and-publish:
