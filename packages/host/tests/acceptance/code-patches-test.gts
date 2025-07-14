@@ -412,8 +412,9 @@ ${REPLACE_MARKER}\n\`\`\``;
       'code patch result event has the correct failure reason',
     );
 
+    console.log('context');
+
     console.log(
-      'context',
       JSON.stringify(
         JSON.parse(codePatchResultEvents[0].content?.data ?? '{}').context,
         null,
