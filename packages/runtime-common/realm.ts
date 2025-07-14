@@ -520,14 +520,14 @@ export class Realm {
 
   private async _batchWrite(
     files: Map<LocalPath, string>,
-    clientRequestId?: string | null, //check if clientRequestId effects anything
+    clientRequestId?: string | null,
   ): Promise<FileWriteResult[]> {
     await this.indexing();
     let results: FileWriteResult[] = [];
     let urls: URL[] = [];
     for (let [path, content] of files) {
       let url = this.paths.fileURL(path);
-      this.sendIndexInitiationEvent(url.href); //check if this does anything
+      this.sendIndexInitiationEvent(url.href);
       await this.trackOwnWrite(path);
       try {
         let doc = JSON.parse(content);
