@@ -10,6 +10,8 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+
 import { restartableTask, timeout } from 'ember-concurrency';
 
 import {
@@ -72,6 +74,14 @@ export default class RegisterUser extends Component<Signature> {
         @disabled={{this.validateEmail.isRunning}}
         @loading={{this.validateEmail.isRunning}}
       >Resend Email</Button>
+    {{else if (eq this.currentPage 'account-creation')}}
+      <span class='title' data-test-email-validation-complete>
+        Email validation complete
+      </span>
+      <p>
+        Please wait as we set up your account.
+      </p>
+      <LoadingIndicator />
     {{else if (eq this.currentPage 'token-form')}}
       <FieldContainer
         @label='This site is currently invite-only. Enter your invite code here.'
@@ -354,7 +364,7 @@ export default class RegisterUser extends Component<Signature> {
         sendAttempt: number;
       }
     | {
-        type: 'waitForEmailValidation';
+        type: 'waitForEmailValidation' | 'waitForAccountCreation';
         username: string;
         password: string;
         token?: string;
@@ -385,6 +395,8 @@ export default class RegisterUser extends Component<Signature> {
       return 'registration-form';
     } else if (['askForToken', 'sendToken'].includes(this.state.type)) {
       return 'token-form';
+    } else if (this.state.type === 'waitForAccountCreation') {
+      return 'account-creation';
     } else {
       return 'waiting-page';
     }
@@ -736,6 +748,11 @@ export default class RegisterUser extends Component<Signature> {
       auth.device_id &&
       this.state.type === 'waitForEmailValidation' // In our setup, waiting for email validation is the last step of matrix registration - this condition is to satisfy the type check where token is only defined in sendToken and waitForEmailValidation states
     ) {
+      this.state = {
+        ...this.state,
+        type: 'waitForAccountCreation',
+      };
+
       await this.matrixService.initializeNewUser(
         auth as LoginResponse,
         this.state.name,
