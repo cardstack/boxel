@@ -354,8 +354,7 @@ ${REPLACE_MARKER}
     );
   });
 
-  // TODO: restore in CS-9082
-  skip('trying but failing to patch code', async function (assert) {
+  test('trying but failing to patch code', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}hello.txt`,
