@@ -887,13 +887,19 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             listingId,
           )) as CardListing;
           assert.ok(listing, 'Listing should be created');
-          assert.ok(listing.specs.length === 1, 'Listing should have one spec');
-          assert.ok(
-            listing.specs[0].ref.name === 'Author',
+          assert.strictEqual(
+            listing.specs.length,
+            1,
+            'Listing should have one spec',
+          );
+          assert.strictEqual(
+            listing.specs[0].ref.name,
+            'Author',
             'Listing should have an Author spec',
           );
-          assert.ok(
-            listing.examples.length === 1,
+          assert.strictEqual(
+            listing.examples.length,
+            1,
             'Listing should have one example',
           );
         }
