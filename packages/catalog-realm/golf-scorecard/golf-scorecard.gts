@@ -10,7 +10,7 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import DateField from 'https://cardstack.com/base/date';
 import BooleanField from 'https://cardstack.com/base/boolean';
-import { cn, add, subtract, eq, gt, lt } from '@cardstack/boxel-ui/helpers';
+import { cn } from '@cardstack/boxel-ui/helpers';
 import TrophyIcon from '@cardstack/boxel-icons/trophy';
 
 export class HoleField extends FieldDef {
@@ -117,8 +117,8 @@ export class GolfScorecard extends CardDef {
     },
   });
 
-  constructor(owner: unknown, args: {}) {
-    super(owner, args);
+  constructor(data?: Record<string, any> | undefined) {
+    super(data);
 
     this.tournamentName = 'US Open Championship';
     this.roundDate = new Date();
@@ -150,7 +150,7 @@ export class GolfScorecard extends CardDef {
 
     // Create proper HoleField instances
     this.holes = defaultHoles.map((holeData) => {
-      const hole = new HoleField(this, {});
+      const hole = new HoleField({});
       hole.holeNumber = holeData.holeNumber;
       hole.par = holeData.par;
       hole.yards = holeData.yards;
@@ -160,7 +160,15 @@ export class GolfScorecard extends CardDef {
     });
   }
 
-  static embedded = class Embedded extends Component<typeof GolfScorecard> {
+  static embedded = class Embedded extends Component<typeof this> {
+    get formattedRoundDate() {
+      let date = this.args.model?.roundDate;
+      if (!date) return '';
+      if (typeof date === 'string') date = new Date(date);
+      return date instanceof Date && !isNaN(date.getTime())
+        ? date.toLocaleDateString()
+        : '';
+    }
     <template>
       <div class='tv-scoreboard'>
         <div class='scoreboard-container'>
@@ -231,7 +239,7 @@ export class GolfScorecard extends CardDef {
             <div class='round-info'>ROUND
               {{@model.roundNumber}}
               •
-              {{@model.roundDate}}</div>
+              {{this.formattedRoundDate}}</div>
             <div class='tv-graphics'>OFFICIAL PARTNER: USGA × PGA TOUR</div>
           </div>
         </div>
@@ -677,7 +685,16 @@ export class GolfScorecard extends CardDef {
     }
   };
 
-  static isolated = class Isolated extends Component<typeof GolfScorecard> {
+  static isolated = class Isolated extends Component<typeof this> {
+    get formattedRoundDate() {
+      let date = this.args.model?.roundDate;
+      if (!date) return '';
+      if (typeof date === 'string') date = new Date(date);
+      return date instanceof Date && !isNaN(date.getTime())
+        ? date.toLocaleDateString()
+        : '';
+    }
+
     get frontNinePar() {
       try {
         if (!this.args.model?.holes) return 0;
@@ -779,7 +796,7 @@ export class GolfScorecard extends CardDef {
             </div>
             <div class='info-row'>
               <span class='label'>Date:</span>
-              <span class='value'>{{@model.roundDate}}</span>
+              <span class='value'>{{this.formattedRoundDate}}</span>
             </div>
           </div>
         </div>
@@ -800,22 +817,24 @@ export class GolfScorecard extends CardDef {
                 </tr>
               </thead>
               <tbody>
-                {{#each (slice @model.holes 0 9) as |hole index|}}
-                  <tr class='table-row'>
-                    <td class='hole-cell hole-number'>{{hole.holeNumber}}</td>
-                    <td class='par-cell'>{{hole.par}}</td>
-                    <td class='yards-cell'>{{hole.yards}}</td>
-                    <td class='score-cell score-value'>{{hole.strokes}}</td>
-                    <td class='putts-cell'>{{hole.putts}}</td>
-                    <td class='result-cell'>
-                      <span
-                        class={{cn 'score-badge' (getScoreClass hole.score)}}
-                      >
-                        {{hole.score}}
-                      </span>
-                    </td>
-                  </tr>
-                {{/each}}
+                {{#if @model.holes}}
+                  {{#each (slice @model.holes 0 9) as |hole|}}
+                    <tr class='table-row'>
+                      <td class='hole-cell hole-number'>{{hole.holeNumber}}</td>
+                      <td class='par-cell'>{{hole.par}}</td>
+                      <td class='yards-cell'>{{hole.yards}}</td>
+                      <td class='score-cell score-value'>{{hole.strokes}}</td>
+                      <td class='putts-cell'>{{hole.putts}}</td>
+                      <td class='result-cell'>
+                        <span
+                          class={{cn 'score-badge' (getScoreClass hole.score)}}
+                        >
+                          {{hole.score}}
+                        </span>
+                      </td>
+                    </tr>
+                  {{/each}}
+                {{/if}}
                 <tr class='total-row'>
                   <td class='hole-cell'>OUT</td>
                   <td class='par-cell'>{{this.frontNinePar}}</td>
@@ -847,22 +866,24 @@ export class GolfScorecard extends CardDef {
                 </tr>
               </thead>
               <tbody>
-                {{#each (slice @model.holes 9 18) as |hole|}}
-                  <tr class='table-row'>
-                    <td class='hole-cell hole-number'>{{hole.holeNumber}}</td>
-                    <td class='par-cell'>{{hole.par}}</td>
-                    <td class='yards-cell'>{{hole.yards}}</td>
-                    <td class='score-cell score-value'>{{hole.strokes}}</td>
-                    <td class='putts-cell'>{{hole.putts}}</td>
-                    <td class='result-cell'>
-                      <span
-                        class={{cn 'score-badge' (getScoreClass hole.score)}}
-                      >
-                        {{hole.score}}
-                      </span>
-                    </td>
-                  </tr>
-                {{/each}}
+                {{#if @model.holes}}
+                  {{#each (slice @model.holes 9 18) as |hole|}}
+                    <tr class='table-row'>
+                      <td class='hole-cell hole-number'>{{hole.holeNumber}}</td>
+                      <td class='par-cell'>{{hole.par}}</td>
+                      <td class='yards-cell'>{{hole.yards}}</td>
+                      <td class='score-cell score-value'>{{hole.strokes}}</td>
+                      <td class='putts-cell'>{{hole.putts}}</td>
+                      <td class='result-cell'>
+                        <span
+                          class={{cn 'score-badge' (getScoreClass hole.score)}}
+                        >
+                          {{hole.score}}
+                        </span>
+                      </td>
+                    </tr>
+                  {{/each}}
+                {{/if}}
                 <tr class='total-row'>
                   <td class='hole-cell'>IN</td>
                   <td class='par-cell'>{{this.backNinePar}}</td>
@@ -1196,75 +1217,9 @@ export class GolfScorecard extends CardDef {
         }
       </style>
     </template>
-
-    get frontNinePar() {
-      try {
-        if (!this.args.model?.holes) return 0;
-        return this.args.model.holes
-          .slice(0, 9)
-          .reduce((total, hole) => total + (hole.par ?? 0), 0);
-      } catch (e) {
-        return 0;
-      }
-    }
-
-    get backNinePar() {
-      try {
-        if (!this.args.model?.holes) return 0;
-        return this.args.model.holes
-          .slice(9, 18)
-          .reduce((total, hole) => total + (hole.par ?? 0), 0);
-      } catch (e) {
-        return 0;
-      }
-    }
-
-    get frontNineYards() {
-      try {
-        if (!this.args.model?.holes) return 0;
-        return this.args.model.holes
-          .slice(0, 9)
-          .reduce((total, hole) => total + (hole.yards ?? 0), 0);
-      } catch (e) {
-        return 0;
-      }
-    }
-
-    get backNineYards() {
-      try {
-        if (!this.args.model?.holes) return 0;
-        return this.args.model.holes
-          .slice(9, 18)
-          .reduce((total, hole) => total + (hole.yards ?? 0), 0);
-      } catch (e) {
-        return 0;
-      }
-    }
-
-    get frontNinePutts() {
-      try {
-        if (!this.args.model?.holes) return 0;
-        return this.args.model.holes
-          .slice(0, 9)
-          .reduce((total, hole) => total + (hole.putts ?? 0), 0);
-      } catch (e) {
-        return 0;
-      }
-    }
-
-    get backNinePutts() {
-      try {
-        if (!this.args.model?.holes) return 0;
-        return this.args.model.holes
-          .slice(9, 18)
-          .reduce((total, hole) => total + (hole.putts ?? 0), 0);
-      } catch (e) {
-        return 0;
-      }
-    }
   };
 
-  static edit = class Edit extends Component<typeof GolfScorecard> {
+  static edit = class Edit extends Component<typeof this> {
     <template>
       <div class='edit-form'>
         <div class='form-section'>
