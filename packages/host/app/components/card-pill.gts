@@ -64,42 +64,40 @@ export default class CardPill extends Component<CardPillSignature> {
 
   <template>
     {{consumeContext this.makeCardResource}}
-    {{#if this.cardTitle}}
-      {{#if this.isCreating}}
-        <LoadingIndicator />
-      {{else}}
-        <Pill
-          class={{cn
-            'card-pill'
-            is-autoattached=@isAutoAttachedCard
-            hide-icon-right=this.hideIconRight
-          }}
-          data-test-attached-card={{@cardId}}
-          data-test-autoattached-card={{@isAutoAttachedCard}}
-          ...attributes
-        >
-          <:iconLeft>
-            <RealmIcon @realmInfo={{this.realm.info @urlForRealmLookup}} />
-          </:iconLeft>
-          <:default>
-            <div class='card-content' title={{this.cardTitle}}>
-              {{this.cardTitle}}
-            </div>
-          </:default>
-          <:iconRight>
-            {{#if @removeCard}}
-              <IconButton
-                class='remove-button'
-                @icon={{IconX}}
-                @height='10'
-                @width='10'
-                {{on 'click' (fn @removeCard @cardId)}}
-                data-test-remove-card-btn
-              />
-            {{/if}}
-          </:iconRight>
-        </Pill>
-      {{/if}}
+    {{#if this.isCreating}}
+      <LoadingIndicator />
+    {{else}}
+      <Pill
+        class={{cn
+          'card-pill'
+          is-autoattached=@isAutoAttachedCard
+          hide-icon-right=this.hideIconRight
+        }}
+        data-test-attached-card={{@cardId}}
+        data-test-autoattached-card={{@isAutoAttachedCard}}
+        ...attributes
+      >
+        <:iconLeft>
+          <RealmIcon @realmInfo={{this.realm.info @urlForRealmLookup}} />
+        </:iconLeft>
+        <:default>
+          <div class='card-content' title={{this.cardTitle}}>
+            {{this.cardTitle}}
+          </div>
+        </:default>
+        <:iconRight>
+          {{#if @removeCard}}
+            <IconButton
+              class='remove-button'
+              @icon={{IconX}}
+              @height='10'
+              @width='10'
+              {{on 'click' (fn @removeCard @cardId)}}
+              data-test-remove-card-btn
+            />
+          {{/if}}
+        </:iconRight>
+      </Pill>
     {{/if}}
     <style scoped>
       .card-pill {

@@ -247,8 +247,9 @@ export function isCardErrorJSONAPI(err: any): err is CardErrorJSONAPI {
   return (
     err != null &&
     typeof err === 'object' &&
-    err.meta &&
-    err.meta.lastKnownGoodHtml
+    err.status &&
+    err.title &&
+    err.meta
   );
 }
 
