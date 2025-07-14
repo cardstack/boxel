@@ -59,7 +59,7 @@ interface Signature {
 
 export default class RegisterUser extends Component<Signature> {
   <template>
-    {{#if (eq this.currentPage 'waiting-page')}}
+    {{#if (eq this.currentPage 'awaiting-validation')}}
       <span class='title' data-test-email-validation>Please check your email to
         complete registration.</span>
       <ul class='email-validation-instruction'>
@@ -398,7 +398,7 @@ export default class RegisterUser extends Component<Signature> {
     } else if (this.state.type === 'waitForAccountCreation') {
       return 'account-creation';
     } else {
-      return 'waiting-page';
+      return 'awaiting-validation';
     }
   }
 
