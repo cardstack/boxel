@@ -1237,8 +1237,12 @@ export default class MatrixService extends Service {
     return await this.client.registerRequest(data, kind);
   }
 
-  async sendReadReceipt(matrixEvent: MatrixEvent) {
-    return await this.client.sendReadReceipt(matrixEvent);
+  // Type of matrixEvent is a partial MatrixEvent because a couple of places
+  // where this method is called don't have the full MatrixEvent type available
+  async sendReadReceipt(
+    matrixEvent: Pick<MatrixEvent, 'getId' | 'getRoomId' | 'getTs'>,
+  ) {
+    return await this.client.sendReadReceipt(matrixEvent as MatrixEvent);
   }
 
   async isUsernameAvailable(username: string) {
