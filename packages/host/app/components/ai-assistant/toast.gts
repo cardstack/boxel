@@ -51,6 +51,7 @@ export default class AiAssistantToast extends Component<Signature> {
           {{on 'click' this.closeToast}}
           class='toast-close-button'
           aria-label='close toast'
+          tabindex={{unless this.isVisible '-1'}}
           data-test-close-toast
         />
       </header>
@@ -62,6 +63,7 @@ export default class AiAssistantToast extends Component<Signature> {
         @size='extra-small'
         class='view-in-chat-button'
         {{on 'click' this.viewInChat}}
+        tabindex={{unless this.isVisible '-1'}}
         data-test-ai-assistant-toast-button
       >
         View in chat
