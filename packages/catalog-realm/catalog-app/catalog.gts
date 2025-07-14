@@ -56,8 +56,29 @@ import { Category } from './listing/category';
 import { Tag } from './listing/tag';
 
 type ViewOption = 'strip' | 'grid';
+type SphereName = 'BUILD' | 'LEARN' | 'LIFE' | 'PLAY' | 'WORK';
 
-// ShowcaseView
+// Base interface for all category and sphere filter items
+interface BaseFilterItem {
+  id: string;
+  displayName: string;
+  icon: typeof IconComponent;
+}
+
+// Individual category filter
+interface CategoryFilter extends BaseFilterItem {
+  sphere?: string;
+}
+
+// Sphere filter that contains multiple categories
+interface SphereFilter extends BaseFilterItem {
+  filters: CategoryFilter[];
+}
+
+// Union type for category and sphere filter items
+type CategorySphereFilterItem = CategoryFilter | SphereFilter;
+
+// Showcase View
 interface ShowcaseViewArgs {
   Args: {
     startHereListings?: CardDef[];
@@ -374,8 +395,10 @@ class Isolated extends Component<typeof Catalog> {
     },
   );
 
-  get categoryItems() {
-    // Get all category instances from the database
+  // Returns a list of filter items for the category sidebar:
+  // - "All" button (CategoryFilter)
+  // - Sphere groups (SphereFilter) containing individual categories
+  get categoryItems(): CategorySphereFilterItem[] {
     const categoryInstances = (this.categorySearch?.instances ??
       []) as Category[];
 
@@ -383,8 +406,6 @@ class Isolated extends Component<typeof Catalog> {
       return [];
     }
 
-    // Define sphere names as a union type for better type safety
-    type SphereName = 'BUILD' | 'LEARN' | 'LIFE' | 'PLAY' | 'WORK';
     // Define which icon to use for each sphere
     const sphereIconMap: Record<SphereName, typeof IconComponent> = {
       BUILD: BuildingIcon,
@@ -394,24 +415,8 @@ class Isolated extends Component<typeof Catalog> {
       WORK: BuildingBank,
     };
 
-    // Define the structure for sphere groups
-    interface SphereGroupSignature {
-      id: string;
-      displayName: string;
-      icon: typeof IconComponent;
-      filters: CategoryFilterItemSignature[];
-    }
-
-    // Define the structure for category filter items
-    interface CategoryFilterItemSignature {
-      id: string;
-      displayName: string;
-      icon: typeof IconComponent;
-      sphere?: string;
-    }
-
     // Group categories by their sphere
-    const categoriesGroupedBySphere: Record<string, SphereGroupSignature> = {};
+    const sphereFilters: Record<string, SphereFilter> = {};
 
     // Loop through each category and organize them by sphere
     for (const category of categoryInstances) {
@@ -419,51 +424,47 @@ class Isolated extends Component<typeof Catalog> {
         continue;
       }
 
-      const sphereName = category.sphere.name;
+      const name = category.sphere.name;
 
-      if (!categoriesGroupedBySphere[sphereName]) {
-        categoriesGroupedBySphere[sphereName] = {
-          id: sphereName.toLowerCase(),
-          displayName: sphereName,
-          icon: sphereIconMap[sphereName as SphereName] || CategoryIcon,
+      if (!sphereFilters[name]) {
+        sphereFilters[name] = {
+          id: name.toLowerCase(),
+          displayName: name,
+          icon: sphereIconMap[name as SphereName] || CategoryIcon,
           filters: [],
         };
       }
 
-      const categoryFilterItem: CategoryFilterItemSignature = {
+      const categoryFilter: CategoryFilter = {
         id: category.id,
         displayName: category.name,
         icon: CategoryIcon,
-        sphere: sphereName,
+        sphere: name,
       };
 
-      categoriesGroupedBySphere[sphereName].filters.push(categoryFilterItem);
+      sphereFilters[name].filters.push(categoryFilter);
     }
 
-    // Sort categories within each sphere group
-    for (const sphereGroup of Object.values(categoriesGroupedBySphere)) {
-      sphereGroup.filters.sort((a, b) =>
+    // Sort categories within each sphere filter
+    for (const sphereFilter of Object.values(sphereFilters)) {
+      sphereFilter.filters.sort((a, b) =>
         a.displayName.localeCompare(b.displayName),
       );
     }
 
-    // Create the final list with "All" button at the top
     // Sort categories by their display name
-    const allCategoriesList: (
-      | SphereGroupSignature
-      | CategoryFilterItemSignature
-    )[] = [
+    const filterItems: CategorySphereFilterItem[] = [
       {
         id: 'all',
         displayName: 'All',
         icon: LayoutGridPlusIcon,
       },
-      ...Object.values(categoriesGroupedBySphere).sort((a, b) =>
+      ...Object.values(sphereFilters).sort((a, b) =>
         a.displayName.localeCompare(b.displayName),
       ),
     ];
 
-    return allCategoriesList;
+    return filterItems;
   }
 
   @action

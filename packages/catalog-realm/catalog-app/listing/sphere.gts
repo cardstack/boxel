@@ -9,7 +9,6 @@ export class Sphere extends CardDef {
   static displayName = 'Sphere';
   static headerColor = '#00ebac';
   @field name = contains(StringField);
-  @field description = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: Sphere) {
       return this.name;
