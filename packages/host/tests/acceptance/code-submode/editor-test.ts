@@ -384,8 +384,38 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       throw new Error('file not found');
     }
     assert.deepEqual(
-      fileRef.content as string,
-      JSON.stringify(editedCard),
+      JSON.parse(fileRef.content as string),
+      {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'John',
+            address: {
+              city: 'Ljubljana',
+              country: 'Slovenia',
+              shippingInfo: {
+                preferredCarrier: null,
+                remarks: null,
+              },
+            },
+            description: null,
+            thumbnailURL: null,
+          },
+          relationships: {
+            pet: {
+              links: {
+                self: `../Pet/mango`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `../person`,
+              name: 'Person',
+            },
+          },
+        },
+      },
       'Person/john-with-bad-pet-link.json changes were saved',
     );
   });
