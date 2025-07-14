@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        file: ${{ fromJSON(needs.find-changed-skills.outputs.files )}}
+        file: ${{ needs.find-changed-skills.outputs.files }}
     steps:
       - name: Process skill card changes
         id: process-changes
