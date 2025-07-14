@@ -28,6 +28,7 @@ import {
   getRoomsFromSync,
   initialRoomName,
   setupUserSubscribed,
+  openAiAssistant,
   setSkillsRedirect,
   waitUntil,
 } from '../helpers';
@@ -66,7 +67,18 @@ test.describe('Room creation', () => {
     let room2 = await createRoom(page);
     await assertRooms(page, [room1, room2]);
 
-    await reloadAndOpenAiAssistant(page);
+    // Assert that the room selection persists for each tab separately after reload
+    const context = page.context();
+    const page2 = await context.newPage();
+    await page2.goto(appURL);
+    await openAiAssistant(page2);
+    await openRoom(page, room1);
+    await openRoom(page2, room2);
+    await page.reload();
+    await page2.reload();
+    await expect(page.locator(`[data-test-room="${room1}"]`)).toHaveCount(1);
+    await expect(page2.locator(`[data-test-room="${room2}"]`)).toHaveCount(1);
+
     await assertRooms(page, [room1, room2]);
 
     await logout(page);
@@ -240,7 +252,7 @@ test.describe('Room creation', () => {
       url: appURL,
     });
 
-    // Open assistant without waiting for [data-test-room] which won’t show on a new account
+    // Open assistant without waiting for [data-test-room] which won't show on a new account
     await page.locator('[data-test-open-ai-assistant]').click();
     await expect(page.locator(`[data-test-close-ai-assistant]`)).toHaveCount(1);
     await expect(page.locator(`[data-test-chat-title]`)).not.toHaveText(

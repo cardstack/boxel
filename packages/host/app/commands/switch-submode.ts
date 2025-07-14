@@ -64,5 +64,8 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
     }
 
     await this.operatorModeStateService.updateSubmode(input.submode);
+    if (this.operatorModeStateService.workspaceChooserOpened) {
+      this.operatorModeStateService.closeWorkspaceChooser();
+    }
   }
 }

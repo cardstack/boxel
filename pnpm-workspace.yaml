@@ -34,7 +34,7 @@ catalog:
   "@lukeed/uuid": ^2.0.1
   "@percy/cli": ^1.30.10
   "@percy/ember": ^4.2.0
-  "@playwright/test": ^1.48.0
+  "@playwright/test": ^1.54.0
   "@rollup/plugin-babel": ^6.0.4
   "@sentry/node": ^8.31.0
   "@simple-dom/interface": ^1.4.0

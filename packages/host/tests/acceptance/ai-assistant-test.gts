@@ -1135,6 +1135,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       undefined,
       'Context sent with message contains correct selectedCodeRef',
     );
+    assert.deepEqual(
+      contextSent.realmPermissions,
+      {
+        canRead: true,
+        canWrite: true,
+      },
+      'Context sent with message contains correct realmPermissions',
+    );
     await click('[data-test-clickable-definition-container]');
 
     await fillIn('[data-test-message-field]', `Message - 2`);
@@ -1181,6 +1189,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         name: 'Plant',
       },
       'Context sent with message contains correct selectedCodeRef',
+    );
+    assert.deepEqual(
+      contextSent.realmPermissions,
+      {
+        canRead: true,
+        canWrite: true,
+      },
+      'Context sent with message contains correct realmPermissions',
     );
 
     await click(
@@ -1235,6 +1251,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       },
       'Context sent with message contains correct selectedCodeRef',
     );
+    assert.deepEqual(
+      contextSent.realmPermissions,
+      {
+        canRead: true,
+        canWrite: true,
+      },
+      'Context sent with message contains correct realmPermissions',
+    );
 
     await click(
       '[data-test-boxel-button][data-test-module-inspector-view="spec"]',
@@ -1283,6 +1307,60 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         name: 'Plant',
       },
       'Context sent with message contains correct selectedCodeRef',
+    );
+    assert.deepEqual(
+      contextSent.realmPermissions,
+      {
+        canRead: true,
+        canWrite: true,
+      },
+      'Context sent with message contains correct realmPermissions',
+    );
+  });
+
+  test('dashboard context sent with message', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      workspaceChooserOpened: true,
+      stacks: [[]],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    await fillIn('[data-test-message-field]', `Message - 1`);
+    await click('[data-test-send-message-btn]');
+    let roomEvents = mockMatrixUtils.getRoomEvents(matrixRoomId);
+    let lastMessageEvent = roomEvents[roomEvents.length - 1];
+    let contextSent = JSON.parse(lastMessageEvent.content.data).context;
+    assert.strictEqual(
+      contextSent.realmUrl,
+      undefined,
+      'Context sent with message does not contain realmUrl',
+    );
+    assert.strictEqual(
+      contextSent.submode,
+      'workspace-chooser',
+      'Context sent with message contains correct submode',
+    );
+    assert.deepEqual(
+      contextSent.workspaces,
+      [
+        {
+          name: 'Test Workspace B',
+          type: 'user-workspace',
+          url: testRealmURL,
+        },
+        {
+          name: 'Cardstack Catalog',
+          type: 'catalog-workspace',
+          url: 'http://localhost:4201/catalog/',
+        },
+        {
+          name: 'Cardstack Skills',
+          type: 'catalog-workspace',
+          url: 'http://localhost:4201/skills/',
+        },
+      ],
+      'Context sent with message contains correct workspaces',
     );
   });
 });

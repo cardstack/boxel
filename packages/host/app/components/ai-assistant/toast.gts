@@ -9,8 +9,6 @@ import Component from '@glimmer/component';
 import { format as formatDate, formatISO, isAfter, subMinutes } from 'date-fns';
 import { cancelPoll, pollTask, runTask } from 'ember-lifeline';
 
-import window from 'ember-window-mock';
-
 import { TrackedObject } from 'tracked-built-ins';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
@@ -18,9 +16,8 @@ import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { markdownToHtml } from '@cardstack/runtime-common';
 
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
+import LocalPersistenceService from '@cardstack/host/services/local-persistence-service';
 import MatrixService from '@cardstack/host/services/matrix-service';
-
-import { CurrentRoomIdPersistenceKey } from '@cardstack/host/utils/local-storage-keys';
 
 import assistantIcon from './ai-assist-icon.webp';
 
@@ -129,6 +126,7 @@ export default class AiAssistantToast extends Component<Signature> {
   </template>
 
   @service private declare matrixService: MatrixService;
+  @service private declare localPersistenceService: LocalPersistenceService;
   _pollToken: ReturnType<typeof pollTask> | null = null;
 
   private get state() {
@@ -226,7 +224,7 @@ export default class AiAssistantToast extends Component<Signature> {
 
   @action
   private viewInChat() {
-    window.localStorage.setItem(CurrentRoomIdPersistenceKey, this.roomId);
+    this.localPersistenceService.setCurrentRoomId(this.roomId);
     this.args.onViewInChatClick();
   }
 }
