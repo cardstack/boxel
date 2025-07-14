@@ -141,6 +141,7 @@ module('buildPromptForModel', (hooks) => {
       '@aibot:localhost',
       undefined,
       undefined,
+      [],
       fakeMatrixClient,
     );
 
@@ -227,6 +228,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       '@aibot:localhost',
       undefined,
       undefined,
+      [],
       fakeMatrixClient,
     );
 
@@ -307,6 +309,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
         '@aibot@localhost',
         undefined,
         undefined,
+        [],
         fakeMatrixClient,
       );
       assert.notOk(true, 'should have raised an exception');
@@ -728,6 +731,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       '@aibot:localhost',
       undefined,
       undefined,
+      [],
       fakeMatrixClient,
     );
 
@@ -1059,6 +1063,7 @@ Attached Files (files with newer versions don't show their content):
       '@aibot:localhost',
       undefined,
       undefined,
+      [],
       fakeMatrixClient,
     );
     const userMessages = fullPrompt.filter(
@@ -2001,11 +2006,16 @@ Attached Files (files with newer versions don't show their content):
       '@aibot:localhost',
       fakeMatrixClient,
     );
+    console.log(messages);
     assert.true(messages!.length > 0);
     assert.equal(messages![0].role, 'system');
     assert.true(messages![0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.false(messages![0].content?.includes('SKILL_INSTRUCTIONS_V1'));
-    assert.true(messages![0].content?.includes('SKILL_INSTRUCTIONS_V2'));
+    assert.true(
+      messages![0].content?.includes(
+        'Skill (id: skill-card-1):\nSKILL_INSTRUCTIONS_V2\n',
+      ),
+    );
   });
 
   test('if tool calls are required, ensure they are set', async () => {
@@ -2372,6 +2382,7 @@ Attached Files (files with newer versions don't show their content):
       history,
       '@aibot:localhost',
       tools,
+      [],
       [],
       fakeMatrixClient,
     );
@@ -2900,13 +2911,25 @@ Attached Files (files with newer versions don't show their content):
       ),
     );
 
-    const { tools } = await getPromptParts(
+    const { messages, tools } = await getPromptParts(
       eventList,
       '@aibot:localhost',
       fakeMatrixClient,
     );
     // we should not have any tools available
     assert.true(tools!.length == 0, 'Should not have tools available');
+
+    assert.equal(
+      messages![1].content,
+      `The user is currently viewing the following user interface:
+Room ID: !XuZQzeYAGZzFQFYUzQ:localhost
+Submode: interact
+The user has no open cards.
+Disabled skills: http://boxel.ai/skills/skill_card_editing
+
+Current date and time: 2025-06-11T11:43:00.533Z
+`,
+    );
   });
 
   test('Uses updated command definitions when skill card is updated', async () => {

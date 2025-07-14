@@ -122,7 +122,7 @@ This document defines your operational parameters as the Boxel AI assistant—an
 `;
 
 export const SKILL_INSTRUCTIONS_MESSAGE =
-  '\nThe user has given you the following instructions. You must obey these instructions when responding to the user:\n';
+  '\nThe user has given you the following instructions. You must obey these instructions when responding to the user:\n\n';
 
 type CommandMessage = {
   type: 'command';
@@ -176,6 +176,7 @@ export async function getPromptParts(
     };
   }
   let skills = await getEnabledSkills(eventList, client);
+  let disabledSkillIds = await getDisabledSkillIds(eventList);
   let tools = await getTools(eventList, skills, aiBotUserId, client);
   let toolChoice = getToolChoice(history, aiBotUserId);
   let messages = await buildPromptForModel(
@@ -183,6 +184,7 @@ export async function getPromptParts(
     aiBotUserId,
     tools,
     skills,
+    disabledSkillIds,
     client,
   );
   let model = getModel(eventList);
@@ -272,6 +274,20 @@ async function getEnabledSkills(
     );
   }
   return [];
+}
+
+export async function getDisabledSkillIds(
+  eventList: DiscreteMatrixEvent[],
+): Promise<string[]> {
+  let skillsConfigEvent = eventList.findLast(
+    (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  ) as SkillsConfigEvent;
+  if (!skillsConfigEvent) {
+    return [];
+  }
+  return skillsConfigEvent.content.disabledSkillCards.map(
+    (serializedFile) => serializedFile.sourceUrl,
+  );
 }
 
 export interface OpenAIPromptMessage {
@@ -796,6 +812,7 @@ export async function buildPromptForModel(
   aiBotUserId: string,
   tools: Tool[] = [],
   skillCards: LooseCardResource[] = [],
+  disabledSkillIds: string[] = [],
   client: MatrixClient,
 ) {
   // Need to make sure the passed in username is a full id
@@ -884,6 +901,7 @@ export async function buildPromptForModel(
     history,
     aiBotUserId,
     tools,
+    disabledSkillIds,
   );
   // The context should be placed where it explains the state of the host.
   // This is either:
@@ -931,6 +949,7 @@ export const buildContextMessage = async (
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   tools: Tool[],
+  disabledSkillIds: string[],
 ): Promise<string> => {
   let result = '';
 
@@ -975,6 +994,9 @@ export const buildContextMessage = async (
       result += `Open cards:\n${context.openCardIds.map((id) => ` - ${id}\n`)}`;
     } else {
       result += `The user has no open cards.\n`;
+    }
+    if (disabledSkillIds.length > 0) {
+      result += `Disabled skills: ${disabledSkillIds.join(', ')}\n`;
     }
     if (context?.codeMode?.currentFile) {
       result += `File open in code editor: ${context.codeMode.currentFile}\n`;
@@ -1025,7 +1047,12 @@ export const attachedCardsToMessage = (
 };
 
 export const skillCardsToMessage = (cards: LooseCardResource[]) => {
-  return cards.map((card) => card.attributes?.instructions).join('\n');
+  return cards
+    .map((card) => {
+      return `Skill (id: ${card.id}):
+${card.attributes?.instructions}`;
+    })
+    .join('\n\n');
 };
 
 export function cleanContent(content: string) {

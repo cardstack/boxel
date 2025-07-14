@@ -359,7 +359,7 @@
       "disabledSkillCards": [
         {
           "url": "mxc://mock-server/skill_card_editing",
-          "sourceUrl": "mxc://mock-server/skill_card_editing",
+          "sourceUrl": "http://boxel.ai/skills/skill_card_editing",
           "contentType": "text/plain"
         }
       ],
