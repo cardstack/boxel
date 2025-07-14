@@ -538,7 +538,9 @@ export class Realm {
           );
           content = JSON.stringify(serialized, null, 2);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error(`ignoring error: ${e}`);
+      }
       let { lastModified, created, isNew } = await this.#adapter.write(
         path,
         content,
@@ -692,7 +694,7 @@ export class Realm {
       let fileURL = this.paths.fileURL(href);
       let localPath = this.paths.local(fileURL);
       if (isModuleResource(resource)) {
-        files.set(localPath, resource.attributes?.content);
+        files.set(localPath, resource.attributes?.content ?? '');
       } else if (isCardResource(resource)) {
         let doc = {
           data: resource,
