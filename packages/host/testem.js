@@ -27,7 +27,7 @@ const config = {
   },
 };
 
-if (process.env.CI) {
+if (process.env.CXI) {
   fs.mkdirSync('../../junit');
 
   const reporters = [
