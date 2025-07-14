@@ -324,6 +324,17 @@ export default class SearchSheet extends Component<Signature> {
           height var(--boxel-transition),
           width var(--boxel-transition);
       }
+      .search-sheet:not(.closed) {
+        border-top-right-radius: var(--boxel-border-radius-xxl);
+        border-top-left-radius: var(--boxel-border-radius-xxl);
+        border-bottom-right-radius: 0;
+        border-bottom-left-radius: 0;
+        overflow: hidden;
+      }
+      .search-sheet:not(.closed):deep(.input-container),
+      .search-sheet:not(.closed):deep(.search-sheet__search-input-group) {
+        border-radius: inherit;
+      }
 
       .search-sheet__search-input-group {
         transition:
@@ -334,11 +345,6 @@ export default class SearchSheet extends Component<Signature> {
       .closed {
         height: var(--search-sheet-closed-height);
         width: var(--search-sheet-closed-width);
-      }
-
-      .closed .search-sheet__search-input-group {
-        outline: var(--boxel-border-flexible);
-        border-radius: var(--boxel-border-radius-xxl);
       }
 
       .search-sheet.closed .search-sheet-content {
@@ -408,13 +414,15 @@ export default class SearchSheet extends Component<Signature> {
         overflow-x: auto;
       }
       .open-search-field {
-        padding: 10px;
-        border-radius: 20px;
-        box-shadow: 0 5px 15px 0 rgba(0, 0, 0, 0.75);
-        border: solid 1px rgba(255, 255, 255, 0.35);
+        padding: var(--boxel-sp-xs);
+        border-radius: 50%;
         background-color: var(--boxel-700);
 
-        --icon-color: var(--boxel-teal);
+        --icon-color: var(--boxel-highlight);
+      }
+      .open-search-field:focus:focus-visible {
+        outline-offset: 0;
+        outline-width: 2px;
       }
     </style>
   </template>
