@@ -1,6 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat, fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
@@ -16,7 +15,6 @@ import { provide, consume } from 'ember-provide-consume-context';
 import get from 'lodash/get';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
-import { Tooltip } from '@cardstack/boxel-ui/components';
 import {
   cn,
   eq,
@@ -24,12 +22,7 @@ import {
   MenuItem,
   MenuDivider,
 } from '@cardstack/boxel-ui/helpers';
-import {
-  Download,
-  IconCode,
-  IconSearch,
-  type Icon,
-} from '@cardstack/boxel-ui/icons';
+import { IconCode, IconSearch, type Icon } from '@cardstack/boxel-ui/icons';
 
 import {
   chooseCard,
@@ -82,6 +75,10 @@ import consumeContext from '../../helpers/consume-context';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
+import NeighborStackTriggerButton, {
+  SearchSheetTriggers,
+  type SearchSheetTrigger,
+} from './interact-submode/neighbor-stack-trigger';
 import OperatorModeStack from './stack';
 import { CardDefOrId } from './stack-item';
 import SubmodeLayout from './submode-layout';
@@ -105,75 +102,8 @@ const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
 export type Stack = StackItem[];
 
-const SearchSheetTriggers = {
-  DropCardToLeftNeighborStackButton: 'drop-card-to-left-neighbor-stack-button',
-  DropCardToRightNeighborStackButton:
-    'drop-card-to-right-neighbor-stack-button',
-} as const;
-type Values<T> = T[keyof T];
-type SearchSheetTrigger = Values<typeof SearchSheetTriggers>;
-
 const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<CardDef>>();
 const stackItemComponentAPI = new WeakMap<StackItem, StackItemComponentAPI>();
-
-interface NeighborStackTriggerButtonSignature {
-  Element: HTMLButtonElement;
-  Args: {
-    triggerSide: SearchSheetTrigger;
-    activeTrigger: SearchSheetTrigger | null;
-    onTrigger: (triggerSide: SearchSheetTrigger) => void;
-  };
-}
-
-class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSignature> {
-  get triggerSideClass() {
-    switch (this.args.triggerSide) {
-      case SearchSheetTriggers.DropCardToLeftNeighborStackButton:
-        return 'add-card-to-neighbor-stack--left';
-      case SearchSheetTriggers.DropCardToRightNeighborStackButton:
-        return 'add-card-to-neighbor-stack--right';
-      default:
-        return undefined;
-    }
-  }
-
-  <template>
-    <button
-      class={{cn
-        'add-card-to-neighbor-stack'
-        this.triggerSideClass
-        add-card-to-neighbor-stack--active=(eq @activeTrigger @triggerSide)
-      }}
-      {{on 'click' (fn @onTrigger @triggerSide)}}
-      ...attributes
-    >
-      <Download width='19' height='19' />
-    </button>
-    <style scoped>
-      .add-card-to-neighbor-stack {
-        --icon-color: var(--boxel-highlight-hover);
-        width: var(--container-button-size);
-        height: var(--container-button-size);
-        padding: 0;
-        border-radius: 50%;
-        background-color: var(--boxel-700);
-        border: var(--boxel-border-flexible);
-        box-shadow: var(--boxel-deep-box-shadow);
-        z-index: var(--boxel-layer-floating-button);
-      }
-      .add-card-to-neighbor-stack:hover,
-      .add-card-to-neighbor-stack--active {
-        --icon-color: var(--boxel-highlight);
-      }
-      .add-card-to-neighbor-stack--left {
-        margin-left: var(--operator-mode-spacing);
-      }
-      .add-card-to-neighbor-stack--right {
-        margin-right: var(--operator-mode-spacing);
-      }
-    </style>
-  </template>
-}
 
 const CodeSubmodeNewFileOptions: TemplateOnlyComponent = <template>
   <ul class='code-mode-file-options'>
@@ -286,7 +216,7 @@ export default class InteractSubmode extends Component {
           stackIndex,
         });
         here.addToStack(newItem);
-        here.operatorModeStateService.workspaceChooserOpened = false;
+        here.operatorModeStateService.closeWorkspaceChooser();
       },
       copyURLToClipboard: async (
         card: CardDef | URL | string,
@@ -671,7 +601,7 @@ export default class InteractSubmode extends Component {
           }
         }
 
-        this.operatorModeStateService.workspaceChooserOpened = false;
+        this.operatorModeStateService.closeWorkspaceChooser();
       } finally {
         waiter.endAsync(waiterToken);
       }
@@ -842,22 +772,15 @@ export default class InteractSubmode extends Component {
     >
       <div class='interact-submode' style={{this.backgroundImageStyle}}>
         {{#if this.canCreateNeighborStack}}
-          <Tooltip @placement='right'>
-            <:trigger>
-              <NeighborStackTriggerButton
-                data-test-add-card-left-stack
-                @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
-                @activeTrigger={{this.searchSheetTrigger}}
-                @onTrigger={{fn
-                  this.showSearchWithTrigger
-                  search.openSearchToPrompt
-                }}
-              />
-            </:trigger>
-            <:content>
-              {{neighborStackTooltipMessage 'left'}}
-            </:content>
-          </Tooltip>
+          <NeighborStackTriggerButton
+            class='neighbor-stack-trigger stack-trigger-left'
+            @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
+            @activeTrigger={{this.searchSheetTrigger}}
+            @onTrigger={{fn
+              this.showSearchWithTrigger
+              search.openSearchToPrompt
+            }}
+          />
         {{/if}}
         <div class='stacks'>
           {{#each this.stacks as |stack stackIndex|}}
@@ -903,23 +826,15 @@ export default class InteractSubmode extends Component {
           />
         </div>
         {{#if this.canCreateNeighborStack}}
-          <Tooltip @placement='left'>
-            <:trigger>
-              <NeighborStackTriggerButton
-                class='neighbor-stack-trigger'
-                data-test-add-card-right-stack
-                @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
-                @activeTrigger={{this.searchSheetTrigger}}
-                @onTrigger={{fn
-                  this.showSearchWithTrigger
-                  search.openSearchToPrompt
-                }}
-              />
-            </:trigger>
-            <:content>
-              {{neighborStackTooltipMessage 'right'}}
-            </:content>
-          </Tooltip>
+          <NeighborStackTriggerButton
+            class='neighbor-stack-trigger stack-trigger-right'
+            @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
+            @activeTrigger={{this.searchSheetTrigger}}
+            @onTrigger={{fn
+              this.showSearchWithTrigger
+              search.openSearchToPrompt
+            }}
+          />
         {{/if}}
         {{#if this.cardToDelete}}
           <DeleteModal
@@ -958,6 +873,12 @@ export default class InteractSubmode extends Component {
         justify-content: center;
         align-items: center;
       }
+      .stacks > :deep(.operator-mode-stack:first-child) {
+        padding-left: var(--boxel-sp-lg);
+      }
+      .stacks > :deep(.operator-mode-stack:last-child) {
+        padding-right: var(--boxel-sp-lg);
+      }
       .stack-with-bg-image:before {
         content: ' ';
         height: 100%;
@@ -972,7 +893,7 @@ export default class InteractSubmode extends Component {
         display: none;
       }
       .stack-medium-padding-top {
-        padding-top: var(--operator-mode-top-bar-item-height);
+        padding-top: calc(var(--stack-padding-top) / 2);
       }
       .stack-small-padding-top {
         padding-top: var(--operator-mode-spacing);
@@ -980,11 +901,15 @@ export default class InteractSubmode extends Component {
       .neighbor-stack-trigger {
         flex: 0;
         flex-basis: var(--container-button-size);
+        position: absolute;
+        z-index: var(--boxel-layer-floating-button);
+      }
+      .stack-trigger-right {
+        right: 0;
+      }
+      .stack-trigger-left {
+        left: 0;
       }
     </style>
   </template>
 }
-
-const neighborStackTooltipMessage = (side: 'left' | 'right') => {
-  return `Open a card to the ${side} of the current card`;
-};

@@ -13,7 +13,6 @@ import { getService } from '@universal-ember/test-support';
 
 import { format, subMinutes } from 'date-fns';
 
-import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -30,9 +29,9 @@ import {
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import LocalPersistenceService from '@cardstack/host/services/local-persistence-service';
 
-import { CurrentRoomIdPersistenceKey } from '@cardstack/host/utils/local-storage-keys';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
   percySnapshot,
@@ -63,6 +62,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
   const realmName = 'Operator Mode Workspace';
   let loader: Loader;
   let operatorModeStateService: OperatorModeStateService;
+  let localPersistenceService: LocalPersistenceService;
 
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
@@ -101,6 +101,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
   hooks.beforeEach(async function () {
     operatorModeStateService = getService('operator-mode-state-service');
+    localPersistenceService = getService('local-persistence-service');
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -278,19 +279,21 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
         );
 
       await click('[data-test-close-ai-assistant]');
-      window.localStorage.setItem(
-        CurrentRoomIdPersistenceKey,
-        "room-id-that-doesn't-exist-and-should-not-break-the-implementation",
-      );
+
+      const testValue =
+        "room-id-that-doesn't-exist-and-should-not-break-the-implementation";
+
+      localPersistenceService.setCurrentRoomId(testValue);
+
       await click('[data-test-open-ai-assistant]');
-      await waitFor(`[data-room-settled]`);
+      await waitFor(`[data-test-room="${room2Id}"]`);
       assert
         .dom(`[data-test-room="${room2Id}"]`)
         .exists(
           "test room 2 is the most recently created room and it's opened initially",
         );
     } finally {
-      window.localStorage.removeItem(CurrentRoomIdPersistenceKey); // Cleanup
+      localPersistenceService.setCurrentRoomId(undefined);
     }
   });
 

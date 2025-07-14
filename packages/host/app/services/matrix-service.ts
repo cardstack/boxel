@@ -27,7 +27,6 @@ import { v4 as uuidv4 } from 'uuid';
 
 import {
   aiBotUsername,
-  baseRealm,
   LooseCardResource,
   logger,
   ResolvedCodeRef,
@@ -97,20 +96,19 @@ import type * as SkillModule from 'https://cardstack.com/base/skill';
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
 import { addPatchTools } from '../commands/utils';
 import { isSkillCard } from '../lib/file-def-manager';
+import { skillCardURL } from '../lib/utils';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
 
-import {
-  CurrentRoomIdPersistenceKey,
-  clearLocalStorage,
-} from '../utils/local-storage-keys';
+import { clearLocalStorage } from '../utils/local-storage-keys';
 
 import { type SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
 
 import type CardService from './card-service';
 import type CommandService from './command-service';
 import type LoaderService from './loader-service';
+import type LocalPersistenceService from './local-persistence-service';
 import type LoggerService from './logger-service';
 import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
@@ -141,6 +139,7 @@ export default class MatrixService extends Service {
   @service declare private reset: ResetService;
   @service declare private network: NetworkService;
   @service declare private store: StoreService;
+  @service declare private localPersistenceService: LocalPersistenceService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
   @tracked private postLoginCompleted = false;
@@ -179,12 +178,17 @@ export default class MatrixService extends Service {
   private slidingSync: SlidingSync | undefined;
   private aiRoomIds: Set<string> = new Set();
   @tracked private _isLoadingMoreAIRooms = false;
-  agentId = uuidv4();
+  agentId: string | undefined;
 
   constructor(owner: Owner) {
     super(owner);
     this.setLoggerLevelFromEnvironment();
+    this.setAgentId();
     this.#ready = this.loadState.perform();
+  }
+
+  private setAgentId() {
+    this.agentId = this.localPersistenceService.getAgentId();
   }
 
   private setLoggerLevelFromEnvironment() {
@@ -204,10 +208,9 @@ export default class MatrixService extends Service {
     this._currentRoomId = value;
     if (value) {
       this.loadAllTimelineEvents(value);
-      window.localStorage.setItem(CurrentRoomIdPersistenceKey, value);
-    } else {
-      window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
     }
+
+    this.localPersistenceService.setCurrentRoomId(value);
   }
 
   get ready() {
@@ -341,7 +344,7 @@ export default class MatrixService extends Service {
   async logout() {
     try {
       await this.flushAll;
-      clearAuth();
+      this.clearAuth();
       this.postLoginCompleted = false;
       this.reset.resetAll();
       this.unbindEventListeners();
@@ -351,10 +354,10 @@ export default class MatrixService extends Service {
       // card id's in the URL
       this.router.transitionTo('index', {
         queryParams: {
-          workspaceChooserOpened: 'true',
           operatorModeState: stringify({
             stacks: [],
             submode: Submodes.Interact,
+            workspaceChooserOpened: true,
           } as OperatorModeSerializedState),
         },
       });
@@ -801,6 +804,7 @@ export default class MatrixService extends Service {
     attachedCards: CardDef[] = [],
     attachedFiles: FileDef[] = [],
     context: BoxelContext,
+    failureReason?: string | undefined,
   ) {
     let contentData = await this.withContextAndAttachments(
       context,
@@ -810,6 +814,7 @@ export default class MatrixService extends Service {
     let content: CodePatchResultContent = {
       msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
       codeBlockIndex,
+      failureReason,
       'm.relates_to': {
         event_id: eventId,
         key: resultKey,
@@ -985,12 +990,12 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [`${baseRealm.url}Skill/boxel-environment`];
+    let interactModeDefaultSkills = [skillCardURL('boxel-environment')];
 
     let codeModeDefaultSkills = [
-      `${baseRealm.url}Skill/boxel-environment`,
-      `${baseRealm.url}Skill/boxel-development`,
-      `${baseRealm.url}Skill/source-code-editing`,
+      skillCardURL('boxel-environment'),
+      skillCardURL('boxel-development'),
+      skillCardURL('source-code-editing'),
     ];
 
     let defaultSkills;
@@ -1585,6 +1590,11 @@ export default class MatrixService extends Service {
     }
   }
 
+  private clearAuth() {
+    window.localStorage.removeItem('auth');
+    this.localPersistenceService.setCurrentRoomId(undefined);
+  }
+
   async activateCodingSkill() {
     if (!this.currentRoomId) {
       return;
@@ -1693,11 +1703,6 @@ export default class MatrixService extends Service {
 
 function saveAuth(auth: LoginResponse) {
   window.localStorage.setItem('auth', JSON.stringify(auth));
-}
-
-function clearAuth() {
-  window.localStorage.removeItem('auth');
-  window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
 }
 
 function getAuth(): LoginResponse | undefined {

@@ -173,9 +173,18 @@ export interface BoxelContext {
   agentId?: string;
   openCardIds?: string[];
   realmUrl?: string;
+  realmPermissions?: {
+    canRead: boolean;
+    canWrite: boolean;
+  };
   tools?: Tool[];
   toolChoice?: ToolChoice;
   submode?: string;
+  workspaces?: {
+    url: string;
+    name: string;
+    type: 'user-workspace' | 'catalog-workspace';
+  }[];
   codeMode?: {
     currentFile?: string;
     moduleInspectorPanel?: string;
@@ -304,6 +313,7 @@ export interface CodePatchResultContent {
   };
   msgtype: typeof APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE;
   codeBlockIndex: number;
+  failureReason?: string; // only present if status is 'failed'
   data: {
     context?: BoxelContext;
     attachedFiles?: (SerializedFile & { content?: string; error?: string })[];

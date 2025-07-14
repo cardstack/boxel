@@ -297,7 +297,7 @@ export default class SearchSheet extends Component<Signature> {
           var(--operator-mode-bottom-bar-item-height) +
             var(--operator-mode-spacing)
         );
-        --search-sheet-closed-width: 10.75rem;
+        --search-sheet-closed-width: var(--container-button-size);
         --search-sheet-prompt-height: 9.375rem;
       }
 

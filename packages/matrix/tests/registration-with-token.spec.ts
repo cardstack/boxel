@@ -41,6 +41,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     synapse = await synapseStart({
       template: 'test',
     });
+    await registerRealmUsers(synapse);
     await smtpStart();
     realmServer = await startRealmServer();
   });
@@ -56,7 +57,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     test.setTimeout(120_000);
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerUser(synapse, 'user2', 'pass');
-    await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await clearLocalStorage(page, serverIndexUrl);
     await gotoRegistration(page, serverIndexUrl);
@@ -256,7 +256,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
   test(`it can resend email validation message`, async ({ page }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await registerRealmUsers(synapse);
     await clearLocalStorage(page, appURL);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await gotoRegistration(page, appURL);
@@ -288,6 +287,7 @@ test.describe('User Registration w/ Token', () => {
     synapse = await synapseStart({
       template: 'test',
     });
+    await registerRealmUsers(synapse);
     await smtpStart();
   });
 
@@ -300,7 +300,6 @@ test.describe('User Registration w/ Token', () => {
     page,
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await registerUser(synapse, 'user1', 'pass');
     await clearLocalStorage(page);
@@ -343,7 +342,6 @@ test.describe('User Registration w/ Token', () => {
     page,
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await clearLocalStorage(page);
 
@@ -385,7 +383,6 @@ test.describe('User Registration w/ Token', () => {
     page,
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await clearLocalStorage(page);
 
@@ -427,7 +424,6 @@ test.describe('User Registration w/ Token', () => {
     page,
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await clearLocalStorage(page);
 
@@ -489,7 +485,6 @@ test.describe('User Registration w/ Token', () => {
   });
 
   test(`it shows an error when passwords do not match`, async ({ page }) => {
-    await registerRealmUsers(synapse);
     await clearLocalStorage(page);
     await gotoRegistration(page);
 
@@ -536,7 +531,6 @@ test.describe('User Registration w/ Token', () => {
   test(`it shows an error when password doesn't follow requirement`, async ({
     page,
   }) => {
-    await registerRealmUsers(synapse);
     await clearLocalStorage(page);
     await gotoRegistration(page);
 

@@ -81,6 +81,7 @@ export interface OperatorModeState {
   moduleInspector?: ModuleInspectorView;
   newFileDropdownOpen?: boolean;
   cardPreviewFormat: Format;
+  workspaceChooserOpened?: boolean;
 }
 
 interface CardItem {
@@ -104,6 +105,7 @@ export type SerializedState = {
   aiAssistantOpen?: boolean;
   moduleInspector?: ModuleInspectorView;
   cardPreviewFormat?: Format;
+  workspaceChooserOpened?: boolean;
 };
 
 interface OpenFileSubscriber {
@@ -122,6 +124,7 @@ export default class OperatorModeStateService extends Service {
     aiAssistantOpen: false,
     newFileDropdownOpen: false,
     cardPreviewFormat: 'isolated' as Format,
+    workspaceChooserOpened: false,
   });
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
@@ -170,6 +173,7 @@ export default class OperatorModeStateService extends Service {
       moduleInspector: this._state.moduleInspector,
       newFileDropdownOpen: this._state.newFileDropdownOpen,
       cardPreviewFormat: this._state.cardPreviewFormat,
+      workspaceChooserOpened: this._state.workspaceChooserOpened,
     } as const;
   }
 
@@ -206,6 +210,7 @@ export default class OperatorModeStateService extends Service {
       moduleInspector: DEFAULT_MODULE_INSPECTOR_VIEW,
       newFileDropdownOpen: false,
       cardPreviewFormat: 'isolated' as Format,
+      workspaceChooserOpened: true,
     });
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
@@ -292,7 +297,7 @@ export default class OperatorModeStateService extends Service {
     }
 
     if (this._state.stacks.length === 0) {
-      this.operatorModeController.workspaceChooserOpened = true;
+      this._state.workspaceChooserOpened = true;
     }
 
     this.schedulePersist();
@@ -678,10 +683,15 @@ export default class OperatorModeStateService extends Service {
       openDirs: Object.fromEntries(this._state.openDirs.entries()),
       codeSelection: this._state.codeSelection,
       fieldSelection: this._state.fieldSelection,
-      aiAssistantOpen: this._state.aiAssistantOpen,
       moduleInspector: this._state.moduleInspector,
       cardPreviewFormat: this._state.cardPreviewFormat,
     };
+    if (this._state.aiAssistantOpen) {
+      state.aiAssistantOpen = this._state.aiAssistantOpen;
+    }
+    if (this._state.workspaceChooserOpened) {
+      state.workspaceChooserOpened = this._state.workspaceChooserOpened;
+    }
 
     for (let stack of this._state.stacks) {
       let serializedStack: SerializedStack = [];
@@ -745,6 +755,7 @@ export default class OperatorModeStateService extends Service {
       moduleInspector:
         rawState.moduleInspector ?? DEFAULT_MODULE_INSPECTOR_VIEW,
       cardPreviewFormat: rawState.cardPreviewFormat ?? 'isolated',
+      workspaceChooserOpened: rawState.workspaceChooserOpened ?? false,
     });
 
     if (rawState.codePath && rawState.moduleInspector) {
@@ -942,6 +953,16 @@ export default class OperatorModeStateService extends Service {
     this.updateSubmode(Submodes.Interact);
   }
 
+  openWorkspaceChooser() {
+    this._state.workspaceChooserOpened = true;
+    this.schedulePersist();
+  }
+
+  closeWorkspaceChooser() {
+    this._state.workspaceChooserOpened = false;
+    this.schedulePersist();
+  }
+
   openWorkspace = async (realmUrl: string) => {
     let id = `${realmUrl}index`;
     let stackItem = new StackItem({
@@ -962,16 +983,17 @@ export default class OperatorModeStateService extends Service {
     );
     this.updateSubmode(Submodes.Interact);
 
-    this.operatorModeController.workspaceChooserOpened = false;
+    this._state.workspaceChooserOpened = false;
     this.cachedRealmURL = new URL(realmUrl);
   };
 
   get workspaceChooserOpened() {
-    return this.operatorModeController.workspaceChooserOpened;
+    return this.state.workspaceChooserOpened ?? false;
   }
 
   set workspaceChooserOpened(workspaceChooserOpened: boolean) {
-    this.operatorModeController.workspaceChooserOpened = workspaceChooserOpened;
+    this._state.workspaceChooserOpened = workspaceChooserOpened;
+    this.schedulePersist();
   }
 
   // Operator mode state is persisted in a query param, which lives in the index controller
@@ -1013,6 +1035,25 @@ export default class OperatorModeStateService extends Service {
     openCardIdsSet: Set<string> = new Set([...this.getOpenCardIds()]),
   ): BoxelContext {
     let codeMode: BoxelContext['codeMode'] = undefined;
+    if (this._state.workspaceChooserOpened) {
+      let userWorkspaces = this.realmServer.userRealmURLs.map((url) => ({
+        url,
+        name: this.realm.info(url).name,
+        type: 'user-workspace' as const,
+      }));
+      let catalogWorkspaces = this.realmServer.catalogRealmURLs.map((url) => ({
+        url,
+        name: this.realm.info(url).name,
+        type: 'catalog-workspace' as const,
+      }));
+      return {
+        agentId: this.matrixService.agentId,
+        submode: 'workspace-chooser',
+        debug: this.operatorModeController.debug,
+        openCardIds: [],
+        workspaces: [...userWorkspaces, ...catalogWorkspaces],
+      };
+    }
     if (this._state.submode === Submodes.Code) {
       codeMode = {
         currentFile: this.codePathString,
@@ -1036,12 +1077,19 @@ export default class OperatorModeStateService extends Service {
     }
 
     let openCardIds = this.makeRemoteIdsList([...openCardIdsSet]);
+    let realmUrl = this.realmURL.href;
+    let realmPermissions = {
+      canRead: this.realm.canRead(realmUrl),
+      canWrite: this.realm.canWrite(realmUrl),
+    };
+
     return {
       agentId: this.matrixService.agentId,
       submode: this._state.submode,
       debug: this.operatorModeController.debug,
       openCardIds,
-      realmUrl: this.realmURL.href,
+      realmUrl,
+      realmPermissions,
       codeMode,
     };
   }

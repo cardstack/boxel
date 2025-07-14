@@ -13,6 +13,7 @@ import * as ListingInstallCommandModule from './listing-install';
 import * as ListingRemixCommandModule from './listing-remix';
 import * as ListingUseCommandModule from './listing-use';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
+import * as OpenWorkspaceCommandModule from './open-workspace';
 import * as PatchCardInstanceCommandModule from './patch-card-instance';
 import * as PatchCodeCommandModule from './patch-code';
 import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assistant';
@@ -106,6 +107,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/open-ai-assistant-room',
     OpenAiAssistantRoomCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/open-workspace',
+    OpenWorkspaceCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/send-ai-assistant-message',

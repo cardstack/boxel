@@ -320,7 +320,7 @@
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "Updating the file...\nhttp://test.com/spaghetti-recipe.gts\n╔═══ SEARCH ════╗\nthis is the riveting content of the spaghetti-recipe.gts file\n╠═══════════════╣\nthis is the engaging content of the spaghetti-recipe.gts file\n╚═══ REPLACE ═══╝\n\nI will also create a file for rigatoni:\n\nhttp://test.com/rigatoni-recipe.gts\n╔═══ SEARCH ════╗\n╠═══════════════╣\nthis is the holy content of the rigatoni-recipe.gts file\n╚═══ REPLACE ═══╝\n",
+      "body": "Updating the file...\nhttp://test.com/spaghetti-recipe.gts\n╔═══ SEARCH ════╗\nthis is the riveting content of the spaghetti-recipe.gts file\n╠═══════════════╣\nthis is the engaging content of the spaghetti-recipe.gts file\n╚═══ REPLACE ═══╝\n\n",
       "msgtype": "app.boxel.message",
       "format": "org.matrix.custom.html",
       "isStreamingFinished": true
@@ -341,10 +341,11 @@
       "msgtype": "app.boxel.codePatchResult",
       "m.relates_to": {
         "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE",
-        "key": "applied",
+        "key": "failed",
         "rel_type": "app.boxel.codePatchAnnotation"
       },
       "codeBlockIndex": 0,
+      "failureReason": "The patch did not apply cleanly.",
       "data": {
         "context": {
           "tools": [],
@@ -358,35 +359,6 @@
       "age": 63267
     },
     "event_id": "$92DJh6JsIg0z0GmnkylmSz9BWPLcrN8pWnk1fiOEJTk",
-    "user_id": "@user:localhost",
-    "age": 63267
-  },
-  {
-    "type": "app.boxel.codePatchResult",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@user:localhost",
-    "content": {
-      "msgtype": "app.boxel.codePatchResult",
-      "m.relates_to": {
-        "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE",
-        "key": "failed",
-        "rel_type": "app.boxel.codePatchAnnotation"
-      },
-      "codeBlockIndex": 1,
-      "failureReason": "The patch did not apply cleanly.",
-      "data": {
-        "context": {
-          "tools": [],
-          "functions": [],
-          "submode": "code"
-        }
-      }
-    },
-    "origin_server_ts": 1736864370893,
-    "unsigned": {
-      "age": 63267
-    },
-    "event_id": "$000Jh6JsIg0z0GmnkylmSz9BWPLcrN8pWnk1fiOE111",
     "user_id": "@user:localhost",
     "age": 63267
   }

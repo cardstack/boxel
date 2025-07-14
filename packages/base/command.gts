@@ -68,6 +68,10 @@ export class FileUrlCard extends CardDef {
   @field fileUrl = contains(StringField);
 }
 
+export class RealmUrlCard extends CardDef {
+  @field realmUrl = contains(StringField);
+}
+
 export class ReadTextFileInput extends CardDef {
   @field realm = contains(StringField);
   @field path = contains(StringField);
@@ -125,9 +129,15 @@ export class LintAndFixResult extends CardDef {
   @field output = contains(StringField);
 }
 
+export class PatchCodeResultField extends FieldDef {
+  @field status = contains(StringField); // 'applied', 'failed'
+  @field failureReason = contains(StringField); // only present if status is 'failed'
+}
+
 export class PatchCodeCommandResult extends CardDef {
   @field patchedContent = contains(StringField);
   @field finalFileUrl = contains(StringField);
+  @field results = containsMany(PatchCodeResultField);
 }
 
 export class PatchCodeInput extends CardDef {

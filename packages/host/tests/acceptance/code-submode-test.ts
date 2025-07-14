@@ -712,6 +712,20 @@ module('Acceptance | code submode tests', function (_hooks) {
               },
             },
           },
+          'BrokenCountry/broken-country.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Broken Country',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../broken-country',
+                  name: 'Country',
+                },
+              },
+            },
+          },
           'hello.txt': txtSource,
           'z00.json': '{}',
           'z01.json': '{}',
@@ -943,6 +957,34 @@ module('Acceptance | code submode tests', function (_hooks) {
         },
       ]);
       assert.dom('[data-test-send-error-to-ai-assistant]').exists();
+    });
+
+    test('it shows card preview errors and fix it button in module inspector', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}BrokenCountry/broken-country.json`,
+      });
+
+      assert.dom('[data-test-error-display]').exists();
+      assert
+        .dom('[data-test-error-display] [data-test-error-message]')
+        .hasText('intentionalError is not defined');
+
+      assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
+      await click('[data-test-send-error-to-ai-assistant]');
+      assert.dom('[data-test-ai-assistant-panel]').exists();
+      assertMessages(assert, [
+        {
+          from: 'testuser',
+          message: `In the attachment file, I encountered an error that needs fixing: Card Error intentionalError is not defined`,
+          files: [
+            {
+              name: 'broken-country.gts',
+              sourceUrl: `${testRealmURL}broken-country.gts`,
+            },
+          ],
+        },
+      ]);
     });
 
     test('empty state displays default realm info', async function (assert) {
