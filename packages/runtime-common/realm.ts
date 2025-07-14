@@ -637,8 +637,8 @@ export class Realm {
   }
 
   async #startup() {
-    await Promise.resolve();
     let startTime = Date.now();
+    await this.logInToMatrix();
     let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
     if (isNewIndex || this.#fullIndexOnStartup) {
       let promise = this.#realmIndexUpdater.fullIndex();
