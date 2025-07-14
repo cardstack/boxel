@@ -99,7 +99,7 @@ jobs:
           retention-days: 30
 
   host-rerun-test:
-    name: Rerurn host test
+    name: Rerun host test
     runs-on: ubuntu-latest
     concurrency:
       group: boxel-rerun-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
@@ -136,6 +136,7 @@ jobs:
         working-directory: packages/matrix
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: seq 50 | xargs -I{} pnpm test:wait-for-servers --filter="trying but failing to patch code"
+        working-directory: packages/host
 
   host-merge-reports-and-publish:
     name: Merge Host reports and publish
