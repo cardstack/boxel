@@ -376,8 +376,8 @@ class Isolated extends Component<typeof Catalog> {
   );
 
   // Returns a list of filter items for the category sidebar:
-  // - "All" button (CategoryFilter)
-  // - Sphere groups (SphereFilter) containing individual categories
+  // - "All" button (FilterItem)
+  // - SphereFilter containing individual categories
   get categoryItems(): FilterItem[] {
     const categoryInstances = (this.categorySearch?.instances ??
       []) as Category[];
@@ -396,7 +396,7 @@ class Isolated extends Component<typeof Catalog> {
     };
 
     // Group categories by their sphere
-    const sphereFilters: Record<string, SphereFilter> = {};
+    const sphereFilters: Record<string, FilterItem> = {};
 
     // Loop through each category and organize them by sphere
     for (const category of categoryInstances) {
@@ -415,19 +415,18 @@ class Isolated extends Component<typeof Catalog> {
         };
       }
 
-      const categoryFilter: CategoryFilter = {
+      const categoryFilter: FilterItem = {
         id: category.id,
         displayName: category.name,
         icon: CategoryIcon,
-        sphere: name,
       };
 
-      sphereFilters[name].filters.push(categoryFilter);
+      sphereFilters[name].filters!.push(categoryFilter);
     }
 
     // Sort categories within each sphere filter
     for (const sphereFilter of Object.values(sphereFilters)) {
-      sphereFilter.filters.sort((a, b) =>
+      sphereFilter.filters!.sort((a, b) =>
         a.displayName.localeCompare(b.displayName),
       );
     }
