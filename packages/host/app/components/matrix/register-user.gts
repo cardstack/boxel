@@ -10,8 +10,6 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
-
 import { restartableTask, timeout } from 'ember-concurrency';
 
 import {
@@ -20,6 +18,8 @@ import {
   type LoginResponse,
 } from 'matrix-js-sdk';
 import { v4 as uuidv4 } from 'uuid';
+
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import {
   BoxelInput,
