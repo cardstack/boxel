@@ -9,8 +9,6 @@ import Component from '@glimmer/component';
 import { format as formatDate, formatISO, isAfter, subMinutes } from 'date-fns';
 import { cancelPoll, pollTask, runTask } from 'ember-lifeline';
 
-import { MatrixEvent } from 'matrix-js-sdk';
-
 import { TrackedObject } from 'tracked-built-ins';
 
 import { BoxelButton, IconButton } from '@cardstack/boxel-ui/components';
@@ -261,13 +259,12 @@ export default class AiAssistantToast extends Component<Signature> {
 
   private closeToast = () => {
     let message = this.unseenMessage;
-    // Real MatrixEvent is not available to us here, but we can masquerade as one
-    // by adding the necessary methods
+
     let matrixEvent = {
       getId: () => message.eventId,
       getRoomId: () => this.roomId,
       getTs: () => message.created.getTime(),
-    } as MatrixEvent;
+    };
     this.matrixService.sendReadReceipt(matrixEvent);
   };
 }
