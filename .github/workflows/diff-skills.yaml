@@ -24,6 +24,7 @@ jobs:
         uses: tj-actions/changed-files@2f7c5bfce28377bc069a65ba478de0a74aa0ca32 # 46.0.1
         with:
           files: "**/*.json"
+          matrix: true
           base_sha: ${{ github.event.pull_request.base.sha }}
 
   post-diffs:
@@ -31,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        file: ${{ needs.find-changed-skills.outputs.files }}
+        file: ${{ fromJSON(needs.find-changed-skills.outputs.files) }}
     steps:
       - name: Process skill card changes
         id: process-changes
