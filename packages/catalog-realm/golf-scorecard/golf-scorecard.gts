@@ -938,6 +938,7 @@ export class GolfScorecard extends CardDef {
           --danger-red: #dc2626;
           --pxg-black: #222;
           --pxg-gold: #d4af37;
+          padding: 16px;
         }
 
         .header {
@@ -1177,10 +1178,6 @@ export class GolfScorecard extends CardDef {
         }
 
         @media (max-width: 768px) {
-          .scorecard {
-            padding: 16px;
-          }
-
           .header {
             flex-direction: column;
             gap: 16px;
