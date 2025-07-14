@@ -529,6 +529,16 @@ export class Realm {
       let url = this.paths.fileURL(path);
       this.sendIndexInitiationEvent(url.href); //check if this does anything
       await this.trackOwnWrite(path);
+      try {
+        let doc = JSON.parse(content);
+        if (isCardResource(doc.data)) {
+          let serialized = await this.fileSerialization(
+            { data: merge(doc.data, { meta: { realmURL: this.url } }) },
+            url,
+          );
+          content = JSON.stringify(serialized, null, 2);
+        }
+      } catch (e) {}
       let { lastModified, created, isNew } = await this.#adapter.write(
         path,
         content,
@@ -679,38 +689,15 @@ export class Realm {
       let resource = operation.data;
       let href = operation.href;
 
+      let fileURL = this.paths.fileURL(href);
+      let localPath = this.paths.local(fileURL);
       if (isModuleResource(resource)) {
-        let fileURL = this.paths.fileURL(href);
-        let localPath = this.paths.local(fileURL);
-        let content = resource.attributes?.content as string;
-        files.set(localPath, content);
+        files.set(localPath, resource.attributes?.content);
       } else if (isCardResource(resource)) {
-        let fileURL = this.paths.fileURL(href);
-        let localPath = this.paths.local(fileURL);
-        try {
-          let fileSerialization = await this.fileSerialization(
-            { data: merge(resource, { meta: { realmURL: this.url } }) },
-            fileURL,
-          );
-          files.set(localPath, JSON.stringify(fileSerialization, null, 2));
-        } catch (err: any) {
-          return createResponse({
-            body: JSON.stringify({
-              errors: [
-                {
-                  status: '500',
-                  title: 'Serialization Error',
-                  detail: err.message,
-                },
-              ],
-            }),
-            init: {
-              status: 500,
-              headers: { 'content-type': SupportedMimeType.JSONAPI },
-            },
-            requestContext,
-          });
-        }
+        let doc = {
+          data: resource,
+        };
+        files.set(localPath, JSON.stringify(doc, null, 2));
       } else {
         return createResponse({
           body: JSON.stringify({
