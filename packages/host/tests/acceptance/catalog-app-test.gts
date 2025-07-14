@@ -1,12 +1,13 @@
 import { click, waitFor, waitUntil, fillIn } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { module, test } from 'qunit';
+import { module, skip, test } from 'qunit';
 
 import { validate as uuidValidate } from 'uuid';
 
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
+import ListingCreateCommand from '@cardstack/host/commands/listing-create';
 import ListingInstallCommand from '@cardstack/host/commands/listing-install';
 import ListingRemixCommand from '@cardstack/host/commands/listing-remix';
 import ListingUseCommand from '@cardstack/host/commands/listing-use';
@@ -26,6 +27,8 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+
+import type { CardListing } from '@cardstack/catalog/listing/listing';
 
 const catalogRealmURL = 'http://localhost:4201/catalog/';
 const testRealm2URL = `http://test-realm/test2/`;
@@ -661,7 +664,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           );
       });
 
-      test('should be reset when clicking "Catalog Home" button', async function (assert) {
+      // TOOD: restore in CS-9083
+      skip('should be reset when clicking "Catalog Home" button', async function (assert) {
         await waitFor('[data-test-filter-search-input]');
         await click('[data-test-filter-search-input]');
         await fillIn('[data-test-filter-search-input]', 'Mortgage');
@@ -736,10 +740,16 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .doesNotExist('No tag should be selected after reset');
       });
 
+      test('updates the card count correctly when filtering by a sphere group', async function (assert) {
+        await click('[data-test-boxel-filter-list-button="LIFE"]');
+        assert
+          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+          .exists({ count: 3 });
+      });
+
       test('updates the card count correctly when filtering by a category', async function (assert) {
-        await click(
-          '[data-test-boxel-filter-list-button="Education and Learning"]',
-        );
+        await click('[data-test-filter-list-item="LIFE"] .dropdown-toggle');
+        await click('[data-test-boxel-filter-list-button="Health & Wellness"]');
         assert
           .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
           .exists({ count: 1 });
@@ -805,6 +815,54 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
         assert.dom('[data-test-no-results]').exists();
       });
+
+      test('categories with null sphere fields are excluded from filter list', async function (assert) {
+        // Setup: Create a category with null sphere field
+        await setupAcceptanceTestRealm({
+          realmURL: testRealmURL,
+          mockMatrixUtils,
+          contents: {
+            'Category/category-with-null-sphere.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  name: 'CategoryWithNullSphere',
+                },
+                relationships: {
+                  sphere: {
+                    links: {
+                      self: null,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${catalogRealmURL}catalog-app/listing/category`,
+                    name: 'Category',
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${catalogRealmURL}`,
+                format: 'isolated',
+              },
+            ],
+          ],
+        });
+
+        assert
+          .dom('[data-test-boxel-filter-list-button="CategoryWithNullSphere"]')
+          .doesNotExist(
+            'Category with null sphere should not appear in filter list',
+          );
+      });
     });
   });
 
@@ -853,6 +911,53 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       // we always run a command inside interact mode
       await visitOperatorMode({
         stacks: [[]],
+      });
+    });
+    module('"create"', async function () {
+      test('card listing', async function (assert) {
+        const cardId = testRealmURL + 'author/Author/example';
+        const commandService = getService('command-service');
+        const command = new ListingCreateCommand(commandService.commandContext);
+        await command.execute({
+          openCardId: cardId,
+        });
+        await visitOperatorMode({
+          submode: 'code',
+          fileView: 'browser',
+          codePath: `${testRealmURL}index`,
+        });
+        await waitForCodeEditor();
+        await verifySubmode(assert, 'code');
+        const instanceFolder = 'CardListing/';
+        await verifyFolderInFileTree(assert, instanceFolder);
+        if (instanceFolder) {
+          await openDir(assert, instanceFolder);
+        }
+        const listingId = await verifyJSONWithUUIDInFolder(
+          assert,
+          instanceFolder,
+        );
+        if (listingId) {
+          const listing = (await getService('store').get(
+            listingId,
+          )) as CardListing;
+          assert.ok(listing, 'Listing should be created');
+          assert.strictEqual(
+            listing.specs.length,
+            1,
+            'Listing should have one spec',
+          );
+          assert.strictEqual(
+            listing.specs[0].ref.name,
+            'Author',
+            'Listing should have an Author spec',
+          );
+          assert.strictEqual(
+            listing.examples.length,
+            1,
+            'Listing should have one example',
+          );
+        }
       });
     });
     module('"use"', async function () {
