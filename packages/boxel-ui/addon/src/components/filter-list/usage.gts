@@ -42,6 +42,7 @@ export default class FilterListUsage extends Component {
       displayName: 'All Cards',
       icon: Card,
       filters: [],
+      isExpanded: true,
     },
     {
       displayName: 'Starred',
