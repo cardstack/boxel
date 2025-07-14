@@ -728,7 +728,7 @@ export class Realm {
           files,
           request.headers.get('X-Boxel-Client-Request-Id'),
         );
-      } catch (e) {
+      } catch (e: any) {
         return createResponse({
           body: JSON.stringify({
             errors: [{ title: 'Write Error', detail: e.message }],
