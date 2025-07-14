@@ -354,106 +354,110 @@ ${REPLACE_MARKER}
     );
   });
 
-  test('trying but failing to patch code', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}hello.txt`,
-    });
-    await click('[data-test-open-ai-assistant]');
-    let roomId = getRoomIds().pop()!;
+  test.each(
+    'trying but failing to patch code',
+    new Array(100),
+    async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}hello.txt`,
+      });
+      await click('[data-test-open-ai-assistant]');
+      let roomId = getRoomIds().pop()!;
 
-    let codeBlock = `\`\`\`
+      let codeBlock = `\`\`\`
 http://test-realm/test/hello.txt
 ${SEARCH_MARKER}
 Goodbye, world!
 ${SEPARATOR_MARKER}
 Hi, world!
 ${REPLACE_MARKER}\n\`\`\``;
-    let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: codeBlock,
-      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      format: 'org.matrix.custom.html',
-      isStreamingFinished: true,
-    });
-    let originalContent = getMonacoContent();
-    assert.strictEqual(originalContent, 'Hello, world!');
-    await waitFor('[data-test-apply-code-button]');
-    await click('[data-test-apply-code-button]');
-    await waitFor(
-      '[data-test-apply-code-button][data-test-apply-state="failed"]',
-    );
+      let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: codeBlock,
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      });
+      let originalContent = getMonacoContent();
+      assert.strictEqual(originalContent, 'Hello, world!');
+      await waitFor('[data-test-apply-code-button]');
+      await click('[data-test-apply-code-button]');
+      await waitFor(
+        '[data-test-apply-code-button][data-test-apply-state="failed"]',
+      );
 
-    let codePatchResultEvents = getRoomEvents(roomId).filter(
-      (event) =>
-        event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
-        event.content['m.relates_to']?.rel_type ===
-          APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE &&
-        event.content['m.relates_to']?.event_id === eventId &&
-        event.content['m.relates_to']?.key === 'failed',
-    );
-    assert.equal(
-      codePatchResultEvents.length,
-      1,
-      'code patch result event is dispatched',
-    );
-    assert.strictEqual(
-      codePatchResultEvents[0].content.codeBlockIndex,
-      0,
-      'code patch result event has the correct code block index',
-    );
-    assert.strictEqual(
-      codePatchResultEvents[0].content?.['m.relates_to']?.key,
-      'failed',
-      'code patch result event has the correct key',
-    );
-    assert.strictEqual(
-      codePatchResultEvents[0].content?.failureReason,
-      'The patch did not cleanly apply.',
-      'code patch result event has the correct failure reason',
-    );
+      let codePatchResultEvents = getRoomEvents(roomId).filter(
+        (event) =>
+          event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
+          event.content['m.relates_to']?.rel_type ===
+            APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE &&
+          event.content['m.relates_to']?.event_id === eventId &&
+          event.content['m.relates_to']?.key === 'failed',
+      );
+      assert.equal(
+        codePatchResultEvents.length,
+        1,
+        'code patch result event is dispatched',
+      );
+      assert.strictEqual(
+        codePatchResultEvents[0].content.codeBlockIndex,
+        0,
+        'code patch result event has the correct code block index',
+      );
+      assert.strictEqual(
+        codePatchResultEvents[0].content?.['m.relates_to']?.key,
+        'failed',
+        'code patch result event has the correct key',
+      );
+      assert.strictEqual(
+        codePatchResultEvents[0].content?.failureReason,
+        'The patch did not cleanly apply.',
+        'code patch result event has the correct failure reason',
+      );
 
-    console.log('context');
+      console.log('context');
 
-    console.log(
-      JSON.stringify(
+      console.log(
+        JSON.stringify(
+          JSON.parse(codePatchResultEvents[0].content?.data ?? '{}').context,
+          null,
+          2,
+        ),
+      );
+
+      assert.deepEqual(
         JSON.parse(codePatchResultEvents[0].content?.data ?? '{}').context,
-        null,
-        2,
-      ),
-    );
-
-    assert.deepEqual(
-      JSON.parse(codePatchResultEvents[0].content?.data ?? '{}').context,
-      {
-        agentId: getService('matrix-service').agentId,
-        codeMode: {
-          currentFile: 'http://test-realm/test/hello.txt',
-          moduleInspectorPanel: 'schema',
+        {
+          agentId: getService('matrix-service').agentId,
+          codeMode: {
+            currentFile: 'http://test-realm/test/hello.txt',
+            moduleInspectorPanel: 'schema',
+          },
+          submode: 'code',
+          debug: false,
+          openCardIds: [],
+          realmPermissions: {
+            canRead: true,
+            canWrite: true,
+          },
+          realmUrl: 'http://test-realm/test/',
         },
-        submode: 'code',
-        debug: false,
-        openCardIds: [],
-        realmPermissions: {
-          canRead: true,
-          canWrite: true,
-        },
-        realmUrl: 'http://test-realm/test/',
-      },
-      'patch code result event contains the context',
-    );
-    assert.deepEqual(
-      JSON.parse(codePatchResultEvents[0].content?.data ?? '{}')
-        .attachedFiles?.[0]?.name,
-      'hello.txt',
-      'attempted file should be attached 1',
-    );
-    assert.deepEqual(
-      JSON.parse(codePatchResultEvents[0].content?.data ?? '{}')
-        .attachedFiles?.[0]?.sourceUrl,
-      'http://test-realm/test/hello.txt',
-      'attempted file should be attached 2',
-    );
-  });
+        'patch code result event contains the context',
+      );
+      assert.deepEqual(
+        JSON.parse(codePatchResultEvents[0].content?.data ?? '{}')
+          .attachedFiles?.[0]?.name,
+        'hello.txt',
+        'attempted file should be attached 1',
+      );
+      assert.deepEqual(
+        JSON.parse(codePatchResultEvents[0].content?.data ?? '{}')
+          .attachedFiles?.[0]?.sourceUrl,
+        'http://test-realm/test/hello.txt',
+        'attempted file should be attached 2',
+      );
+    },
+  );
 
   test('failure patching code when using "Accept All" button', async function (assert) {
     await visitOperatorMode({
