@@ -30,6 +30,7 @@ export enum SupportedMimeType {
   HTML = 'text/html',
   JSONAPI = 'application/vnd.api+json',
   JSON = 'application/json',
+  CardDependencies = 'application/json',
   CardTypeSummary = 'application/json',
   All = '*/*',
 }

@@ -225,11 +225,16 @@ export class ListingActionInput extends CardDef {
   @field realm = contains(StringField);
   @field actionType = contains(StringField);
   @field listing = linksTo(CardDef);
+  @field attachedCard = linksTo(CardDef);
 }
 
 export class ListingInput extends CardDef {
   @field realm = contains(StringField);
   @field listing = linksTo(CardDef);
+}
+
+export class ListingCreateInput extends CardDef {
+  @field openCardId = contains(StringField);
 }
 
 export class VisitCardsInput extends CardDef {
