@@ -1,4 +1,7 @@
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import {
+  MatrixClient,
+  passwordFromSeed,
+} from '@cardstack/runtime-common/matrix-client';
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -436,10 +439,7 @@ export async function validateMatrixEnvVars(): Promise<{
 
   // If password is not provided but realm secret is, generate password from secret
   if (!password && realmSecret) {
-    const { realmPassword } = await import(
-      '../../matrix/helpers/realm-credentials.js'
-    );
-    password = await realmPassword(username, realmSecret);
+    password = await passwordFromSeed(username, realmSecret);
     console.log(
       'Generated password from REALM_SECRET_SEED for realm user authentication',
     );
