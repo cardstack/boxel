@@ -1,4 +1,7 @@
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import {
+  MatrixClient,
+  passwordFromSeed,
+} from '@cardstack/runtime-common/matrix-client';
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -116,7 +119,10 @@ export abstract class RealmSyncBase {
           const entryPath = dir ? path.posix.join(dir, name) : name;
 
           if (isFile) {
-            files.set(entryPath, true);
+            // Apply the same filtering logic as local files
+            if (!this.shouldIgnoreRemoteFile(entryPath)) {
+              files.set(entryPath, true);
+            }
           } else {
             // Recursively get subdirectory files
             const subdirFiles = await this.getRemoteFileList(entryPath);
@@ -140,6 +146,30 @@ export abstract class RealmSyncBase {
       }
       console.error(`Error reading remote directory ${dir}:`, error);
       throw error; // Re-throw other errors too - don't silently continue
+    }
+
+    // Special case: Check for .realm.json in the root directory
+    // The realm server doesn't include dotfiles in directory listings but serves them directly
+    if (!dir) {
+      // Only check in root directory
+      try {
+        const realmJsonUrl = this.buildFileUrl('.realm.json');
+        const jwt = await this.realmAuthClient.getJWT();
+
+        const response = await fetch(realmJsonUrl, {
+          method: 'HEAD', // Just check if it exists
+          headers: {
+            Authorization: jwt,
+          },
+        });
+
+        if (response.ok) {
+          files.set('.realm.json', true);
+        }
+      } catch (error) {
+        // .realm.json doesn't exist or can't be accessed, which is fine
+        console.log('Note: .realm.json not found in remote realm');
+      }
     }
 
     return files;
@@ -340,9 +370,13 @@ export abstract class RealmSyncBase {
   }
 
   private shouldIgnoreFile(relativePath: string, fullPath: string): boolean {
-    // Always ignore files that start with a dot
+    // Always ignore files that start with a dot, except for .realm.json
     const fileName = path.basename(relativePath);
     if (fileName.startsWith('.')) {
+      // Exception: allow .realm.json to be synced
+      if (fileName === '.realm.json') {
+        return false;
+      }
       return true;
     }
 
@@ -356,17 +390,35 @@ export abstract class RealmSyncBase {
     return ig.ignores(normalizedPath);
   }
 
+  private shouldIgnoreRemoteFile(relativePath: string): boolean {
+    // Apply the same dotfile filtering logic as local files
+    const fileName = path.basename(relativePath);
+    if (fileName.startsWith('.')) {
+      // Exception: allow .realm.json to be synced
+      if (fileName === '.realm.json') {
+        return false;
+      }
+      return true;
+    }
+
+    // Note: We can't check gitignore patterns for remote files since we don't have
+    // access to the remote .gitignore/.boxelignore files, but dotfile filtering
+    // is the primary concern for security
+    return false;
+  }
+
   abstract sync(): Promise<void>;
 }
 
-export function validateMatrixEnvVars(): {
+export async function validateMatrixEnvVars(): Promise<{
   matrixUrl: string;
   username: string;
   password: string;
-} {
+}> {
   const matrixUrl = process.env.MATRIX_URL;
   const username = process.env.MATRIX_USERNAME;
-  const password = process.env.MATRIX_PASSWORD;
+  let password = process.env.MATRIX_PASSWORD;
+  const realmSecret = process.env.REALM_SECRET_SEED;
 
   if (!matrixUrl) {
     console.error('MATRIX_URL environment variable is required');
@@ -378,10 +430,20 @@ export function validateMatrixEnvVars(): {
     process.exit(1);
   }
 
-  if (!password) {
-    console.error('MATRIX_PASSWORD environment variable is required');
+  if (!password && !realmSecret) {
+    console.error(
+      'Either MATRIX_PASSWORD or REALM_SECRET_SEED environment variable is required',
+    );
     process.exit(1);
   }
 
-  return { matrixUrl, username, password };
+  // If password is not provided but realm secret is, generate password from secret
+  if (!password && realmSecret) {
+    password = await passwordFromSeed(username, realmSecret);
+    console.log(
+      'Generated password from REALM_SECRET_SEED for realm user authentication',
+    );
+  }
+
+  return { matrixUrl, username, password: password! };
 }
