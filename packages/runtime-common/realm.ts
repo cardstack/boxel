@@ -144,7 +144,7 @@ export interface FileWriteResult {
 
 export interface WriteOptions {
   clientRequestId?: string | null;
-  isSourceFile?: boolean | null;
+  serializeFile?: boolean | null;
 }
 
 export interface RealmAdapter {
@@ -533,7 +533,7 @@ export class Realm {
       await this.trackOwnWrite(path);
       try {
         let doc = JSON.parse(content);
-        if (isCardResource(doc.data) && !options?.isSourceFile) {
+        if (isCardResource(doc.data) && options?.serializeFile) {
           let serialized = await this.fileSerialization(
             { data: merge(doc.data, { meta: { realmURL: this.url } }) },
             url,
@@ -728,8 +728,8 @@ export class Realm {
       try {
         writeResults = await this.writeMany(files, {
           clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-          isSourceFile:
-            request.headers.get('Accept') === SupportedMimeType.CardSource,
+          serializeFile:
+            request.headers.get('Accept') === SupportedMimeType.CardJson,
         });
       } catch (e: any) {
         return createResponse({
@@ -1354,7 +1354,7 @@ export class Realm {
       await request.text(),
       {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-        isSourceFile: true,
+        serializeFile: false,
       },
     );
     return createResponse({
@@ -1645,8 +1645,8 @@ export class Realm {
     }
     let [{ lastModified }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-      isSourceFile:
-        request.headers.get('Accept') === SupportedMimeType.CardSource,
+      serializeFile:
+        request.headers.get('Accept') === SupportedMimeType.CardJson,
     });
 
     let newURL = primaryResourceURL.href.replace(/\.json$/, '');
@@ -1842,8 +1842,8 @@ export class Realm {
     }
     let [{ lastModified }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-      isSourceFile:
-        request.headers.get('Accept') === SupportedMimeType.CardSource,
+      serializeFile:
+        request.headers.get('Accept') === SupportedMimeType.CardJson,
     });
     let entry = await this.#realmIndexQueryEngine.cardDocument(
       new URL(instanceURL),
