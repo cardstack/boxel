@@ -626,7 +626,9 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           },
         }),
-        knownClientRequestId,
+        {
+          clientRequestId: knownClientRequestId,
+        },
       );
 
       await settled();
