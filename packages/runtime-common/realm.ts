@@ -538,7 +538,7 @@ export class Realm {
             { data: merge(doc.data, { meta: { realmURL: this.url } }) },
             url,
           );
-          content = JSON.stringify(serialized);
+          content = JSON.stringify(serialized, null, 2);
         }
       } catch (e: any) {
         if (e.message.includes('not found')) {
@@ -1634,7 +1634,7 @@ export class Realm {
         }
       }
       let localPath = this.paths.local(fileURL);
-      files.set(localPath, JSON.stringify(fileSerialization));
+      files.set(localPath, JSON.stringify(fileSerialization, null, 2));
     }
     if (!primaryResourceURL) {
       return systemError({
