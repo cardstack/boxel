@@ -131,6 +131,23 @@ module('Integration | commands | transform-cards', function (hooks) {
       }
     }
 
+    // Mock command that adds metadata to the JSON
+    class AddMetadataCommand extends Command<typeof JsonCard, typeof JsonCard> {
+      async getInputType() {
+        return JsonCard;
+      }
+
+      protected async run(
+        input: CommandModule.JsonCard,
+      ): Promise<CommandModule.JsonCard> {
+        let json = { ...input.json };
+        if (!json.data.attributes.metadata) {
+          json.data.attributes.metadata = 'Added by TransformCardsCommand';
+        }
+        return new JsonCard({ json });
+      }
+    }
+
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
@@ -213,6 +230,7 @@ module('Integration | commands | transform-cards', function (hooks) {
         }`,
         'prefix-name-command.ts': { default: PrefixNameCommand },
         'uppercase-name-command.ts': { default: UppercaseNameCommand },
+        'add-metadata-command.ts': { default: AddMetadataCommand },
         '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-t.png" }`,
       },
     });
@@ -328,7 +346,7 @@ module('Integration | commands | transform-cards', function (hooks) {
         },
       },
       commandRef: {
-        module: `${testRealmURL}prefix-name-command`,
+        module: `${testRealmURL}add-metadata-command`,
         name: 'default',
       },
     });
@@ -341,14 +359,20 @@ module('Integration | commands | transform-cards', function (hooks) {
     );
     let fluffyContent = await response.text();
     let fluffyData = JSON.parse(fluffyContent);
-    assert.strictEqual(fluffyData.data.attributes.name, 'Transformed: Fluffy');
+    assert.strictEqual(
+      fluffyData.data.attributes.metadata,
+      'Added by TransformCardsCommand',
+    );
 
     response = await networkService.authedFetch(
       new URL(`${testRealmURL}Pet/rover.json`),
     );
     let roverContent = await response.text();
     let roverData = JSON.parse(roverContent);
-    assert.strictEqual(roverData.data.attributes.name, 'Transformed: Rover');
+    assert.strictEqual(
+      roverData.data.attributes.metadata,
+      'Added by TransformCardsCommand',
+    );
   });
 
   test('handles empty search results gracefully', async function (assert) {

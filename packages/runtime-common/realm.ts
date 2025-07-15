@@ -142,6 +142,11 @@ export interface FileWriteResult {
   isNew: boolean;
 }
 
+export interface WriteOptions {
+  clientRequestId?: string | null;
+  isSourceFile?: boolean | null;
+}
+
 export interface RealmAdapter {
   readdir(
     path: LocalPath,
@@ -502,25 +507,22 @@ export class Realm {
   async write(
     path: LocalPath,
     contents: string,
-    clientRequestId?: string | null,
+    options?: WriteOptions,
   ): Promise<FileWriteResult> {
-    let results = await this._batchWrite(
-      new Map([[path, contents]]),
-      clientRequestId,
-    );
+    let results = await this._batchWrite(new Map([[path, contents]]), options);
     return results[0];
   }
 
   async writeMany(
     files: Map<LocalPath, string>,
-    clientRequestId?: string | null,
+    options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
-    return this._batchWrite(files, clientRequestId);
+    return this._batchWrite(files, options);
   }
 
   private async _batchWrite(
     files: Map<LocalPath, string>,
-    clientRequestId?: string | null,
+    options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
     await this.indexing();
     let results: FileWriteResult[] = [];
@@ -531,7 +533,7 @@ export class Realm {
       await this.trackOwnWrite(path);
       try {
         let doc = JSON.parse(content);
-        if (isCardResource(doc.data)) {
+        if (isCardResource(doc.data) && !options?.isSourceFile) {
           let serialized = await this.fileSerialization(
             { data: merge(doc.data, { meta: { realmURL: this.url } }) },
             url,
@@ -556,7 +558,7 @@ export class Realm {
           eventName: 'index',
           indexType: 'incremental',
           invalidations: invalidatedURLs.map((u) => u.href),
-          clientRequestId: clientRequestId ?? null,
+          clientRequestId: options?.clientRequestId ?? null,
         });
       },
     });
@@ -724,10 +726,11 @@ export class Realm {
 
     if (files.size > 0) {
       try {
-        writeResults = await this.writeMany(
-          files,
-          request.headers.get('X-Boxel-Client-Request-Id'),
-        );
+        writeResults = await this.writeMany(files, {
+          clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+          isSourceFile:
+            request.headers.get('Accept') === SupportedMimeType.CardSource,
+        });
       } catch (e: any) {
         return createResponse({
           body: JSON.stringify({
@@ -1349,7 +1352,10 @@ export class Realm {
     let { lastModified } = await this.write(
       this.paths.local(new URL(request.url)),
       await request.text(),
-      request.headers.get('X-Boxel-Client-Request-Id'),
+      {
+        clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+        isSourceFile: true,
+      },
     );
     return createResponse({
       body: null,
@@ -1637,10 +1643,11 @@ export class Realm {
         lid: primaryResource.lid,
       });
     }
-    let [{ lastModified }] = await this.writeMany(
-      files,
-      request.headers.get('X-Boxel-Client-Request-Id'),
-    );
+    let [{ lastModified }] = await this.writeMany(files, {
+      clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+      isSourceFile:
+        request.headers.get('Accept') === SupportedMimeType.CardSource,
+    });
 
     let newURL = primaryResourceURL.href.replace(/\.json$/, '');
     let entry = await this.#realmIndexQueryEngine.cardDocument(
@@ -1833,10 +1840,11 @@ export class Realm {
       let path = this.paths.local(fileURL);
       files.set(path, JSON.stringify(fileSerialization, null, 2));
     }
-    let [{ lastModified }] = await this.writeMany(
-      files,
-      request.headers.get('X-Boxel-Client-Request-Id'),
-    );
+    let [{ lastModified }] = await this.writeMany(files, {
+      clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+      isSourceFile:
+        request.headers.get('Accept') === SupportedMimeType.CardSource,
+    });
     let entry = await this.#realmIndexQueryEngine.cardDocument(
       new URL(instanceURL),
       {
