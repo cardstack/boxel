@@ -70,7 +70,7 @@ module(basename(__filename), function () {
         testDbAdapter = dbAdapter;
         let virtualNetwork = createVirtualNetwork();
         dir = dirSync().name;
-        let { realm } = await createRealm({
+        ({ realm } = await createRealm({
           withWorker: true,
           dir,
           virtualNetwork,
@@ -427,7 +427,7 @@ module(basename(__filename), function () {
             '.DS_Store':
               'In  macOS, .DS_Store is a file that stores custom attributes of its containing folder',
           },
-        });
+        }));
         await realm.start();
       },
     });

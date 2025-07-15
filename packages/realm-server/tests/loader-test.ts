@@ -157,6 +157,7 @@ module(basename(__filename), function () {
 
     module('with a different realm', function (hooks) {
       let loader2: Loader;
+      let realm: Realm;
 
       hooks.before(async function () {
         dir = dirSync();
@@ -167,7 +168,7 @@ module(basename(__filename), function () {
       setupDB(hooks, {
         before: async (dbAdapter, publisher, runner) => {
           loader2 = createLoader();
-          let { realm } = await createRealm({
+          ({ realm } = await createRealm({
             withWorker: true,
             dir: dir.name,
             fileSystem: {
@@ -181,7 +182,7 @@ module(basename(__filename), function () {
             dbAdapter,
             runner,
             publisher,
-          });
+          }));
           virtualNetwork.mount(realm.handle.bind(realm));
           await realm.start();
         },

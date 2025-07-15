@@ -909,7 +909,7 @@ module(basename(__filename), function () {
         let localBaseRealmURL = new URL('http://127.0.0.1:4446/base/');
         virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
-        let { realm: base } = await createRealm({
+        ({ realm: base } = await createRealm({
           withWorker: true,
           dir: basePath,
           realmURL: baseRealm.url,
@@ -918,10 +918,10 @@ module(basename(__filename), function () {
           runner,
           dbAdapter,
           deferStartUp: true,
-        });
+        }));
         virtualNetwork.mount(base.handle);
 
-        let { realm: testRealm } = await createRealm({
+        ({ realm: testRealm } = await createRealm({
           withWorker: true,
           dir: join(dir.name, 'demo'),
           virtualNetwork,
@@ -930,7 +930,7 @@ module(basename(__filename), function () {
           runner,
           dbAdapter,
           deferStartUp: true,
-        });
+        }));
         virtualNetwork.mount(testRealm.handle);
 
         let matrixClient = new MatrixClient({
