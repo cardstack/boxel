@@ -17,7 +17,6 @@ import {
 import {
   Query,
   isCardInstance,
-  EqFilter,
   AnyFilter,
   Filter,
 } from '@cardstack/runtime-common';
@@ -36,9 +35,9 @@ import CatalogLayout from './layouts/catalog-layout';
 import type IconComponent from '@cardstack/boxel-icons/captions';
 import BuildingBank from '@cardstack/boxel-icons/building-bank';
 import BuildingIcon from '@cardstack/boxel-icons/building';
+import CategoryIcon from '@cardstack/boxel-icons/category';
 import HealthRecognition from '@cardstack/boxel-icons/health-recognition';
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
-import ShipWheelIcon from '@cardstack/boxel-icons/ship-wheel';
 import UsersIcon from '@cardstack/boxel-icons/users';
 import WorldIcon from '@cardstack/boxel-icons/world';
 import {
@@ -57,8 +56,9 @@ import { Category } from './listing/category';
 import { Tag } from './listing/tag';
 
 type ViewOption = 'strip' | 'grid';
+type SphereName = 'BUILD' | 'LEARN' | 'LIFE' | 'PLAY' | 'WORK';
 
-// ShowcaseView
+// Showcase View
 interface ShowcaseViewArgs {
   Args: {
     startHereListings?: CardDef[];
@@ -375,40 +375,75 @@ class Isolated extends Component<typeof Catalog> {
     },
   );
 
-  get categoryItems() {
-    let instances = (this.categorySearch?.instances ?? []) as Category[];
-    if (!instances) {
+  // Returns a list of filter items for the category sidebar:
+  // - "All" button (FilterItem)
+  // - SphereFilter containing individual categories
+  get categoryItems(): FilterItem[] {
+    const categoryInstances = (this.categorySearch?.instances ??
+      []) as Category[];
+
+    if (!categoryInstances) {
       return [];
     }
 
-    const iconMap: Record<string, typeof IconComponent> = {
-      All: LayoutGridPlusIcon,
-      'Accounting & Finance': BuildingBank,
-      Business: BuildingIcon,
-      'Content Management': UsersIcon,
-      'Games and Entertainment': WorldIcon,
-      'Health and Fitness': HealthRecognition,
-      'Travel and Lifestyle': ShipWheelIcon,
+    // Define which icon to use for each sphere
+    const sphereIconMap: Record<SphereName, typeof IconComponent> = {
+      BUILD: BuildingIcon,
+      LEARN: UsersIcon,
+      LIFE: HealthRecognition,
+      PLAY: WorldIcon,
+      WORK: BuildingBank,
     };
 
-    // Create nested structure with "All" as parent
-    const nestedCategories = instances.map((instance) => {
-      return {
-        id: instance.id,
-        displayName: instance.name,
-        icon: iconMap[instance.name] || LayoutGridPlusIcon,
-      };
-    });
+    // Group categories by their sphere
+    const sphereFilters: Record<string, FilterItem> = {};
 
-    return [
+    // Loop through each category and organize them by sphere
+    for (const category of categoryInstances) {
+      if (!category.sphere?.name) {
+        continue;
+      }
+
+      const name = category.sphere.name;
+
+      if (!sphereFilters[name]) {
+        sphereFilters[name] = {
+          id: name.toLowerCase(),
+          displayName: name,
+          icon: sphereIconMap[name as SphereName] || CategoryIcon,
+          filters: [],
+        };
+      }
+
+      const categoryFilter: FilterItem = {
+        id: category.id,
+        displayName: category.name,
+        icon: CategoryIcon,
+      };
+
+      sphereFilters[name].filters!.push(categoryFilter);
+    }
+
+    // Sort categories within each sphere filter
+    for (const sphereFilter of Object.values(sphereFilters)) {
+      sphereFilter.filters!.sort((a, b) =>
+        a.displayName.localeCompare(b.displayName),
+      );
+    }
+
+    // Sort categories by their display name
+    const filterItems = [
       {
         id: 'all',
         displayName: 'All',
-        icon: iconMap['All'],
-        filters: nestedCategories,
-        isExpanded: true,
+        icon: LayoutGridPlusIcon,
       },
+      ...Object.values(sphereFilters).sort((a, b) =>
+        a.displayName.localeCompare(b.displayName),
+      ),
     ];
+
+    return filterItems;
   }
 
   @action
@@ -416,15 +451,45 @@ class Isolated extends Component<typeof Catalog> {
     this.activeCategory = category;
   }
 
-  get categoryFilter(): EqFilter | undefined {
-    if (this.activeCategory?.id === 'all' || !this.activeCategory) {
+  get categoryFilter(): AnyFilter | undefined {
+    const isNoFilterSelected =
+      this.activeCategory?.id === 'all' || !this.activeCategory;
+
+    if (isNoFilterSelected) {
       return;
     }
-    return {
-      eq: {
-        'categories.id': this.activeCategory.id,
-      },
-    };
+
+    // Show all items that belong to ANY category within this sphereUser selected a sphere (e.g., "BUILD", "LEARN", etc.)
+    const isSphereSelected =
+      this.activeCategory?.filters && this.activeCategory.filters.length > 0;
+
+    if (isSphereSelected) {
+      const categoryIdsInSphere = this.activeCategory!.filters!.map(
+        (category) => category.id,
+      );
+
+      const sphereFilter = {
+        any: categoryIdsInSphere.map((categoryId) => ({
+          eq: {
+            'categories.id': categoryId,
+          },
+        })),
+      };
+
+      return sphereFilter;
+    } else {
+      const specificCategoryFilter = {
+        any: [
+          {
+            eq: {
+              'categories.id': this.activeCategory!.id,
+            },
+          },
+        ],
+      };
+
+      return specificCategoryFilter;
+    }
   }
 
   get tagQuery(): Query {
@@ -447,7 +512,7 @@ class Isolated extends Component<typeof Catalog> {
     },
   );
 
-  get tagItems() {
+  get tagItems(): FilterItem[] {
     let instances = (this.tagSearch?.instances ?? []) as Tag[];
     if (!instances) {
       return [];

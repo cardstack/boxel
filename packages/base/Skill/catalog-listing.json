@@ -2,8 +2,15 @@
   "data": {
     "type": "card",
     "attributes": {
-      "instructions": "Before running the operation, ensure the following conditions are met:\n\n1. The use, install, and remix commands must exist and be callable.\n2. The user must provide all of the following:\n- A valid Realm URL\n- A Listing Card\n- An Action Type: \"use\", \"install\", or \"remix\"\n\nIf any value is missing, prompt the user to provide the missing input(s). If all inputs are available, proceed automatically without asking for confirmation.\n\nBased on the action type:\n- If actionType === \"use\" → run the use command\n- If actionType === \"install\" → run the install command\n- If actionType === \"remix\" → run the remix command\n\nUse the following inputs to run the command:\n- Realm URL: [user input]\n- Listing: [user input]\n\nIf actionType is remix:\n- After running remix, also run remix code to generate two example prompts.\n- Respond with:\n    1. A confirmation message summarizing the remix operation.\n    2. A follow-up message with two listing-related remix prompts.If specific prompts can't be generated, provide two general suggestions (e.g., \"Change to dark theme\", \"Convert to minimalist layout).",
+      "instructions": "Before running the operation, ensure the following conditions are met:\n\n1. The create, use, install, and remix commands must exist and be callable.\n2. Except create, the user must provide all of the following:\n- A valid Realm URL\n- A Listing Card\n- An Action Type: \"use\", \"install\", or \"remix\"\n\n3. To create, user must attach at least one card instance to create the listing.\n\nIf any value is missing, prompt the user to provide the missing input(s). If all inputs are available, proceed automatically without asking for confirmation.\n\nBased on the action type:\n- If actionType === \"create\" → run the create command\n- If actionType === \"use\" → run the use command\n- If actionType === \"install\" → run the install command\n- If actionType === \"remix\" → run the remix command\n\nIf actionType === \"create\" → run create with following payload(s):\n - Open card id: [attached instance URL]\n\n Else, use the following inputs to run the command:\n- Realm URL: [user input]\n- Listing: [user input]\n\nIf actionType is remix:\n- After running remix, also run remix code to generate two example prompts.\n- Respond with:\n    1. A confirmation message summarizing the remix operation.\n    2. A follow-up message with two listing-related remix prompts.If specific prompts can't be generated, provide two general suggestions (e.g., \"Change to dark theme\", \"Convert to minimalist layout).",
       "commands": [
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/listing-create"
+          },
+          "requiresApproval": false
+        },
         {
           "codeRef": {
             "name": "default",

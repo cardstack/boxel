@@ -44,10 +44,7 @@ interface Signature {
         | 'autoAttachedCardTooltipMessage'
         | 'isLoaded'
       >,
-      WithBoundArgs<
-        typeof AttachButton,
-        'files' | 'cards' | 'chooseCard' | 'chooseFile'
-      >,
+      WithBoundArgs<typeof AttachButton, 'chooseCard' | 'chooseFile'>,
     ];
   };
 }
@@ -66,13 +63,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
         removeFile=@removeFile
         autoAttachedCardTooltipMessage=@autoAttachedCardTooltipMessage
       )
-      (component
-        AttachButton
-        files=this.files
-        cards=this.cards
-        chooseCard=@chooseCard
-        chooseFile=@chooseFile
-      )
+      (component AttachButton chooseCard=@chooseCard chooseFile=@chooseFile)
     }}
   </template>
 
@@ -86,7 +77,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
   };
 
   private get items() {
-    return [...this.cards, ...this.files];
+    return [...this.cards, ...this.cardErrors, ...this.files];
   }
 
   private get isLoaded() {
@@ -95,6 +86,10 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
 
   private get cards() {
     return this.cardCollection?.cards ?? [];
+  }
+
+  private get cardErrors() {
+    return this.cardCollection?.cardErrors ?? [];
   }
 
   private get cardIds() {

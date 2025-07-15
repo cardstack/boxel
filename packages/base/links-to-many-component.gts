@@ -57,6 +57,7 @@ interface Signature {
     cardTypeFor(
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
+      overrides?: () => Map<string, typeof BaseDef> | undefined,
     ): typeof BaseDef;
     childFormat: 'atom' | 'fitted';
     typeConstraint?: ResolvedCodeRef;
@@ -150,6 +151,7 @@ interface LinksToManyStandardEditorSignature {
     cardTypeFor(
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
+      overrides?: () => Map<string, typeof BaseDef> | undefined,
     ): typeof BaseDef;
     add: () => void;
     remove: (i: number) => void;
@@ -304,6 +306,7 @@ interface LinksToManyCompactEditorSignature {
     cardTypeFor(
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
+      overrides?: () => Map<string, typeof BaseDef> | undefined,
     ): typeof BaseDef;
     add: () => void;
     remove: (i: number) => void;
@@ -428,6 +431,7 @@ export function getLinksToManyComponent({
   cardTypeFor(
     field: Field<typeof BaseDef>,
     boxedElement: Box<BaseDef>,
+    overrides?: () => Map<string, typeof BaseDef> | undefined,
   ): typeof BaseDef;
 }): BoxComponent {
   let stable = componentCache.get(arrayField);

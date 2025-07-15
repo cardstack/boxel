@@ -594,7 +594,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await click('[data-test-more-options-button]');
       assert
         .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
-        .exists({ count: 5 });
+        .exists({ count: 6 });
 
       await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
       assert

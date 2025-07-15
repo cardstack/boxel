@@ -49,7 +49,7 @@ export default class NeighborStackTriggerButton extends Component<Signature> {
           }}
         >
           <span class='icon-container'>
-            <IconPlus class='add-icon' width='12' height='12' />
+            <IconPlus class='add-icon' width='10' height='10' />
           </span>
         </Button>
       </:trigger>
@@ -63,7 +63,7 @@ export default class NeighborStackTriggerButton extends Component<Signature> {
       .add-card-to-neighbor-stack {
         --minimized-width: 8px;
         --minimized-height: 20px;
-        --expanded-width: 20px;
+        --expanded-width: 16px;
         --expanded-height: 66px;
         --boxel-transition: 100ms ease;
         --boxel-button-min-width: var(--expanded-width);
