@@ -42,57 +42,50 @@ jobs:
           # Create a temporary directory for processing
           mkdir -p /tmp/skill-diffs
 
-          # Get the list of changed JSON files (with a "Skill" in the file path)
-          CHANGED_FILES=$(echo "${{ matrix.file }}" | tr ' ' '\n' | grep -E 'Skill' || true)
+          FILE=${{ matrix.file }}
 
-          # Initialize arrays to store results
-          DIFFS=()
+          # Get the file content from target branch and PR branch
+          OLD_CONTENT=$(git show ${{ github.event.pull_request.base.sha }}:$FILE 2>/dev/null || echo "{}")
+          NEW_CONTENT=$(git show ${{ github.event.pull_request.head.sha }}:$FILE 2>/dev/null || echo "{}")
 
-          # Process each changed JSON file
-          for FILE in $CHANGED_FILES; do
-            # Get the file content from target branch and PR branch
-            OLD_CONTENT=$(git show ${{ github.event.pull_request.base.sha }}:$FILE 2>/dev/null || echo "{}")
-            NEW_CONTENT=$(git show ${{ github.event.pull_request.head.sha }}:$FILE 2>/dev/null || echo "{}")
+          # Check if it's a skill card
+          IS_SKILL_CARD=$(echo "$NEW_CONTENT" | jq -r '.data.meta.adoptsFrom.module == "https://cardstack.com/base/skill"')
 
-            # Check if it's a skill card
-            IS_SKILL_CARD=$(echo "$NEW_CONTENT" | jq -r '.data.meta.adoptsFrom.module == "https://cardstack.com/base/skill"')
+          if [ "$IS_SKILL_CARD" = "true" ]; then
+            # Extract instructions and commands
+            OLD_INSTRUCTIONS=$(echo "$OLD_CONTENT" | jq -r '.data.attributes.instructions // ""')
+            NEW_INSTRUCTIONS=$(echo "$NEW_CONTENT" | jq -r '.data.attributes.instructions // ""')
 
-            if [ "$IS_SKILL_CARD" = "true" ]; then
-              # Extract instructions and commands
-              OLD_INSTRUCTIONS=$(echo "$OLD_CONTENT" | jq -r '.data.attributes.instructions // ""')
-              NEW_INSTRUCTIONS=$(echo "$NEW_CONTENT" | jq -r '.data.attributes.instructions // ""')
+            OLD_COMMANDS=$(echo "$OLD_CONTENT" | jq -r '.data.attributes.commands // []')
+            NEW_COMMANDS=$(echo "$NEW_CONTENT" | jq -r '.data.attributes.commands // []')
 
-              OLD_COMMANDS=$(echo "$OLD_CONTENT" | jq -r '.data.attributes.commands // []')
-              NEW_COMMANDS=$(echo "$NEW_CONTENT" | jq -r '.data.attributes.commands // []')
+            # Create diffs
+            echo "$OLD_INSTRUCTIONS" > /tmp/skill-diffs/old_instructions.txt
+            echo "$NEW_INSTRUCTIONS" > /tmp/skill-diffs/new_instructions.txt
 
-              # Create diffs
-              echo "$OLD_INSTRUCTIONS" > /tmp/skill-diffs/old_instructions.txt
-              echo "$NEW_INSTRUCTIONS" > /tmp/skill-diffs/new_instructions.txt
+            echo "$OLD_COMMANDS" > /tmp/skill-diffs/old_commands.txt
+            echo "$NEW_COMMANDS" > /tmp/skill-diffs/new_commands.txt
+            # Generate diffs
+            INSTRUCTIONS_DIFF=$(diff -u /tmp/skill-diffs/old_instructions.txt /tmp/skill-diffs/new_instructions.txt || true)
+            COMMANDS_DIFF=$(diff -u /tmp/skill-diffs/old_commands.txt /tmp/skill-diffs/new_commands.txt || true)
 
-              echo "$OLD_COMMANDS" > /tmp/skill-diffs/old_commands.txt
-              echo "$NEW_COMMANDS" > /tmp/skill-diffs/new_commands.txt
-              # Generate diffs
-              INSTRUCTIONS_DIFF=$(diff -u /tmp/skill-diffs/old_instructions.txt /tmp/skill-diffs/new_instructions.txt || true)
-              COMMANDS_DIFF=$(diff -u /tmp/skill-diffs/old_commands.txt /tmp/skill-diffs/new_commands.txt || true)
-
-              # Add to results if there are changes
-              if [ -n "$INSTRUCTIONS_DIFF" ] || [ -n "$COMMANDS_DIFF" ]; then
-                DIFFS+=("### Changes in $FILE")
-                if [ -n "$INSTRUCTIONS_DIFF" ]; then
-                  DIFFS+=("#### Instructions Changes")
-                  DIFFS+=("\`\`\`diff")
-                  DIFFS+=("$INSTRUCTIONS_DIFF")
-                  DIFFS+=("\`\`\`")
-                fi
-                if [ -n "$COMMANDS_DIFF" ]; then
-                  DIFFS+=("#### Commands Changes")
-                  DIFFS+=("\`\`\`diff")
-                  DIFFS+=("$COMMANDS_DIFF")
-                  DIFFS+=("\`\`\`")
-                fi
+            # Add to results if there are changes
+            if [ -n "$INSTRUCTIONS_DIFF" ] || [ -n "$COMMANDS_DIFF" ]; then
+              DIFFS+=("### Changes in $FILE")
+              if [ -n "$INSTRUCTIONS_DIFF" ]; then
+                DIFFS+=("#### Instructions Changes")
+                DIFFS+=("\`\`\`diff")
+                DIFFS+=("$INSTRUCTIONS_DIFF")
+                DIFFS+=("\`\`\`")
+              fi
+              if [ -n "$COMMANDS_DIFF" ]; then
+                DIFFS+=("#### Commands Changes")
+                DIFFS+=("\`\`\`diff")
+                DIFFS+=("$COMMANDS_DIFF")
+                DIFFS+=("\`\`\`")
               fi
             fi
-          done
+          fi
 
           # Join the diffs with newlines
           DIFF_CONTENT=$(printf "%s\n" "${DIFFS[@]}")
