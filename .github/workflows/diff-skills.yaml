@@ -48,8 +48,21 @@ jobs:
           OLD_CONTENT=$(git show ${{ github.event.pull_request.base.sha }}:$FILE 2>/dev/null || echo "{}")
           NEW_CONTENT=$(git show ${{ github.event.pull_request.head.sha }}:$FILE 2>/dev/null || echo "{}")
 
+          echo "Old content:"
+          echo $OLD_CONTENT
+
+          echo ""
+
+          echo "New content:"
+          echo $NEW_CONTENT
+
+          echo ""
+
           # Check if it's a skill card
           IS_SKILL_CARD=$(echo "$NEW_CONTENT" | jq -r '.data.meta.adoptsFrom.module == "https://cardstack.com/base/skill"')
+
+          echo "Is skill card:"
+          echo $IS_SKILL_CARD
 
           if [ "$IS_SKILL_CARD" = "true" ]; then
             # Extract instructions and commands
