@@ -141,6 +141,10 @@ jobs:
 
             echo "diff_file=$diff_file" >> "$GITHUB_OUTPUT"
             echo "diff_comment=$diff_comment_file" >> "$GITHUB_OUTPUT"
+
+            # Remove slashes and other forbidden characters from artifact name
+            artifact_name=$(echo -n "$FILE" | sed -e 's/[ \t:\/\\"<>|*?]/-/g' -e 's/--*/-/g')
+            echo "artifact_name=$artifact_name" >> $GITHUB_ENV
           fi
 
       - name: Create comment if there are changes
@@ -155,5 +159,5 @@ jobs:
         if: steps.process-changes.outputs.diff_file != ''
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.file }}
+          name: ${{ steps.process-changes.outputs.artifact_name }}
           path: ${{ steps.process-changes.outputs.diff_file }}
