@@ -534,7 +534,7 @@ export class Realm {
       await this.trackOwnWrite(path);
       try {
         let doc = JSON.parse(content);
-        if (isCardResource(doc.data)) {
+        if (isCardResource(doc.data) && options?.serializeFile) {
           let serialized = await this.fileSerialization(
             { data: merge(doc.data, { meta: { realmURL: this.url } }) },
             url,
@@ -729,6 +729,7 @@ export class Realm {
       try {
         writeResults = await this.writeMany(files, {
           clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+          serializeFile: true,
         });
       } catch (e: any) {
         return createResponse({
@@ -1848,8 +1849,6 @@ export class Realm {
     }
     let [{ lastModified }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-      serializeFile:
-        request.headers.get('Accept') !== SupportedMimeType.CardSource,
     });
     let entry = await this.#realmIndexQueryEngine.cardDocument(
       new URL(instanceURL),
