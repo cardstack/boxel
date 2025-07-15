@@ -47,6 +47,13 @@ jobs:
           echo "File:"
           echo $FILE
 
+          echo ""
+
+          echo "Base SHA: ${{ github.event.pull_request.base.sha }}"
+          echo "Head SHA: ${{ github.event.pull_request.head.sha }}"
+
+          echo ""
+
           # Get the file content from target branch and PR branch
           OLD_CONTENT=$(git show ${{ github.event.pull_request.base.sha }}:$FILE 2>/dev/null || echo "{}")
           NEW_CONTENT=$(git show ${{ github.event.pull_request.head.sha }}:$FILE 2>/dev/null || echo "{}")
