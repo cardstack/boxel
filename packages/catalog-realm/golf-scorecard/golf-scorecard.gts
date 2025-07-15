@@ -177,7 +177,7 @@ export class GolfScorecard extends CardDef {
               <div class='logo-container'>
                 <img
                   src='https://cdn.brandfetch.io/id2q8bBLix/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B'
-                  alt='USGA Logo'
+                  alt='USGA'
                   class='usga-logo'
                 />
               </div>
@@ -188,7 +188,7 @@ export class GolfScorecard extends CardDef {
               <div class='logo-container'>
                 <img
                   src='https://cdn.brandfetch.io/idjcY_09lV/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B'
-                  alt='PGA Tour Logo'
+                  alt='PGA Tour'
                   class='pga-logo'
                 />
               </div>
@@ -763,18 +763,17 @@ export class GolfScorecard extends CardDef {
 
     <template>
       <div class='scorecard'>
-        <!-- Header Section -->
         <div class='header'>
           <div class='branding'>
             <div class='brand-logos'>
               <img
                 src='https://cdn.brandfetch.io/id2q8bBLix/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B'
-                alt='USGA Logo'
+                alt='USGA'
                 class='usga-logo'
               />
               <img
                 src='https://cdn.brandfetch.io/idjcY_09lV/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B'
-                alt='PGA Tour Logo'
+                alt='PGA Tour'
                 class='pga-logo'
               />
             </div>
@@ -801,7 +800,6 @@ export class GolfScorecard extends CardDef {
           </div>
         </div>
 
-        <!-- Front Nine -->
         <div class='nine-section'>
           <h2 class='nine-title'>Front Nine</h2>
           <div class='scorecard-table-wrapper'>
@@ -850,7 +848,6 @@ export class GolfScorecard extends CardDef {
           </div>
         </div>
 
-        <!-- Back Nine -->
         <div class='nine-section'>
           <h2 class='nine-title'>Back Nine</h2>
           <div class='scorecard-table-wrapper'>
@@ -899,7 +896,6 @@ export class GolfScorecard extends CardDef {
           </div>
         </div>
 
-        <!-- Summary -->
         <div class='summary'>
           <div class='summary-stats'>
             <div class='stat-item'>
@@ -936,7 +932,6 @@ export class GolfScorecard extends CardDef {
           </div>
         </div>
 
-        <!-- Footer Branding -->
         <div class='footer'>
           <div class='partnership-text'>
             Official Partnership: USGA × PGA TOUR
