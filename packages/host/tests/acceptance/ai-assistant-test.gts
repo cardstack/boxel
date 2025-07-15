@@ -14,6 +14,7 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   DEFAULT_LLM,
   DEFAULT_LLM_LIST,
+  DEFAULT_LLM_ID_TO_NAME,
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -194,6 +195,26 @@ module('Acceptance | AI Assistant tests', function (hooks) {
           pet: mangoPet,
           friends: [mangoPet],
         }),
+        'plant.gts': `
+          import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+          export class Plant extends CardDef {
+            static displayName = "Plant";
+            @field commonName = contains(StringField);
+          }
+        `,
+        'Plant/highbush-blueberry.json': {
+          data: {
+            attributes: {
+              commonName: 'Highbush Blueberry',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `../plant`,
+                name: 'Plant',
+              },
+            },
+          },
+        },
         'index.json': new CardsGrid(),
         '.realm.json': {
           name: 'Test Workspace B',
@@ -362,26 +383,31 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
     assert
       .dom('[data-test-llm-select-selected]')
-      .hasText(DEFAULT_LLM.split('/')[1]);
+      .hasText(DEFAULT_LLM_ID_TO_NAME[DEFAULT_LLM]);
     await click('[data-test-llm-select-selected]');
 
     assert.dom('[data-test-llm-select-item]').exists({
       count: DEFAULT_LLM_LIST.length,
     });
+
+    let llmIdToChangeTo = 'anthropic/claude-3.7-sonnet';
+    let llmName = DEFAULT_LLM_ID_TO_NAME[llmIdToChangeTo];
+
     assert
-      .dom('[data-test-llm-select-item="anthropic/claude-3.7-sonnet"]')
-      .hasText('anthropic/claude-3.7-sonnet');
-    await click(
-      '[data-test-llm-select-item="anthropic/claude-3.7-sonnet"] button',
-    );
+      .dom(`[data-test-llm-select-item="${llmIdToChangeTo}"]`)
+      .hasText(llmName);
+    await click(`[data-test-llm-select-item="${llmIdToChangeTo}"] button`);
     await click('[data-test-pill-menu-button]');
-    assert.dom('[data-test-llm-select-selected]').hasText('claude-3.7-sonnet');
+    assert.dom('[data-test-llm-select-selected]').hasText(llmName);
 
     let roomState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
-    assert.strictEqual(roomState.model, 'anthropic/claude-3.7-sonnet');
+    assert.strictEqual(roomState.model, llmIdToChangeTo);
   });
 
   test('defaults to anthropic/claude-sonnet-4 in code mode', async function (assert) {
+    let defaultCodeLLMId = 'anthropic/claude-sonnet-4';
+    let defaultCodeLLMName = DEFAULT_LLM_ID_TO_NAME[defaultCodeLLMId];
+
     await visitOperatorMode({
       stacks: [
         [
@@ -397,7 +423,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    assert.dom('[data-test-llm-select-selected]').hasText('claude-sonnet-4');
+    assert.dom('[data-test-llm-select-selected]').hasText(defaultCodeLLMName);
 
     createAndJoinRoom({
       sender: '@testuser:localhost',
@@ -407,7 +433,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-past-sessions-button]');
     await waitFor("[data-test-enter-room='mock_room_1']");
     await click('[data-test-enter-room="mock_room_1"]');
-    assert.dom('[data-test-llm-select-selected]').hasText('claude-sonnet-4');
+    assert.dom('[data-test-llm-select-selected]').hasText(defaultCodeLLMName);
   });
 
   test('auto-attached file is not displayed in interact mode', async function (assert) {
@@ -509,7 +535,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assertMessages(assert, [
       {
         from: 'testuser',
-        message: 'Message with updated card new card',
+        message: 'Message with updated card',
         cards: [{ id, title: 'new card' }],
       },
     ]);
@@ -1009,5 +1035,332 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .containsText(
         'This message will be cancelled before the reasoning is finished',
       );
+  });
+
+  test(`should not display action bar when there is no code patch block`, async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      codePath: `${testRealmURL}index.json`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    // In interact mode, auto-attached cards must be the top most cards in the stack
+    // unless the card is manually chosen
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    let codeBlock = `\`\`\`
+  { "name": "test" }
+\`\`\``;
+
+    simulateRemoteMessage(matrixRoomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    await waitFor('[data-test-ai-assistant-message]');
+    assert.dom('[data-test-ai-assistant-action-bar]').doesNotExist();
+  });
+
+  test('code mode context sent with message', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}Plant/highbush-blueberry.json`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+          {
+            id: `${testRealmURL}Plant/highbush-blueberry`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    await fillIn('[data-test-message-field]', `Message - 1`);
+    await click('[data-test-send-message-btn]');
+
+    let roomEvents = mockMatrixUtils.getRoomEvents(matrixRoomId);
+    let lastMessageEvent = roomEvents[roomEvents.length - 1];
+    let contextSent = JSON.parse(lastMessageEvent.content.data).context;
+    assert.strictEqual(
+      contextSent.realmUrl,
+      testRealmURL,
+      'Context sent with message contains correct realmUrl',
+    );
+    assert.strictEqual(
+      contextSent.submode,
+      'code',
+      'Context sent with message contains correct submode',
+    );
+    assert.deepEqual(
+      contextSent.openCardIds,
+      [`${testRealmURL}Plant/highbush-blueberry`],
+      'Context sent with message contains correct openCardIds',
+    );
+    assert.strictEqual(
+      contextSent.codeMode.currentFile,
+      `${testRealmURL}Plant/highbush-blueberry.json`,
+      'Context sent with message contains correct currentFile',
+    );
+    assert.strictEqual(
+      contextSent.codeMode.moduleInspectorPanel,
+      'preview',
+      'Context sent with message contains correct moduleInspectorPanel',
+    );
+    assert.deepEqual(
+      contextSent.codeMode.previewPanelSelection,
+      {
+        cardId: `${testRealmURL}Plant/highbush-blueberry`,
+        format: 'isolated',
+      },
+      'Context sent with message contains correct previewPanelSelection',
+    );
+    assert.deepEqual(
+      contextSent.codeMode.selectedCodeRef,
+      undefined,
+      'Context sent with message contains correct selectedCodeRef',
+    );
+    assert.deepEqual(
+      contextSent.realmPermissions,
+      {
+        canRead: true,
+        canWrite: true,
+      },
+      'Context sent with message contains correct realmPermissions',
+    );
+    await click('[data-test-clickable-definition-container]');
+
+    await fillIn('[data-test-message-field]', `Message - 2`);
+    await click('[data-test-send-message-btn]');
+
+    roomEvents = mockMatrixUtils.getRoomEvents(matrixRoomId);
+    lastMessageEvent = roomEvents[roomEvents.length - 1];
+    contextSent = JSON.parse(lastMessageEvent.content.data).context;
+
+    assert.strictEqual(
+      contextSent.realmUrl,
+      testRealmURL,
+      'Context sent with message contains correct realmUrl',
+    );
+    assert.strictEqual(
+      contextSent.submode,
+      'code',
+      'Context sent with message contains correct submode',
+    );
+    assert.deepEqual(
+      contextSent.openCardIds,
+      [],
+      'Context sent with message contains correct openCardIds',
+    );
+    assert.strictEqual(
+      contextSent.codeMode.currentFile,
+      `${testRealmURL}plant.gts`,
+      'Context sent with message contains correct currentFile',
+    );
+    assert.strictEqual(
+      contextSent.codeMode.moduleInspectorPanel,
+      'schema',
+      'Context sent with message contains correct moduleInspectorPanel',
+    );
+    assert.strictEqual(
+      contextSent.codeMode.previewPanelSelection,
+      undefined,
+      'Context sent with message contains correct previewPanelSelection',
+    );
+    assert.deepEqual(
+      contextSent.codeMode.selectedCodeRef,
+      {
+        module: 'http://test-realm/test/plant',
+        name: 'Plant',
+      },
+      'Context sent with message contains correct selectedCodeRef',
+    );
+    assert.deepEqual(
+      contextSent.realmPermissions,
+      {
+        canRead: true,
+        canWrite: true,
+      },
+      'Context sent with message contains correct realmPermissions',
+    );
+
+    await click(
+      '[data-test-boxel-button][data-test-module-inspector-view="preview"]',
+    );
+
+    await fillIn('[data-test-message-field]', `Message - 3`);
+    await click('[data-test-send-message-btn]');
+
+    roomEvents = mockMatrixUtils.getRoomEvents(matrixRoomId);
+    lastMessageEvent = roomEvents[roomEvents.length - 1];
+    contextSent = JSON.parse(lastMessageEvent.content.data).context;
+
+    assert.strictEqual(
+      contextSent.realmUrl,
+      testRealmURL,
+      'Context sent with message contains correct realmUrl',
+    );
+    assert.strictEqual(
+      contextSent.submode,
+      'code',
+      'Context sent with message contains correct submode',
+    );
+    assert.deepEqual(
+      contextSent.openCardIds,
+      [`${testRealmURL}Plant/highbush-blueberry`],
+      'Context sent with message contains correct openCardIds',
+    );
+    assert.strictEqual(
+      contextSent.codeMode.currentFile,
+      `${testRealmURL}plant.gts`,
+      'Context sent with message contains correct currentFile',
+    );
+    assert.strictEqual(
+      contextSent.codeMode.moduleInspectorPanel,
+      'preview',
+      'Context sent with message contains correct moduleInspectorPanel',
+    );
+    assert.deepEqual(
+      contextSent.codeMode.previewPanelSelection,
+      {
+        cardId: `${testRealmURL}Plant/highbush-blueberry`,
+        format: 'isolated',
+      },
+      'Context sent with message contains correct previewPanelSelection',
+    );
+    assert.deepEqual(
+      contextSent.codeMode.selectedCodeRef,
+      {
+        module: 'http://test-realm/test/plant',
+        name: 'Plant',
+      },
+      'Context sent with message contains correct selectedCodeRef',
+    );
+    assert.deepEqual(
+      contextSent.realmPermissions,
+      {
+        canRead: true,
+        canWrite: true,
+      },
+      'Context sent with message contains correct realmPermissions',
+    );
+
+    await click(
+      '[data-test-boxel-button][data-test-module-inspector-view="spec"]',
+    );
+    await fillIn('[data-test-message-field]', `Message - 4`);
+    await click('[data-test-send-message-btn]');
+
+    roomEvents = mockMatrixUtils.getRoomEvents(matrixRoomId);
+    lastMessageEvent = roomEvents[roomEvents.length - 1];
+    contextSent = JSON.parse(lastMessageEvent.content.data).context;
+
+    assert.strictEqual(
+      contextSent.realmUrl,
+      testRealmURL,
+      'Context sent with message contains correct realmUrl',
+    );
+    assert.strictEqual(
+      contextSent.submode,
+      'code',
+      'Context sent with message contains correct submode',
+    );
+    assert.deepEqual(
+      contextSent.openCardIds,
+      [],
+      'Context sent with message contains correct openCardIds',
+    );
+    assert.strictEqual(
+      contextSent.codeMode.currentFile,
+      `${testRealmURL}plant.gts`,
+      'Context sent with message contains correct currentFile',
+    );
+    assert.strictEqual(
+      contextSent.codeMode.moduleInspectorPanel,
+      'spec',
+      'Context sent with message contains correct moduleInspectorPanel',
+    );
+    assert.strictEqual(
+      contextSent.codeMode.previewPanelSelection,
+      undefined,
+      'Context sent with message contains correct previewPanelSelection',
+    );
+    assert.deepEqual(
+      contextSent.codeMode.selectedCodeRef,
+      {
+        module: 'http://test-realm/test/plant',
+        name: 'Plant',
+      },
+      'Context sent with message contains correct selectedCodeRef',
+    );
+    assert.deepEqual(
+      contextSent.realmPermissions,
+      {
+        canRead: true,
+        canWrite: true,
+      },
+      'Context sent with message contains correct realmPermissions',
+    );
+  });
+
+  test('dashboard context sent with message', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      workspaceChooserOpened: true,
+      stacks: [[]],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    await fillIn('[data-test-message-field]', `Message - 1`);
+    await click('[data-test-send-message-btn]');
+    let roomEvents = mockMatrixUtils.getRoomEvents(matrixRoomId);
+    let lastMessageEvent = roomEvents[roomEvents.length - 1];
+    let contextSent = JSON.parse(lastMessageEvent.content.data).context;
+    assert.strictEqual(
+      contextSent.realmUrl,
+      undefined,
+      'Context sent with message does not contain realmUrl',
+    );
+    assert.strictEqual(
+      contextSent.submode,
+      'workspace-chooser',
+      'Context sent with message contains correct submode',
+    );
+    assert.deepEqual(
+      contextSent.workspaces,
+      [
+        {
+          name: 'Test Workspace B',
+          type: 'user-workspace',
+          url: testRealmURL,
+        },
+        {
+          name: 'Cardstack Catalog',
+          type: 'catalog-workspace',
+          url: 'http://localhost:4201/catalog/',
+        },
+        {
+          name: 'Cardstack Skills',
+          type: 'catalog-workspace',
+          url: 'http://localhost:4201/skills/',
+        },
+      ],
+      'Context sent with message contains correct workspaces',
+    );
   });
 });

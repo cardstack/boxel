@@ -12,6 +12,7 @@ import Component from '@glimmer/component';
 
 import { tracked, cached } from '@glimmer/tracking';
 
+import Captions from '@cardstack/boxel-icons/captions';
 import {
   restartableTask,
   timeout,
@@ -49,6 +50,7 @@ import {
   cardTypeIcon,
   CommandContext,
   realmURL,
+  identifyCard,
 } from '@cardstack/runtime-common';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
@@ -191,8 +193,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get styleForStackedCard(): SafeString {
-    const stackItemMaxWidth = '50rem';
-    const widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
+    const stackItemMaxWidth = 50; // unit: rem, 800px for 16px base
+    const RATIO = 1.2;
+    //  top card: 800px / (1.2 ^ 0) = 800px;
+    //  buried card: 800px / (1.2 ^ 1) = ~666px;
+    //  next buried card: 800px / (1.2 ^ 2) = ~555px;
+    const maxWidthReductionPercent = 10; // Every new card on the stack is 10% wider than the previous one (for narrow viewport)
     const numberOfCards = this.args.stackItems.length;
     const invertedIndex = numberOfCards - this.args.index - 1;
     const isLastCard = this.args.index === numberOfCards - 1;
@@ -206,16 +212,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
     if (numberOfCards > 1) {
       if (isLastCard) {
-        marginTopPx = numberOfCards === 2 ? 25 : 50;
+        marginTopPx = numberOfCards === 2 ? 30 : 50;
       } else if (isSecondLastCard && numberOfCards > 2) {
         marginTopPx = 25;
       }
     }
 
-    let maxWidthPercent = 100 - invertedIndex * widthReductionPercent;
+    let maxWidthPercent = 100 - invertedIndex * maxWidthReductionPercent;
     let width = this.isItemFullWidth
       ? '100%'
-      : `calc(${stackItemMaxWidth} * ${maxWidthPercent} / 100)`;
+      : `${stackItemMaxWidth / Math.pow(RATIO, invertedIndex)}rem`;
 
     let styles = `
       height: calc(100% - ${marginTopPx}px);
@@ -285,7 +291,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get headerTitle() {
-    return this.card ? cardTypeDisplayName(this.card) : undefined;
+    if (this.isIndexCard) {
+      return 'Workspace';
+    } else if (this.card) {
+      return cardTypeDisplayName(this.card);
+    }
+    return undefined;
   }
 
   private get cardTitle() {
@@ -311,6 +322,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     if (this.isBuried) {
       return undefined;
     }
+
     let menuItems: MenuItem[] = [
       new MenuItem('Copy Card URL', 'action', {
         action: () =>
@@ -327,6 +339,22 @@ export default class OperatorModeStackItem extends Component<Signature> {
       this.realm.canWrite(this.url)
     ) {
       menuItems.push(
+        new MenuItem('New Card of This Type', 'action', {
+          action: () => {
+            if (!this.card) {
+              return;
+            }
+            let ref = identifyCard(this.card.constructor);
+            if (!ref) {
+              return;
+            }
+            this.args.publicAPI.createCard(ref, undefined, {
+              realmURL: this.operatorModeStateService.getWritableRealmURL(),
+            });
+          },
+          icon: this.card ? (cardTypeIcon(this.card) as any) : Captions,
+          disabled: !this.card,
+        }),
         new MenuItem('Delete', 'action', {
           action: () =>
             this.card ? this.args.publicAPI.delete(this.card) : undefined,
@@ -575,6 +603,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
     >
       <CardContainer
         class='stack-item-card'
+        style={{cssVar
+          card-error-header-height='var(--stack-item-header-height)'
+        }}
         {{ContentElement onSetup=this.setupContainerEl}}
       >
         {{#if (not this.cardResource.isLoaded)}}
@@ -622,6 +653,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <CardHeader
               @cardTypeDisplayName={{this.headerTitle}}
               @cardTypeIcon={{cardTypeIcon this.card}}
+              @cardTitle={{this.card.title}}
               @isSaving={{this.cardResource.autoSaveState.isSaving}}
               @isTopCard={{this.isTopCard}}
               @lastSavedMessage={{this.cardResource.autoSaveState.lastSavedErrorMsg}}

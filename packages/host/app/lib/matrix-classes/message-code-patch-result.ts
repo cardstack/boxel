@@ -16,6 +16,7 @@ export default class MessageCodePatchResult {
   @tracked index: number;
   @tracked status: CodePatchStatus;
   @tracked finalFileUrlAfterCodePatching: string;
+  @tracked originalUploadedFileUrl: string;
 
   constructor(
     public message: Message,
@@ -23,6 +24,7 @@ export default class MessageCodePatchResult {
     status: CodePatchStatus,
     index: number,
     finalFileUrlAfterCodePatching: string,
+    originalUploadedFileUrl: string,
     owner: Owner,
   ) {
     setOwner(this, owner);
@@ -30,6 +32,7 @@ export default class MessageCodePatchResult {
     this.index = index;
     this.status = status;
     this.finalFileUrlAfterCodePatching = finalFileUrlAfterCodePatching;
+    this.originalUploadedFileUrl = originalUploadedFileUrl;
   }
 
   @service declare commandService: CommandService;

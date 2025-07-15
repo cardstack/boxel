@@ -1,4 +1,9 @@
 import {
+  LedgerEntry,
+  Plan,
+  Subscription,
+  SubscriptionCycle,
+  User,
   decodeWebSafeBase64,
   encodeWebSafeBase64,
   param,
@@ -16,16 +21,11 @@ import { handlePaymentSucceeded } from '@cardstack/billing/stripe-webhook-handle
 import { handleSubscriptionDeleted } from '@cardstack/billing/stripe-webhook-handlers/subscription-deleted';
 import { handleCheckoutSessionCompleted } from '@cardstack/billing/stripe-webhook-handlers/checkout-session-completed';
 import {
-  LedgerEntry,
-  SubscriptionCycle,
   insertSubscriptionCycle,
   sumUpCreditsLedger,
   addToCreditsLedger,
   insertSubscription,
-  User,
   spendCredits,
-  Plan,
-  Subscription,
 } from '@cardstack/billing/billing-queries';
 
 import {
@@ -815,151 +815,138 @@ module(basename(__filename), function () {
       });
     });
 
-    module('checkout session completed', function () {
+    module('checkout session completed', function (hooks) {
       let user: User;
       let matrixUserId = '@pepe:cardstack.com';
 
-      module(
-        'without entry in users table before webhook arrival (legacy users registered prior to users table introduction)',
-        function () {
-          test('updates user stripe customer id on checkout session completed', async function (assert) {
-            let stripeCheckoutSessionCompletedEvent = {
-              id: 'evt_1234567890',
-              object: 'event',
-              data: {
-                object: {
-                  id: 'cs_test_1234567890',
-                  object: 'checkout.session',
-                  client_reference_id: encodeWebSafeBase64(matrixUserId),
-                  customer: 'cus_123',
-                  metadata: {},
+      hooks.beforeEach(async function () {
+        user = await insertUser(
+          dbAdapter,
+          matrixUserId,
+          'cus_123',
+          'user@test.com',
+        );
+      });
+
+      test('updates user stripe customer id on checkout session completed', async function (assert) {
+        let stripeCheckoutSessionCompletedEvent = {
+          id: 'evt_1234567890',
+          object: 'event',
+          data: {
+            object: {
+              id: 'cs_test_1234567890',
+              object: 'checkout.session',
+              client_reference_id: encodeWebSafeBase64(matrixUserId),
+              customer: 'cus_123',
+              metadata: {},
+            },
+          },
+          type: 'checkout.session.completed',
+        } as StripeCheckoutSessionCompletedWebhookEvent;
+
+        await handleCheckoutSessionCompleted(
+          dbAdapter,
+          stripeCheckoutSessionCompletedEvent,
+        );
+
+        let stripeEvents = await fetchStripeEvents(dbAdapter);
+        assert.strictEqual(stripeEvents.length, 1);
+        assert.strictEqual(
+          stripeEvents[0].stripe_event_id,
+          stripeCheckoutSessionCompletedEvent.id,
+        );
+
+        const updatedUser = await fetchUserByStripeCustomerId(
+          dbAdapter,
+          'cus_123',
+        );
+        assert.strictEqual(updatedUser.length, 1);
+        assert.strictEqual(updatedUser[0].stripe_customer_id, 'cus_123');
+        assert.strictEqual(updatedUser[0].matrix_user_id, matrixUserId);
+      });
+
+      module('user has a subscription', function () {
+        test('add extra credits to user ledger when checkout session completed', async function (assert) {
+          let creatorPlan = await insertPlan(
+            dbAdapter,
+            'Creator',
+            12,
+            2500,
+            'prod_creator',
+          );
+          let subscription = await insertSubscription(dbAdapter, {
+            user_id: user.id,
+            plan_id: creatorPlan.id,
+            started_at: 1,
+            status: 'active',
+            stripe_subscription_id: 'sub_1234567890',
+          });
+          await insertSubscriptionCycle(dbAdapter, {
+            subscriptionId: subscription.id,
+            periodStart: 1,
+            periodEnd: 2,
+          });
+          let stripeCheckoutSessionCompletedEvent = {
+            id: 'evt_1234567890',
+            object: 'event',
+            data: {
+              object: {
+                id: 'cs_test_1234567890',
+                object: 'checkout.session',
+                customer: null,
+                client_reference_id: encodeWebSafeBase64(matrixUserId),
+                metadata: {
+                  credit_reload_amount: '25000',
                 },
               },
-              type: 'checkout.session.completed',
-            } as StripeCheckoutSessionCompletedWebhookEvent;
+            },
+            type: 'checkout.session.completed',
+          } as StripeCheckoutSessionCompletedWebhookEvent;
 
-            await handleCheckoutSessionCompleted(
-              dbAdapter,
-              stripeCheckoutSessionCompletedEvent,
-            );
+          await handleCheckoutSessionCompleted(
+            dbAdapter,
+            stripeCheckoutSessionCompletedEvent,
+          );
 
-            let stripeEvents = await fetchStripeEvents(dbAdapter);
-            assert.strictEqual(stripeEvents.length, 1);
-            assert.strictEqual(
-              stripeEvents[0].stripe_event_id,
-              stripeCheckoutSessionCompletedEvent.id,
-            );
-
-            const updatedUser = await fetchUserByStripeCustomerId(
-              dbAdapter,
-              'cus_123',
-            );
-            assert.strictEqual(updatedUser.length, 1);
-            assert.strictEqual(updatedUser[0].stripe_customer_id, 'cus_123');
-            assert.strictEqual(updatedUser[0].matrix_user_id, matrixUserId);
+          let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {
+            userId: user.id,
+            creditType: 'extra_credit',
           });
-        },
-      );
+          assert.strictEqual(availableExtraCredits, 25000);
+        });
+      });
 
-      module(
-        'with entry in users table before webhook arrival',
-        function (hooks) {
-          hooks.beforeEach(async function () {
-            user = await insertUser(
-              dbAdapter,
-              matrixUserId,
-              'cus_123',
-              'user@test.com',
-            );
-          });
-
-          test('updates user stripe customer id on checkout session completed', async function (assert) {
-            let stripeCheckoutSessionCompletedEvent = {
-              id: 'evt_1234567890',
-              object: 'event',
-              data: {
-                object: {
-                  id: 'cs_test_1234567890',
-                  object: 'checkout.session',
-                  client_reference_id: encodeWebSafeBase64(matrixUserId),
-                  customer: 'cus_123',
-                  metadata: {},
+      module('user does not have a subscription', function () {
+        test('add extra credits to user ledger when checkout session completed', async function (assert) {
+          let stripeCheckoutSessionCompletedEvent = {
+            id: 'evt_1234567890',
+            object: 'event',
+            data: {
+              object: {
+                id: 'cs_test_1234567890',
+                object: 'checkout.session',
+                customer: null,
+                client_reference_id: encodeWebSafeBase64(matrixUserId),
+                metadata: {
+                  credit_reload_amount: '25000',
                 },
               },
-              type: 'checkout.session.completed',
-            } as StripeCheckoutSessionCompletedWebhookEvent;
+            },
+            type: 'checkout.session.completed',
+          } as StripeCheckoutSessionCompletedWebhookEvent;
 
-            await handleCheckoutSessionCompleted(
-              dbAdapter,
-              stripeCheckoutSessionCompletedEvent,
-            );
+          await handleCheckoutSessionCompleted(
+            dbAdapter,
+            stripeCheckoutSessionCompletedEvent,
+          );
 
-            let stripeEvents = await fetchStripeEvents(dbAdapter);
-            assert.strictEqual(stripeEvents.length, 1);
-            assert.strictEqual(
-              stripeEvents[0].stripe_event_id,
-              stripeCheckoutSessionCompletedEvent.id,
-            );
-
-            const updatedUser = await fetchUserByStripeCustomerId(
-              dbAdapter,
-              'cus_123',
-            );
-            assert.strictEqual(updatedUser.length, 1);
-            assert.strictEqual(updatedUser[0].stripe_customer_id, 'cus_123');
-            assert.strictEqual(updatedUser[0].matrix_user_id, matrixUserId);
+          let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {
+            userId: user.id,
+            creditType: 'extra_credit',
           });
-
-          test('add extra credits to user ledger when checkout session completed', async function (assert) {
-            let creatorPlan = await insertPlan(
-              dbAdapter,
-              'Creator',
-              12,
-              2500,
-              'prod_creator',
-            );
-            let subscription = await insertSubscription(dbAdapter, {
-              user_id: user.id,
-              plan_id: creatorPlan.id,
-              started_at: 1,
-              status: 'active',
-              stripe_subscription_id: 'sub_1234567890',
-            });
-            await insertSubscriptionCycle(dbAdapter, {
-              subscriptionId: subscription.id,
-              periodStart: 1,
-              periodEnd: 2,
-            });
-            let stripeCheckoutSessionCompletedEvent = {
-              id: 'evt_1234567890',
-              object: 'event',
-              data: {
-                object: {
-                  id: 'cs_test_1234567890',
-                  object: 'checkout.session',
-                  customer: null,
-                  client_reference_id: encodeWebSafeBase64(matrixUserId),
-                  metadata: {
-                    credit_reload_amount: '25000',
-                  },
-                },
-              },
-              type: 'checkout.session.completed',
-            } as StripeCheckoutSessionCompletedWebhookEvent;
-
-            await handleCheckoutSessionCompleted(
-              dbAdapter,
-              stripeCheckoutSessionCompletedEvent,
-            );
-
-            let availableExtraCredits = await sumUpCreditsLedger(dbAdapter, {
-              userId: user.id,
-              creditType: 'extra_credit',
-            });
-            assert.strictEqual(availableExtraCredits, 25000);
-          });
-        },
-      );
+          assert.strictEqual(availableExtraCredits, 25000);
+        });
+      });
     });
 
     module('AI usage tracking', function (hooks) {

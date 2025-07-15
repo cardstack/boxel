@@ -23,6 +23,7 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+  CodeRef,
 } from '@cardstack/runtime-common';
 import { type SerializedFile } from './file-api';
 
@@ -172,9 +173,18 @@ export interface BoxelContext {
   agentId?: string;
   openCardIds?: string[];
   realmUrl?: string;
+  realmPermissions?: {
+    canRead: boolean;
+    canWrite: boolean;
+  };
   tools?: Tool[];
   toolChoice?: ToolChoice;
   submode?: string;
+  workspaces?: {
+    url: string;
+    name: string;
+    type: 'user-workspace' | 'catalog-workspace';
+  }[];
   codeMode?: {
     currentFile?: string;
     moduleInspectorPanel?: string;
@@ -182,6 +192,7 @@ export interface BoxelContext {
       cardId: string;
       format: string;
     };
+    selectedCodeRef?: CodeRef;
   };
   debug?: boolean;
   requireToolCall?: boolean;
@@ -201,7 +212,7 @@ export interface CardMessageContent {
   [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]?: boolean;
   [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]?: string; // event_id of the message we are continuing
   [APP_BOXEL_REASONING_CONTENT_KEY]?: string;
-  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[]; // TODO
+  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[];
   errorMessage?: string;
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.
@@ -302,6 +313,7 @@ export interface CodePatchResultContent {
   };
   msgtype: typeof APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE;
   codeBlockIndex: number;
+  failureReason?: string; // only present if status is 'failed'
   data: {
     context?: BoxelContext;
     attachedFiles?: (SerializedFile & { content?: string; error?: string })[];

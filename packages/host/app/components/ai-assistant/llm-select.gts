@@ -3,6 +3,8 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
+import Check from '@cardstack/boxel-icons/check';
+
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import PillMenu from '@cardstack/host/components/pill-menu';
@@ -11,7 +13,7 @@ import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 interface Signature {
   Args: {
     selected: string;
-    options: string[];
+    options: Record<string, string>;
     onChange: (selectedLLM: string) => void;
     disabled?: boolean;
     onExpand?: () => void;
@@ -40,34 +42,33 @@ export default class LLMSelect extends Component<Signature> {
       </:headerDetail>
       <:content>
         <ul class='llm-list'>
-          {{#each @options as |option|}}
+          {{#each-in @options as |id name|}}
             <li
-              class='llm-option {{if (eq @selected option) "selected"}}'
-              data-test-llm-select-item={{option}}
+              class='llm-option {{if (eq @selected id) "selected"}}'
+              data-test-llm-select-item={{id}}
               {{scrollIntoViewModifier
-                (eq @selected option)
+                (eq @selected id)
                 container='llm-select'
-                key=option
+                key=id
               }}
             >
               <button
                 type='button'
                 class='llm-button'
-                {{on 'click' (fn this.handleOptionClick option)}}
+                {{on 'click' (fn this.handleOptionClick id)}}
               >
-                {{option}}
+                {{name}}
+                {{#if (eq @selected id)}}
+                  <Check class='selected-icon' />
+                {{/if}}
               </button>
             </li>
-          {{/each}}
+          {{/each-in}}
         </ul>
       </:content>
     </PillMenu>
     <style scoped>
       .llm-select {
-        --boxel-pill-menu-header-padding: 0;
-        --boxel-pill-menu-content-padding: var(--boxel-sp) 0;
-        --boxel-pill-menu-footer-padding: 0;
-        --boxel-pill-menu-button-padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
         background-color: transparent;
         box-shadow: none;
       }
@@ -89,12 +90,15 @@ export default class LLMSelect extends Component<Signature> {
         padding: 0;
         margin: 0;
         display: grid;
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xxxs);
         max-height: 300px;
         overflow-y: auto;
+
+        scroll-timeline: --pill-menu-content-scroll-timeline;
       }
 
       .llm-option {
+        background: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
         border: 1px solid var(--boxel-400);
       }
@@ -107,21 +111,34 @@ export default class LLMSelect extends Component<Signature> {
         background-color: var(--boxel-teal);
       }
 
+      .selected-icon {
+        width: var(--boxel-font-size);
+        height: auto;
+        stroke-width: 3px;
+      }
+
       .llm-button {
         width: 100%;
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        text-align: left;
         background: none;
         border: none;
         color: var(--boxel-dark);
         font: 500 var(--boxel-font-xs);
         cursor: pointer;
+
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .llm-option.selected .llm-button {
+        font-weight: 600;
       }
     </style>
   </template>
 
   private get displayName() {
-    return this.args.selected.split('/')[1] ?? this.args.selected;
+    return this.args.options[this.args.selected];
   }
 
   @action

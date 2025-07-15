@@ -8,7 +8,6 @@ import { task, timeout, all } from 'ember-concurrency';
 import { IEvent } from 'matrix-js-sdk';
 
 import { TrackedSet } from 'tracked-built-ins';
-import { v4 as uuidv4 } from 'uuid';
 
 import {
   Command,
@@ -27,8 +26,6 @@ import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
-
-import { shortenUuid } from '../utils/uuid';
 
 import type LoaderService from './loader-service';
 import type OperatorModeStateService from './operator-mode-state-service';
@@ -55,20 +52,6 @@ export default class CommandService extends Service {
   executedCommandRequestIds = new TrackedSet<string>();
   private commandProcessingEventQueue: string[] = [];
   private flushCommandProcessingQueue: Promise<void> | undefined;
-
-  private commands: Map<
-    string,
-    {
-      command: GenericCommand;
-      autoExecute: boolean;
-    }
-  > = new Map();
-
-  public registerCommand(command: GenericCommand, autoExecute: boolean) {
-    let name = `${command.name}_${shortenUuid(uuidv4())}`;
-    this.commands.set(name, { command, autoExecute });
-    return name;
-  }
 
   public queueEventForCommandProcessing(event: Partial<IEvent>) {
     let eventId = event.event_id;
@@ -159,12 +142,7 @@ export default class CommandService extends Service {
         if (!messageCommand.name) {
           continue;
         }
-        let { command, autoExecute } =
-          this.commands.get(messageCommand.name) ?? {};
-        if (
-          messageCommand.requiresApproval === false ||
-          (command && autoExecute)
-        ) {
+        if (messageCommand.requiresApproval === false) {
           this.run.perform(messageCommand);
         }
       }
@@ -196,21 +174,17 @@ export default class CommandService extends Service {
       this.matrixService.failedCommandState.delete(commandRequestId!);
       this.currentlyExecutingCommandRequestIds.add(commandRequestId!);
 
-      // lookup command
-      let { command: commandToRun } =
-        this.commands.get(command.commandRequest.name ?? '') ?? {};
+      let commandToRun;
 
       // If we don't find it in the one-offs, start searching for
       // one in the skills we can construct
-      if (!commandToRun) {
-        let commandCodeRef = command.codeRef;
-        if (commandCodeRef) {
-          let CommandConstructor = (await getClass(
-            commandCodeRef,
-            this.loaderService.loader,
-          )) as { new (context: CommandContext): Command<any, any> };
-          commandToRun = new CommandConstructor(this.commandContext);
-        }
+      let commandCodeRef = command.codeRef;
+      if (commandCodeRef) {
+        let CommandConstructor = (await getClass(
+          commandCodeRef,
+          this.loaderService.loader,
+        )) as { new (context: CommandContext): Command<any, any> };
+        commandToRun = new CommandConstructor(this.commandContext);
       }
 
       if (commandToRun) {
@@ -322,38 +296,49 @@ export default class CommandService extends Service {
         `${codeData.eventId}:${codeData.codeBlockIndex}`,
       );
     }
+    let finalFileUrl: string | undefined;
     try {
       let patchCodeCommand = new PatchCodeCommand(this.commandContext);
-      let { finalFileUrl } = await patchCodeCommand.execute({
+      let patchCodeResult = await patchCodeCommand.execute({
         fileUrl,
         codeBlocks: codeDataItems.map(
           (codeData) => codeData.searchReplaceBlock!,
         ),
       });
+      finalFileUrl = patchCodeResult.finalFileUrl;
 
-      for (const codeBlock of codeDataItems) {
-        this.executedCommandRequestIds.add(
-          `${codeBlock.eventId}:${codeBlock.codeBlockIndex}`,
-        );
+      for (let i = 0; i < codeDataItems.length; i++) {
+        const codeData = codeDataItems[i];
+        const patchResult = patchCodeResult.results[i];
+        if (patchResult.status === 'applied') {
+          this.executedCommandRequestIds.add(
+            `${codeData.eventId}:${codeData.codeBlockIndex}`,
+          );
+        }
       }
+
       await this.matrixService.updateSkillsAndCommandsIfNeeded(roomId);
       let fileDef = this.matrixService.fileAPI.createFileDef({
-        sourceUrl: finalFileUrl,
+        sourceUrl: finalFileUrl ?? fileUrl,
         name: fileUrl.split('/').pop(),
       });
 
       let context = this.operatorModeStateService.getSummaryForAIBot();
+
       let resultSends: Promise<unknown>[] = [];
-      for (const codeData of codeDataItems) {
+      for (let i = 0; i < codeDataItems.length; i++) {
+        const codeData = codeDataItems[i];
+        const result = patchCodeResult.results[i];
         resultSends.push(
           this.matrixService.sendCodePatchResultEvent(
             roomId,
             codeData.eventId,
             codeData.codeBlockIndex,
-            'applied',
+            result.status as CodePatchStatus,
             [],
             [fileDef],
             context,
+            result.failureReason,
           ),
         );
       }

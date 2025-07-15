@@ -45,6 +45,7 @@ import {
   type PrerenderedCardLike,
 } from '@cardstack/runtime-common';
 
+import ListingInitCommand from '@cardstack/host/commands/listing-action-init';
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
@@ -210,6 +211,11 @@ export default class PlaygroundPanel extends Component<Signature> {
           disabled: !this.canWriteRealm,
         },
       ),
+      new MenuItem(`Create listing with AI`, 'action', {
+        action: () => this.createListingWithAI.perform(),
+        icon: AiAssistantIcon,
+        disabled: !this.canWriteRealm,
+      }),
     ];
     return menuItems;
   }
@@ -313,6 +319,24 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   private get cardError(): CardErrorJSONAPI | undefined {
     return this.cardResource?.cardError;
+  }
+
+  private get errorMessage() {
+    let error = this.cardResource?.cardError;
+    if (!error) {
+      return undefined;
+    }
+    if (error.status === 404 && error.title === 'Not Found') {
+      if (error.message.includes('missing')) {
+        // missing relationship link
+        return `Card "${error.id}" contains a missing link.`;
+      } else {
+        // custom message for missing file case
+        return 'File not found. Please choose or create another instance.';
+      }
+    }
+    // default error message will be shown
+    return undefined;
   }
 
   private get specCard(): Spec | undefined {
@@ -799,6 +823,14 @@ export default class PlaygroundPanel extends Component<Signature> {
     },
   );
 
+  private createListingWithAI = restartableTask(async () => {
+    let { commandContext } = this.commandService;
+    await new ListingInitCommand(commandContext).execute({
+      actionType: 'create',
+      attachedCard: this.card ? this.card : undefined,
+    });
+  });
+
   <template>
     {{consumeContext this.makeCardResource}}
 
@@ -878,6 +910,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                     data-test-error-container
                   >
                     <CardError
+                      @message={{this.errorMessage}}
                       @error={{this.cardError}}
                       @cardCreationError={{this.cardError.meta.isCreationError}}
                       @fileToFixWithAi={{this.currentFileDef}}
@@ -935,7 +968,6 @@ export default class PlaygroundPanel extends Component<Signature> {
 
     <style scoped>
       .playground-panel {
-        position: relative;
         background-image: url('./playground-background.png');
         background-position: left top;
         background-repeat: repeat;
@@ -986,10 +1018,18 @@ export default class PlaygroundPanel extends Component<Signature> {
         flex-grow: 1;
         display: grid;
         grid-template-rows: max-content 1fr;
+        position: unset;
+
+        --card-error-header-height: calc(
+          40px + var(--boxel-form-control-height) + var(--boxel-sp)
+        );
       }
       .error-container :deep(.instance-chooser) {
         border-radius: var(--boxel-border-radius);
         box-shadow: var(--boxel-deep-box-shadow);
+      }
+      .card-error-detail :deep(.instance-chooser) {
+        border-radius: var(--boxel-border-radius);
       }
     </style>
   </template>

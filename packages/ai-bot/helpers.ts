@@ -770,7 +770,7 @@ async function toResultMessages(
             if (status === 'applied') {
               content = `(The user has successfully applied code patch ${codeBlockIndex + 1}.)`;
             } else if (status === 'failed') {
-              content = `(The user tried to apply code patch ${codeBlockIndex + 1} but it failed to apply.)`;
+              content = `(The user tried to apply code patch ${codeBlockIndex + 1} but there was an error: ${codePatchResultEvent.content.failureReason})`;
             }
             let attachments = await buildAttachmentsMessagePart(
               client,

@@ -27,19 +27,12 @@ import { v4 as uuidv4 } from 'uuid';
 
 import {
   aiBotUsername,
-  baseRealm,
   LooseCardResource,
   logger,
   ResolvedCodeRef,
   isCardInstance,
   Deferred,
 } from '@cardstack/runtime-common';
-
-import {
-  basicMappings,
-  generateJsonSchemaForCardType,
-  getPatchTool,
-} from '@cardstack/runtime-common/helpers/ai';
 
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
@@ -61,6 +54,11 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+  SLIDING_SYNC_AI_ROOM_LIST_NAME,
+  SLIDING_SYNC_AUTH_ROOM_LIST_NAME,
+  SLIDING_SYNC_LIST_RANGE_END,
+  SLIDING_SYNC_LIST_TIMELINE_LIMIT,
+  SLIDING_SYNC_TIMEOUT,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -96,21 +94,21 @@ import type {
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
+import { addPatchTools } from '../commands/utils';
 import { isSkillCard } from '../lib/file-def-manager';
+import { skillCardURL } from '../lib/utils';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
 
-import {
-  CurrentRoomIdPersistenceKey,
-  clearLocalStorage,
-} from '../utils/local-storage-keys';
+import { clearLocalStorage } from '../utils/local-storage-keys';
 
 import { type SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
 
 import type CardService from './card-service';
 import type CommandService from './command-service';
 import type LoaderService from './loader-service';
+import type LocalPersistenceService from './local-persistence-service';
 import type LoggerService from './logger-service';
 import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
@@ -125,11 +123,6 @@ import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
-const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
-const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
-const SLIDING_SYNC_LIST_RANGE_END = 9;
-const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
-const SLIDING_SYNC_TIMEOUT = 30000;
 
 const realmEventsLogger = logger('realm:events');
 
@@ -146,9 +139,9 @@ export default class MatrixService extends Service {
   @service declare private reset: ResetService;
   @service declare private network: NetworkService;
   @service declare private store: StoreService;
+  @service declare private localPersistenceService: LocalPersistenceService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
-  @tracked private _isNewUser = false;
   @tracked private postLoginCompleted = false;
   @tracked private _currentRoomId: string | undefined;
   @tracked private timelineLoadingState: Map<string, boolean> =
@@ -185,12 +178,17 @@ export default class MatrixService extends Service {
   private slidingSync: SlidingSync | undefined;
   private aiRoomIds: Set<string> = new Set();
   @tracked private _isLoadingMoreAIRooms = false;
-  agentId = uuidv4();
+  agentId: string | undefined;
 
   constructor(owner: Owner) {
     super(owner);
     this.setLoggerLevelFromEnvironment();
+    this.setAgentId();
     this.#ready = this.loadState.perform();
+  }
+
+  private setAgentId() {
+    this.agentId = this.localPersistenceService.getAgentId();
   }
 
   private setLoggerLevelFromEnvironment() {
@@ -210,10 +208,9 @@ export default class MatrixService extends Service {
     this._currentRoomId = value;
     if (value) {
       this.loadAllTimelineEvents(value);
-      window.localStorage.setItem(CurrentRoomIdPersistenceKey, value);
-    } else {
-      window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
     }
+
+    this.localPersistenceService.setCurrentRoomId(value);
   }
 
   get ready() {
@@ -347,7 +344,7 @@ export default class MatrixService extends Service {
   async logout() {
     try {
       await this.flushAll;
-      clearAuth();
+      this.clearAuth();
       this.postLoginCompleted = false;
       this.reset.resetAll();
       this.unbindEventListeners();
@@ -357,10 +354,10 @@ export default class MatrixService extends Service {
       // card id's in the URL
       this.router.transitionTo('index', {
         queryParams: {
-          workspaceChooserOpened: 'true',
           operatorModeState: stringify({
             stacks: [],
             submode: Submodes.Interact,
+            workspaceChooserOpened: true,
           } as OperatorModeSerializedState),
         },
       });
@@ -373,10 +370,6 @@ export default class MatrixService extends Service {
 
   get isInitializingNewUser() {
     return this._isInitializingNewUser;
-  }
-
-  get isNewUser() {
-    return this._isNewUser;
   }
 
   async initializeNewUser(
@@ -406,7 +399,8 @@ export default class MatrixService extends Service {
       }),
       this.realmServer.fetchCatalogRealms(),
     ]);
-    this._isNewUser = true;
+
+    this.router.refresh();
     this._isInitializingNewUser = false;
   }
 
@@ -571,7 +565,6 @@ export default class MatrixService extends Service {
         state: SlidingSyncState | null,
         resp: MSC3575SlidingSyncResponse | null,
       ) => {
-        console.log('SlidingSync lifecycle event', { state, resp });
         if (
           state === SlidingSyncState.Complete &&
           resp &&
@@ -645,110 +638,50 @@ export default class MatrixService extends Service {
   // Re-upload skills and commands. FileDefManager's cache will ensure we don't re-upload the same content.
   // If there are new urls and content hashes for skills or commands, The room state will be updated.
   async updateSkillsAndCommandsIfNeeded(roomId: string) {
-    this.updateStateEvent(
+    await this.updateStateEvent(
       roomId,
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
       '',
       async (currentSkillsConfig) => {
-        let existingSkillCardFileDefs = [
-          ...(currentSkillsConfig?.enabledSkillCards ?? []),
-          ...(currentSkillsConfig?.disabledSkillCards ?? []),
-        ] as FileAPI.SerializedFile[];
-        let skillCards = (
+        let enabledSkillCardFileDefs =
+          (currentSkillsConfig?.enabledSkillCards ??
+            []) as FileAPI.SerializedFile[];
+        let enabledCommandDefinitions: SkillModule.CommandField[] = [];
+        let enabledSkillCards = (
           await Promise.all(
-            existingSkillCardFileDefs.map(
-              async (fileDef) =>
-                await this.store.get<SkillModule.Skill>(fileDef.sourceUrl),
-            ),
+            enabledSkillCardFileDefs.map(async (fileDef) => {
+              const card = await this.store.get<SkillModule.Skill>(
+                fileDef.sourceUrl,
+              );
+              if (isSkillCard in card) {
+                enabledCommandDefinitions = enabledCommandDefinitions.concat(
+                  (card as SkillModule.Skill).commands ?? [],
+                );
+              }
+              return card;
+            }),
           )
         ).filter((card) => isSkillCard in card) as SkillModule.Skill[];
-
-        let updatedSkillFileDefs = await this.uploadCards(
-          skillCards as CardDef[],
+        let enabledSkillFileDefs = await this.uploadCards(
+          enabledSkillCards as CardDef[],
         );
-        let updatedCommandFileDefs: FileDef[] = [];
-        for (let skillCard of skillCards) {
-          let commandDefinitions = (skillCard as SkillModule.Skill).commands;
-          if (commandDefinitions.length) {
-            let commandDefFileDefs =
-              await this.uploadCommandDefinitions(commandDefinitions);
-            updatedCommandFileDefs.push(...commandDefFileDefs);
-          }
-        }
-
-        const enabledSkillCards = [
-          ...(currentSkillsConfig.enabledSkillCards || []),
-        ];
-        const disabledSkillCards = [
-          ...(currentSkillsConfig.disabledSkillCards || []),
-        ];
-        const commandDefinitions = [
-          ...(currentSkillsConfig.commandDefinitions || []),
-        ];
-
-        // For skill cards, only use updatedSkillFileDefs if they exist in the current enabledSkillCards or disabledSkillCards
-        const updatedEnabledCards = enabledSkillCards.map(
-          (enabledSkillCard) => {
-            const matchingFileDef = updatedSkillFileDefs.find(
-              (fileDef) =>
-                fileDef.sourceUrl === enabledSkillCard.sourceUrl &&
-                fileDef.url !== enabledSkillCard.url &&
-                fileDef.contentHash !== enabledSkillCard.contentHash,
-            );
-            return matchingFileDef
-              ? matchingFileDef.serialize()
-              : enabledSkillCard;
-          },
+        // get the unique subset of enabledCommandDefinitions by functionName
+        enabledCommandDefinitions = enabledCommandDefinitions.filter(
+          (command, index, self) =>
+            index ===
+            self.findIndex((c) => c.functionName === command.functionName),
         );
-
-        const updatedDisabledCards = disabledSkillCards.map(
-          (disabledSkillCard) => {
-            const matchingFileDef = updatedSkillFileDefs.find(
-              (fileDef) =>
-                fileDef.sourceUrl === disabledSkillCard.sourceUrl &&
-                fileDef.url !== disabledSkillCard.url &&
-                fileDef.contentHash !== disabledSkillCard.contentHash,
-            );
-            return matchingFileDef
-              ? matchingFileDef.serialize()
-              : disabledSkillCard;
-          },
+        let enabledCommandDefFileDefs = await this.uploadCommandDefinitions(
+          enabledCommandDefinitions,
         );
-
-        // Command definitions might be added or removed, so we use updatedCommandFileDefs
-        // to determine which ones are new or removed
-        const newCommandDefinitions = updatedCommandFileDefs
-          .map((fileDef) => fileDef.serialize())
-          .filter(
-            (commandFileDef) =>
-              !commandDefinitions.some(
-                (commandDefinition) =>
-                  commandDefinition.sourceUrl === commandFileDef.sourceUrl,
-              ),
-          );
-
-        // Only keep commands that exist in updatedCommandFileDefs
-        const updatedCommandDefinitions = [
-          ...commandDefinitions.filter((cmd) =>
-            updatedCommandFileDefs.some(
-              (fileDef) => fileDef.sourceUrl === cmd.sourceUrl,
-            ),
-          ),
-          ...newCommandDefinitions,
-        ].map((cmd) => {
-          const matchingFileDef = updatedCommandFileDefs.find(
-            (fileDef) => fileDef.sourceUrl === cmd.sourceUrl,
-          );
-          if (matchingFileDef) {
-            return { ...cmd, url: matchingFileDef.url };
-          }
-          return cmd;
-        });
-
         return {
-          enabledSkillCards: updatedEnabledCards,
-          disabledSkillCards: updatedDisabledCards,
-          commandDefinitions: updatedCommandDefinitions,
+          enabledSkillCards: enabledSkillFileDefs.map((fileDef) =>
+            fileDef.serialize(),
+          ),
+          disabledSkillCards: currentSkillsConfig?.disabledSkillCards ?? [],
+          commandDefinitions: enabledCommandDefFileDefs.map((fileDef) =>
+            fileDef.serialize(),
+          ),
         };
       },
     );
@@ -871,6 +804,7 @@ export default class MatrixService extends Service {
     attachedCards: CardDef[] = [],
     attachedFiles: FileDef[] = [],
     context: BoxelContext,
+    failureReason?: string | undefined,
   ) {
     let contentData = await this.withContextAndAttachments(
       context,
@@ -880,6 +814,7 @@ export default class MatrixService extends Service {
     let content: CodePatchResultContent = {
       msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
       codeBlockIndex,
+      failureReason,
       'm.relates_to': {
         event_id: eventId,
         key: resultKey,
@@ -906,6 +841,15 @@ export default class MatrixService extends Service {
     return await this.client.uploadFiles(files);
   }
 
+  async fetchMatrixHostedFile(matrixFileUrl: string) {
+    let response = await fetch(matrixFileUrl, {
+      headers: {
+        Authorization: `Bearer ${this.client.getAccessToken()}`,
+      },
+    });
+    return response;
+  }
+
   async sendMessage(
     roomId: string,
     body: string | undefined,
@@ -915,25 +859,21 @@ export default class MatrixService extends Service {
     context?: BoxelContext,
   ): Promise<void> {
     let tools: Tool[] = [];
-    let attachedOpenCards: CardDef[] = [];
-    let mappings = await basicMappings(this.loaderService.loader);
     // Open cards are attached automatically
     // If they are not attached, the user is not allowing us to
     // modify them
-    attachedOpenCards = attachedCards.filter((c) =>
-      (context?.openCardIds ?? []).includes(c.id),
-    );
+    let openCardIds = context?.openCardIds ?? [];
+    let patchableCards = attachedCards
+      .filter((c) => openCardIds.includes(c.id))
+      .filter((c) => this.realm.canWrite(c.id));
     // Generate tool calls for patching currently open cards permitted for modification
-    for (let attachedOpenCard of attachedOpenCards) {
-      let patchSpec = generateJsonSchemaForCardType(
-        attachedOpenCard.constructor as typeof CardDef,
+    tools = tools.concat(
+      await addPatchTools(
+        this.commandService.commandContext,
+        patchableCards,
         this.cardAPI,
-        mappings,
-      );
-      if (this.realm.canWrite(attachedOpenCard.id)) {
-        tools.push(getPatchTool(attachedOpenCard.id, patchSpec));
-      }
-    }
+      ),
+    );
 
     await this.updateSkillsAndCommandsIfNeeded(roomId);
     let contentData = await this.withContextAndAttachments(
@@ -952,7 +892,6 @@ export default class MatrixService extends Service {
         attachedCards: contentData.attachedCards,
         context: {
           ...contentData.context,
-          openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
           debug: context?.debug,
           functions: [],
@@ -1051,12 +990,12 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [`${baseRealm.url}Skill/boxel-environment`];
+    let interactModeDefaultSkills = [skillCardURL('boxel-environment')];
 
     let codeModeDefaultSkills = [
-      `${baseRealm.url}Skill/boxel-environment`,
-      `${baseRealm.url}Skill/boxel-development`,
-      `${baseRealm.url}Skill/source-code-editing`,
+      skillCardURL('boxel-environment'),
+      skillCardURL('boxel-development'),
+      skillCardURL('source-code-editing'),
     ];
 
     let defaultSkills;
@@ -1298,8 +1237,12 @@ export default class MatrixService extends Service {
     return await this.client.registerRequest(data, kind);
   }
 
-  async sendReadReceipt(matrixEvent: MatrixEvent) {
-    return await this.client.sendReadReceipt(matrixEvent);
+  // Type of matrixEvent is a partial MatrixEvent because a couple of places
+  // where this method is called don't have the full MatrixEvent type available
+  async sendReadReceipt(
+    matrixEvent: Pick<MatrixEvent, 'getId' | 'getRoomId' | 'getTs'>,
+  ) {
+    return await this.client.sendReadReceipt(matrixEvent as MatrixEvent);
   }
 
   async isUsernameAvailable(username: string) {
@@ -1624,12 +1567,14 @@ export default class MatrixService extends Service {
           'Ignoring realm event because no realm found',
           event,
         );
-      } else if (realmResourceForEvent.info?.realmUserId !== event.sender) {
-        realmEventsLogger.debug(
-          `Ignoring realm event because sender ${event.sender} is not the realm user ${realmResourceForEvent.info?.realmUserId}`,
-          event,
-        );
       } else {
+        if (realmResourceForEvent.info?.realmUserId !== event.sender) {
+          realmEventsLogger.warn(
+            `Realm event sender ${event.sender} is not the realm user ${realmResourceForEvent.info?.realmUserId}`,
+            event,
+          );
+        }
+
         (event.content as any).origin_server_ts = event.origin_server_ts;
         this.messageService.relayRealmEvent(
           realmResourceForEvent.url,
@@ -1647,6 +1592,11 @@ export default class MatrixService extends Service {
     ) {
       this.commandService.queueEventForCommandProcessing(event);
     }
+  }
+
+  private clearAuth() {
+    window.localStorage.removeItem('auth');
+    this.localPersistenceService.setCurrentRoomId(undefined);
   }
 
   async activateCodingSkill() {
@@ -1757,11 +1707,6 @@ export default class MatrixService extends Service {
 
 function saveAuth(auth: LoginResponse) {
   window.localStorage.setItem('auth', JSON.stringify(auth));
-}
-
-function clearAuth() {
-  window.localStorage.removeItem('auth');
-  window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
 }
 
 function getAuth(): LoginResponse | undefined {

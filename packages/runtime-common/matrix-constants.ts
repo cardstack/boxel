@@ -27,21 +27,31 @@ export const APP_BOXEL_CONTINUATION_OF_CONTENT_KEY =
   'app.boxel.continuation-of';
 export const DEFAULT_LLM = 'openai/gpt-4.1';
 export const DEFAULT_CODING_LLM = 'anthropic/claude-sonnet-4';
-export const DEFAULT_LLM_LIST = [
-  'anthropic/claude-3.5-sonnet',
-  'anthropic/claude-3.7-sonnet',
-  'anthropic/claude-3.7-sonnet:thinking',
-  'anthropic/claude-sonnet-4',
-  'anthropic/claude-opus-4',
-  'deepseek/deepseek-chat-v3-0324',
-  'google/gemini-2.0-flash-001',
-  'google/gemini-2.0-flash-lite-001',
-  'google/gemini-2.5-pro-preview',
-  'meta-llama/llama-3.2-3b-instruct',
-  'openai/gpt-4.1-nano',
-  'openai/gpt-4.1-mini',
-  'openai/gpt-4.1',
-  'openai/gpt-4o',
-  'openai/gpt-4o-mini',
-  'x-ai/grok-3-mini-beta',
-];
+export const DEFAULT_REMIX_LLM = 'openai/gpt-4.1-nano';
+
+export const DEFAULT_LLM_ID_TO_NAME: Record<string, string> = {
+  'anthropic/claude-3.5-sonnet': 'Anthropic: Claude 3.5 Sonnet',
+  'anthropic/claude-3.7-sonnet': 'Anthropic: Claude 3.7 Sonnet',
+  'anthropic/claude-3.7-sonnet:thinking':
+    'Anthropic: Claude 3.7 Sonnet (thinking)',
+  'anthropic/claude-sonnet-4': 'Anthropic: Claude Sonnet 4',
+  'anthropic/claude-opus-4': 'Anthropic: Claude Opus 4',
+  'deepseek/deepseek-chat-v3-0324': 'DeepSeek: DeepSeek V3 0324',
+  'google/gemini-2.0-flash-001': 'Google: Gemini 2.0 Flash',
+  'google/gemini-2.0-flash-lite-001': 'Google: Gemini 2.0 Flash Lite',
+  'google/gemini-2.5-pro-preview': 'Google: Gemini 2.5 Pro Preview 06-05',
+  'meta-llama/llama-3.2-3b-instruct': 'Meta: Llama 3.2 3B Instruct',
+  'openai/gpt-4.1-nano': 'OpenAI: GPT-4.1 Nano',
+  'openai/gpt-4.1-mini': 'OpenAI: GPT-4.1 Mini',
+  'openai/gpt-4.1': 'OpenAI: GPT-4.1',
+  'openai/gpt-4o': 'OpenAI: GPT-4o',
+  'openai/gpt-4o-mini': 'OpenAI: GPT-4o-mini',
+};
+
+export const DEFAULT_LLM_LIST = Object.keys(DEFAULT_LLM_ID_TO_NAME);
+
+export const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
+export const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
+export const SLIDING_SYNC_LIST_RANGE_END = 9;
+export const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
+export const SLIDING_SYNC_TIMEOUT = 30000;

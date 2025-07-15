@@ -38,7 +38,10 @@ import {
   internalKeyFor,
   isCardInstance,
 } from '@cardstack/runtime-common';
-import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
+import {
+  DEFAULT_LLM_LIST,
+  DEFAULT_LLM_ID_TO_NAME,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
 import UpdateSkillActivationCommand from '@cardstack/host/commands/update-skill-activation';
@@ -214,24 +217,72 @@ export default class Room extends Component<Signature> {
         height: 100%;
         overflow: hidden;
         position: relative;
+
+        --chat-input-area-border-radius: var(--boxel-border-radius-xxl);
       }
       .room-actions {
-        padding: var(--boxel-sp-xxs) var(--boxel-sp) var(--boxel-sp);
+        position: relative;
+        padding: 0 var(--ai-assistant-panel-padding)
+          var(--ai-assistant-panel-padding);
         box-shadow: var(--boxel-box-shadow);
       }
+
+      .room-actions::before {
+        content: '';
+        position: absolute;
+
+        width: 100%;
+        height: calc(
+          var(--ai-assistant-panel-bottom-gradient-height) +
+            var(--chat-input-area-border-radius)
+        );
+        left: 0;
+        bottom: calc(100% - var(--chat-input-area-border-radius));
+
+        background: linear-gradient(
+          to top,
+          var(--boxel-ai-purple),
+          var(--boxel-ai-purple) 20%,
+          transparent 100%
+        );
+
+        z-index: 0;
+      }
+
       .chat-input-area {
+        --boxel-pill-menu-header-padding: 0;
+        --boxel-pill-menu-content-padding: var(--boxel-sp) 0;
+        --boxel-pill-menu-footer-padding: 0;
+        --boxel-pill-menu-button-padding: 2px 6px;
+
+        --chat-input-area-bottom-padding: var(--boxel-sp-sm);
+
         background-color: var(--boxel-light);
-        border-radius: var(--boxel-border-radius);
+        border-radius: var(--chat-input-area-border-radius);
+
+        position: relative;
+        z-index: 2;
+
+        timeline-scope: --chat-input-scroll-timeline;
       }
       .chat-input-area__bottom-actions {
         display: flex;
-        padding: var(--boxel-sp-sm);
+        align-items: center;
+        padding: var(--chat-input-area-bottom-padding);
         gap: var(--boxel-sp-sm);
         background-color: var(--boxel-light-100);
-        border-top: 1px solid var(--boxel-200);
-        border-bottom-left-radius: var(--boxel-border-radius);
-        border-bottom-right-radius: var(--boxel-border-radius);
+        border-bottom-left-radius: var(--chat-input-area-border-radius);
+        border-bottom-right-radius: var(--chat-input-area-border-radius);
       }
+
+      .chat-input-area__bottom-actions:not(:has(.menu-content)) {
+        height: 40px;
+      }
+
+      .chat-input-area__bottom-actions:has(.menu-content) {
+        padding: 0;
+      }
+
       :deep(.ai-assistant-conversation > *:first-child) {
         margin-top: auto;
       }
@@ -242,13 +293,23 @@ export default class Room extends Component<Signature> {
         margin-left: auto;
         margin-right: auto;
       }
-      .skill-menu:deep(.pill-menu-button),
-      .llm-select:deep(.pill-menu-button) {
-        flex: 1;
+
+      .chat-input-area :deep(.pill-menu-button) {
+        height: 22px;
+        gap: var(--boxel-sp-xxxs);
       }
+
+      .chat-input-area :deep(.pill-menu-button:hover) {
+        border-color: var(--boxel-dark);
+      }
+
       .llm-select :deep(.menu-content) {
         margin-right: calc(-2 * var(--boxel-sp-sm));
-        padding-right: var(--boxel-sp-sm);
+        width: 100%;
+      }
+
+      .chat-input-area :deep(.minimized-arrow) {
+        margin-left: 0;
       }
     </style>
   </template>
@@ -271,6 +332,8 @@ export default class Room extends Component<Signature> {
 
   private autoAttachmentResource = getAutoAttachment(this, {
     submode: () => this.operatorModeStateService.state.submode,
+    moduleInspectorPanel: () =>
+      this.operatorModeStateService.moduleInspectorPanel,
     autoAttachedFileUrl: () => this.autoAttachedFileUrl,
     playgroundPanelCardId: () => this.playgroundPanelCardId,
     topMostStackItems: () => this.topMostStackItems,
@@ -605,11 +668,16 @@ export default class Room extends Component<Signature> {
   }
 
   private get llmsForSelectMenu() {
-    return [
+    let ids = [
       ...new Set([...DEFAULT_LLM_LIST, ...this.args.roomResource.usedLLMs]),
     ]
       .filter(Boolean)
       .sort();
+
+    return ids.reduce((acc: Record<string, string>, id) => {
+      acc[id] = DEFAULT_LLM_ID_TO_NAME[id] ?? id;
+      return acc;
+    }, {});
   }
 
   private get sortedSkills(): RoomSkill[] {
@@ -778,9 +846,7 @@ export default class Room extends Component<Signature> {
         this.matrixService.cardsToSend.set(this.args.roomId, undefined);
       }
       let openCardIds = new Set([
-        ...(this.operatorModeStateService.getOpenCardIds(
-          this.args.selectedCardRef,
-        ) || []),
+        ...(this.operatorModeStateService.getOpenCardIds() || []),
         ...this.autoAttachedCardIds,
       ]);
       let context =
@@ -932,7 +998,7 @@ export default class Room extends Component<Signature> {
     for (let i = 0; i < lastMessage.htmlParts.length; i++) {
       let htmlPart = lastMessage.htmlParts[i];
       let codeData = htmlPart.codeData;
-      if (!codeData) continue;
+      if (!codeData || !codeData.searchReplaceBlock) continue;
       let status = this.commandService.getCodePatchStatus(codeData);
       if (status && status === 'ready') {
         result.push(codeData);

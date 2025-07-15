@@ -594,7 +594,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await click('[data-test-more-options-button]');
       assert
         .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
-        .exists({ count: 5 });
+        .exists({ count: 6 });
 
       await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
       assert
@@ -631,7 +631,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       assert
         .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
-        .hasText('Author');
+        .hasText('Author - Jane Doe');
       assertCardExists(assert, cardId, 'isolated');
       assert.dom('[data-test-author-title]').hasText('Jane Doe');
       assert
@@ -652,7 +652,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-format-chooser="edit"]').hasClass('active');
       assert
         .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
-        .hasText('Author');
+        .hasText('Author - Jane Doe');
       assertCardExists(assert, cardId, 'edit');
 
       await selectFormat('atom');
@@ -680,7 +680,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       assert
         .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
-        .hasText('Author');
+        .hasText('Author - Jane Doe');
       assertCardExists(assert, cardId, 'isolated');
       assert.dom('[data-test-author-title]').hasText('Jane Doe');
       assert.dom('[data-test-format-chooser="isolated"]').hasClass('active');
@@ -1039,6 +1039,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       );
 
       await click(`[data-test-recent-file="${testRealmURL}blog-post.gts"]`); // change open file
+      await selectDeclaration('Category');
       await togglePlaygroundPanel();
       assert.dom('[data-test-selected-item]').containsText('City Design');
       assertCardExists(assert, categoryId1, 'embedded');
@@ -1136,7 +1137,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       await click('[data-test-file-browser-toggle]');
       await click('[data-test-file="blog-post.gts"]');
-      await click('[data-test-module-inspector-view="preview"]');
+      await togglePlaygroundPanel();
+      await click('[data-test-inspector-toggle]');
+      await selectDeclaration('Category');
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="1"]');
       assert
@@ -1878,6 +1881,68 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert
         .dom('[data-test-error-container]')
         .doesNotExist('can recover from missing link error');
+    });
+
+    test('it renders error message for missing file', async function (assert) {
+      setPlaygroundSelections({
+        [`${testRealmURL}person/Person`]: {
+          cardId: `${testRealmURL}Person/chef-mike`,
+          format: 'isolated',
+        },
+      });
+      await openFileInPlayground('person.gts', testRealmURL, {
+        declaration: 'Person',
+      });
+      assert
+        .dom('[data-test-boxel-card-header-title]')
+        .containsText('Card Error: Not Found');
+      assert
+        .dom('[data-test-card-error]')
+        .containsText(
+          'File not found. Please choose or create another instance.',
+        );
+    });
+
+    test('it renders error message for non-existent link in relationship field', async function (assert) {
+      // non-existent link in links-to field
+      await realm.write(
+        'Person/chef-mike.json',
+        JSON.stringify({
+          data: {
+            attributes: { title: 'Chef Mike' },
+            relationships: {
+              pet: {
+                links: {
+                  self: '../Pet/missing-pet',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        }),
+      );
+      setPlaygroundSelections({
+        [`${testRealmURL}person/Person`]: {
+          cardId: `${testRealmURL}Person/chef-mike`,
+          format: 'isolated',
+        },
+      });
+      await openFileInPlayground('person.gts', testRealmURL, {
+        declaration: 'Person',
+      });
+      assert
+        .dom('[data-test-boxel-card-header-title]')
+        .containsText('Card Error: Link Not Found');
+      assert
+        .dom('[data-test-card-error]')
+        .containsText(
+          `Card "${testRealmURL}Person/chef-mike" contains a missing link.`,
+        );
     });
   });
 });

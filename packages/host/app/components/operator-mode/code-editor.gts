@@ -35,7 +35,7 @@ import {
   findDeclarationByName,
 } from '@cardstack/host/resources/module-contents';
 
-import { type ModuleContentsResource } from '@cardstack/host/resources/module-contents';
+import { type ModuleAnalysis } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
 import type { SaveType } from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
@@ -50,7 +50,7 @@ import BinaryFileInfo from './binary-file-info';
 interface Signature {
   Args: {
     file: FileResource | undefined;
-    moduleContentsResource: ModuleContentsResource | undefined;
+    moduleAnalysis: ModuleAnalysis | undefined;
     selectedDeclaration: ModuleDeclaration | undefined;
     isReadOnly: boolean;
     saveSourceOnClose: (url: URL, content: string) => void;
@@ -108,13 +108,11 @@ export default class CodeEditor extends Component<Signature> {
   }
 
   private get isLoading() {
-    return (
-      this.loadMonaco.isRunning || this.args.moduleContentsResource?.isLoading
-    );
+    return this.loadMonaco.isRunning || this.args.moduleAnalysis?.isLoading;
   }
 
   private get declarations() {
-    return this.args.moduleContentsResource?.declarations || [];
+    return this.args.moduleAnalysis?.declarations || [];
   }
 
   private loadMonaco = task(async () => {

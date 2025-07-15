@@ -1,6 +1,7 @@
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
+import { debounce } from 'lodash';
 
 import {
   contains,
@@ -16,7 +17,6 @@ import {
 import {
   Query,
   isCardInstance,
-  EqFilter,
   AnyFilter,
   Filter,
 } from '@cardstack/runtime-common';
@@ -35,9 +35,9 @@ import CatalogLayout from './layouts/catalog-layout';
 import type IconComponent from '@cardstack/boxel-icons/captions';
 import BuildingBank from '@cardstack/boxel-icons/building-bank';
 import BuildingIcon from '@cardstack/boxel-icons/building';
+import CategoryIcon from '@cardstack/boxel-icons/category';
 import HealthRecognition from '@cardstack/boxel-icons/health-recognition';
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
-import ShipWheelIcon from '@cardstack/boxel-icons/ship-wheel';
 import UsersIcon from '@cardstack/boxel-icons/users';
 import WorldIcon from '@cardstack/boxel-icons/world';
 import {
@@ -56,8 +56,9 @@ import { Category } from './listing/category';
 import { Tag } from './listing/tag';
 
 type ViewOption = 'strip' | 'grid';
+type SphereName = 'BUILD' | 'LEARN' | 'LIFE' | 'PLAY' | 'WORK';
 
-// ShowcaseView
+// Showcase View
 interface ShowcaseViewArgs {
   Args: {
     startHereListings?: CardDef[];
@@ -177,11 +178,11 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
       }
       .showcase-cards-display :deep(.cards.grid-view),
       .featured-cards-display :deep(.cards.grid-view) {
-        --grid-view-height: 540px;
+        --grid-view-height: 380px;
         grid-template-columns: repeat(2, 1fr);
       }
       .new-this-week-cards-display :deep(.cards.grid-view) {
-        --grid-view-height: 320px;
+        --grid-view-height: 380px;
         grid-template-columns: repeat(4, 1fr);
       }
 
@@ -197,10 +198,6 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
       }
 
       @container showcase-display-container (inline-size <= 768px) {
-        .showcase-cards-display :deep(.cards.grid-view),
-        .featured-cards-display :deep(.cards.grid-view) {
-          --grid-view-height: 380px;
-        }
         .new-this-week-cards-display :deep(.cards.grid-view) {
           grid-template-columns: repeat(2, 1fr);
         }
@@ -240,7 +237,7 @@ class CatalogListView extends GlimmerComponent<CatalogListViewArgs> {
   }
 
   <template>
-    <CardsDisplaySection>
+    <CardsDisplaySection ...attributes>
       <:intro>
         <header class='catalog-list-header'>
           <ViewSelector
@@ -328,9 +325,13 @@ class Isolated extends Component<typeof Catalog> {
   // Filter Search
   @tracked searchValue: string | undefined = undefined;
 
-  @action
-  handleSearch(value: string) {
+  private debouncedSetSearchKey = debounce((value: string) => {
     this.searchValue = value;
+  }, 300);
+
+  @action
+  onSearchInput(value: string) {
+    this.debouncedSetSearchKey(value);
   }
 
   //query
@@ -374,40 +375,75 @@ class Isolated extends Component<typeof Catalog> {
     },
   );
 
-  get categoryItems() {
-    let instances = (this.categorySearch?.instances ?? []) as Category[];
-    if (!instances) {
+  // Returns a list of filter items for the category sidebar:
+  // - "All" button (FilterItem)
+  // - SphereFilter containing individual categories
+  get categoryItems(): FilterItem[] {
+    const categoryInstances = (this.categorySearch?.instances ??
+      []) as Category[];
+
+    if (!categoryInstances) {
       return [];
     }
 
-    const iconMap: Record<string, typeof IconComponent> = {
-      All: LayoutGridPlusIcon,
-      'Accounting & Finance': BuildingBank,
-      Business: BuildingIcon,
-      'Content Management': UsersIcon,
-      'Games and Entertainment': WorldIcon,
-      'Health and Fitness': HealthRecognition,
-      'Travel and Lifestyle': ShipWheelIcon,
+    // Define which icon to use for each sphere
+    const sphereIconMap: Record<SphereName, typeof IconComponent> = {
+      BUILD: BuildingIcon,
+      LEARN: UsersIcon,
+      LIFE: HealthRecognition,
+      PLAY: WorldIcon,
+      WORK: BuildingBank,
     };
 
-    // Create nested structure with "All" as parent
-    const nestedCategories = instances.map((instance) => {
-      return {
-        id: instance.id,
-        displayName: instance.name,
-        icon: iconMap[instance.name] || LayoutGridPlusIcon,
-      };
-    });
+    // Group categories by their sphere
+    const sphereFilters: Record<string, FilterItem> = {};
 
-    return [
+    // Loop through each category and organize them by sphere
+    for (const category of categoryInstances) {
+      if (!category.sphere?.name) {
+        continue;
+      }
+
+      const name = category.sphere.name;
+
+      if (!sphereFilters[name]) {
+        sphereFilters[name] = {
+          id: name.toLowerCase(),
+          displayName: name,
+          icon: sphereIconMap[name as SphereName] || CategoryIcon,
+          filters: [],
+        };
+      }
+
+      const categoryFilter: FilterItem = {
+        id: category.id,
+        displayName: category.name,
+        icon: CategoryIcon,
+      };
+
+      sphereFilters[name].filters!.push(categoryFilter);
+    }
+
+    // Sort categories within each sphere filter
+    for (const sphereFilter of Object.values(sphereFilters)) {
+      sphereFilter.filters!.sort((a, b) =>
+        a.displayName.localeCompare(b.displayName),
+      );
+    }
+
+    // Sort categories by their display name
+    const filterItems = [
       {
         id: 'all',
         displayName: 'All',
-        icon: iconMap['All'],
-        filters: nestedCategories,
-        isExpanded: true,
+        icon: LayoutGridPlusIcon,
       },
+      ...Object.values(sphereFilters).sort((a, b) =>
+        a.displayName.localeCompare(b.displayName),
+      ),
     ];
+
+    return filterItems;
   }
 
   @action
@@ -415,15 +451,45 @@ class Isolated extends Component<typeof Catalog> {
     this.activeCategory = category;
   }
 
-  get categoryFilter(): EqFilter | undefined {
-    if (this.activeCategory?.id === 'all' || !this.activeCategory) {
+  get categoryFilter(): AnyFilter | undefined {
+    const isNoFilterSelected =
+      this.activeCategory?.id === 'all' || !this.activeCategory;
+
+    if (isNoFilterSelected) {
       return;
     }
-    return {
-      eq: {
-        'categories.id': this.activeCategory.id,
-      },
-    };
+
+    // Show all items that belong to ANY category within this sphereUser selected a sphere (e.g., "BUILD", "LEARN", etc.)
+    const isSphereSelected =
+      this.activeCategory?.filters && this.activeCategory.filters.length > 0;
+
+    if (isSphereSelected) {
+      const categoryIdsInSphere = this.activeCategory!.filters!.map(
+        (category) => category.id,
+      );
+
+      const sphereFilter = {
+        any: categoryIdsInSphere.map((categoryId) => ({
+          eq: {
+            'categories.id': categoryId,
+          },
+        })),
+      };
+
+      return sphereFilter;
+    } else {
+      const specificCategoryFilter = {
+        any: [
+          {
+            eq: {
+              'categories.id': this.activeCategory!.id,
+            },
+          },
+        ],
+      };
+
+      return specificCategoryFilter;
+    }
   }
 
   get tagQuery(): Query {
@@ -446,7 +512,7 @@ class Isolated extends Component<typeof Catalog> {
     },
   );
 
-  get tagItems() {
+  get tagItems(): FilterItem[] {
     let instances = (this.tagSearch?.instances ?? []) as Tag[];
     if (!instances) {
       return [];
@@ -481,7 +547,7 @@ class Isolated extends Component<typeof Catalog> {
 
   // end of listing query filter values
 
-  @action navigateToHome() {
+  @action clearFiltersAndReset() {
     this.resetFilters();
   }
 
@@ -505,8 +571,22 @@ class Isolated extends Component<typeof Catalog> {
     );
   }
 
+  get hasNoActiveFilters() {
+    return !this.hasActiveFilters;
+  }
+
   get isShowcaseView() {
-    return this.activeTabId === 'showcase' && !this.hasActiveFilters;
+    return this.activeTabId === 'showcase' && this.hasNoActiveFilters;
+  }
+
+  get navigationButtonText() {
+    if (this.activeTabId === 'showcase') {
+      return 'Catalog Home';
+    }
+    const tabOption = this.tabFilterOptions.find(
+      (tab) => tab.tabId === this.activeTabId,
+    );
+    return tabOption ? `All ${tabOption.displayName}` : 'Catalog Home';
   }
 
   get headerColor() {
@@ -540,7 +620,7 @@ class Isolated extends Component<typeof Catalog> {
             <BoxelInput
               @type='search'
               @value={{this.searchValue}}
-              @onInput={{this.handleSearch}}
+              @onInput={{this.onSearchInput}}
               placeholder='Search by Title'
               data-test-filter-search-input
               class='catalog-search-input'
@@ -550,20 +630,19 @@ class Isolated extends Component<typeof Catalog> {
       </:header>
       <:sidebar>
         <div class='sidebar-content'>
-          {{#if (this.shouldShowTab 'showcase')}}
-            <button
-              class='navigation-button {{if this.isShowcaseView "is-selected"}}'
-              {{on 'click' this.navigateToHome}}
-              data-test-showcase-tab-button
-            >
-              <img
-                src='https://boxel-images.boxel.ai/icons/icon_catalog_rounded.png'
-                alt='Catalog Icon'
-                class='catalog-icon'
-              />
-              <span class='button-text'>Catalog Home</span>
-            </button>
-          {{/if}}
+          <button
+            class='navigation-button
+              {{if this.hasNoActiveFilters "is-selected"}}'
+            {{on 'click' this.clearFiltersAndReset}}
+            data-test-navigation-reset-button={{this.activeTabId}}
+          >
+            <img
+              src='https://boxel-images.boxel.ai/icons/icon_catalog_rounded.png'
+              alt='Catalog Icon'
+              class='catalog-icon'
+            />
+            <span class='button-text'>{{this.navigationButtonText}}</span>
+          </button>
 
           <FilterSidebar
             @categoryItems={{this.categoryItems}}
@@ -588,12 +667,14 @@ class Isolated extends Component<typeof Catalog> {
                     @newListings={{@model.new}}
                     @featuredListings={{@model.featured}}
                     @context={{@context}}
+                    data-test-showcase-view
                   />
                 {{else}}
                   <CatalogListView
                     @query={{this.query}}
                     @realms={{this.realmHrefs}}
                     @context={{@context}}
+                    data-test-catalog-list-view
                   />
                 {{/if}}
               </div>
@@ -676,7 +757,8 @@ class Isolated extends Component<typeof Catalog> {
         width: 100%;
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         border: none;
-        background: var(--layout-container-background-color);
+        background: var(--boxel-light);
+
         color: var(--boxel-dark);
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);

@@ -54,7 +54,11 @@ interface Signature {
 
 export default class AiAssistantPanel extends Component<Signature> {
   <template>
-    <Velcro @placement='bottom' @offsetOptions={{-50}} as |popoverVelcro|>
+    <Velcro
+      @placement='bottom-end'
+      @offsetOptions={{this.velcroOffsetOptions}}
+      as |popoverVelcro|
+    >
       <div
         class='ai-assistant-panel'
         data-test-ai-assistant-panel
@@ -62,7 +66,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         data-test-room-is-empty={{if this.roomResource.messages false true}}
         ...attributes
       >
-        <@resizeHandle />
+        <@resizeHandle class='ai-assistant-panel-resize-handle' />
         <header class='panel-header'>
           <img
             alt='AI Assistant'
@@ -187,20 +191,46 @@ export default class AiAssistantPanel extends Component<Signature> {
     {{/if}}
 
     <style scoped>
+      :global(:root) {
+        --past-sessions-background: #4f4b57;
+        --past-sessions-divider-color: #75707e;
+        --past-sessions-hover-background: #797788;
+      }
+
       .left-border {
         border-left: 1px solid var(--boxel-600);
       }
 
       .ai-assistant-panel {
         --ai-assistant-panel-header-height: 4.5rem;
-        --ai-assistant-panel-gradient-start-proportion: 0.6;
+        --ai-assistant-panel-top-gradient-start-proportion: 0.6;
         --ai-assistant-panel-padding: var(--boxel-sp-sm);
+
+        --ai-assistant-panel-bottom-gradient-height: var(--boxel-sp-xl);
+
+        --top-gradient-hidden: linear-gradient(
+          to bottom,
+          transparent,
+          transparent
+            calc(var(--ai-assistant-panel-top-gradient-start-proportion) * 100%),
+          transparent 100%
+        );
+
+        --top-gradient-showing: linear-gradient(
+          to bottom,
+          var(--boxel-ai-purple),
+          var(--boxel-ai-purple)
+            calc(var(--ai-assistant-panel-top-gradient-start-proportion) * 100%),
+          transparent 100%
+        );
 
         background-color: var(--boxel-ai-purple);
         border-radius: 0;
         color: var(--boxel-light);
         height: 100%;
         position: relative;
+
+        timeline-scope: --ai-assistant-chat-scroll-timeline;
       }
       :deep(.arrow) {
         display: none;
@@ -231,13 +261,10 @@ export default class AiAssistantPanel extends Component<Signature> {
         gap: var(--boxel-sp-xxxs);
 
         z-index: 10;
-        background: linear-gradient(
-          to bottom,
-          var(--boxel-ai-purple),
-          var(--boxel-ai-purple)
-            calc(var(--ai-assistant-panel-gradient-start-proportion) * 100%),
-          transparent 100%
-        );
+        background: var(--top-gradient-hidden);
+
+        animation: ai-assistant-chat-gradient-scroll-timeline linear forwards;
+        animation-timeline: --ai-assistant-chat-scroll-timeline;
       }
 
       .panel-title-text {
@@ -273,7 +300,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         position: absolute;
         height: calc(
           var(--ai-assistant-panel-header-height) *
-            var(--ai-assistant-panel-gradient-start-proportion) -
+            var(--ai-assistant-panel-top-gradient-start-proportion) -
             var(--ai-assistant-panel-padding)
         );
         width: 100%;
@@ -342,7 +369,29 @@ export default class AiAssistantPanel extends Component<Signature> {
       }
 
       .session-error {
-        padding: 0 var(--boxel-sp);
+        padding: var(--ai-assistant-panel-padding);
+      }
+
+      .session-error :deep(.intro) {
+        margin-top: calc(var(--ai-assistant-panel-header-height) * 0.5);
+      }
+
+      .ai-assistant-panel-resize-handle {
+        z-index: calc(var(--host-ai-panel-z-index) + 1);
+      }
+
+      @keyframes ai-assistant-chat-gradient-scroll-timeline {
+        0% {
+          background: var(--top-gradient-hidden);
+        }
+
+        1% {
+          background: var(--top-gradient-showing);
+        }
+
+        100% {
+          background: var(--top-gradient-showing);
+        }
       }
     </style>
   </template>
@@ -359,6 +408,13 @@ export default class AiAssistantPanel extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.loadMonaco.perform();
+  }
+
+  get velcroOffsetOptions() {
+    return {
+      mainAxis: 10,
+      crossAxis: 50,
+    };
   }
 
   get hasOtherActiveSessions() {

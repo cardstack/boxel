@@ -1,0 +1,199 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelName": "Lucid Air Dream Edition",
+      "basePrice": 100000,
+      "selectedColor": {
+        "name": "Cosmos Silver",
+        "price": 1200,
+        "description": "Premium tri-coat metallic silver",
+        "imageUrl": "https://images.unsplash.com/photo-1609521263047-f8f205293f24?w=800",
+        "colorValue": "#c0c0c0",
+        "isSelected": false
+      },
+      "selectedTrim": {
+        "name": "Dream Edition Range",
+        "price": 0,
+        "description": "516-mile range with 1,111 HP dual-motor setup",
+        "imageUrl": "https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=800",
+        "colorValue": null,
+        "isSelected": true
+      },
+      "selectedRange": {
+        "name": "471 miles",
+        "price": 5000,
+        "description": "High-performance battery optimization",
+        "imageUrl": "https://images.unsplash.com/photo-1582902047681-c7604b9ea0de?w=800",
+        "colorValue": null,
+        "isSelected": false
+      },
+      "selectedWheels": {
+        "name": "20\" Dream",
+        "price": 2500,
+        "description": "Lightweight forged aluminum",
+        "imageUrl": "https://images.unsplash.com/photo-1609521263047-f8f205293f24?w=800",
+        "colorValue": null,
+        "isSelected": false
+      },
+      "selectedInterior": {
+        "name": "Tahoe Leather",
+        "price": 3000,
+        "description": "Premium Nappa leather with diamond quilting",
+        "imageUrl": "https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=800",
+        "colorValue": null,
+        "isSelected": false
+      },
+      "autopilotEnabled": false,
+      "premiumAudioEnabled": true,
+      "sunroofEnabled": true,
+      "colorOptions": [
+        {
+          "name": "Stellar Black",
+          "price": 0,
+          "description": "Deep metallic black with subtle pearl finish",
+          "imageUrl": "https://images.unsplash.com/photo-1603386329225-868f9b1ee6c9?w=800",
+          "colorValue": "#1a1a1a",
+          "isSelected": true
+        },
+        {
+          "name": "Cosmos Silver",
+          "price": 1200,
+          "description": "Premium tri-coat metallic silver",
+          "imageUrl": "https://images.unsplash.com/photo-1609521263047-f8f205293f24?w=800",
+          "colorValue": "#c0c0c0",
+          "isSelected": false
+        },
+        {
+          "name": "Quantum Grey",
+          "price": 2500,
+          "description": "Matte ceramic grey with nano-coating",
+          "imageUrl": "https://images.unsplash.com/photo-1607603750916-cf6d3d1c38c5?w=800",
+          "colorValue": "#6b7280",
+          "isSelected": false
+        },
+        {
+          "name": "Zenith White",
+          "price": 800,
+          "description": "Pure white with prismatic pearl",
+          "imageUrl": "https://images.unsplash.com/photo-1611016186353-9af58c69a533?w=800",
+          "colorValue": "#f8f8f8",
+          "isSelected": false
+        }
+      ],
+      "trimOptions": [
+        {
+          "name": "Dream Edition Range",
+          "price": 0,
+          "description": "516-mile range with 1,111 HP dual-motor setup",
+          "imageUrl": "https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=800",
+          "colorValue": null,
+          "isSelected": true
+        },
+        {
+          "name": "Dream Edition Performance",
+          "price": 3000,
+          "description": "471-mile range with 1,111 HP, 0-60 in 2.5s",
+          "imageUrl": "https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=800",
+          "colorValue": null,
+          "isSelected": false
+        },
+        {
+          "name": "Sapphire",
+          "price": 80000,
+          "description": "Track-focused with 1,234 HP tri-motor",
+          "imageUrl": "https://images.unsplash.com/photo-1542362567-b07e54358753?w=800",
+          "colorValue": null,
+          "isSelected": false
+        }
+      ],
+      "rangeOptions": [
+        {
+          "name": "516 miles",
+          "price": 0,
+          "description": "Extended range battery with 118 kWh capacity",
+          "imageUrl": "https://images.unsplash.com/photo-1593941707882-a5bac6861d75?w=800",
+          "colorValue": null,
+          "isSelected": true
+        },
+        {
+          "name": "471 miles",
+          "price": 5000,
+          "description": "High-performance battery optimization",
+          "imageUrl": "https://images.unsplash.com/photo-1582902047681-c7604b9ea0de?w=800",
+          "colorValue": null,
+          "isSelected": false
+        },
+        {
+          "name": "405 miles",
+          "price": 12000,
+          "description": "Standard range for maximum performance",
+          "imageUrl": "https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=800",
+          "colorValue": null,
+          "isSelected": false
+        }
+      ],
+      "wheelOptions": [
+        {
+          "name": "21\" Aero Blade",
+          "price": 0,
+          "description": "Forged carbon fiber with active aero",
+          "imageUrl": "https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=800",
+          "colorValue": null,
+          "isSelected": true
+        },
+        {
+          "name": "20\" Dream",
+          "price": 2500,
+          "description": "Lightweight forged aluminum",
+          "imageUrl": "https://images.unsplash.com/photo-1609521263047-f8f205293f24?w=800",
+          "colorValue": null,
+          "isSelected": false
+        },
+        {
+          "name": "19\" Touring",
+          "price": 4000,
+          "description": "Comfort-optimized with low rolling resistance",
+          "imageUrl": "https://images.unsplash.com/photo-1603386329225-868f9b1ee6c9?w=800",
+          "colorValue": null,
+          "isSelected": false
+        }
+      ],
+      "interiorOptions": [
+        {
+          "name": "Mojave Dream Weave",
+          "price": 0,
+          "description": "6-seat executive layout with heated/cooled captain's chairs",
+          "imageUrl": "https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=800",
+          "colorValue": null,
+          "isSelected": true
+        },
+        {
+          "name": "Tahoe Leather",
+          "price": 3000,
+          "description": "Premium Nappa leather with diamond quilting",
+          "imageUrl": "https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=800",
+          "colorValue": null,
+          "isSelected": false
+        },
+        {
+          "name": "Santa Cruz Vegan",
+          "price": 1500,
+          "description": "Sustainable luxury materials",
+          "imageUrl": "https://images.unsplash.com/photo-1542362567-b07e54358753?w=800",
+          "colorValue": null,
+          "isSelected": false
+        }
+      ],
+      "title": "2025 Lucid Air Dream Edition",
+      "description": "Experience the future of luxury electric mobility with the Lucid Air Dream Edition. Featuring over 500 miles of range, 1,111 horsepower, and the most advanced autonomous driving technology.",
+      "thumbnailURL": "https://images.unsplash.com/photo-1603386329225-868f9b1ee6c9?w=400"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../car-configurator-ev",
+        "name": "CarConfiguratorEV"
+      }
+    }
+  }
+}

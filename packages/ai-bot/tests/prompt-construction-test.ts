@@ -151,7 +151,6 @@ module('buildPromptForModel', (hooks) => {
     assert.equal(result[2].role, 'user');
     assert.equal(result[2].content, 'Hey');
 
-    console.log(result[1].content);
     assert.equal(
       result[1].content,
       `The user is currently viewing the following user interface:
@@ -732,7 +731,6 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
 
-    console.log(prompt);
     let userMessages = prompt.filter((message) => message.role === 'user');
     assert.ok(
       userMessages[0]?.content?.includes(
@@ -3181,10 +3179,10 @@ Attached Files (files with newer versions don't show their content):
     assert.true(messages![6].content!.includes('Business Card V2'));
   });
 
-  test('Responds to completion of lone code patch', async function () {
+  test('Responds to successful completion of lone code patch', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
-        path.join(__dirname, 'resources/chats/one-code-block-one-result.json'),
+        path.join(__dirname, 'resources/chats/one-code-block-one-success.json'),
         'utf-8',
       ),
     );
@@ -3248,7 +3246,7 @@ Attached Files (files with newer versions don't show their content):
     );
     assert.strictEqual(
       userMessages[1].content,
-      '(The user has successfully applied code patch 1.)\n(The user tried to apply code patch 2 but it failed to apply.)',
+      '(The user has successfully applied code patch 1.)\n(The user tried to apply code patch 2 but there was an error: The patch did not apply cleanly.)',
     );
   });
 
@@ -3274,7 +3272,7 @@ Attached Files (files with newer versions don't show their content):
     );
   });
 
-  test('Responds to command result when patch and command proposed and patch already completed', async function () {
+  test('Responds to command result when patch and command proposed and patch already succeeded', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -3342,7 +3340,7 @@ Attached Files (files with newer versions don't show their content):
     );
   });
 
-  test('Responds to command result when patch and command proposed and patch already completed with command completing first', async function () {
+  test('Responds to command result when patch and command proposed and patch already succeeded with command succeeding first', async function () {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -3407,6 +3405,28 @@ Attached Files (files with newer versions don't show their content):
     assert.ok(
       toolResultMessages[0].content!.includes('Cloudy'),
       'Tool call result should include "Cloudy"',
+    );
+  });
+
+  test('Responds to failure of lone code patch', async function () {
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/one-code-block-one-failure.json'),
+        'utf-8',
+      ),
+    );
+    const { shouldRespond, messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
+    // patch code results should be included
+    const userMessages = messages!.filter((message) => message.role === 'user');
+    assert.strictEqual(userMessages.length, 2, 'Should have two user messages');
+    assert.strictEqual(
+      userMessages[1].content,
+      '(The user tried to apply code patch 1 but there was an error: The patch did not apply cleanly.)',
     );
   });
 

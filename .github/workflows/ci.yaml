@@ -219,6 +219,9 @@ jobs:
       - name: Run Playwright tests
         run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/matrix
+      - name: Print realm server logs
+        if: always()
+        run: cat /tmp/server.log
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
@@ -336,6 +339,7 @@ jobs:
           [
             "auth-client-test.ts",
             "billing-test.ts",
+            "card-dependencies-endpoint-test.ts",
             "card-endpoints-test.ts",
             "card-source-endpoints-test.ts",
             "file-watcher-events-test.ts",
@@ -343,8 +347,10 @@ jobs:
             "index-writer-test.ts",
             "indexing-test.ts",
             "loader-test.ts",
+            "transpile-test.ts",
             "module-syntax-test.ts",
             "permissions/permission-checker-test.ts",
+            "prerendering-test.ts",
             "queue-test.ts",
             "realm-endpoints/directory-test.ts",
             "realm-endpoints/info-test.ts",
@@ -389,8 +395,12 @@ jobs:
         working-directory: packages/realm-server
         env:
           TEST_MODULE: ${{matrix.testModule}}
-      - name: prepare_artifact_name
+      - name: Print realm server logs
+        if: always()
+        run: cat /tmp/server.log
+      - name: Prepare artifact name
         id: artifact_name
+        if: always()
         run: |
           export SAFE_ARTIFACT_NAME=$(echo ${{ matrix.testModule }} |  sed 's/[/]/_/g')
           echo "artifact_name=$SAFE_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"

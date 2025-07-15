@@ -19,6 +19,7 @@ const RoomMessageCommand: TemplateOnlyComponent<Signature> = <template>
       justify-content: flex-end;
       gap: var(--boxel-sp-xs);
       margin-top: var(--boxel-sp);
+      padding: var(--boxel-sp-4xs);
     }
   </style>
 </template>;

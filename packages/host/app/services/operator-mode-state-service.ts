@@ -17,10 +17,9 @@ import {
   CodeRef,
   isResolvedCodeRef,
   isCardInstance,
-  type ResolvedCodeRef,
-  internalKeyFor,
   isLocalId,
   SupportedMimeType,
+  internalKeyFor,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
@@ -58,6 +57,7 @@ import MatrixService from './matrix-service';
 import NetworkService from './network';
 
 import type CardService from './card-service';
+import type CodeSemanticsService from './code-semantics-service';
 import type { RecentFile } from './recent-files-service';
 import type ResetService from './reset';
 import type SpecPanelService from './spec-panel-service';
@@ -80,6 +80,8 @@ export interface OperatorModeState {
   fieldSelection?: string;
   moduleInspector?: ModuleInspectorView;
   newFileDropdownOpen?: boolean;
+  cardPreviewFormat: Format;
+  workspaceChooserOpened?: boolean;
 }
 
 interface CardItem {
@@ -102,6 +104,8 @@ export type SerializedState = {
   fieldSelection?: string;
   aiAssistantOpen?: boolean;
   moduleInspector?: ModuleInspectorView;
+  cardPreviewFormat?: Format;
+  workspaceChooserOpened?: boolean;
 };
 
 interface OpenFileSubscriber {
@@ -119,6 +123,8 @@ export default class OperatorModeStateService extends Service {
     openDirs: new TrackedMap<string, string[]>(),
     aiAssistantOpen: false,
     newFileDropdownOpen: false,
+    cardPreviewFormat: 'isolated' as Format,
+    workspaceChooserOpened: false,
   });
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
@@ -127,6 +133,7 @@ export default class OperatorModeStateService extends Service {
   private moduleInspectorHistory: Record<string, ModuleInspectorView>;
 
   @service declare private cardService: CardService;
+  @service declare private codeSemanticsService: CodeSemanticsService;
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private realm: Realm;
@@ -165,6 +172,8 @@ export default class OperatorModeStateService extends Service {
       aiAssistantOpen: this._state.aiAssistantOpen,
       moduleInspector: this._state.moduleInspector,
       newFileDropdownOpen: this._state.newFileDropdownOpen,
+      cardPreviewFormat: this._state.cardPreviewFormat,
+      workspaceChooserOpened: this._state.workspaceChooserOpened,
     } as const;
   }
 
@@ -200,6 +209,8 @@ export default class OperatorModeStateService extends Service {
       aiAssistantOpen: false,
       moduleInspector: DEFAULT_MODULE_INSPECTOR_VIEW,
       newFileDropdownOpen: false,
+      cardPreviewFormat: 'isolated' as Format,
+      workspaceChooserOpened: true,
     });
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
@@ -286,7 +297,7 @@ export default class OperatorModeStateService extends Service {
     }
 
     if (this._state.stacks.length === 0) {
-      this.operatorModeController.workspaceChooserOpened = true;
+      this._state.workspaceChooserOpened = true;
     }
 
     this.schedulePersist();
@@ -347,19 +358,22 @@ export default class OperatorModeStateService extends Service {
       .map((stack) => stack[stack.length - 1]);
   }
 
-  getOpenCardIds(selectedCardRef?: ResolvedCodeRef): string[] {
+  get isViewingCardInCodeMode() {
+    return (
+      this._state.submode === Submodes.Code &&
+      this.codePathString?.endsWith('.json')
+    );
+  }
+
+  getOpenCardIds(): string[] {
     if (this._state.submode === Submodes.Code) {
       let openCardsInCodeMode = [];
-      // selectedCardRef is only needed for determining open playground card id in code submode
-      if (selectedCardRef) {
-        let moduleId = internalKeyFor(selectedCardRef, undefined);
-        openCardsInCodeMode.push(
-          this.playgroundPanelService.getSelection(moduleId)?.cardId,
-        );
+      if (this.playgroundPanelSelection) {
+        openCardsInCodeMode.push(this.playgroundPanelSelection.cardId);
       }
       // Alternatively we may simply be looking at a card in code mode
-      if (this._state.codePath?.href.endsWith('.json')) {
-        let cardId = this._state.codePath.href.replace(/\.json$/, '');
+      if (this.isViewingCardInCodeMode) {
+        let cardId = this.codePathString!.replace(/\.json$/, '');
         if (!openCardsInCodeMode.includes(cardId)) {
           openCardsInCodeMode.push(cardId);
         }
@@ -374,8 +388,8 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
-  getOpenCards = restartableTask(async (selectedCardRef?: ResolvedCodeRef) => {
-    let cardIds = this.getOpenCardIds(selectedCardRef);
+  getOpenCards = restartableTask(async () => {
+    let cardIds = this.getOpenCardIds();
     if (!cardIds) {
       return;
     }
@@ -618,6 +632,11 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  updateCardPreviewFormat(format: Format) {
+    this._state.cardPreviewFormat = format;
+    this.schedulePersist();
+  }
+
   clearStacks() {
     this._state.stacks.splice(0);
     this.schedulePersist();
@@ -664,9 +683,15 @@ export default class OperatorModeStateService extends Service {
       openDirs: Object.fromEntries(this._state.openDirs.entries()),
       codeSelection: this._state.codeSelection,
       fieldSelection: this._state.fieldSelection,
-      aiAssistantOpen: this._state.aiAssistantOpen,
       moduleInspector: this._state.moduleInspector,
+      cardPreviewFormat: this._state.cardPreviewFormat,
     };
+    if (this._state.aiAssistantOpen) {
+      state.aiAssistantOpen = this._state.aiAssistantOpen;
+    }
+    if (this._state.workspaceChooserOpened) {
+      state.workspaceChooserOpened = this._state.workspaceChooserOpened;
+    }
 
     for (let stack of this._state.stacks) {
       let serializedStack: SerializedStack = [];
@@ -729,6 +754,8 @@ export default class OperatorModeStateService extends Service {
       aiAssistantOpen: rawState.aiAssistantOpen ?? false,
       moduleInspector:
         rawState.moduleInspector ?? DEFAULT_MODULE_INSPECTOR_VIEW,
+      cardPreviewFormat: rawState.cardPreviewFormat ?? 'isolated',
+      workspaceChooserOpened: rawState.workspaceChooserOpened ?? false,
     });
 
     if (rawState.codePath && rawState.moduleInspector) {
@@ -926,6 +953,16 @@ export default class OperatorModeStateService extends Service {
     this.updateSubmode(Submodes.Interact);
   }
 
+  openWorkspaceChooser() {
+    this._state.workspaceChooserOpened = true;
+    this.schedulePersist();
+  }
+
+  closeWorkspaceChooser() {
+    this._state.workspaceChooserOpened = false;
+    this.schedulePersist();
+  }
+
   openWorkspace = async (realmUrl: string) => {
     let id = `${realmUrl}index`;
     let stackItem = new StackItem({
@@ -946,16 +983,17 @@ export default class OperatorModeStateService extends Service {
     );
     this.updateSubmode(Submodes.Interact);
 
-    this.operatorModeController.workspaceChooserOpened = false;
+    this._state.workspaceChooserOpened = false;
     this.cachedRealmURL = new URL(realmUrl);
   };
 
   get workspaceChooserOpened() {
-    return this.operatorModeController.workspaceChooserOpened;
+    return this.state.workspaceChooserOpened ?? false;
   }
 
   set workspaceChooserOpened(workspaceChooserOpened: boolean) {
-    this.operatorModeController.workspaceChooserOpened = workspaceChooserOpened;
+    this._state.workspaceChooserOpened = workspaceChooserOpened;
+    this.schedulePersist();
   }
 
   // Operator mode state is persisted in a query param, which lives in the index controller
@@ -980,37 +1018,78 @@ export default class OperatorModeStateService extends Service {
       let playgroundSelections = JSON.parse(
         window.localStorage.getItem(PlaygroundSelections) ?? '{}',
       );
-      let playgroundPanelSelection = Object.values(playgroundSelections).find(
-        (selection: any) => selection.url === this.codePathString,
-      );
-      return playgroundPanelSelection as PlaygroundSelection | undefined;
+      if (this.codePathString && playgroundSelections[this.codePathString]) {
+        return playgroundSelections[this.codePathString];
+      }
+      let selectedCodeRefUrl = this.codeSemanticsService.selectedCodeRef
+        ? internalKeyFor(this.codeSemanticsService.selectedCodeRef!, undefined)
+        : null;
+      if (selectedCodeRefUrl && playgroundSelections[selectedCodeRefUrl]) {
+        return playgroundSelections[selectedCodeRefUrl];
+      }
     }
     return undefined;
   }
 
   getSummaryForAIBot(
-    openCardIds: Set<string> = new Set([...this.getOpenCardIds()]),
+    openCardIdsSet: Set<string> = new Set([...this.getOpenCardIds()]),
   ): BoxelContext {
-    let codeMode =
-      this._state.submode === Submodes.Code
-        ? {
-            currentFile: this.codePathString,
-            moduleInspectorPanel: this.moduleInspectorPanel,
-            previewPanelSelection: this.playgroundPanelSelection
-              ? {
-                  cardId: this.playgroundPanelSelection.cardId,
-                  format: this.playgroundPanelSelection.format,
-                }
-              : undefined,
-          }
-        : undefined;
+    let codeMode: BoxelContext['codeMode'] = undefined;
+    if (this._state.workspaceChooserOpened) {
+      let userWorkspaces = this.realmServer.userRealmURLs.map((url) => ({
+        url,
+        name: this.realm.info(url).name,
+        type: 'user-workspace' as const,
+      }));
+      let catalogWorkspaces = this.realmServer.catalogRealmURLs.map((url) => ({
+        url,
+        name: this.realm.info(url).name,
+        type: 'catalog-workspace' as const,
+      }));
+      return {
+        agentId: this.matrixService.agentId,
+        submode: 'workspace-chooser',
+        debug: this.operatorModeController.debug,
+        openCardIds: [],
+        workspaces: [...userWorkspaces, ...catalogWorkspaces],
+      };
+    }
+    if (this._state.submode === Submodes.Code) {
+      codeMode = {
+        currentFile: this.codePathString,
+      };
+      if (this.isViewingCardInCodeMode) {
+        codeMode.moduleInspectorPanel = 'preview';
+        codeMode.previewPanelSelection = {
+          cardId: this.codePathString!.replace(/\.json$/, ''),
+          format: this._state.cardPreviewFormat ?? 'isolated',
+        };
+      } else {
+        codeMode.moduleInspectorPanel = this.moduleInspectorPanel;
+        codeMode.previewPanelSelection = this.playgroundPanelSelection
+          ? {
+              cardId: this.playgroundPanelSelection.cardId,
+              format: this.playgroundPanelSelection.format,
+            }
+          : undefined;
+        codeMode.selectedCodeRef = this.codeSemanticsService.selectedCodeRef;
+      }
+    }
+
+    let openCardIds = this.makeRemoteIdsList([...openCardIdsSet]);
+    let realmUrl = this.realmURL.href;
+    let realmPermissions = {
+      canRead: this.realm.canRead(realmUrl),
+      canWrite: this.realm.canWrite(realmUrl),
+    };
 
     return {
       agentId: this.matrixService.agentId,
       submode: this._state.submode,
       debug: this.operatorModeController.debug,
-      openCardIds: this.makeRemoteIdsList([...openCardIds]),
-      realmUrl: this.realmURL.href,
+      openCardIds,
+      realmUrl,
+      realmPermissions,
       codeMode,
     };
   }

@@ -49,7 +49,9 @@
       "ember-eslint-parser": "patches/ember-eslint-parser.patch"
     },
     "onlyBuiltDependencies": [
-      "fsevents"
+      "esbuild",
+      "fsevents",
+      "puppeteer"
     ]
   },
   "devDependencies": {

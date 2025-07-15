@@ -27,7 +27,10 @@ import {
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import type { FileDefManager } from '@cardstack/host/lib/file-def-manager';
+import type {
+  FileDefManager,
+  PrivilegedFileDefManager,
+} from '@cardstack/host/lib/file-def-manager';
 import FileDefManagerImpl from '@cardstack/host/lib/file-def-manager';
 import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader';
 
@@ -53,7 +56,11 @@ type Plural<T> = {
   [K in keyof T]: T[K][];
 };
 
-const publicRealmURLs = [baseRealm.url, 'http://localhost:4201/catalog/'];
+const publicRealmURLs = [
+  baseRealm.url,
+  'http://localhost:4201/catalog/',
+  'http://localhost:4201/skills/',
+];
 
 export class MockClient implements ExtendedClient {
   private listeners: Partial<Plural<MatrixSDK.ClientEventHandlerMap>> = {};
@@ -70,7 +77,7 @@ export class MockClient implements ExtendedClient {
   ) {
     let matrixService = getService('matrix-service');
     this.fileDefManager = new FileDefManagerImpl({
-      client: this as unknown as MatrixSDK.MatrixClient,
+      client: this as unknown as ExtendedClient,
       owner: this.owner,
       getCardAPI: () => matrixService.cardAPI,
       getFileAPI: () => matrixService.fileAPI,
@@ -714,6 +721,34 @@ export class MockClient implements ExtendedClient {
 
   async cacheContentHashIfNeeded(event: DiscreteMatrixEvent): Promise<void> {
     this.fileDefManager.cacheContentHashIfNeeded(event);
+  }
+
+  async recacheContentHash(contentHash: string, url: string): Promise<void> {
+    const fileDefManager = this.fileDefManager as PrivilegedFileDefManager;
+    if (fileDefManager.invalidUrlCache.has(url)) {
+      // Skipping re-caching for this url as it was previously checked and is invalid
+      return;
+    }
+
+    // Update the cache with the new URL for the content hash
+    fileDefManager.contentHashCache.set(contentHash, url);
+
+    let contentArrayBuffer = this.serverState.getContent(url);
+    let content = contentArrayBuffer?.toString();
+    if (!content) {
+      throw new Error('No content found for URL: ' + url);
+    }
+    const fetchedContentHash = await fileDefManager.getContentHash(content);
+    if (fetchedContentHash !== contentHash) {
+      console.warn(
+        `Content hash mismatch for URL: ${url}, skipping re-caching step`,
+      );
+      fileDefManager.invalidUrlCache.add(url);
+      return;
+    }
+
+    // Update the cache with the new URL for the content hash
+    fileDefManager.contentHashCache.set(contentHash, url);
   }
 
   async uploadContent(

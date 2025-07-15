@@ -2,9 +2,16 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Content Management",
+      "name": "Developer Tools & Code ",
       "description": null,
       "thumbnailURL": null
+    },
+    "relationships": {
+      "sphere": {
+        "links": {
+          "self": "../Sphere/637767ff-c7a9-40d6-9cd3-93f0b32a8fbb"
+        }
+      }
     },
     "meta": {
       "adoptsFrom": {

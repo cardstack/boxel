@@ -31,6 +31,9 @@ import {
   type QueuePublisher,
   type QueueRunner,
   type IndexRunner,
+  User,
+  Subscription,
+  Plan,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
@@ -46,7 +49,7 @@ import {
 import { Server } from 'http';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { shimExternals } from '../../lib/externals';
-import { Plan, Subscription, User } from '@cardstack/billing/billing-queries';
+
 import supertest, { SuperTest, Test } from 'supertest';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {
@@ -291,6 +294,11 @@ export async function createRealm({
       realmServerMatrixUsername: testRealmServerMatrixUsername,
     });
   }
+  let realmServerMatrixClient = new MatrixClient({
+    matrixURL: realmServerTestMatrix.url,
+    username: realmServerTestMatrix.username,
+    seed: realmSecretSeed,
+  });
   let realm = new Realm({
     url: realmURL,
     adapter,
@@ -299,7 +307,7 @@ export async function createRealm({
     virtualNetwork,
     dbAdapter,
     queue: publisher,
-    realmServerMatrixUserId: testRealmServerMatrixUserId,
+    realmServerMatrixClient,
   });
   if (worker) {
     virtualNetwork.mount(realm.handle);
@@ -732,6 +740,7 @@ export function setupPermissionedRealm(
     fileSystem,
     onRealmSetup,
     subscribeToRealmEvents = false,
+    mode = 'beforeEach',
   }: {
     permissions: RealmPermissions;
     fileSystem?: Record<string, string | LooseSingleCardDocument>;
@@ -744,6 +753,7 @@ export function setupPermissionedRealm(
       dir: DirResult;
     }) => void;
     subscribeToRealmEvents?: boolean;
+    mode?: 'beforeEach' | 'before';
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -751,7 +761,11 @@ export function setupPermissionedRealm(
   setGracefulCleanup();
 
   setupDB(hooks, {
-    beforeEach: async (dbAdapter, publisher, runner) => {
+    [mode]: async (
+      dbAdapter: PgAdapter,
+      publisher: QueuePublisher,
+      runner: QueueRunner,
+    ) => {
       let dir = dirSync();
       let testRealmDir = join(dir.name, 'realm_server_1', 'test');
 
@@ -791,7 +805,7 @@ export function setupPermissionedRealm(
     },
   });
 
-  hooks.afterEach(async function () {
+  hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
     testRealmServer.testRealm.unsubscribe();
     await closeServer(testRealmServer.testRealmHttpServer);
     resetCatalogRealms();

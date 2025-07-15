@@ -1,0 +1,57 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Book Recommender",
+      "summary": "Intelligent book recommendation engine with preference-based filtering - select fiction/non-fiction preferences and specific genres while viewing personalized book matches. Features dynamic preference collection, smart genre categorization, detailed book cards with purchase links, and adaptive filtering algorithms for curated reading suggestions.",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/book-recommender-listing/screenshot_01.png"
+      ],
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/book-recommender-listing/thumbnail.png"
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/889706f8-9dd3-4dad-b277-f43faaea4c1c"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/fe75c989-2459-427d-a35b-6b91613758de"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../book-recommender/BookRecommender/3502345f-9d97-439a-a72f-1a5090fd7b99"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "CardListing"
+      }
+    }
+  }
+}

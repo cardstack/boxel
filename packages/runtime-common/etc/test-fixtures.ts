@@ -35,8 +35,8 @@ export function compiledCard(id = 'null', moduleName = '/dir/person.gts') {
   return `
 import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
-import { createTemplateFactory } from "@ember/template-factory";
 import { setComponentTemplate } from "@ember/component";
+import { createTemplateFactory } from "@ember/template-factory";
 export class Person extends CardDef {
   static displayName = 'Person';
   static {

@@ -7,12 +7,14 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
+import pluralize from 'pluralize';
+
 import { Button } from '@cardstack/boxel-ui/components';
 
 import { skillCardRef } from '@cardstack/runtime-common';
 import { chooseCard } from '@cardstack/runtime-common';
 
-import CardPill from '@cardstack/host/components/card-pill';
+import SkillToggle from '@cardstack/host/components/ai-assistant/skill-menu/skill-toggle';
 import PillMenu from '@cardstack/host/components/pill-menu';
 
 import { RoomSkill } from '@cardstack/host/resources/room';
@@ -36,9 +38,6 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       @onCollapse={{fn this.setExpanded false}}
       ...attributes
     >
-      <:headerIcon>
-        <span class='header-icon' />
-      </:headerIcon>
       <:headerDetail>
         <span
           class='skills-length'
@@ -49,7 +48,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         <ul class='skill-list'>
           {{#each @skills key='cardId' as |skill|}}
             <li>
-              <CardPill
+              <SkillToggle
                 @cardId={{skill.cardId}}
                 @onToggle={{fn this.toggleSkill skill}}
                 @isEnabled={{skill.isActive}}
@@ -64,6 +63,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         <Button
           class='attach-button'
           @kind='primary'
+          @size='extra-small'
           {{on 'click' this.attachSkillCard}}
           @disabled={{this.doAttachSkillCard.isRunning}}
           @loading={{this.isAttachingSkill}}
@@ -78,38 +78,22 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       </:footer>
     </PillMenu>
     <style scoped>
-      .header-icon {
-        display: inline-block;
-        width: 20px;
-        height: 18px;
-        background-image: url('./robot-head@2x.webp');
-        background-position: left center;
-        background-repeat: no-repeat;
-        background-size: contain;
-        flex-shrink: 0;
-      }
       .skill-menu {
-        --boxel-pill-menu-header-padding: 0;
-        --boxel-pill-menu-content-padding: var(--boxel-sp) 0;
-        --boxel-pill-menu-footer-padding: 0;
-        --boxel-pill-menu-button-padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
         background-color: transparent;
         box-shadow: none;
       }
       .skill-list {
         display: grid;
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xxxs);
         list-style-type: none;
         padding: 0;
         margin: 0;
         overflow-y: auto;
+        max-height: 300px;
+
+        scroll-timeline: --pill-menu-content-scroll-timeline;
       }
-      .skill-list :deep(.card-pill) {
-        --pill-gap: var(--boxel-sp-xxxs);
-        display: inline-grid;
-        grid-template-columns: auto 1fr auto;
-        width: 100%;
-      }
+
       .skill-list :deep(.card-content) {
         max-width: initial;
         font: 600 var(--boxel-font-xs);
@@ -118,12 +102,11 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
         --boxel-button-font: 600 var(--boxel-font-xs);
         --boxel-button-border: 1px solid var(--boxel-400);
         --boxel-button-color: var(--boxel-dark);
-        border-radius: var(--boxel-border-radius);
+        --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-sm);
+        --boxel-button-min-height: unset;
 
-        padding: var(--boxel-sp-4xs) var(--boxel-sp-xxxs);
         gap: var(--boxel-sp-xs);
         background: none;
-        width: 100%;
       }
       .attach-button:hover:not(:disabled),
       .attach-button:focus:not(:disabled) {
@@ -163,7 +146,10 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     if (this.isExpanded) {
       return `Skills: ${this.activeSkills.length} of ${this.args.skills.length} active`;
     }
-    return `Skills ${this.activeSkills.length}`;
+    return `${this.activeSkills.length} ${pluralize(
+      'Skills',
+      this.activeSkills.length,
+    )}`;
   }
 
   private get activeSkills() {

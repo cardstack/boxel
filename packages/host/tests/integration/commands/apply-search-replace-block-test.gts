@@ -198,13 +198,18 @@ ${SEPARATOR_MARKER}
   @field editor = linksTo(Editor);
 ${REPLACE_MARKER}`;
 
-    let result = await applyCommand.execute({
-      fileContent,
-      codeBlock,
-    });
-
-    // No matches should leave content unchanged
-    assert.strictEqual(result.resultContent, fileContent);
+    // No matches should throw
+    try {
+      await applyCommand.execute({
+        fileContent,
+        codeBlock,
+      });
+    } catch (error: any) {
+      assert.ok(
+        error.message.includes('The patch did not cleanly apply'),
+        'Should throw an error when no matches are found',
+      );
+    }
   });
 
   // Skipping this test for now as throwing errors causes issues

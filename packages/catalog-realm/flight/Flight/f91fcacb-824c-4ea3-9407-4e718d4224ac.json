@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "airline": "Air France",
+      "flightNumber": "AF1581",
+      "departureCity": "London",
+      "arrivalCity": "Paris",
+      "departureAirport": "LHR",
+      "arrivalAirport": "CDG",
+      "departureTime": "2024-08-15T14:30:00.000Z",
+      "arrivalTime": "2024-08-15T17:15:00.000Z",
+      "duration": "2h 45m",
+      "aircraftType": "Airbus A320",
+      "price": 285,
+      "cabinClass": "Economy",
+      "airlineLogo": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Air_France_Logo.svg/200px-Air_France_Logo.svg.png",
+      "title": "Air France Flight to Paris",
+      "description": "Direct flight from London Heathrow to Paris Charles de Gaulle",
+      "thumbnailURL": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/Airfrance_Logo.svg/2560px-Airfrance_Logo.svg.png"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../flight",
+        "name": "Flight"
+      }
+    }
+  }
+}

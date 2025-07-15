@@ -28,6 +28,15 @@ interface LoginOptions {
   skipOpeningAssistant?: true;
 }
 
+export async function setSkillsRedirect(page: Page) {
+  await page.route('http://localhost:4201/skills/**', async (route) => {
+    const url = route.request().url();
+    const suffix = url.split('http://localhost:4201/skills/').pop();
+    const newUrl = `http://localhost:4205/skills/${suffix}`;
+    await route.continue({ url: newUrl });
+  });
+}
+
 export async function registerRealmUsers(synapse: SynapseInstance) {
   await registerUser(
     synapse,
@@ -43,6 +52,11 @@ export async function registerRealmUsers(synapse: SynapseInstance) {
     synapse,
     'catalog_realm',
     await realmPassword('catalog_realm', realmSecretSeed),
+  );
+  await registerUser(
+    synapse,
+    'skills_realm',
+    await realmPassword('skills_realm', realmSecretSeed),
   );
   await registerUser(
     synapse,
@@ -342,6 +356,7 @@ export async function deleteRoom(page: Page, roomId: string) {
 
   // Here, past sessions could be rerendered because in one case we're creating a new room when opening an AI panel, so we need to wait for the past sessions to settle
   await page.waitForTimeout(500);
+  await page.locator(`[data-test-joined-room="${roomId}"]`).hover();
   await page
     .locator(`[data-test-past-session-options-button="${roomId}"]`)
     .click();
@@ -363,6 +378,7 @@ export async function openRoom(page: Page, roomId: string) {
 export async function openRenameMenu(page: Page, roomId: string) {
   await page.locator(`[data-test-past-sessions-button]`).click();
   await page.waitForTimeout(500); // without this, the click on the options button result in the menu staying open
+  await page.locator(`[data-test-joined-room="${roomId}"]`).hover();
   await page
     .locator(`[data-test-past-session-options-button="${roomId}"]`)
     .click();
@@ -564,7 +580,7 @@ export async function assertRooms(page: Page, rooms: string[]) {
       `joined rooms are not displayed`,
     ).toHaveCount(0);
   }
-  await page.locator(`[data-test-close-past-sessions]`).click();
+  await page.locator('[data-test-ai-assistant-panel]').click();
 }
 
 export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
@@ -632,14 +648,14 @@ export async function assertPaymentLink(
 export async function setupPayment(
   username: string,
   realmServer: IsolatedRealmServer,
-  page?: Page,
+  _page?: Page,
 ) {
   // decode the username from base64
   const decodedUsername = decodeFromAlphanumeric(username);
 
   // mock trigger stripe webhook 'checkout.session.completed'
-  let freePlan = await realmServer.executeSQL(
-    `SELECT * FROM plans WHERE name = 'Free'`,
+  let starterPlan = await realmServer.executeSQL(
+    `SELECT * FROM plans WHERE name = 'Starter'`,
   );
 
   const randomNumber = Math.random().toString(36).substring(2, 12);
@@ -672,7 +688,7 @@ export async function setupPayment(
       stripe_subscription_id
     ) VALUES (
       '${userId}',
-      '${freePlan[0].id}',
+      '${starterPlan[0].id}',
       ${now},
       ${oneYearFromNow},
       'active',
@@ -703,22 +719,8 @@ export async function setupPayment(
   const subscriptionCycleUUID = subscriptionCycle[0].id;
 
   await realmServer.executeSQL(
-    `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, subscription_cycle_id) VALUES ('${userId}', ${freePlan[0].credits_included}, 'plan_allowance', '${subscriptionCycleUUID}')`,
+    `INSERT INTO credits_ledger (user_id, credit_amount, credit_type, subscription_cycle_id) VALUES ('${userId}', ${starterPlan[0].credits_included}, 'plan_allowance', '${subscriptionCycleUUID}')`,
   );
-
-  // Return url example: https://realms-staging.stack.cards/?from-free-plan-payment-link=true
-  // extract return url from page.url()
-  // assert return url contains ?from-free-plan-payment-link=true
-  if (page) {
-    const currentUrl = new URL(page.url());
-    const currentParams = currentUrl.searchParams;
-    await currentParams.append('from-free-plan-payment-link', 'true');
-    const returnUrl = `${currentUrl.origin}${
-      currentUrl.pathname
-    }?${currentParams.toString()}`;
-
-    await page.goto(returnUrl);
-  }
 }
 
 export async function setupUserSubscribed(

@@ -1,0 +1,62 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Flight",
+      "summary": "This card presents real-time flight info, complete with airline logos, times, prices, aircraft type, and routing details. Automatically formats pricing, supports visual timelines with icons, and includes both detailed and compact layouts. Perfect for booking flows, travel dashboards, and itinerary builders.",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/flight-listing/screenshot_01.png"
+      ],
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/flight-listing/thumbnail.png"
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/599cecb6-3f69-46b2-96bd-906ac3160a57"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/38b5d1dc-00d3-4a19-8998-29f0c19081de"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../flight/Flight/d723d435-3bc6-4aca-ad30-8623dcb9f1d4"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../flight/Flight/f91fcacb-824c-4ea3-9407-4e718d4224ac"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "CardListing"
+      }
+    }
+  }
+}

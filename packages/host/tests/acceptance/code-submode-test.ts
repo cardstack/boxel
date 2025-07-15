@@ -254,10 +254,6 @@ const employeeCardSource = `
   import BooleanField from 'https://cardstack.com/base/boolean';
   import { Person } from './person';
 
-  export function isHourly (this: Employee) {
-    return !this.isSalaried;
-  }
-
   export class Isolated extends Component<typeof Employee> {
     <template>
       <@fields.firstName /> <@fields.lastName />
@@ -277,6 +273,10 @@ const employeeCardSource = `
         Department: <@fields.department />
       </template>
     };
+  }
+
+  export function isHourly (this: Employee) {
+    return !this.isSalaried;
   }
 `;
 
@@ -712,6 +712,20 @@ module('Acceptance | code submode tests', function (_hooks) {
               },
             },
           },
+          'BrokenCountry/broken-country.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Broken Country',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../broken-country',
+                  name: 'Country',
+                },
+              },
+            },
+          },
           'hello.txt': txtSource,
           'z00.json': '{}',
           'z01.json': '{}',
@@ -868,7 +882,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assertMessages(assert, [
         {
           from: 'testuser',
-          message: `In the attachment file, I encountered an error that needs fixing: Syntax Error Stack trace: Parse Error at broken.gts:1:6: 1:10. broken.gts`,
+          message: `In the attachment file, I encountered an error that needs fixing: Syntax Error Stack trace: Parse Error at broken.gts:1:6: 1:10.`,
           files: [
             { name: 'broken.gts', sourceUrl: `${testRealmURL}broken.gts` },
           ],
@@ -943,6 +957,34 @@ module('Acceptance | code submode tests', function (_hooks) {
         },
       ]);
       assert.dom('[data-test-send-error-to-ai-assistant]').exists();
+    });
+
+    test('it shows card preview errors and fix it button in module inspector', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}BrokenCountry/broken-country.json`,
+      });
+
+      assert.dom('[data-test-error-display]').exists();
+      assert
+        .dom('[data-test-error-display] [data-test-error-message]')
+        .hasText('intentionalError is not defined');
+
+      assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
+      await click('[data-test-send-error-to-ai-assistant]');
+      assert.dom('[data-test-ai-assistant-panel]').exists();
+      assertMessages(assert, [
+        {
+          from: 'testuser',
+          message: `In the attachment file, I encountered an error that needs fixing: Card Error intentionalError is not defined`,
+          files: [
+            {
+              name: 'broken-country.gts',
+              sourceUrl: `${testRealmURL}broken-country.gts`,
+            },
+          ],
+        },
+      ]);
     });
 
     test('empty state displays default realm info', async function (assert) {
@@ -1085,7 +1127,7 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       assert
         .dom('[data-test-code-mode-card-renderer-header]')
-        .hasText('Person');
+        .hasText('Person - Fadhlan');
       assert
         .dom('[data-test-code-mode-card-renderer-body]')
         .includesText('Fadhlan');
@@ -1247,17 +1289,17 @@ module('Acceptance | code submode tests', function (_hooks) {
       await waitFor('[data-test-card-inspector-panel]');
       await waitFor('[data-test-current-module-name]');
       await waitFor('[data-test-in-this-file-selector]');
-      //default is the 1st index
-      let elementName = 'AClassWithExportName (LocalClass) class';
+      //default is the last index
+      let elementName = 'default (DefaultClass) class';
       assert
-        .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
+        .dom('[data-test-boxel-selector-item]:nth-of-type(11)')
         .hasText(elementName);
       assert
         .dom('[data-test-boxel-selector-item-selected]')
         .hasText(elementName);
       assert.true(
-        monacoService.getLineCursorOn()?.includes('LocalClass'),
-        'cursor is on LocalClass line',
+        monacoService.getLineCursorOn()?.includes('DefaultClass'),
+        'cursor is on DefaultClass line',
       );
 
       // clicking on a card
@@ -1295,15 +1337,15 @@ module('Acceptance | code submode tests', function (_hooks) {
       await waitFor('[data-test-card-inspector-panel]');
       await waitFor('[data-test-current-module-name]');
       await waitFor('[data-test-in-this-file-selector]');
-      //default is the 1st index
-      let elementName = 'AClassWithExportName (LocalClass) class';
+      //default is the last index
+      let elementName = 'default (DefaultClass) class';
       assert
-        .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
+        .dom('[data-test-boxel-selector-item]:nth-of-type(11)')
         .hasText(elementName);
       assert
         .dom('[data-test-boxel-selector-item-selected]')
         .hasText(elementName);
-      assert.true(monacoService.getLineCursorOn()?.includes('LocalClass'));
+      assert.true(monacoService.getLineCursorOn()?.includes('DefaultClass'));
 
       elementName = 'ExportedFieldInheritLocalField';
       let position = new MonacoSDK.Position(45, 0);

@@ -20,13 +20,10 @@ import {
   assertLoggedOut,
   logout,
   login,
-  assertPaymentLink,
-  setupPayment,
   registerRealmUsers,
   enterWorkspace,
   showAllCards,
   setupUser,
-  encodeWebSafeBase64,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '../helpers/matrix-constants';
@@ -44,6 +41,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     synapse = await synapseStart({
       template: 'test',
     });
+    await registerRealmUsers(synapse);
     await smtpStart();
     realmServer = await startRealmServer();
   });
@@ -59,7 +57,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     test.setTimeout(120_000);
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerUser(synapse, 'user2', 'pass');
-    await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await clearLocalStorage(page, serverIndexUrl);
     await gotoRegistration(page, serverIndexUrl);
@@ -111,23 +108,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     });
 
     await page.bringToFront();
-
-    await expect(page.locator('[data-test-email-validated]')).toContainText(
-      'Success! Your email has been validated',
-    );
-
-    await assertPaymentLink(page, {
-      username: '@user1:localhost',
-      email: 'user1@example.com',
-    });
-
-    // base 64 encode the matrix user id
-    const matrixUserId = encodeWebSafeBase64('@user1:localhost');
-    await setupPayment(matrixUserId, realmServer, page);
-    await assertLoggedIn(page, {
-      email: 'user1@example.com',
-      displayName: 'Test User',
-    });
 
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
     await expect(
@@ -197,14 +177,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       url: serverIndexUrl,
       skipOpeningAssistant: true,
     });
-
-    await expect(
-      page.locator('[data-test-setup-payment-message]'),
-    ).toContainText('Set up your payment method now to enjoy Boxel');
-
-    const user2MatrixUserId = encodeWebSafeBase64('@user2:localhost');
-
-    await setupPayment(user2MatrixUserId, realmServer, page);
 
     await assertLoggedIn(page, {
       userId: '@user2:localhost',
@@ -284,7 +256,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
   test(`it can resend email validation message`, async ({ page }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await registerRealmUsers(synapse);
     await clearLocalStorage(page, appURL);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await gotoRegistration(page, appURL);
@@ -316,6 +287,7 @@ test.describe('User Registration w/ Token', () => {
     synapse = await synapseStart({
       template: 'test',
     });
+    await registerRealmUsers(synapse);
     await smtpStart();
   });
 
@@ -328,7 +300,6 @@ test.describe('User Registration w/ Token', () => {
     page,
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await registerUser(synapse, 'user1', 'pass');
     await clearLocalStorage(page);
@@ -371,7 +342,6 @@ test.describe('User Registration w/ Token', () => {
     page,
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await clearLocalStorage(page);
 
@@ -413,7 +383,6 @@ test.describe('User Registration w/ Token', () => {
     page,
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await clearLocalStorage(page);
 
@@ -455,7 +424,6 @@ test.describe('User Registration w/ Token', () => {
     page,
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await registerRealmUsers(synapse);
     await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
     await clearLocalStorage(page);
 
@@ -517,7 +485,6 @@ test.describe('User Registration w/ Token', () => {
   });
 
   test(`it shows an error when passwords do not match`, async ({ page }) => {
-    await registerRealmUsers(synapse);
     await clearLocalStorage(page);
     await gotoRegistration(page);
 
@@ -564,7 +531,6 @@ test.describe('User Registration w/ Token', () => {
   test(`it shows an error when password doesn't follow requirement`, async ({
     page,
   }) => {
-    await registerRealmUsers(synapse);
     await clearLocalStorage(page);
     await gotoRegistration(page);
 

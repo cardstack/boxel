@@ -12,10 +12,9 @@ import window from 'ember-window-mock';
 import CreateAiAssistantRoomCommand from '../commands/create-ai-assistant-room';
 import { Submodes } from '../components/submode-switcher';
 import { eventDebounceMs, isMatrixError } from '../lib/matrix-utils';
-import {
-  CurrentRoomIdPersistenceKey,
-  NewSessionIdPersistenceKey,
-} from '../utils/local-storage-keys';
+import { NewSessionIdPersistenceKey } from '../utils/local-storage-keys';
+
+import LocalPersistenceService from './local-persistence-service';
 
 import type CommandService from './command-service';
 import type MatrixService from './matrix-service';
@@ -34,6 +33,7 @@ export default class AiAssistantPanelService extends Service {
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private commandService: CommandService;
+  @service declare private localPersistenceService: LocalPersistenceService;
 
   @tracked displayRoomError = false;
   @tracked isShowingPastSessions = false;
@@ -79,7 +79,8 @@ export default class AiAssistantPanelService extends Service {
     if (this.operatorModeStateService.state.submode === Submodes.Code) {
       this.matrixService.setLLMForCodeMode();
     }
-    window.localStorage.setItem(CurrentRoomIdPersistenceKey, roomId);
+
+    this.localPersistenceService.setCurrentRoomId(roomId);
     if (hidePastSessionsList) {
       this.hidePastSessions();
     }
@@ -149,9 +150,7 @@ export default class AiAssistantPanelService extends Service {
   });
 
   private async enterRoomInitially() {
-    let persistedRoomId = window.localStorage.getItem(
-      CurrentRoomIdPersistenceKey,
-    );
+    let persistedRoomId = this.localPersistenceService.getCurrentRoomId();
     if (persistedRoomId) {
       let roomToEnter = this.aiSessionRooms.find(
         (r) => r.roomId === persistedRoomId,
@@ -284,7 +283,7 @@ export default class AiAssistantPanelService extends Service {
       }
 
       if (this.matrixService.currentRoomId === roomId) {
-        window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
+        this.localPersistenceService.setCurrentRoomId(undefined);
         if (this.latestRoom) {
           this.enterRoom(this.latestRoom.roomId, false);
         } else {

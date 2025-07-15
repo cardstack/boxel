@@ -2,6 +2,9 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 
 import { action } from '@ember/object';
+
+import RouterService from '@ember/routing/router-service';
+
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -15,6 +18,8 @@ import {
   type LoginResponse,
 } from 'matrix-js-sdk';
 import { v4 as uuidv4 } from 'uuid';
+
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import {
   BoxelInput,
@@ -40,6 +45,7 @@ import { AuthMode } from './auth';
 const MATRIX_REGISTRATION_TYPES = {
   sendToken: 'm.login.registration_token',
   login: 'm.login.dummy',
+  waitForAccountCreation: undefined,
   waitForEmailValidation: 'm.login.email.identity',
   askForToken: undefined,
   register: undefined,
@@ -54,7 +60,7 @@ interface Signature {
 
 export default class RegisterUser extends Component<Signature> {
   <template>
-    {{#if (eq this.currentPage 'waiting-page')}}
+    {{#if (eq this.currentPage 'awaiting-validation')}}
       <span class='title' data-test-email-validation>Please check your email to
         complete registration.</span>
       <ul class='email-validation-instruction'>
@@ -69,6 +75,14 @@ export default class RegisterUser extends Component<Signature> {
         @disabled={{this.validateEmail.isRunning}}
         @loading={{this.validateEmail.isRunning}}
       >Resend Email</Button>
+    {{else if (eq this.currentPage 'account-creation')}}
+      <span class='title' data-test-email-validation-complete>
+        Email validation complete
+      </span>
+      <p>
+        Please wait as we set up your account.
+      </p>
+      <LoadingIndicator />
     {{else if (eq this.currentPage 'token-form')}}
       <FieldContainer
         @label='This site is currently invite-only. Enter your invite code here.'
@@ -293,6 +307,7 @@ export default class RegisterUser extends Component<Signature> {
       }
     </style>
   </template>
+  @service private declare router: RouterService;
   @tracked private email = '';
   @tracked private name = '';
   @tracked private username = '';
@@ -350,7 +365,7 @@ export default class RegisterUser extends Component<Signature> {
         sendAttempt: number;
       }
     | {
-        type: 'waitForEmailValidation';
+        type: 'waitForEmailValidation' | 'waitForAccountCreation';
         username: string;
         password: string;
         token?: string;
@@ -381,8 +396,10 @@ export default class RegisterUser extends Component<Signature> {
       return 'registration-form';
     } else if (['askForToken', 'sendToken'].includes(this.state.type)) {
       return 'token-form';
+    } else if (this.state.type === 'waitForAccountCreation') {
+      return 'account-creation';
     } else {
-      return 'waiting-page';
+      return 'awaiting-validation';
     }
   }
 
@@ -732,6 +749,11 @@ export default class RegisterUser extends Component<Signature> {
       auth.device_id &&
       this.state.type === 'waitForEmailValidation' // In our setup, waiting for email validation is the last step of matrix registration - this condition is to satisfy the type check where token is only defined in sendToken and waitForEmailValidation states
     ) {
+      this.state = {
+        ...this.state,
+        type: 'waitForAccountCreation',
+      };
+
       await this.matrixService.initializeNewUser(
         auth as LoginResponse,
         this.state.name,
