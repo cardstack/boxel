@@ -96,6 +96,18 @@ export class LeaseCalculator extends CardDef {
       return 'https://upload.wikimedia.org/wikipedia/commons/f/f4/BMW_logo_%28gray%29.svg';
     }
 
+    get vehicleImageUrl() {
+      const make = this.args.model.vehicleMake?.toUpperCase() ?? '';
+      if (make.includes('MERCEDES')) {
+        return 'https://images.unsplash.com/photo-1621349337628-d4f1c1a24114?q=80&w=687&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D';
+      } else if (make.includes('AUDI')) {
+        return 'https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=800&q=80';
+      } else if (make.includes('TOYOTA')) {
+        return 'https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=800&q=80';
+      }
+      return 'https://media.ed.edmunds-media.com/bmw/x3/2025/oem/2025_bmw_x3_4dr-suv_30-xdrive_fq_oem_1_815.jpg';
+    }
+
     <template>
       <div class='lease-calculator' style={{this.brandColors}}>
         <header class='header'>
@@ -117,7 +129,12 @@ export class LeaseCalculator extends CardDef {
         <div class='content-container'>
           <div class='vehicle-summary'>
             <div class='vehicle-image-container'>
-              <div class='vehicle-image bmw-x3'></div>
+              <div
+                class='vehicle-image'
+                style={{htmlSafe
+                  (concat "background-image: url('" this.vehicleImageUrl "');")
+                }}
+              ></div>
               <div class='msrp-tag'>
                 <div class='msrp-label'>MSRP</div>
                 <div class='msrp-value'>{{currencyFormat
@@ -386,10 +403,6 @@ export class LeaseCalculator extends CardDef {
           background-color: var(--brand-light-gray);
           border-radius: 8px;
           overflow: hidden;
-        }
-
-        .vehicle-image {
-          background-image: url('https://www.bmwusa.com/content/dam/bmwusa/XModels/X3/2024/BMW-MY24-X3-Gallery-01-Desktop.jpg');
           background-size: cover;
           background-position: center;
         }
