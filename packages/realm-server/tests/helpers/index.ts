@@ -152,7 +152,6 @@ export function createVirtualNetwork() {
 
 export function prepareTestDB(): void {
   process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
-  console.log('PGDATABASE', process.env.PGDATABASE);
 }
 
 export async function closeServer(server: Server) {
