@@ -42,7 +42,7 @@ jobs:
           # Create a temporary directory for processing
           mkdir -p /tmp/skill-diffs
 
-          FILE=${{ matrix.file }}
+          FILE="${{ matrix.file }}"
 
           echo "File:"
           echo $FILE
