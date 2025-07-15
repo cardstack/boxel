@@ -2,23 +2,22 @@
   "data": {
     "type": "card",
     "attributes": {
-      "flightNumber": "EK653",
       "airline": "Emirates",
-      "airlineCode": "EK",
-      "airlineLogo": "https://logos-world.net/wp-content/uploads/2020/03/Emirates-Logo.png",
-      "departureAirport": "MLE",
+      "flightNumber": "EK653",
       "departureCity": "Malé",
-      "arrivalAirport": "JFK",
       "arrivalCity": "New York",
+      "departureAirport": "MLE",
+      "arrivalAirport": "JFK",
       "departureTime": "2024-03-22T01:35:00.000Z",
       "arrivalTime": "2024-03-22T18:05:00.000Z",
       "duration": "21h 30m",
-      "aircraft": "Boeing 777-300ER",
+      "aircraftType": null,
       "price": 1899,
       "cabinClass": "Economy",
-      "stops": 1,
-      "stopCity": "Dubai",
-      "stopDuration": "3h 15m"
+      "airlineLogo": "https://logos-world.net/wp-content/uploads/2020/03/Emirates-Logo.png",
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {
