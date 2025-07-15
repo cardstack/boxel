@@ -160,12 +160,7 @@ interface LinksToManyStandardEditorSignature {
 
 class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEditorSignature> {
   @consume(CardContextName) declare cardContext: CardContext;
-  private sortableGroupId: string;
-
-  constructor(owner: Owner, args: LinksToManyStandardEditorSignature['Args']) {
-    super(owner, args);
-    this.sortableGroupId = uuidv4();
-  }
+  private sortableGroupId= uuidv4();
 
   @action
   setItems(items: any) {
