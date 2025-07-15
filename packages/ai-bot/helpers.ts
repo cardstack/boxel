@@ -5,6 +5,7 @@ import {
   SEARCH_MARKER,
   SEPARATOR_MARKER,
   REPLACE_MARKER,
+  humanReadable,
 } from '@cardstack/runtime-common';
 import { ToolChoice } from '@cardstack/runtime-common/helpers/ai';
 import type {
@@ -978,6 +979,9 @@ export const buildContextMessage = async (
     }
     if (context?.codeMode?.currentFile) {
       result += `File open in code editor: ${context.codeMode.currentFile}\n`;
+      if (context?.codeMode?.selectedCodeRef) {
+        result += `  Selected declaration: ${humanReadable(context.codeMode.selectedCodeRef)}\n`;
+      }
     }
     if (context?.codeMode?.moduleInspectorPanel) {
       result += `Module inspector panel: ${context.codeMode.moduleInspectorPanel}\n`;
