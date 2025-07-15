@@ -146,51 +146,10 @@ jobs:
       - name: Create comment if there are changes
         if: steps.process-changes.outputs.diff_file != ''
         continue-on-error: true
-        uses: actions/github-script@v7
+        uses: marocchino/sticky-pull-request-comment@d2ad0de260ae8b0235ce059e63f2949ba9e05943 # 2.9.3
         with:
-          script: |
-            const fs = require('fs');
-            const diffPath = '${{ steps.process-changes.outputs.diff_file }}';
-            const diffContent = fs.readFileSync(diffPath, 'utf8');
-
-            // (optionally truncate to stay within GitHub’s 65 536-char comment limit)
-            const MAX = 60000;
-            const bodyText =
-              diffContent.length > MAX
-            ? diffContent.slice(0, MAX) + '\n\n*(truncated — see artifact for full diff)*'
-            : diffContent;
-              const { data: comments } = await github.rest.issues.listComments({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-              });
-
-            // Check if we already have a comment from this workflow
-            const existingComment = comments.find(comment =>
-              comment.user.login === 'github-actions[bot]' &&
-              comment.body.includes('## Skill Card Changes: ${{ matrix.file }}')
-            );
-
-            const commentBody = `## Skill Card Changes: ${{ matrix.file }}\n\n${diffContent}`;
-
-            if (existingComment) {
-              // Update existing comment
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existingComment.id,
-                body: commentBody
-              });
-            } else {
-              // Create new comment
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: commentBody
-              });
-            }
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          header: ${{ matrix.file }} diff
+          path: ${{ steps.process-changes.outputs.diff_comment }}
 
       - name: Upload artifact if there are changes
         if: steps.process-changes.outputs.diff_file != ''
