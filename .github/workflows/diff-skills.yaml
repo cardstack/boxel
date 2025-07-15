@@ -33,9 +33,9 @@ jobs:
     strategy:
       matrix:
         file: ${{ fromJSON(needs.find-changed-skills.outputs.files) }}
-    if: contains(${{ matrix.file }}, 'skill')
     steps:
       - name: Process skill card changes
+        if: contains(${{ matrix.file }}, 'skill')
         id: process-changes
         continue-on-error: true
         run: |
