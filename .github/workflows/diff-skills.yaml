@@ -93,6 +93,7 @@ jobs:
 
             echo "$OLD_COMMANDS" > /tmp/skill-diffs/old_commands.txt
             echo "$NEW_COMMANDS" > /tmp/skill-diffs/new_commands.txt
+
             # Generate diffs
             INSTRUCTIONS_DIFF=$(diff -u /tmp/skill-diffs/old_instructions.txt /tmp/skill-diffs/new_instructions.txt || true)
             COMMANDS_DIFF=$(diff -u /tmp/skill-diffs/old_commands.txt /tmp/skill-diffs/new_commands.txt || true)
