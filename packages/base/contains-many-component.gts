@@ -54,12 +54,7 @@ interface ContainsManyEditorSignature {
 }
 
 class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
-  private sortableGroupId: string;
-
-  constructor(owner: Owner, args: ContainsManyEditorSignature['Args']) {
-    super(owner, args);
-    this.sortableGroupId = uuidv4();
-  }
+  private sortableGroupId = uuidv4();
 
   @action
   setItems(items: any) {
