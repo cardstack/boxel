@@ -141,6 +141,7 @@ export default class OperatorModeContainer extends Component<Signature> {
 
     <style scoped>
       :global(:root) {
+        --boxel-sp-xxl: 2.5rem; /* 40px */
         --boxel-sp-lg: 1.25rem; /* 20px */
         --boxel-sp-xs: 0.625rem; /* 10px */
         --operator-mode-bg-color: #686283;
