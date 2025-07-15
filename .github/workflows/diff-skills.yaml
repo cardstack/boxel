@@ -9,6 +9,5 @@ permissions:
 
 jobs:
   diffs-skills:
-    name: Build ai-bot Docker image
     uses: cardstack/gh-actions/.github/workflows/diff-skills.yml@skills-matrix-cs-8727
     secrets: inherit
