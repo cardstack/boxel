@@ -34,8 +34,13 @@ jobs:
       matrix:
         file: ${{ fromJSON(needs.find-changed-skills.outputs.files) }}
     steps:
-      - name: Process skill card changes
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
         if: contains(matrix.file, 'skill')
+        with:
+          fetch-depth: 0 # Required for git diff to work properly
+          ref: ${{ github.event.pull_request.base.ref }} # Checkout the target branch first
+
+      - name: Process skill card changes
         id: process-changes
         continue-on-error: true
         run: |
