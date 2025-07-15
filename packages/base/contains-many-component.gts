@@ -54,11 +54,11 @@ interface ContainsManyEditorSignature {
 }
 
 class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
-  private sortGroupId: string;
+  private sortableGroupId: string;
 
   constructor(owner: Owner, args: ContainsManyEditorSignature['Args']) {
     super(owner, args);
-    this.sortGroupId = uuidv4();
+    this.sortableGroupId = uuidv4();
   }
 
   @action
@@ -71,7 +71,10 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
       <div class='contains-many-editor' data-test-contains-many={{@field.name}}>
         {{#if @arrayField.children.length}}
           <ul
-            {{sortableGroup groupName=this.sortGroupId onChange=this.setItems}}
+            {{sortableGroup
+              groupName=this.sortableGroupId
+              onChange=this.setItems
+            }}
             class='list'
             data-test-list={{@field.name}}
           >
@@ -80,7 +83,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
                 class='editor'
                 data-test-item={{i}}
                 {{sortableItem
-                  groupName=this.sortGroupId
+                  groupName=this.sortableGroupId
                   model=boxedElement.value
                 }}
               >
