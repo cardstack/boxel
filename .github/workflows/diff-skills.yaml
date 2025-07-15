@@ -126,7 +126,21 @@ jobs:
             diff_file="$RUNNER_TEMP/skill-card-diff.md"   # $RUNNER_TEMP survives the job
             printf '%s\n' "$DIFF_CONTENT" > "$diff_file"
 
+            # Create truncated content for comment
+            if [[ ${#DIFF_CONTENT} -gt 60000 ]]; then
+              TRUNCATED_CONTENT="TRUNCATED: see artifact for full diff
+
+              ${DIFF_CONTENT:0:60000}"
+            else
+              TRUNCATED_CONTENT="$DIFF_CONTENT"
+            fi
+
+            # Write maybe-truncated content to a separate file
+            diff_comment_file="$RUNNER_TEMP/skill-card-diff-comment.md"
+            printf '%s\n' "$TRUNCATED_CONTENT" > "$diff_comment_file"
+
             echo "diff_file=$diff_file" >> "$GITHUB_OUTPUT"
+            echo "diff_comment=$diff_comment_file" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create comment if there are changes
