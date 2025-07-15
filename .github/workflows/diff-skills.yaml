@@ -182,5 +182,5 @@ jobs:
         if: steps.process-changes.outputs.diff_file != ''
         uses: actions/upload-artifact@v4
         with:
-          name: skill-card-full-diff
+          name: ${{ matrix.file }}
           path: ${{ steps.process-changes.outputs.diff_file }}
