@@ -157,7 +157,6 @@ module(basename(__filename), function () {
 
     module('with a different realm', function (hooks) {
       let loader2: Loader;
-      let realm: Realm;
 
       hooks.before(async function () {
         dir = dirSync();
