@@ -44,6 +44,9 @@ jobs:
 
           FILE=${{ matrix.file }}
 
+          echo "File:"
+          echo $FILE
+
           # Get the file content from target branch and PR branch
           OLD_CONTENT=$(git show ${{ github.event.pull_request.base.sha }}:$FILE 2>/dev/null || echo "{}")
           NEW_CONTENT=$(git show ${{ github.event.pull_request.head.sha }}:$FILE 2>/dev/null || echo "{}")
