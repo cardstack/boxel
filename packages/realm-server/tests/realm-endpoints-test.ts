@@ -909,7 +909,7 @@ module(basename(__filename), function () {
         let localBaseRealmURL = new URL('http://127.0.0.1:4446/base/');
         virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
 
-        base = await createRealm({
+        let { realm: base } = await createRealm({
           withWorker: true,
           dir: basePath,
           realmURL: baseRealm.url,
@@ -921,7 +921,7 @@ module(basename(__filename), function () {
         });
         virtualNetwork.mount(base.handle);
 
-        testRealm = await createRealm({
+        let { realm: testRealm } = await createRealm({
           withWorker: true,
           dir: join(dir.name, 'demo'),
           virtualNetwork,

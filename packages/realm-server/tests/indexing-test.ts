@@ -70,7 +70,7 @@ module(basename(__filename), function () {
         testDbAdapter = dbAdapter;
         let virtualNetwork = createVirtualNetwork();
         dir = dirSync().name;
-        realm = await createRealm({
+        let { realm } = await createRealm({
           withWorker: true,
           dir,
           virtualNetwork,

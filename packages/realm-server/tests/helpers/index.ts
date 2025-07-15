@@ -34,6 +34,7 @@ import {
   User,
   Subscription,
   Plan,
+  RealmAdapter,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
@@ -151,6 +152,7 @@ export function createVirtualNetwork() {
 
 export function prepareTestDB(): void {
   process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
+  console.log('PGDATABASE', process.env.PGDATABASE);
 }
 
 export async function closeServer(server: Server) {
@@ -265,7 +267,7 @@ export async function createRealm({
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
-}): Promise<Realm> {
+}): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
   for (let [filename, contents] of Object.entries(fileSystem)) {
@@ -313,7 +315,7 @@ export async function createRealm({
     virtualNetwork.mount(realm.handle);
     await worker.run();
   }
-  return realm;
+  return { realm, adapter };
 }
 
 export function setupBaseRealmServer(
@@ -363,7 +365,7 @@ export async function runBaseRealmServer(
     secretSeed: realmSecretSeed,
     realmServerMatrixUsername: testRealmServerMatrixUsername,
   });
-  let testBaseRealm = await createRealm({
+  let { realm: testBaseRealm } = await createRealm({
     dir: basePath,
     realmURL: baseRealm.url,
     virtualNetwork,
@@ -437,7 +439,7 @@ export async function runTestRealmServer({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
   });
   await worker.run();
-  let testRealm = await createRealm({
+  let { realm: testRealm, adapter: testRealmAdapter } = await createRealm({
     dir: testRealmDir,
     fileSystem,
     realmURL: realmURL.href,
@@ -481,6 +483,7 @@ export async function runTestRealmServer({
     testRealm,
     testRealmServer,
     testRealmHttpServer,
+    testRealmAdapter,
     matrixClient,
   };
 }
@@ -749,6 +752,7 @@ export function setupPermissionedRealm(
       testRealm: Realm;
       testRealmPath: string;
       testRealmHttpServer: Server;
+      testRealmAdapter: RealmAdapter;
       request: SuperTest<Test>;
       dir: DirResult;
     }) => void;
@@ -799,6 +803,7 @@ export function setupPermissionedRealm(
         testRealm: testRealmServer.testRealm,
         testRealmPath: testRealmServer.testRealmDir,
         testRealmHttpServer: testRealmServer.testRealmHttpServer,
+        testRealmAdapter: testRealmServer.testRealmAdapter,
         request,
         dir,
       });

@@ -168,7 +168,7 @@ module(basename(__filename), function () {
       setupDB(hooks, {
         before: async (dbAdapter, publisher, runner) => {
           loader2 = createLoader();
-          realm = await createRealm({
+          let { realm } = await createRealm({
             withWorker: true,
             dir: dir.name,
             fileSystem: {

@@ -8,6 +8,7 @@ import {
   Realm,
   type LooseSingleCardDocument,
   SupportedMimeType,
+  RealmAdapter,
 } from '@cardstack/runtime-common';
 import {
   setupCardLogs,
@@ -25,16 +26,19 @@ module(basename(__filename), function () {
     'Realm-specific Endpoints: can make request to post /_atomic',
     function (hooks) {
       let testRealm: Realm;
+      let testRealmAdapter: RealmAdapter;
       let request: SuperTest<Test>;
 
       function onRealmSetup(args: {
         testRealm: Realm;
         testRealmHttpServer: Server;
+        testRealmAdapter: RealmAdapter;
         request: SuperTest<Test>;
         dir: DirResult;
       }) {
         testRealm = args.testRealm;
         request = args.request;
+        testRealmAdapter = args.testRealmAdapter;
       }
 
       let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
@@ -629,6 +633,92 @@ module(basename(__filename), function () {
             source,
             'the card source is correct',
           );
+        });
+        test('writes will get file directly from disk enabling writes that rely on file system but not index', async function (assert) {
+          let source = `
+            import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+            export class Place extends CardDef {
+              static displayName = 'Place';
+              @field name = contains(StringField);
+            }
+            `.trim();
+
+          let doc = {
+            'atomic:operations': [
+              {
+                op: 'add',
+                href: '/place-modules/place.gts',
+                data: {
+                  type: 'source',
+                  attributes: {
+                    content: source,
+                  },
+                  meta: {},
+                },
+              },
+            ],
+          };
+          let response = await request
+            .post('/_atomic')
+            .set('Accept', SupportedMimeType.JSONAPI)
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+            )
+            .send(JSON.stringify(doc));
+          assert.strictEqual(response.status, 201);
+          //place module is indexed but it will be overwritten by a file write
+          let unIndexedSource = `
+          import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          export class Place extends CardDef {
+            static displayName = 'Place';
+            @field newName = contains(StringField);
+          }
+          `;
+          await testRealmAdapter.write(
+            '/place-modules/place.gts',
+            unIndexedSource,
+          );
+          // this instance should adoptsFrom the file unIndexedSource
+          let newDoc = {
+            'atomic:operations': [
+              {
+                op: 'add',
+                href: '/place.json',
+                data: {
+                  type: 'card',
+                  attributes: {
+                    newName: 'Kuala Lumpur',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '/place-modules/place',
+                      name: 'Place',
+                    },
+                  },
+                },
+              },
+            ],
+          };
+
+          response = await request
+            .post('/_atomic')
+            .set('Accept', SupportedMimeType.JSONAPI)
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+            )
+            .send(JSON.stringify(newDoc));
+          assert.strictEqual(response.status, 201);
+
+          let cardResponse = await request
+            .get('/place')
+            .set('Accept', SupportedMimeType.CardJson);
+          let json = cardResponse.body as LooseSingleCardDocument;
+          assert.strictEqual(json.data.attributes?.name, undefined);
+          assert.strictEqual(json.data.attributes?.newName, 'Kuala Lumpur');
         });
       });
       module('error handling', function (hooks) {

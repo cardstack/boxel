@@ -316,6 +316,7 @@ export class Realm {
           owner = await this.getRealmOwnerUserId();
         }
         req.headers.set('X-Boxel-Assume-User', owner);
+        req.headers.set('X-Boxel-Disable-Module-Cache', 'true');
         return next(req);
       },
       async (req, next) => {
@@ -533,7 +534,7 @@ export class Realm {
       await this.trackOwnWrite(path);
       try {
         let doc = JSON.parse(content);
-        if (isCardResource(doc.data) && options?.serializeFile) {
+        if (isCardResource(doc.data)) {
           let serialized = await this.fileSerialization(
             { data: merge(doc.data, { meta: { realmURL: this.url } }) },
             url,
@@ -728,8 +729,6 @@ export class Realm {
       try {
         writeResults = await this.writeMany(files, {
           clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-          serializeFile:
-            request.headers.get('Accept') === SupportedMimeType.CardJson,
         });
       } catch (e: any) {
         return createResponse({
@@ -1116,8 +1115,10 @@ export class Realm {
     let start = Date.now();
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
-
-    if (!this.#disableModuleCaching) {
+    if (
+      !this.#disableModuleCaching &&
+      !request.headers.get('X-Boxel-Disable-Module-Cache')
+    ) {
       let useWorkInProgressIndex = Boolean(
         request.headers.get('X-Boxel-Building-Index'),
       );
@@ -1174,7 +1175,14 @@ export class Realm {
         }
       }
     }
-
+    return this.serveModuleFromDisk(localPath, start, request, requestContext);
+  }
+  private async serveModuleFromDisk(
+    localPath: LocalPath,
+    start: number,
+    request: Request,
+    requestContext: RequestContext,
+  ) {
     try {
       let maybeFileRef = await this.getFileWithFallbacks(
         localPath,
@@ -1645,8 +1653,6 @@ export class Realm {
     }
     let [{ lastModified }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-      serializeFile:
-        request.headers.get('Accept') === SupportedMimeType.CardJson,
     });
 
     let newURL = primaryResourceURL.href.replace(/\.json$/, '');
@@ -1843,7 +1849,7 @@ export class Realm {
     let [{ lastModified }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
       serializeFile:
-        request.headers.get('Accept') === SupportedMimeType.CardJson,
+        request.headers.get('Accept') !== SupportedMimeType.CardSource,
     });
     let entry = await this.#realmIndexQueryEngine.cardDocument(
       new URL(instanceURL),
