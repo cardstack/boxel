@@ -11,7 +11,6 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { chooseCard, baseCardRef, chooseFile } from '@cardstack/runtime-common';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
 interface AttachButtonTriggerSignature {
@@ -54,8 +53,6 @@ const AttachButtonTrigger: TemplateOnlyComponent<AttachButtonTriggerSignature> =
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    files: FileDef[];
-    cards: CardDef[];
     chooseCard: (cardId: string) => void;
     chooseFile: (file: FileDef) => void;
   };
