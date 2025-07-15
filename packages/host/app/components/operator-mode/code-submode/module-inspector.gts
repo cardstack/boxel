@@ -53,8 +53,9 @@ import ToggleButton from '@cardstack/host/components/operator-mode/code-submode/
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
-import { type Ready } from '@cardstack/host/resources/file';
 import type { FileResource } from '@cardstack/host/resources/file';
+import { type Ready } from '@cardstack/host/resources/file';
+import { isReady } from '@cardstack/host/resources/file';
 import {
   type CardOrFieldDeclaration,
   type ModuleAnalysis,
@@ -63,6 +64,7 @@ import {
 } from '@cardstack/host/resources/module-contents';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import { DEFAULT_MODULE_INSPECTOR_VIEW } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { ModuleInspectorView } from '@cardstack/host/services/operator-mode-state-service';
@@ -75,6 +77,7 @@ import type StoreService from '@cardstack/host/services/store';
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import type { ComponentLike } from '@glint/template';
@@ -111,6 +114,7 @@ interface ModuleInspectorSignature {
 
 export default class ModuleInspector extends Component<ModuleInspectorSignature> {
   @service private declare loaderService: LoaderService;
+  @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
   @service private declare realm: RealmService;
@@ -149,6 +153,30 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       return undefined;
     }
     return !isCardOrFieldDeclaration(this.args.selectedDeclaration);
+  }
+
+  private get sourceFileForCard(): FileDef | undefined {
+    if (!this.args.cardError || !isReady(this.args.currentOpenFile)) {
+      return undefined;
+    }
+
+    const fileContent = JSON.parse(this.args.currentOpenFile.content);
+    const adoptsFrom = fileContent?.data?.meta?.adoptsFrom;
+
+    if (!adoptsFrom) {
+      return undefined;
+    }
+
+    let moduleURLWithExtension = new URL(
+      adoptsFrom.module.endsWith('.gts')
+        ? adoptsFrom.module
+        : `${adoptsFrom.module}.gts`,
+      this.args.currentOpenFile.url,
+    );
+    return this.matrixService.fileAPI.createFileDef({
+      sourceUrl: moduleURLWithExtension.href,
+      name: moduleURLWithExtension.href.split('/').pop()!,
+    });
   }
 
   private get fileIncompatibilityMessage() {
@@ -426,7 +454,10 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       {{! this is here to make TS happy, this is always true }}
       {{#if @cardError}}
         <section class='module-inspector-content error'>
-          <CardError @error={{@cardError}} />
+          <CardError
+            @error={{@cardError}}
+            @fileToFixWithAi={{this.sourceFileForCard}}
+          />
         </section>
       {{/if}}
     {{else if this.isEmptyFile}}

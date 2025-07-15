@@ -530,6 +530,11 @@ export default class SubmodeLayout extends Component<Signature> {
         outline-width: 2px;
         outline-offset: 0px;
       }
+
+      :deep(.open-search-field) {
+        box-shadow: var(--submode-bar-item-box-shadow);
+        outline: var(--submode-bar-item-outline);
+      }
     </style>
   </template>
 }

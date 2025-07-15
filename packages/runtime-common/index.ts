@@ -38,6 +38,7 @@ export {
   formattedError,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
+  isCardErrorJSONAPI,
 } from './error';
 
 export interface ResourceObject {

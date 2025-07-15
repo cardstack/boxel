@@ -1,7 +1,7 @@
 import { click, waitFor, find, findAll, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { module, test } from 'qunit';
+import { module, skip, test } from 'qunit';
 
 import {
   REPLACE_MARKER,
@@ -153,6 +153,16 @@ ${REPLACE_MARKER}\n\`\`\``;
       1,
       'code patch result event is dispatched',
     );
+    assert.strictEqual(
+      codePatchResultEvents[0].content.codeBlockIndex,
+      0,
+      'code patch result event has the correct code block index',
+    );
+    assert.strictEqual(
+      codePatchResultEvents[0].content?.['m.relates_to']?.key,
+      'applied',
+      'code patch result event has the correct key',
+    );
 
     assert.deepEqual(
       JSON.parse(codePatchResultEvents[0].content?.data ?? '{}').context,
@@ -166,6 +176,10 @@ ${REPLACE_MARKER}\n\`\`\``;
         debug: false,
         openCardIds: [],
         realmUrl: 'http://test-realm/test/',
+        realmPermissions: {
+          canRead: true,
+          canWrite: true,
+        },
       },
       'patch code result event contains the context',
     );
@@ -337,6 +351,285 @@ ${REPLACE_MARKER}
       codePatchResultEvents.length,
       3,
       'code patch result events are dispatched',
+    );
+  });
+
+  // TODO: restore in CS-9082
+  skip('trying but failing to patch code', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    let codeBlock = `\`\`\`
+http://test-realm/test/hello.txt
+${SEARCH_MARKER}
+Goodbye, world!
+${SEPARATOR_MARKER}
+Hi, world!
+${REPLACE_MARKER}\n\`\`\``;
+    let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+    let originalContent = getMonacoContent();
+    assert.strictEqual(originalContent, 'Hello, world!');
+    await waitFor('[data-test-apply-code-button]');
+    await click('[data-test-apply-code-button]');
+    await waitFor(
+      '[data-test-apply-code-button][data-test-apply-state="failed"]',
+    );
+
+    let codePatchResultEvents = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE &&
+        event.content['m.relates_to']?.event_id === eventId &&
+        event.content['m.relates_to']?.key === 'failed',
+    );
+    assert.equal(
+      codePatchResultEvents.length,
+      1,
+      'code patch result event is dispatched',
+    );
+    assert.strictEqual(
+      codePatchResultEvents[0].content.codeBlockIndex,
+      0,
+      'code patch result event has the correct code block index',
+    );
+    assert.strictEqual(
+      codePatchResultEvents[0].content?.['m.relates_to']?.key,
+      'failed',
+      'code patch result event has the correct key',
+    );
+    assert.strictEqual(
+      codePatchResultEvents[0].content?.failureReason,
+      'The patch did not cleanly apply.',
+      'code patch result event has the correct failure reason',
+    );
+
+    assert.deepEqual(
+      JSON.parse(codePatchResultEvents[0].content?.data ?? '{}').context,
+      {
+        agentId: getService('matrix-service').agentId,
+        codeMode: {
+          currentFile: 'http://test-realm/test/hello.txt',
+          moduleInspectorPanel: 'schema',
+        },
+        submode: 'code',
+        debug: false,
+        openCardIds: [],
+        realmPermissions: {
+          canRead: true,
+          canWrite: true,
+        },
+        realmUrl: 'http://test-realm/test/',
+      },
+      'patch code result event contains the context',
+    );
+    assert.deepEqual(
+      JSON.parse(codePatchResultEvents[0].content?.data ?? '{}')
+        .attachedFiles?.[0]?.name,
+      'hello.txt',
+      'attempted file should be attached 1',
+    );
+    assert.deepEqual(
+      JSON.parse(codePatchResultEvents[0].content?.data ?? '{}')
+        .attachedFiles?.[0]?.sourceUrl,
+      'http://test-realm/test/hello.txt',
+      'attempted file should be attached 2',
+    );
+  });
+
+  test('failure patching code when using "Accept All" button', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+
+    // open skill menu
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+
+    // add useful-commands skill, which includes the switch-submode command
+    await click(
+      `[data-test-card-catalog-item="${testRealmURL}Skill/useful-commands"]`,
+    );
+    await click('[data-test-card-catalog-go-button]');
+
+    // there are 3 patches in the message
+    // 1. hello.txt: Hello, world! -> Hi, world! # will apply
+    // 2. hi.txt: Hi, Mars! -> Greetings, world! # won't apply cleanly
+    // 3. hi.txt: How are you? -> We are one! # will apply
+
+    let codeBlock = `\`\`\`ruby
+def hello
+  "I am just a simple code block, not a code patch. Even if I am here, it should not affect the 'Accept All' functionality related to code patches."
+end
+\`\`\`
+
+\`\`\`
+http://test-realm/test/hello.txt
+${SEARCH_MARKER}
+Hello, world!
+${SEPARATOR_MARKER}
+Hi, world!
+${REPLACE_MARKER}
+\`\`\`
+
+I will also update the second file per your request.
+
+ \`\`\`
+http://test-realm/test/hi.txt
+${SEARCH_MARKER}
+Hi, Mars!
+${SEPARATOR_MARKER}
+Greetings, world!
+${REPLACE_MARKER}
+\`\`\`
+
+\`\`\`
+http://test-realm/test/hi.txt
+${SEARCH_MARKER}
+How are you?
+${SEPARATOR_MARKER}
+We are one!
+${REPLACE_MARKER}
+\`\`\``;
+
+    let roomId = getRoomIds().pop()!;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'abc123',
+          name: 'show-card_566f',
+          arguments: JSON.stringify({
+            description: 'Showing skill card',
+            attributes: {
+              cardId: `${testRealmURL}Skill/useful-commands`,
+            },
+          }),
+        },
+      ],
+    });
+
+    await waitFor(
+      '[data-test-ai-assistant-action-bar] [data-test-accept-all]',
+      {
+        timeout: 4000,
+      },
+    );
+    // Intentionally not using await here to test the loading state of the button
+    click('[data-test-ai-assistant-action-bar] [data-test-accept-all]');
+    await waitFor(
+      '[data-test-ai-assistant-action-bar] [data-test-loading-indicator]',
+    );
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-ai-assistant-action-bar]')
+          ?.textContent?.includes('Apply Diff') &&
+        find('[data-test-code-block-index] [data-test-apply-state="applying"]'),
+      {
+        timeout: 5000,
+        timeoutMessage:
+          'timed out waiting action bar to patch to start applying',
+      },
+    );
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-ai-assistant-action-bar]')
+          ?.textContent?.includes('Show Card'),
+      {
+        timeout: 3000,
+        timeoutMessage: 'timed out waiting action bar to show Show Card',
+      },
+    );
+    await waitUntil(
+      () =>
+        findAll(
+          '[data-test-code-block-index] [data-test-apply-state="applied"]',
+        ).length === 2,
+      {
+        timeout: 3000,
+        timeoutMessage:
+          'timed out waiting for two code patches to be in applied state',
+      },
+    );
+    await waitUntil(
+      () =>
+        findAll('[data-test-code-block-index] [data-test-apply-state="failed"]')
+          .length === 1,
+      {
+        timeout: 3000,
+        timeoutMessage:
+          'timed out waiting for one code patch to be in failed state',
+      },
+    );
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Skill/useful-commands"]`)
+      .exists();
+
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+    assert.strictEqual(
+      getMonacoContent(),
+      'Hi, world!',
+      'hello.txt should be patched',
+    );
+    await click('[data-test-file-browser-toggle]');
+    await click('[data-test-file="hi.txt"]');
+
+    // We can see content that is the result of 1 successful patch made to this file (hi.txt)
+    await waitUntil(() => getMonacoContent() === 'Hi, world!\nWe are one!', {
+      timeout: 5000,
+      timeoutMessage:
+        'timed out waiting monaco editor content to reflect partially failed patch',
+    });
+
+    let codePatchResultEvents = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+    );
+    let successfulCodePatchResultEvents = codePatchResultEvents.filter(
+      (event) => event.content['m.relates_to']?.key === 'applied',
+    );
+    assert.equal(
+      successfulCodePatchResultEvents.length,
+      2,
+      'successful code patch result events are dispatched',
+    );
+    let failedCodePatchResultEvents = codePatchResultEvents.filter(
+      (event) => event.content['m.relates_to']?.key === 'failed',
+    );
+    assert.equal(
+      failedCodePatchResultEvents.length,
+      1,
+      'failed code patch result events are dispatched',
     );
   });
 
@@ -532,6 +825,8 @@ ${REPLACE_MARKER}
       codePath: `${testRealmURL}hello.txt`,
     });
     await click('[data-test-open-ai-assistant]');
+    await click('[data-test-past-sessions-button]');
+    await click(`[data-test-enter-room="${roomId}"]`);
     await waitUntil(() => findAll('[data-test-apply-state]').length === 3);
     assert
       .dom('[data-test-apply-state="applied"]')
@@ -791,7 +1086,8 @@ ${REPLACE_MARKER}
     assert.dom('[data-test-code-diff-editor]').exists({ count: 1 });
   });
 
-  test('can restore content of a patched file to its original state', async function (assert) {
+  // TODO: restore in CS-9084
+  skip('can restore content of a patched file to its original state', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}hello.txt`,

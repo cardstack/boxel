@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "airline": "Emirates",
+      "flightNumber": "EK653",
+      "departureCity": "Malé",
+      "arrivalCity": "New York",
+      "departureAirport": "MLE",
+      "arrivalAirport": "JFK",
+      "departureTime": "2024-03-22T01:35:00.000Z",
+      "arrivalTime": "2024-03-22T18:05:00.000Z",
+      "duration": "21h 30m",
+      "aircraftType": null,
+      "price": 1899,
+      "cabinClass": "Economy",
+      "airlineLogo": "https://logos-world.net/wp-content/uploads/2020/03/Emirates-Logo.png",
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../flight",
+        "name": "Flight"
+      }
+    }
+  }
+}

@@ -193,8 +193,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get styleForStackedCard(): SafeString {
-    const stackItemMaxWidth = '50rem';
-    const widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
+    const stackItemMaxWidth = 50; // unit: rem, 800px for 16px base
+    const RATIO = 1.2;
+    //  top card: 800px / (1.2 ^ 0) = 800px;
+    //  buried card: 800px / (1.2 ^ 1) = ~666px;
+    //  next buried card: 800px / (1.2 ^ 2) = ~555px;
+    const maxWidthReductionPercent = 10; // Every new card on the stack is 10% wider than the previous one (for narrow viewport)
     const numberOfCards = this.args.stackItems.length;
     const invertedIndex = numberOfCards - this.args.index - 1;
     const isLastCard = this.args.index === numberOfCards - 1;
@@ -208,16 +212,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
     if (numberOfCards > 1) {
       if (isLastCard) {
-        marginTopPx = numberOfCards === 2 ? 25 : 50;
+        marginTopPx = numberOfCards === 2 ? 30 : 50;
       } else if (isSecondLastCard && numberOfCards > 2) {
         marginTopPx = 25;
       }
     }
 
-    let maxWidthPercent = 100 - invertedIndex * widthReductionPercent;
+    let maxWidthPercent = 100 - invertedIndex * maxWidthReductionPercent;
     let width = this.isItemFullWidth
       ? '100%'
-      : `calc(${stackItemMaxWidth} * ${maxWidthPercent} / 100)`;
+      : `${stackItemMaxWidth / Math.pow(RATIO, invertedIndex)}rem`;
 
     let styles = `
       height: calc(100% - ${marginTopPx}px);

@@ -373,6 +373,7 @@
         "rel_type": "app.boxel.codePatchAnnotation"
       },
       "codeBlockIndex": 1,
+      "failureReason": "The patch did not apply cleanly.",
       "data": {
         "context": {
           "tools": [],

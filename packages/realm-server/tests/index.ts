@@ -11,6 +11,7 @@ import './module-syntax-test';
 import './transpile-test';
 import './permissions/permission-checker-test';
 import './queue-test';
+import './card-dependencies-endpoint-test';
 import './card-endpoints-test';
 import './card-source-endpoints-test';
 import './realm-endpoints-test';

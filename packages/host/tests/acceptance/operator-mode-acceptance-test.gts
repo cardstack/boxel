@@ -766,7 +766,12 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     url = currentURL().split('?')[1].replace(/^\/\?/, '') ?? '';
     urlParameters = new URLSearchParams(url);
-    assert.true(Boolean(urlParameters.get('workspaceChooserOpened')));
+    let operatorModeStateParam = urlParameters.get('operatorModeState');
+
+    assert.true(
+      operatorModeStateParam &&
+        JSON.parse(operatorModeStateParam).workspaceChooserOpened,
+    );
     await percySnapshot(assert);
   });
 
@@ -812,7 +817,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click('[data-test-workspace="Cardstack Catalog"]');
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    assert.dom(`[data-test-realm-name]`).hasText('In Cardstack Catalog');
+    assert.dom(`[data-test-realm-name]`).includesText('In Cardstack Catalog');
     assert.dom(`[data-test-file="index.json"]`).hasClass('selected');
     assert.dom('[data-test-recent-file]').exists({ count: 4 });
     assert

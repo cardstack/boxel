@@ -9,18 +9,16 @@ import Component from '@glimmer/component';
 import { format as formatDate, formatISO, isAfter, subMinutes } from 'date-fns';
 import { cancelPoll, pollTask, runTask } from 'ember-lifeline';
 
-import window from 'ember-window-mock';
-
 import { TrackedObject } from 'tracked-built-ins';
 
-import { BoxelButton } from '@cardstack/boxel-ui/components';
+import { BoxelButton, IconButton } from '@cardstack/boxel-ui/components';
+import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
 
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
+import LocalPersistenceService from '@cardstack/host/services/local-persistence-service';
 import MatrixService from '@cardstack/host/services/matrix-service';
-
-import { CurrentRoomIdPersistenceKey } from '@cardstack/host/utils/local-storage-keys';
 
 import assistantIcon from './ai-assist-icon.webp';
 
@@ -45,6 +43,17 @@ export default class AiAssistantToast extends Component<Signature> {
         <time datetime={{formatISO this.unseenMessage.created}} class='time'>
           {{formatDate this.unseenMessage.created 'dd.MM.yyyy, h:mm aa'}}
         </time>
+
+        <IconButton
+          @icon={{IconX}}
+          @width='10'
+          @height='10'
+          {{on 'click' this.closeToast}}
+          class='toast-close-button'
+          aria-label='close toast'
+          tabindex={{unless this.isVisible '-1'}}
+          data-test-close-toast
+        />
       </header>
       <div class='toast-content' data-test-ai-assistant-toast-content>
         {{htmlSafe (markdownToHtml this.unseenMessage.body)}}
@@ -54,6 +63,7 @@ export default class AiAssistantToast extends Component<Signature> {
         @size='extra-small'
         class='view-in-chat-button'
         {{on 'click' this.viewInChat}}
+        tabindex={{unless this.isVisible '-1'}}
         data-test-ai-assistant-toast-button
       >
         View in chat
@@ -94,6 +104,7 @@ export default class AiAssistantToast extends Component<Signature> {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
+        position: relative;
       }
       .time {
         display: block;
@@ -101,6 +112,23 @@ export default class AiAssistantToast extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-sm);
         color: var(--boxel-450);
         white-space: nowrap;
+        flex: 1;
+      }
+      .toast-close-button {
+        --icon-color: var(--boxel-450);
+        border: none;
+        background: none;
+        padding: 1px;
+        border-radius: var(--boxel-border-radius-xs);
+        transition: background-color 0.2s ease;
+        width: 16px;
+        height: 16px;
+        min-width: 16px;
+        min-height: 16px;
+      }
+      .toast-close-button:hover {
+        --icon-color: var(--boxel-light);
+        background-color: rgba(255, 255, 255, 0.1);
       }
       .toast-content {
         color: var(--boxel-light);
@@ -129,6 +157,7 @@ export default class AiAssistantToast extends Component<Signature> {
   </template>
 
   @service private declare matrixService: MatrixService;
+  @service private declare localPersistenceService: LocalPersistenceService;
   _pollToken: ReturnType<typeof pollTask> | null = null;
 
   private get state() {
@@ -226,7 +255,18 @@ export default class AiAssistantToast extends Component<Signature> {
 
   @action
   private viewInChat() {
-    window.localStorage.setItem(CurrentRoomIdPersistenceKey, this.roomId);
+    this.localPersistenceService.setCurrentRoomId(this.roomId);
     this.args.onViewInChatClick();
   }
+
+  private closeToast = () => {
+    let message = this.unseenMessage;
+
+    let matrixEvent = {
+      getId: () => message.eventId,
+      getRoomId: () => this.roomId,
+      getTs: () => message.created.getTime(),
+    };
+    this.matrixService.sendReadReceipt(matrixEvent);
+  };
 }

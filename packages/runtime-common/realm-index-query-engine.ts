@@ -136,6 +136,17 @@ export class RealmIndexQueryEngine {
     return results;
   }
 
+  async getCardDependencies(url: URL): Promise<string[]> {
+    let instance = await this.instance(url);
+    if (!instance) {
+      throw new Error(`Card not found: ${url.href}`);
+    }
+    if (instance.deps) {
+      return instance.deps;
+    }
+    return [];
+  }
+
   async cardDocument(
     url: URL,
     opts?: Options,

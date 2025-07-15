@@ -29,7 +29,7 @@
     "@types/qs": "catalog:",
     "@types/uuid": "catalog:",
     "babel-import-util": "^1.2.2",
-    "babel-plugin-ember-template-compilation": "~2.2.1",
+    "babel-plugin-ember-template-compilation": "catalog:",
     "camelcase": "catalog:",
     "content-tag": "catalog:",
     "date-fns": "catalog:",

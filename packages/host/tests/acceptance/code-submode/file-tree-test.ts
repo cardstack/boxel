@@ -412,14 +412,14 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await waitFor('[data-test-realm-name="Test Workspace B"]');
     assert.dom('[data-test-realm-name]').hasText('In Test Workspace B');
 
-    await waitFor('[data-test-file-tree-realm-dropdown-button]');
-    await click('[data-test-file-tree-realm-dropdown-button]');
+    await waitFor('[data-test-realm-dropdown-trigger]');
+    await click('[data-test-realm-dropdown-trigger]');
 
     assert.dom('[data-test-boxel-menu-item-text="Base Workspace"]').exists();
     await click('[data-test-boxel-menu-item-text="Base Workspace"]');
 
     await waitFor('[data-test-realm-name="Base Workspace"]');
-    assert.dom('[data-test-realm-name]').hasText('In Base Workspace');
+    assert.dom('[data-test-realm-name]').hasText('In Base Workspace READ ONLY');
     assert.dom('[data-test-realm-read-only]').exists();
   });
 
@@ -453,8 +453,8 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       'Enter',
     );
 
-    await waitFor('[data-test-file-tree-realm-dropdown-button]');
-    await click('[data-test-file-tree-realm-dropdown-button]');
+    await waitFor('[data-test-realm-dropdown-trigger]');
+    await click('[data-test-realm-dropdown-trigger]');
 
     assert.dom('[data-test-boxel-menu-item-text="Test Workspace B"]').exists();
     await click('[data-test-boxel-menu-item-text="Test Workspace B"]');
@@ -503,7 +503,9 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
         '[data-test-realm-icon-url="https://boxel-images.boxel.ai/icons/cardstack.png"]',
       )
       .exists();
-    assert.dom('[data-test-realm-name]').hasText('In Test Workspace A');
+    assert
+      .dom('[data-test-realm-name]')
+      .hasText('In Test Workspace A READ ONLY');
 
     await waitFor('[data-test-file="mango.png"]');
     assert.dom('[data-test-file="mango.png"]').hasClass('selected');

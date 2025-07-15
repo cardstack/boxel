@@ -10,7 +10,7 @@ export class NotLoaded extends Error {
   ) {
     let message: string;
     let card = Reflect.getPrototypeOf(instance)!.constructor as typeof CardDef;
-    let field = getField(card, fieldName);
+    let field = getField(instance, fieldName);
     if (!field) {
       throw new Error(
         `The field '${fieldName} does not exist in card ${card.name}'`,
