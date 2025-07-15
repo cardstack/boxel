@@ -90,6 +90,9 @@ jobs:
           # Join the diffs with newlines
           DIFF_CONTENT=$(printf "%s\n" "${DIFFS[@]}")
 
+          echo "Diff content?"
+          echo $DIFF_CONTENT
+
           # Set output
           if [[ -n "$DIFF_CONTENT" ]]; then
             diff_file="$RUNNER_TEMP/skill-card-diff.md"   # $RUNNER_TEMP survives the job
