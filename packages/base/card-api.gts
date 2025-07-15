@@ -1223,6 +1223,16 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     ) {
       return (format ?? defaultFormat) === 'edit' && !isComputed;
     }
+    function getChildFormat(format: Format | undefined, model: Box<FieldDef>) {
+      if (
+        format === 'edit' &&
+        'isCardDef' in model.value.constructor &&
+        model.value.constructor.isCardDef
+      ) {
+        return 'fitted';
+      }
+      return format;
+    }
     return class LinksToComponent extends GlimmerComponent<{
       Element: HTMLElement;
       Args: {
@@ -1246,7 +1256,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
           {{else}}
             {{#let (fieldComponent linksToField model) as |FieldComponent|}}
               <FieldComponent
-                @format={{@format}}
+                @format={{getChildFormat @format model}}
                 @displayContainer={{@displayContainer}}
                 ...attributes
               />
