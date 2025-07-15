@@ -140,7 +140,7 @@ jobs:
 
             # Remove slashes and other forbidden characters from artifact name
             artifact_name=$(echo -n "$FILE" | sed -e 's/[ \t:\/\\"<>|*?]/-/g' -e 's/--*/-/g')
-            echo "artifact_name=$artifact_name" >> $GITHUB_ENV
+            echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create comment if there are changes
