@@ -1899,13 +1899,65 @@ export class Realm {
     if (this.#adapter.lintStub) {
       result = await this.#adapter.lintStub(request, requestContext);
     } else {
-      let source = await request.text();
+      let source: string;
+      let filename = 'input.gts'; // Default for GTS context
+
+      // Parse request based on content type (simplified)
+      const contentType = request.headers.get('content-type');
+      if (contentType === 'application/json') {
+        try {
+          const body = JSON.parse(await request.text());
+          source = body.source || body.code;
+          filename =
+            body.filename || request.headers.get('X-Filename') || filename;
+
+          if (!source) {
+            return createResponse({
+              body: JSON.stringify({
+                error: 'Missing source code in request body',
+              }),
+              init: {
+                status: 400,
+                headers: { 'content-type': 'application/json' },
+              },
+              requestContext,
+            });
+          }
+        } catch (error) {
+          return createResponse({
+            body: JSON.stringify({ error: 'Invalid JSON request body' }),
+            init: {
+              status: 400,
+              headers: { 'content-type': 'application/json' },
+            },
+            requestContext,
+          });
+        }
+      } else {
+        // Fallback to plain text (backward compatibility)
+        source = await request.text();
+        filename = request.headers.get('X-Filename') || filename;
+      }
+
+      if (!source || source.trim() === '') {
+        return createResponse({
+          body: JSON.stringify({
+            error: 'Empty source code provided',
+          }),
+          init: {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          },
+          requestContext,
+        });
+      }
+
       let job = await this.#queue.publish<LintResult>({
         jobType: `lint-source`,
         concurrencyGroup: `lint:${this.url}:${Math.random().toString().slice(-1)}`,
         timeout: 10,
         priority: userInitiatedPriority,
-        args: { source } satisfies LintArgs,
+        args: { source, filename } satisfies LintArgs,
       });
       result = await job.done;
     }
