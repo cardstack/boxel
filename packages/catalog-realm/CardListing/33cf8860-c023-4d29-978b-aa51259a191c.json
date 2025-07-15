@@ -1,0 +1,57 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Golf Scorecard",
+      "summary": "This card logs strokes, pars, and putts across all 18 holes—auto-computing birdies, bogeys, and total scores. Includes live leaderboard views, TV-style overlays, and PGA/USGA branding support. Ideal for tournaments, sports apps, and golf analytics dashboards.",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/golf-scorecard-listing/screenshot_01.png"
+      ],
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/golf-scorecard-listing/thumbnail.png"
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/6733cf88-60c0-436d-a9d7-8baa51259a19"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/11e83666-2bd7-4a51-95a9-675f99c7b638"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "./33cf8860-c023-4d29-978b-aa51259a191c"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "CardListing"
+      }
+    }
+  }
+}
