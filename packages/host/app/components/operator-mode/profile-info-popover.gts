@@ -31,9 +31,11 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       .profile-popover {
         width: 320px;
         position: absolute;
-        bottom: 68px;
-        left: 20px;
-        z-index: var(--host-profile-popover-z-index);
+        top: calc(
+          var(--container-button-size) + calc(2 * var(--operator-mode-spacing))
+        );
+        right: var(--operator-mode-spacing);
+        z-index: calc(var(--boxel-layer-floating-button) + 1);
         background: var(--boxel-100);
         padding: var(--boxel-sp);
         flex-direction: column;

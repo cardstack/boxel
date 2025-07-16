@@ -495,8 +495,8 @@ export default class SubmodeLayout extends Component<Signature> {
         --boxel-icon-button-width: var(--container-button-size);
         --boxel-icon-button-height: var(--container-button-size);
         position: absolute;
-        bottom: var(--operator-mode-spacing);
-        left: var(--operator-mode-spacing);
+        top: var(--operator-mode-spacing);
+        right: var(--operator-mode-spacing);
         padding: 0;
         background: none;
         border: none;
