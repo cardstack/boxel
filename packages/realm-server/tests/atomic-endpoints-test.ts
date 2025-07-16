@@ -490,7 +490,6 @@ module(basename(__filename), function () {
             )
             .send(JSON.stringify(doc));
 
-          console.log('response body', response.body);
           assert.strictEqual(response.status, 201);
           assert.strictEqual(response.body['atomic:results'].length, 2);
           let placeResponse = await request
@@ -617,7 +616,6 @@ module(basename(__filename), function () {
             )
             .send(JSON.stringify(doc));
 
-          console.log('response body', response.body);
           assert.strictEqual(response.status, 201);
           assert.strictEqual(response.body['atomic:results'].length, 2);
           let cardResponse = await request
