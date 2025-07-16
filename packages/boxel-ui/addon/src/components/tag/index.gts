@@ -34,7 +34,7 @@ const Tag: TemplateOnlyComponent<TagSignature> = <template>
   <style scoped>
     @layer {
       .tag-pill {
-        --pill-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xxs);
+        --pill-padding: var(--boxel-sp-5xs) var(--boxel-sp-xxxs);
         --pill-font: 500 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-sm);
         max-width: 100%;

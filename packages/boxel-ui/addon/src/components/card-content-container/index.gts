@@ -1,11 +1,17 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import { cn, element } from '../../helpers.ts';
+import { cn, element, eq } from '../../helpers.ts';
+
+export type BoxelContainerDisplayOption =
+  | 'default'
+  | 'grid'
+  | 'inline-grid'
+  | 'flex'
+  | 'inline-flex';
 
 interface Signature {
   Args: {
-    isFlex?: boolean;
-    isGrid?: boolean;
+    display?: BoxelContainerDisplayOption;
     tag?: keyof HTMLElementTagNameMap;
   };
   Blocks: {
@@ -17,7 +23,13 @@ interface Signature {
 const Container: TemplateOnlyComponent<Signature> = <template>
   {{#let (element @tag) as |TagName|}}
     <TagName
-      class={{cn 'container' is-grid=@isGrid is-flex=@isFlex}}
+      class={{cn
+        'boxel-container'
+        boxel-grid=(eq @display 'grid')
+        boxel-inline-grid=(eq @display 'inline-grid')
+        boxel-flex=(eq @display 'flex')
+        boxel-inline-flex=(eq @display 'inline-flex')
+      }}
       ...attributes
     >
       {{yield}}
@@ -25,17 +37,28 @@ const Container: TemplateOnlyComponent<Signature> = <template>
   {{/let}}
   <style scoped>
     @layer {
-      .card-content-container {
-        padding: var(--boxel-sp);
+      .boxel-container {
+        --_sp: var(--spacing, var(--boxel-sp));
+        padding: var(--boxel-container-padding, var(--_sp));
       }
-      .is-grid {
+      .boxel-grid {
         display: grid;
-        gap: var(--boxel-sp);
+        gap: var(--boxel-container-gap, var(--_sp));
       }
-      .is-flex {
+      .boxel-inline-grid {
+        display: inline-grid;
+        gap: var(--boxel-container-gap, var(--_sp));
+      }
+      .boxel-flex {
         display: flex;
         flex-wrap: wrap;
-        gap: var(--boxel-sp);
+        gap: var(--boxel-container-gap, var(--_sp));
+        align-items: center;
+      }
+      .boxel-inline-flex {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-container-gap, var(--_sp));
         align-items: center;
       }
     }

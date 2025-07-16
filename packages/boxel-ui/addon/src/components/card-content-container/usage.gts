@@ -3,16 +3,22 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import BoxelContainer from './index.gts';
+import BoxelContainer, { type BoxelContainerDisplayOption } from './index.gts';
 
 interface Signature {
   Element: HTMLElement;
 }
 
 export default class BoxelContainerUsage extends Component<Signature> {
-  @tracked tag?: keyof HTMLElementTagNameMap;
-  @tracked isGrid?: boolean;
-  @tracked isFlex?: boolean;
+  private displayOptions: BoxelContainerDisplayOption[] = [
+    'default',
+    'grid',
+    'inline-grid',
+    'flex',
+    'inline-flex',
+  ];
+  @tracked private tag?: keyof HTMLElementTagNameMap;
+  @tracked private display?: BoxelContainerDisplayOption;
 
   <template>
     <FreestyleUsage @name='BoxelContainer'>
@@ -22,9 +28,8 @@ export default class BoxelContainerUsage extends Component<Signature> {
       </:description>
       <:example>
         <BoxelContainer
+          @display={{this.display}}
           @tag={{if this.tag this.tag 'div'}}
-          @isFlex={{this.isFlex}}
-          @isGrid={{this.isGrid}}
         >
           <h3>h3</h3>
           <p>Hello</p>
@@ -39,21 +44,14 @@ export default class BoxelContainerUsage extends Component<Signature> {
           @optional={{true}}
           @onInput={{fn (mut this.tag)}}
         />
-        <Args.Bool
-          @name='isGrid'
-          @description='Makes the element a block-level grid container with standard spacing'
-          @value={{this.isGrid}}
-          @defaultValue={{false}}
+        <Args.String
+          @name='display'
           @optional={{true}}
-          @onInput={{fn (mut this.isGrid)}}
-        />
-        <Args.Bool
-          @name='isFlex'
-          @description='Makes the element a block-level flex container with standard spacing'
-          @value={{this.isFlex}}
-          @defaultValue={{false}}
-          @optional={{true}}
-          @onInput={{fn (mut this.isFlex)}}
+          @description='Css display property for grid, flex, inline-grid, and inline-flex'
+          @defaultValue='HTML element default'
+          @options={{this.displayOptions}}
+          @onInput={{fn (mut this.display)}}
+          @value='default'
         />
       </:api>
     </FreestyleUsage>
