@@ -1,0 +1,74 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "School Calendar",
+      "summary": "Professional school calendar management system with event and schedule integration - organize academic events, weekly schedules, and school year planning while viewing clean grid-based layouts. Features date range management, embedded event cards, schedule item organization, hover animations, and educational institution styling for comprehensive academic calendar coordination.",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/school-calendar-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/school-calendar-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/school-calendar-listing/screenshot_03.png"
+      ],
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/school-calendar-listing/thumbnail.png"
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/243337da-30e2-4d9a-a34d-fec1e0788e41"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/7ea60742-019c-49e8-9f8c-7cd0848cb9cd"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/3f124b97-7ea6-4742-819c-69e89f8c7cd0"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/4b977ea6-0742-419c-a9e8-9f8c7cd0848c"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/fcb7401d-a64c-40e6-b161-ac48487e0a4d"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../school-calendar/SchoolCalendar/01541fcf-020e-4f78-8141-25e9c307a195"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "CardListing"
+      }
+    }
+  }
+}
