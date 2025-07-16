@@ -84,7 +84,7 @@ const matrixUserIds = [
 ];
 
 exports.up = (pgm) => {
-  if (process.env.REALM_SENTRY_ENVIRONMENT !== 'production') {
+  if (process.env.REALM_SENTRY_ENVIRONMENT === 'production') {
     for (const matrixUserId of matrixUserIds) {
       pgm.sql(`
         INSERT INTO users (matrix_user_id)
