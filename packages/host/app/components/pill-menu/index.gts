@@ -35,10 +35,6 @@ export default class PillMenu extends Component<Signature> {
     {{#if this.isExpanded}}
       <div
         class='pill-menu {{if (has-block "footer") "has-footer"}}'
-        {{onClickOutside
-          this.collapseMenu
-          exceptSelector='.card-catalog-modal'
-        }}
         ...attributes
       >
         <Header class='menu-header' data-test-pill-menu-header>
