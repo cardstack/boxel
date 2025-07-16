@@ -142,6 +142,127 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-field="textArea"] textarea')
         .hasAttribute('disabled');
     });
+
+    test('linksToMany field with computeVia is not editable in edit format', async function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+
+      class Friend extends CardDef {
+        @field firstName = contains(StringField);
+        @field pets = linksToMany(Pet);
+      }
+
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field friend = linksTo(Friend);
+        @field friendPetNames = containsMany(StringField);
+        @field friendPets = linksToMany(Pet, {
+          computeVia: function (this: Person) {
+            return this.friend?.pets;
+          },
+        });
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Friend, Pet });
+
+      let pet1 = new Pet({ name: 'Mango' });
+      let pet2 = new Pet({ name: 'Van Gogh' });
+      let friend = new Friend({
+        firstName: 'Hassan',
+        pets: [pet1, pet2],
+      });
+      let person = new Person({
+        firstName: 'Arthur',
+        friend: friend,
+      });
+
+      await saveCard(pet1, `${testRealmURL}Pet/pet1`, loader);
+      await saveCard(pet2, `${testRealmURL}Pet/pet2`, loader);
+      await saveCard(friend, `${testRealmURL}Friend/friend1`, loader);
+
+      await renderCard(loader, person, 'edit');
+
+      // The friendPets field should be read-only (not editable) because it has computeVia
+      assert
+        .dom('[data-test-field="friendPets"] [data-test-add-new]')
+        .doesNotExist('computed linksToMany field should not have add button');
+      assert
+        .dom('[data-test-field="friendPets"] [data-test-remove]')
+        .doesNotExist(
+          'computed linksToMany field should not have remove buttons',
+        );
+      assert
+        .dom(
+          '[data-test-plural-view-field="friendPets"] [data-test-plural-view-item]',
+        )
+        .exists({ count: 2 }, 'computed linksToMany child fields are rendered');
+      assert
+        .dom(
+          '[data-test-plural-view-field="friendPets"] [data-test-plural-view-item="0"][data-test-card-format="fitted"]',
+        )
+        .exists(
+          'computed linksToMany child fields are rendered in fitted format',
+        );
+      assert
+        .dom(
+          '[data-test-plural-view-field="friendPets"] [data-test-plural-view-item="1"][data-test-card-format="fitted"]',
+        )
+        .exists(
+          'computed linksToMany child fields are rendered in fitted format',
+        );
+    });
+
+    test('linksTo field with computeVia is not editable in edit format', async function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+
+      class Friend extends CardDef {
+        @field firstName = contains(StringField);
+        @field favoritePet = linksTo(Pet);
+      }
+
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field friend = linksTo(Friend);
+        @field friendFavoritePet = linksTo(Pet, {
+          computeVia: function (this: Person) {
+            return this.friend?.favoritePet;
+          },
+        });
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Friend, Pet });
+
+      let pet1 = new Pet({ name: 'Mango' });
+      let friend = new Friend({
+        firstName: 'Hassan',
+        favoritePet: pet1,
+      });
+      let person = new Person({
+        firstName: 'Arthur',
+        friend: friend,
+      });
+
+      await saveCard(pet1, `${testRealmURL}Pet/pet1`, loader);
+      await saveCard(friend, `${testRealmURL}Friend/friend1`, loader);
+
+      await renderCard(loader, person, 'edit');
+
+      // The friendFavoritePet field should be read-only (not editable) because it has computeVia
+      assert
+        .dom('[data-test-field="friendFavoritePet"] [data-test-add-new]')
+        .doesNotExist('computed linksTo field should not have add button');
+      assert
+        .dom('[data-test-field="friendFavoritePet"] [data-test-remove]')
+        .doesNotExist('computed linksTo field should not have remove button');
+      assert
+        .dom(
+          '[data-test-field="friendFavoritePet"] [data-test-card-format="fitted"]',
+        )
+        .exists('computed linksTo field is rendered in fitted format');
+    });
   });
 
   module('cards allowed to be edited', function (hooks) {
@@ -3472,76 +3593,6 @@ module('Integration | card-basics', function (hooks) {
           '[data-test-field="isPresent"] [data-test-boxel-radio-option-id="true"] input',
         )
         .isNotChecked();
-    });
-
-    test('linksToMany field with computeVia is not editable in edit format', async function (assert) {
-      class Pet extends CardDef {
-        @field name = contains(StringField);
-      }
-
-      class Friend extends CardDef {
-        @field firstName = contains(StringField);
-        @field pets = linksToMany(Pet);
-      }
-
-      class Person extends CardDef {
-        @field firstName = contains(StringField);
-        @field friend = linksTo(Friend);
-        @field friendPetNames = containsMany(StringField);
-        @field friendPets = linksToMany(Pet, {
-          computeVia: function (this: Person) {
-            return this.friend?.pets;
-          },
-        });
-      }
-
-      loader.shimModule(`${testRealmURL}test-cards`, { Person, Friend, Pet });
-
-      let pet1 = new Pet({ name: 'Mango' });
-      let pet2 = new Pet({ name: 'Van Gogh' });
-      let friend = new Friend({
-        firstName: 'Hassan',
-        pets: [pet1, pet2],
-      });
-      let person = new Person({
-        firstName: 'Arthur',
-        friend: friend,
-      });
-
-      await saveCard(pet1, `${testRealmURL}Pet/pet1`, loader);
-      await saveCard(pet2, `${testRealmURL}Pet/pet2`, loader);
-      await saveCard(friend, `${testRealmURL}Friend/friend1`, loader);
-
-      await renderCard(loader, person, 'edit');
-
-      // The friendPets field should be read-only (not editable) because it has computeVia
-      assert
-        .dom('[data-test-field="friendPets"] [data-test-add-new]')
-        .doesNotExist('computed linksToMany field should not have add button');
-      assert
-        .dom('[data-test-field="friendPets"] [data-test-remove]')
-        .doesNotExist(
-          'computed linksToMany field should not have remove buttons',
-        );
-      assert
-        .dom(
-          '[data-test-plural-view-field="friendPets"] [data-test-plural-view-item]',
-        )
-        .exists({ count: 2 }, 'computed linksToMany child fields are rendered');
-      assert
-        .dom(
-          '[data-test-plural-view-field="friendPets"] [data-test-plural-view-item="0"][data-test-card-format="fitted"]',
-        )
-        .exists(
-          'computed linksToMany child fields are rendered in fitted format',
-        );
-      assert
-        .dom(
-          '[data-test-plural-view-field="friendPets"] [data-test-plural-view-item="1"][data-test-card-format="fitted"]',
-        )
-        .exists(
-          'computed linksToMany child fields are rendered in fitted format',
-        );
     });
   });
 });
