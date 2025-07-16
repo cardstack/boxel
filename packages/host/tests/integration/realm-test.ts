@@ -3265,6 +3265,7 @@ posts/ignore-me.gts
             realmUserId: '@realm/test-realm-test:localhost',
             showAsCatalog: null,
             visibility: 'public',
+            publishable: null,
           },
         },
       },
