@@ -106,7 +106,7 @@ export default class CardCatalogModal extends Component<Signature> {
         <ModalContainer
           class='card-catalog-modal'
           @title={{this.state.chooseCardTitle}}
-          @onClose={{fn this.pick undefined}}
+          @onClose={{fn this.pick undefined undefined}}
           @layer='urgent'
           {{focusTrap
             isActive=(not this.state.dismissModal)
