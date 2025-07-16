@@ -28,3 +28,4 @@ import './types-endpoint-test';
 import './virtual-network-test';
 import './billing-test';
 import './prerendering-test';
+import './atomic-endpoints-test';
