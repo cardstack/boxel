@@ -70,7 +70,7 @@ module(basename(__filename), function () {
         testDbAdapter = dbAdapter;
         let virtualNetwork = createVirtualNetwork();
         dir = dirSync().name;
-        realm = await createRealm({
+        ({ realm } = await createRealm({
           withWorker: true,
           dir,
           virtualNetwork,
@@ -427,7 +427,7 @@ module(basename(__filename), function () {
             '.DS_Store':
               'In  macOS, .DS_Store is a file that stores custom attributes of its containing folder',
           },
-        });
+        }));
         await realm.start();
       },
     });
@@ -1567,6 +1567,110 @@ module(basename(__filename), function () {
         blogAppModule?.type,
         'module',
         'BlogApp module is in resolved module successfully',
+      );
+    });
+    test('can write several modules at once', async function (assert) {
+      let mapOfWrites = new Map();
+      mapOfWrites.set(
+        'place.gts',
+        `
+        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        export class Place extends CardDef {
+          @field name = contains(StringField);
+        }
+      `,
+      );
+      mapOfWrites.set(
+        'country.gts',
+        `
+        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        export class Country extends CardDef {
+          @field name = contains(StringField);
+        }
+      `,
+      );
+      let result = await realm.writeMany(mapOfWrites);
+      assert.strictEqual(result.length, 2, '2 files were written');
+      assert.strictEqual(result[0].path, 'place.gts');
+      assert.strictEqual(result[1].path, 'country.gts');
+
+      let place = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}place`),
+      );
+      assert.ok(place, 'place module is in the index');
+
+      let country = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}country`),
+      );
+      assert.ok(country, 'country module is in the index');
+      assert.deepEqual(
+        // we splat because despite having the same shape, the constructors are different
+        { ...realm.realmIndexUpdater.stats },
+        {
+          instancesIndexed: 0,
+          instanceErrors: 0,
+          moduleErrors: 0,
+          modulesIndexed: 2,
+          totalIndexEntries: 18,
+        },
+        'indexed correct number of files',
+      );
+    });
+
+    test('can write instances and modules at once', async function (assert) {
+      let mapOfWrites = new Map();
+      mapOfWrites.set(
+        'place.gts',
+        `
+        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+        export class Place extends CardDef {
+          @field name = contains(StringField);
+        }
+      `,
+      );
+      mapOfWrites.set(
+        'place.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { name: 'Paris' },
+            meta: {
+              adoptsFrom: {
+                module: './place',
+                name: 'Place',
+              },
+            },
+          },
+        }),
+      );
+      let result = await realm.writeMany(mapOfWrites);
+      assert.strictEqual(result.length, 2, '2 files were written');
+      assert.strictEqual(result[0].path, 'place.gts');
+      assert.strictEqual(result[1].path, 'place.json');
+
+      let module = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}place`),
+      );
+      assert.ok(module, 'place module is in the index');
+
+      let instance = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}place`),
+      );
+      assert.ok(instance, 'place instance is in the index');
+      assert.deepEqual(
+        // we splat because despite having the same shape, the constructors are different
+        { ...realm.realmIndexUpdater.stats },
+        {
+          instancesIndexed: 1,
+          instanceErrors: 0,
+          moduleErrors: 0,
+          modulesIndexed: 1,
+          totalIndexEntries: 18,
+        },
+        'indexed correct number of files',
       );
     });
   });

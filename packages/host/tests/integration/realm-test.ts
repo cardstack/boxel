@@ -7,7 +7,7 @@ import { module, test } from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
 import { baseRealm, Realm } from '@cardstack/runtime-common';
-import { isSingleCardDocument } from '@cardstack/runtime-common/card-document';
+import { isSingleCardDocument } from '@cardstack/runtime-common/document-types';
 import {
   cardSrc,
   compiledCard,

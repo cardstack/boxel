@@ -3,8 +3,8 @@ import {
   makeCardTypeSummaryDoc,
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
-  type CardResource,
-} from './card-document';
+} from './document-types';
+import { type CardResource } from './resource-types';
 import { Loader } from './loader';
 import { RealmPaths, LocalPath, join } from './paths';
 import {
@@ -13,11 +13,13 @@ import {
   methodNotAllowed,
   badRequest,
   CardError,
+  ErrorDetails,
 } from './error';
 import { v4 as uuidV4 } from 'uuid';
 import { formatRFC7231 } from 'date-fns';
 import {
   isCardResource,
+  isModuleResource,
   executableExtensions,
   hasExecutableExtension,
   isNode,
@@ -86,6 +88,12 @@ import type {
   UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 import type { LintArgs, LintResult } from './lint';
+import {
+  AtomicOperation,
+  AtomicOperationResult,
+  AtomicPayloadValidationError,
+  filterAtomicOperations,
+} from './atomic-document';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -127,6 +135,18 @@ export interface RealmPermissions {
   [username: string]: RealmAction[] | null;
 }
 
+export interface FileWriteResult {
+  path: string;
+  lastModified: number;
+  created: number;
+  isNew: boolean;
+}
+
+export interface WriteOptions {
+  clientRequestId?: string | null;
+  serializeFile?: boolean | null;
+}
+
 export interface RealmAdapter {
   readdir(
     path: LocalPath,
@@ -143,7 +163,7 @@ export interface RealmAdapter {
 
   exists(path: LocalPath): Promise<boolean>;
 
-  write(path: LocalPath, contents: string): Promise<{ lastModified: number }>;
+  write(path: LocalPath, contents: string): Promise<FileWriteResult>;
 
   remove(path: LocalPath): Promise<void>;
 
@@ -199,11 +219,6 @@ interface UpdateItem {
 export interface MatrixConfig {
   url: URL;
   username: string;
-}
-
-interface WriteResult {
-  path: LocalPath;
-  lastModified: number;
 }
 
 export type RequestContext = { realm: Realm; permissions: RealmPermissions };
@@ -301,6 +316,7 @@ export class Realm {
           owner = await this.getRealmOwnerUserId();
         }
         req.headers.set('X-Boxel-Assume-User', owner);
+        req.headers.set('X-Boxel-Disable-Module-Cache', 'true');
         return next(req);
       },
       async (req, next) => {
@@ -381,6 +397,11 @@ export class Realm {
         '/_readiness-check',
         SupportedMimeType.RealmInfo,
         this.readinessCheck.bind(this),
+      )
+      .post(
+        '/_atomic',
+        SupportedMimeType.JSONAPI,
+        this.handleAtomicOperations.bind(this),
       )
       .post('(/|/.+/)', SupportedMimeType.CardJson, this.createCard.bind(this))
       .get(
@@ -487,35 +508,49 @@ export class Realm {
   async write(
     path: LocalPath,
     contents: string,
-    clientRequestId?: string | null,
-  ): Promise<WriteResult[]>;
-  async write(
+    options?: WriteOptions,
+  ): Promise<FileWriteResult> {
+    let results = await this._batchWrite(new Map([[path, contents]]), options);
+    return results[0];
+  }
+
+  async writeMany(
     files: Map<LocalPath, string>,
-    clientRequestId?: string | null,
-  ): Promise<WriteResult[]>;
-  async write(
-    pathOrFiles: LocalPath | Map<LocalPath, string>,
-    contentsOrClientRequestId: string,
-    maybeClientRequestId?: string | null,
-  ): Promise<WriteResult[]> {
-    let files = new Map<LocalPath, string>();
-    let clientRequestId: string | undefined | null;
-    if (typeof pathOrFiles === 'string') {
-      files.set(pathOrFiles, contentsOrClientRequestId);
-      clientRequestId = maybeClientRequestId ?? null;
-    } else {
-      files = pathOrFiles;
-      clientRequestId = contentsOrClientRequestId ?? null;
-    }
+    options?: WriteOptions,
+  ): Promise<FileWriteResult[]> {
+    return this._batchWrite(files, options);
+  }
+
+  private async _batchWrite(
+    files: Map<LocalPath, string>,
+    options?: WriteOptions,
+  ): Promise<FileWriteResult[]> {
     await this.indexing();
-    let results: WriteResult[] = [];
+    let results: FileWriteResult[] = [];
     let urls: URL[] = [];
     for (let [path, content] of files) {
       let url = this.paths.fileURL(path);
       this.sendIndexInitiationEvent(url.href);
       await this.trackOwnWrite(path);
-      let { lastModified } = await this.#adapter.write(path, content);
-      results.push({ path, lastModified });
+      try {
+        let doc = JSON.parse(content);
+        if (isCardResource(doc.data) && options?.serializeFile) {
+          let serialized = await this.fileSerialization(
+            { data: merge(doc.data, { meta: { realmURL: this.url } }) },
+            url,
+          );
+          content = JSON.stringify(serialized, null, 2);
+        }
+      } catch (e: any) {
+        if (e.message.includes('not found')) {
+          throw new Error(e);
+        }
+      }
+      let { lastModified, created, isNew } = await this.#adapter.write(
+        path,
+        content,
+      );
+      results.push({ path, lastModified, created, isNew });
       urls.push(url);
     }
     await this.#realmIndexUpdater.update(urls, {
@@ -524,11 +559,212 @@ export class Realm {
           eventName: 'index',
           indexType: 'incremental',
           invalidations: invalidatedURLs.map((u) => u.href),
-          clientRequestId: clientRequestId ?? null, // use null instead of undefined for valid JSON serialization
+          clientRequestId: options?.clientRequestId ?? null,
         });
       },
     });
     return results;
+  }
+
+  validate(json: any): AtomicPayloadValidationError[] {
+    let operations = json['atomic:operations'];
+    let title = 'Invalid atomic:operations format';
+    let errors: AtomicPayloadValidationError[] = [];
+    if (!operations || !Array.isArray(operations)) {
+      let detail = `Request body must contain 'atomic:operations' array`;
+      errors.push({
+        title,
+        detail,
+        status: 400,
+      });
+      return errors;
+    }
+    for (let operation of operations) {
+      if (operation.op !== 'add') {
+        let detail = `You tried to use an unsupported operation type: '${operation.op}'. Only 'add' operations are currently supported`;
+        errors.push({
+          title,
+          detail,
+          status: 422,
+        });
+      }
+      if (!operation.href) {
+        let detail = `Request operation must contain 'href' property`;
+        errors.push({
+          title,
+          detail,
+          status: 400,
+        });
+      }
+      if (
+        operation.data &&
+        !(operation.data.type == 'card' || operation.data.type == 'source')
+      ) {
+        let detail = `You tried to use an unsupported resource type: '${operation.data.type}'. Only 'card' and 'source' resource types are currently supported`;
+        errors.push({
+          title,
+          detail,
+          status: 422,
+        });
+      }
+    }
+    return errors;
+  }
+
+  // this method carefully checks before writing with the intent of
+  // stopping failed operations that depend on others
+  private async checkBeforeAtomicWrite(
+    operations: AtomicOperation[],
+  ): Promise<ErrorDetails[]> {
+    let promises = [];
+    for (let { href } of operations) {
+      promises.push(this.#adapter.exists(href));
+    }
+    let booleanFlags = await Promise.all(promises);
+    return operations
+      .filter((_, i) => booleanFlags[i])
+      .map(({ href }) => {
+        return {
+          title: 'Resource already exists',
+          detail: `Resource ${href} already exists`,
+          status: 409,
+        };
+      });
+  }
+
+  private lowestStatusCode(errors: ErrorDetails[]): number {
+    let statuses = errors
+      .filter((e) => e.status)
+      .map((e) => e.status) as number[];
+    return Math.min(...statuses);
+  }
+
+  private async handleAtomicOperations(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let body = await request.text();
+    let json;
+    try {
+      json = JSON.parse(body);
+    } catch (e) {
+      return createResponse({
+        body: JSON.stringify({
+          errors: [
+            {
+              title: 'Invalid atomic:operations format',
+              detail: `Request body is not valid JSON`,
+            },
+          ],
+        }),
+        init: {
+          status: 400,
+          headers: {
+            'content-type': SupportedMimeType.JSONAPI,
+          },
+        },
+        requestContext,
+      });
+    }
+    let validationErrors = this.validate(json);
+    if (validationErrors.length > 0) {
+      return createResponse({
+        body: JSON.stringify({ errors: validationErrors }),
+        init: {
+          status: 400,
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        }, //consolidate to 400
+        requestContext,
+      });
+    }
+    let operations = filterAtomicOperations(json['atomic:operations']);
+    let atomicCheckErrors = await this.checkBeforeAtomicWrite(operations);
+    if (atomicCheckErrors.length > 0) {
+      return createResponse({
+        body: JSON.stringify({ errors: atomicCheckErrors }),
+        init: {
+          status: this.lowestStatusCode(atomicCheckErrors),
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        },
+        requestContext,
+      });
+    }
+    let files = new Map<LocalPath, string>();
+    let writeResults: FileWriteResult[] = [];
+
+    for (let operation of operations) {
+      let resource = operation.data;
+      let href = operation.href;
+
+      let fileURL = this.paths.fileURL(href);
+      let localPath = this.paths.local(fileURL);
+      if (isModuleResource(resource)) {
+        files.set(localPath, resource.attributes?.content ?? '');
+      } else if (isCardResource(resource)) {
+        let doc = {
+          data: resource,
+        };
+        files.set(localPath, JSON.stringify(doc, null, 2));
+      } else {
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                status: 400,
+                title: 'Invalid resource',
+                detail: `Operation data is not a valid card resource or module resource`,
+              },
+            ],
+          }),
+          init: {
+            status: 400,
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
+          },
+          requestContext,
+        });
+      }
+    }
+
+    if (files.size > 0) {
+      try {
+        writeResults = await this.writeMany(files, {
+          clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+          serializeFile: true,
+        });
+      } catch (e: any) {
+        return createResponse({
+          body: JSON.stringify({
+            errors: [{ title: 'Write Error', detail: e.message }],
+          }),
+          init: {
+            status: 500,
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
+          },
+          requestContext,
+        });
+      }
+    }
+
+    let results: AtomicOperationResult[] = writeResults.map(
+      ({ path, created }) => ({
+        data: {
+          id: this.paths.fileURL(path).href,
+        },
+        meta: {
+          created,
+        },
+      }),
+    );
+    return createResponse({
+      body: JSON.stringify({ 'atomic:results': results }, null, 2),
+      init: {
+        status: 201,
+        headers: {
+          'content-type': SupportedMimeType.JSONAPI,
+        },
+      },
+      requestContext,
+    });
   }
 
   // we track our own writes so that we can eliminate echoes in the file watcher
@@ -880,8 +1116,10 @@ export class Realm {
     let start = Date.now();
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
-
-    if (!this.#disableModuleCaching) {
+    if (
+      !this.#disableModuleCaching &&
+      !request.headers.get('X-Boxel-Disable-Module-Cache')
+    ) {
       let useWorkInProgressIndex = Boolean(
         request.headers.get('X-Boxel-Building-Index'),
       );
@@ -938,7 +1176,14 @@ export class Realm {
         }
       }
     }
-
+    return this.serveModuleFromDisk(localPath, start, request, requestContext);
+  }
+  private async serveModuleFromDisk(
+    localPath: LocalPath,
+    start: number,
+    request: Request,
+    requestContext: RequestContext,
+  ) {
     try {
       let maybeFileRef = await this.getFileWithFallbacks(
         localPath,
@@ -1113,10 +1358,13 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let [{ lastModified }] = await this.write(
+    let { lastModified } = await this.write(
       this.paths.local(new URL(request.url)),
       await request.text(),
-      request.headers.get('X-Boxel-Client-Request-Id'),
+      {
+        clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+        serializeFile: false,
+      },
     );
     return createResponse({
       body: null,
@@ -1404,10 +1652,9 @@ export class Realm {
         lid: primaryResource.lid,
       });
     }
-    let [{ lastModified }] = await this.write(
-      files,
-      request.headers.get('X-Boxel-Client-Request-Id'),
-    );
+    let [{ lastModified }] = await this.writeMany(files, {
+      clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+    });
 
     let newURL = primaryResourceURL.href.replace(/\.json$/, '');
     let entry = await this.#realmIndexQueryEngine.cardDocument(
@@ -1600,10 +1847,9 @@ export class Realm {
       let path = this.paths.local(fileURL);
       files.set(path, JSON.stringify(fileSerialization, null, 2));
     }
-    let [{ lastModified }] = await this.write(
-      files,
-      request.headers.get('X-Boxel-Client-Request-Id'),
-    );
+    let [{ lastModified }] = await this.writeMany(files, {
+      clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+    });
     let entry = await this.#realmIndexQueryEngine.cardDocument(
       new URL(instanceURL),
       {
