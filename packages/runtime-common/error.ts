@@ -244,6 +244,16 @@ export class CardError extends Error implements SerializedError {
   }
 }
 
+export function isCardErrorJSONAPI(err: any): err is CardErrorJSONAPI {
+  return (
+    err != null &&
+    typeof err === 'object' &&
+    err.status &&
+    err.title &&
+    err.meta
+  );
+}
+
 export function isCardError(err: any): err is CardError {
   return err != null && typeof err === 'object' && err.isCardError;
 }

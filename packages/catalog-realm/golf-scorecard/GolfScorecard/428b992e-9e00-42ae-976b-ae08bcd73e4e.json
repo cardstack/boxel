@@ -1,0 +1,151 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "tournamentName": "US Open Championship",
+      "courseName": "Pinehurst No. 2",
+      "playerName": "Rory McIlroy",
+      "roundDate": "2025-07-14",
+      "roundNumber": 1,
+      "holes": [
+        {
+          "holeNumber": 1,
+          "par": 4,
+          "yards": 445,
+          "strokes": 4,
+          "putts": 2
+        },
+        {
+          "holeNumber": 2,
+          "par": 4,
+          "yards": 411,
+          "strokes": 3,
+          "putts": 1
+        },
+        {
+          "holeNumber": 3,
+          "par": 3,
+          "yards": 198,
+          "strokes": 3,
+          "putts": 2
+        },
+        {
+          "holeNumber": 4,
+          "par": 4,
+          "yards": 381,
+          "strokes": 4,
+          "putts": 1
+        },
+        {
+          "holeNumber": 5,
+          "par": 5,
+          "yards": 567,
+          "strokes": 4,
+          "putts": 2
+        },
+        {
+          "holeNumber": 6,
+          "par": 4,
+          "yards": 450,
+          "strokes": 5,
+          "putts": 2
+        },
+        {
+          "holeNumber": 7,
+          "par": 3,
+          "yards": 176,
+          "strokes": 2,
+          "putts": 1
+        },
+        {
+          "holeNumber": 8,
+          "par": 4,
+          "yards": 422,
+          "strokes": 4,
+          "putts": 2
+        },
+        {
+          "holeNumber": 9,
+          "par": 4,
+          "yards": 436,
+          "strokes": 4,
+          "putts": 2
+        },
+        {
+          "holeNumber": 10,
+          "par": 4,
+          "yards": 447,
+          "strokes": 4,
+          "putts": 2
+        },
+        {
+          "holeNumber": 11,
+          "par": 5,
+          "yards": 551,
+          "strokes": 5,
+          "putts": 2
+        },
+        {
+          "holeNumber": 12,
+          "par": 3,
+          "yards": 164,
+          "strokes": 3,
+          "putts": 1
+        },
+        {
+          "holeNumber": 13,
+          "par": 4,
+          "yards": 408,
+          "strokes": 4,
+          "putts": 2
+        },
+        {
+          "holeNumber": 14,
+          "par": 4,
+          "yards": 458,
+          "strokes": 4,
+          "putts": 2
+        },
+        {
+          "holeNumber": 15,
+          "par": 3,
+          "yards": 227,
+          "strokes": 2,
+          "putts": 1
+        },
+        {
+          "holeNumber": 16,
+          "par": 4,
+          "yards": 479,
+          "strokes": 4,
+          "putts": 2
+        },
+        {
+          "holeNumber": 17,
+          "par": 4,
+          "yards": 429,
+          "strokes": 3,
+          "putts": 1
+        },
+        {
+          "holeNumber": 18,
+          "par": 5,
+          "yards": 543,
+          "strokes": 5,
+          "putts": 2
+        }
+      ],
+      "signedByPlayer": false,
+      "signedByMarker": false,
+      "title": "Rory McIlroy - 2025 US Open Round 1",
+      "description": "First round scorecard for Rory McIlroy at the 2025 US Open Championship",
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../golf-scorecard",
+        "name": "GolfScorecard"
+      }
+    }
+  }
+}
