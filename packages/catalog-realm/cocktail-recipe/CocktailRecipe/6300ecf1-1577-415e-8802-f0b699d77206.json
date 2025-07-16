@@ -1,0 +1,53 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cocktailName": "Classic Whiskey Sour",
+      "description": "A timeless cocktail that perfectly balances the warmth of whiskey with the tartness of lemon and the sweetness of simple syrup. This classic drink has been a staple in bars since the 1860s and remains one of the most beloved whiskey cocktails.",
+      "difficulty": "easy",
+      "preparationTime": 5,
+      "glassType": "Rocks Glass",
+      "ingredients": [
+        {
+          "ingredient": "Bourbon Whiskey",
+          "amount": 2,
+          "unit": "oz",
+          "notes": "Use a quality bourbon, Buffalo Trace or Maker's Mark work well"
+        },
+        {
+          "ingredient": "Fresh Lemon Juice",
+          "amount": 1,
+          "unit": "oz",
+          "notes": "Always use freshly squeezed lemon juice, never bottled"
+        },
+        {
+          "ingredient": "Simple Syrup",
+          "amount": 0.75,
+          "unit": "oz",
+          "notes": "Equal parts sugar and water, dissolved"
+        },
+        {
+          "ingredient": "Egg White",
+          "amount": 1,
+          "unit": "whole",
+          "notes": "Optional, for frothy texture and silky mouthfeel"
+        }
+      ],
+      "garnish": {
+        "garnishType": "Lemon wheel and maraschino cherry",
+        "preparation": "Cut a fresh lemon wheel and select a quality maraschino cherry",
+        "placement": "Float lemon wheel on top and add cherry with a cocktail pick"
+      },
+      "instructions": "1. Add bourbon, lemon juice, simple syrup, and egg white (if using) to a cocktail shaker.\n\n2. Dry shake (without ice) for 10-15 seconds to emulsify the egg white.\n\n3. Add ice to the shaker and shake vigorously for another 10-15 seconds.\n\n4. Double strain through a fine mesh strainer into a rocks glass filled with fresh ice.\n\n5. Garnish with a lemon wheel and maraschino cherry.\n\n6. Serve immediately while cold.",
+      "bartenderNotes": "The key to a perfect Whiskey Sour is balance. Taste and adjust the lemon-to-simple syrup ratio based on your preference and the tartness of your lemons. The egg white is traditional and adds a beautiful foam cap, but can be omitted for those with dietary restrictions. For a twist, try using maple syrup instead of simple syrup for an autumnal variation.",
+      "origin": "United States, mid-1800s. First documented in Jerry Thomas's 1862 bartender manual 'The Bartender's Guide'",
+      "thumbnailURL": "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=400"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../cocktail-recipe",
+        "name": "CocktailRecipe"
+      }
+    }
+  }
+}

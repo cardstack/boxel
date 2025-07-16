@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cocktailName": "Classic Negroni",
+      "description": "An iconic Italian aperitivo that masterfully balances bitter, sweet, and botanical flavors. The Negroni's ruby red color and complex flavor profile make it a sophisticated choice for any cocktail enthusiast.",
+      "difficulty": "medium",
+      "preparationTime": 3,
+      "glassType": "Old Fashioned Glass",
+      "ingredients": [
+        {
+          "ingredient": "Gin",
+          "amount": 1,
+          "unit": "oz",
+          "notes": "Use a London Dry gin like Tanqueray or Beefeater"
+        },
+        {
+          "ingredient": "Campari",
+          "amount": 1,
+          "unit": "oz",
+          "notes": "The signature bitter Italian aperitif"
+        },
+        {
+          "ingredient": "Sweet Red Vermouth",
+          "amount": 1,
+          "unit": "oz",
+          "notes": "Carpano Antica Formula or Dolin Rouge preferred"
+        }
+      ],
+      "garnish": {
+        "garnishType": "Orange peel",
+        "preparation": "Express oils from a wide orange peel over the drink",
+        "placement": "Float on top of the cocktail"
+      },
+      "instructions": "1. Add gin, Campari, and sweet vermouth to a mixing glass filled with ice.\n\n2. Stir gently for 20-30 seconds until well chilled.\n\n3. Strain into an old fashioned glass over one large ice cube.\n\n4. Express the oils from the orange peel over the drink by gently twisting it.\n\n5. Drop the orange peel into the glass as garnish.\n\n6. Serve immediately.",
+      "bartenderNotes": "The Negroni's beauty lies in its perfect 1:1:1 ratio. Some prefer to adjust this slightly - try 1.25:0.75:1 for a more gin-forward version. The quality of vermouth matters significantly; store opened bottles in the refrigerator and use within a month. For a lighter variation, try a Negroni Sbagliato by substituting Prosecco for gin.",
+      "origin": "Florence, Italy, 1919. Created at Caffè Casoni when Count Camillo Negroni asked bartender Fosco Scarselli to strengthen his Americano by replacing soda water with gin.",
+      "thumbnailURL": "https://images.unsplash.com/photo-1582457601528-5f8757143fb1?q=80&w=400"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../cocktail-recipe",
+        "name": "CocktailRecipe"
+      }
+    }
+  }
+}
