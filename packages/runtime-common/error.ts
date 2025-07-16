@@ -8,6 +8,7 @@ export interface ErrorDetails {
   status?: number;
   title?: string;
   responseText?: string;
+  detail?: string;
   id?: string | null;
   source?: {
     pointer?: string;
@@ -241,6 +242,16 @@ export class CardError extends Error implements SerializedError {
       }, with body: ${await response.text()}`,
     );
   }
+}
+
+export function isCardErrorJSONAPI(err: any): err is CardErrorJSONAPI {
+  return (
+    err != null &&
+    typeof err === 'object' &&
+    err.status &&
+    err.title &&
+    err.meta
+  );
 }
 
 export function isCardError(err: any): err is CardError {

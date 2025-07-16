@@ -361,7 +361,8 @@ class CarouselComponent extends GlimmerComponent<Signature> {
           }
         }
 
-        @container (max-height: 100px) {
+        @container (max-height: 140px) {
+          .actions-buttons-container,
           .carousel-nav,
           .carousel-dots {
             display: none;

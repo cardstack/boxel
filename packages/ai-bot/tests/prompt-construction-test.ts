@@ -100,7 +100,7 @@ module('buildPromptForModel', (hooks) => {
     global.Date = originalDate;
   });
 
-  test('should generate a prompt from the user', async () => {
+  test('should generate a prompt from the user (viewing card in code mode', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -141,6 +141,7 @@ module('buildPromptForModel', (hooks) => {
       '@aibot:localhost',
       undefined,
       undefined,
+      [],
       fakeMatrixClient,
     );
 
@@ -159,6 +160,80 @@ Submode: code
 Workspace: http://localhost:4201/experiments
 The user has no open cards.
 File open in code editor: http://localhost:4201/experiments/Author/1
+Module inspector panel: preview
+Viewing card instance: http://localhost:4201/experiments/Author/1
+In format: isolated
+
+Current date and time: 2025-06-11T11:43:00.533Z
+`,
+    );
+  });
+
+  test('should generate a prompt from the user (viewing CardDef in code mode', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hey',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/experiments',
+              submode: 'code',
+              codeMode: {
+                currentFile: 'http://localhost:4201/experiments/author.gts',
+                selectedCodeRef: {
+                  module: 'http://localhost:4201/experiments/author',
+                  name: 'Address',
+                },
+                moduleInspectorPanel: 'preview',
+                previewPanelSelection: {
+                  cardId: 'http://localhost:4201/experiments/Author/1',
+                  format: 'isolated',
+                },
+              },
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    // Should have a system prompt and a user prompt
+    assert.equal(result.length, 3);
+    assert.equal(result[0].role, 'system');
+    assert.equal(result[1].role, 'system');
+    assert.equal(result[2].role, 'user');
+    assert.equal(result[2].content, 'Hey');
+
+    assert.equal(
+      result[1].content,
+      `The user is currently viewing the following user interface:
+Room ID: room1
+Submode: code
+Workspace: http://localhost:4201/experiments
+The user has no open cards.
+File open in code editor: http://localhost:4201/experiments/author.gts
+  Selected declaration: Address from http://localhost:4201/experiments/author
 Module inspector panel: preview
 Viewing card instance: http://localhost:4201/experiments/Author/1
 In format: isolated
@@ -227,6 +302,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       '@aibot:localhost',
       undefined,
       undefined,
+      [],
       fakeMatrixClient,
     );
 
@@ -307,6 +383,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
         '@aibot@localhost',
         undefined,
         undefined,
+        [],
         fakeMatrixClient,
       );
       assert.notOk(true, 'should have raised an exception');
@@ -728,6 +805,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       '@aibot:localhost',
       undefined,
       undefined,
+      [],
       fakeMatrixClient,
     );
 
@@ -1059,6 +1137,7 @@ Attached Files (files with newer versions don't show their content):
       '@aibot:localhost',
       undefined,
       undefined,
+      [],
       fakeMatrixClient,
     );
     const userMessages = fullPrompt.filter(
@@ -2001,11 +2080,16 @@ Attached Files (files with newer versions don't show their content):
       '@aibot:localhost',
       fakeMatrixClient,
     );
+    console.log(messages);
     assert.true(messages!.length > 0);
     assert.equal(messages![0].role, 'system');
     assert.true(messages![0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.false(messages![0].content?.includes('SKILL_INSTRUCTIONS_V1'));
-    assert.true(messages![0].content?.includes('SKILL_INSTRUCTIONS_V2'));
+    assert.true(
+      messages![0].content?.includes(
+        'Skill (id: skill-card-1):\nSKILL_INSTRUCTIONS_V2\n',
+      ),
+    );
   });
 
   test('if tool calls are required, ensure they are set', async () => {
@@ -2372,6 +2456,7 @@ Attached Files (files with newer versions don't show their content):
       history,
       '@aibot:localhost',
       tools,
+      [],
       [],
       fakeMatrixClient,
     );
@@ -2900,13 +2985,25 @@ Attached Files (files with newer versions don't show their content):
       ),
     );
 
-    const { tools } = await getPromptParts(
+    const { messages, tools } = await getPromptParts(
       eventList,
       '@aibot:localhost',
       fakeMatrixClient,
     );
     // we should not have any tools available
     assert.true(tools!.length == 0, 'Should not have tools available');
+
+    assert.equal(
+      messages![1].content,
+      `The user is currently viewing the following user interface:
+Room ID: !XuZQzeYAGZzFQFYUzQ:localhost
+Submode: interact
+The user has no open cards.
+Disabled skills: http://boxel.ai/skills/skill_card_editing
+
+Current date and time: 2025-06-11T11:43:00.533Z
+`,
+    );
   });
 
   test('Uses updated command definitions when skill card is updated', async () => {

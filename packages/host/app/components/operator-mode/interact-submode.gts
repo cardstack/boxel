@@ -905,10 +905,10 @@ export default class InteractSubmode extends Component {
         z-index: var(--boxel-layer-floating-button);
       }
       .stack-trigger-right {
-        right: 0;
+        right: 2px;
       }
       .stack-trigger-left {
-        left: 0;
+        left: 2px;
       }
     </style>
   </template>

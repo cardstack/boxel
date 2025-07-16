@@ -21,20 +21,15 @@ import {
   setupMatrixRoom,
   createVirtualNetworkAndLoader,
   matrixURL,
-  waitUntil,
   testRealmHref,
   testRealmURL,
   createJWT,
 } from './helpers';
+import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
-import type {
-  IncrementalIndexEventContent,
-  MatrixEvent,
-  RealmEvent,
-  RealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import isEqual from 'lodash/isEqual';
 
 module(basename(__filename), function () {
@@ -151,7 +146,7 @@ module(basename(__filename), function () {
 
           assert.strictEqual(
             response.headers['content-type'],
-            'text/plain;charset=UTF-8',
+            'text/plain; charset=utf-8',
             'content type is correct',
           );
           assert.strictEqual(
@@ -354,35 +349,15 @@ module(basename(__filename), function () {
             .delete('/unused-card.gts')
             .set('Accept', 'application/vnd.card+source');
 
-          await waitForIncrementalIndexEvent(
-            getMessagesSince,
+          await expectIncrementalIndexEvent(
+            `${testRealmURL}unused-card.gts`,
             realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+            },
           );
-
-          let messages = await getMessagesSince(realmEventTimestampStart);
-          let incrementalIndexInitiationEvent = findRealmEvent(
-            messages,
-            'index',
-            'incremental-index-initiation',
-          );
-
-          let incrementalEvent = findRealmEvent(
-            messages,
-            'index',
-            'incremental',
-          );
-
-          assert.deepEqual(incrementalIndexInitiationEvent!.content, {
-            eventName: 'index',
-            indexType: 'incremental-index-initiation',
-            updatedFile: `${testRealmURL}unused-card.gts`,
-          });
-
-          assert.deepEqual(incrementalEvent!.content, {
-            eventName: 'index',
-            indexType: 'incremental',
-            invalidations: [`${testRealmURL}unused-card.gts`],
-          });
         });
 
         test('serves a card-source DELETE request for a card instance', async function (assert) {
@@ -495,37 +470,15 @@ module(basename(__filename), function () {
             .set('Accept', 'application/vnd.card+source')
             .send(`//TEST UPDATE\n${cardSrc}`);
 
-          await waitForIncrementalIndexEvent(
-            getMessagesSince,
+          await expectIncrementalIndexEvent(
+            `${testRealmURL}unused-card.gts`,
             realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+            },
           );
-
-          let messages = await getMessagesSince(realmEventTimestampStart);
-          let incrementalIndexInitiationEvent = findRealmEvent(
-            messages,
-            'index',
-            'incremental-index-initiation',
-          );
-
-          let incrementalEvent = findRealmEvent(
-            messages,
-            'index',
-            'incremental',
-          );
-
-          assert.deepEqual(incrementalIndexInitiationEvent!.content, {
-            eventName: 'index',
-            indexType: 'incremental-index-initiation',
-            updatedFile: `${testRealmURL}unused-card.gts`,
-          });
-
-          assert.deepEqual(incrementalEvent!.content, {
-            eventName: 'index',
-            indexType: 'incremental',
-            invalidations: [`${testRealmURL}unused-card.gts`],
-            // FIXME ??
-            clientRequestId: null,
-          });
         });
 
         test('serves a card-source POST request for a .txt file', async function (assert) {
@@ -745,8 +698,6 @@ module(basename(__filename), function () {
                 eventName: 'index',
                 indexType: 'incremental',
                 invalidations: [`${testRealmURL}test-card.gts`],
-                // ??
-                // realmURL: testRealmHref,
                 clientRequestId: null,
               },
             },
@@ -764,8 +715,6 @@ module(basename(__filename), function () {
                 eventName: 'index',
                 indexType: 'incremental',
                 invalidations: [`${testRealmURL}test-card.gts`, id],
-                // ??
-                // realmURL: testRealmHref,
                 clientRequestId: null,
               },
             },
@@ -783,8 +732,6 @@ module(basename(__filename), function () {
                 eventName: 'index',
                 indexType: 'incremental',
                 invalidations: [id],
-                // ??
-                // realmURL: testRealmHref,
                 clientRequestId: null,
               },
             },
@@ -856,41 +803,6 @@ module(basename(__filename), function () {
     });
   });
 });
-
-async function waitForIncrementalIndexEvent(
-  getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
-  since: number,
-) {
-  await waitUntil(async () => {
-    let matrixMessages = await getMessagesSince(since);
-
-    return matrixMessages.some(
-      (m) =>
-        m.type === APP_BOXEL_REALM_EVENT_TYPE &&
-        m.content.eventName === 'index' &&
-        m.content.indexType === 'incremental',
-    );
-  });
-}
-
-function findRealmEvent(
-  events: MatrixEvent[],
-  eventName: string,
-  indexType: string,
-): RealmEvent | undefined {
-  return events.find(
-    (m) =>
-      m.type === APP_BOXEL_REALM_EVENT_TYPE &&
-      m.content.eventName === eventName &&
-      (realmEventIsIndex(m.content) ? m.content.indexType === indexType : true),
-  ) as RealmEvent | undefined;
-}
-
-function realmEventIsIndex(
-  event: RealmEventContent,
-): event is IncrementalIndexEventContent {
-  return event.eventName === 'index';
-}
 
 function matchRealmEvent(events: MatrixEvent[], event: any) {
   return events.find(

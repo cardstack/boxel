@@ -33,6 +33,7 @@ import {
   Loader,
   isCardInstance,
   type ResolvedCodeRef,
+  uuidv4,
 } from '@cardstack/runtime-common';
 import { IconMinusCircle, IconX, FourLines } from '@cardstack/boxel-ui/icons';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -55,6 +56,7 @@ interface Signature {
     cardTypeFor(
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
+      overrides?: () => Map<string, typeof BaseDef> | undefined,
     ): typeof BaseDef;
     childFormat: 'atom' | 'fitted';
     typeConstraint?: ResolvedCodeRef;
@@ -148,6 +150,7 @@ interface LinksToManyStandardEditorSignature {
     cardTypeFor(
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
+      overrides?: () => Map<string, typeof BaseDef> | undefined,
     ): typeof BaseDef;
     add: () => void;
     remove: (i: number) => void;
@@ -156,6 +159,7 @@ interface LinksToManyStandardEditorSignature {
 
 class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEditorSignature> {
   @consume(CardContextName) declare cardContext: CardContext;
+  private sortableGroupId = uuidv4();
 
   @action
   setItems(items: any) {
@@ -166,7 +170,10 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
     <PermissionsConsumer as |permissions|>
       {{#if @arrayField.children.length}}
         <ul
-          {{sortableGroup groupName=@field.name onChange=this.setItems}}
+          {{sortableGroup
+            groupName=this.sortableGroupId
+            onChange=this.setItems
+          }}
           class='list'
           data-test-list={{@field.name}}
           ...attributes
@@ -175,7 +182,10 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
             <li
               class='editor'
               data-test-item={{i}}
-              {{sortableItem groupName=@field.name model=boxedElement.value}}
+              {{sortableItem
+                groupName=this.sortableGroupId
+                model=boxedElement.value
+              }}
             >
               {{#if permissions.canWrite}}
                 <IconButton
@@ -290,6 +300,7 @@ interface LinksToManyCompactEditorSignature {
     cardTypeFor(
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
+      overrides?: () => Map<string, typeof BaseDef> | undefined,
     ): typeof BaseDef;
     add: () => void;
     remove: (i: number) => void;
@@ -414,6 +425,7 @@ export function getLinksToManyComponent({
   cardTypeFor(
     field: Field<typeof BaseDef>,
     boxedElement: Box<BaseDef>,
+    overrides?: () => Map<string, typeof BaseDef> | undefined,
   ): typeof BaseDef;
 }): BoxComponent {
   let stable = componentCache.get(arrayField);

@@ -1,0 +1,116 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "prefersFiction": false,
+      "prefersNonFiction": false,
+      "likesFantasy": false,
+      "likesSciFi": false,
+      "likesMystery": false,
+      "likesHistory": false,
+      "likesSelfHelp": false,
+      "likesScience": false,
+      "books": [
+        {
+          "title": "The Midnight Library",
+          "author": "Matt Haig",
+          "description": "Between life and death there is a library filled with books containing different versions of your life. When Nora Seeds finds herself in the Midnight Library, she has a chance to make different choices and discover what makes life worth living.",
+          "isFiction": true,
+          "genre": "Fantasy",
+          "category": null,
+          "purchaseUrl": "https://bookshop.org/books/the-midnight-library/9780525559474"
+        },
+        {
+          "title": "Project Hail Mary",
+          "author": "Andy Weir",
+          "description": "A lone astronaut must save the earth from disaster in this incredible adventure of ingenuity, discovery, and survival in space as only Andy Weir could imagine it.",
+          "isFiction": true,
+          "genre": "Science Fiction",
+          "category": null,
+          "purchaseUrl": "https://bookshop.org/books/project-hail-mary/9780593135204"
+        },
+        {
+          "title": "The Silent Patient",
+          "author": "Alex Michaelides",
+          "description": "A woman shoots her husband five times and then never speaks another word. A criminal psychotherapist is determined to get her to talk and unravel the mystery of why she shot her apparently perfect husband.",
+          "isFiction": true,
+          "genre": "Mystery",
+          "category": null,
+          "purchaseUrl": "https://bookshop.org/books/the-silent-patient/9781250301697"
+        },
+        {
+          "title": "Klara and the Sun",
+          "author": "Kazuo Ishiguro",
+          "description": "A story told from the perspective of an Artificial Friend, a solar-powered robot with human-like qualities who observes the world from her place in a store, waiting to be chosen by a customer.",
+          "isFiction": true,
+          "genre": "Science Fiction",
+          "category": null,
+          "purchaseUrl": "https://bookshop.org/books/klara-and-the-sun/9780593318171"
+        },
+        {
+          "title": "The House in the Cerulean Sea",
+          "author": "TJ Klune",
+          "description": "A magical island where six dangerous magical children are being hidden away from the world. A social worker is sent to evaluate them and their caretaker, only to discover they may be humanity's last hope.",
+          "isFiction": true,
+          "genre": "Fantasy",
+          "category": null,
+          "purchaseUrl": "https://bookshop.org/books/the-house-in-the-cerulean-sea/9781250217288"
+        },
+        {
+          "title": "Sapiens: A Brief History of Humankind",
+          "author": "Yuval Noah Harari",
+          "description": "A groundbreaking narrative that explores how humans evolved from insignificant apes to become the dominant species on the planet, capable of splitting atoms, flying to the moon, and manipulating the genetic code of life.",
+          "isFiction": false,
+          "genre": null,
+          "category": "History",
+          "purchaseUrl": "https://bookshop.org/books/sapiens-a-brief-history-of-humankind/9780062316110"
+        },
+        {
+          "title": "Atomic Habits",
+          "author": "James Clear",
+          "description": "An easy and proven way to build good habits and break bad ones. This practical guide reveals a framework for daily improvement, no matter your goals, with tiny changes that yield remarkable results.",
+          "isFiction": false,
+          "genre": null,
+          "category": "Self-Help",
+          "purchaseUrl": "https://bookshop.org/books/atomic-habits-an-easy-proven-way-to-build-good-habits-break-bad-ones/9780735211292"
+        },
+        {
+          "title": "Entangled Life",
+          "author": "Merlin Sheldrake",
+          "description": "A mind-bending journey into the hidden world of fungi that will change your understanding of life on earth. Fungi provide a key to understanding the planet on which we live and the ways we think, feel, and behave.",
+          "isFiction": false,
+          "genre": null,
+          "category": "Science",
+          "purchaseUrl": "https://bookshop.org/books/entangled-life-how-fungi-make-our-worlds-change-our-minds-shape-our-futures/9780525510314"
+        },
+        {
+          "title": "Thinking, Fast and Slow",
+          "author": "Daniel Kahneman",
+          "description": "A revelatory exploration of how we make decisions, drawing on decades of research in psychology and behavioral economics. Kahneman explains the two systems that drive the way we think and make choices.",
+          "isFiction": false,
+          "genre": null,
+          "category": "Science",
+          "purchaseUrl": "https://bookshop.org/books/thinking-fast-and-slow/9780374533557"
+        },
+        {
+          "title": "The Splendid and the Vile",
+          "author": "Erik Larson",
+          "description": "A compelling portrait of Winston Churchill's leadership during the Blitz, showing how Churchill taught the British people to be fearless and how he transformed their fear into courage in one of history's darkest years.",
+          "isFiction": false,
+          "genre": null,
+          "category": "History",
+          "purchaseUrl": "https://bookshop.org/books/the-splendid-and-the-vile-a-saga-of-churchill-family-and-defiance-during-the-blitz/9780385348713"
+        }
+      ],
+      "title": "Recommended Books for You",
+      "description": "A curated collection of must-read books across various genres",
+      "thumbnailURL": "https://images.unsplash.com/photo-1526243741027-444d633d7365?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=2142&q=80"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../book-recommender",
+        "name": "BookRecommender"
+      }
+    }
+  }
+}

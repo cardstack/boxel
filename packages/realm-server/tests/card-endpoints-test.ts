@@ -3,7 +3,6 @@ import { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
 import { Server } from 'http';
 import { type DirResult } from 'tmp';
-import { validate as uuidValidate } from 'uuid';
 import { existsSync, readJSONSync } from 'fs-extra';
 import {
   isSingleCardDocument,
@@ -15,7 +14,6 @@ import {
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
 import {
-  findRealmEvent,
   setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
@@ -25,18 +23,13 @@ import {
   closeServer,
   testRealmInfo,
   cleanWhiteSpace,
-  waitUntil,
   testRealmHref,
   createJWT,
   testRealmServerMatrixUserId,
 } from './helpers';
+import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
-import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
-import type {
-  IncrementalIndexEventContent,
-  MatrixEvent,
-} from 'https://cardstack.com/base/matrix-event';
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | card URLs', function (hooks) {
@@ -362,7 +355,6 @@ module(basename(__filename), function () {
         let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
 
         test('serves the request', async function (assert) {
-          let id: string | undefined;
           let realmEventTimestampStart = Date.now();
 
           let response = await request
@@ -381,28 +373,17 @@ module(basename(__filename), function () {
             })
             .set('Accept', 'application/vnd.card+json');
 
-          await waitForIncrementalIndexEvent(
-            getMessagesSince,
+          let incrementalEventContent = await expectIncrementalIndexEvent(
+            testRealmHref,
             realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+            },
           );
+          let id = incrementalEventContent.invalidations[0].split('/').pop()!;
 
-          let messages = await getMessagesSince(realmEventTimestampStart);
-          let incrementalEvent = findRealmEvent(
-            messages,
-            'index',
-            'incremental',
-          )?.content as IncrementalIndexEventContent;
-
-          id = incrementalEvent.invalidations[0].split('/').pop()!;
-          assert.true(uuidValidate(id!), 'card identifier is a UUID');
-          assert.strictEqual(
-            incrementalEvent.invalidations[0],
-            `${testRealmHref}CardDef/${id}`,
-          );
-
-          if (!id) {
-            assert.ok(false, 'new card identifier was undefined');
-          }
           assert.strictEqual(response.status, 201, 'HTTP 201 status');
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
@@ -2401,36 +2382,15 @@ module(basename(__filename), function () {
             })
             .set('Accept', 'application/vnd.card+json');
 
-          await waitForIncrementalIndexEvent(
-            getMessagesSince,
+          await expectIncrementalIndexEvent(
+            `${testRealmHref}person-1.json`,
             realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+            },
           );
-
-          let messages = await getMessagesSince(realmEventTimestampStart);
-          let incrementalIndexInitiationEvent = findRealmEvent(
-            messages,
-            'index',
-            'incremental-index-initiation',
-          );
-
-          let incrementalEvent = findRealmEvent(
-            messages,
-            'index',
-            'incremental',
-          );
-
-          assert.deepEqual(incrementalIndexInitiationEvent!.content, {
-            eventName: 'index',
-            indexType: 'incremental-index-initiation',
-            updatedFile: `${testRealmHref}person-1.json`,
-          });
-
-          assert.deepEqual(incrementalEvent!.content, {
-            eventName: 'index',
-            indexType: 'incremental',
-            invalidations: [`${testRealmHref}person-1`],
-            clientRequestId: null,
-          });
         });
       });
 
@@ -2543,35 +2503,15 @@ module(basename(__filename), function () {
             .delete('/person-1')
             .set('Accept', 'application/vnd.card+json');
 
-          await waitForIncrementalIndexEvent(
-            getMessagesSince,
+          await expectIncrementalIndexEvent(
+            `${testRealmHref}person-1.json`,
             realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+            },
           );
-
-          let messages = await getMessagesSince(realmEventTimestampStart);
-          let incrementalIndexInitiationEvent = findRealmEvent(
-            messages,
-            'index',
-            'incremental-index-initiation',
-          );
-
-          let incrementalEvent = findRealmEvent(
-            messages,
-            'index',
-            'incremental',
-          );
-
-          assert.deepEqual(incrementalIndexInitiationEvent!.content, {
-            eventName: 'index',
-            indexType: 'incremental-index-initiation',
-            updatedFile: `${testRealmHref}person-1.json`,
-          });
-
-          assert.deepEqual(incrementalEvent!.content, {
-            eventName: 'index',
-            indexType: 'incremental',
-            invalidations: [`${testRealmHref}person-1`],
-          });
         });
 
         test('serves a card DELETE request with .json extension in the url', async function (assert) {
@@ -2665,19 +2605,3 @@ let cardDefModuleDependencies = [
   'https://cardstack.com/base/links-to-editor.gts',
   'https://cardstack.com/base/links-to-many-component.gts',
 ];
-
-async function waitForIncrementalIndexEvent(
-  getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
-  since: number,
-) {
-  await waitUntil(async () => {
-    let matrixMessages = await getMessagesSince(since);
-
-    return matrixMessages.some(
-      (m) =>
-        m.type === APP_BOXEL_REALM_EVENT_TYPE &&
-        m.content.eventName === 'index' &&
-        m.content.indexType === 'incremental',
-    );
-  });
-}

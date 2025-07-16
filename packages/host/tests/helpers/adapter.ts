@@ -10,6 +10,7 @@ import {
   hasExecutableExtension,
   Deferred,
   unixTime,
+  FileWriteResult,
 } from '@cardstack/runtime-common';
 
 import { LintResult } from '@cardstack/runtime-common/lint';
@@ -310,10 +311,11 @@ export class TestRealmAdapter implements RealmAdapter {
   async write(
     path: LocalPath,
     contents: string | object,
-  ): Promise<{ lastModified: number }> {
+  ): Promise<FileWriteResult> {
     let segments = path.split('/');
     let name = segments.pop()!;
     let dir = this.#traverse(segments, 'directory');
+    let exists = await this.exists(path);
     if (dir.kind === 'file') {
       throw new Error(`treated file as a directory`);
     }
@@ -352,7 +354,12 @@ export class TestRealmAdapter implements RealmAdapter {
 
     this.postUpdateEvent(updateEvent);
 
-    return { lastModified };
+    return {
+      path,
+      lastModified,
+      created: lastModified,
+      isNew: !exists,
+    };
   }
 
   postUpdateEvent(data: UpdateRealmEventContent) {

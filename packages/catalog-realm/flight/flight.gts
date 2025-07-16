@@ -199,6 +199,8 @@ export class Flight extends CardDef {
           --border-color: #e5e7eb;
           background: white;
           padding: 24px;
+          margin: 10px;
+          border: 1px solid #e5e7eb;
           border-radius: 12px;
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
           container-type: inline-size;
