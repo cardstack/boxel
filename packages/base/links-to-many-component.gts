@@ -46,7 +46,6 @@ import {
 
 import { action } from '@ember/object';
 import { initSharedState } from './shared-state';
-import Owner from '@ember/owner';
 
 interface Signature {
   Element: HTMLElement;
@@ -160,7 +159,7 @@ interface LinksToManyStandardEditorSignature {
 
 class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEditorSignature> {
   @consume(CardContextName) declare cardContext: CardContext;
-  private sortableGroupId= uuidv4();
+  private sortableGroupId = uuidv4();
 
   @action
   setItems(items: any) {

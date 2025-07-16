@@ -37,7 +37,6 @@ import {
   SortableHandleModifier as sortableHandle,
   SortableItemModifier as sortableItem,
 } from '@cardstack/boxel-ui/modifiers';
-import Owner from '@ember/owner';
 
 interface ContainsManyEditorSignature {
   Args: {
