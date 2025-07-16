@@ -115,7 +115,7 @@ export class Responder {
     // It will be null at all other times.
     if (chunk.usage) {
       log.info(
-        `Request used ${chunk.usage.prompt_tokens} prompt tokens and ${chunk.usage.completion_tokens}`,
+        `Request used ${chunk.usage.prompt_tokens} prompt tokens and ${chunk.usage.completion_tokens} completion tokens`,
       );
     }
 
