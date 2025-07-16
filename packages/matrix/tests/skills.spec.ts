@@ -278,6 +278,7 @@ test.describe('Skills', () => {
     await expect(
       page.locator(`[data-test-skill-toggle="${skillCard2}-off"]`),
     ).toHaveCount(1);
+    await page.locator('[data-test-pill-menu-button]').click();
     await sendMessage(page, room1, 'Message 2');
     await assertMessages(page, [
       { from: 'user1', message: 'Message 1' },
