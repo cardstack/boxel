@@ -364,6 +364,16 @@ export default class SubmodeLayout extends Component<Signature> {
               )
             }}
           />
+          {{#if this.profileSummaryOpened}}
+            <ProfileInfoPopover
+              {{onClickOutside
+                this.toggleProfileSummary
+                exceptSelector='.profile-icon-button'
+              }}
+              @toggleProfileSettings={{this.toggleProfileSettings}}
+              @toggleSubscriptionPlans={{this.toggleSubscriptionPlans}}
+            />
+          {{/if}}
         </ResizablePanel>
         {{#if this.aiAssistantPanelService.isOpen}}
           <ResizablePanel
@@ -385,17 +395,6 @@ export default class SubmodeLayout extends Component<Signature> {
         {{/if}}
       </ResizablePanelGroup>
     </div>
-
-    {{#if this.profileSummaryOpened}}
-      <ProfileInfoPopover
-        {{onClickOutside
-          this.toggleProfileSummary
-          exceptSelector='.profile-icon-button'
-        }}
-        @toggleProfileSettings={{this.toggleProfileSettings}}
-        @toggleSubscriptionPlans={{this.toggleSubscriptionPlans}}
-      />
-    {{/if}}
 
     {{#if this.profileSettingsOpened}}
       <ProfileSettingsModal

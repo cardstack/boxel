@@ -887,6 +887,13 @@ export default class CodeSubmode extends Component<Signature> {
         padding-right: var(--operator-mode-spacing);
         display: flex;
         z-index: 1;
+        width: calc(
+          100% -
+            calc(
+              var(--operator-mode-left-column) + var(--container-button-size) +
+                var(--operator-mode-spacing)
+            )
+        );
       }
       .code-mode-top-bar
         > :deep(* + *:not(.ember-basic-dropdown-content-wormhole-origin)) {
