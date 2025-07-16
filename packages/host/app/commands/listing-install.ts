@@ -80,7 +80,9 @@ export default class ListingInstallCommand extends HostBaseCommand<
       })
       .addIf(listing.examples?.length > 0, (opts: InstallOptions) => {
         let r = planInstanceInstall(listing.examples, opts);
-        exampleCardId = join(realmUrl, r.instancesCopy[0].lid);
+        let firstInstance = r.instancesCopy[0];
+        exampleCardId = join(realmUrl, firstInstance.lid);
+        selectedCodeRef = firstInstance.targetCodeRef;
         return r;
       })
       .addIf(listing.skills?.length > 0, (opts: InstallOptions) => {

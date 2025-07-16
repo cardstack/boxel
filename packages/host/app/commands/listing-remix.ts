@@ -70,7 +70,9 @@ export default class RemixCommand extends HostBaseCommand<
       const codePath = selectedCodeRef.module;
 
       if (exampleCardId) {
-        const moduleId = [selectedCodeRef.name, selectedCodeRef.name].join('/');
+        const moduleId = [selectedCodeRef.module, selectedCodeRef.name].join(
+          '/',
+        );
         await new UpdatePlaygroundSelectionCommand(this.commandContext).execute(
           {
             moduleId: moduleId,
