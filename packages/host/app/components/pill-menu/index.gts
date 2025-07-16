@@ -3,8 +3,6 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
-
 import { Header } from '@cardstack/boxel-ui/components';
 
 import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
