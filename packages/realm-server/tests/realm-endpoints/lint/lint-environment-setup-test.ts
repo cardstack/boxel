@@ -1,9 +1,9 @@
-// Test to verify Phase 1.1 - Test Environment Setup
+// Test to verify Test Environment Setup
 import { module, test } from 'qunit';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 
-module('Test Environment Setup (Phase 1.1)', function () {
+module('Test Environment Setup', function () {
   test('prettier dependency is available', async function (assert) {
     try {
       const prettier = await import('prettier');
@@ -14,7 +14,10 @@ module('Test Environment Setup (Phase 1.1)', function () {
         'Prettier resolveConfig function is available',
       );
     } catch (error) {
-      assert.ok(false, `Prettier is not available: ${error.message}`);
+      assert.ok(
+        false,
+        `Prettier is not available: ${(error as Error).message}`,
+      );
     }
   });
 
@@ -30,12 +33,16 @@ module('Test Environment Setup (Phase 1.1)', function () {
       const result = await prettier.format(testCode, config);
 
       assert.ok(result, 'Prettier with ember-template-tag plugin works');
-      assert.ok(typeof result === 'string', 'Prettier result is a string');
+      assert.strictEqual(
+        typeof result,
+        'string',
+        'Prettier result is a string',
+      );
       assert.ok(result.includes('template'), 'Template tag is preserved');
     } catch (error) {
       assert.ok(
         false,
-        `Prettier ember-template-tag plugin is not working: ${error.message}`,
+        `Prettier ember-template-tag plugin is not working: ${(error as Error).message}`,
       );
     }
   });
@@ -53,17 +60,16 @@ module('Test Environment Setup (Phase 1.1)', function () {
         'Test fixture contains expected content',
       );
     } catch (error) {
-      assert.ok(false, `Test fixtures are not accessible: ${error.message}`);
+      assert.ok(
+        false,
+        `Test fixtures are not accessible: ${(error as Error).message}`,
+      );
     }
   });
 
   test('prettier configuration resolves correctly', async function (assert) {
     try {
       const prettier = await import('prettier');
-      const config = await prettier.resolveConfig('test.gts');
-
-      // The config might be null if no config is found, which is fine
-      assert.ok(true, 'Prettier configuration resolution works');
 
       // Test with explicit config
       const testConfig = {
@@ -76,11 +82,15 @@ module('Test Environment Setup (Phase 1.1)', function () {
       const result = await prettier.format(testCode, testConfig);
 
       assert.ok(result, 'Prettier formatting with config works');
-      assert.ok(typeof result === 'string', 'Prettier result is a string');
+      assert.strictEqual(
+        typeof result,
+        'string',
+        'Prettier result is a string',
+      );
     } catch (error) {
       assert.ok(
         false,
-        `Prettier configuration is not working: ${error.message}`,
+        `Prettier configuration is not working: ${(error as Error).message}`,
       );
     }
   });
@@ -139,7 +149,7 @@ module('Test Environment Setup (Phase 1.1)', function () {
     } catch (error) {
       assert.ok(
         false,
-        `runtime-common dependencies check failed: ${error.message}`,
+        `runtime-common dependencies check failed: ${(error as Error).message}`,
       );
     }
   });
@@ -158,7 +168,11 @@ module('Test Environment Setup (Phase 1.1)', function () {
       const result = await prettier.format(input, config);
 
       assert.ok(result, 'Prettier formatting produces output');
-      assert.ok(typeof result === 'string', 'Prettier result is a string');
+      assert.strictEqual(
+        typeof result,
+        'string',
+        'Prettier result is a string',
+      );
       assert.ok(result.includes('import'), 'Import statements are preserved');
       assert.ok(result.includes('CardDef'), 'CardDef is preserved');
       assert.ok(result.includes('export'), 'Export statements are preserved');
@@ -174,7 +188,10 @@ module('Test Environment Setup (Phase 1.1)', function () {
         `Formatted output has proper spacing. Input: ${input.length} chars, Output: ${result.length} chars. Result: ${result.substring(0, 100)}...`,
       );
     } catch (error) {
-      assert.ok(false, `Basic prettier formatting failed: ${error.message}`);
+      assert.ok(
+        false,
+        `Basic prettier formatting failed: ${(error as Error).message}`,
+      );
     }
   });
 });

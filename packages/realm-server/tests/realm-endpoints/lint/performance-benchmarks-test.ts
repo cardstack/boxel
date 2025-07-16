@@ -1,11 +1,11 @@
-// Performance benchmark tests for Phase 1.3 - Test Infrastructure
+// Performance benchmark tests for Test Infrastructure
 import { module, test } from 'qunit';
 import {
   PrettierTestUtils,
   loadAllTestFixtures,
 } from '../../helpers/prettier-test-utils';
 
-module('Performance Benchmarks (Phase 1.3)', function (hooks) {
+module('Performance Benchmarks', function (hooks) {
   let utils: PrettierTestUtils;
   let fixtures: any[];
 
@@ -28,8 +28,9 @@ module('Performance Benchmarks (Phase 1.3)', function (hooks) {
         benchmark.duration < 100,
         `Small file formatting should be under 100ms, got ${benchmark.duration}ms`,
       );
-      assert.ok(
-        benchmark.result === smallFixture.expected,
+      assert.strictEqual(
+        benchmark.result,
+        smallFixture.expected,
         'Correct result returned',
       );
     } else {
@@ -53,7 +54,7 @@ module('Performance Benchmarks (Phase 1.3)', function (hooks) {
       benchmark.duration < 500,
       `Large file formatting should be under 500ms, got ${benchmark.duration}ms`,
     );
-    assert.ok(benchmark.result === largeInput, 'Correct result returned');
+    assert.strictEqual(benchmark.result, largeInput, 'Correct result returned');
   });
 
   test('concurrent formatting performance', async function (assert) {
@@ -76,12 +77,17 @@ module('Performance Benchmarks (Phase 1.3)', function (hooks) {
       totalTime < 1000,
       `Concurrent formatting should be under 1000ms, got ${totalTime}ms`,
     );
-    assert.ok(results.length === 5, 'All concurrent operations completed');
+    assert.strictEqual(
+      results.length,
+      5,
+      'All concurrent operations completed',
+    );
 
     results.forEach((result, index) => {
       assert.ok(result.duration > 0, `Operation ${index} has valid duration`);
-      assert.ok(
-        result.result === concurrentData[index].expected,
+      assert.strictEqual(
+        result.result,
+        concurrentData[index].expected,
         `Operation ${index} has correct result`,
       );
     });
@@ -98,7 +104,7 @@ module('Performance Benchmarks (Phase 1.3)', function (hooks) {
           throw new Error(errorCase.expectedError);
         } catch (error) {
           // Error handling simulation - catch and return
-          return { error: error.message };
+          return { error: (error as Error).message };
         }
       }, `error-handling-${errorCase.name}`);
 
