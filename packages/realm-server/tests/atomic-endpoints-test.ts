@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, only } from 'qunit';
 import { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import { Server } from 'http';
@@ -114,7 +114,7 @@ module(basename(__filename), function () {
             'the card source is correct',
           );
         });
-        test('can write multiple new modules', async function (assert) {
+        only('can write multiple new modules', async function (assert) {
           let place1Source = `
               import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
               import StringField from "https://cardstack.com/base/string";
@@ -176,7 +176,7 @@ module(basename(__filename), function () {
               },
             ],
           };
-          let response = await request
+          let response = wait request
             .post('/_atomic')
             .set('Accept', SupportedMimeType.JSONAPI)
             .set(

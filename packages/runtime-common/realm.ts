@@ -72,6 +72,7 @@ import { MatrixClient, getMatrixUsername } from './matrix-client';
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
 import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
+import { isUrlLike } from './virtual-network';
 
 import { RealmAuthDataSource } from './realm-auth-data-source';
 import { fetcher } from './fetcher';
@@ -618,7 +619,8 @@ export class Realm {
   ): Promise<ErrorDetails[]> {
     let promises = [];
     for (let { href } of operations) {
-      promises.push(this.#adapter.exists(href));
+      let localPath = isUrlLike(href) ? this.paths.local(new URL(href)) : href;
+      promises.push(this.#adapter.exists(localPath));
     }
     let booleanFlags = await Promise.all(promises);
     return operations
