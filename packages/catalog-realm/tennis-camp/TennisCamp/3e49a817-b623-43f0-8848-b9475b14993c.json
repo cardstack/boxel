@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "campName": "Manhattan Kids Tennis Academy",
+      "tagline": "Where Future Champions Begin Their Journey!",
+      "description": "Join Manhattan's premier tennis camp designed specifically for young athletes ages 5-12! Our expert coaches create a fun, safe, and encouraging environment where kids learn tennis fundamentals, build confidence, and make lasting friendships. Located in the heart of downtown Manhattan with easy access for busy families.",
+      "ageRange": "5-12 years old",
+      "location": "Central Park Tennis Center, 830 5th Ave, New York, NY 10065",
+      "startDate": "2024-06-24",
+      "endDate": "2024-08-16",
+      "weeklyPrice": 425,
+      "fullSummerPrice": 3200,
+      "contactEmail": "info@manhattankidstennis.com",
+      "contactPhone": {
+        "number": "2125551234",
+        "countryCode": "+1"
+      },
+      "website": "https://manhattankidstennis.com",
+      "features": "🎾 Professional coaching by certified instructors\n⭐ Small group sizes (max 6 kids per court)\n🏆 Weekly mini-tournaments and skill challenges\n🥤 Healthy snacks and hydration breaks included\n🎨 Arts & crafts tennis-themed activities\n🏃‍♂️ Fitness games and agility training\n🎁 Camp t-shirt and water bottle included\n📸 Weekly photo updates for parents\n🌟 End-of-summer awards ceremony",
+      "schedule": "Monday-Friday: 9:00 AM - 3:00 PM\n• 9:00-9:30 AM: Warm-up games & stretching\n• 9:30-11:00 AM: Tennis fundamentals & drills\n• 11:00-11:15 AM: Snack break\n• 11:15 AM-12:30 PM: Court games & practice matches\n• 12:30-1:30 PM: Lunch break\n• 1:30-2:30 PM: Fun activities & mini-tournaments\n• 2:30-3:00 PM: Cool-down & camp circle\n\nExtended care available 8:00 AM - 6:00 PM for additional fee",
+      "testimonials": "⭐⭐⭐⭐⭐ \"My 8-year-old Emma absolutely loved this camp! She went from never holding a racket to serving and rallying. The coaches were amazing with kids.\" - Sarah M., Upper East Side\n\n⭐⭐⭐⭐⭐ \"Best investment we made this summer! Our twin boys (age 6) made friends, learned tennis, and had a blast. Very organized and professional.\" - Michael R., Tribeca\n\n⭐⭐⭐⭐⭐ \"The location is perfect for our family. Coaches really know how to keep kids engaged and excited about tennis. Highly recommend!\" - Jennifer L., Midtown",
+      "thumbnailURL": "https://images.unsplash.com/photo-1554068865-24cecd4e34b8?w=400&h=300&fit=crop&q=80"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../tennis-camp",
+        "name": "TennisCamp"
+      }
+    }
+  }
+}
