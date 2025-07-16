@@ -213,6 +213,7 @@ test.describe('Skills', () => {
       'Skills: 2 of 3 active',
     );
 
+    await page.locator('[data-test-pill-menu-button]').click();
     await openRoom(page, room1);
     await isInRoom(page, room1);
     await expect(page.locator('[data-test-active-skills-count]')).toContainText(
