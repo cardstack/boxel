@@ -2,13 +2,13 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Manhattan Kids Tennis Camp",
+      "name": "Tennis Camp",
       "summary": "Premium tennis camp website with vibrant youth-focused design - configure camp details, pricing, and schedules while viewing animated marketing presentations. Features animated gradient backgrounds, floating tennis elements, comprehensive pricing cards, parent testimonials integration, and energetic color schemes optimized for child enrollment experiences.",
       "images": [
-        "https://boxel-images.boxel.ai/app-assets/catalog/manhattan-kids-tennis-camp-listing/screenshot_01.png"
+        "https://boxel-images.boxel.ai/app-assets/catalog/tennis-camp-listing/screenshot_01.png"
       ],
       "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/manhattan-kids-tennis-camp-listing/thumbnail.png"
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/tennis-camp-listing/thumbnail.png"
     },
     "relationships": {
       "specs.0": {
@@ -19,6 +19,11 @@
       },
       "categories.0": {
         "links": { "self": "../Category/11e83666-2bd7-4a51-95a9-675f99c7b638" }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../TennisCamp/3e49a817-b623-43f0-8848-b9475b14993c"
+        }
       }
     },
     "meta": {
