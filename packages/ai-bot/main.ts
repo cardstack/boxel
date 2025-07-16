@@ -47,6 +47,10 @@ import { ChatCompletionMessageParam } from 'openai/resources';
 import { OpenAIError } from 'openai/error';
 import { ChatCompletionStream } from 'openai/lib/ChatCompletionStream.mjs';
 import { acquireLock, releaseLock } from './lib/queries';
+import { logger as matrixLogger } from 'matrix-js-sdk/lib/logger';
+
+// Silence FetchHttpApi Matrix SDK logs
+matrixLogger.setLevel('warn');
 
 let log = logger('ai-bot');
 
@@ -513,12 +517,19 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
+let waitForActiveGenerationsPromise: Promise<void> | undefined;
 async function handleShutdown() {
+  if (waitForActiveGenerationsPromise) {
+    return waitForActiveGenerationsPromise;
+  }
+
   isShuttingDown = true;
 
   log.info('Shutting down...');
 
-  await waitForActiveGenerations();
+  waitForActiveGenerationsPromise = waitForActiveGenerations();
+  await waitForActiveGenerationsPromise;
+  waitForActiveGenerationsPromise = undefined;
 }
 
 async function waitForActiveGenerations() {
@@ -527,9 +538,11 @@ async function waitForActiveGenerations() {
   let waitTime = 0;
 
   while (activeGenerations.size > 0) {
-    log.info(
-      `Waiting for ${activeGenerations.size} active generations to finish...`,
-    );
+    if (waitTime === 0) {
+      log.info(
+        `Waiting for active generations to finish (count: ${activeGenerations.size})...`,
+      );
+    }
 
     await new Promise((resolve) => setTimeout(resolve, 1000));
     waitTime += 1000;
