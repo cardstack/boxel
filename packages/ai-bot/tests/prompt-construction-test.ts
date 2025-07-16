@@ -214,6 +214,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
       '@aibot:localhost',
       undefined,
       undefined,
+      [],
       fakeMatrixClient,
     );
 
