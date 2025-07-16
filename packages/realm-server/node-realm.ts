@@ -26,7 +26,10 @@ import {
 } from 'fs-extra';
 import { join } from 'path';
 import { Duplex } from 'node:stream';
-import type { RequestContext } from '@cardstack/runtime-common/realm';
+import type {
+  RequestContext,
+  FileWriteResult,
+} from '@cardstack/runtime-common/realm';
 import jwt from 'jsonwebtoken';
 import type {
   RealmEventContent,
@@ -173,15 +176,18 @@ export class NodeAdapter implements RealmAdapter {
     };
   }
 
-  async write(
-    path: string,
-    contents: string,
-  ): Promise<{ lastModified: number }> {
+  async write(path: string, contents: string): Promise<FileWriteResult> {
     let absolutePath = join(this.realmDir, path);
+    let exists = await this.exists(path);
     ensureFileSync(absolutePath);
     writeFileSync(absolutePath, contents);
-    let { mtime } = statSync(absolutePath);
-    return { lastModified: unixTime(mtime.getTime()) };
+    let { mtime, birthtime } = statSync(absolutePath);
+    return {
+      path: absolutePath,
+      lastModified: unixTime(mtime.getTime()),
+      created: unixTime(birthtime.getTime()),
+      isNew: !exists,
+    };
   }
 
   async remove(path: LocalPath): Promise<void> {

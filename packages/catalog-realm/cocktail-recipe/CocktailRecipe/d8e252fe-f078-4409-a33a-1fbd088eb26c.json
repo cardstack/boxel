@@ -1,0 +1,53 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cocktailName": "Old Fashioned",
+      "description": "A timeless classic that showcases the rich flavors of bourbon with just a hint of sweetness and aromatic bitters. This sophisticated cocktail has been a favorite since the 1800s and remains a staple in every respectable bar.",
+      "difficulty": "easy",
+      "preparationTime": 3,
+      "glassType": "Rocks glass",
+      "ingredients": [
+        {
+          "ingredient": "Bourbon whiskey",
+          "amount": 2,
+          "unit": "oz",
+          "notes": "preferably high-quality, aged 4+ years"
+        },
+        {
+          "ingredient": "Simple syrup",
+          "amount": 0.25,
+          "unit": "oz",
+          "notes": "or 1 sugar cube"
+        },
+        {
+          "ingredient": "Angostura bitters",
+          "amount": 3,
+          "unit": "dashes",
+          "notes": "aromatic bitters"
+        },
+        {
+          "ingredient": "Orange peel",
+          "amount": 1,
+          "unit": "twist",
+          "notes": "for garnish"
+        }
+      ],
+      "garnish": {
+        "garnishType": "Orange peel twist",
+        "preparation": "Express the oils over the drink, then twist and place on rim",
+        "placement": "On the rim of the glass"
+      },
+      "instructions": "1. Place sugar cube (or simple syrup) in rocks glass\n2. Add 3 dashes of Angostura bitters\n3. If using sugar cube, muddle with bitters and a splash of water until dissolved\n4. Add 2 oz bourbon and stir gently\n5. Add large ice cube or sphere\n6. Express orange peel over drink and garnish\n7. Serve immediately",
+      "bartenderNotes": "The key to a perfect Old Fashioned is using quality bourbon and not over-diluting. The large ice cube melts slowly, maintaining the drink's strength. Always express the orange peel - the oils add essential aroma. Some prefer to muddle a cherry and orange slice, but purists stick to just the peel.",
+      "origin": "Louisville, Kentucky, USA (circa 1880s)",
+      "thumbnailURL": "https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=800&h=600&fit=crop"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../cocktail-recipe",
+        "name": "CocktailRecipe"
+      }
+    }
+  }
+}

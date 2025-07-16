@@ -8,6 +8,7 @@ export interface ErrorDetails {
   status?: number;
   title?: string;
   responseText?: string;
+  detail?: string;
   id?: string | null;
   source?: {
     pointer?: string;
