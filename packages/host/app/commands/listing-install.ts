@@ -11,6 +11,7 @@ import {
   ModuleResource,
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+import { logger } from '@cardstack/runtime-common';
 import {
   type AtomicOperation,
   type AtomicOperationResult,
@@ -20,14 +21,12 @@ import {
   type CopyModuleMeta,
 } from '@cardstack/runtime-common/catalog';
 
-import { logger } from '@cardstack/runtime-common';
-
 import * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import type RealmServerService from '../services/realm-server';
 import type CardService from '../services/card-service';
+import type RealmServerService from '../services/realm-server';
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
 const log = logger('catalog:install');

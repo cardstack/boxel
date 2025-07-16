@@ -13,6 +13,11 @@ import {
   type Loader,
 } from '@cardstack/runtime-common';
 
+import {
+  AtomicOperation,
+  createAtomicDocument,
+} from '@cardstack/runtime-common/atomic-document';
+
 import type {
   BaseDef,
   CardDef,
@@ -29,10 +34,6 @@ import type MessageService from './message-service';
 import type NetworkService from './network';
 import type Realm from './realm';
 import type ResetService from './reset';
-import {
-  AtomicOperation,
-  createAtomicDocument,
-} from '@cardstack/runtime-common/atomic-document';
 
 export type CardSaveSubscriber = (
   url: URL,

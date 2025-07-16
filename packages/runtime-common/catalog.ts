@@ -268,8 +268,12 @@ function dedupeCopyMeta(array: CopyMeta[]): CopyMeta[] {
   );
 }
 function dedupeCopyInstanceMeta(array: CopyInstanceMeta[]): CopyInstanceMeta[] {
-  return uniqWith(array, (a: CopyInstanceMeta, b: CopyInstanceMeta) =>
-    isEqual(a.sourceCard, b.sourceCard),
+  return uniqWith(
+    array,
+    (a: CopyInstanceMeta, b: CopyInstanceMeta) =>
+      isEqual(a.sourceCard, b.sourceCard) &&
+      isEqual(a.targetCodeRef, b.targetCodeRef) &&
+      isEqual(a.lid, b.lid),
   );
 }
 export function mergePlans(...plans: InstallPlan[]): InstallPlan {

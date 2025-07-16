@@ -649,7 +649,11 @@ module('Unit | Catalog | Install Plan Builder', function () {
             instancesCopy: [
               {
                 sourceCard: {} as CardDef,
-                localDir: `xyz/some-folder`,
+                targetCodeRef: {
+                  name: 'Some Ref Name',
+                  module: `${targetRealmURL}xyz/some-folder/some`,
+                },
+                lid: 'xyz/some-folder/Example/1',
               },
             ],
           };
@@ -660,7 +664,11 @@ module('Unit | Catalog | Install Plan Builder', function () {
             instancesCopy: [
               {
                 sourceCard: {} as CardDef,
-                localDir: `xyz/some-folder`,
+                targetCodeRef: {
+                  name: 'Some Ref Name',
+                  module: `${targetRealmURL}xyz/some-folder/some`,
+                },
+                lid: 'xyz/some-folder/Example/1',
               },
             ],
           };
@@ -670,7 +678,11 @@ module('Unit | Catalog | Install Plan Builder', function () {
           instancesCopy: [
             {
               sourceCard: {} as CardDef,
-              localDir: `xyz/some-folder`,
+              targetCodeRef: {
+                name: 'Some Ref Name',
+                module: `${targetRealmURL}xyz/some-folder/some`,
+              },
+              lid: 'xyz/some-folder/Example/1',
             },
           ],
           modulesCopy: [],
