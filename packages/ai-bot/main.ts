@@ -8,6 +8,7 @@ import {
   aiBotUsername,
   DEFAULT_LLM,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+  uuidv4,
 } from '@cardstack/runtime-common';
 import {
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
@@ -45,6 +46,7 @@ import { PgAdapter } from '@cardstack/postgres';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { OpenAIError } from 'openai/error';
 import { ChatCompletionStream } from 'openai/lib/ChatCompletionStream.mjs';
+import { acquireLock, releaseLock } from './lib/queries';
 
 let log = logger('ai-bot');
 
@@ -59,6 +61,8 @@ let activeGenerations = new Map<
 >();
 
 const MINIMUM_CREDITS = 10;
+let isShuttingDown = false;
+let aiBotInstanceId = uuidv4();
 
 class Assistant {
   private openai: OpenAI;
@@ -66,8 +70,9 @@ class Assistant {
   private toolCallCapableModels: Set<string>;
   pgAdapter: PgAdapter;
   id: string;
+  aiBotInstanceId: string;
 
-  constructor(client: MatrixClient, id: string) {
+  constructor(client: MatrixClient, id: string, aiBotInstanceId: string) {
     this.openai = new OpenAI({
       baseURL: 'https://openrouter.ai/api/v1',
       apiKey: process.env.OPENROUTER_API_KEY,
@@ -76,6 +81,7 @@ class Assistant {
     this.client = client;
     this.pgAdapter = new PgAdapter();
     this.toolCallCapableModels = new Set();
+    this.aiBotInstanceId = aiBotInstanceId;
   }
 
   async loadToolCallCapableModels() {
@@ -154,6 +160,7 @@ class Assistant {
 }
 
 let startTime = Date.now();
+let assistant: Assistant;
 
 (async () => {
   const matrixUrl = process.env.MATRIX_URL || 'http://localhost:8008';
@@ -185,7 +192,7 @@ Common issues are:
     });
   let { user_id: aiBotUserId } = auth;
 
-  let assistant = new Assistant(client, aiBotUserId);
+  assistant = new Assistant(client, aiBotUserId, aiBotInstanceId);
   await assistant.loadToolCallCapableModels();
 
   client.on(RoomMemberEvent.Membership, function (event, member) {
@@ -211,7 +218,15 @@ Common issues are:
   client.on(
     RoomEvent.Timeline,
     async function (event, room, toStartOfTimeline) {
+      let eventId = event.getId()!;
+
       try {
+        if (isShuttingDown) {
+          // We are shutting down gracefully (waiting for active generations to finish)
+          // Do not accept new work.
+          return;
+        }
+
         // Ensure that the event body we have is a string
         // it's possible that this is sent undefined
         let eventBody = event.getContent().body || '';
@@ -228,6 +243,17 @@ Common issues are:
         }
 
         if (senderMatrixUserId === aiBotUserId) {
+          return;
+        }
+
+        let eventLock = await acquireLock(
+          assistant.pgAdapter,
+          eventId,
+          aiBotInstanceId,
+        );
+
+        if (!eventLock) {
+          // Some other instance is already processing this event. Ignore it.
           return;
         }
 
@@ -388,6 +414,7 @@ Common issues are:
           if (generationId) {
             assistant.trackAiUsageCost(senderMatrixUserId, generationId);
           }
+          activeGenerations.delete(room.roomId);
         }
 
         if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {
@@ -402,6 +429,8 @@ Common issues are:
         log.error(e);
         Sentry.captureException(e);
         return;
+      } finally {
+        await releaseLock(assistant.pgAdapter, eventId);
       }
     },
   );
@@ -471,3 +500,45 @@ Common issues are:
   Sentry.captureException(e);
   process.exit(1);
 });
+
+// Handle SIGTERM (sent by ECS when it shuts down the instance)
+process.on('SIGTERM', async () => {
+  await handleShutdown();
+  process.exit(0);
+});
+
+// Handle SIGINT (Ctrl+C from user)
+process.on('SIGINT', async () => {
+  await handleShutdown();
+  process.exit(0);
+});
+
+async function handleShutdown() {
+  isShuttingDown = true;
+
+  log.info('Shutting down...');
+
+  await waitForActiveGenerations();
+}
+
+async function waitForActiveGenerations() {
+  let minutes = 5;
+  const maxWaitTime = minutes * 60 * 1000;
+  let waitTime = 0;
+
+  while (activeGenerations.size > 0) {
+    log.info(
+      `Waiting for ${activeGenerations.size} active generations to finish...`,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    waitTime += 1000;
+
+    if (waitTime > maxWaitTime) {
+      log.error(
+        `Max wait time reached for waiting for active generations to finish (${minutes} minutes), exiting... (active generations: ${activeGenerations.size})`,
+      );
+      process.exit(1);
+    }
+  }
+}
