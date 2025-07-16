@@ -137,6 +137,7 @@ module(basename(__filename), function () {
               displayName: 'Friend',
               total: 2,
               iconHTML,
+              uniqueDisplayName: 'Friend',
             },
           },
           {
@@ -146,6 +147,7 @@ module(basename(__filename), function () {
               displayName: 'FriendWithUsedLink',
               total: 2,
               iconHTML,
+              uniqueDisplayName: 'FriendWithUsedLink',
             },
           },
           {
@@ -155,6 +157,7 @@ module(basename(__filename), function () {
               displayName: 'Home',
               total: 1,
               iconHTML,
+              uniqueDisplayName: 'Home',
             },
           },
           {
@@ -164,6 +167,7 @@ module(basename(__filename), function () {
               displayName: 'Person',
               total: 3,
               iconHTML,
+              uniqueDisplayName: 'Person',
             },
           },
           {
@@ -173,6 +177,7 @@ module(basename(__filename), function () {
               displayName: 'TimersCard',
               total: 1,
               iconHTML,
+              uniqueDisplayName: 'TimersCard',
             },
           },
         ],

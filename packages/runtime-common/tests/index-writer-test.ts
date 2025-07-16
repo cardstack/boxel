@@ -1412,6 +1412,7 @@ const tests = Object.freeze({
         display_name: string;
         icon_html: string;
         total: number;
+        unique_display_name: string;
       },
     ];
     assert.strictEqual(
@@ -1427,12 +1428,14 @@ const tests = Object.freeze({
           code_ref: `${testRealmURL}fancy-person/FancyPerson`,
           display_name: 'Fancy Person',
           icon_html: iconHTML,
+          unique_display_name: 'Fancy Person',
         },
         {
           total: 1,
           code_ref: `${testRealmURL}person/Person`,
           display_name: 'Person',
           icon_html: iconHTML,
+          unique_display_name: 'Person',
         },
       ],
       'correct card type summary after indexing is done',
@@ -1521,6 +1524,7 @@ const tests = Object.freeze({
         display_name: string;
         total: number;
         icon_html: string;
+        unique_display_name: string;
       },
     ];
     assert.strictEqual(
@@ -1537,18 +1541,21 @@ const tests = Object.freeze({
           code_ref: `${testRealmURL}fancy-person/FancyPerson`,
           display_name: 'Fancy Person',
           icon_html: iconHTML,
+          unique_display_name: 'Fancy Person',
         },
         {
           total: 1,
           code_ref: `${testRealmURL}person/Person`,
           display_name: 'Person',
           icon_html: iconHTML,
+          unique_display_name: 'Person',
         },
         {
           total: 1,
           code_ref: `${testRealmURL}pet/Pet`,
           display_name: 'Pet',
           icon_html: iconHTML,
+          unique_display_name: 'Pet',
         },
       ],
       'correct card type summary after indexing is done',
