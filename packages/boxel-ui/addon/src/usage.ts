@@ -11,15 +11,15 @@ import CardContainerUsage from './components/card-container/usage.gts';
 import CardContentContainerUsage from './components/card-content-container/usage.gts';
 import CardHeaderUsage from './components/card-header/usage.gts';
 import CircleSpinnerUsage from './components/circle-spinner/usage.gts';
-import ColorPickerUsage from './components/color-picker/usage.gts';
 import ColorPaletteUsage from './components/color-palette/usage.gts';
+import ColorPickerUsage from './components/color-picker/usage.gts';
 import CopyButtonUsage from './components/copy-button/usage.gts';
 import DateRangePickerUsage from './components/date-range-picker/usage.gts';
 import DragAndDropUsage from './components/drag-and-drop/usage.gts';
 import DropdownTriggerUsage from './components/dropdown/trigger/usage.gts';
 import DropdownUsage from './components/dropdown/usage.gts';
-import EntityDisplayWithIconUsage from './components/entity-icon-display/usage.gts';
-import EntityDisplayWithThumbnailUsage from './components/entity-thumbnail-display/usage.gts';
+import EntityIconDisplayUsage from './components/entity-icon-display/usage.gts';
+import EntityThumbnailDisplayUsage from './components/entity-thumbnail-display/usage.gts';
 import FieldContainerUsage from './components/field-container/usage.gts';
 import FilterListUsage from './components/filter-list/usage.gts';
 import GridContainerUsage from './components/grid-container/usage.gts';
@@ -44,6 +44,7 @@ import SkeletonPlaceholderUsage from './components/skeleton-placeholder/usage.gt
 import SwitchUsage from './components/switch/usage.gts';
 import TabbedHeaderUsage from './components/tabbed-header/usage.gts';
 import TagListUsage from './components/tag-list/usage.gts';
+import TagUsage from './components/tag/usage.gts';
 import TooltipUsage from './components/tooltip/usage.gts';
 import ViewSelectorUsage from './components/view-selector/usage.gts';
 
@@ -58,15 +59,15 @@ export const ALL_USAGE_COMPONENTS = [
   ['CardContentContainer', CardContentContainerUsage],
   ['CardHeader', CardHeaderUsage],
   ['CircleSpinner', CircleSpinnerUsage],
-  ['ColorPicker', ColorPickerUsage],
   ['ColorPalette', ColorPaletteUsage],
-  ['CopyButtonUsage', CopyButtonUsage],
+  ['ColorPicker', ColorPickerUsage],
+  ['CopyButton', CopyButtonUsage],
   ['DateRangePicker', DateRangePickerUsage],
   ['DragAndDrop', DragAndDropUsage],
   ['DropdownTrigger', DropdownTriggerUsage],
   ['Dropdown', DropdownUsage],
-  ['EntityDisplayWithIcon', EntityDisplayWithIconUsage],
-  ['EntityDisplayWithThumbnail', EntityDisplayWithThumbnailUsage],
+  ['EntityIconDisplay', EntityIconDisplayUsage],
+  ['EntityThumbnailDisplay', EntityThumbnailDisplayUsage],
   ['FieldContainer', FieldContainerUsage],
   ['FilterList', FilterListUsage],
   ['GridContainer', GridContainerUsage],
@@ -91,6 +92,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['Switch', SwitchUsage],
   ['TabbedHeader', TabbedHeaderUsage],
   ['TagList', TagListUsage],
+  ['Tag', TagUsage],
   ['Tooltip', TooltipUsage],
   ['ViewSelector', ViewSelectorUsage],
 ];

@@ -1,4 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { hash } from '@ember/helper';
 
 import { cn, element, eq } from '../../helpers.ts';
 import { getContrastColor } from '../../helpers/contrast-color.ts';
@@ -10,6 +11,8 @@ export interface PillSignature {
   Args: {
     kind?: BoxelPillKind;
     pillBackgroundColor?: string;
+    pillBorderColor?: string;
+    pillFontColor?: string;
     tag?: keyof HTMLElementTagNameMap;
   };
   Blocks: {
@@ -26,7 +29,14 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
       class={{cn 'pill' button-pill=(eq @kind 'button')}}
       style={{cssVar
         pill-background-color=@pillBackgroundColor
-        pill-font-color=(getContrastColor @pillBackgroundColor)
+        pill-font-color=(if
+          @pillFontColor
+          @pillFontColor
+          (getContrastColor
+            @pillBackgroundColor undefined undefined (hash isSmallText=true)
+          )
+        )
+        pill-border-color=@pillBorderColor
       }}
       ...attributes
     >
@@ -51,7 +61,8 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
       .pill {
         --default-pill-font: 600 var(--boxel-font-sm);
         --default-pill-padding: var(--boxel-sp-5xs) var(--boxel-sp-xxxs);
-        --default-pill-border: 1px solid var(--boxel-400);
+        --default-pill-border: 1px solid
+          var(--pill-border-color, var(--boxel-400));
         display: inline-flex;
         align-items: center;
         gap: var(--pill-gap, var(--boxel-sp-5xs));

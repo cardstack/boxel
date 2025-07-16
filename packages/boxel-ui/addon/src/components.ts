@@ -61,6 +61,7 @@ import SortDropdown, {
 } from './components/sort-dropdown/index.gts';
 import Switch from './components/switch/index.gts';
 import TabbedHeader from './components/tabbed-header/index.gts';
+import BoxelTag from './components/tag/index.gts';
 import TagList from './components/tag-list/index.gts';
 import Tooltip from './components/tooltip/index.gts';
 import ViewSelector, {
@@ -90,6 +91,7 @@ export {
   BoxelMultiSelect,
   BoxelMultiSelectBasic,
   BoxelSelect,
+  BoxelTag,
   Button,
   CardContainer,
   CardContentContainer,
