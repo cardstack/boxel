@@ -64,7 +64,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       });
     });
 
-    // Phase 1.3 - Test Infrastructure Tests
+    // Test Infrastructure Tests
     module('Test Infrastructure Validation', function () {
       test('prettier environment is properly configured', async function (assert) {
         const validation = await validatePrettierEnvironment();
@@ -110,12 +110,13 @@ export class MyCard extends CardDef {
 }`;
 
         const comparison = compareFormattedOutput(testOutput, expectedOutput);
-        assert.ok(!comparison.matches, 'Different outputs should not match');
+        assert.notOk(comparison.matches, 'Different outputs should not match');
         assert.ok(
           comparison.differences.length > 0,
           'Should detect differences',
         );
         assert.ok(
+          // eslint-disable-next-line qunit/no-assert-logical-expression
           comparison.similarity >= 0 && comparison.similarity <= 1,
           'Similarity should be between 0 and 1',
         );
@@ -182,7 +183,11 @@ export class MyCard extends CardDef {
 
         const result = JSON.parse(response.text);
         assert.ok(result.output, 'Should return output');
-        assert.ok(typeof result.output === 'string', 'Output should be string');
+        assert.strictEqual(
+          typeof result.output,
+          'string',
+          'Output should be string',
+        );
       });
     });
 
@@ -190,10 +195,9 @@ export class MyCard extends CardDef {
       test('handles various error scenarios gracefully', async function (assert) {
         const errorCases = createErrorTestCases();
 
-        for (const [caseKey, errorCase] of Object.entries(errorCases)) {
+        for (const [_caseKey, errorCase] of Object.entries(errorCases)) {
           const mockRequest = {
             source: errorCase.source,
-            prettierOptions: errorCase.prettierOptions || {},
           };
 
           try {
@@ -223,7 +227,7 @@ export class MyCard extends CardDef {
           } catch (error) {
             assert.ok(
               false,
-              `Error case '${errorCase.name}' should not throw: ${error.message}`,
+              `Error case '${errorCase.name}' should not throw: ${(error as Error).message}`,
             );
           }
         }
@@ -253,7 +257,7 @@ export class MyCard extends CardDef {
         assert.ok(result.output, 'Should return output');
 
         // Should still apply ESLint fixes even if prettier fails
-        // NOTE: This test will fail until Phase 4 implementation is complete
+        // NOTE: This test will fail until implementation is complete
         // For now, we're testing the infrastructure expectation
         if (result.output.includes('import StringField from')) {
           assert.ok(
@@ -266,11 +270,12 @@ export class MyCard extends CardDef {
           );
         } else {
           // Current behavior - just verify we get some output
-          assert.ok(
-            typeof result.output === 'string',
+          assert.strictEqual(
+            typeof result.output,
+            'string',
             'Should return string output',
           );
-          // Skip the ESLint fix checks for now - they will be implemented in Phase 4
+          // Skip the ESLint fix checks for now - they will be implemented later
         }
       });
     });
@@ -385,7 +390,7 @@ export class MyCard extends CardDef {
       });
     });
 
-    module('Phase 1.3 Test Infrastructure', function (hooks) {
+    module('Test Infrastructure', function (hooks) {
       let utils: PrettierTestUtils;
       let performanceBaseline: number;
 
@@ -397,16 +402,19 @@ export class MyCard extends CardDef {
 
       test('test utilities are properly initialized', function (assert) {
         assert.ok(utils, 'PrettierTestUtils instance created');
-        assert.ok(
-          typeof utils.compareFormattedOutput === 'function',
+        assert.strictEqual(
+          typeof utils.compareFormattedOutput,
+          'function',
           'compareFormattedOutput method available',
         );
-        assert.ok(
-          typeof utils.benchmarkOperation === 'function',
+        assert.strictEqual(
+          typeof utils.benchmarkOperation,
+          'function',
           'benchmarkOperation method available',
         );
-        assert.ok(
-          typeof utils.validateTestFixtures === 'function',
+        assert.strictEqual(
+          typeof utils.validateTestFixtures,
+          'function',
           'validateTestFixtures method available',
         );
       });
@@ -425,12 +433,9 @@ export class MyCard extends CardDef {
 
         assert.ok(result, 'Benchmark result returned');
         assert.ok(result.duration >= 40, 'Duration measured correctly'); // Allow for timing variance
-        assert.ok(
-          result.operation === 'test-operation',
-          'Operation name recorded',
-        );
-        assert.ok(
-          result.result === 'formatted output',
+        assert.strictEqual(
+          result.result,
+          'formatted output',
           'Operation result captured',
         );
       });
@@ -450,12 +455,21 @@ export class MyCard extends CardDef {
         );
 
         assert.ok(comparison.isMatch, 'Matching output detected correctly');
-        assert.ok(comparison.input === input, 'Input preserved in comparison');
-        assert.ok(
-          comparison.expected === expected,
+        assert.strictEqual(
+          comparison.input,
+          input,
+          'Input preserved in comparison',
+        );
+        assert.strictEqual(
+          comparison.expected,
+          expected,
           'Expected output preserved',
         );
-        assert.ok(comparison.actual === actual, 'Actual output preserved');
+        assert.strictEqual(
+          comparison.actual,
+          actual,
+          'Actual output preserved',
+        );
       });
 
       test('test fixture validation works', async function (assert) {
@@ -487,8 +501,9 @@ export class MyCard extends CardDef {
           Array.isArray(concurrentData),
           'Concurrent test data is array',
         );
-        assert.ok(
-          concurrentData.length === 5,
+        assert.strictEqual(
+          concurrentData.length,
+          5,
           'Correct number of test cases generated',
         );
 

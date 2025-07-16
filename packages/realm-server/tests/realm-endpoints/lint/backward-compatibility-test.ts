@@ -1,8 +1,8 @@
-// Backward compatibility tests for Phase 1.3 - Test Infrastructure
+// Backward compatibility tests for Test Infrastructure
 import { module, test } from 'qunit';
 import { PrettierTestUtils } from '../../helpers/prettier-test-utils';
 
-module('Backward Compatibility Tests (Phase 1.3)', function (hooks) {
+module('Backward Compatibility Tests', function (hooks) {
   let utils: PrettierTestUtils;
 
   hooks.beforeEach(function () {
@@ -26,25 +26,22 @@ module('Backward Compatibility Tests (Phase 1.3)', function (hooks) {
     const endpointTest = compatibilityResult.tests.find(
       (t) => t.name === 'existing-lint-endpoint-still-works',
     );
-    assert.ok(
-      endpointTest && endpointTest.passed,
-      'Existing lint endpoint still works',
-    );
+    assert.ok(endpointTest?.passed, 'Existing lint endpoint still works');
 
     const eslintTest = compatibilityResult.tests.find(
       (t) => t.name === 'eslint-fixes-still-applied',
     );
-    assert.ok(eslintTest && eslintTest.passed, 'ESLint fixes still applied');
+    assert.ok(eslintTest?.passed, 'ESLint fixes still applied');
 
     const queueTest = compatibilityResult.tests.find(
       (t) => t.name === 'queue-based-processing-intact',
     );
-    assert.ok(queueTest && queueTest.passed, 'Queue-based processing intact');
+    assert.ok(queueTest?.passed, 'Queue-based processing intact');
 
     const authTest = compatibilityResult.tests.find(
       (t) => t.name === 'matrix-authentication-works',
     );
-    assert.ok(authTest && authTest.passed, 'Matrix authentication works');
+    assert.ok(authTest?.passed, 'Matrix authentication works');
   });
 
   test('existing request format compatibility', function (assert) {
@@ -80,16 +77,19 @@ module('Backward Compatibility Tests (Phase 1.3)', function (hooks) {
     };
 
     // Verify response structure is maintained
-    assert.ok(
-      expectedResponseFormat.status === 200,
+    assert.strictEqual(
+      expectedResponseFormat.status,
+      200,
       'HTTP 200 status maintained',
     );
-    assert.ok(
-      expectedResponseFormat.headers['Content-Type'] === 'application/json',
+    assert.strictEqual(
+      expectedResponseFormat.headers['Content-Type'],
+      'application/json',
       'JSON content type maintained',
     );
-    assert.ok(
-      typeof expectedResponseFormat.body.output === 'string',
+    assert.strictEqual(
+      typeof expectedResponseFormat.body.output,
+      'string',
       'Output property is string',
     );
   });
@@ -153,7 +153,7 @@ module('Backward Compatibility Tests (Phase 1.3)', function (hooks) {
 
     testFiles.forEach((filename) => {
       const extension = filename.split('.').pop();
-      const isSupported = ['gts', 'ts', 'js', 'hbs'].includes(extension);
+      const isSupported = ['gts', 'ts', 'js', 'hbs'].includes(extension ?? '');
       assert.ok(isSupported, `File extension .${extension} is supported`);
     });
   });

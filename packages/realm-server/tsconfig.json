@@ -33,9 +33,10 @@
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"],
     "transform": {
-      "include": ["../base/**", "./**", "../boxel-ui/addon/**"]
+      "include": ["../base/**", "./**", "../boxel-ui/addon/**"],
+      "exclude": ["./tests/fixtures/**"]
     }
   },
   "include": ["../base/**/*", "./**/*", "../runtime-common/types/*"],
-  "exclude": ["../base/**/__boxel/**", "./realms/**"]
+  "exclude": ["../base/**/__boxel/**", "./realms/**", "./tests/fixtures/**"]
 }

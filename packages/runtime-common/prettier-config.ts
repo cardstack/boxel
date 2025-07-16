@@ -1,4 +1,4 @@
-// Phase 3.2 - Configuration Resolution Design
+// Configuration Resolution Design
 // This module provides configuration resolution for prettier integration
 
 import type { Options as PrettierOptions } from 'prettier';
@@ -35,7 +35,7 @@ const DEFAULT_PRETTIER_CONFIG: PrettierConfig = {
 
 /**
  * Resolves prettier configuration from project root
- * This function will be enhanced in Phase 4 to actually load from .prettierrc.js
+ * This function will be enhanced to actually load from .prettierrc.js
  */
 export async function resolvePrettierConfig(
   filename: string = 'input.gts',

@@ -98,7 +98,6 @@ export function assertFormattedOutput(
  */
 export interface PerformanceBenchmark {
   name: string;
-  operation: string;
   duration: number;
   iterations: number;
   averageTime: number;
@@ -242,7 +241,7 @@ export interface ErrorTestCase {
 }
 
 /**
- * Main test utilities class for Phase 1.3 infrastructure
+ * Main test utilities class for infrastructure
  */
 export class PrettierTestUtils {
   /**
@@ -270,13 +269,12 @@ export class PrettierTestUtils {
 
     return {
       name: operationName,
-      operation: operationName,
       duration,
       iterations,
       averageTime,
       maxTime,
       minTime,
-      result: lastResult,
+      result: lastResult!,
     };
   }
 
@@ -386,7 +384,10 @@ export class PrettierTestUtils {
         results.push({
           name: testCase.name,
           passed: false,
-          error: error.message,
+          error:
+            error && typeof error === 'object' && 'message' in error
+              ? (error as { message: string }).message
+              : String(error),
         });
         allPassed = false;
       }
@@ -482,7 +483,7 @@ export async function validatePrettierEnvironment(): Promise<{
       }
     } catch (pluginError) {
       errors.push(
-        `Prettier ember-template-tag plugin error: ${pluginError.message}`,
+        `Prettier ember-template-tag plugin error: ${(pluginError as Error).message}`,
       );
     }
 
@@ -496,11 +497,11 @@ export async function validatePrettierEnvironment(): Promise<{
       }
     } catch (configError) {
       warnings.push(
-        `Prettier config resolution warning: ${configError.message}`,
+        `Prettier config resolution warning: ${(configError as Error).message}`,
       );
     }
   } catch (error) {
-    errors.push(`Prettier validation failed: ${error.message}`);
+    errors.push(`Prettier validation failed: ${(error as Error).message}`);
   }
 
   return {
@@ -618,13 +619,13 @@ export class MyCard extends CardDef {
         success: true,
       });
     } catch (error) {
-      errors.push(`${testCase.name} error: ${error.message}`);
+      errors.push(`${testCase.name} error: ${(error as Error).message}`);
       results.push({
         name: testCase.name,
         input: testCase.source,
         output: null,
         success: false,
-        error: error.message,
+        error: (error as Error).message,
       });
     }
   }
@@ -744,7 +745,7 @@ export async function validateTestFixtures(): Promise<{
       }
     }
   } catch (error) {
-    errors.push(`Failed to load test fixtures: ${error.message}`);
+    errors.push(`Failed to load test fixtures: ${(error as Error).message}`);
   }
 
   return {
@@ -787,9 +788,6 @@ export function createTestSuiteConfig(
     includeBackwardCompatibility,
   };
 }
-
-// Re-export types for convenience
-export type { Assert } from 'qunit';
 
 /**
  * Create a large test file for performance testing

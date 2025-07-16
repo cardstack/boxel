@@ -1,6 +1,5 @@
-// Phase 1.2 - Design Test Cases First
+// Design Test Cases First
 // These tests define the expected behavior of prettier integration with the lint endpoint
-// They will initially fail until we implement the actual prettier integration
 
 import { module, test } from 'qunit';
 import { Test, SuperTest } from 'supertest';
@@ -13,11 +12,11 @@ import {
   matrixURL,
   setupPermissionedRealm,
   createJWT,
-} from '../../helpers';
+} from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(`realm-endpoints/lint/${basename(__filename)}`, function () {
-  module('Prettier Lint Integration Tests (Phase 1.2)', function (hooks) {
+module(`realm-endpoints/${basename(__filename)}`, function () {
+  module('Prettier Lint Integration Tests', function (hooks) {
     let testRealm: Realm;
     let request: SuperTest<Test>;
 
@@ -297,14 +296,12 @@ export class MyCard extends CardDef {
 
       // Should still apply ESLint fixes even if prettier fails
       assert.ok(
-        // eslint-disable-next-line qunit/no-assert-logical-expression
         responseJson.output.includes('import { StringField }') ||
           responseJson.output.includes('import StringField from') ||
           responseJson.output.includes('StringField'),
         'ESLint fixes are still applied',
       );
       assert.ok(
-        // eslint-disable-next-line qunit/no-assert-logical-expression
         responseJson.output.includes('import { CardDef, field, contains }') ||
           responseJson.output.includes('CardDef') ||
           responseJson.output.includes('field') ||
