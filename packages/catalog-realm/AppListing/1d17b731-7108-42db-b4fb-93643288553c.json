@@ -72,6 +72,11 @@
           "self": "../Spec/sprint-planner-kanban-resource"
         }
       },
+      "specs.12": {
+        "links": {
+          "self": "../Spec/e115cc06-06d1-463e-a9da-aa4f9efdea7e"
+        }
+      },
       "publisher": {
         "links": {
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
@@ -95,6 +100,16 @@
       "examples.0": {
         "links": {
           "self": "../sprint-planner/SprintPlanner/6a51360f-431c-446a-8db6-f608d3f3e079"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../sprint-planner/Project/f379cb36-a323-4213-8477-572a31d5d21d"
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
         }
       }
     },
