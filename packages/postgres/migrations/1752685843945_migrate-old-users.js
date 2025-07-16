@@ -1,4 +1,4 @@
-const users = [
+const matrixUserIds = [
   '@0xpranayy:boxel.ai',
   '@agent:boxel.ai',
   '@aibot:boxel.ai',
@@ -85,20 +85,15 @@ const users = [
 
 exports.up = (pgm) => {
   if (process.env.REALM_SENTRY_ENVIRONMENT !== 'production') {
-    const placeholders = matrixUserIds
-      .map((_, index) => `($${index + 1})`)
-      .join(', ');
-    pgm.sql(
-      `
-      INSERT INTO users (matrix_user_id)
-      SELECT matrix_id
-      FROM (VALUES ${placeholders}) AS new_users(matrix_id)
-      WHERE NOT EXISTS (
-        SELECT 1 FROM users WHERE matrix_user_id = new_users.matrix_id
-      )
-    `,
-      matrixUserIds,
-    );
+    for (const matrixUserId of matrixUserIds) {
+      pgm.sql(`
+        INSERT INTO users (matrix_user_id)
+        SELECT '${matrixUserId}'
+        WHERE NOT EXISTS (
+          SELECT 1 FROM users WHERE matrix_user_id = '${matrixUserId}'
+        )
+      `);
+    }
   }
 };
 
