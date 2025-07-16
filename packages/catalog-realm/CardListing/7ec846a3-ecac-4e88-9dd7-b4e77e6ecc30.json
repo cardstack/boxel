@@ -1,0 +1,79 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Cocktail Recipe",
+      "summary": "Professional cocktail recipe manager with authentic speakeasy design - configure ingredients, garnishes, and preparation methods while viewing Waldorf-inspired presentations. Features difficulty ratings, preparation timers, bartender notes, cocktail origin stories, and luxurious dark theme styling for immersive mixology experiences.",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/cocktail-recipe-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/cocktail-recipe-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/cocktail-recipe-listing/screenshot_03.png"
+      ],
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/cocktail-recipe-listing/thumbnail.png"
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/cfef2f57-e5ba-410f-a769-4a6aa245dbee"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/e5bae10f-2769-4a6a-a245-dbee563456e7"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/2f57e5ba-e10f-4769-8a6a-a245dbee5634"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/2045acf6-06c3-48e4-9a62-87691c874cbb"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../cocktail-recipe/CocktailRecipe/6300ecf1-1577-415e-8802-f0b699d77206"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../cocktail-recipe/CocktailRecipe/77215ec8-02f0-4699-9772-061f7d7c3719"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../cocktail-recipe/CocktailRecipe/d8e252fe-f078-4409-a33a-1fbd088eb26c"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "CardListing"
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "CocktailRecipe",
+        "module": "../cocktail-recipe/cocktail-recipe"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "CocktailRecipe",
+      "description": "Spec of Cocktail Recipe",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

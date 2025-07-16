@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "IngredientField",
+        "module": "../cocktail-recipe/fields/ingredient-field"
+      },
+      "specType": "field",
+      "containedExamples": [],
+      "title": "IngredientField",
+      "description": "Spec of Ingredient Field",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

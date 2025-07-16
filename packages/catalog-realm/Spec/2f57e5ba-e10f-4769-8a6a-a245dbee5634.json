@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "GarnishField",
+        "module": "../cocktail-recipe/fields/garnish-field"
+      },
+      "specType": "field",
+      "containedExamples": [],
+      "title": "GarnishField",
+      "description": "Spec of Garnish Field",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
