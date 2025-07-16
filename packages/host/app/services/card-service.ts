@@ -29,6 +29,10 @@ import type MessageService from './message-service';
 import type NetworkService from './network';
 import type Realm from './realm';
 import type ResetService from './reset';
+import {
+  AtomicOperation,
+  createAtomicDocument,
+} from '@cardstack/runtime-common/atomic-document';
 
 export type CardSaveSubscriber = (
   url: URL,
@@ -269,6 +273,18 @@ export default class CardService extends Service {
       );
     }
     return (await response.json()).data.attributes;
+  }
+
+  async executeAtomicOperations(operations: AtomicOperation[], realmURL: URL) {
+    let doc = createAtomicDocument(operations);
+    let response = await this.network.authedFetch(`${realmURL.href}_atomic`, {
+      method: 'POST',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+      },
+      body: JSON.stringify(doc),
+    });
+    return response.json();
   }
 }
 

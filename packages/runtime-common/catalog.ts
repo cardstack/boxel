@@ -22,8 +22,8 @@ export interface CopyMeta {
 
 export interface CopyInstanceMeta {
   sourceCard: CardDef;
-  localDir: string;
-  targetCodeRef?: ResolvedCodeRef | undefined;
+  targetCodeRef: ResolvedCodeRef;
+  lid: string;
 }
 export interface InstallPlan {
   modulesCopy: CopyMeta[];
@@ -36,7 +36,7 @@ export interface FinalInstallPlan extends InstallPlan {
 
 export interface CopyModuleMeta {
   sourceModule: string;
-  targetModule: string;
+  targetModule: string; //TODO: maybe we should use a lid??
 }
 
 export function generateInstallFolderName(
@@ -55,20 +55,17 @@ export function generateInstallFolderName(
 }
 
 export class InstallOptions {
-  targetRealm: string;
+  targetDirectoryName: string; //name of outer uuid  folder
+  private targetRealmPath: RealmPaths;
   private sourceRealmPath: RealmPaths;
-  private listingDirectoryPath: RealmPaths; // organizing folder of listing
-  installDirectoryName: string; //name of outer uuid  folder
-  sourceDirectoryPath: RealmPaths; // (best guess) listing folder of distributed code; typically, fallsback to realm when not all code is self-contained in this folder
-  removeListingDirectory: boolean = true; // if true, remove listting directory from source directory.
-  targetLocalDirectory: string;
+  sourceDirectoryPath: RealmPaths;
 
   constructor(targetRealm: string, listing: Listing, installDirId?: string) {
-    this.targetRealm = targetRealm;
+    this.targetRealmPath = new RealmPaths(new URL(targetRealm));
 
     const listingDirectoryName = kebabCase(listing.name);
 
-    this.installDirectoryName = generateInstallFolderName(
+    this.targetDirectoryName = generateInstallFolderName(
       listingDirectoryName,
       installDirId,
     );
@@ -79,58 +76,49 @@ export class InstallOptions {
     }
 
     this.sourceRealmPath = new RealmPaths(sourceRealmURL);
-    this.listingDirectoryPath = new RealmPaths(
+    let maybeSourceDirectoryPath = new RealmPaths(
       new URL(join(this.sourceRealmPath.url, listingDirectoryName)),
     );
-    this.removeListingDirectory = allCodeRefsInSameDirectory(
-      listing,
-      this.listingDirectory,
-    );
 
-    this.sourceDirectoryPath = this.removeListingDirectory
-      ? this.listingDirectoryPath
+    this.sourceDirectoryPath = allResourcesInSameDirectory(
+      listing,
+      maybeSourceDirectoryPath.url,
+    )
+      ? maybeSourceDirectoryPath
       : this.sourceRealmPath;
-    this.targetLocalDirectory = this.installDirectoryName;
   }
 
   get sourceRealm(): string {
     return this.sourceRealmPath.url;
   }
 
-  get listingDirectory(): string {
-    return this.listingDirectoryPath.url;
-  }
   get targetDirectory(): string {
     return new RealmPaths(
-      new URL(join(this.targetRealm, this.installDirectoryName)),
+      new URL(join(this.targetRealmPath.url, this.targetDirectoryName)),
     ).url;
   }
 
-  get sourceDirectory(): string {
-    return this.sourceDirectoryPath.url;
+  get targetRealm(): string {
+    return this.targetRealmPath.url;
   }
 }
 
-export function allCodeRefsInSameDirectory(
+export function allResourcesInSameDirectory(
   listing: Listing,
   dir: string,
   ignoreBaseRealm: boolean = true,
 ) {
-  const codeRefs: ResolvedCodeRef[] = [];
+  const resourceIds: string[] = [];
   listing.specs.forEach((c: Spec) => {
-    codeRefs.push({ module: c.moduleHref, name: c.ref.name });
+    resourceIds.push(c.moduleHref);
   });
-  listing.examples.forEach((c: CardDef) => {
+  [...listing.examples, ...listing.skills].forEach((c: CardDef) => {
     let codeRef = resolveAdoptedCodeRef(c);
-    codeRefs.push(codeRef);
+    resourceIds.push(codeRef.module);
+    resourceIds.push(c.id);
   });
-  listing.skills.forEach((c: CardDef) => {
-    let codeRef = resolveAdoptedCodeRef(c);
-    codeRefs.push(codeRef);
-  });
-  let moduleIds = codeRefs.map((r) => r.module);
   let sourceDirPath = new RealmPaths(new URL(dir));
-  return moduleIds.every((id: string) => {
+  return resourceIds.every((id: string) => {
     let url = new URL(id);
     let inRealm = sourceDirPath.inRealm(url);
     let inBaseRealm = baseRealmPath.inRealm(url);
@@ -148,17 +136,18 @@ function resolveTargetCodeRef(
   if (baseRealmPath.inRealm(new URL(codeRef.module))) {
     return codeRef;
   } else {
-    let local = opts.sourceDirectoryPath.local(new URL(codeRef.module));
-    let targetModule = join(
-      opts.targetRealm,
-      opts.installDirectoryName ?? '',
-      local + '.gts',
-    ); //we assume .gts extension for now
+    let local = resolveTargetLocal(codeRef.module, opts);
+    let targetModule = join(opts.targetDirectory, local);
     return {
       name: codeRef.name,
       module: targetModule,
     };
   }
+}
+
+function resolveTargetLocal(sourceHref: string, opts: InstallOptions) {
+  let local = opts.sourceDirectoryPath.local(new URL(sourceHref));
+  return local;
 }
 
 type PlanBuilderStep = (opts: InstallOptions, plan: InstallPlan) => InstallPlan;
@@ -241,21 +230,26 @@ export function planInstanceInstall(
   let copySourceMeta: CopyMeta[] = [];
   for (let instance of instances) {
     let sourceCodeRef = resolveAdoptedCodeRef(instance);
-    let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, opts);
+    let lid = resolveTargetLocal(instance.id, opts);
+    if (baseRealmPath.inRealm(new URL(instance.id))) {
+      throw new Error('Cannot install instance from base realm');
+    }
     if (!baseRealmPath.inRealm(new URL(sourceCodeRef.module))) {
+      let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, opts);
       copySourceMeta.push({
         sourceCodeRef,
         targetCodeRef,
       });
       copyInstanceMeta.push({
         sourceCard: instance,
+        lid: join(opts.targetDirectoryName, lid),
         targetCodeRef,
-        localDir: opts.targetLocalDirectory,
       });
     } else {
       copyInstanceMeta.push({
         sourceCard: instance,
-        localDir: opts.targetLocalDirectory,
+        targetCodeRef: sourceCodeRef,
+        lid: join(opts.targetDirectoryName, lid),
       });
     }
   }

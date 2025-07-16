@@ -618,7 +618,8 @@ export class Realm {
   ): Promise<ErrorDetails[]> {
     let promises = [];
     for (let { href } of operations) {
-      promises.push(this.#adapter.exists(href));
+      let localPath = this.paths.local(new URL(href));
+      promises.push(this.#adapter.exists(localPath));
     }
     let booleanFlags = await Promise.all(promises);
     return operations

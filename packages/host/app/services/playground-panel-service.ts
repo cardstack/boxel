@@ -60,8 +60,9 @@ export default class PlaygroundPanelService extends Service {
     cardId: string,
     format: Format,
     fieldIndex: number | undefined,
+    codePath?: string,
   ) => {
-    let url = this.operatorModeStateService.codePathString;
+    let url = codePath ?? this.operatorModeStateService.codePathString;
 
     this.playgroundSelections[moduleId] = {
       cardId,

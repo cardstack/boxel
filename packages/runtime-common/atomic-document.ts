@@ -1,17 +1,21 @@
 import { ErrorDetails } from './error';
 import {
   ModuleResource,
-  CardResource,
   isCardResource,
   isModuleResource,
 } from './resource-types';
+import { LooseCardResource } from './index';
 
 export type AtomicOperationType = 'add' | 'update' | 'remove';
+
+export interface AtomicOperationDocument {
+  'atomic:operations': AtomicOperation[];
+}
 
 export interface AtomicOperation {
   op: AtomicOperationType;
   href: string;
-  data?: ModuleResource | CardResource;
+  data?: ModuleResource | LooseCardResource;
 }
 
 type AtomicPayloadErrorStatusCodes = 400 | 401 | 403 | 404 | 405 | 409 | 422;
@@ -33,9 +37,18 @@ export interface AtomicOperationResult {
 
 export function filterAtomicOperations(
   operations: AtomicOperation[],
-): (AtomicOperation & { data: CardResource | ModuleResource })[] {
+): (AtomicOperation & { data: LooseCardResource | ModuleResource })[] {
   return operations.filter(
-    (op): op is AtomicOperation & { data: CardResource } =>
+    (op): op is AtomicOperation & { data: LooseCardResource } =>
       (op.data != null && isCardResource(op.data)) || isModuleResource(op.data),
   );
+}
+
+//This helper ensures that the atomic document is re-ordered correctly
+export function createAtomicDocument(
+  operations: AtomicOperation[],
+): AtomicOperationDocument {
+  return {
+    'atomic:operations': operations,
+  };
 }
