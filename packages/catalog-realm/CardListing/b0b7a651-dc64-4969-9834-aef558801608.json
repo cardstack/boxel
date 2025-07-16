@@ -1,0 +1,57 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "EV Car Configurator",
+      "summary": "Interactive EV car configurator simulating real-time customization of a luxury electric vehicle. Choose from exterior colors, trims, ranges, wheels, interiors, and premium features like autopilot and immersive audio. Dynamic pricing updates instantly based on selections, with sleek visuals and section-based navigation for a seamless experience.",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/ev-car-configurator-listing/screenshot_01.png"
+      ],
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/ev-car-configurator-listing/thumbnail.png"
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/cd63a3fc-e789-48b2-a1b0-01eb30794379"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/7b93f46e-8bb8-4999-9a8f-c56533b25627"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../car-configurator-ev/CarConfiguratorEV/9436d728-e236-46cd-9632-3c9a4efbbf8a"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "CardListing"
+      }
+    }
+  }
+}

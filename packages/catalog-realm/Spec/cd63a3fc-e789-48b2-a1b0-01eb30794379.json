@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "CarConfiguratorEV",
+        "module": "../car-configurator-ev/car-configurator-ev"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "CarConfiguratorEV",
+      "description": "Spec of Car Configurator EV",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
