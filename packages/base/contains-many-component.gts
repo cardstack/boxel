@@ -25,11 +25,18 @@ import {
   type ResolvedCodeRef,
   Loader,
   loadCardDef,
+  uuidv4,
   isCardInstance,
 } from '@cardstack/runtime-common';
-import { IconTrash } from '@cardstack/boxel-ui/icons';
+import { IconTrash, FourLines } from '@cardstack/boxel-ui/icons';
 import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { task } from 'ember-concurrency';
+import { action } from '@ember/object';
+import {
+  SortableGroupModifier as sortableGroup,
+  SortableHandleModifier as sortableHandle,
+  SortableItemModifier as sortableItem,
+} from '@cardstack/boxel-ui/modifiers';
 
 interface ContainsManyEditorSignature {
   Args: {
@@ -46,14 +53,46 @@ interface ContainsManyEditorSignature {
 }
 
 class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
+  private sortableGroupId = uuidv4();
+
+  @action
+  setItems(items: any) {
+    this.args.arrayField.set(items);
+  }
+
   <template>
     <PermissionsConsumer as |permissions|>
       <div class='contains-many-editor' data-test-contains-many={{@field.name}}>
         {{#if @arrayField.children.length}}
-          <ul class='list'>
+          <ul
+            {{sortableGroup
+              groupName=this.sortableGroupId
+              onChange=this.setItems
+            }}
+            class='list'
+            data-test-list={{@field.name}}
+          >
             {{#each @arrayField.children as |boxedElement i|}}
-              <li class='editor' data-test-item={{i}}>
+              <li
+                class='editor'
+                data-test-item={{i}}
+                {{sortableItem
+                  groupName=this.sortableGroupId
+                  model=boxedElement.value
+                }}
+              >
                 {{#if permissions.canWrite}}
+                  <IconButton
+                    {{sortableHandle}}
+                    @variant='primary'
+                    @icon={{FourLines}}
+                    @width='18px'
+                    @height='18px'
+                    class='sort'
+                    aria-label='Sort'
+                    data-test-sort-handle
+                    data-test-sort={{i}}
+                  />
                   <IconButton
                     @icon={{IconTrash}}
                     @width='18px'
@@ -109,7 +148,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
       .editor {
         position: relative;
         display: grid;
-        grid-template-columns: 1fr var(--remove-icon-size);
+        grid-template-columns: var(--boxel-icon-lg) 1fr var(--remove-icon-size);
       }
       .editor :deep(.boxel-input:hover) {
         border-color: var(--boxel-form-control-border-color);
@@ -121,12 +160,14 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
         padding: var(--boxel-sp);
         background-color: var(--boxel-100);
         border-radius: var(--boxel-form-control-border-radius);
-        order: -1;
         transition: background-color var(--boxel-transition);
       }
       .remove {
         --icon-color: var(--boxel-dark);
         --icon-stroke-width: 1.5px;
+        align-self: auto;
+        outline: 0;
+        order: 1;
       }
       .remove:focus,
       .remove:hover {
@@ -138,7 +179,24 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
         background-color: var(--boxel-200);
       }
       .add-new {
-        width: calc(100% - var(--remove-icon-size));
+        width: calc(100% - var(--boxel-icon-xxl));
+        margin-left: var(--boxel-icon-lg);
+        /* for alignment due to sort handle */
+      }
+      .sort {
+        cursor: move;
+        cursor: grab;
+      }
+      .sort:active {
+        cursor: grabbing;
+      }
+      .sort:active + .item-container,
+      .sort:hover + .item-container {
+        background-color: var(--boxel-200);
+      }
+      :deep(.is-dragging) {
+        z-index: 99;
+        transform: translateY(var(--boxel-sp));
       }
     </style>
   </template>

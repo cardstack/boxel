@@ -1459,8 +1459,8 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       ember-sortable:
-        specifier: ^5.0.2
-        version: 5.0.2(@ember/test-helpers@5.2.2(@babel/core@7.26.10)(@glint/template@1.3.0))(@ember/test-waiters@3.1.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))
+        specifier: ^5.3.1
+        version: 5.3.1(@ember/test-helpers@5.2.2(@babel/core@7.26.10)(@glint/template@1.3.0))(@ember/test-waiters@3.1.0)(@glint/template@1.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
       ember-source:
         specifier: ^5.4.0
         version: 5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)
@@ -8340,14 +8340,13 @@ packages:
     resolution: {integrity: sha512-SEsTwFp9SHTg4LgebhkUuLgYWg1VZD7I1QcrV2sTY583wu216OThoSs5szvS/KgSc1xD1Z22TFvOb848t2hGfw==}
     engines: {node: 10.* || 12.* || >= 14.*}
 
-  ember-sortable@5.0.2:
-    resolution: {integrity: sha512-9AyO1jE2baLLiC5lpcH9kffmNRsFgPzFqxTmoekhQ4GAy/qxiMzx84AkS7Q7d7eT0UFn3AdPSe/8vVsM/O64cg==}
+  ember-sortable@5.3.1:
+    resolution: {integrity: sha512-dFnkhAn7bEGvbi8TQqP8M/wz7Z96AeJjuGrmi22QtcBCLLpjpmM0rchCtiQ4bRwg/u2Ds/yce4Wbnx8ex5UkdQ==}
     engines: {node: 14.* || >= 16}
     peerDependencies:
       '@ember/test-helpers': ^2.6.0 || >= 3.0.0
       '@ember/test-waiters': '>= 3.0.1'
       ember-modifier: ^4.1.0
-      ember-source: ^3.28.0 || >= 4.0.0
 
   ember-source-channel-url@3.0.0:
     resolution: {integrity: sha512-vF/8BraOc66ZxIDo3VuNP7iiDrnXEINclJgSJmqwAAEpg84Zb1DHPI22XTXSDA+E8fW5btPUxu65c3ZXi8AQFA==}
@@ -20667,14 +20666,17 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ember-sortable@5.0.2(@ember/test-helpers@5.2.2(@babel/core@7.26.10)(@glint/template@1.3.0))(@ember/test-waiters@3.1.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)):
+  ember-sortable@5.3.1(@ember/test-helpers@5.2.2(@babel/core@7.26.10)(@glint/template@1.3.0))(@ember/test-waiters@3.1.0)(@glint/template@1.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))):
     dependencies:
       '@ember/test-helpers': 5.2.2(@babel/core@7.26.10)(@glint/template@1.3.0)
       '@ember/test-waiters': 3.1.0
       '@embroider/addon-shim': 1.8.9
+      '@embroider/macros': 1.16.13(@glint/template@1.3.0)
+      '@glimmer/env': 0.1.7
       ember-modifier: 4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))
-      ember-source: 5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)
+      rsvp: 4.8.5
     transitivePeerDependencies:
+      - '@glint/template'
       - supports-color
 
   ember-source-channel-url@3.0.0:
