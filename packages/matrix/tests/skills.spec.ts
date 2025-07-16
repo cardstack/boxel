@@ -239,7 +239,7 @@ test.describe('Skills', () => {
     await attachSkill(page, skillCard2, true);
     await sendMessage(page, room1, 'Message 1');
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
-    await attachSkill(page, skillCard1, true);
+    await attachSkill(page, skillCard1);
     await attachSkill(page, skillCard3);
     await sendMessage(page, room1, 'Message 2');
     await assertMessages(page, [
@@ -253,6 +253,7 @@ test.describe('Skills', () => {
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard1, true);
     await attachSkill(page, skillCard2);
+    await page.locator('[data-test-pill-menu-button]').click();
     await sendMessage(page, room1, 'Message 1');
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
@@ -296,6 +297,7 @@ test.describe('Skills', () => {
     await expect(
       page.locator(`[data-test-skill-toggle="${skillCard2}-off"]`),
     ).toHaveCount(1);
+    await page.locator('[data-test-pill-menu-button]').click();
     await sendMessage(page, room1, 'Message 1');
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
