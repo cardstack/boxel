@@ -176,7 +176,7 @@ module(basename(__filename), function () {
               },
             ],
           };
-          let response = wait request
+          let response = await request
             .post('/_atomic')
             .set('Accept', SupportedMimeType.JSONAPI)
             .set(
