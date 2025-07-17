@@ -48,6 +48,8 @@ import { OpenAIError } from 'openai/error';
 import { ChatCompletionStream } from 'openai/lib/ChatCompletionStream.mjs';
 import { acquireLock, releaseLock } from './lib/queries';
 import { logger as matrixLogger } from 'matrix-js-sdk/lib/logger';
+import { setupSignalHandlers } from './lib/signal-handlers';
+import { isShuttingDown, setActiveGenerations } from './lib/shutdown';
 
 // Silence FetchHttpApi Matrix SDK logs
 matrixLogger.setLevel('warn');
@@ -65,7 +67,6 @@ let activeGenerations = new Map<
 >();
 
 const MINIMUM_CREDITS = 10;
-let isShuttingDown = false;
 let aiBotInstanceId = uuidv4();
 
 class Assistant {
@@ -199,6 +200,12 @@ Common issues are:
   assistant = new Assistant(client, aiBotUserId, aiBotInstanceId);
   await assistant.loadToolCallCapableModels();
 
+  // Set up signal handlers for graceful shutdown
+  setupSignalHandlers();
+
+  // Share activeGenerations map with shutdown module
+  setActiveGenerations(activeGenerations);
+
   client.on(RoomMemberEvent.Membership, function (event, member) {
     if (event.event.origin_server_ts! < startTime) {
       return;
@@ -264,7 +271,7 @@ Common issues are:
           activeGenerations.delete(room.roomId);
         }
 
-        if (isShuttingDown) {
+        if (isShuttingDown()) {
           // This aibot instance is in process of shutting down (e.g. during a new deploy, or manual termination).
           // We are shutting down gracefully (waiting for active generations to finish)
           // Do not accept new work.
@@ -506,54 +513,3 @@ Common issues are:
   Sentry.captureException(e);
   process.exit(1);
 });
-
-// Handle SIGTERM (sent by ECS when it shuts down the instance)
-process.on('SIGTERM', async () => {
-  await handleShutdown();
-  process.exit(0);
-});
-
-// Handle SIGINT (Ctrl+C from user)
-process.on('SIGINT', async () => {
-  await handleShutdown();
-  process.exit(0);
-});
-
-let waitForActiveGenerationsPromise: Promise<void> | undefined;
-async function handleShutdown() {
-  if (waitForActiveGenerationsPromise) {
-    return waitForActiveGenerationsPromise;
-  }
-
-  isShuttingDown = true;
-
-  log.info('Shutting down...');
-
-  waitForActiveGenerationsPromise = waitForActiveGenerations();
-  await waitForActiveGenerationsPromise;
-  waitForActiveGenerationsPromise = undefined;
-}
-
-async function waitForActiveGenerations() {
-  let minutes = 5;
-  const maxWaitTime = minutes * 60 * 1000;
-  let waitTime = 0;
-
-  while (activeGenerations.size > 0) {
-    if (waitTime === 0) {
-      log.info(
-        `Waiting for active generations to finish (count: ${activeGenerations.size})...`,
-      );
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    waitTime += 1000;
-
-    if (waitTime > maxWaitTime) {
-      log.error(
-        `Max wait time reached for waiting for active generations to finish (${minutes} minutes), exiting... (active generations: ${activeGenerations.size})`,
-      );
-      process.exit(1);
-    }
-  }
-}
