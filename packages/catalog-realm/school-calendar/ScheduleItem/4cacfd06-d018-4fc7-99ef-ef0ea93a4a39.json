@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Science Class",
+      "dayOfWeek": "Tuesday",
+      "startTime": "10:15 AM",
+      "endTime": "11:15 AM",
+      "location": "Room 102",
+      "description": "Physics and chemistry experiments. Lab coat required.",
+      "color": "#27ae60",
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../components/ScheduleItem/schedule-item",
+        "name": "ScheduleItem"
+      }
+    }
+  }
+}

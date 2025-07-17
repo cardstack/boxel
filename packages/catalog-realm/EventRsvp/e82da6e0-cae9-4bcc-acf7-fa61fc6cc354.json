@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "deadline": null,
+      "maxAttendees": 100,
+      "requiresApproval": false,
+      "attendees": [
+        {
+          "name": null,
+          "email": null,
+          "isAttending": false,
+          "guestCount": null,
+          "dietaryRestrictions": null
+        }
+      ],
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../school-calendar/components/EventRsvp/event-rsvp",
+        "name": "EventRsvp"
+      }
+    }
+  }
+}
