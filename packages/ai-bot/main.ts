@@ -419,6 +419,7 @@ Common issues are:
             assistant.trackAiUsageCost(senderMatrixUserId, generationId);
           }
           activeGenerations.delete(room.roomId);
+          await releaseLock(assistant.pgAdapter, eventId);
         }
 
         if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {
@@ -433,8 +434,6 @@ Common issues are:
         log.error(e);
         Sentry.captureException(e);
         return;
-      } finally {
-        await releaseLock(assistant.pgAdapter, eventId);
       }
     },
   );
