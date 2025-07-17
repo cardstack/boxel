@@ -80,15 +80,19 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return this.args.model.specs && this.args.model?.specs?.length > 0;
   }
 
+  get isSkillListing() {
+    return this.args.model instanceof SkillListing;
+  }
+
   get hasSkills() {
-    return (
-      this.args.model instanceof SkillListing &&
-      this.args.model?.skills?.length > 0
-    );
+    return this.args.model.skills && this.args.model?.skills?.length > 0;
   }
 
   get remixDisabled() {
-    return !this.hasOneOrMoreSpec && !this.hasSkills;
+    return (
+      (!this.isSkillListing && !this.hasOneOrMoreSpec) ||
+      (this.isSkillListing && !this.hasSkills)
+    );
   }
 
   @action preview() {
@@ -160,7 +164,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
             {{#if this.hasExamples}}
               <BoxelButton
                 class='action-button'
-                data-test-catalog-listing-isolated-preview-button
+                data-test-catalog-listing-embedded-preview-button
                 {{on 'click' this.preview}}
               >
                 Preview
@@ -170,7 +174,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
               <:trigger as |bindings|>
                 <BoxelButton
                   class='action-button'
-                  data-test-catalog-listing-isolated-remix-button
+                  data-test-catalog-listing-embedded-remix-button
                   @kind='primary'
                   @loading={{this._remix.isRunning}}
                   @disabled={{this.remixDisabled}}
@@ -184,7 +188,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                   class='realm-dropdown-menu'
                   @closeMenu={{dd.close}}
                   @items={{this.remixRealmOptions}}
-                  data-test-catalog-listing-isolated-remix-dropdown
+                  data-test-catalog-listing-embedded-remix-dropdown
                 />
               </:content>
             </BoxelDropdown>
@@ -199,7 +203,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           </Pill>
         </div>
 
-        <div class='app-listing-summary info-box'>
+        <div
+          class='app-listing-summary info-box'
+          data-test-catalog-listing-embedded-summary-section
+        >
           <h2>Summary</h2>
           {{#if @model.summary}}
             <@fields.summary />
@@ -209,22 +216,28 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
         </div>
 
-        <div class='license-section'>
+        <div
+          class='license-section'
+          data-test-catalog-listing-embedded-license-section
+        >
           <h2>License</h2>
           {{#if @model.license.name}}
             {{@model.license.name}}
           {{else}}
-            <p class='no-data-text'>No license Provided</p>
+            <p class='no-data-text'>No License Provided</p>
           {{/if}}
         </div>
       </section>
 
       <hr class='divider' />
 
-      <section class='app-listing-images'>
+      <section
+        class='app-listing-images'
+        data-test-catalog-listing-embedded-images-section
+      >
         <h2>Images</h2>
         {{#if this.hasImages}}
-          <ul class='images-list'>
+          <ul class='images-list' data-test-catalog-listing-embedded-images>
             {{#each @model.images as |image|}}
               <li class='images-item'>
                 <img src={{image}} alt={{@model.name}} />
@@ -236,10 +249,13 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         {{/if}}
       </section>
 
-      <section class='app-listing-examples'>
+      <section
+        class='app-listing-examples'
+        data-test-catalog-listing-embedded-examples-section
+      >
         <h2>Examples</h2>
         {{#if this.hasExamples}}
-          <ul class='examples-list'>
+          <ul class='examples-list' data-test-catalog-listing-embedded-examples>
             {{#each @fields.examples as |Example|}}
               <li>
                 <Example />
@@ -253,10 +269,16 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
       <hr class='divider' />
 
-      <section class='app-listing-categories'>
+      <section
+        class='app-listing-categories'
+        data-test-catalog-listing-embedded-categories-section
+      >
         <h2>Categories</h2>
         {{#if this.hasCategories}}
-          <ul class='categories-list'>
+          <ul
+            class='categories-list'
+            data-test-catalog-listing-embedded-categories
+          >
             {{#each @model.categories as |category|}}
               <li class='categories-item'>
                 <Pill>{{category.name}}</Pill>
@@ -268,8 +290,30 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         {{/if}}
       </section>
 
+      <section
+        class='app-listing-skills'
+        data-test-catalog-listing-embedded-skills-section
+      >
+        <h2>Skills</h2>
+        {{#if this.hasSkills}}
+          <ul class='skills-list' data-test-catalog-listing-embedded-skills>
+            {{#each @fields.skills as |Skill|}}
+              <li>
+                <Skill />
+              </li>
+            {{/each}}
+          </ul>
+        {{else}}
+          <p class='no-data-text'>No Skills Provided</p>
+        {{/if}}
+      </section>
+
       <hr class='divider' />
-      <section class='app-listing-spec-breakdown'>
+      <section
+        class='app-listing-spec-breakdown'
+        data-test-catalog-listing-embedded-specs-section
+      >
+
         <h2>Includes These Boxels</h2>
         {{#if this.hasNonEmptySpecBreakdown}}
           <Accordion
@@ -424,6 +468,15 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         display: flex;
         flex-wrap: wrap;
         gap: var(--boxel-sp-sm);
+        list-style: none;
+        margin-block: 0;
+        padding-inline-start: 0;
+      }
+
+      .skills-list {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: var(--boxel-sp);
         list-style: none;
         margin-block: 0;
         padding-inline-start: 0;
