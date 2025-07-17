@@ -364,6 +364,16 @@ export default class SubmodeLayout extends Component<Signature> {
               )
             }}
           />
+          {{#if this.profileSummaryOpened}}
+            <ProfileInfoPopover
+              {{onClickOutside
+                this.toggleProfileSummary
+                exceptSelector='.profile-icon-button'
+              }}
+              @toggleProfileSettings={{this.toggleProfileSettings}}
+              @toggleSubscriptionPlans={{this.toggleSubscriptionPlans}}
+            />
+          {{/if}}
         </ResizablePanel>
         {{#if this.aiAssistantPanelService.isOpen}}
           <ResizablePanel
@@ -385,17 +395,6 @@ export default class SubmodeLayout extends Component<Signature> {
         {{/if}}
       </ResizablePanelGroup>
     </div>
-
-    {{#if this.profileSummaryOpened}}
-      <ProfileInfoPopover
-        {{onClickOutside
-          this.toggleProfileSummary
-          exceptSelector='.profile-icon-button'
-        }}
-        @toggleProfileSettings={{this.toggleProfileSettings}}
-        @toggleSubscriptionPlans={{this.toggleSubscriptionPlans}}
-      />
-    {{/if}}
 
     {{#if this.profileSettingsOpened}}
       <ProfileSettingsModal
@@ -495,8 +494,8 @@ export default class SubmodeLayout extends Component<Signature> {
         --boxel-icon-button-width: var(--container-button-size);
         --boxel-icon-button-height: var(--container-button-size);
         position: absolute;
-        bottom: var(--operator-mode-spacing);
-        left: var(--operator-mode-spacing);
+        top: var(--operator-mode-spacing);
+        right: var(--operator-mode-spacing);
         padding: 0;
         background: none;
         border: none;
