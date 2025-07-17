@@ -166,6 +166,51 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             },
           },
         },
+        'Listing/empty.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Empty',
+              name: 'Empty',
+              summary: null,
+              images: null,
+              description: null,
+              thumbnailURL: null,
+            },
+            relationships: {
+              'skills.0': {
+                links: {
+                  self: `${catalogRealmURL}Skill/homework-grader`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${catalogRealmURL}catalog-app/listing/listing`,
+                name: 'Listing',
+              },
+            },
+          },
+        },
+        'Listing/empty-skill.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Empty',
+              name: 'Empty',
+              summary: 'Empty',
+              images: null,
+              description: null,
+              thumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${catalogRealmURL}catalog-app/listing/listing`,
+                name: 'SkillListing',
+              },
+            },
+          },
+        },
         'index.json': {
           data: {
             type: 'card',
@@ -412,7 +457,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           ],
         });
         await click(
-          `[data-test-card="${listingId}"] [data-test-catalog-listing-isolated-remix-button]`,
+          `[data-test-card="${listingId}"] [data-test-catalog-listing-embedded-remix-button]`,
         );
         assert
           .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
@@ -883,7 +928,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
       await verifyButtonAction(
         assert,
-        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-isolated-remix-button]`,
+        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-embedded-remix-button]`,
         'Remix',
         'I would like to remix this Mortgage Calculator under the following realm: http://test-realm/test/',
       );
@@ -891,7 +936,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
     test('after clicking "Preview" button, the first example card opens up onto the stack', async function (assert) {
       await click(
-        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-isolated-preview-button]`,
+        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-embedded-preview-button]`,
       );
       assert
         .dom(
@@ -903,6 +948,141 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
         )
         .hasText('Mortgage Calculator');
+    });
+
+    test('display of sections when viewing listing details', async function (assert) {
+      const homeworkGraderId = `${catalogRealmURL}CardListing/cbe2c79b-60aa-4dca-bc13-82b610e31653`;
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: homeworkGraderId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      //sections exists
+      assert
+        .dom('[data-test-catalog-listing-embedded-summary-section]')
+        .exists();
+      assert
+        .dom('[data-test-catalog-listing-embedded-license-section]')
+        .exists();
+      assert
+        .dom('[data-test-catalog-listing-embedded-images-section]')
+        .exists();
+      assert
+        .dom('[data-test-catalog-listing-embedded-examples-section]')
+        .exists();
+      assert
+        .dom('[data-test-catalog-listing-embedded-categories-section]')
+        .exists();
+      assert.dom('[data-test-catalog-listing-embedded-specs-section]').exists();
+      assert
+        .dom('[data-test-catalog-listing-embedded-skills-section]')
+        .exists();
+
+      //content exists
+      assert.dom('[data-test-catalog-listing-embedded-images]').exists();
+      assert.dom('[data-test-catalog-listing-embedded-examples]').exists();
+      assert.dom('[data-test-catalog-listing-embedded-categories]').exists();
+      assert.dom('[data-test-catalog-listing-embedded-skills]').exists();
+
+      assert
+        .dom('[data-test-catalog-listing-embedded-summary-section]')
+        .containsText(
+          'An AI-assisted card for grading assignments. Define questions, collect student answers, and trigger grading through a linked AI skill. The system creates an assistant room, sends the assignment and skill, and executes a grading command. The AI returns a letter grade, individual question scores, and markdown-formatted feedback, which are displayed in a styled summary.',
+        );
+      assert
+        .dom('[data-test-catalog-listing-embedded-license-section]')
+        .containsText('No License Provided');
+
+      assert
+        .dom('[data-test-catalog-listing-embedded-images] li')
+        .exists({ count: 3 });
+
+      assert
+        .dom('[data-test-catalog-listing-embedded-examples] li')
+        .exists({ count: 2 });
+      assert
+        .dom('[data-test-catalog-listing-embedded-examples] li:first-child')
+        .containsText('Basic Arithmetic');
+      assert
+        .dom('[data-test-catalog-listing-embedded-examples] li:last-child')
+        .containsText('US History');
+      assert
+        .dom('[data-test-catalog-listing-embedded-categories] li')
+        .exists({ count: 1 });
+      assert
+        .dom('[data-test-catalog-listing-embedded-categories] li:first-child')
+        .containsText('Education & Courses');
+      assert
+        .dom('[data-test-catalog-listing-embedded-skills] li')
+        .exists({ count: 1 });
+      assert
+        .dom('[data-test-catalog-listing-embedded-skills] li:first-child')
+        .containsText('Grading Skill');
+      assert.dom('[data-test-accordion-item="card"]').exists();
+      await click('[data-test-accordion-item="card"] button');
+      assert
+        .dom('[data-test-selected-accordion-item="card"]')
+        .containsText('Homework');
+    });
+
+    test('remix button is disabled when remix a listing has no examples and no specs', async function (assert) {
+      const emptyListingId = `${testRealmURL}Listing/empty`;
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: emptyListingId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      assert
+        .dom('[data-test-catalog-listing-embedded-summary-section]')
+        .containsText('No Summary Provided');
+
+      assert
+        .dom('[data-test-catalog-listing-embedded-examples-section]')
+        .containsText('No Examples Provided');
+
+      assert
+        .dom('[data-test-catalog-listing-embedded-specs-section]')
+        .containsText('No Specs Provided');
+
+      assert
+        .dom('[data-test-catalog-listing-embedded-remix-button]')
+        .isDisabled();
+    });
+
+    test('remix button is disabled when remix a skill listing has no skills', async function (assert) {
+      const emptySkillListingId = `${testRealmURL}Listing/empty-skill`;
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: emptySkillListingId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      assert
+        .dom('[data-test-catalog-listing-embedded-skills-section]')
+        .containsText('No Skills Provided');
+
+      assert
+        .dom('[data-test-catalog-listing-embedded-remix-button]')
+        .isDisabled(
+          'Remix button should be disabled when skill listing has no skills',
+        );
     });
   });
 
@@ -1024,16 +1204,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         if (outerFolder) {
           await openDir(assert, outerFolder);
         }
-        // mortgage-calculator-[uuid]/mortgage-calculator.gts
         let gtsFilePath = outerFolder + 'mortgage-calculator.gts';
         await verifyFileInFileTree(assert, gtsFilePath);
-        // mortgage-calculator-[uuid]/MortgageCalculator/example.json
         let instanceFolder = outerFolder + 'MortgageCalculator' + '/';
         await verifyFolderInFileTree(assert, instanceFolder);
-        if (instanceFolder) {
-          await openDir(assert, instanceFolder);
-        }
-        await verifyJSONWithUUIDInFolder(assert, instanceFolder);
+        await openDir(assert, instanceFolder);
+        await verifyFileInFileTree(assert, instanceFolder + 'example.json');
       });
 
       test('field listing', async function (assert) {
@@ -1105,10 +1281,11 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         }
         let instanceFolder = outerFolder + 'Skill' + '/';
         await verifyFolderInFileTree(assert, instanceFolder);
-        if (instanceFolder) {
-          await openDir(assert, instanceFolder);
-        }
-        await verifyJSONWithUUIDInFolder(assert, instanceFolder);
+        await openDir(assert, instanceFolder);
+        await verifyFileInFileTree(
+          assert,
+          instanceFolder + 'skill-pirate-speak.json',
+        );
       });
     });
     module('"remix"', async function () {
@@ -1153,15 +1330,15 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         }
         let instanceFolder = outerFolder + 'Skill' + '/';
         await verifyFolderInFileTree(assert, instanceFolder);
-        if (instanceFolder) {
-          await openDir(assert, instanceFolder);
-        }
-        let filePath = await verifyJSONWithUUIDInFolder(assert, instanceFolder);
-        let cardId = testRealm2URL + filePath;
-        let headerId = cardId.replace('.json', '');
+        await openDir(assert, instanceFolder);
+        await verifyFileInFileTree(
+          assert,
+          instanceFolder + 'skill-pirate-speak.json',
+        );
+        let cardId = testRealm2URL + instanceFolder + 'skill-pirate-speak';
         await waitFor('[data-test-card-resource-loaded]');
         assert
-          .dom(`[data-test-code-mode-card-renderer-header="${headerId}"]`)
+          .dom(`[data-test-code-mode-card-renderer-header="${cardId}"]`)
           .exists();
       });
     });
@@ -1190,9 +1367,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
       let instanceFolder = outerFolder + 'Author' + '/';
       await verifyFolderInFileTree(assert, instanceFolder);
-      if (instanceFolder) {
-        await openDir(assert, instanceFolder);
-      }
+      await openDir(assert, instanceFolder);
       await verifyJSONWithUUIDInFolder(assert, instanceFolder);
     });
 
@@ -1227,7 +1402,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       if (instanceFolder) {
         await openDir(assert, instanceFolder);
       }
-      await verifyJSONWithUUIDInFolder(assert, instanceFolder);
+      await verifyFileInFileTree(assert, instanceFolder + 'example.json');
     });
 
     test('"remix" is successful even if target realm does not have a trailing slash', async function (assert) {

@@ -111,6 +111,7 @@ export type RealmInfo = {
   showAsCatalog: boolean | null;
   visibility: RealmVisibility;
   realmUserId?: string;
+  publishable: boolean | null;
 };
 
 export interface FileRef {
@@ -618,7 +619,8 @@ export class Realm {
   ): Promise<ErrorDetails[]> {
     let promises = [];
     for (let { href } of operations) {
-      promises.push(this.#adapter.exists(href));
+      let localPath = this.paths.local(new URL(href, this.paths.url));
+      promises.push(this.#adapter.exists(localPath));
     }
     let booleanFlags = await Promise.all(promises);
     return operations
@@ -695,9 +697,7 @@ export class Realm {
     for (let operation of operations) {
       let resource = operation.data;
       let href = operation.href;
-
-      let fileURL = this.paths.fileURL(href);
-      let localPath = this.paths.local(fileURL);
+      let localPath = this.paths.local(new URL(href, this.paths.url));
       if (isModuleResource(resource)) {
         files.set(localPath, resource.attributes?.content ?? '');
       } else if (isCardResource(resource)) {
@@ -2458,6 +2458,7 @@ export class Realm {
       visibility: await this.visibility(),
       realmUserId:
         this.#matrixClient.getUserId()! || this.#matrixClient.username,
+      publishable: null,
     };
     if (!realmConfig) {
       return realmInfo;
@@ -2475,6 +2476,8 @@ export class Realm {
         realmInfo.realmUserId =
           realmConfigJson.realmUserId ??
           (this.#matrixClient.getUserId()! || this.#matrixClient.username);
+        realmInfo.publishable =
+          realmConfigJson.publishable ?? realmInfo.publishable;
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }

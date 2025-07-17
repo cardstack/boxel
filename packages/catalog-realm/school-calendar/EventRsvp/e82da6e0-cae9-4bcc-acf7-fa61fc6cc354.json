@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "deadline": "2024-09-01",
+      "maxAttendees": 100,
+      "requiresApproval": false,
+      "attendees": [
+        {
+          "name": "Alice Johnson",
+          "email": "alice@example.com",
+          "isAttending": true,
+          "guestCount": 1,
+          "dietaryRestrictions": "Vegetarian"
+        },
+        {
+          "name": "Bob Smith",
+          "email": "bob@example.com",
+          "isAttending": true,
+          "guestCount": 0,
+          "dietaryRestrictions": "None"
+        }
+      ],
+      "title": "Back to School Night RSVP",
+      "description": "Please RSVP for our annual Back to School Night event. Let us know if you have any dietary restrictions.",
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../components/EventRsvp/event-rsvp",
+        "name": "EventRsvp"
+      }
+    }
+  }
+}

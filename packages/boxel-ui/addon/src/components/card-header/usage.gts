@@ -51,6 +51,7 @@ export default class CardHeaderUsage extends Component {
     iconURL: 'https://boxel-images.boxel.ai/icons/Letter-j.png',
     name: "John's Workspace",
     isIndexing: true,
+    publishable: null,
   };
   @tracked moreOptionsMenuItems: MenuItem[] = [
     new MenuItem('Copy Card URL', 'action', {
