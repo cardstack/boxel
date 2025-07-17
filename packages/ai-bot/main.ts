@@ -225,12 +225,6 @@ Common issues are:
       let eventId = event.getId()!;
 
       try {
-        if (isShuttingDown) {
-          // We are shutting down gracefully (waiting for active generations to finish)
-          // Do not accept new work.
-          return;
-        }
-
         // Ensure that the event body we have is a string
         // it's possible that this is sent undefined
         let eventBody = event.getContent().body || '';
@@ -250,17 +244,7 @@ Common issues are:
           return;
         }
 
-        let eventLock = await acquireLock(
-          assistant.pgAdapter,
-          eventId,
-          aiBotInstanceId,
-        );
-
-        if (!eventLock) {
-          // Some other instance is already processing this event. Ignore it.
-          return;
-        }
-
+        // Handle the case where the user stops the generation
         let activeGeneration = activeGenerations.get(room.roomId);
         if (
           activeGeneration &&
@@ -278,6 +262,25 @@ Common issues are:
             );
           }
           activeGenerations.delete(room.roomId);
+        }
+
+        if (isShuttingDown) {
+          // This aibot instance is in process of shutting down (e.g. during a new deploy, or manual termination).
+          // We are shutting down gracefully (waiting for active generations to finish)
+          // Do not accept new work.
+          return;
+        }
+
+        // Acquire a lock so that only one instance processes this event.
+        let eventLock = await acquireLock(
+          assistant.pgAdapter,
+          eventId,
+          aiBotInstanceId,
+        );
+
+        if (!eventLock) {
+          // Some other instance is already processing this event. Ignore it.
+          return;
         }
 
         if (!Responder.eventMayTriggerResponse(event)) {
