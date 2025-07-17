@@ -2112,6 +2112,16 @@ export class MaybeBase64Field extends StringField {
   static atom = MaybeBase64Field.embedded;
 }
 
+export class CardInfoField extends FieldDef {
+  static displayName = 'Card Info';
+  @field title = contains(StringField);
+  @field description = contains(StringField);
+  @field thumbnailURL = contains(MaybeBase64Field);
+  // @field tags = linksToMany(Tag); // cs-9066
+  // @field theme = linksTo(Theme); // cs-9112
+  // @field notes = contains(RichTextField); // cs-8594 & cs-9044
+}
+
 export class CardDef extends BaseDef {
   readonly [localId]: string = uuidv4();
   [isSavedInstance] = false;
@@ -2133,12 +2143,24 @@ export class CardDef extends BaseDef {
     cardTracking.set(this, true);
   }
   @field id = contains(ReadOnlyField);
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardInfo = contains(CardInfoField);
+  @field title = contains(StringField, {
+    computeVia: function (this: CardDef) {
+      return this.cardInfo.title?.trim()?.length
+        ? this.cardInfo.title
+        : this.constructor.displayName;
+    },
+  });
+  @field description = contains(StringField, {
+    computeVia: function (this: CardDef) {
+      return this.cardInfo.description;
+    },
+  });
   // TODO: this will probably be an image or image url field card when we have it
   // UPDATE: we now have a Base64ImageField card. we can probably refactor this
   // to use it directly now (or wait until a better image field comes along)
   @field thumbnailURL = contains(MaybeBase64Field);
+
   static displayName = 'Card';
   static isCardDef = true;
   static icon = CaptionsIcon;
