@@ -416,6 +416,7 @@ export default class RealmService extends Service {
         iconURL: null,
         showAsCatalog: null,
         visibility: 'private',
+        publishable: null,
         isIndexing: false,
         isPublic: false,
       };
@@ -429,6 +430,7 @@ export default class RealmService extends Service {
         iconURL: null,
         showAsCatalog: null,
         visibility: 'private',
+        publishable: null,
         isIndexing: false,
         isPublic: false,
       };

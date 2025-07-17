@@ -26,6 +26,7 @@ const testRealmInfo: RealmInfo = {
   iconURL: null,
   showAsCatalog: null,
   visibility: 'public',
+  publishable: null,
 };
 
 const tests = Object.freeze({
