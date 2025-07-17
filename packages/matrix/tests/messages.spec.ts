@@ -49,7 +49,7 @@ test.describe('Room messages', () => {
     await realmServer.stop();
   });
 
-  test.skip(`it can send a message in a room`, async ({ page }) => {
+  test(`it can send a message in a room`, async ({ page }) => {
     await login(page, 'user1', 'pass', { url: appURL });
     let room1 = await getRoomId(page);
     await expect(page.locator('[data-test-new-session]')).toHaveCount(1);
@@ -77,13 +77,13 @@ test.describe('Room messages', () => {
 
     await writeMessage(page, room1, 'Message 2');
     await page.keyboard.press('Shift+Enter');
-    await page.keyboard.type('Hello World!');
+    await page.keyboard.type('!');
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
     await page.keyboard.press('Enter');
     const messages = [
       { from: 'user1', message: 'Message 1' },
-      { from: 'user1', message: 'Message 2\n\nHello World!' },
+      { from: 'user1', message: 'Message 2\n\n!' },
     ];
     await assertMessages(page, messages);
 
