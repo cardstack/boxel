@@ -160,6 +160,7 @@ export default class SubmodeLayout extends Component<Signature> {
         await this.operatorModeStateService.updateCodePath(null);
         break;
       case Submodes.Code:
+      case Submodes.Host:
         await this.operatorModeStateService.updateCodePath(
           this.lastCardIdInRightMostStack
             ? new URL(this.lastCardIdInRightMostStack + '.json')
