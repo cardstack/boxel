@@ -2145,45 +2145,9 @@ export class Realm {
     if (this.#adapter.lintStub) {
       result = await this.#adapter.lintStub(request, requestContext);
     } else {
-      let source: string;
-      let filename = 'input.gts'; // Default for GTS context
-
-      // Parse request based on content type (simplified)
-      const contentType = request.headers.get('content-type');
-      if (contentType === 'application/json') {
-        try {
-          const body = JSON.parse(await request.text());
-          source = body.source || body.code;
-          filename =
-            body.filename || request.headers.get('X-Filename') || filename;
-
-          if (!source) {
-            return createResponse({
-              body: JSON.stringify({
-                error: 'Missing source code in request body',
-              }),
-              init: {
-                status: 400,
-                headers: { 'content-type': 'application/json' },
-              },
-              requestContext,
-            });
-          }
-        } catch (error) {
-          return createResponse({
-            body: JSON.stringify({ error: 'Invalid JSON request body' }),
-            init: {
-              status: 400,
-              headers: { 'content-type': 'application/json' },
-            },
-            requestContext,
-          });
-        }
-      } else {
-        // Fallback to plain text (backward compatibility)
-        source = await request.text();
-        filename = request.headers.get('X-Filename') || filename;
-      }
+      // Get source from plain text request body
+      const source = await request.text();
+      const filename = request.headers.get('X-Filename') || 'input.gts';
 
       if (!source || source.trim() === '') {
         return createResponse({

@@ -304,10 +304,6 @@ export class MyCard extends CardDef {
         const errorCases = createErrorTestCases();
 
         for (const [_caseKey, errorCase] of Object.entries(errorCases)) {
-          const mockRequest = {
-            source: errorCase.source,
-          };
-
           try {
             const response = await request
               .post('/_lint')
@@ -317,8 +313,7 @@ export class MyCard extends CardDef {
               )
               .set('X-HTTP-Method-Override', 'QUERY')
               .set('Accept', 'application/json')
-              .set('Content-Type', 'application/json')
-              .send(JSON.stringify(mockRequest));
+              .send(errorCase.source);
 
             // Should not fail completely, should return 200 with fallback behavior
             assert.strictEqual(
@@ -804,41 +799,6 @@ export class MyCard extends CardDef {
         );
       });
 
-      test('supports JSON request body with filename parameter', async function (assert) {
-        let response = await request
-          .post('/_lint')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
-          )
-          .set('X-HTTP-Method-Override', 'QUERY')
-          .set('Accept', 'application/json')
-          .set('Content-Type', 'application/json')
-          .send(
-            JSON.stringify({
-              source: `import { CardDef } from 'https://cardstack.com/base/card-api';
-export class MyCard extends CardDef {
-@field name = contains(StringField);
-}`,
-              filename: 'my-card.gts',
-            }),
-          );
-
-        assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        let responseJson = JSON.parse(response.text);
-        assert.strictEqual(
-          responseJson.output,
-          `import StringField from 'https://cardstack.com/base/string';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-
-export class MyCard extends CardDef {
-  @field name = contains(StringField);
-}
-`,
-          'JSON request body with filename parameter works correctly',
-        );
-      });
-
       test('supports X-Filename header for parser detection', async function (assert) {
         let response = await request
           .post('/_lint')
@@ -912,59 +872,6 @@ export class MyCard${i} extends CardDef {
             '  @field name0 = contains(StringField);',
           ),
           'Prettier formatting is applied to large files',
-        );
-      });
-
-      test('handles invalid JSON request body gracefully', async function (assert) {
-        let response = await request
-          .post('/_lint')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
-          )
-          .set('X-HTTP-Method-Override', 'QUERY')
-          .set('Accept', 'application/json')
-          .set('Content-Type', 'application/json')
-          .send('{ invalid json }');
-
-        assert.strictEqual(
-          response.status,
-          400,
-          'HTTP 400 status for invalid JSON',
-        );
-        let responseJson = JSON.parse(response.text);
-        assert.ok(
-          responseJson.error.includes('Invalid JSON'),
-          'Error message indicates invalid JSON',
-        );
-      });
-
-      test('handles missing source in JSON request body', async function (assert) {
-        let response = await request
-          .post('/_lint')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
-          )
-          .set('X-HTTP-Method-Override', 'QUERY')
-          .set('Accept', 'application/json')
-          .set('Content-Type', 'application/json')
-          .send(
-            JSON.stringify({
-              filename: 'test.gts',
-              // Missing source property
-            }),
-          );
-
-        assert.strictEqual(
-          response.status,
-          400,
-          'HTTP 400 status for missing source',
-        );
-        let responseJson = JSON.parse(response.text);
-        assert.ok(
-          responseJson.error.includes('Missing source'),
-          'Error message indicates missing source',
         );
       });
     });
