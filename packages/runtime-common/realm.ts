@@ -618,7 +618,8 @@ export class Realm {
   ): Promise<ErrorDetails[]> {
     let promises = [];
     for (let { href } of operations) {
-      promises.push(this.#adapter.exists(href));
+      let localPath = this.paths.local(new URL(href, this.paths.url));
+      promises.push(this.#adapter.exists(localPath));
     }
     let booleanFlags = await Promise.all(promises);
     return operations
@@ -695,9 +696,7 @@ export class Realm {
     for (let operation of operations) {
       let resource = operation.data;
       let href = operation.href;
-
-      let fileURL = this.paths.fileURL(href);
-      let localPath = this.paths.local(fileURL);
+      let localPath = this.paths.local(new URL(href, this.paths.url));
       if (isModuleResource(resource)) {
         files.set(localPath, resource.attributes?.content ?? '');
       } else if (isCardResource(resource)) {

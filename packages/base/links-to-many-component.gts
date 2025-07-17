@@ -397,6 +397,17 @@ function getEditorChildFormat(
   return 'fitted';
 }
 
+function getPluralChildFormat(effectiveFormat: Format, model: Box<FieldDef>) {
+  if (
+    effectiveFormat === 'edit' &&
+    'isCardDef' in model.value.constructor &&
+    model.value.constructor.isCardDef
+  ) {
+    return 'fitted';
+  }
+  return effectiveFormat;
+}
+
 function coalesce<T>(arg1: T | undefined, arg2: T): T {
   return arg1 ?? arg2;
 }
@@ -472,7 +483,7 @@ export function getLinksToManyComponent({
             >
               {{#each (getComponents) as |Item i|}}
                 <Item
-                  @format={{effectiveFormat}}
+                  @format={{getPluralChildFormat effectiveFormat model}}
                   @displayContainer={{@displayContainer}}
                   class='linksToMany-item'
                   data-test-plural-view-item={{i}}

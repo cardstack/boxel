@@ -13,6 +13,11 @@ import {
   type Loader,
 } from '@cardstack/runtime-common';
 
+import {
+  AtomicOperation,
+  createAtomicDocument,
+} from '@cardstack/runtime-common/atomic-document';
+
 import type {
   BaseDef,
   CardDef,
@@ -269,6 +274,18 @@ export default class CardService extends Service {
       );
     }
     return (await response.json()).data.attributes;
+  }
+
+  async executeAtomicOperations(operations: AtomicOperation[], realmURL: URL) {
+    let doc = createAtomicDocument(operations);
+    let response = await this.network.authedFetch(`${realmURL.href}_atomic`, {
+      method: 'POST',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+      },
+      body: JSON.stringify(doc),
+    });
+    return response.json();
   }
 }
 

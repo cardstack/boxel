@@ -228,9 +228,15 @@ export class ListingActionInput extends CardDef {
   @field attachedCard = linksTo(CardDef);
 }
 
-export class ListingInput extends CardDef {
+export class ListingInstallInput extends CardDef {
   @field realm = contains(StringField);
   @field listing = linksTo(CardDef);
+}
+
+export class ListingInstallResult extends CardDef {
+  @field exampleCardId = contains(StringField);
+  @field skillCardId = contains(StringField);
+  @field selectedCodeRef = contains(CodeRefField);
 }
 
 export class ListingCreateInput extends CardDef {

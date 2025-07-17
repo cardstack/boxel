@@ -54,7 +54,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
             },
             targetCodeRef: {
               name: 'Some Ref Name',
-              module: `${targetRealmURL}some-folder-xyz/some.gts`,
+              module: `${targetRealmURL}some-folder-xyz/some`,
             },
           });
 
@@ -65,7 +65,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
             },
             targetCodeRef: {
               name: 'Some Ref Name 2',
-              module: `${targetRealmURL}some-folder-xyz/some-2.gts`,
+              module: `${targetRealmURL}some-folder-xyz/some-2`,
             },
           });
         });
@@ -103,7 +103,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
             },
             targetCodeRef: {
               name: 'Some Ref Name',
-              module: `${targetRealmURL}some-folder-xyz/some-folder/some.gts`,
+              module: `${targetRealmURL}some-folder-xyz/some-folder/some`,
             },
           });
           assert.deepEqual(modulesCopy[1], {
@@ -113,7 +113,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
             },
             targetCodeRef: {
               name: 'Some Ref Name 2',
-              module: `${targetRealmURL}some-folder-xyz/some-folder-2/some-2.gts`,
+              module: `${targetRealmURL}some-folder-xyz/some-folder-2/some-2`,
             },
           });
         });
@@ -151,7 +151,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
           },
           targetCodeRef: {
             name: 'Some Ref Name',
-            module: `${targetRealmURL}xyz/some-folder/some.gts`,
+            module: `${targetRealmURL}xyz/some-folder/some`,
           },
         });
         assert.deepEqual(modulesCopy[1], {
@@ -161,7 +161,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
           },
           targetCodeRef: {
             name: 'Some Ref Name 2',
-            module: `${targetRealmURL}xyz/some-folder/some-2.gts`,
+            module: `${targetRealmURL}xyz/some-folder/some-2`,
           },
         });
       });
@@ -199,7 +199,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
           },
           targetCodeRef: {
             name: 'Some Ref Name',
-            module: `${targetRealmURL}xyz/some-folder/some.gts`,
+            module: `${targetRealmURL}xyz/some-folder/some`,
           },
         });
         assert.deepEqual(modulesCopy[1], {
@@ -209,7 +209,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
           },
           targetCodeRef: {
             name: 'Some Ref Name 2',
-            module: `${targetRealmURL}xyz/some-folder-2/some-2.gts`,
+            module: `${targetRealmURL}xyz/some-folder-2/some-2`,
           },
         });
       });
@@ -246,7 +246,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
           },
           targetCodeRef: {
             name: 'Some Ref Name',
-            module: `${targetRealmURL}xyz/some.gts`,
+            module: `${targetRealmURL}xyz/some`,
           },
         });
         assert.deepEqual(modulesCopy[1], {
@@ -256,7 +256,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
           },
           targetCodeRef: {
             name: 'Some Ref Name 2',
-            module: `${targetRealmURL}xyz/some-2.gts`,
+            module: `${targetRealmURL}xyz/some-2`,
           },
         });
       });
@@ -298,13 +298,13 @@ module('Unit | Catalog | Install Plan Builder', function () {
           },
           targetCodeRef: {
             name: 'Some Ref Name',
-            module: `${targetRealmURL}some-folder-xyz/some.gts`,
+            module: `${targetRealmURL}some-folder-xyz/some`,
           },
         });
-        assert.strictEqual(instancesCopy[0].localDir, 'some-folder-xyz');
+        assert.strictEqual(instancesCopy[0].lid, 'some-folder-xyz/Example/1');
         assert.deepEqual(instancesCopy[0].targetCodeRef, {
           name: 'Some Ref Name',
-          module: `${targetRealmURL}some-folder-xyz/some.gts`,
+          module: `${targetRealmURL}some-folder-xyz/some`,
         });
       });
       test('instance adoptsFrom from code inside base realm', function (assert) {
@@ -332,8 +332,11 @@ module('Unit | Catalog | Install Plan Builder', function () {
           new InstallOptions(targetRealmURL.href, listing, 'xyz'),
         );
         assert.strictEqual(modulesCopy.length, 0);
-        assert.strictEqual(instancesCopy[0].localDir, 'some-folder-xyz');
-        assert.strictEqual(instancesCopy[0].targetCodeRef, undefined);
+        assert.strictEqual(instancesCopy[0].lid, 'some-folder-xyz/Example/1');
+        assert.deepEqual(instancesCopy[0].targetCodeRef, {
+          module: `${baseRealmURL}skill`,
+          name: 'Some Ref Name',
+        });
       });
       test('instance adoptsFrom code outside of source folder', function (assert) {
         const instances = [
@@ -367,13 +370,16 @@ module('Unit | Catalog | Install Plan Builder', function () {
           },
           targetCodeRef: {
             name: 'Some Ref Name',
-            module: `${targetRealmURL}some-folder-xyz/some-folder-2/some.gts`,
+            module: `${targetRealmURL}some-folder-xyz/some-folder-2/some`,
           },
         });
-        assert.strictEqual(instancesCopy[0].localDir, `some-folder-xyz`);
+        assert.strictEqual(
+          instancesCopy[0].lid,
+          `some-folder-xyz/some-folder/Example/1`,
+        );
         assert.deepEqual(instancesCopy[0].targetCodeRef, {
           name: 'Some Ref Name',
-          module: `${targetRealmURL}some-folder-xyz/some-folder-2/some.gts`,
+          module: `${targetRealmURL}some-folder-xyz/some-folder-2/some`,
         });
       });
       test('not ALL instances adoptsFrom code inside source folder', function (assert) {
@@ -419,7 +425,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
           },
           targetCodeRef: {
             name: 'Some Ref Name',
-            module: `${targetRealmURL}some-folder-xyz/some-folder/some.gts`,
+            module: `${targetRealmURL}some-folder-xyz/some-folder/some`,
           },
         });
         assert.deepEqual(modulesCopy[1], {
@@ -429,18 +435,24 @@ module('Unit | Catalog | Install Plan Builder', function () {
           },
           targetCodeRef: {
             name: 'Some Ref Name',
-            module: `${targetRealmURL}some-folder-xyz/some-folder-2/some-2.gts`,
+            module: `${targetRealmURL}some-folder-xyz/some-folder-2/some-2`,
           },
         });
-        assert.deepEqual(instancesCopy[0].localDir, 'some-folder-xyz');
+        assert.deepEqual(
+          instancesCopy[0].lid,
+          'some-folder-xyz/some-folder/Example/1',
+        );
         assert.deepEqual(instancesCopy[0].targetCodeRef, {
           name: 'Some Ref Name',
-          module: `${targetRealmURL}some-folder-xyz/some-folder/some.gts`,
+          module: `${targetRealmURL}some-folder-xyz/some-folder/some`,
         });
-        assert.deepEqual(instancesCopy[1].localDir, 'some-folder-xyz');
+        assert.deepEqual(
+          instancesCopy[1].lid,
+          'some-folder-xyz/some-folder/Example/2',
+        );
         assert.deepEqual(instancesCopy[1].targetCodeRef, {
           name: 'Some Ref Name',
-          module: `${targetRealmURL}some-folder-xyz/some-folder-2/some-2.gts`,
+          module: `${targetRealmURL}some-folder-xyz/some-folder-2/some-2`,
         });
       });
     });
@@ -498,14 +510,14 @@ module('Unit | Catalog | Install Plan Builder', function () {
           },
           targetCodeRef: {
             name: 'Some Ref Name 1',
-            module: `${targetRealmURL}xyz/some-folder/some.gts`,
+            module: `${targetRealmURL}xyz/some-folder/some`,
           },
         });
 
-        assert.strictEqual(instancesCopy[0].localDir, 'xyz');
+        assert.strictEqual(instancesCopy[0].lid, 'xyz/some-folder/Example/1');
         assert.deepEqual(instancesCopy[0].targetCodeRef, {
           name: 'Some Ref Name 1',
-          module: `${targetRealmURL}xyz/some-folder/some.gts`,
+          module: `${targetRealmURL}xyz/some-folder/some`,
         });
 
         assert.deepEqual(modulesCopy[1], {
@@ -515,14 +527,14 @@ module('Unit | Catalog | Install Plan Builder', function () {
           },
           targetCodeRef: {
             name: 'Some Ref Name 2',
-            module: `${targetRealmURL}xyz/some-folder-2/some-2.gts`,
+            module: `${targetRealmURL}xyz/some-folder-2/some-2`,
           },
         });
 
-        assert.strictEqual(instancesCopy[1].localDir, 'xyz');
+        assert.strictEqual(instancesCopy[1].lid, 'xyz/some-folder-2/Example/2');
         assert.deepEqual(instancesCopy[1].targetCodeRef, {
           name: 'Some Ref Name 2',
-          module: `${targetRealmURL}xyz/some-folder-2/some-2.gts`,
+          module: `${targetRealmURL}xyz/some-folder-2/some-2`,
         });
       });
       test('instance adoptsFrom from code inside base realm', function (assert) {
@@ -549,8 +561,11 @@ module('Unit | Catalog | Install Plan Builder', function () {
           new InstallOptions(targetRealmURL.href, listing, 'xyz'),
         );
         assert.strictEqual(modulesCopy.length, 0);
-        assert.strictEqual(instancesCopy[0].localDir, 'xyz');
-        assert.strictEqual(instancesCopy[0].targetCodeRef, undefined);
+        assert.strictEqual(instancesCopy[0].lid, 'xyz/some-folder/Example/1');
+        assert.deepEqual(instancesCopy[0].targetCodeRef, {
+          module: `${baseRealmURL}skill`,
+          name: 'Some Ref Name',
+        });
       });
     });
   });
@@ -580,7 +595,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 },
                 targetCodeRef: {
                   name: 'Some Ref Name',
-                  module: `${targetRealmURL}xyz/some-folder/some.gts`,
+                  module: `${targetRealmURL}xyz/some-folder/some`,
                 },
               },
             ],
@@ -597,7 +612,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 },
                 targetCodeRef: {
                   name: 'Some Ref Name',
-                  module: `${targetRealmURL}xyz/some-folder/some.gts`,
+                  module: `${targetRealmURL}xyz/some-folder/some`,
                 },
               },
             ],
@@ -614,7 +629,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 name: 'Some Ref Name',
               },
               targetCodeRef: {
-                module: `${targetRealmURL}xyz/some-folder/some.gts`,
+                module: `${targetRealmURL}xyz/some-folder/some`,
                 name: 'Some Ref Name',
               },
             },
@@ -622,7 +637,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
           modulesToInstall: [
             {
               sourceModule: `${sourceRealmURL.href}some-folder/some`,
-              targetModule: `${targetRealmURL}xyz/some-folder/some.gts`,
+              targetModule: `${targetRealmURL}xyz/some-folder/some`,
             },
           ],
         });
@@ -634,7 +649,11 @@ module('Unit | Catalog | Install Plan Builder', function () {
             instancesCopy: [
               {
                 sourceCard: {} as CardDef,
-                localDir: `xyz/some-folder`,
+                targetCodeRef: {
+                  name: 'Some Ref Name',
+                  module: `${targetRealmURL}xyz/some-folder/some`,
+                },
+                lid: 'xyz/some-folder/Example/1',
               },
             ],
           };
@@ -645,7 +664,11 @@ module('Unit | Catalog | Install Plan Builder', function () {
             instancesCopy: [
               {
                 sourceCard: {} as CardDef,
-                localDir: `xyz/some-folder`,
+                targetCodeRef: {
+                  name: 'Some Ref Name',
+                  module: `${targetRealmURL}xyz/some-folder/some`,
+                },
+                lid: 'xyz/some-folder/Example/1',
               },
             ],
           };
@@ -655,7 +678,11 @@ module('Unit | Catalog | Install Plan Builder', function () {
           instancesCopy: [
             {
               sourceCard: {} as CardDef,
-              localDir: `xyz/some-folder`,
+              targetCodeRef: {
+                name: 'Some Ref Name',
+                module: `${targetRealmURL}xyz/some-folder/some`,
+              },
+              lid: 'xyz/some-folder/Example/1',
             },
           ],
           modulesCopy: [],
@@ -675,7 +702,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 },
                 targetCodeRef: {
                   name: 'Some Ref Name',
-                  module: `${targetRealmURL}xyz/some-folder/some.gts`,
+                  module: `${targetRealmURL}xyz/some-folder/some`,
                 },
               },
             ],
@@ -692,7 +719,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 },
                 targetCodeRef: {
                   name: 'Some Ref Name 2',
-                  module: `${targetRealmURL}xyz/some-folder/some.gts`,
+                  module: `${targetRealmURL}xyz/some-folder/some`,
                 },
               },
             ],
@@ -709,7 +736,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 },
                 targetCodeRef: {
                   name: 'Some Ref Name 3',
-                  module: `${targetRealmURL}xyz/some-folder/some-3.gts`,
+                  module: `${targetRealmURL}xyz/some-folder/some-3`,
                 },
               },
             ],
@@ -720,11 +747,11 @@ module('Unit | Catalog | Install Plan Builder', function () {
         assert.strictEqual(modulesToInstall.length, 2);
         assert.deepEqual(modulesToInstall[0], {
           sourceModule: `${sourceRealmURL.href}some-folder/some`,
-          targetModule: `${targetRealmURL}xyz/some-folder/some.gts`,
+          targetModule: `${targetRealmURL}xyz/some-folder/some`,
         });
         assert.deepEqual(modulesToInstall[1], {
           sourceModule: `${sourceRealmURL.href}some-folder/some`,
-          targetModule: `${targetRealmURL}xyz/some-folder/some-3.gts`,
+          targetModule: `${targetRealmURL}xyz/some-folder/some-3`,
         });
       });
     });

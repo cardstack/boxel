@@ -1,0 +1,50 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Marigold Academy 2024-2025",
+      "schoolYearStart": "2024-08-15",
+      "schoolYearEnd": "2025-06-10",
+      "description": "Official school calendar for Marigold Academy's 2024-2025 academic year. Includes all major academic events, holidays, and special activities. Students and parents should refer to this calendar for important dates throughout the school year.",
+      "thumbnailURL": "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?q=80&w=2022&auto=format&fit=crop"
+    },
+    "relationships": {
+      "events.0": {
+        "links": {
+          "self": "../CalendarEvent/4a39e583-ce46-4b44-9d40-303aec3dfe60"
+        }
+      },
+      "events.1": {
+        "links": {
+          "self": "../CalendarEvent/a93a4a39-e583-4e46-9b44-9d40303aec3d"
+        }
+      },
+      "events.2": {
+        "links": {
+          "self": "../CalendarEvent/e583ce46-5b44-4d40-b03a-ec3dfe60eef5"
+        }
+      },
+      "events.3": {
+        "links": {
+          "self": "../CalendarEvent/ef0ea93a-4a39-4583-8e46-5b449d40303a"
+        }
+      },
+      "scheduleItems.0": {
+        "links": {
+          "self": "../ScheduleItem/2fc799ef-ef0e-493a-8a39-e583ce465b44"
+        }
+      },
+      "scheduleItems.1": {
+        "links": {
+          "self": "../ScheduleItem/4cacfd06-d018-4fc7-99ef-ef0ea93a4a39"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../school-calendar",
+        "name": "SchoolCalendar"
+      }
+    }
+  }
+}
