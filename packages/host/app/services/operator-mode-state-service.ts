@@ -871,6 +871,10 @@ export default class OperatorModeStateService extends Service {
     return new URL(this.realm.defaultReadableRealm.path);
   }
 
+  get currentRealmInfo() {
+    return this.realm.info(this.realmURL.href);
+  }
+
   getWritableRealmURL = (preferredURLs: string[] = []) => {
     // Optional `preferredURLs` argument with highest priority with fallback options below
     // Precedence rules for determining "current realm" for WRITE purposes:
