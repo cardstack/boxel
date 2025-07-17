@@ -1,5 +1,6 @@
 import Component from '@glimmer/component';
 
+import { action } from '@ember/object';
 import { service } from '@ember/service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -9,11 +10,17 @@ import SubmodeLayout from './submode-layout';
 export default class HostSubmode extends Component {
   @service private declare operatorModeStateService: OperatorModeStateService;
 
+  @action private noop() {}
+
   <template>
-    <SubmodeLayout class='host-submode-layout' data-test-host-submode>
+    <SubmodeLayout
+      @onCardSelectFromSearch={{this.noop}}
+      class='host-submode-layout'
+      data-test-host-submode
+    >
       <div class='host-submode'>
         Host submode:
-        {{this.operatorModeStateService.state.codePath}}
+        {{this.operatorModeStateService.state.codePath.href}}
       </div>
     </SubmodeLayout>
 
