@@ -72,7 +72,6 @@ import { MatrixClient, getMatrixUsername } from './matrix-client';
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
 import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
-import { isUrlLike } from './virtual-network';
 
 import { RealmAuthDataSource } from './realm-auth-data-source';
 import { fetcher } from './fetcher';
@@ -619,7 +618,7 @@ export class Realm {
   ): Promise<ErrorDetails[]> {
     let promises = [];
     for (let { href } of operations) {
-      let localPath = isUrlLike(href) ? this.paths.local(new URL(href)) : href;
+      let localPath = this.paths.local(new URL(href, this.paths.url));
       promises.push(this.#adapter.exists(localPath));
     }
     let booleanFlags = await Promise.all(promises);
@@ -697,9 +696,7 @@ export class Realm {
     for (let operation of operations) {
       let resource = operation.data;
       let href = operation.href;
-
-      let fileURL = this.paths.fileURL(href);
-      let localPath = this.paths.local(fileURL);
+      let localPath = this.paths.local(new URL(href, this.paths.url));
       if (isModuleResource(resource)) {
         files.set(localPath, resource.attributes?.content ?? '');
       } else if (isCardResource(resource)) {
