@@ -290,6 +290,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         {{/if}}
       </section>
 
+      <hr class='divider' />
       <section
         class='app-listing-skills'
         data-test-catalog-listing-embedded-skills-section
