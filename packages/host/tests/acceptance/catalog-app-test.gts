@@ -1024,16 +1024,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         if (outerFolder) {
           await openDir(assert, outerFolder);
         }
-        // mortgage-calculator-[uuid]/mortgage-calculator.gts
         let gtsFilePath = outerFolder + 'mortgage-calculator.gts';
         await verifyFileInFileTree(assert, gtsFilePath);
-        // mortgage-calculator-[uuid]/MortgageCalculator/example.json
         let instanceFolder = outerFolder + 'MortgageCalculator' + '/';
         await verifyFolderInFileTree(assert, instanceFolder);
-        if (instanceFolder) {
-          await openDir(assert, instanceFolder);
-        }
-        await verifyJSONWithUUIDInFolder(assert, instanceFolder);
+        await openDir(assert, instanceFolder);
+        await verifyFileInFileTree(assert, instanceFolder + 'example.json');
       });
 
       test('field listing', async function (assert) {
@@ -1105,10 +1101,11 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         }
         let instanceFolder = outerFolder + 'Skill' + '/';
         await verifyFolderInFileTree(assert, instanceFolder);
-        if (instanceFolder) {
-          await openDir(assert, instanceFolder);
-        }
-        await verifyJSONWithUUIDInFolder(assert, instanceFolder);
+        await openDir(assert, instanceFolder);
+        await verifyFileInFileTree(
+          assert,
+          instanceFolder + 'skill-pirate-speak.json',
+        );
       });
     });
     module('"remix"', async function () {
@@ -1153,15 +1150,15 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         }
         let instanceFolder = outerFolder + 'Skill' + '/';
         await verifyFolderInFileTree(assert, instanceFolder);
-        if (instanceFolder) {
-          await openDir(assert, instanceFolder);
-        }
-        let filePath = await verifyJSONWithUUIDInFolder(assert, instanceFolder);
-        let cardId = testRealm2URL + filePath;
-        let headerId = cardId.replace('.json', '');
+        await openDir(assert, instanceFolder);
+        await verifyFileInFileTree(
+          assert,
+          instanceFolder + 'skill-pirate-speak.json',
+        );
+        let cardId = testRealm2URL + instanceFolder + 'skill-pirate-speak';
         await waitFor('[data-test-card-resource-loaded]');
         assert
-          .dom(`[data-test-code-mode-card-renderer-header="${headerId}"]`)
+          .dom(`[data-test-code-mode-card-renderer-header="${cardId}"]`)
           .exists();
       });
     });
@@ -1190,9 +1187,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
       let instanceFolder = outerFolder + 'Author' + '/';
       await verifyFolderInFileTree(assert, instanceFolder);
-      if (instanceFolder) {
-        await openDir(assert, instanceFolder);
-      }
+      await openDir(assert, instanceFolder);
       await verifyJSONWithUUIDInFolder(assert, instanceFolder);
     });
 
@@ -1227,7 +1222,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       if (instanceFolder) {
         await openDir(assert, instanceFolder);
       }
-      await verifyJSONWithUUIDInFolder(assert, instanceFolder);
+      await verifyFileInFileTree(assert, instanceFolder + 'example.json');
     });
 
     test('"remix" is successful even if target realm does not have a trailing slash', async function (assert) {
