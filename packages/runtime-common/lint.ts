@@ -94,29 +94,8 @@ export async function lintFix({
     // Step 3: Apply prettier formatting
     const formattedOutput = await prettier.format(eslintOutput, prettierConfig);
 
-    // Add blank line after imports if missing
-    const lines = formattedOutput.split('\n');
-    let lastImportIndex = -1;
-
-    // Find the last import statement
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].trim().startsWith('import ')) {
-        lastImportIndex = i;
-      }
-    }
-
-    // Add blank line after last import if there isn't one already
-    if (lastImportIndex !== -1 && lastImportIndex < lines.length - 1) {
-      const nextLineIndex = lastImportIndex + 1;
-      if (nextLineIndex < lines.length && lines[nextLineIndex].trim() !== '') {
-        lines.splice(nextLineIndex, 0, '');
-      }
-    }
-
-    const finalOutput = lines.join('\n');
-
     // Step 4: Return combined result with properly formatted code
-    return { output: finalOutput };
+    return { output: formattedOutput };
   } catch (error) {
     // Step 5: Handle errors gracefully with fallback behavior
     console.warn(

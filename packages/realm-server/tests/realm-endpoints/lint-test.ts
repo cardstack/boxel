@@ -613,7 +613,6 @@ export class MyCard extends CardDef {
           responseJson.output,
           `import StringField from 'https://cardstack.com/base/string';
 import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }
@@ -643,7 +642,6 @@ export class MyCard extends CardDef {
           responseJson.output,
           `import { eq } from '@cardstack/boxel-ui/helpers';
 import MyComponent from 'somewhere';
-
 <template>
   <MyComponent @flag={{eq 1 1}} />
 </template>
@@ -715,7 +713,6 @@ export class MyCard extends CardDef{
           responseJson.output,
           `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import { StringField } from 'https://cardstack.com/base/string';
-
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }
@@ -751,7 +748,6 @@ export class MyCard extends CardDef {
           responseJson.output,
           `import { eq } from '@cardstack/boxel-ui/helpers';
 import MyComponent from 'somewhere';
-
 <template>
   <div>
     <MyComponent @flag={{eq 1 1}}>
@@ -821,7 +817,6 @@ export class MyCard extends CardDef {
           responseJson.output,
           `import StringField from 'https://cardstack.com/base/string';
 import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }
