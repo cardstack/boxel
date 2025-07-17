@@ -865,25 +865,6 @@ test.describe('Room messages', () => {
     });
   });
 
-  test('it can send the prompts on new-session room as chat message on click', async ({
-    page,
-  }) => {
-    const prompt = {
-      from: 'user1',
-      message: 'Make this more polite.', // a prompt on new-session template
-      cards: [],
-    };
-    await login(page, 'user1', 'pass', { url: appURL });
-    await page.locator(`[data-test-room-settled]`).waitFor();
-
-    await expect(page.locator(`[data-test-new-session]`)).toHaveCount(1);
-    await expect(page.locator(`[data-test-prompt]`)).toHaveCount(3);
-
-    await page.locator(`[data-test-prompt="1"]`).click();
-    await expect(page.locator(`[data-test-new-session]`)).toHaveCount(0);
-    await assertMessages(page, [prompt]);
-  });
-
   test('sending a prompt submits attached cards', async ({ page }) => {
     const testCard1 = `${appURL}/mango`;
     const testCard2 = `${appURL}/hassan`;
@@ -908,11 +889,14 @@ test.describe('Room messages', () => {
       page.locator(`[data-test-chat-input-area] [data-test-attached-card]`),
     ).toHaveCount(2);
 
-    await page.locator(`[data-test-prompt="0"]`).click();
+    page
+      .locator('[data-test-message-field]')
+      .fill('Sending message with attached cards');
+    await page.locator('[data-test-send-message-btn]').click();
 
     const message1 = {
       from: 'user1',
-      message: 'Fill in the title and description.', // prompt is submitted
+      message: 'Sending message with attached cards.', // prompt is submitted
       cards: [
         { id: testCard1, title: 'Mango' }, // auto-attached card is submitted
         { id: testCard2, title: 'Hassan' }, // attached card is submitted
