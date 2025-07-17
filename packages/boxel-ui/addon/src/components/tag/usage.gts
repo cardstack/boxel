@@ -6,13 +6,12 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import Tag from './index.gts';
 
 export default class TagUsage extends Component {
-  pillKinds = ['button', 'default'];
-  @tracked name = 'Meeting Minutes';
-  @tracked pillColor?: string;
-  @tracked borderColor?: string;
-  @tracked fontColor?: string;
-  @tracked ellipsize = false;
-  @tracked tag?: keyof HTMLElementTagNameMap;
+  @tracked private name = 'Meeting Minutes';
+  @tracked private pillColor?: string;
+  @tracked private borderColor?: string;
+  @tracked private fontColor?: string;
+  @tracked private ellipsize = false;
+  @tracked private htmlTag?: keyof HTMLElementTagNameMap;
 
   <template>
     <FreestyleUsage @name='Tag List'>
@@ -26,7 +25,7 @@ export default class TagUsage extends Component {
             @pillColor={{this.pillColor}}
             @borderColor={{this.borderColor}}
             @fontColor={{this.fontColor}}
-            @tag={{if this.tag this.tag 'div'}}
+            @htmlTag={{if this.htmlTag this.htmlTag 'div'}}
             @ellipsize={{this.ellipsize}}
           />
         </div>
@@ -72,18 +71,18 @@ export default class TagUsage extends Component {
           @onInput={{fn (mut this.ellipsize)}}
         />
         <Args.String
-          @name='tag'
+          @name='htmlTag'
           @description='HTML element tag name'
-          @value={{this.tag}}
+          @value={{this.htmlTag}}
           @defaultValue='div'
           @optional={{true}}
-          @onInput={{fn (mut this.tag)}}
+          @onInput={{fn (mut this.htmlTag)}}
         />
       </:api>
     </FreestyleUsage>
     <style scoped>
       .tag-usage-container {
-        width: 100px;
+        width: 100px; /* for previewing the ellipsize property */
       }
     </style>
   </template>

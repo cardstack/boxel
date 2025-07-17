@@ -1,17 +1,16 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import cn from '../../helpers/cn.ts';
-import Pill, { type BoxelPillKind } from '../pill/index.gts';
+import Pill from '../pill/index.gts';
 
 export interface TagSignature {
   Args: {
     borderColor?: string;
     ellipsize?: boolean;
     fontColor?: string;
-    kind?: BoxelPillKind;
+    htmlTag?: keyof HTMLElementTagNameMap;
     name?: string;
     pillColor?: string;
-    tag?: keyof HTMLElementTagNameMap;
   };
   Element: HTMLElement;
 }
@@ -22,8 +21,7 @@ const Tag: TemplateOnlyComponent<TagSignature> = <template>
     @pillBackgroundColor={{@pillColor}}
     @pillBorderColor={{if @borderColor @borderColor @pillColor}}
     @pillFontColor={{@fontColor}}
-    @tag={{@tag}}
-    @kind={{@kind}}
+    @tag={{@htmlTag}}
     ...attributes
   >
     <span class={{cn 'tag-name' ellipsize=@ellipsize}}>

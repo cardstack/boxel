@@ -26,7 +26,7 @@ import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 const realmName = 'Local Workspace';
-const baseRealmCardCount = 2;
+const baseRealmCardCount = 3;
 
 module('Integration | card-catalog', function (hooks) {
   setupRenderingTest(hooks);

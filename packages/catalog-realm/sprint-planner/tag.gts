@@ -1,44 +1,31 @@
-import { Pill } from '@cardstack/boxel-ui/components';
-import TagIcon from '@cardstack/boxel-icons/tag';
-import {
-  CardDef,
-  Component,
-  StringField,
-  contains,
-  field,
-} from 'https://cardstack.com/base/card-api';
-import ColorField from 'https://cardstack.com/base/color';
+import { Component } from 'https://cardstack.com/base/card-api';
+import TagCard from 'https://cardstack.com/base/tag';
 
-export class Tag extends CardDef {
-  static displayName = 'Tag';
-  static icon = TagIcon;
-  @field name = contains(StringField);
-  @field title = contains(StringField, {
-    computeVia: function (this: Tag) {
-      return this.name;
-    },
-  });
-  @field color = contains(ColorField);
+import { BoxelTag } from '@cardstack/boxel-ui/components';
+import { getContrastColor } from '@cardstack/boxel-ui/helpers';
 
+export class Tag extends TagCard {
   static atom = class Atom extends Component<typeof this> {
     <template>
-      {{#if @model.name}}
-        <Pill class='tag-pill' @pillBackgroundColor={{@model.color}}>
-          <:default>
-            <span># {{@model.name}}</span>
-          </:default>
-        </Pill>
-      {{/if}}
-
-      <style scoped>
-        .tag-pill {
-          font-size: calc(var(--boxel-font-size-xs) * 0.95);
-          font-weight: 500;
-          padding: 0;
-          --pill-font-color: var(--boxel-400);
-          border: none;
-        }
-      </style>
+      <BoxelTag
+        @name='# {{@model.name}}'
+        @pillColor={{@model.color}}
+        @fontColor={{this.fontColor}}
+        @ellipsize={{true}}
+        @borderColor='none'
+      />
     </template>
+
+    private get fontColor() {
+      if (this.args.model.fontColor) {
+        return this.args.model.fontColor;
+      }
+      if (this.args.model.color) {
+        return getContrastColor(this.args.model.color, undefined, undefined, {
+          isSmallText: true,
+        });
+      }
+      return 'var(--boxel-400)';
+    }
   };
 }
