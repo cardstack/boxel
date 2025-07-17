@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "EventRsvp",
+        "module": "../components/EventRsvp/event-rsvp"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "EventRsvp",
+      "description": "Spec of Event Rsvp",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

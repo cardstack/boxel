@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "ScheduleItem",
+        "module": "../components/ScheduleItem/schedule-item"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "ScheduleItem",
+      "description": "Spec of Schedule Item",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
