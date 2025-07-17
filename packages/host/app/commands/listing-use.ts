@@ -22,7 +22,7 @@ import type RealmServerService from '../services/realm-server';
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
 export default class ListingUseCommand extends HostBaseCommand<
-  typeof BaseCommandModule.ListingInstallInput
+  typeof BaseCommandModule.ListingInput
 > {
   @service declare private realmServer: RealmServerService;
 
@@ -30,12 +30,12 @@ export default class ListingUseCommand extends HostBaseCommand<
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
-    const { ListingInstallInput } = commandModule;
-    return ListingInstallInput;
+    const { ListingInput } = commandModule;
+    return ListingInput;
   }
 
   protected async run(
-    input: BaseCommandModule.ListingInstallInput,
+    input: BaseCommandModule.ListingInput,
   ): Promise<undefined> {
     let realmUrls = this.realmServer.availableRealmURLs;
     let { realm, listing: listingInput } = input;
