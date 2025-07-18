@@ -111,7 +111,6 @@ export default class CardErrorComponent extends Component<Signature> {
       .error-header {
         color: var(--boxel-error-300);
         min-height: var(--boxel-form-control-height);
-        background-color: var(--boxel-100);
         box-shadow: 0 1px 0 0 rgba(0 0 0 / 15%);
       }
       .card-error-detail {

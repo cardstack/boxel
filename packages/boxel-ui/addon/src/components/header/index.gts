@@ -8,6 +8,7 @@ interface Signature {
   Args: {
     hasBackground?: boolean;
     hasBottomBorder?: boolean;
+    hasShadow?: boolean;
     size?: 'large';
     subtitle?: string;
     title?: string;
@@ -27,6 +28,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       has-background=@hasBackground
       large=(eq @size 'large')
       hasBottomBorder=@hasBottomBorder
+      has-shadow=@hasShadow
     }}
     data-test-boxel-header
     ...attributes
@@ -67,12 +69,26 @@ const Header: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     @layer {
       header {
-        --default-header-padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp-sm);
+        --_bg-color: var(
+          --boxel-header-background-color,
+          var(--accent-foreground, var(--boxel-100))
+        );
+        --_shadow: var(
+          --boxel-header-box-shadow,
+          var(--shadow, var(--boxel-box-shadow-sm))
+        );
+        --_font-color: var(
+          --boxel-header-text-color,
+          var(--primary, var(--boxel-dark))
+        );
         position: relative;
         display: flex;
         align-items: center;
         min-height: var(--boxel-header-min-height, 1.875rem); /* 30px */
-        color: var(--boxel-header-text-color, var(--boxel-dark));
+        width: 100%;
+        box-sizing: border-box;
+        overflow: hidden;
+        color: var(--_font-color);
         border-top-right-radius: calc(
           var(--boxel-header-border-radius, var(--boxel-border-radius)) - 1px
         );
@@ -87,7 +103,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
           background-color var(--boxel-transition),
           color var(--boxel-transition);
         gap: var(--boxel-header-gap, var(--boxel-sp-xs));
-        padding: var(--boxel-header-padding, var(--default-header-padding));
+        padding: var(--boxel-header-padding, var(--boxel-sp-xs));
       }
       header .title {
         max-width: var(
@@ -114,10 +130,10 @@ const Header: TemplateOnlyComponent<Signature> = <template>
           var(--boxel--header-border-color, var(--boxel-200));
       }
       .has-background {
-        background-color: var(
-          --boxel-header-background-color,
-          var(--boxel-100)
-        );
+        background-color: var(--_bg-color);
+      }
+      .has-shadow {
+        box-shadow: var(--_shadow);
       }
       .content {
         display: flex;

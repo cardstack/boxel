@@ -195,6 +195,18 @@ export default class CardHeader extends Component<Signature> {
     <style scoped>
       @layer {
         header {
+          --_bg-color: var(
+            --boxel-card-header-background-color,
+            var(--accent-foreground, var(--boxel-100))
+          );
+          --_shadow: var(
+            --boxel-card-header-box-shadow,
+            var(--shadow, var(--boxel-box-shadow-sm))
+          );
+          --_font-color: var(
+            --boxel-card-header-text-color,
+            var(--primary, var(--boxel-dark))
+          );
           --inner-boxel-card-header-padding: var(
             --boxel-card-header-padding,
             var(--boxel-sp-xs)
@@ -214,11 +226,8 @@ export default class CardHeader extends Component<Signature> {
           width: 100%;
           box-sizing: border-box;
           overflow: hidden;
-          color: var(--boxel-card-header-text-color, var(--boxel-dark));
-          background-color: var(
-            --boxel-card-header-background-color,
-            var(--boxel-light)
-          );
+          color: var(--_font-color);
+          background-color: var(--_bg-color);
           border-top-right-radius: calc(
             var(--boxel-card-header-border-radius, var(--boxel-border-radius)) -
               1px
@@ -233,9 +242,10 @@ export default class CardHeader extends Component<Signature> {
             background-color var(--boxel-transition),
             color var(--boxel-transition);
           gap: var(--boxel-card-header-gap, var(--boxel-sp-xs));
-          padding: var(--inner-boxel-card-header-padding, var(--boxel-sp-xl));
+          padding: var(--inner-boxel-card-header-padding);
           font: var(--boxel-card-header-font-weight, 600)
             var(--boxel-card-header-text-font, var(--boxel-font-sm));
+          box-shadow: var(--_shadow);
         }
         header.is-editing {
           background-color: var(--boxel-highlight);
