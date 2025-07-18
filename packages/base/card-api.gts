@@ -72,9 +72,12 @@ import DefaultCardDefTemplate from './default-templates/isolated-and-edit';
 import DefaultAtomViewTemplate from './default-templates/atom';
 import MissingTemplate from './default-templates/missing-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
+import MarkdownTemplate from './default-templates/markdown';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
+import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
+export { sanitizedHtml } from './helpers/sanitized-html';
 
 interface CardOrFieldTypeIconSignature {
   Element: Element;
@@ -2112,6 +2115,38 @@ export class MaybeBase64Field extends StringField {
   static atom = MaybeBase64Field.embedded;
 }
 
+export class MarkdownField extends StringField {
+  static displayName = 'Markdown';
+  static icon = MarkdownIcon;
+
+  static embedded = class MarkdownViewTemplate extends Component<
+    typeof MarkdownField
+  > {
+    <template>
+      <MarkdownTemplate @content={{@model}} />
+    </template>
+  };
+  static atom = class MarkdownViewTemplate extends Component<
+    typeof MarkdownField
+  > {
+    <template>
+      <MarkdownTemplate @content={{@model}} />
+    </template>
+  };
+
+  static edit = class Edit extends Component<typeof this> {
+    <template>
+      <BoxelInput
+        class='boxel-text-area'
+        @type='textarea'
+        @value={{@model}}
+        @onInput={{@set}}
+        @disabled={{not @canEdit}}
+      />
+    </template>
+  };
+}
+
 export class CardInfoField extends FieldDef {
   static displayName = 'Card Info';
   @field title = contains(StringField);
@@ -2119,7 +2154,7 @@ export class CardInfoField extends FieldDef {
   @field thumbnailURL = contains(MaybeBase64Field);
   // @field tags = linksToMany(Tag); // cs-9066
   // @field theme = linksTo(Theme); // cs-9112
-  // @field notes = contains(RichTextField); // cs-8594 & cs-9044
+  @field notes = contains(MarkdownField); // TODO: rich-text field cs-8594 & cs-9044
 }
 
 export class CardDef extends BaseDef {
