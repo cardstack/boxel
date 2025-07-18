@@ -2,6 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
+      "name": "Keanu Reeves",
+      "company": "Matrix Studios",
       "cardInfo": {
         "title": "Minutes of Meeting - Project Alpha",
         "description": "Concise documentation of the decisions, tasks, and discussions from the Project Alpha Meeting on January 15, 2024.",
