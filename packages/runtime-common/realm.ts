@@ -111,6 +111,7 @@ export type RealmInfo = {
   showAsCatalog: boolean | null;
   visibility: RealmVisibility;
   realmUserId?: string;
+  publishable: boolean | null;
 };
 
 export interface FileRef {
@@ -2457,6 +2458,7 @@ export class Realm {
       visibility: await this.visibility(),
       realmUserId:
         this.#matrixClient.getUserId()! || this.#matrixClient.username,
+      publishable: null,
     };
     if (!realmConfig) {
       return realmInfo;
@@ -2474,6 +2476,8 @@ export class Realm {
         realmInfo.realmUserId =
           realmConfigJson.realmUserId ??
           (this.#matrixClient.getUserId()! || this.#matrixClient.username);
+        realmInfo.publishable =
+          realmConfigJson.publishable ?? realmInfo.publishable;
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
