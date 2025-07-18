@@ -2145,13 +2145,29 @@ export class Realm {
     if (this.#adapter.lintStub) {
       result = await this.#adapter.lintStub(request, requestContext);
     } else {
-      let source = await request.text();
+      // Get source from plain text request body
+      const source = await request.text();
+      const filename = request.headers.get('X-Filename') || 'input.gts';
+
+      if (!source || source.trim() === '') {
+        return createResponse({
+          body: JSON.stringify({
+            error: 'Empty source code provided',
+          }),
+          init: {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          },
+          requestContext,
+        });
+      }
+
       let job = await this.#queue.publish<LintResult>({
         jobType: `lint-source`,
         concurrencyGroup: `lint:${this.url}:${Math.random().toString().slice(-1)}`,
         timeout: 10,
         priority: userInitiatedPriority,
-        args: { source } satisfies LintArgs,
+        args: { source, filename } satisfies LintArgs,
       });
       result = await job.done;
     }

@@ -57,7 +57,9 @@
     "super-fast-md5": "catalog:",
     "transform-modules-amd-plugin": "workspace:*",
     "typescript-memoize": "catalog:",
-    "uuid": "catalog:"
+    "uuid": "catalog:",
+    "prettier": "catalog:",
+    "prettier-plugin-ember-template-tag": "catalog:"
   },
   "devDependencies": {
     "@babel/core": "catalog:",

@@ -34,6 +34,7 @@ export default class LintAndFixCommand extends HostBaseCommand<
         Accept: 'application/json',
         'Content-Type': SupportedMimeType.CardSource,
         'X-HTTP-Method-Override': 'QUERY',
+        'X-Filename': input.filename || 'input.gts',
       },
     });
     if (response.status === 200) {
