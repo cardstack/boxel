@@ -26,6 +26,7 @@ import {
 import Auth from '@cardstack/host/components/matrix/auth';
 
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
+import HostSubmode from '@cardstack/host/components/operator-mode/host-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
@@ -112,6 +113,10 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.submode === Submodes.Code;
   }
 
+  private get isHostMode() {
+    return this.operatorModeStateService.state?.submode === Submodes.Host;
+  }
+
   <template>
     <Modal
       class='operator-mode'
@@ -134,6 +139,8 @@ export default class OperatorModeContainer extends Component<Signature> {
         <Auth />
       {{else if this.isCodeMode}}
         <CodeSubmode @saveSourceOnClose={{perform this.saveSource}} />
+      {{else if this.isHostMode}}
+        <HostSubmode />
       {{else}}
         <InteractSubmode />
       {{/if}}

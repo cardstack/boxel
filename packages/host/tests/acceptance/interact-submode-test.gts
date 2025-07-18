@@ -551,6 +551,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           fileView: 'inspector',
           openDirs: {},
           moduleInspector: 'schema',
+          trail: [],
         })!,
       )}`;
       assert.strictEqual(currentURL(), expectedURL);
@@ -580,6 +581,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             openDirs: {},
             cardPreviewFormat: 'isolated',
             moduleInspector: 'schema',
+            trail: [],
           })!,
         )}`,
       );
