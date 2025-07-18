@@ -20,11 +20,8 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare store: Store;
 
-  @action private noop() {}
-
   <template>
     <SubmodeLayout
-      @onCardSelectFromSearch={{this.noop}}
       class='host-submode-layout'
       data-test-host-submode
       as |layout|

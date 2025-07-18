@@ -133,6 +133,15 @@ module('Acceptance | host submode', function (hooks) {
       assert.dom('[data-test-boxel-menu-item-text="Host"]').exists();
     });
 
+    test('search is not present', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}Person/1.json`],
+      });
+
+      assert.dom('[data-test-open-search-field]').doesNotExist();
+    });
+
     test('entering from interact mode stays on the same card', async function (assert) {
       await visitOperatorMode({
         submode: 'interact',

@@ -62,7 +62,7 @@ interface Signature {
   Args: {
     onSearchSheetOpened?: () => void;
     onSearchSheetClosed?: () => void;
-    onCardSelectFromSearch: (cardId: string) => void;
+    onCardSelectFromSearch?: (cardId: string) => void;
     selectedCardRef?: ResolvedCodeRef | undefined;
     newFileOptions?: NewFileOptions;
   };
@@ -350,16 +350,18 @@ export default class SubmodeLayout extends Component<Signature> {
               @displayName={{this.matrixService.profile.displayName}}
             />
           </button>
-          <SearchSheet
-            @mode={{this.searchSheetMode}}
-            @onSetup={{this.setupSearch}}
-            @onBlur={{this.closeSearchSheet}}
-            @onCancel={{this.closeSearchSheet}}
-            @onFocus={{this.openSearchSheetToPrompt}}
-            @onSearch={{this.expandSearchToShowResults}}
-            @onCardSelect={{this.handleCardSelectFromSearch}}
-            @onInputInsertion={{this.storeSearchElement}}
-          />
+          {{#if @onCardSelectFromSearch}}
+            <SearchSheet
+              @mode={{this.searchSheetMode}}
+              @onSetup={{this.setupSearch}}
+              @onBlur={{this.closeSearchSheet}}
+              @onCancel={{this.closeSearchSheet}}
+              @onFocus={{this.openSearchSheetToPrompt}}
+              @onSearch={{this.expandSearchToShowResults}}
+              @onCardSelect={{this.handleCardSelectFromSearch}}
+              @onInputInsertion={{this.storeSearchElement}}
+            />
+          {{/if}}
           <AiAssistantToast
             @hide={{this.aiAssistantPanelService.isOpen}}
             @onViewInChatClick={{this.aiAssistantPanelService.openPanel}}
