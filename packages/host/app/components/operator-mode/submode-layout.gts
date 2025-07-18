@@ -211,7 +211,7 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   @action private async handleCardSelectFromSearch(cardId: string) {
-    this.args.onCardSelectFromSearch(cardId);
+    this.args.onCardSelectFromSearch?.(cardId);
     this.closeSearchSheet();
   }
 
