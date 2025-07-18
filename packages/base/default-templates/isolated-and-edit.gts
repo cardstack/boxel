@@ -19,6 +19,7 @@ import type {
   Format,
   CardOrFieldTypeIcon,
 } from '../card-api';
+import type { BoxComponent } from '../field-component';
 
 const setBackgroundImage = (backgroundURL?: string | null) => {
   if (!backgroundURL) {
@@ -96,12 +97,12 @@ class CardInfo extends GlimmerComponent<{
   </template>
 }
 
-type Fields = Record<string, new () => GlimmerComponent>;
+type Fields = Record<string, BoxComponent>;
 
 export default class DefaultCardDefTemplate extends GlimmerComponent<{
   Args: {
     model: CardDef;
-    fields: Fields;
+    fields: Fields & { cardInfo: Fields };
     format: Format;
   };
 }> {
@@ -121,28 +122,15 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
   }
 
   private get ownFields() {
-    return Object.fromEntries(this.ownFieldsArr);
+    return Object.fromEntries(this.ownFieldsArr) as Fields;
   }
 
-  private getField = (key: string) => {
-    return getField(this.args.model.constructor, key) as
-      | Field<BaseDefConstructor>
-      | undefined;
-  };
-
   private isComputed = (key: string) => {
-    const field = this.getField(key);
+    const field: Field<BaseDefConstructor> | undefined = getField(
+      this.args.model.constructor,
+      key,
+    );
     return Boolean(field?.computeVia);
-  };
-
-  private getCardInfoField = (key: string) => {
-    return (this.args.fields?.cardInfo as unknown as Fields)?.[key];
-  };
-
-  private getFieldIcon = (key: string) => {
-    const field = this.getField(key);
-    let fieldInstance = field?.card;
-    return fieldInstance?.icon;
   };
 
   <template>
@@ -172,11 +160,11 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
           {{#each this.headerFields as |key|}}
             <FieldContainer
               @label={{startCase key}}
-              @icon={{this.getFieldIcon key}}
+              @icon={{getFieldIcon @model.cardInfo key}}
               data-test-field={{key}}
             >
               {{#if (this.isComputed key)}}
-                {{#let (this.getCardInfoField key) as |Field|}}
+                {{#let (get @fields.cardInfo key) as |Field|}}
                   <Field />
                 {{/let}}
               {{else}}
@@ -198,7 +186,6 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       {{#if this.ownFieldsArr.length}}
         <section class='own-fields'>
           {{#each-in this.ownFields as |key Field|}}
-            {{! TODO: fix icon }}
             <FieldContainer
               @label={{startCase key}}
               @icon={{getFieldIcon @model key}}
