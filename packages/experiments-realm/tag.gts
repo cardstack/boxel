@@ -1,4 +1,9 @@
-import { Component } from 'https://cardstack.com/base/card-api';
+import {
+  Component,
+  field,
+  contains,
+  StringField,
+} from 'https://cardstack.com/base/card-api';
 import TagCard from 'https://cardstack.com/base/tag';
 
 import { BoxelTag } from '@cardstack/boxel-ui/components';
@@ -11,13 +16,9 @@ class ViewTemplate extends Component<typeof Tag> {
       @pillColor={{@model.color}}
       @fontColor={{this.fontColor}}
       @ellipsize={{true}}
-      @borderColor='none'
     />
   </template>
   private get fontColor() {
-    if (this.args.model.fontColor) {
-      return this.args.model.fontColor;
-    }
     if (this.args.model.color) {
       return getContrastColor(this.args.model.color, undefined, undefined, {
         isSmallText: true,
@@ -28,6 +29,12 @@ class ViewTemplate extends Component<typeof Tag> {
 }
 
 export class Tag extends TagCard {
+  @field name = contains(StringField);
+  @field title = contains(StringField, {
+    computeVia: function (this: Tag) {
+      return this.name;
+    },
+  });
   static atom = ViewTemplate;
   static embedded = ViewTemplate;
 }
