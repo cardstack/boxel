@@ -2292,7 +2292,7 @@ export class Tag extends CardDef {
       <BoxelTag
         @name={{@model.title}}
         @ellipsize={{true}}
-        @pillColor={{@model.color}}
+        @pillColor={{if @model.color @model.color '#e2e2e2'}}
       />
     </template>
   };

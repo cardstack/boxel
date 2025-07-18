@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "color": null,
+      "cardInfo": {
+        "title": "Project Alpha",
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      },
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "cardInfo.tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/card-api",
+        "name": "Tag"
+      }
+    }
+  }
+}

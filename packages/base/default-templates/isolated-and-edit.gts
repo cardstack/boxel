@@ -201,7 +201,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
             {{! TODO: fix icon }}
             <FieldContainer
               @label={{startCase key}}
-              @icon={{this.getFieldIcon key}}
+              @icon={{getFieldIcon @model key}}
               data-test-field={{key}}
             >
               <Field />
@@ -232,6 +232,9 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       .card-info-edit-header {
         display: grid;
       }
+      .card-info-header :deep(.info) {
+        align-self: center;
+      }
       .own-fields {
         display: grid;
         gap: var(--boxel-sp-lg);
@@ -248,6 +251,9 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
         margin-top: var(--boxel-sp-xs);
+      }
+      .default-card-template.edit > .notes-footer {
+        background-color: var(--accent-foreground, var(--boxel-100));
       }
       /* this aligns edit fields with containsMany, linksTo, and linksToMany fields */
       .default-card-template.edit
