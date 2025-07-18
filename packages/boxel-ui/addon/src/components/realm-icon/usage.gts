@@ -14,6 +14,7 @@ export default class RealmIconUsage extends Component {
     iconURL: 'https://boxel-images.boxel.ai/icons/Letter-c.png',
     name: "Carl's Workspace",
     isIndexing: false,
+    publishable: null,
   });
 
   <template>

@@ -17,4 +17,5 @@ export const testRealmInfo: RealmInfo = {
   showAsCatalog: null,
   visibility: 'public',
   realmUserId: testRealmURLToUsername(testRealmURL),
+  publishable: null,
 };
