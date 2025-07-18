@@ -1,15 +1,8 @@
-import { click, waitFor, find, findAll, waitUntil } from '@ember/test-helpers';
+import { click } from '@ember/test-helpers';
 
-import { getService } from '@universal-ember/test-support';
-import { module, skip, test } from 'qunit';
+import { module, test } from 'qunit';
 
-import {
-  REPLACE_MARKER,
-  SEARCH_MARKER,
-  SEPARATOR_MARKER,
-  baseRealm,
-  skillCardRef,
-} from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
@@ -23,6 +16,27 @@ import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
 
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+
+const personCardSource = `
+  import { contains, containsMany, field, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
+  import StringField from "https://cardstack.com/base/string";
+
+  export class Person extends CardDef {
+    static displayName = 'Person';
+    @field firstName = contains(StringField);
+    @field lastName = contains(StringField);
+    @field title = contains(StringField, {
+      computeVia: function (this: Person) {
+        return [this.firstName, this.lastName].filter(Boolean).join(' ');
+      },
+    });
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+          <p>Title: <@fields.title /></p>
+      </template>
+    };
+  }
+`;
 
 module('Acceptance | host submode', function (hooks) {
   setupApplicationTest(hooks);
@@ -48,6 +62,23 @@ module('Acceptance | host submode', function (hooks) {
               'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
             iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
           },
+          'person.gts': personCardSource,
+
+          'Person/1.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'A',
+                lastName: 'B',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
         },
       });
     });
@@ -55,11 +86,23 @@ module('Acceptance | host submode', function (hooks) {
     test('host submode is not available', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
-        codePath: `${testRealmURL}index.json`,
+        stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
       });
 
       await click('[data-test-submode-switcher] button');
       assert.dom('[data-test-boxel-menu-item-text="Host"]').doesNotExist();
+    });
+
+    test('visiting host submode via query parameter shows a button to interact submode', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        stacks: [[{ id: `${testRealmURL}Person/1.json`, format: 'isolated' }]],
+      });
+
+      await click('[data-test-switch-to-interact]');
+
+      assert.dom('[data-test-submode-switcher]').hasText('Interact');
+      assert.dom(`[data-test-stack-card="${testRealmURL}Person/1"]`).exists();
     });
   });
 
@@ -80,14 +123,19 @@ module('Acceptance | host submode', function (hooks) {
       });
     });
 
-    test('host submode is available', async function (assert) {
+    test('host submode is available and can be entered', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
-        codePath: `${testRealmURL}index.json`,
+        stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
       });
 
       await click('[data-test-submode-switcher] button');
       assert.dom('[data-test-boxel-menu-item-text="Host"]').exists();
+
+      await click('[data-test-boxel-menu-item-text="Host"]');
+      assert
+        .dom(`[data-test-host-submode-card="${testRealmURL}index"]`)
+        .exists();
     });
   });
 });

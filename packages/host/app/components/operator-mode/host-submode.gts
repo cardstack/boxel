@@ -1,26 +1,60 @@
-import Component from '@glimmer/component';
-
 import { action } from '@ember/object';
 import { service } from '@ember/service';
+import Component from '@glimmer/component';
+import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
 
+import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import Store from '@cardstack/host/services/store';
 
 import SubmodeLayout from './submode-layout';
 
-export default class HostSubmode extends Component {
+interface HostSubmodeSignature {
+  Element: HTMLElement;
+  Args: {};
+}
+
+export default class HostSubmode extends Component<HostSubmodeSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare store: Store;
 
   @action private noop() {}
 
+  private get lastCardIdInRightMostStack() {
+    let allStackItems =
+      this.operatorModeStateService.state?.stacks.flat() ?? [];
+
+    if (allStackItems.length <= 0) {
+      return null;
+    }
+
+    let stackItem = allStackItems[allStackItems.length - 1];
+    return stackItem.id;
+  }
   <template>
     <SubmodeLayout
       @onCardSelectFromSearch={{this.noop}}
       class='host-submode-layout'
       data-test-host-submode
+      as |layout|
     >
       <div class='host-submode'>
-        Host submode:
-        {{this.operatorModeStateService.state.codePath.href}}
+        <CardContainer @displayBoundaries={{true}} class='container'>
+          {{#if this.operatorModeStateService.currentRealmInfo.publishable}}
+            <p data-test-host-submode-card={{this.lastCardIdInRightMostStack}}>
+              Host submode:
+              {{this.lastCardIdInRightMostStack}}
+            </p>
+          {{else}}
+            <p>This file is not in a publishable realm.
+            </p>
+            <BoxelButton
+              {{on 'click' (fn layout.updateSubmode 'interact')}}
+              data-test-switch-to-interact
+            >View in Interact mode</BoxelButton>
+          {{/if}}
+        </CardContainer>
       </div>
     </SubmodeLayout>
 
@@ -31,6 +65,16 @@ export default class HostSubmode extends Component {
         justify-content: center;
         height: 100%;
         width: 100%;
+      }
+
+      .container {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+        align-items: center;
+        justify-content: center;
+        width: 30rem;
+        height: 80%;
       }
     </style>
   </template>

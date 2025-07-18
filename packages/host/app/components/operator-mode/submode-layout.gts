@@ -71,6 +71,7 @@ interface Signature {
       {
         openSearchToPrompt: () => void;
         openSearchToResults: (term: string) => void;
+        updateSubmode: (submode: Submode) => void;
       },
     ];
   };
@@ -321,6 +322,7 @@ export default class SubmodeLayout extends Component<Signature> {
             (hash
               openSearchToPrompt=this.openSearchSheetToPrompt
               openSearchToResults=this.openSearchAndShowResults
+              updateSubmode=this.updateSubmode
             )
           }}
           <button
