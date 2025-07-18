@@ -575,7 +575,7 @@ class SparklingWaterCatalogIsolatedTemplate extends Component<
         <section class='empty-showcase'>
           <div class='empty-state'>
             <DropletIcon width='64' height='64' />
-            <h3>No flavors added yet</h3>
+            <h3>No flavors added yet.</h3>
             <p>Add some delicious Bupples flavors to see the 3D showcase!</p>
           </div>
         </section>
