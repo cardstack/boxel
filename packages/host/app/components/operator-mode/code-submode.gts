@@ -825,6 +825,8 @@ export default class CodeSubmode extends Component<Signature> {
             (2 * (var(--operator-mode-spacing)))
         );
         --monaco-background: var(--boxel-600);
+        --monaco-selection-background: var(--boxel-500);
+        --monaco-inactive-selection-background: var(--boxel-550);
         --monaco-readonly-background: #606060;
       }
 

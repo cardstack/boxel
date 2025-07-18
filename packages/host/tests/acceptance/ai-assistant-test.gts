@@ -1117,6 +1117,16 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       `${testRealmURL}Plant/highbush-blueberry.json`,
       'Context sent with message contains correct currentFile',
     );
+    assert.deepEqual(
+      contextSent.codeMode.selectionRange,
+      {
+        startLine: 1,
+        startColumn: 1,
+        endLine: 1,
+        endColumn: 1,
+      },
+      'Context sent with message contains correct selectionRange',
+    );
     assert.strictEqual(
       contextSent.codeMode.moduleInspectorPanel,
       'preview',
@@ -1172,6 +1182,16 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       `${testRealmURL}plant.gts`,
       'Context sent with message contains correct currentFile',
     );
+    assert.deepEqual(
+      contextSent.codeMode.selectionRange,
+      {
+        startLine: 3,
+        startColumn: 45,
+        endLine: 3,
+        endColumn: 45,
+      },
+      'Context sent with message contains correct selectionRange',
+    );
     assert.strictEqual(
       contextSent.codeMode.moduleInspectorPanel,
       'schema',
@@ -1202,6 +1222,17 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click(
       '[data-test-boxel-button][data-test-module-inspector-view="preview"]',
     );
+    // Select some text in the monaco editor for testing selectionRange
+    let monacoService = getService('monaco-service');
+    let editor = monacoService.editor;
+    if (editor?.setSelection) {
+      editor.setSelection({
+        startLineNumber: 3,
+        startColumn: 45,
+        endLineNumber: 6,
+        endColumn: 1,
+      });
+    }
 
     await fillIn('[data-test-message-field]', `Message - 3`);
     await click('[data-test-send-message-btn]');
@@ -1229,6 +1260,16 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       contextSent.codeMode.currentFile,
       `${testRealmURL}plant.gts`,
       'Context sent with message contains correct currentFile',
+    );
+    assert.deepEqual(
+      contextSent.codeMode.selectionRange,
+      {
+        startLine: 3,
+        startColumn: 45,
+        endLine: 6,
+        endColumn: 1,
+      },
+      'Context sent with message contains correct selectionRange',
     );
     assert.strictEqual(
       contextSent.codeMode.moduleInspectorPanel,
