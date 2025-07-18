@@ -63,7 +63,6 @@ module('Acceptance | host submode', function (hooks) {
             iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
           },
           'person.gts': personCardSource,
-
           'Person/1.json': {
             data: {
               type: 'card',
@@ -119,11 +118,27 @@ module('Acceptance | host submode', function (hooks) {
             iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
             publishable: true,
           },
+          'person.gts': personCardSource,
+          'Person/1.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'A',
+                lastName: 'B',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
         },
       });
     });
 
-    test('host submode is available and can be entered', async function (assert) {
+    test('host submode is available', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
         stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
@@ -131,10 +146,39 @@ module('Acceptance | host submode', function (hooks) {
 
       await click('[data-test-submode-switcher] button');
       assert.dom('[data-test-boxel-menu-item-text="Host"]').exists();
+    });
 
+    test('entering from interact mode stays on the same card', async function (assert) {
+      await visitOperatorMode({
+        submode: 'interact',
+        stacks: [[{ id: `${testRealmURL}Person/1.json`, format: 'isolated' }]],
+      });
+
+      await click('[data-test-submode-switcher] button');
       await click('[data-test-boxel-menu-item-text="Host"]');
       assert
-        .dom(`[data-test-host-submode-card="${testRealmURL}index"]`)
+        .dom('[data-test-host-submode-card]')
+        .hasAttribute(
+          'data-test-host-submode-card',
+          `${testRealmURL}Person/1.json`,
+        )
+        .exists();
+    });
+
+    test('entering from code mode shows the index card', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}Person/1.json`,
+      });
+
+      await click('[data-test-submode-switcher] button');
+      await click('[data-test-boxel-menu-item-text="Host"]');
+      assert
+        .dom('[data-test-host-submode-card]')
+        .hasAttribute(
+          'data-test-host-submode-card',
+          `${testRealmURL}index.json`,
+        )
         .exists();
     });
   });

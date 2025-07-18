@@ -21,17 +21,6 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
   @action private noop() {}
 
-  private get lastCardIdInRightMostStack() {
-    let allStackItems =
-      this.operatorModeStateService.state?.stacks.flat() ?? [];
-
-    if (allStackItems.length <= 0) {
-      return null;
-    }
-
-    let stackItem = allStackItems[allStackItems.length - 1];
-    return stackItem.id;
-  }
   <template>
     <SubmodeLayout
       @onCardSelectFromSearch={{this.noop}}
@@ -42,9 +31,11 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       <div class='host-submode'>
         <CardContainer @displayBoundaries={{true}} class='container'>
           {{#if this.operatorModeStateService.currentRealmInfo.publishable}}
-            <p data-test-host-submode-card={{this.lastCardIdInRightMostStack}}>
+            <p
+              data-test-host-submode-card={{this.operatorModeStateService.currentTrailItem}}
+            >
               Host submode:
-              {{this.lastCardIdInRightMostStack}}
+              {{this.operatorModeStateService.currentTrailItem}}
             </p>
           {{else}}
             <p>This file is not in a publishable realm.

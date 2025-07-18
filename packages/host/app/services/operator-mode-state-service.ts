@@ -73,6 +73,7 @@ export interface OperatorModeState {
   stacks: Stack[];
   submode: Submode;
   codePath: URL | null;
+  trail: string[];
   aiAssistantOpen: boolean;
   fileView?: FileView;
   openDirs: Map<string, string[]>;
@@ -98,6 +99,7 @@ export type SerializedState = {
   stacks: SerializedStack[];
   submode?: Submode;
   codePath?: string;
+  trail?: string[];
   fileView?: FileView;
   openDirs?: Record<string, string[]>;
   codeSelection?: string;
@@ -120,6 +122,7 @@ export default class OperatorModeStateService extends Service {
     stacks: new TrackedArray<Stack>([]),
     submode: Submodes.Interact,
     codePath: null,
+    trail: [],
     openDirs: new TrackedMap<string, string[]>(),
     aiAssistantOpen: false,
     newFileDropdownOpen: false,
@@ -165,6 +168,7 @@ export default class OperatorModeStateService extends Service {
       stacks: this._state.stacks,
       submode: this._state.submode,
       codePath: this._state.codePath,
+      trail: this._state.trail,
       fileView: this._state.fileView,
       openDirs: this._state.openDirs,
       codeSelection: this._state.codeSelection,
@@ -205,6 +209,7 @@ export default class OperatorModeStateService extends Service {
       stacks: new TrackedArray([]),
       submode: Submodes.Interact,
       codePath: null,
+      trail: [],
       openDirs: new TrackedMap<string, string[]>(),
       aiAssistantOpen: false,
       moduleInspector: DEFAULT_MODULE_INSPECTOR_VIEW,
@@ -356,6 +361,19 @@ export default class OperatorModeStateService extends Service {
     return this._state.stacks
       .filter((stack) => stack.length > 0)
       .map((stack) => stack[stack.length - 1]);
+  }
+
+  updateTrail(trail: string[]) {
+    this._state.trail = trail;
+    this.schedulePersist();
+  }
+
+  get currentTrailItem() {
+    if (this._state.trail.length === 0) {
+      return new URL('./index.json', this.realmURL);
+    }
+
+    return this._state.trail[this._state.trail.length - 1];
   }
 
   get isViewingCardInCodeMode() {
@@ -679,6 +697,7 @@ export default class OperatorModeStateService extends Service {
       stacks: [],
       submode: this._state.submode,
       codePath: this._state.codePath?.toString(),
+      trail: this._state.trail,
       fileView: this._state.fileView?.toString() as FileView,
       openDirs: Object.fromEntries(this._state.openDirs.entries()),
       codeSelection: this._state.codeSelection,
@@ -747,6 +766,7 @@ export default class OperatorModeStateService extends Service {
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submodes.Interact,
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
+      trail: rawState.trail ?? [],
       fileView: rawState.fileView ?? 'inspector',
       openDirs,
       codeSelection: rawState.codeSelection,
