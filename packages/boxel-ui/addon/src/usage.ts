@@ -8,11 +8,11 @@ import AvatarUsage from './components/avatar/usage.gts';
 import BasicFittedUsage from './components/basic-fitted/usage.gts';
 import ButtonUsage from './components/button/usage.gts';
 import CardContainerUsage from './components/card-container/usage.gts';
-import CardContentContainerUsage from './components/card-content-container/usage.gts';
 import CardHeaderUsage from './components/card-header/usage.gts';
 import CircleSpinnerUsage from './components/circle-spinner/usage.gts';
 import ColorPaletteUsage from './components/color-palette/usage.gts';
 import ColorPickerUsage from './components/color-picker/usage.gts';
+import ContainerUsage from './components/container/usage.gts';
 import CopyButtonUsage from './components/copy-button/usage.gts';
 import DateRangePickerUsage from './components/date-range-picker/usage.gts';
 import DragAndDropUsage from './components/drag-and-drop/usage.gts';
@@ -56,11 +56,11 @@ export const ALL_USAGE_COMPONENTS = [
   ['BasicFitted', BasicFittedUsage],
   ['Button', ButtonUsage],
   ['CardContainer', CardContainerUsage],
-  ['CardContentContainer', CardContentContainerUsage],
   ['CardHeader', CardHeaderUsage],
   ['CircleSpinner', CircleSpinnerUsage],
   ['ColorPalette', ColorPaletteUsage],
   ['ColorPicker', ColorPickerUsage],
+  ['Container', ContainerUsage],
   ['CopyButton', CopyButtonUsage],
   ['DateRangePicker', DateRangePickerUsage],
   ['DragAndDrop', DragAndDropUsage],
