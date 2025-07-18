@@ -6,7 +6,11 @@ import { startCase } from 'lodash';
 import { FieldContainer, Header } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
-import { getField, sanitizeHtml } from '@cardstack/runtime-common';
+import {
+  getField,
+  sanitizeHtml,
+  getFieldIcon,
+} from '@cardstack/runtime-common';
 
 import type {
   BaseDefConstructor,
@@ -30,6 +34,7 @@ class CardInfo extends GlimmerComponent<{
     thumbnailURL?: string;
     icon?: CardOrFieldTypeIcon;
   };
+  Blocks: { default: [] };
 }> {
   <template>
     {{#if @thumbnailURL}}
@@ -46,6 +51,8 @@ class CardInfo extends GlimmerComponent<{
     <div class='info'>
       <h2 class='card-info-title'>{{@title}}</h2>
       <p class='card-info-description'>{{@description}}</p>
+
+      {{yield}}
     </div>
     <style scoped>
       @layer {
@@ -99,7 +106,13 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
   };
 }> {
   private headerFields = ['title', 'description', 'thumbnailURL'];
-  private excludedFields = ['id', 'cardInfo', ...this.headerFields, 'notes'];
+  private excludedFields = [
+    'id',
+    'cardInfo',
+    ...this.headerFields,
+    'notes',
+    'tags',
+  ];
 
   private get ownFieldsArr() {
     return Object.entries(this.args.fields).filter(
@@ -137,7 +150,10 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       <Header
         @hasBackground={{true}}
         @hasShadow={{true}}
-        class='card-info-header'
+        class={{cn
+          'card-info-header'
+          card-info-edit-header=(eq @format 'edit')
+        }}
       >
         {{#if (eq @format 'isolated')}}
           <CardInfo
@@ -145,7 +161,13 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
             @description={{@model.description}}
             @thumbnailURL={{@model.thumbnailURL}}
             @icon={{@model.constructor.icon}}
-          />
+          >
+            <@fields.cardInfo.tags
+              class='tags'
+              @format='atom'
+              @displayContainer={{false}}
+            />
+          </CardInfo>
         {{else}}
           {{#each this.headerFields as |key|}}
             <FieldContainer
@@ -164,6 +186,13 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
               {{/if}}
             </FieldContainer>
           {{/each}}
+          <FieldContainer
+            @label='Tags'
+            @icon={{getFieldIcon @model.cardInfo 'tags'}}
+            data-test-field='tags'
+          >
+            <@fields.cardInfo.tags />
+          </FieldContainer>
         {{/if}}
       </Header>
       {{#if this.ownFieldsArr.length}}
@@ -183,7 +212,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       <footer class='notes-footer'>
         <FieldContainer
           @label='Notes'
-          @icon={{this.getFieldIcon 'notes'}}
+          @icon={{getFieldIcon @model.cardInfo 'notes'}}
           data-test-field='notes'
         >
           <@fields.cardInfo.notes />
@@ -198,6 +227,10 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         --boxel-header-min-height: 9.375rem; /* 150px */
         --boxel-header-padding: var(--boxel-sp-lg);
         --boxel-header-gap: var(--boxel-sp-lg);
+        align-items: flex-start;
+      }
+      .card-info-edit-header {
+        display: grid;
       }
       .own-fields {
         display: grid;
@@ -209,6 +242,12 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       }
       .notes-footer {
         padding: var(--boxel-sp-xl);
+      }
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xs);
+        margin-top: var(--boxel-sp-xs);
       }
       /* this aligns edit fields with containsMany, linksTo, and linksToMany fields */
       .default-card-template.edit

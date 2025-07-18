@@ -3,7 +3,12 @@ import GlimmerComponent from '@glimmer/component';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+import {
+  BoxelInput,
+  BoxelTag,
+  ColorPicker,
+  ColorPalette,
+} from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
@@ -77,6 +82,8 @@ import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
+import PaintBucket from '@cardstack/boxel-icons/paint-bucket';
+import TagIcon from '@cardstack/boxel-icons/tag';
 export { sanitizedHtml } from './helpers/sanitized-html';
 
 interface CardOrFieldTypeIconSignature {
@@ -2147,12 +2154,32 @@ export class MarkdownField extends StringField {
   };
 }
 
+class ColorViewTemplate extends Component<typeof ColorField> {
+  <template>
+    <ColorPicker @color={{@model}} @disabled={{true}} @showHexString={{true}} />
+  </template>
+}
+
+export class ColorField extends StringField {
+  static displayName = 'Color';
+  static icon = PaintBucket;
+
+  static embedded = ColorViewTemplate;
+  static atom = ColorViewTemplate;
+  static fitted = ColorViewTemplate;
+  static edit = class ColorEditTemplate extends Component<typeof this> {
+    <template>
+      <ColorPalette @color={{@model}} @onChange={{@set}} />
+    </template>
+  };
+}
+
 export class CardInfoField extends FieldDef {
   static displayName = 'Card Info';
   @field title = contains(StringField);
   @field description = contains(StringField);
   @field thumbnailURL = contains(MaybeBase64Field);
-  // @field tags = linksToMany(Tag); // cs-9066
+  @field tags = linksToMany(() => Tag);
   // @field theme = linksTo(Theme); // cs-9112
   @field notes = contains(MarkdownField); // TODO: rich-text field cs-8594 & cs-9044
 }
@@ -2254,6 +2281,21 @@ export class CardDef extends BaseDef {
     let realmURLString = getCardMeta(this, 'realmURL');
     return realmURLString ? new URL(realmURLString) : undefined;
   }
+}
+
+export class Tag extends CardDef {
+  static displayName = 'Tag';
+  static icon = TagIcon;
+  @field color = contains(ColorField);
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      <BoxelTag
+        @name={{@model.title}}
+        @ellipsize={{true}}
+        @pillColor={{@model.color}}
+      />
+    </template>
+  };
 }
 
 export type BaseDefConstructor = typeof BaseDef;
