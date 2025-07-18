@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Bupples Sparking Water Catalog",
+      "summary": "Premium sparkling water catalog with interactive 3D can showcase - configure flavors, colors, and pricing while viewing spinning 3D product visualizations. Features realistic CSS-animated cans, dynamic flavor selection, intensity meters, interactive spin controls, and professional beverage industry design for immersive product exploration",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/bupples-sparking-water-catalog-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/bupples-sparking-water-catalog-listing/screenshot_02.png"
+      ],
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/bupples-sparking-water-catalog-listing/thumbnail.png"
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/ba18cf89-cef3-48a2-90b3-894e59a20bee"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/2dd46ddf-d53f-43a0-af2f-cc1185cba7be"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../sparkling-water-catalog/SparklingWaterCatalog/ceff0cf4-90b1-44c9-9fea-667fd947a1bd"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "CardListing"
+      }
+    }
+  }
+}
