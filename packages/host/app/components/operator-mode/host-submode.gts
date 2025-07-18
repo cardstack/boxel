@@ -1,10 +1,11 @@
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
 
 import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
+
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import Store from '@cardstack/host/services/store';
 

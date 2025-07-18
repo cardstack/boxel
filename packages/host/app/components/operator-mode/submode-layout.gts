@@ -167,7 +167,7 @@ export default class SubmodeLayout extends Component<Signature> {
             : null,
         );
         break;
-      case Submodes.Host:
+      case Submodes.Host: {
         let currentSubmode = this.operatorModeStateService.state.submode;
 
         if (currentSubmode === Submodes.Code) {
@@ -181,6 +181,7 @@ export default class SubmodeLayout extends Component<Signature> {
         }
 
         break;
+      }
       default:
         throw assertNever(submode);
     }

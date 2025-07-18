@@ -370,7 +370,7 @@ export default class OperatorModeStateService extends Service {
 
   get currentTrailItem() {
     if (this._state.trail.length === 0) {
-      return new URL('./index.json', this.realmURL);
+      return new URL('./index.json', this.realmURL).href;
     }
 
     return this._state.trail[this._state.trail.length - 1];
