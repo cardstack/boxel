@@ -39,7 +39,8 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
               {{this.operatorModeStateService.currentTrailItem}}
             </p>
           {{else}}
-            <p>This file is not in a publishable realm.
+            <p>
+              This file is not in a publishable realm.
             </p>
             <BoxelButton
               {{on 'click' (fn layout.updateSubmode 'interact')}}
