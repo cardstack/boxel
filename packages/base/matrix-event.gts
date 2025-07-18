@@ -193,6 +193,12 @@ export interface BoxelContext {
       format: string;
     };
     selectedCodeRef?: CodeRef;
+    selectionRange?: {
+      startLine: number;
+      startColumn: number;
+      endLine: number;
+      endColumn: number;
+    };
   };
   debug?: boolean;
   requireToolCall?: boolean;

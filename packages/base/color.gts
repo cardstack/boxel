@@ -1,6 +1,7 @@
 import { Component, StringField } from './card-api';
 import { ColorPalette } from '@cardstack/boxel-ui/components';
 import { ColorPicker } from '@cardstack/boxel-ui/components';
+import PaintBucket from '@cardstack/boxel-icons/paint-bucket';
 
 class View extends Component<typeof ColorPalette> {
   <template>
@@ -16,6 +17,7 @@ class EditView extends Component<typeof ColorPalette> {
 
 export default class ColorField extends StringField {
   static displayName = 'Color';
+  static icon = PaintBucket;
 
   static embedded = View;
   static atom = View;

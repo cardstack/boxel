@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "flavorName": "Citrus Symphony",
+      "description": "**A harmonious blend of citrus!** 🍊🍋\n\nOrange, lemon, and grapefruit come together in perfect harmony. Bright and uplifting with a sophisticated citrus profile that's never too sweet.",
+      "primaryColor": "#9D00FF",
+      "accentColor": "#A7E4FF",
+      "intensity": 3,
+      "price": 3.29,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sparkling-water-catalog",
+        "name": "SparkleFlavor"
+      }
+    }
+  }
+}

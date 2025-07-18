@@ -191,6 +191,10 @@ export default class MonacoService extends Service {
   getContentHeight() {
     return this.editor?.getContentHeight();
   }
+
+  getSelection() {
+    return this.editor?.getSelection();
+  }
 }
 
 declare module '@ember/service' {

@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "brandName": "Bupples Sparkling Water",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "featuredFlavors.0": {
+        "links": {
+          "self": "../SparkleFlavor/3c092f66-ae79-4f6b-bfa8-bcd448b2c6e7"
+        }
+      },
+      "featuredFlavors.1": {
+        "links": {
+          "self": "../SparkleFlavor/d47d3c09-2f66-4e79-bf6b-ffa8bcd448b2"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sparkling-water-catalog",
+        "name": "SparklingWaterCatalog"
+      }
+    }
+  }
+}
