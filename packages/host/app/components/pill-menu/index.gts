@@ -3,8 +3,6 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
-
 import { Header } from '@cardstack/boxel-ui/components';
 
 import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
@@ -35,10 +33,6 @@ export default class PillMenu extends Component<Signature> {
     {{#if this.isExpanded}}
       <div
         class='pill-menu {{if (has-block "footer") "has-footer"}}'
-        {{onClickOutside
-          this.collapseMenu
-          exceptSelector='.card-catalog-modal'
-        }}
         ...attributes
       >
         <Header class='menu-header' data-test-pill-menu-header>
