@@ -4,7 +4,7 @@ import {
   type ResolvedCodeRef,
   RealmPaths,
   join,
-  InstallOptions,
+  ListingPathResolver,
   planModuleInstall,
   planInstanceInstall,
   PlanBuilder,
@@ -62,30 +62,28 @@ export default class ListingInstallCommand extends HostBaseCommand<
     // this is intentionally to type because base command cannot interpret Listing type from catalog
     const listing = listingInput as Listing;
 
-    let installOpts = new InstallOptions(realmUrl, listing);
-
     // side-effects
     let exampleCardId: string | undefined;
     let selectedCodeRef: ResolvedCodeRef | undefined;
     let skillCardId: string | undefined;
 
-    const builder = new PlanBuilder(installOpts);
+    const builder = new PlanBuilder(realmUrl, listing);
 
     builder
-      .addIf(listing.specs?.length > 0, (opts: InstallOptions) => {
-        let r = planModuleInstall(listing.specs, opts);
+      .addIf(listing.specs?.length > 0, (resolver: ListingPathResolver) => {
+        let r = planModuleInstall(listing.specs, resolver);
         selectedCodeRef = r.modulesCopy[0].targetCodeRef;
         return r;
       })
-      .addIf(listing.examples?.length > 0, (opts: InstallOptions) => {
-        let r = planInstanceInstall(listing.examples, opts);
+      .addIf(listing.examples?.length > 0, (resolver: ListingPathResolver) => {
+        let r = planInstanceInstall(listing.examples, resolver);
         let firstInstance = r.instancesCopy[0];
         exampleCardId = join(realmUrl, firstInstance.lid);
         selectedCodeRef = firstInstance.targetCodeRef;
         return r;
       })
-      .addIf(listing.skills?.length > 0, (opts: InstallOptions) => {
-        let r = planInstanceInstall(listing.skills, opts);
+      .addIf(listing.skills?.length > 0, (resolver: ListingPathResolver) => {
+        let r = planInstanceInstall(listing.skills, resolver);
         skillCardId = join(realmUrl, r.instancesCopy[0].lid);
         return r;
       });

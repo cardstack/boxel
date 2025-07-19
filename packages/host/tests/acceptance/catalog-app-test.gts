@@ -292,21 +292,36 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     await click('[data-test-file-browser-toggle]');
   }
 
-  // open directory if it is not already open and verify its in an open state
-  async function openDir(assert: Assert, dirPath: string) {
-    let selector = `[data-test-directory="${dirPath}"] .icon`; //.icon is the tag with open state class
-    let element = document.querySelector(selector);
-    if ((element as HTMLElement)?.classList.contains('closed')) {
-      await click(`[data-test-directory="${dirPath}"]`);
-    }
-    assert.dom(selector).hasClass('open');
-    let dirName = element?.getAttribute('data-test-directory');
-    return dirName;
-  }
+  //path can be directory/ or directory/file.gts
+  async function openDir(assert: Assert, path: string) {
+    const isFilePath = !path.endsWith('/');
+    const pathToProcess = isFilePath
+      ? path.substring(0, path.lastIndexOf('/'))
+      : path;
 
-  async function verifyFolderInFileTree(assert: Assert, dirName: string) {
-    let dirSelector = `[data-test-directory="${dirName}"]`;
-    assert.dom(dirSelector).exists();
+    const pathSegments = pathToProcess
+      .split('/')
+      .filter((segment) => segment.length > 0);
+
+    let currentPath = '';
+
+    for (const segment of pathSegments) {
+      currentPath = currentPath ? `${currentPath}${segment}/` : `${segment}/`;
+
+      let selector = `[data-test-directory="${currentPath}"] .icon`;
+      let element = document.querySelector(selector);
+
+      if ((element as HTMLElement)?.classList.contains('closed')) {
+        await click(`[data-test-directory="${currentPath}"]`);
+      }
+
+      assert.dom(selector).hasClass('open');
+    }
+
+    let finalElement = document.querySelector(
+      `[data-test-directory="${pathToProcess}"] .icon`,
+    );
+    let dirName = finalElement?.getAttribute('data-test-directory');
     return dirName;
   }
 
@@ -1109,10 +1124,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         await waitForCodeEditor();
         await verifySubmode(assert, 'code');
         const instanceFolder = 'CardListing/';
-        await verifyFolderInFileTree(assert, instanceFolder);
-        if (instanceFolder) {
-          await openDir(assert, instanceFolder);
-        }
+        await openDir(assert, instanceFolder);
         const listingId = await verifyJSONWithUUIDInFolder(
           assert,
           instanceFolder,
@@ -1155,33 +1167,14 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           assert,
           listingName,
         );
-        if (outerFolder) {
-          await openDir(assert, outerFolder);
-        }
 
-        let instanceFolder = outerFolder + 'Author' + '/';
-        await verifyFolderInFileTree(assert, instanceFolder);
-        if (instanceFolder) {
-          await openDir(assert, instanceFolder);
-        }
+        let instanceFolder = `${outerFolder}Author/`;
+        await openDir(assert, instanceFolder);
         await verifyJSONWithUUIDInFolder(assert, instanceFolder);
       });
     });
     module('"install"', async function () {
-      test('card listing ', async function (assert) {
-        // Given a card listing named "mortgage-calculator":
-        /*
-         * mortgage-calculator/mortgage-calculator.gts <- spec points to this
-         * mortgage-calculator/MortgageCalculator/example.json <- listing points to this
-         */
-
-        // When I install the listing into my selected realm, it should be:
-        /*
-         *  mortgage-calculator-[uuid]/
-         *  mortgage-calculator-[uuid]/mortgage-calculator.gts
-         *  mortgage-calculator-[uuid]/MortgageCalculator/[uuid].json
-         */
-
+      test('card listing', async function (assert) {
         const listingName = 'mortgage-calculator';
 
         await executeCommand(
@@ -1196,32 +1189,19 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         });
         await waitForCodeEditor();
 
-        // mortgage-calculator-[uuid]/
         let outerFolder = await verifyFolderWithUUIDInFileTree(
           assert,
           listingName,
         );
-        if (outerFolder) {
-          await openDir(assert, outerFolder);
-        }
-        let gtsFilePath = outerFolder + 'mortgage-calculator.gts';
+        let gtsFilePath = `${outerFolder}${listingName}/mortgage-calculator.gts`;
+        await openDir(assert, gtsFilePath);
         await verifyFileInFileTree(assert, gtsFilePath);
-        let instanceFolder = outerFolder + 'MortgageCalculator' + '/';
-        await verifyFolderInFileTree(assert, instanceFolder);
-        await openDir(assert, instanceFolder);
-        await verifyFileInFileTree(assert, instanceFolder + 'example.json');
+        let examplePath = `${outerFolder}mortgage-calculator/MortgageCalculator/example.json`;
+        await openDir(assert, examplePath);
+        await verifyFileInFileTree(assert, examplePath);
       });
 
       test('field listing', async function (assert) {
-        // Given a field listing named "contact-link":
-        /*
-         * fields/contact-link.gts <- spec points to this
-         */
-        // When I install the listing into my selected realm, it should be:
-        /*
-         * contact-link-[uuid]/fields/contact-link.gts
-         */
-
         const listingName = 'contact-link';
         const contactLinkFieldListingCardId = `${catalogRealmURL}FieldListing/fb9494c4-0d61-4d2d-a6c0-7b16ca40b42b`;
 
@@ -1244,24 +1224,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           assert,
           listingName,
         );
-        if (outerFolder) {
-          await openDir(assert, outerFolder);
-        }
-        await openDir(assert, `${outerFolder}fields/`);
+        await openDir(assert, `${outerFolder}fields/contact-link.gts`);
         let gtsFilePath = `${outerFolder}fields/contact-link.gts`;
-        // contact-link-[uuid]/fields/contact-link.gts
         await verifyFileInFileTree(assert, gtsFilePath);
       });
 
       test('skill listing', async function (assert) {
-        // Given a skill listing named "talk-like-a-pirate":
-        /*
-         * SkillListing/talk-like-a-pirate.json <- listing points to this
-         */
-        // When I install the listing into my selected realm, it should be:
-        /*
-         * talk-like-a-pirate-[uuid]/Skill/[uuid].json
-         */
         const listingName = 'talk-like-a-pirate';
         const listingId = `${catalogRealmURL}SkillListing/${listingName}`;
         await executeCommand(ListingInstallCommand, listingId, testRealm2URL);
@@ -1276,16 +1244,9 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           assert,
           listingName,
         );
-        if (outerFolder) {
-          await openDir(assert, outerFolder);
-        }
-        let instanceFolder = outerFolder + 'Skill' + '/';
-        await verifyFolderInFileTree(assert, instanceFolder);
-        await openDir(assert, instanceFolder);
-        await verifyFileInFileTree(
-          assert,
-          instanceFolder + 'skill-pirate-speak.json',
-        );
+        let instancePath = `${outerFolder}Skill/skill-pirate-speak.json`;
+        await openDir(assert, instancePath);
+        await verifyFileInFileTree(assert, instancePath);
       });
     });
     module('"remix"', async function () {
@@ -1303,9 +1264,11 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           assert,
           listingName,
         );
-        let instanceFolder = outerFolder + 'Author/';
-        await verifyFolderInFileTree(assert, instanceFolder);
-        let gtsFilePath = outerFolder + `${listingName}.gts`;
+        let instanceFile = `${outerFolder}${listingName}/Author/example.json`;
+        await openDir(assert, instanceFile);
+        await verifyFileInFileTree(assert, instanceFile);
+        let gtsFilePath = `${outerFolder}${listingName}/author.gts`;
+        await openDir(assert, gtsFilePath);
         await verifyFileInFileTree(assert, gtsFilePath);
         await waitForCodeEditor();
         assert
@@ -1325,17 +1288,10 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           assert,
           listingName,
         );
-        if (outerFolder) {
-          await openDir(assert, outerFolder);
-        }
-        let instanceFolder = outerFolder + 'Skill' + '/';
-        await verifyFolderInFileTree(assert, instanceFolder);
-        await openDir(assert, instanceFolder);
-        await verifyFileInFileTree(
-          assert,
-          instanceFolder + 'skill-pirate-speak.json',
-        );
-        let cardId = testRealm2URL + instanceFolder + 'skill-pirate-speak';
+        let instancePath = `${outerFolder}Skill/skill-pirate-speak.json`;
+        await openDir(assert, instancePath);
+        await verifyFileInFileTree(assert, instancePath);
+        let cardId = testRealm2URL + instancePath.replace('.json', '');
         await waitFor('[data-test-card-resource-loaded]');
         assert
           .dom(`[data-test-code-mode-card-renderer-header="${cardId}"]`)
@@ -1361,12 +1317,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         assert,
         listingName,
       );
-      if (outerFolder) {
-        await openDir(assert, outerFolder);
-      }
 
-      let instanceFolder = outerFolder + 'Author' + '/';
-      await verifyFolderInFileTree(assert, instanceFolder);
+      let instanceFolder = `${outerFolder}Author`;
       await openDir(assert, instanceFolder);
       await verifyJSONWithUUIDInFolder(assert, instanceFolder);
     });
@@ -1385,24 +1337,18 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
       await waitForCodeEditor();
 
-      // mortgage-calculator-[uuid]/
       let outerFolder = await verifyFolderWithUUIDInFileTree(
         assert,
         listingName,
       );
-      if (outerFolder) {
-        await openDir(assert, outerFolder);
-      }
-      // mortgage-calculator-[uuid]/mortgage-calculator.gts
-      let gtsFilePath = outerFolder + 'mortgage-calculator.gts';
+
+      let gtsFilePath = `${outerFolder}${listingName}/mortgage-calculator.gts`;
+      await openDir(assert, gtsFilePath);
       await verifyFileInFileTree(assert, gtsFilePath);
-      // mortgage-calculator-[uuid]/MortgageCalculator/example.json
-      let instanceFolder = outerFolder + 'MortgageCalculator' + '/';
-      await verifyFolderInFileTree(assert, instanceFolder);
-      if (instanceFolder) {
-        await openDir(assert, instanceFolder);
-      }
-      await verifyFileInFileTree(assert, instanceFolder + 'example.json');
+      let instancePath = `${outerFolder}${listingName}/MortgageCalculator/example.json`;
+
+      await openDir(assert, instancePath);
+      await verifyFileInFileTree(assert, instancePath);
     });
 
     test('"remix" is successful even if target realm does not have a trailing slash', async function (assert) {
@@ -1423,9 +1369,11 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         assert,
         listingName,
       );
-      let instanceFolder = outerFolder + 'Author/';
-      await verifyFolderInFileTree(assert, instanceFolder);
-      let gtsFilePath = outerFolder + `${listingName}.gts`;
+      let instancePath = `${outerFolder}${listingName}/Author/example.json`;
+      await openDir(assert, instancePath);
+      await verifyFileInFileTree(assert, instancePath);
+      let gtsFilePath = `${outerFolder}${listingName}/author.gts`;
+      await openDir(assert, gtsFilePath);
       await verifyFileInFileTree(assert, gtsFilePath);
       await waitForCodeEditor();
       assert
