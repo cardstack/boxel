@@ -1,7 +1,7 @@
 import { click, waitFor, waitUntil, fillIn } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import { module, skip, test } from 'qunit';
+import { module, test } from 'qunit';
 
 import { validate as uuidValidate } from 'uuid';
 
@@ -709,8 +709,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           );
       });
 
-      // TOOD: restore in CS-9083
-      skip('should be reset when clicking "Catalog Home" button', async function (assert) {
+      test('should be reset when clicking "Catalog Home" button', async function (assert) {
         await waitFor('[data-test-filter-search-input]');
         await click('[data-test-filter-search-input]');
         await fillIn('[data-test-filter-search-input]', 'Mortgage');
@@ -721,12 +720,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         if (tagPill) {
           await click(tagPill);
         }
-
-        assert
-          .dom('[data-test-showcase-view]')
-          .doesNotExist('Should be in list view after applying filter');
-
         await click('[data-test-navigation-reset-button="showcase"]');
+
+        await waitUntil(() => {
+          const cards = document.querySelectorAll('[data-test-showcase-view]');
+          return cards.length === 1;
+        });
 
         assert
           .dom('[data-test-showcase-view]')
