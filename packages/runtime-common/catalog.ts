@@ -26,13 +26,36 @@ export interface CopyInstanceMeta {
   targetCodeRef: ResolvedCodeRef;
   lid: string;
 }
-export interface InstallPlan {
+export interface InstallPlanInterface {
   modulesCopy: CopyMeta[];
   instancesCopy: CopyInstanceMeta[];
+  get modulesToInstall(): CopyModuleMeta[];
 }
 
-export interface FinalInstallPlan extends InstallPlan {
-  modulesToInstall: CopyModuleMeta[];
+export class InstallPlan implements InstallPlanInterface {
+  modulesCopy: CopyMeta[];
+  instancesCopy: CopyInstanceMeta[];
+  constructor(modulesCopy: CopyMeta[], instancesCopy: CopyInstanceMeta[]) {
+    this.modulesCopy = modulesCopy;
+    this.instancesCopy = instancesCopy;
+  }
+
+  get modulesToInstall(): CopyModuleMeta[] {
+    const uniqueModules = this.modulesCopy.reduce(
+      (acc, { sourceCodeRef, targetCodeRef }) => {
+        const key = `${sourceCodeRef.module}-${targetCodeRef.module}`;
+        if (!acc.has(key)) {
+          acc.set(key, {
+            sourceModule: sourceCodeRef.module,
+            targetModule: targetCodeRef.module,
+          });
+        }
+        return acc;
+      },
+      new Map<string, CopyModuleMeta>(),
+    );
+    return Array.from(uniqueModules.values());
+  }
 }
 
 export interface CopyModuleMeta {
@@ -126,25 +149,18 @@ export class PlanBuilder {
     return this;
   }
 
-  build(): FinalInstallPlan {
-    let accumulatedPlan: InstallPlan = this.steps.reduce(
+  build(): InstallPlan {
+    let plan: InstallPlan = this.steps.reduce(
       (plan: InstallPlan, step: PlanBuilderStep, i) => {
         this.log.debug(`=== Plan Step ${i} ===`);
         this.log.debug(JSON.stringify(plan, null, 2));
         return mergePlans(plan, step(this.resolver, plan));
       },
-      {
-        modulesCopy: [],
-        instancesCopy: [],
-      },
+      new InstallPlan([], []),
     );
-    const finalPlan: FinalInstallPlan = {
-      ...accumulatedPlan,
-      modulesToInstall: modulesToInstall(accumulatedPlan),
-    };
     this.log.debug(`=== Final Plan ===`);
-    this.log.debug(JSON.stringify(finalPlan, null, 2));
-    return finalPlan;
+    this.log.debug(JSON.stringify(plan, null, 2));
+    return plan;
   }
 }
 
@@ -168,10 +184,7 @@ export function planModuleInstall(
   resolver: ListingPathResolver,
 ): InstallPlan {
   if (specs.length == 0) {
-    return {
-      modulesCopy: [],
-      instancesCopy: [],
-    };
+    return new InstallPlan([], []);
   }
   let codeRefs: ResolvedCodeRef[] = specs.map((s) => {
     return { module: s.moduleHref, name: s.ref.name };
@@ -187,18 +200,15 @@ export function planModuleInstall(
     };
     return [copyMeta];
   });
-  return {
-    modulesCopy,
-    instancesCopy: [],
-  };
+  return new InstallPlan(modulesCopy, []);
 }
 
 export function planInstanceInstall(
   instances: CardDef[],
   resolver: ListingPathResolver,
 ): InstallPlan {
-  let copyInstanceMeta: CopyInstanceMeta[] = [];
-  let copySourceMeta: CopyMeta[] = [];
+  let instancesCopy: CopyInstanceMeta[] = [];
+  let modulesCopy: CopyMeta[] = [];
   for (let instance of instances) {
     let sourceCodeRef = resolveAdoptedCodeRef(instance);
     let lid = resolver.local(instance.id);
@@ -207,27 +217,24 @@ export function planInstanceInstall(
     }
     if (!baseRealmPath.inRealm(new URL(sourceCodeRef.module))) {
       let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, resolver);
-      copySourceMeta.push({
+      modulesCopy.push({
         sourceCodeRef,
         targetCodeRef,
       });
-      copyInstanceMeta.push({
+      instancesCopy.push({
         sourceCard: instance,
         lid: resolver.targetLid(lid),
         targetCodeRef,
       });
     } else {
-      copyInstanceMeta.push({
+      instancesCopy.push({
         sourceCard: instance,
         targetCodeRef: sourceCodeRef,
         lid: resolver.targetLid(lid),
       });
     }
   }
-  return {
-    modulesCopy: copySourceMeta,
-    instancesCopy: copyInstanceMeta,
-  };
+  return new InstallPlan(modulesCopy, instancesCopy);
 }
 
 function dedupeCopyMeta(array: CopyMeta[]): CopyMeta[] {
@@ -248,26 +255,8 @@ function dedupeCopyInstanceMeta(array: CopyInstanceMeta[]): CopyInstanceMeta[] {
   );
 }
 export function mergePlans(...plans: InstallPlan[]): InstallPlan {
-  return {
-    modulesCopy: dedupeCopyMeta(plans.flatMap((p) => p.modulesCopy)),
-    instancesCopy: dedupeCopyInstanceMeta(
-      plans.flatMap((p) => p.instancesCopy),
-    ),
-  };
-}
-
-export function modulesToInstall(plan: InstallPlan): CopyModuleMeta[] {
-  // Deduplicate based on source and target module paths
-  const uniqueModules = plan.modulesCopy.reduce((acc, copyMeta) => {
-    const key = `${copyMeta.sourceCodeRef.module}-${copyMeta.targetCodeRef.module}`;
-    if (!acc.has(key)) {
-      acc.set(key, {
-        sourceModule: copyMeta.sourceCodeRef.module,
-        targetModule: copyMeta.targetCodeRef.module,
-      });
-    }
-    return acc;
-  }, new Map<string, CopyModuleMeta>());
-
-  return Array.from(uniqueModules.values());
+  return new InstallPlan(
+    dedupeCopyMeta(plans.flatMap((p) => p.modulesCopy)),
+    dedupeCopyInstanceMeta(plans.flatMap((p) => p.instancesCopy)),
+  );
 }

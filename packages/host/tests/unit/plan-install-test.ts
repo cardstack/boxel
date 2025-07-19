@@ -7,6 +7,7 @@ import {
   realmURL,
   ListingPathResolver,
   meta,
+  InstallPlan,
 } from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -380,8 +381,8 @@ module('Unit | Catalog | Install Plan Builder', function () {
     module('build()', function () {
       test('modulesCopy is deduplicated', function (assert) {
         builder.add(() => {
-          return {
-            modulesCopy: [
+          return new InstallPlan(
+            [
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name',
@@ -393,12 +394,12 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 },
               },
             ],
-            instancesCopy: [],
-          };
+            [],
+          );
         });
         builder.add(() => {
-          return {
-            modulesCopy: [
+          return new InstallPlan(
+            [
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name',
@@ -410,37 +411,34 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 },
               },
             ],
-            instancesCopy: [],
-          };
+            [],
+          );
         });
         let plan = builder.build();
-        assert.deepEqual(plan, {
-          instancesCopy: [],
-          modulesCopy: [
-            {
-              sourceCodeRef: {
-                module: `${sourceRealmURL.href}some-folder/some`,
-                name: 'Some Ref Name',
+        assert.deepEqual(
+          plan,
+          new InstallPlan(
+            [
+              {
+                sourceCodeRef: {
+                  module: `${sourceRealmURL.href}some-folder/some`,
+                  name: 'Some Ref Name',
+                },
+                targetCodeRef: {
+                  module: `${targetRealmURL}xyz/some-folder/some`,
+                  name: 'Some Ref Name',
+                },
               },
-              targetCodeRef: {
-                module: `${targetRealmURL}xyz/some-folder/some`,
-                name: 'Some Ref Name',
-              },
-            },
-          ],
-          modulesToInstall: [
-            {
-              sourceModule: `${sourceRealmURL.href}some-folder/some`,
-              targetModule: `${targetRealmURL}xyz/some-folder/some`,
-            },
-          ],
-        });
+            ],
+            [],
+          ),
+        );
       });
       test('instanceCopy is deduplicated', function (assert) {
         builder.add(() => {
-          return {
-            modulesCopy: [],
-            instancesCopy: [
+          return new InstallPlan(
+            [],
+            [
               {
                 sourceCard: {} as CardDef,
                 targetCodeRef: {
@@ -450,12 +448,12 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 lid: 'xyz/some-folder/Example/1',
               },
             ],
-          };
+          );
         });
         builder.add(() => {
-          return {
-            modulesCopy: [],
-            instancesCopy: [
+          return new InstallPlan(
+            [],
+            [
               {
                 sourceCard: {} as CardDef,
                 targetCodeRef: {
@@ -465,30 +463,33 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 lid: 'xyz/some-folder/Example/1',
               },
             ],
-          };
+          );
         });
         let plan = builder.build();
-        assert.deepEqual(plan, {
-          instancesCopy: [
-            {
-              sourceCard: {} as CardDef,
-              targetCodeRef: {
-                name: 'Some Ref Name',
-                module: `${targetRealmURL}xyz/some-folder/some`,
+        assert.deepEqual(
+          plan,
+
+          new InstallPlan(
+            [],
+            [
+              {
+                sourceCard: {} as CardDef,
+                targetCodeRef: {
+                  name: 'Some Ref Name',
+                  module: `${targetRealmURL}xyz/some-folder/some`,
+                },
+                lid: 'xyz/some-folder/Example/1',
               },
-              lid: 'xyz/some-folder/Example/1',
-            },
-          ],
-          modulesCopy: [],
-          modulesToInstall: [],
-        });
+            ],
+          ),
+        );
       });
     });
     module('modulesToInstall()', function () {
       test('sourceCodeRef that come from same module are deduplicated unless they have different target modules', function (assert) {
         builder.add(() => {
-          return {
-            modulesCopy: [
+          return new InstallPlan(
+            [
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name',
@@ -500,12 +501,12 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 },
               },
             ],
-            instancesCopy: [],
-          };
+            [],
+          );
         });
         builder.add(() => {
-          return {
-            modulesCopy: [
+          return new InstallPlan(
+            [
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name 2',
@@ -517,12 +518,12 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 },
               },
             ],
-            instancesCopy: [],
-          };
+            [],
+          );
         });
         builder.add(() => {
-          return {
-            modulesCopy: [
+          return new InstallPlan(
+            [
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name 3',
@@ -534,8 +535,8 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 },
               },
             ],
-            instancesCopy: [],
-          };
+            [],
+          );
         });
         let { modulesToInstall } = builder.build();
         assert.strictEqual(modulesToInstall.length, 2);
