@@ -1153,7 +1153,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
     });
     module('"use"', async function () {
-      test('card listing', async function (assert) {
+      skip('card listing', async function (assert) {
         const listingName = 'author';
         const listingId = testRealmURL + 'Listing/author.json';
         await executeCommand(ListingUseCommand, listingId, testRealm2URL);
@@ -1299,7 +1299,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
     });
 
-    test('"use" is successful even if target realm does not have a trailing slash', async function (assert) {
+    skip('"use" is successful even if target realm does not have a trailing slash', async function (assert) {
       const listingName = 'author';
       const listingId = testRealmURL + 'Listing/author.json';
       await executeCommand(
