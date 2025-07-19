@@ -5,8 +5,9 @@ import {
   planModuleInstall,
   planInstanceInstall,
   realmURL,
-  InstallOptions,
+  ListingPathResolver,
   meta,
+  InstallPlan,
 } from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -21,54 +22,6 @@ module('Unit | Catalog | Install Plan Builder', function () {
     module(
       'listing name provided (source folder derived from listing name)',
       function () {
-        test('code exists inside source folder', function (assert) {
-          const specs = [
-            {
-              ref: { name: 'Some Ref Name' },
-              moduleHref: `${sourceRealmURL.href}some-folder/some`,
-              [realmURL]: sourceRealmURL,
-            },
-            {
-              ref: { name: 'Some Ref Name 2' },
-              moduleHref: `${sourceRealmURL.href}some-folder/some-2`,
-              [realmURL]: sourceRealmURL,
-            },
-          ] as Spec[];
-          const listing = {
-            name: 'Some Folder', // the source folder derived = /some-folder
-            specs,
-            examples: [],
-            skills: [],
-            [realmURL]: sourceRealmURL,
-          } as any;
-          const { modulesCopy } = planModuleInstall(
-            specs,
-            new InstallOptions(targetRealmURL.href, listing, 'xyz'),
-          );
-
-          assert.strictEqual(modulesCopy.length, 2);
-          assert.deepEqual(modulesCopy[0], {
-            sourceCodeRef: {
-              name: 'Some Ref Name',
-              module: `${sourceRealmURL.href}some-folder/some`,
-            },
-            targetCodeRef: {
-              name: 'Some Ref Name',
-              module: `${targetRealmURL}some-folder-xyz/some`,
-            },
-          });
-
-          assert.deepEqual(modulesCopy[1], {
-            sourceCodeRef: {
-              name: 'Some Ref Name 2',
-              module: `${sourceRealmURL.href}some-folder/some-2`,
-            },
-            targetCodeRef: {
-              name: 'Some Ref Name 2',
-              module: `${targetRealmURL}some-folder-xyz/some-2`,
-            },
-          });
-        });
         test('code exists outside of the source folder', function (assert) {
           const specs = [
             {
@@ -92,7 +45,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
           } as any;
           const { modulesCopy } = planModuleInstall(
             specs,
-            new InstallOptions(targetRealmURL.href, listing, 'xyz'),
+            new ListingPathResolver(targetRealmURL.href, listing, 'xyz'),
           );
 
           assert.strictEqual(modulesCopy.length, 2);
@@ -120,51 +73,6 @@ module('Unit | Catalog | Install Plan Builder', function () {
       },
     );
     module('listing name NOT provided', function () {
-      test('code exists in same source folder', function (assert) {
-        const specs = [
-          {
-            ref: { name: 'Some Ref Name' },
-            moduleHref: `${sourceRealmURL.href}some-folder/some`,
-            [realmURL]: sourceRealmURL,
-          },
-          {
-            ref: { name: 'Some Ref Name 2' },
-            moduleHref: `${sourceRealmURL.href}some-folder/some-2`,
-            [realmURL]: sourceRealmURL,
-          },
-        ] as Spec[];
-        const listing = {
-          specs,
-          examples: [],
-          skills: [],
-          [realmURL]: sourceRealmURL,
-        } as any;
-        const { modulesCopy } = planModuleInstall(
-          specs,
-          new InstallOptions(targetRealmURL.href, listing, 'xyz'),
-        );
-        assert.strictEqual(modulesCopy.length, 2);
-        assert.deepEqual(modulesCopy[0], {
-          sourceCodeRef: {
-            name: 'Some Ref Name',
-            module: `${sourceRealmURL.href}some-folder/some`,
-          },
-          targetCodeRef: {
-            name: 'Some Ref Name',
-            module: `${targetRealmURL}xyz/some-folder/some`,
-          },
-        });
-        assert.deepEqual(modulesCopy[1], {
-          sourceCodeRef: {
-            name: 'Some Ref Name 2',
-            module: `${sourceRealmURL.href}some-folder/some-2`,
-          },
-          targetCodeRef: {
-            name: 'Some Ref Name 2',
-            module: `${targetRealmURL}xyz/some-folder/some-2`,
-          },
-        });
-      });
       test('code exists in separate source folders', function (assert) {
         const specs = [
           {
@@ -188,7 +96,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
         } as any;
         const { modulesCopy } = planModuleInstall(
           specs,
-          new InstallOptions(targetRealmURL.href, listing, 'xyz'),
+          new ListingPathResolver(targetRealmURL.href, listing, 'xyz'),
         );
 
         assert.strictEqual(modulesCopy.length, 2);
@@ -235,7 +143,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
         } as any;
         const { modulesCopy } = planModuleInstall(
           specs,
-          new InstallOptions(targetRealmURL.href, listing, 'xyz'),
+          new ListingPathResolver(targetRealmURL.href, listing, 'xyz'),
         );
 
         assert.strictEqual(modulesCopy.length, 2);
@@ -265,48 +173,6 @@ module('Unit | Catalog | Install Plan Builder', function () {
 
   module('planInstanceInstall()', function () {
     module('listing name provided', function () {
-      test('instance adoptsFrom code inside source folder', function (assert) {
-        const instances = [
-          {
-            id: `${sourceRealmURL.href}some-folder/Example/1`,
-            [meta]: {
-              adoptsFrom: {
-                name: 'Some Ref Name',
-                module: `${sourceRealmURL.href}some-folder/some`,
-              },
-            },
-            [realmURL]: sourceRealmURL,
-          },
-        ] as CardDef[];
-        const listing = {
-          name: 'Some Folder',
-          specs: [],
-          examples: instances,
-          skills: [],
-          [realmURL]: sourceRealmURL,
-        } as any;
-        let { modulesCopy, instancesCopy } = planInstanceInstall(
-          instances,
-          new InstallOptions(targetRealmURL.href, listing, 'xyz'),
-        );
-        assert.strictEqual(modulesCopy.length, 1);
-        assert.strictEqual(instancesCopy.length, 1);
-        assert.deepEqual(modulesCopy[0], {
-          sourceCodeRef: {
-            name: 'Some Ref Name',
-            module: `${sourceRealmURL.href}some-folder/some`,
-          },
-          targetCodeRef: {
-            name: 'Some Ref Name',
-            module: `${targetRealmURL}some-folder-xyz/some`,
-          },
-        });
-        assert.strictEqual(instancesCopy[0].lid, 'some-folder-xyz/Example/1');
-        assert.deepEqual(instancesCopy[0].targetCodeRef, {
-          name: 'Some Ref Name',
-          module: `${targetRealmURL}some-folder-xyz/some`,
-        });
-      });
       test('instance adoptsFrom from code inside base realm', function (assert) {
         const instances = [
           {
@@ -329,10 +195,13 @@ module('Unit | Catalog | Install Plan Builder', function () {
         } as any;
         let { modulesCopy, instancesCopy } = planInstanceInstall(
           instances,
-          new InstallOptions(targetRealmURL.href, listing, 'xyz'),
+          new ListingPathResolver(targetRealmURL.href, listing, 'xyz'),
         );
         assert.strictEqual(modulesCopy.length, 0);
-        assert.strictEqual(instancesCopy[0].lid, 'some-folder-xyz/Example/1');
+        assert.strictEqual(
+          instancesCopy[0].lid,
+          'some-folder-xyz/some-folder/Example/1',
+        );
         assert.deepEqual(instancesCopy[0].targetCodeRef, {
           module: `${baseRealmURL}skill`,
           name: 'Some Ref Name',
@@ -360,7 +229,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
         } as any;
         let { modulesCopy, instancesCopy } = planInstanceInstall(
           instances,
-          new InstallOptions(targetRealmURL.href, listing, 'xyz'),
+          new ListingPathResolver(targetRealmURL.href, listing, 'xyz'),
         );
         assert.strictEqual(modulesCopy.length, 1);
         assert.deepEqual(modulesCopy[0], {
@@ -382,82 +251,9 @@ module('Unit | Catalog | Install Plan Builder', function () {
           module: `${targetRealmURL}some-folder-xyz/some-folder-2/some`,
         });
       });
-      test('not ALL instances adoptsFrom code inside source folder', function (assert) {
-        const instances = [
-          {
-            id: `${sourceRealmURL.href}some-folder/Example/1`,
-            [meta]: {
-              adoptsFrom: {
-                name: 'Some Ref Name',
-                module: `${sourceRealmURL.href}some-folder/some`,
-              },
-            },
-            [realmURL]: sourceRealmURL,
-          },
-          {
-            id: `${sourceRealmURL.href}some-folder/Example/2`,
-            [meta]: {
-              adoptsFrom: {
-                name: 'Some Ref Name',
-                module: `${sourceRealmURL.href}some-folder-2/some-2`,
-              },
-            },
-            [realmURL]: sourceRealmURL,
-          },
-        ] as CardDef[];
-        const listing = {
-          name: 'Some Folder',
-          specs: [],
-          examples: instances,
-          skills: [],
-          [realmURL]: sourceRealmURL,
-        } as any;
-        let { modulesCopy, instancesCopy } = planInstanceInstall(
-          instances,
-          new InstallOptions(targetRealmURL.href, listing, 'xyz'),
-        );
-        assert.strictEqual(modulesCopy.length, 2);
-        assert.strictEqual(instancesCopy.length, 2);
-        assert.deepEqual(modulesCopy[0], {
-          sourceCodeRef: {
-            name: 'Some Ref Name',
-            module: `${sourceRealmURL.href}some-folder/some`,
-          },
-          targetCodeRef: {
-            name: 'Some Ref Name',
-            module: `${targetRealmURL}some-folder-xyz/some-folder/some`,
-          },
-        });
-        assert.deepEqual(modulesCopy[1], {
-          sourceCodeRef: {
-            name: 'Some Ref Name',
-            module: `${sourceRealmURL.href}some-folder-2/some-2`,
-          },
-          targetCodeRef: {
-            name: 'Some Ref Name',
-            module: `${targetRealmURL}some-folder-xyz/some-folder-2/some-2`,
-          },
-        });
-        assert.deepEqual(
-          instancesCopy[0].lid,
-          'some-folder-xyz/some-folder/Example/1',
-        );
-        assert.deepEqual(instancesCopy[0].targetCodeRef, {
-          name: 'Some Ref Name',
-          module: `${targetRealmURL}some-folder-xyz/some-folder/some`,
-        });
-        assert.deepEqual(
-          instancesCopy[1].lid,
-          'some-folder-xyz/some-folder/Example/2',
-        );
-        assert.deepEqual(instancesCopy[1].targetCodeRef, {
-          name: 'Some Ref Name',
-          module: `${targetRealmURL}some-folder-xyz/some-folder-2/some-2`,
-        });
-      });
     });
     module('listing name NOT provided', function () {
-      test('instances adoptsFrom code from any folder (This should be reflected in planModuleCopy tests already)', function (assert) {
+      test('instances adoptsFrom code from any folder', function (assert) {
         const instances = [
           {
             id: `${sourceRealmURL.href}some-folder/Example/1`,
@@ -498,7 +294,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
         } as any;
         let { modulesCopy, instancesCopy } = planInstanceInstall(
           instances,
-          new InstallOptions(targetRealmURL.href, listing, 'xyz'),
+          new ListingPathResolver(targetRealmURL.href, listing, 'xyz'),
         );
         assert.strictEqual(modulesCopy.length, 3);
         assert.strictEqual(instancesCopy.length, 3);
@@ -558,7 +354,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
         } as any;
         let { modulesCopy, instancesCopy } = planInstanceInstall(
           instances,
-          new InstallOptions(targetRealmURL.href, listing, 'xyz'),
+          new ListingPathResolver(targetRealmURL.href, listing, 'xyz'),
         );
         assert.strictEqual(modulesCopy.length, 0);
         assert.strictEqual(instancesCopy[0].lid, 'xyz/some-folder/Example/1');
@@ -579,15 +375,14 @@ module('Unit | Catalog | Install Plan Builder', function () {
       [realmURL]: sourceRealmURL,
     } as any;
     hooks.beforeEach(function () {
-      const opts = new InstallOptions(targetRealmURL.href, listing, 'xyz');
-      builder = new PlanBuilder(opts);
+      builder = new PlanBuilder(targetRealmURL.href, listing);
     });
 
     module('build()', function () {
       test('modulesCopy is deduplicated', function (assert) {
         builder.add(() => {
-          return {
-            modulesCopy: [
+          return new InstallPlan(
+            [
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name',
@@ -599,12 +394,12 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 },
               },
             ],
-            instancesCopy: [],
-          };
+            [],
+          );
         });
         builder.add(() => {
-          return {
-            modulesCopy: [
+          return new InstallPlan(
+            [
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name',
@@ -616,37 +411,34 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 },
               },
             ],
-            instancesCopy: [],
-          };
+            [],
+          );
         });
         let plan = builder.build();
-        assert.deepEqual(plan, {
-          instancesCopy: [],
-          modulesCopy: [
-            {
-              sourceCodeRef: {
-                module: `${sourceRealmURL.href}some-folder/some`,
-                name: 'Some Ref Name',
+        assert.deepEqual(
+          plan,
+          new InstallPlan(
+            [
+              {
+                sourceCodeRef: {
+                  module: `${sourceRealmURL.href}some-folder/some`,
+                  name: 'Some Ref Name',
+                },
+                targetCodeRef: {
+                  module: `${targetRealmURL}xyz/some-folder/some`,
+                  name: 'Some Ref Name',
+                },
               },
-              targetCodeRef: {
-                module: `${targetRealmURL}xyz/some-folder/some`,
-                name: 'Some Ref Name',
-              },
-            },
-          ],
-          modulesToInstall: [
-            {
-              sourceModule: `${sourceRealmURL.href}some-folder/some`,
-              targetModule: `${targetRealmURL}xyz/some-folder/some`,
-            },
-          ],
-        });
+            ],
+            [],
+          ),
+        );
       });
       test('instanceCopy is deduplicated', function (assert) {
         builder.add(() => {
-          return {
-            modulesCopy: [],
-            instancesCopy: [
+          return new InstallPlan(
+            [],
+            [
               {
                 sourceCard: {} as CardDef,
                 targetCodeRef: {
@@ -656,12 +448,12 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 lid: 'xyz/some-folder/Example/1',
               },
             ],
-          };
+          );
         });
         builder.add(() => {
-          return {
-            modulesCopy: [],
-            instancesCopy: [
+          return new InstallPlan(
+            [],
+            [
               {
                 sourceCard: {} as CardDef,
                 targetCodeRef: {
@@ -671,30 +463,33 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 lid: 'xyz/some-folder/Example/1',
               },
             ],
-          };
+          );
         });
         let plan = builder.build();
-        assert.deepEqual(plan, {
-          instancesCopy: [
-            {
-              sourceCard: {} as CardDef,
-              targetCodeRef: {
-                name: 'Some Ref Name',
-                module: `${targetRealmURL}xyz/some-folder/some`,
+        assert.deepEqual(
+          plan,
+
+          new InstallPlan(
+            [],
+            [
+              {
+                sourceCard: {} as CardDef,
+                targetCodeRef: {
+                  name: 'Some Ref Name',
+                  module: `${targetRealmURL}xyz/some-folder/some`,
+                },
+                lid: 'xyz/some-folder/Example/1',
               },
-              lid: 'xyz/some-folder/Example/1',
-            },
-          ],
-          modulesCopy: [],
-          modulesToInstall: [],
-        });
+            ],
+          ),
+        );
       });
     });
     module('modulesToInstall()', function () {
       test('sourceCodeRef that come from same module are deduplicated unless they have different target modules', function (assert) {
         builder.add(() => {
-          return {
-            modulesCopy: [
+          return new InstallPlan(
+            [
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name',
@@ -706,12 +501,12 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 },
               },
             ],
-            instancesCopy: [],
-          };
+            [],
+          );
         });
         builder.add(() => {
-          return {
-            modulesCopy: [
+          return new InstallPlan(
+            [
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name 2',
@@ -723,12 +518,12 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 },
               },
             ],
-            instancesCopy: [],
-          };
+            [],
+          );
         });
         builder.add(() => {
-          return {
-            modulesCopy: [
+          return new InstallPlan(
+            [
               {
                 sourceCodeRef: {
                   name: 'Some Ref Name 3',
@@ -740,8 +535,8 @@ module('Unit | Catalog | Install Plan Builder', function () {
                 },
               },
             ],
-            instancesCopy: [],
-          };
+            [],
+          );
         });
         let { modulesToInstall } = builder.build();
         assert.strictEqual(modulesToInstall.length, 2);

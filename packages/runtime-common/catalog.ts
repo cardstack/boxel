@@ -6,6 +6,7 @@ import { RealmPaths, join } from './paths';
 import { ResolvedCodeRef, resolveAdoptedCodeRef } from './code-ref';
 import { realmURL } from './constants';
 import { logger } from './log';
+import { LocalPath } from './paths';
 
 // @ts-ignore TODO: fix catalog types in runtime-common
 import type { Listing } from '@cardstack/catalog/listing/listing';
@@ -25,13 +26,36 @@ export interface CopyInstanceMeta {
   targetCodeRef: ResolvedCodeRef;
   lid: string;
 }
-export interface InstallPlan {
+export interface InstallPlanInterface {
   modulesCopy: CopyMeta[];
   instancesCopy: CopyInstanceMeta[];
+  get modulesToInstall(): CopyModuleMeta[];
 }
 
-export interface FinalInstallPlan extends InstallPlan {
-  modulesToInstall: CopyModuleMeta[];
+export class InstallPlan implements InstallPlanInterface {
+  modulesCopy: CopyMeta[];
+  instancesCopy: CopyInstanceMeta[];
+  constructor(modulesCopy: CopyMeta[], instancesCopy: CopyInstanceMeta[]) {
+    this.modulesCopy = modulesCopy;
+    this.instancesCopy = instancesCopy;
+  }
+
+  get modulesToInstall(): CopyModuleMeta[] {
+    const uniqueModules = this.modulesCopy.reduce(
+      (acc, { sourceCodeRef, targetCodeRef }) => {
+        const key = `${sourceCodeRef.module}-${targetCodeRef.module}`;
+        if (!acc.has(key)) {
+          acc.set(key, {
+            sourceModule: sourceCodeRef.module,
+            targetModule: targetCodeRef.module,
+          });
+        }
+        return acc;
+      },
+      new Map<string, CopyModuleMeta>(),
+    );
+    return Array.from(uniqueModules.values());
+  }
 }
 
 export interface CopyModuleMeta {
@@ -54,11 +78,11 @@ export function generateInstallFolderName(
   }
 }
 
-export class InstallOptions {
+export class ListingPathResolver {
   targetDirectoryName: string; //name of outer uuid  folder
   private targetRealmPath: RealmPaths;
   private sourceRealmPath: RealmPaths;
-  sourceDirectoryPath: RealmPaths;
+  private targetDirectoryPath: RealmPaths;
 
   constructor(targetRealm: string, listing: Listing, installDirId?: string) {
     this.targetRealmPath = new RealmPaths(new URL(targetRealm));
@@ -76,87 +100,42 @@ export class InstallOptions {
     }
 
     this.sourceRealmPath = new RealmPaths(sourceRealmURL);
-    let maybeSourceDirectoryPath = new RealmPaths(
-      new URL(join(this.sourceRealmPath.url, listingDirectoryName)),
-    );
-
-    this.sourceDirectoryPath = allResourcesInSameDirectory(
-      listing,
-      maybeSourceDirectoryPath.url,
-    )
-      ? maybeSourceDirectoryPath
-      : this.sourceRealmPath;
-  }
-
-  get sourceRealm(): string {
-    return this.sourceRealmPath.url;
-  }
-
-  get targetDirectory(): string {
-    return new RealmPaths(
+    this.targetDirectoryPath = new RealmPaths(
       new URL(join(this.targetRealmPath.url, this.targetDirectoryName)),
-    ).url;
+    );
   }
 
-  get targetRealm(): string {
-    return this.targetRealmPath.url;
+  local(href: string): LocalPath {
+    let local = this.sourceRealmPath.local(
+      new URL(href, this.sourceRealmPath.url),
+    );
+    return local;
   }
-}
 
-export function allResourcesInSameDirectory(
-  listing: Listing,
-  dir: string,
-  ignoreBaseRealm: boolean = true,
-) {
-  const resourceIds: string[] = [];
-  listing.specs.forEach((c: Spec) => {
-    resourceIds.push(c.moduleHref);
-  });
-  [...listing.examples, ...listing.skills].forEach((c: CardDef) => {
-    let codeRef = resolveAdoptedCodeRef(c);
-    resourceIds.push(codeRef.module);
-    resourceIds.push(c.id);
-  });
-  let sourceDirPath = new RealmPaths(new URL(dir));
-  return resourceIds.every((id: string) => {
-    let url = new URL(id);
-    let inRealm = sourceDirPath.inRealm(url);
-    let inBaseRealm = baseRealmPath.inRealm(url);
-    if (ignoreBaseRealm && inBaseRealm) {
-      return inBaseRealm;
-    }
-    return inRealm;
-  });
-}
+  targetLid(href: string): string {
+    let local = this.local(href);
+    return join(this.targetDirectoryName, local);
+  }
 
-function resolveTargetCodeRef(
-  codeRef: ResolvedCodeRef,
-  opts: InstallOptions,
-): ResolvedCodeRef {
-  if (baseRealmPath.inRealm(new URL(codeRef.module))) {
-    return codeRef;
-  } else {
-    let local = resolveTargetLocal(codeRef.module, opts);
-    let targetModule = join(opts.targetDirectory, local);
-    return {
-      name: codeRef.name,
-      module: targetModule,
-    };
+  target(href: string): string {
+    let local = this.local(href);
+    return join(this.targetDirectoryPath.url, local);
   }
 }
 
-function resolveTargetLocal(sourceHref: string, opts: InstallOptions) {
-  let local = opts.sourceDirectoryPath.local(new URL(sourceHref));
-  return local;
-}
-
-type PlanBuilderStep = (opts: InstallOptions, plan: InstallPlan) => InstallPlan;
+type PlanBuilderStep = (
+  resolver: ListingPathResolver,
+  plan: InstallPlan,
+) => InstallPlan;
 
 export class PlanBuilder {
   private steps: PlanBuilderStep[] = [];
   private log = logger('catalog:plan');
+  private resolver: ListingPathResolver;
 
-  constructor(private opts: InstallOptions) {}
+  constructor(realmUrl: string, listing: Listing) {
+    this.resolver = new ListingPathResolver(realmUrl, listing);
+  }
 
   add(step: PlanBuilderStep): this {
     this.steps.push(step);
@@ -170,37 +149,42 @@ export class PlanBuilder {
     return this;
   }
 
-  build(): FinalInstallPlan {
-    let accumulatedPlan: InstallPlan = this.steps.reduce(
+  build(): InstallPlan {
+    let plan: InstallPlan = this.steps.reduce(
       (plan: InstallPlan, step: PlanBuilderStep, i) => {
         this.log.debug(`=== Plan Step ${i} ===`);
         this.log.debug(JSON.stringify(plan, null, 2));
-        return mergePlans(plan, step(this.opts, plan));
+        return mergePlans(plan, step(this.resolver, plan));
       },
-      {
-        modulesCopy: [],
-        instancesCopy: [],
-      },
+      new InstallPlan([], []),
     );
-    const finalPlan: FinalInstallPlan = {
-      ...accumulatedPlan,
-      modulesToInstall: modulesToInstall(accumulatedPlan),
-    };
     this.log.debug(`=== Final Plan ===`);
-    this.log.debug(JSON.stringify(finalPlan, null, 2));
-    return finalPlan;
+    this.log.debug(JSON.stringify(plan, null, 2));
+    return plan;
+  }
+}
+
+function resolveTargetCodeRef(
+  codeRef: ResolvedCodeRef,
+  resolver: ListingPathResolver,
+): ResolvedCodeRef {
+  if (baseRealmPath.inRealm(new URL(codeRef.module))) {
+    return codeRef;
+  } else {
+    let targetModule = resolver.target(codeRef.module);
+    return {
+      name: codeRef.name,
+      module: targetModule,
+    };
   }
 }
 
 export function planModuleInstall(
   specs: Spec[],
-  opts: InstallOptions,
+  resolver: ListingPathResolver,
 ): InstallPlan {
   if (specs.length == 0) {
-    return {
-      modulesCopy: [],
-      instancesCopy: [],
-    };
+    return new InstallPlan([], []);
   }
   let codeRefs: ResolvedCodeRef[] = specs.map((s) => {
     return { module: s.moduleHref, name: s.ref.name };
@@ -209,54 +193,48 @@ export function planModuleInstall(
     if (baseRealmPath.inRealm(new URL(sourceCodeRef.module))) {
       return [];
     }
-    let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, opts);
+    let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, resolver);
     let copyMeta = {
       sourceCodeRef,
       targetCodeRef,
     };
     return [copyMeta];
   });
-  return {
-    modulesCopy,
-    instancesCopy: [],
-  };
+  return new InstallPlan(modulesCopy, []);
 }
 
 export function planInstanceInstall(
   instances: CardDef[],
-  opts: InstallOptions,
+  resolver: ListingPathResolver,
 ): InstallPlan {
-  let copyInstanceMeta: CopyInstanceMeta[] = [];
-  let copySourceMeta: CopyMeta[] = [];
+  let instancesCopy: CopyInstanceMeta[] = [];
+  let modulesCopy: CopyMeta[] = [];
   for (let instance of instances) {
     let sourceCodeRef = resolveAdoptedCodeRef(instance);
-    let lid = resolveTargetLocal(instance.id, opts);
+    let lid = resolver.local(instance.id);
     if (baseRealmPath.inRealm(new URL(instance.id))) {
       throw new Error('Cannot install instance from base realm');
     }
     if (!baseRealmPath.inRealm(new URL(sourceCodeRef.module))) {
-      let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, opts);
-      copySourceMeta.push({
+      let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, resolver);
+      modulesCopy.push({
         sourceCodeRef,
         targetCodeRef,
       });
-      copyInstanceMeta.push({
+      instancesCopy.push({
         sourceCard: instance,
-        lid: join(opts.targetDirectoryName, lid),
+        lid: resolver.targetLid(lid),
         targetCodeRef,
       });
     } else {
-      copyInstanceMeta.push({
+      instancesCopy.push({
         sourceCard: instance,
         targetCodeRef: sourceCodeRef,
-        lid: join(opts.targetDirectoryName, lid),
+        lid: resolver.targetLid(lid),
       });
     }
   }
-  return {
-    modulesCopy: copySourceMeta,
-    instancesCopy: copyInstanceMeta,
-  };
+  return new InstallPlan(modulesCopy, instancesCopy);
 }
 
 function dedupeCopyMeta(array: CopyMeta[]): CopyMeta[] {
@@ -277,26 +255,8 @@ function dedupeCopyInstanceMeta(array: CopyInstanceMeta[]): CopyInstanceMeta[] {
   );
 }
 export function mergePlans(...plans: InstallPlan[]): InstallPlan {
-  return {
-    modulesCopy: dedupeCopyMeta(plans.flatMap((p) => p.modulesCopy)),
-    instancesCopy: dedupeCopyInstanceMeta(
-      plans.flatMap((p) => p.instancesCopy),
-    ),
-  };
-}
-
-export function modulesToInstall(plan: InstallPlan): CopyModuleMeta[] {
-  // Deduplicate based on source and target module paths
-  const uniqueModules = plan.modulesCopy.reduce((acc, copyMeta) => {
-    const key = `${copyMeta.sourceCodeRef.module}-${copyMeta.targetCodeRef.module}`;
-    if (!acc.has(key)) {
-      acc.set(key, {
-        sourceModule: copyMeta.sourceCodeRef.module,
-        targetModule: copyMeta.targetCodeRef.module,
-      });
-    }
-    return acc;
-  }, new Map<string, CopyModuleMeta>());
-
-  return Array.from(uniqueModules.values());
+  return new InstallPlan(
+    dedupeCopyMeta(plans.flatMap((p) => p.modulesCopy)),
+    dedupeCopyInstanceMeta(plans.flatMap((p) => p.instancesCopy)),
+  );
 }
