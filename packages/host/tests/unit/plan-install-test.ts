@@ -204,7 +204,6 @@ module('Unit | Catalog | Install Plan Builder', function () {
           instances,
           new ListingPathResolver(targetRealmURL.href, listing, 'xyz'),
         );
-      assert.strictEqual(modulesCopy.length, 1);
       assert.deepEqual(modulesCopy, [
         {
           sourceCodeRef: {
@@ -261,7 +260,6 @@ module('Unit | Catalog | Install Plan Builder', function () {
           instances,
           new ListingPathResolver(targetRealmURL.href, listing, 'xyz'),
         );
-      assert.strictEqual(modulesCopy.length, 0);
       assert.deepEqual(modulesCopy, []);
       assert.deepEqual(modulesToInstall, []);
       assert.deepEqual(instancesCopy, [
@@ -453,15 +451,16 @@ module('Unit | Catalog | Install Plan Builder', function () {
           );
         });
         let { modulesToInstall } = builder.build();
-        assert.strictEqual(modulesToInstall.length, 2);
-        assert.deepEqual(modulesToInstall[0], {
-          sourceModule: `${sourceRealmURL.href}some-folder/some`,
-          targetModule: `${targetRealmURL}xyz/some-folder/some`,
-        });
-        assert.deepEqual(modulesToInstall[1], {
-          sourceModule: `${sourceRealmURL.href}some-folder/some`,
-          targetModule: `${targetRealmURL}xyz/some-folder/some-3`,
-        });
+        assert.deepEqual(modulesToInstall, [
+          {
+            sourceModule: `${sourceRealmURL.href}some-folder/some`,
+            targetModule: `${targetRealmURL}xyz/some-folder/some`,
+          },
+          {
+            sourceModule: `${sourceRealmURL.href}some-folder/some`,
+            targetModule: `${targetRealmURL}xyz/some-folder/some-3`,
+          },
+        ]);
       });
     });
   });
