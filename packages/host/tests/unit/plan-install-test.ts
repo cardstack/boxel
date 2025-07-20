@@ -225,11 +225,11 @@ module('Unit | Catalog | Install Plan Builder', function () {
       assert.strictEqual(instancesCopy.length, 1);
       assert.strictEqual(
         instancesCopy[0].lid,
-        `some-folder-xyz/some-folder/Example/1`,
+        `some-listing-xyz/some-folder/Example/1`,
       );
       assert.deepEqual(instancesCopy[0].targetCodeRef, {
         name: 'Some Ref Name',
-        module: `${targetRealmURL}some-folder-xyz/some-folder-2/some`,
+        module: `${targetRealmURL}some-listing-xyz/some-folder-2/some`,
       });
     });
     test('can execute plan for instances when instance adoptsFrom from code inside base realm', function (assert) {
@@ -260,7 +260,10 @@ module('Unit | Catalog | Install Plan Builder', function () {
       assert.deepEqual(modulesCopy, []);
       assert.deepEqual(modulesToInstall, []);
       assert.strictEqual(instancesCopy.length, 1);
-      assert.strictEqual(instancesCopy[0].lid, 'xyz/some-folder/Example/1');
+      assert.strictEqual(
+        instancesCopy[0].lid,
+        'some-listing-xyz/some-folder/Example/1',
+      );
       assert.deepEqual(instancesCopy[0].targetCodeRef, {
         module: `${baseRealmURL}skill`,
         name: 'Some Ref Name',
