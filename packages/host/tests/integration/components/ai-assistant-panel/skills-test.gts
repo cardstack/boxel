@@ -1047,6 +1047,7 @@ ${REPLACE_MARKER}
     await click('[data-test-select="http://test-realm/test/Skill/example"]');
     await click('[data-test-card-catalog-go-button]');
     await click('[data-test-send-message-btn]');
+    await click('[data-test-pill-menu-button]');
 
     const initialRoomStateSkillsJson = getRoomState(
       roomId,
