@@ -64,6 +64,11 @@ export class CardIdCard extends CardDef {
   @field cardId = contains(StringField);
 }
 
+export class ShowCardInput extends CardDef {
+  @field cardId = contains(StringField);
+  @field format = contains(StringField);
+}
+
 export class FileUrlCard extends CardDef {
   @field fileUrl = contains(StringField);
 }
@@ -267,6 +272,12 @@ export class GetEventsFromRoomInput extends CardDef {
 
 export class GetEventsFromRoomResult extends CardDef {
   @field matrixEvents = containsMany(JsonField);
+}
+
+export class PreviewFormatInput extends CardDef {
+  @field cardId = contains(StringField);
+  @field format = contains(StringField);
+  @field modulePath = contains(StringField);
 }
 
 export {
