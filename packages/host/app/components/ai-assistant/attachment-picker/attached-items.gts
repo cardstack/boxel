@@ -35,6 +35,8 @@ interface Signature {
     autoAttachedFile?: FileDef;
     removeCard: (cardId: string) => void;
     removeFile: (file: FileDef) => void;
+    chooseCard?: (cardId: string) => void;
+    chooseFile?: (file: FileDef) => void;
     isLoaded: boolean;
     autoAttachedCardTooltipMessage?: string;
   };
@@ -88,6 +90,7 @@ export default class AttachedItems extends Component<Signature> {
                     @cardId={{this.getCardErrorId item}}
                     @isAutoAttachedCard={{true}}
                     @removeCard={{@removeCard}}
+                    @chooseCard={{@chooseCard}}
                     @urlForRealmLookup={{this.getCardErrorRealm item}}
                   />
                 </:trigger>
@@ -107,6 +110,7 @@ export default class AttachedItems extends Component<Signature> {
                 @cardId={{this.getCardErrorId item}}
                 @isAutoAttachedCard={{true}}
                 @removeCard={{@removeCard}}
+                @chooseCard={{@chooseCard}}
                 @urlForRealmLookup={{this.getCardErrorRealm item}}
               />
             {{/if}}
@@ -118,6 +122,7 @@ export default class AttachedItems extends Component<Signature> {
                     @cardId={{idFor item}}
                     @isAutoAttachedCard={{true}}
                     @removeCard={{@removeCard}}
+                    @chooseCard={{@chooseCard}}
                     @urlForRealmLookup={{urlForRealmLookup item}}
                   />
                 </:trigger>
@@ -135,6 +140,7 @@ export default class AttachedItems extends Component<Signature> {
                 @cardId={{idFor item}}
                 @isAutoAttachedCard={{false}}
                 @removeCard={{@removeCard}}
+                @chooseCard={{@chooseCard}}
                 @urlForRealmLookup={{urlForRealmLookup item}}
               />
             {{/if}}
@@ -146,6 +152,7 @@ export default class AttachedItems extends Component<Signature> {
                     @file={{item}}
                     @isAutoAttachedFile={{true}}
                     @removeFile={{@removeFile}}
+                    @chooseFile={{@chooseFile}}
                   />
                 </:trigger>
                 <:content>
@@ -157,6 +164,7 @@ export default class AttachedItems extends Component<Signature> {
                 @file={{item}}
                 @isAutoAttachedFile={{false}}
                 @removeFile={{@removeFile}}
+                @chooseFile={{@chooseFile}}
               />
             {{/if}}
           {{/if}}

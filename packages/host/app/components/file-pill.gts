@@ -1,5 +1,5 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 
 import Component from '@glimmer/component';
 
@@ -18,6 +18,7 @@ interface FilePillSignature {
     isAutoAttachedFile?: boolean;
     removeFile?: (file: FileDef) => void;
     downloadFile?: (file: FileDef) => void;
+    chooseFile?: (file: FileDef) => void;
   };
 }
 
@@ -26,11 +27,44 @@ export default class FilePill extends Component<FilePillSignature> {
     return this.args.file.constructor.getComponent(this.args.file);
   }
 
+  @action
+  private handleFileClick() {
+    if (this.args.isAutoAttachedFile && this.args.chooseFile) {
+      this.args.chooseFile(this.args.file);
+    }
+  }
+
+  @action
+  private handleRemoveClick(event: Event) {
+    // Prevent the click from bubbling up to the pill button
+    event.stopPropagation();
+    if (this.args.removeFile) {
+      this.args.removeFile(this.args.file);
+    }
+  }
+
+  @action
+  private handleDownloadClick(event: Event) {
+    // Prevent the click from bubbling up to the pill button
+    event.stopPropagation();
+    if (this.args.downloadFile) {
+      this.args.downloadFile(this.args.file);
+    }
+  }
+
+  private get pillKind() {
+    return this.args.isAutoAttachedFile && this.args.chooseFile
+      ? 'button'
+      : 'default';
+  }
+
   <template>
     <Pill
+      @kind={{this.pillKind}}
       class={{cn 'file-pill' is-autoattached=@isAutoAttachedFile}}
       data-test-attached-file={{@file.sourceUrl}}
       data-test-autoattached-file={{@isAutoAttachedFile}}
+      {{on 'click' this.handleFileClick}}
       ...attributes
     >
       <:iconLeft>
@@ -48,7 +82,7 @@ export default class FilePill extends Component<FilePillSignature> {
             @icon={{IconX}}
             @height='10'
             @width='10'
-            {{on 'click' (fn @removeFile @file)}}
+            {{on 'click' this.handleRemoveClick}}
             data-test-remove-file-btn
           />
         {{/if}}
@@ -58,7 +92,7 @@ export default class FilePill extends Component<FilePillSignature> {
             @icon={{Download}}
             @height='10'
             @width='10'
-            {{on 'click' (fn @downloadFile @file)}}
+            {{on 'click' this.handleDownloadClick}}
             data-test-download-file-btn
           />
         {{/if}}

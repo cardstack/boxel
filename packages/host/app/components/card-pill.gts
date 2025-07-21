@@ -1,5 +1,5 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -29,6 +29,7 @@ interface CardPillSignature {
     urlForRealmLookup: string;
     isAutoAttachedCard?: boolean;
     removeCard?: (cardId: string) => void;
+    chooseCard?: (cardId: string) => void;
     isEnabled?: boolean;
   };
 }
@@ -62,12 +63,35 @@ export default class CardPill extends Component<CardPillSignature> {
     return this.card && !this.card.id && !this.cardError;
   }
 
+  @action
+  private handleCardClick() {
+    if (this.args.isAutoAttachedCard && this.args.chooseCard) {
+      this.args.chooseCard(this.args.cardId);
+    }
+  }
+
+  @action
+  private handleRemoveClick(event: Event) {
+    // Prevent the click from bubbling up to the pill button
+    event.stopPropagation();
+    if (this.args.removeCard) {
+      this.args.removeCard(this.args.cardId);
+    }
+  }
+
+  private get pillKind() {
+    return this.args.isAutoAttachedCard && this.args.chooseCard
+      ? 'button'
+      : 'default';
+  }
+
   <template>
     {{consumeContext this.makeCardResource}}
     {{#if this.isCreating}}
       <LoadingIndicator />
     {{else}}
       <Pill
+        @kind={{this.pillKind}}
         class={{cn
           'card-pill'
           is-autoattached=@isAutoAttachedCard
@@ -75,6 +99,7 @@ export default class CardPill extends Component<CardPillSignature> {
         }}
         data-test-attached-card={{@cardId}}
         data-test-autoattached-card={{@isAutoAttachedCard}}
+        {{on 'click' this.handleCardClick}}
         ...attributes
       >
         <:iconLeft>
@@ -92,7 +117,7 @@ export default class CardPill extends Component<CardPillSignature> {
               @icon={{IconX}}
               @height='10'
               @width='10'
-              {{on 'click' (fn @removeCard @cardId)}}
+              {{on 'click' this.handleRemoveClick}}
               data-test-remove-card-btn
             />
           {{/if}}

@@ -766,6 +766,11 @@ export default class Room extends Component<Signature> {
 
   @action
   private chooseCard(cardId: string) {
+    // handle the case where auto-attached card pill is clicked
+    if (this.autoAttachedCardIds.has(cardId)) {
+      this.removedAttachedCardIds.push(cardId);
+    }
+
     let cardIds = this.cardIdsToAttach ?? [];
     if (!cardIds.includes(cardId)) {
       this.matrixService.cardsToSend.set(this.args.roomId, [
@@ -797,6 +802,11 @@ export default class Room extends Component<Signature> {
 
   @action
   private chooseFile(file: FileDef) {
+    // handle the case where auto-attached file pill is clicked
+    if (this.isAutoAttachedFile(file)) {
+      this.removeAutoAttachedFile();
+    }
+
     let files = this.filesToAttach;
     if (!files?.find((f) => f.sourceUrl === file.sourceUrl)) {
       this.matrixService.filesToSend.set(this.args.roomId, [...files, file]);
