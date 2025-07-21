@@ -1,4 +1,4 @@
-import { TemplateOnlyComponent } from '@ember/component/template-only';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 
 import { Button } from '@cardstack/boxel-ui/components';
