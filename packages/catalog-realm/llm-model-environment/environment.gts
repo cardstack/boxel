@@ -97,7 +97,7 @@ export class ShortcutSettingsField extends FieldDef {
                         "custom-skill"
                       }}'
                   >
-                    {{(if skill.title skill.title skill.id)}}
+                    {{if skill.title skill.title skill.id}}
                   </div>
                 {{/if}}
               {{/each}}
@@ -327,7 +327,7 @@ export class ShortcutSettingsField extends FieldDef {
 
   static fitted = class Fitted extends Component<typeof this> {
     <template>
-      <div class='shortcut-fitted' style='width: 100%; height: 100%'>
+      <div class='shortcut-fitted'>
         <div class='fitted-container'>
           <div class='fitted-format'>
             <div class='fitted-name'>{{if
@@ -347,6 +347,11 @@ export class ShortcutSettingsField extends FieldDef {
       </div>
 
       <style scoped>
+        .shortcut-fitted {
+          width: 100%;
+          height: 100%;
+        }
+
         .fitted-container {
           container-type: size;
           width: 100%;
@@ -587,7 +592,6 @@ export class ShortcutSettingsField extends FieldDef {
   static edit = class Edit extends Component<typeof this> {
     <template>
       <div class='shortcut-edit'>
-        <!-- Name Input with Slash Prefix -->
         <div class='name-input'>
           <div class='slash-input-wrapper'>
             <span class='slash-prefix'>/</span>
@@ -595,7 +599,6 @@ export class ShortcutSettingsField extends FieldDef {
           </div>
         </div>
 
-        <!-- Model and Skills Row -->
         <div class='settings-row'>
           <div class='model-field'>
             <label class='field-label'>Preferred Model</label>
@@ -755,9 +758,8 @@ class Fitted extends Component<typeof Environment> {
   }
 
   <template>
-    <div class='env-fitted' style='width: 100%; height: 100%'>
+    <div class='env-fitted'>
       <div class='fitted-container'>
-        <!-- Badge Format (≤150px width, ≤169px height) -->
         <div class='badge-format'>
           <div class='badge-panel-header'>
             <div class='badge-header-main'>
@@ -772,7 +774,6 @@ class Fitted extends Component<typeof Environment> {
           </div>
         </div>
 
-        <!-- Strip Format (151px+ width, ≤169px height) -->
         <div class='strip-format'>
           <div class='strip-panel-header'>
             <div class='strip-header-main'>
@@ -800,7 +801,6 @@ class Fitted extends Component<typeof Environment> {
           </div>
         </div>
 
-        <!-- Tile Format (≤399px width, ≥170px height) -->
         <div class='tile-format'>
           <div class='tile-panel-header'>
             <div class='tile-header-main'>
@@ -862,7 +862,6 @@ class Fitted extends Component<typeof Environment> {
           </div>
         </div>
 
-        <!-- Card Format (≥400px width, ≥170px height) -->
         <div class='card-format'>
           <div class='card-panel-header'>
             <div class='card-header-main'>
@@ -936,6 +935,11 @@ class Fitted extends Component<typeof Environment> {
     </div>
 
     <style scoped>
+      .env-fitted {
+        width: 100%;
+        height: 100%;
+      }
+
       .fitted-container {
         container-type: size;
         width: 100%;
@@ -944,7 +948,6 @@ class Fitted extends Component<typeof Environment> {
         font-family: 'Inter', system-ui, sans-serif;
       }
 
-      /* Hide all formats by default */
       .badge-format,
       .strip-format,
       .tile-format,
@@ -956,7 +959,6 @@ class Fitted extends Component<typeof Environment> {
         overflow: hidden;
       }
 
-      /* Badge Format (≤150px width, ≤169px height) */
       @container (max-width: 150px) and (max-height: 169px) {
         .badge-format {
           display: flex;
@@ -1670,7 +1672,7 @@ class Isolated extends Component<typeof Environment> {
                                 "custom-skill"
                               }}'
                             {{on 'click' (fn this.viewSkill skill)}}
-                          >{{(if skill.title skill.title skill.id)}}</button>
+                          >{{if skill.title skill.title skill.id}}</button>
                         {{/each}}
                       </div>
                     </div>
@@ -2866,19 +2868,19 @@ class Edit extends Component<typeof Environment> {
 
   <template>
     <div class='environment-editor'>
-      <!-- Big Editable Title -->
       <div class='title-section'>
         <div class='title-input-container'>
-          <input
-            type='text'
-            value={{@model.name}}
-            placeholder='Enter environment name...'
-            {{on 'input' this.updateName}}
-            class='title-input'
-          />
+          <label>
+            <input
+              type='text'
+              value={{@model.name}}
+              placeholder='Enter environment name...'
+              {{on 'input' this.updateName}}
+              class='title-input'
+            />
+          </label>
         </div>
 
-        <!-- Environment Statistics - Show for Current Environment -->
         <div class='env-stats'>
           <div class='stats-header'>
             <h2 class='stats-title'>{{@model.title}} Statistics</h2>
@@ -2969,7 +2971,6 @@ class Edit extends Component<typeof Environment> {
         </div>
       </div>
 
-      <!-- Parent Environment -->
       {{#if @model.parent}}
         <div class='parent-section'>
           <div class='section-header-row'>
@@ -2996,7 +2997,6 @@ class Edit extends Component<typeof Environment> {
         </div>
       {{/if}}
 
-      <!-- Shortcuts Configuration -->
       <div class='config-section'>
         <div class='section-header-row'>
           <h3 class='section-header'>Edit AI Shortcuts</h3>
@@ -3022,8 +3022,8 @@ class Edit extends Component<typeof Environment> {
         </div>
 
         {{#if (gt @model.shortcutSettings.length 0)}}
-          {{#let @fields.shortcutSettings as |field|}}
-            <field @format='edit' />
+          {{#let @fields.shortcutSettings as |Field|}}
+            <Field @format='edit' />
           {{/let}}
         {{else}}
           <div class='empty-state'>
@@ -3070,8 +3070,8 @@ class Edit extends Component<typeof Environment> {
 
         {{#if (gt @model.modelSettings.length 0)}}
 
-          {{#let @fields.modelSettings as |field|}}
-            <field @format='edit' />
+          {{#let @fields.modelSettings as |Field|}}
+            <Field @format='edit' />
           {{/let}}
         {{else}}<div class='empty-state'>
             <div class='empty-icon'>
@@ -3111,7 +3111,6 @@ class Edit extends Component<typeof Environment> {
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
       }
 
-      /* Big Editable Title Section */
       .title-section {
         padding-bottom: 1rem;
         border-bottom: 2px solid oklch(0.92 0.005 210);

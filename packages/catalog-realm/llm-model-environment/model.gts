@@ -45,13 +45,15 @@ class ModelSettingsFieldEdit extends Component<typeof ModelSettingsField> {
       </div>
 
       <div class='role-row'>
-        <input
-          type='text'
-          value={{@model.role}}
-          placeholder='Enter role description...'
-          {{on 'input' this.updateRole}}
-          class='role-text-input'
-        />
+        <label>
+          <input
+            type='text'
+            value={{@model.role}}
+            placeholder='Enter role description...'
+            {{on 'input' this.updateRole}}
+            class='role-text-input'
+          />
+        </label>
 
         <div class='pills-container'>
           <div class='pills-left'>
@@ -1718,9 +1720,8 @@ export class Model extends CardDef {
     }
 
     <template>
-      <div class='model-fitted' style='width: 100%; height: 100%'>
+      <div class='model-fitted'>
         <div class='fitted-container'>
-          <!-- Badge Format (≤150px width, ≤169px height) -->
           <div class='badge-format'>
             <div class='badge-content'>
               <div
@@ -1731,7 +1732,6 @@ export class Model extends CardDef {
             </div>
           </div>
 
-          <!-- Strip Format (151px+ width, ≤169px height) -->
           <div class='strip-format'>
             <div class='strip-content'>
               <div class='strip-header'>
@@ -1749,7 +1749,6 @@ export class Model extends CardDef {
             </div>
           </div>
 
-          <!-- Tile Format (≤399px width, ≥170px height) -->
           <div class='tile-format'>
             <div class='tile-content'>
               <div class='tile-icon'>
@@ -1783,7 +1782,6 @@ export class Model extends CardDef {
             </div>
           </div>
 
-          <!-- Card Format (≥400px width, ≥170px height) -->
           <div class='card-format'>
             <div class='card-content'>
               <div class='card-header'>
@@ -1832,6 +1830,11 @@ export class Model extends CardDef {
       </div>
 
       <style scoped>
+        .model-fitted {
+          width: 100%;
+          height: 100%;
+        }
+
         .fitted-container {
           container-type: size;
           width: 100%;
