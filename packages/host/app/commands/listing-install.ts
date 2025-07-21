@@ -9,7 +9,8 @@ import {
   planInstanceInstall,
   PlanBuilder,
   ModuleResource,
-  LooseSingleCardDocument,
+  LooseCardResource,
+  isSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
 import {
@@ -109,16 +110,14 @@ export default class ListingInstallCommand extends HostBaseCommand<
     );
     let instanceOperations = await Promise.all(
       plan.instancesCopy.map(async (copyInstanceMeta: CopyInstanceMeta) => {
-        let { sourceCard, targetCodeRef } = copyInstanceMeta;
-        let doc: LooseSingleCardDocument =
-          await this.cardService.serializeCard(sourceCard);
-        let cardResource = doc.data;
-        delete cardResource.id;
-        cardResource.lid = copyInstanceMeta.lid;
-        if (targetCodeRef) {
-          cardResource.meta.adoptsFrom = targetCodeRef;
-          cardResource.meta.realmURL = realmUrl;
+        let { sourceCard } = copyInstanceMeta;
+        let doc = await this.cardService.fetchJSON(sourceCard.id);
+        if (!isSingleCardDocument(doc)) {
+          throw new Error('We are only expecting single documents returned');
         }
+        delete doc.data.id;
+        delete doc.included;
+        let cardResource: LooseCardResource = doc?.data;
         let href = join(realmUrl, copyInstanceMeta.lid) + '.json';
         return {
           op: 'add' as const,
