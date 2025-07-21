@@ -1,4 +1,3 @@
-// Configuration Resolution Design
 // This module provides configuration resolution for prettier integration
 
 import type { Options as PrettierOptions } from 'prettier';
@@ -14,7 +13,7 @@ export interface PrettierConfig extends PrettierOptions {
   [key: string]: any;
 }
 
-export interface FileTypeInfo {
+interface FileTypeInfo {
   type: string;
   parser: string;
   confidence: 'high' | 'medium' | 'low';
