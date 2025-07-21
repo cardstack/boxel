@@ -1126,9 +1126,10 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       if (
         (!(doc.included ?? []).find((r) => 'id' in r && r.id === value.id) &&
           doc.data.id !== value.id) ||
-        (!(doc.included ?? []).find(
-          (r) => 'lid' in r && r.lid === value[localId],
-        ) &&
+        (!value.id &&
+          !(doc.included ?? []).find(
+            (r) => 'lid' in r && r.lid === value[localId],
+          ) &&
           doc.data.lid !== value[localId])
       ) {
         doc.included = doc.included ?? [];
@@ -1546,9 +1547,10 @@ class LinksToMany<FieldT extends CardDefConstructor>
       if (
         (!(doc.included ?? []).find((r) => 'id' in r && r.id === value.id) &&
           doc.data.id !== value.id) ||
-        (!(doc.included ?? []).find(
-          (r) => 'lid' in r && r.lid === value[localId],
-        ) &&
+        (!value.id &&
+          !(doc.included ?? []).find(
+            (r) => 'lid' in r && r.lid === value[localId],
+          ) &&
           doc.data.lid !== value[localId])
       ) {
         doc.included = doc.included ?? [];
