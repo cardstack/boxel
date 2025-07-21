@@ -4,6 +4,7 @@ import {
   type BaseDef,
   type CardDef,
   type FieldDef,
+  type FieldConstructor,
 } from 'https://cardstack.com/base/card-api';
 import { Loader } from './loader';
 import {
@@ -252,14 +253,7 @@ export function getField<T extends BaseDef>(
         let cardThunk = fieldOverride;
         let { computeVia, name, description, isUsed } = result;
         result = new (result.constructor as unknown as Field & {
-          new (args: {
-            cardThunk: () => typeof BaseDef;
-            computeVia: undefined | (() => unknown);
-            name: string;
-            description: string | undefined;
-            isUsed?: true;
-            isPolymorphic?: true;
-          }): Field;
+          new (args: FieldConstructor<unknown>): Field;
         })({
           cardThunk: () => cardThunk,
           computeVia,

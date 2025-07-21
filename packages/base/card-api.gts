@@ -166,6 +166,15 @@ export interface CardContext<T extends CardDef = CardDef> {
   store: Store;
 }
 
+export interface FieldConstructor<T> {
+  cardThunk: () => T;
+  computeVia: undefined | (() => unknown);
+  name: string;
+  description: string | undefined;
+  isUsed?: true;
+  isPolymorphic?: true;
+}
+
 function isNotLoadedValue(val: any): val is NotLoadedValue {
   if (!val || typeof val !== 'object') {
     return false;
@@ -492,14 +501,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     description,
     isUsed,
     isPolymorphic,
-  }: {
-    cardThunk: () => FieldT;
-    computeVia: undefined | (() => unknown);
-    name: string;
-    description: string | undefined;
-    isUsed?: true;
-    isPolymorphic?: true;
-  }) {
+  }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
     this.name = name;
@@ -804,14 +806,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     description,
     isUsed,
     isPolymorphic,
-  }: {
-    cardThunk: () => CardT;
-    computeVia: undefined | (() => unknown);
-    name: string;
-    description: string | undefined;
-    isUsed?: true;
-    isPolymorphic?: true;
-  }) {
+  }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
     this.name = name;
@@ -1010,14 +1005,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     description,
     isUsed,
     isPolymorphic,
-  }: {
-    cardThunk: () => CardT;
-    computeVia: undefined | (() => unknown);
-    name: string;
-    description: string | undefined;
-    isUsed?: true;
-    isPolymorphic?: true;
-  }) {
+  }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
     this.name = name;
@@ -1397,14 +1385,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     description,
     isUsed,
     isPolymorphic,
-  }: {
-    cardThunk: () => FieldT;
-    computeVia: undefined | (() => unknown);
-    name: string;
-    description: string | undefined;
-    isUsed?: true;
-    isPolymorphic?: true;
-  }) {
+  }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
     this.computeVia = computeVia;
     this.name = name;
