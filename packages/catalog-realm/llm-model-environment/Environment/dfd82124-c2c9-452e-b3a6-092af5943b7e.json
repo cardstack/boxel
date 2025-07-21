@@ -1,0 +1,90 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Fawn Rules",
+      "modelSettings": [
+        {
+          "role": "Meta's Comeback",
+          "forAssistantUse": true,
+          "forAgenticUse": true,
+          "isDisabled": false
+        },
+        {
+          "role": null,
+          "forAssistantUse": false,
+          "forAgenticUse": false,
+          "isDisabled": true
+        }
+      ],
+      "shortcutSettings": [
+        {
+          "name": "code"
+        },
+        {
+          "name": "ahoy"
+        }
+      ],
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "parent": {
+        "links": {
+          "self": "./3f6cde92-99b2-4bb5-a471-20d907cb682b"
+        }
+      },
+      "modelSettings.0.model": {
+        "links": {
+          "self": "../Model/b2c3d4e5-f6a7-4890-b123-456789abcdef"
+        }
+      },
+      "modelSettings.1.model": {
+        "links": {
+          "self": "../Model/c5d6e7f8-a9b0-4123-c456-123456789012"
+        }
+      },
+      "shortcutSettings.0.preferredModel": {
+        "links": {
+          "self": "../Model/46881f52-9960-408d-a141-eb46cdc23184"
+        }
+      },
+      "shortcutSettings.0.requiredSkills.0": {
+        "links": {
+          "self": "/skills/Skill/boxel-development"
+        }
+      },
+      "shortcutSettings.0.requiredSkills.1": {
+        "links": {
+          "self": "/skills/Skill/boxel-environment"
+        }
+      },
+      "shortcutSettings.0.requiredSkills.2": {
+        "links": {
+          "self": "/skills/Skill/source-code-editing"
+        }
+      },
+      "shortcutSettings.0.requiredSkills.3": {
+        "links": {
+          "self": "/skills/Skill/boxel-design"
+        }
+      },
+      "shortcutSettings.1.preferredModel": {
+        "links": {
+          "self": "../Model/c5d6e7f8-a9b0-4123-c456-123456789012"
+        }
+      },
+      "shortcutSettings.1.requiredSkills.0": {
+        "links": {
+          "self": "../../Skill/skill-pirate-speak"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../environment",
+        "name": "Environment"
+      }
+    }
+  }
+}
