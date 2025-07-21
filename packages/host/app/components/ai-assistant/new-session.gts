@@ -68,36 +68,6 @@ const NewSession: TemplateOnlyComponent<Signature> = <template>
       font: 600 var(--boxel-font);
       line-height: 1.5;
     }
-    .prompts {
-      list-style-type: none;
-      margin: 0;
-      padding-left: 0;
-    }
-    .prompts > li + li {
-      margin-top: var(--boxel-sp-xxs);
-    }
-    .prompt::before {
-      display: inline-block;
-      margin-right: var(--boxel-sp-sm);
-      /* 1.5px for both values causes a build failure TODO fix in CS-8981 */
-      padding: 0 0 1.49px 1.5px;
-      content: '?';
-      width: 1.25rem;
-      height: 1.25rem;
-      border-radius: 50%;
-      background-color: var(--boxel-highlight);
-      color: var(--boxel-dark);
-      font: 500 var(--boxel-font);
-    }
-    .prompt {
-      color: var(--boxel-light);
-      font: 500 var(--boxel-font-sm);
-      letter-spacing: var(--boxel-lsp);
-      padding-left: var(--boxel-sp-xxs);
-    }
-    .prompt:hover:not(:disabled) {
-      color: var(--boxel-highlight);
-    }
     .error-section > * + * {
       margin-top: var(--boxel-sp-sm);
     }
