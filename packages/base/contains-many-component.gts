@@ -150,7 +150,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
         display: grid;
       }
       .editor.can-write {
-        grid-template-columns: var(--boxel-icon-lg) 1fr var(--boxel-icon-lg);
+        grid-template-columns: var(--boxel-icon-lg) 1fr var(--remove-icon-size);
       }
       .editor :deep(.boxel-input:hover) {
         border-color: var(--boxel-form-control-border-color);
