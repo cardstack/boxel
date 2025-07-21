@@ -836,6 +836,13 @@ export default class StoreService extends Service implements StoreInterface {
     } else {
       instance = idOrInstance;
     }
+    let realmToWrite = instance[realmURLSymbol]?.href;
+    let permissionToWrite = realmToWrite
+      ? this.realm.permissions(realmToWrite).canWrite
+      : false;
+    if (!permissionToWrite) {
+      return;
+    }
     let autoSaveState = this.initOrGetAutoSaveState(instance);
     let queueName = instance.id ?? instance[localIdSymbol];
     let autoSaveQueue = this.autoSaveQueues.get(queueName);

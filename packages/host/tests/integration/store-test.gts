@@ -34,6 +34,7 @@ import { getSearch } from '@cardstack/host/resources/search';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type StoreService from '@cardstack/host/services/store';
+import type RealmService from '@cardstack/host/services/realm';
 import { type CardErrorJSONAPI } from '@cardstack/host/services/store';
 
 import { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
@@ -78,6 +79,7 @@ module('Integration | Store', function (hooks) {
   let identityContext: IdentityContext;
   let PersonDef: typeof CardDefType;
   let BoomPersonDef: typeof CardDefType;
+  let realmService: RealmService;
 
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
@@ -146,6 +148,7 @@ module('Integration | Store', function (hooks) {
     store = getService('store');
     operatorModeStateService = getService('operator-mode-state-service');
     identityContext = (store as any).identityContext as IdentityContext;
+    realmService = getService('realm');
 
     ({ adapter: testRealmAdapter, realm: testRealm } =
       await setupIntegrationTestRealm({
@@ -160,7 +163,6 @@ module('Integration | Store', function (hooks) {
           'Person/boris.json': new Person({ name: 'Boris' }),
         },
       }));
-    let realmService = getService('realm');
     await realmService.login(testRealmURL);
   });
 
@@ -774,6 +776,24 @@ module('Integration | Store', function (hooks) {
     });
 
     (instance as any).name = 'Air';
+  });
+
+  test<TestContextWithSave>('an instance will NOT auto save when its data changes, if the user does not have write permissions', async function (assert) {
+    await realmService.logout(); //logout means store does not have write access to the realm
+    let instance = await store.get(`${testRealmURL}Person/hassan`);
+    this.onSave(() => {
+      assert.ok(false, 'should not save');
+    });
+    (instance as any).name = 'Paper';
+    assert.strictEqual((instance as any).name, 'Paper');
+    let id = instance.id;
+    assert.deepEqual(store.getSaveState(id!), {
+      hasUnsavedChanges: true,
+      isSaving: false,
+      lastSaveError: undefined,
+      lastSaved: undefined,
+      lastSavedErrorMsg: undefined,
+    });
   });
 
   test<TestContextWithSave>('an instance can debounce auto saves', async function (assert) {
