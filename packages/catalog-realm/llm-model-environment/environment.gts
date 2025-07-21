@@ -23,7 +23,7 @@ import {
 import { Component } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { Skill } from 'https://cardstack.com/base/skill';
-import { includes } from 'lodash';
+import { includes, uniqBy } from 'lodash';
 
 import SettingsIcon from '@cardstack/boxel-icons/settings';
 import ZapIcon from '@cardstack/boxel-icons/zap';
@@ -3584,19 +3584,30 @@ export class Environment extends CardDef {
         .map((item) => item.model?.id)
         .filter(Boolean),
     );
-    result.models.modified = localModelSettings.filter((local) =>
-      parentModelIds.has(local.model?.id),
+    const parentDisabledModelIds = new Set(
+      (this.parent?.disabledModels ?? []).map((m) => m.model?.id),
+    );
+
+    result.models.modified = localModelSettings.filter(
+      (local) =>
+        parentModelIds.has(local.model?.id) &&
+        !local.isDisabled &&
+        !parentDisabledModelIds.has(local.model?.id),
     ).length;
-    result.models.added = localModelSettings.filter(
-      (local) => !parentModelIds.has(local.model?.id) && !local.isDisabled,
+
+    result.models.added = uniqBy(
+      localModelSettings.filter(
+        (local) => !parentModelIds.has(local.model?.id) && !local.isDisabled,
+      ),
+      'model.id',
     ).length;
+
     result.models.disabled = localModelSettings.filter(
-      (local) => local.isDisabled,
+      (local) => local.isDisabled && local.model?.id,
     ).length;
     result.models.total = this.modelsList.filter(
       (item) => !item.isDisabled,
     ).length;
-
     return result;
   }
 
@@ -3660,6 +3671,13 @@ export class Environment extends CardDef {
         if (!env) return;
         collect(env.parent);
         this.#getArray(env.modelSettings).forEach((setting) => {
+          // if is disabled from parent, skip it
+          const parentDisabledModelIds = new Set(
+            (env?.parent?.disabledModels ?? []).map((m) => m.model?.id),
+          );
+          if (parentDisabledModelIds.has(setting.model?.id)) {
+            return;
+          }
           if (setting?.model?.id) {
             settings.set(setting.model.id, setting);
           }
@@ -3667,6 +3685,12 @@ export class Environment extends CardDef {
       };
       collect(this);
       return Array.from(settings.values());
+    },
+  });
+
+  @field disabledModels = containsMany(ModelSettingsField, {
+    computeVia: function (this: Environment) {
+      return this.modelsList.filter((setting) => setting.isDisabled);
     },
   });
 
