@@ -29,7 +29,7 @@ import {
   type Type,
   type CodeRefType,
   type FieldOfType,
-  getCodeRef,
+  getResolvedCodeRef as getCodeRef,
 } from '@cardstack/host/resources/card-type';
 
 import type { Ready } from '@cardstack/host/resources/file';
