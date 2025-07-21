@@ -206,7 +206,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
         padding: var(--boxel-sp-6xs);
       }
       .instance-error {
-        --instance-error-z-index: 2;
+        --instance-error-z-index: 1;
         position: relative;
       }
       .instance-error::after {
