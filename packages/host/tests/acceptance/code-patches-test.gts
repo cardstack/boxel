@@ -170,6 +170,12 @@ ${REPLACE_MARKER}\n\`\`\``;
         agentId: getService('matrix-service').agentId,
         codeMode: {
           currentFile: 'http://test-realm/test/hello.txt',
+          selectionRange: {
+            endColumn: 1,
+            endLine: 1,
+            startColumn: 1,
+            startLine: 1,
+          },
           moduleInspectorPanel: 'schema',
         },
         submode: 'code',
@@ -419,6 +425,12 @@ ${REPLACE_MARKER}\n\`\`\``;
         agentId: getService('matrix-service').agentId,
         codeMode: {
           currentFile: 'http://test-realm/test/hello.txt',
+          selectionRange: {
+            endColumn: 1,
+            endLine: 1,
+            startColumn: 1,
+            startLine: 1,
+          },
           moduleInspectorPanel: 'schema',
         },
         submode: 'code',

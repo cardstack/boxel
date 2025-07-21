@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "PhotoCollage",
+        "module": "../photo-collage/photo-collage"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "PhotoCollage",
+      "description": "Spec of PhotoCollage",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
