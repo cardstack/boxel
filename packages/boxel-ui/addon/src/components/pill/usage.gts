@@ -15,7 +15,9 @@ export default class PillUsage extends Component {
   pillKinds = ['button', 'default'];
   pillKindDefault: BoxelPillKind = 'default';
   @tracked kind: BoxelPillKind = this.pillKindDefault;
-  @tracked pillBackgroundColor = '#ffffff';
+  @tracked pillBackgroundColor?: string;
+  @tracked borderColor?: string;
+  @tracked fontColor?: string;
 
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare pillPadding: CSSVariableInfo;
@@ -42,6 +44,8 @@ export default class PillUsage extends Component {
           <Pill
             @kind={{this.kind}}
             @pillBackgroundColor={{this.pillBackgroundColor}}
+            @pillBorderColor={{this.borderColor}}
+            @pillFontColor={{this.fontColor}}
             data-test-pill-freestyle-usage
           >
             <:iconLeft>
@@ -68,6 +72,20 @@ export default class PillUsage extends Component {
             @value={{this.pillBackgroundColor}}
             @onInput={{fn (mut this.pillBackgroundColor)}}
             @defaultValue='#ffffff'
+          />
+          <Args.String
+            @name='pillBorderColor'
+            @description='Border color for the pill'
+            @value={{this.borderColor}}
+            @onInput={{fn (mut this.borderColor)}}
+            @defaultValue='#afafb7'
+          />
+          <Args.String
+            @name='pillFontColor'
+            @description='Font color for the pill'
+            @value={{this.fontColor}}
+            @onInput={{fn (mut this.fontColor)}}
+            @defaultValue=' #000000 or #ffffff based on contrast if pillBackgroundColor is a hex value'
           />
         </:api>
         <:cssVars as |Css|>

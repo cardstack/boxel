@@ -503,6 +503,11 @@ export default class CodeEditor extends Component<Signature> {
       }
       .monaco-container :deep(.monaco-editor) {
         --vscode-editor-background: var(--monaco-background);
+        --vscode-editor-selectionBackground: var(--monaco-selection-background);
+        --vscode-editor-inactiveSelectionBackground: var(
+          --monaco-inactive-selection-background
+        );
+
         --vscode-editorStickyScroll-background: var(--monaco-background);
         --vscode-editorGutter-background: var(--monaco-background);
         --vscode-editorStickyScroll-shadow: rgba(0 0 0 / 40%);

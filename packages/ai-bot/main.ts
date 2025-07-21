@@ -8,6 +8,7 @@ import {
   aiBotUsername,
   DEFAULT_LLM,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
+  uuidv4,
 } from '@cardstack/runtime-common';
 import {
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
@@ -45,6 +46,13 @@ import { PgAdapter } from '@cardstack/postgres';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { OpenAIError } from 'openai/error';
 import { ChatCompletionStream } from 'openai/lib/ChatCompletionStream.mjs';
+import { acquireLock, releaseLock } from './lib/queries';
+import { logger as matrixLogger } from 'matrix-js-sdk/lib/logger';
+import { setupSignalHandlers } from './lib/signal-handlers';
+import { isShuttingDown, setActiveGenerations } from './lib/shutdown';
+
+// Silence FetchHttpApi Matrix SDK logs
+matrixLogger.setLevel('warn');
 
 let log = logger('ai-bot');
 
@@ -59,6 +67,7 @@ let activeGenerations = new Map<
 >();
 
 const MINIMUM_CREDITS = 10;
+let aiBotInstanceId = uuidv4();
 
 class Assistant {
   private openai: OpenAI;
@@ -66,8 +75,9 @@ class Assistant {
   private toolCallCapableModels: Set<string>;
   pgAdapter: PgAdapter;
   id: string;
+  aiBotInstanceId: string;
 
-  constructor(client: MatrixClient, id: string) {
+  constructor(client: MatrixClient, id: string, aiBotInstanceId: string) {
     this.openai = new OpenAI({
       baseURL: 'https://openrouter.ai/api/v1',
       apiKey: process.env.OPENROUTER_API_KEY,
@@ -76,6 +86,7 @@ class Assistant {
     this.client = client;
     this.pgAdapter = new PgAdapter();
     this.toolCallCapableModels = new Set();
+    this.aiBotInstanceId = aiBotInstanceId;
   }
 
   async loadToolCallCapableModels() {
@@ -154,6 +165,7 @@ class Assistant {
 }
 
 let startTime = Date.now();
+let assistant: Assistant;
 
 (async () => {
   const matrixUrl = process.env.MATRIX_URL || 'http://localhost:8008';
@@ -185,8 +197,14 @@ Common issues are:
     });
   let { user_id: aiBotUserId } = auth;
 
-  let assistant = new Assistant(client, aiBotUserId);
+  assistant = new Assistant(client, aiBotUserId, aiBotInstanceId);
   await assistant.loadToolCallCapableModels();
+
+  // Set up signal handlers for graceful shutdown
+  setupSignalHandlers();
+
+  // Share activeGenerations map with shutdown module
+  setActiveGenerations(activeGenerations);
 
   client.on(RoomMemberEvent.Membership, function (event, member) {
     if (event.event.origin_server_ts! < startTime) {
@@ -211,6 +229,8 @@ Common issues are:
   client.on(
     RoomEvent.Timeline,
     async function (event, room, toStartOfTimeline) {
+      let eventId = event.getId()!;
+
       try {
         // Ensure that the event body we have is a string
         // it's possible that this is sent undefined
@@ -231,6 +251,7 @@ Common issues are:
           return;
         }
 
+        // Handle the case where the user stops the generation
         let activeGeneration = activeGenerations.get(room.roomId);
         if (
           activeGeneration &&
@@ -248,6 +269,25 @@ Common issues are:
             );
           }
           activeGenerations.delete(room.roomId);
+        }
+
+        if (isShuttingDown()) {
+          // This aibot instance is in process of shutting down (e.g. during a new deploy, or manual termination).
+          // We are shutting down gracefully (waiting for active generations to finish)
+          // Do not accept new work.
+          return;
+        }
+
+        // Acquire a lock so that only one instance processes this event.
+        let eventLock = await acquireLock(
+          assistant.pgAdapter,
+          eventId,
+          aiBotInstanceId,
+        );
+
+        if (!eventLock) {
+          // Some other instance is already processing this event. Ignore it.
+          return;
         }
 
         if (!Responder.eventMayTriggerResponse(event)) {
@@ -388,6 +428,8 @@ Common issues are:
           if (generationId) {
             assistant.trackAiUsageCost(senderMatrixUserId, generationId);
           }
+          activeGenerations.delete(room.roomId);
+          await releaseLock(assistant.pgAdapter, eventId);
         }
 
         if (shouldSetRoomTitle(eventList, aiBotUserId, event)) {

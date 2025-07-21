@@ -573,7 +573,15 @@ export function attachedFilesToMessage(
       }
 
       if (f.content) {
-        return `${hyperlink}: ${f.content}`;
+        // Add line numbers to file content to make selection ranges clearer
+        let lines = f.content.split('\n');
+        let numberedContent = lines
+          .map(
+            (line, index) =>
+              `${(index + 1).toString().padStart(3, ' ')}: ${line}`,
+          )
+          .join('\n');
+        return `${hyperlink}:\n${numberedContent}`;
       } else {
         return `${hyperlink}`;
       }
@@ -1003,6 +1011,16 @@ export const buildContextMessage = async (
       result += `File open in code editor: ${context.codeMode.currentFile}\n`;
       if (context?.codeMode?.selectedCodeRef) {
         result += `  Selected declaration: ${humanReadable(context.codeMode.selectedCodeRef)}\n`;
+      }
+      if (context?.codeMode?.selectionRange) {
+        const { startLine, startColumn, endLine, endColumn } =
+          context.codeMode.selectionRange;
+        if (startLine === endLine) {
+          result += `  Selected text: line ${startLine} (1-based), columns ${startColumn}-${endColumn} (1-based)\n`;
+        } else {
+          result += `  Selected text: lines ${startLine}-${endLine} (1-based), columns ${startColumn}-${endColumn} (1-based)\n`;
+        }
+        result += `  Note: Line numbers in selection refer to the original file. Attached file contents below show line numbers for reference.\n`;
       }
     }
     if (context?.codeMode?.moduleInspectorPanel) {

@@ -789,7 +789,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         await click('[data-test-boxel-filter-list-button="LIFE"]');
         assert
           .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
-          .exists({ count: 5 });
+          .exists({ count: 6 });
       });
 
       test('updates the card count correctly when filtering by a category', async function (assert) {
