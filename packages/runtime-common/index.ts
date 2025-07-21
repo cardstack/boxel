@@ -116,6 +116,7 @@ export { NotLoaded, isNotLoadedError } from './not-loaded';
 export {
   cardTypeDisplayName,
   cardTypeIcon,
+  getFieldIcon,
 } from './helpers/card-type-display-name';
 export * from './url';
 

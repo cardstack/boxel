@@ -33,6 +33,7 @@ import {
 import { maybe } from '@cardstack/host/resources/maybe';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
+import type MonacoService from '@cardstack/host/services/monaco-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import { PlaygroundSelection } from '@cardstack/host/services/playground-panel-service';
 import type Realm from '@cardstack/host/services/realm';
@@ -136,6 +137,7 @@ export default class OperatorModeStateService extends Service {
   @service declare private codeSemanticsService: CodeSemanticsService;
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
+  @service declare private monacoService: MonacoService;
   @service declare private realm: Realm;
   @service declare private realmServer: RealmServer;
   @service declare private recentCardsService: RecentCardsService;
@@ -1058,6 +1060,18 @@ export default class OperatorModeStateService extends Service {
       codeMode = {
         currentFile: this.codePathString,
       };
+
+      // Add selection range information when in code mode
+      let selection = this.monacoService.getSelection();
+      if (selection) {
+        codeMode.selectionRange = {
+          startLine: selection.startLineNumber,
+          startColumn: selection.startColumn,
+          endLine: selection.endLineNumber,
+          endColumn: selection.endColumn,
+        };
+      }
+
       if (this.isViewingCardInCodeMode) {
         codeMode.moduleInspectorPanel = 'preview';
         codeMode.previewPanelSelection = {

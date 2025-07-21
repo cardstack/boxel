@@ -77,13 +77,13 @@ test.describe('Room messages', () => {
 
     await writeMessage(page, room1, 'Message 2');
     await page.keyboard.press('Shift+Enter');
-    await page.keyboard.type('Hello World!');
+    await page.keyboard.type('!');
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
     await page.keyboard.press('Enter');
     const messages = [
       { from: 'user1', message: 'Message 1' },
-      { from: 'user1', message: 'Message 2\n\nHello World!' },
+      { from: 'user1', message: 'Message 2\n\n!' },
     ];
     await assertMessages(page, messages);
 

@@ -302,9 +302,7 @@ export default class SearchSheet extends Component<Signature> {
       }
 
       .search-sheet {
-        --search-sheet-left-offset: calc(
-          var(--container-button-size) + 2 * var(--operator-mode-spacing)
-        );
+        --search-sheet-left-offset: calc(var(--operator-mode-spacing));
         --search-sheet-right-offset: calc(
           var(--container-button-size) + 2 * var(--operator-mode-spacing)
         );

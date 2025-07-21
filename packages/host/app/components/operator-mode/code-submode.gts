@@ -825,6 +825,8 @@ export default class CodeSubmode extends Component<Signature> {
             (2 * (var(--operator-mode-spacing)))
         );
         --monaco-background: var(--boxel-600);
+        --monaco-selection-background: var(--boxel-500);
+        --monaco-inactive-selection-background: var(--boxel-550);
         --monaco-readonly-background: #606060;
       }
 
@@ -887,6 +889,13 @@ export default class CodeSubmode extends Component<Signature> {
         padding-right: var(--operator-mode-spacing);
         display: flex;
         z-index: 1;
+        width: calc(
+          100% -
+            calc(
+              var(--operator-mode-left-column) + var(--container-button-size) +
+                var(--operator-mode-spacing)
+            )
+        );
       }
       .code-mode-top-bar
         > :deep(* + *:not(.ember-basic-dropdown-content-wormhole-origin)) {

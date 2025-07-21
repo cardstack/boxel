@@ -220,7 +220,7 @@ export class TestRealmAdapter implements RealmAdapter {
     }
   }
 
-  async exists(path: string): Promise<boolean> {
+  async exists(path: LocalPath): Promise<boolean> {
     let maybeFilename = path.split('/').pop()!;
     try {
       // a quirk of our test file system's traverse is that it creates

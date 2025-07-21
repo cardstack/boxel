@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "SchoolCalendar",
+        "module": "../school-calendar/school-calendar"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "SchoolCalendar",
+      "description": "Spec of School Calendar",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

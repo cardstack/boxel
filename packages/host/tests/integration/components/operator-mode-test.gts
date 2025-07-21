@@ -2130,7 +2130,7 @@ module('Integration | operator-mode', function (hooks) {
       .exists({ count: 3 });
     assert
       .dom(`[data-test-realm="Base Workspace"] [data-test-card-catalog-item]`)
-      .exists({ count: 2 });
+      .exists({ count: 3 });
 
     await fillIn(`[data-test-search-field]`, `general`);
 

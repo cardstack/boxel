@@ -106,7 +106,7 @@ export default class CardCatalogModal extends Component<Signature> {
         <ModalContainer
           class='card-catalog-modal'
           @title={{this.state.chooseCardTitle}}
-          @onClose={{fn this.pick undefined}}
+          @onClose={{this.cancelPick}}
           @layer='urgent'
           {{focusTrap
             isActive=(not this.state.dismissModal)
@@ -173,7 +173,7 @@ export default class CardCatalogModal extends Component<Signature> {
                   @kind='secondary-light'
                   @size='tall'
                   class='footer-button'
-                  {{on 'click' (fn this.pick undefined undefined)}}
+                  {{on 'click' this.cancelPick}}
                   data-test-card-catalog-cancel-button
                 >
                   Cancel
@@ -570,6 +570,10 @@ export default class CardCatalogModal extends Component<Signature> {
 
   @action private pick(item?: string | CardDef | NewCardArgs, state?: State) {
     this.pickCard.perform(item, state);
+  }
+
+  @action private cancelPick() {
+    this.pick(undefined, undefined);
   }
 
   private createNewTask = task(
