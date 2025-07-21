@@ -2287,7 +2287,7 @@ export class Tag extends CardDef {
   static displayName = 'Tag';
   static icon = TagIcon;
   @field color = contains(ColorField);
-  static atom = class Atom extends Component<typeof this> {
+  static atom: BaseDefComponent = class Atom extends Component<typeof this> {
     <template>
       <BoxelTag
         @name={{@model.title}}
