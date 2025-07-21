@@ -11,6 +11,9 @@ interface Signature {
     retryAction?: () => void;
     type?: 'error' | 'warning';
   };
+  Blocks: {
+    actions: [];
+  };
   Element: HTMLDivElement;
 }
 
@@ -41,7 +44,9 @@ const Alert: TemplateOnlyComponent<Signature> = <template>
       </div>
     {{/each}}
 
-    {{#if @retryAction}}
+    {{#if (has-block 'actions')}}
+      {{yield to='actions'}}
+    {{else if @retryAction}}
       <Button
         {{on 'click' @retryAction}}
         class='retry-button'

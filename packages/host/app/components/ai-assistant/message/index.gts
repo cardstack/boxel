@@ -9,7 +9,7 @@ import Component from '@glimmer/component';
 import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
-import { Alert } from '@cardstack/boxel-ui/components';
+import { Alert, Button } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 
 import { type getCardCollection } from '@cardstack/runtime-common';
@@ -26,6 +26,7 @@ import Meta from './meta';
 import UserMessage from './user-message';
 
 import type { ComponentLike } from '@glint/template';
+import { on } from '@ember/modifier';
 
 interface Signature {
   Element: HTMLElement;
@@ -174,6 +175,7 @@ function collectionResourceError(id: string | null | undefined) {
 
 export default class AiAssistantMessage extends Component<Signature> {
   @service private declare matrixService: MatrixService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
 
   private get isReasoningExpandedByDefault() {
     let result =
@@ -261,12 +263,31 @@ export default class AiAssistantMessage extends Component<Signature> {
 
         {{yield}}
 
-        {{#if this.errorMessages.length}}
-          <Alert
-            @type='error'
-            @messages={{this.errorMessages}}
-            @retryAction={{@retryAction}}
-          />
+        {{#if this.isOutOfCredits}}
+          <Alert @type='error' @messages={{this.errorMessages}}>
+            <:actions>
+              <Button
+                {{on
+                  'click'
+                  this.operatorModeStateService.toggleProfileSettings
+                }}
+                class='add-more-credits-button'
+                @size='small'
+                @kind='primary'
+                data-test-ai-bot-buy-more-credits-button
+              >
+                Buy More Credits
+              </Button>
+            </:actions>
+          </Alert>
+        {{else}}
+          {{#if this.errorMessages.length}}
+            <Alert
+              @type='error'
+              @messages={{this.errorMessages}}
+              @retryAction={{@retryAction}}
+            />
+          {{/if}}
         {{/if}}
       </div>
     </section>
@@ -294,6 +315,17 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
       :deep(code) {
         overflow-wrap: break-word;
+      }
+
+      .add-more-credits-button {
+        --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+        --boxel-button-min-height: max-content;
+        --boxel-button-min-width: max-content;
+        border-color: transparent;
+        width: fit-content;
+        margin-left: auto;
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
       }
     </style>
   </template>
@@ -329,6 +361,14 @@ export default class AiAssistantMessage extends Component<Signature> {
         collectionResourceError(error.id),
       ) ?? []),
     ];
+  }
+
+  private get isOutOfCredits() {
+    return this.errorMessages.some((error) =>
+      /You need a minimum of \d+ credits to continue using the AI bot\. Please upgrade to a larger plan, or top up your account\./.test(
+        error,
+      ),
+    );
   }
 }
 
