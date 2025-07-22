@@ -9,14 +9,18 @@ import Component from '@glimmer/component';
 import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
-import { Alert, Button } from '@cardstack/boxel-ui/components';
+import { Alert } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 
-import { type getCardCollection } from '@cardstack/runtime-common';
+import {
+  MINIMUM_AI_CREDITS_TO_CONTINUE,
+  type getCardCollection,
+} from '@cardstack/runtime-common';
 
 import { type HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -26,7 +30,7 @@ import Meta from './meta';
 import UserMessage from './user-message';
 
 import type { ComponentLike } from '@glint/template';
-import { on } from '@ember/modifier';
+import BillingService from '@cardstack/host/services/billing-service';
 
 interface Signature {
   Element: HTMLElement;
@@ -176,6 +180,7 @@ function collectionResourceError(id: string | null | undefined) {
 export default class AiAssistantMessage extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare billingService: BillingService;
 
   private get isReasoningExpandedByDefault() {
     let result =
@@ -263,30 +268,27 @@ export default class AiAssistantMessage extends Component<Signature> {
 
         {{yield}}
 
-        {{#if this.isOutOfCredits}}
-          <Alert @type='error' @messages={{this.errorMessages}}>
-            <:actions>
-              <Button
-                {{on
-                  'click'
-                  this.operatorModeStateService.toggleProfileSettings
-                }}
-                class='add-more-credits-button'
-                @size='small'
-                @kind='primary'
-                data-test-ai-bot-buy-more-credits-button
-              >
-                Buy More Credits
-              </Button>
-            </:actions>
-          </Alert>
-        {{else}}
-          {{#if this.errorMessages.length}}
-            <Alert
-              @type='error'
-              @messages={{this.errorMessages}}
-              @retryAction={{@retryAction}}
-            />
+        {{#if this.errorMessages.length}}
+          {{#if this.isOutOfCreditsErrorMessage}}
+            <Alert @type='error' as |Alert|>
+              <Alert.Messages @messages={{this.errorMessages}} />
+              {{#if this.isOutOfCredits}}
+                <Alert.Action
+                  @actionName='Buy More Credits'
+                  @action={{this.operatorModeStateService.toggleProfileSettings}}
+                />
+              {{else if @retryAction}}
+                <div class='credits-action-row'>
+                  <div class='credits-added'>Credits added!</div>
+                  <Alert.Action @actionName='Retry' @action={{@retryAction}} />
+                </div>
+              {{/if}}
+            </Alert>
+          {{else if @retryAction}}
+            <Alert @type='error' as |Alert|>
+              <Alert.Messages @messages={{this.errorMessages}} />
+              <Alert.Action @actionName='Retry' @action={{@retryAction}} />
+            </Alert>
           {{/if}}
         {{/if}}
       </div>
@@ -327,6 +329,19 @@ export default class AiAssistantMessage extends Component<Signature> {
         font-size: var(--boxel-font-size-xs);
         font-weight: 500;
       }
+      .credits-action-row {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: var(--boxel-sp-sm);
+      }
+      .credits-action-row :deep(.action-button) {
+        margin-left: 0;
+      }
+      .credits-added {
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+      }
     </style>
   </template>
 
@@ -363,12 +378,22 @@ export default class AiAssistantMessage extends Component<Signature> {
     ];
   }
 
-  private get isOutOfCredits() {
+  private get isOutOfCreditsErrorMessage(): boolean {
     return this.errorMessages.some((error) =>
       /You need a minimum of \d+ credits to continue using the AI bot\. Please upgrade to a larger plan, or top up your account\./.test(
         error,
       ),
     );
+  }
+
+  private get hasMinimumCreditsToContinue(): boolean {
+    return (
+      this.billingService.availableCredits >= MINIMUM_AI_CREDITS_TO_CONTINUE
+    );
+  }
+
+  private get isOutOfCredits() {
+    return !this.hasMinimumCreditsToContinue;
   }
 }
 

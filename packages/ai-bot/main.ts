@@ -9,6 +9,7 @@ import {
   DEFAULT_LLM,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   uuidv4,
+  MINIMUM_AI_CREDITS_TO_CONTINUE,
 } from '@cardstack/runtime-common';
 import {
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
@@ -66,7 +67,6 @@ let activeGenerations = new Map<
   }
 >();
 
-const MINIMUM_CREDITS = 10;
 let aiBotInstanceId = uuidv4();
 
 class Assistant {
@@ -368,10 +368,10 @@ Common issues are:
           senderMatrixUserId,
         );
 
-        if (availableCredits < MINIMUM_CREDITS) {
+        if (availableCredits < MINIMUM_AI_CREDITS_TO_CONTINUE) {
           // Careful when changing this message, it's used in the UI as a detection of whether to show the "Buy credits" button.
           return responder.onError(
-            `You need a minimum of ${MINIMUM_CREDITS} credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.`,
+            `You need a minimum of ${MINIMUM_AI_CREDITS_TO_CONTINUE} credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.`,
           );
         }
 

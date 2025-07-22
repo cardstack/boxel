@@ -249,6 +249,14 @@ export default class BillingService extends Service {
     }
   }
 
+  get availableCredits() {
+    let allAvailableCredits =
+      (this.subscriptionData?.creditsAvailableInPlanAllowance ?? 0) +
+      (this.subscriptionData?.extraCreditsAvailableInBalance ?? 0);
+
+    return allAvailableCredits;
+  }
+
   private async getToken() {
     if (!this.realmServer.token) {
       await this.realmServer.login();
