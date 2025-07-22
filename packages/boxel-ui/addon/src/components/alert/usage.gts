@@ -21,15 +21,14 @@ export default class AlertUsage extends Component<Signature> {
   <template>
     <FreestyleUsage @name='Alert'>
       <:description>
-        A component that displays error or warning messages with optional retry
+        A component that displays error or warning messages with an optional
         action.
       </:description>
       <:example>
-        <Alert
-          @type={{this.messageType}}
-          @messages={{this.messages}}
-          @retryAction={{this.retryHandler}}
-        />
+        <Alert @type={{this.messageType}} as |Alert|>
+          <Alert.Messages @messages={{this.messages}} />
+          <Alert.Action @actionName='Retry' @action={{this.retryHandler}} />
+        </Alert>
       </:example>
 
       <:api as |Args|>
@@ -54,12 +53,13 @@ export default class AlertUsage extends Component<Signature> {
     </FreestyleUsage>
     <FreestyleUsage @name='Without Retry Button'>
       <:example>
-        <Alert
-          @type='warning'
-          @messages={{array
-            'You are about the run of credit. Please upgrade your plan or buy additional credit soon.'
-          }}
-        />
+        <Alert @type='warning' as |Alert|>
+          <Alert.Messages
+            @messages={{array
+              'You are about the run of credit. Please upgrade your plan or buy additional credit soon.'
+            }}
+          />
+        </Alert>
       </:example>
     </FreestyleUsage>
   </template>

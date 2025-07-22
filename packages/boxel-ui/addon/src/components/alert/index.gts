@@ -1,32 +1,47 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
+import Component from '@glimmer/component';
 
 import { cn, eq } from '../../helpers.ts';
 import { FailureBordered, Warning } from '../../icons.gts';
 import Button from '../button/index.gts';
 
-interface Signature {
+import type { ComponentLike } from '@glint/template';
+
+interface MessagesSignature {
   Args: {
     messages: string[];
-    retryAction?: () => void;
     type?: 'error' | 'warning';
-  };
-  Blocks: {
-    actions: [];
   };
   Element: HTMLDivElement;
 }
 
-const Alert: TemplateOnlyComponent<Signature> = <template>
-  <div
-    class={{cn
-      'alert-container'
-      error-container=(eq @type 'error')
-      warning-container=(eq @type 'warning')
-    }}
-    data-test-boxel-alert={{@type}}
-    ...attributes
-  >
+interface ActionSignature {
+  Args: {
+    actionName?: string;
+    action?: () => void;
+  };
+  Element: HTMLDivElement;
+}
+
+interface Signature {
+  Args: {
+    type?: 'error' | 'warning';
+  };
+  Blocks: {
+    default: [
+      {
+        Messages: ComponentLike<MessagesSignature>;
+        Action: ComponentLike<ActionSignature>;
+      },
+    ];
+  };
+  Element: HTMLDivElement;
+}
+
+class Messages extends Component<MessagesSignature> {
+  <template>
     {{#each @messages as |message i|}}
       <div class='alert'>
         {{#if (eq @type 'error')}}
@@ -43,21 +58,70 @@ const Alert: TemplateOnlyComponent<Signature> = <template>
         </p>
       </div>
     {{/each}}
+    <style scoped>
+      .alert {
+        display: flex;
+        gap: var(--boxel-sp-xs);
+      }
+      .alert + .alert {
+        margin-top: var(--boxel-sp-lg);
+      }
+      .alert-icon {
+        min-width: 20px;
+        height: 20px;
+      }
+      .message {
+        align-self: center;
+        overflow: hidden;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        margin: 0;
+      }
+    </style>
+  </template>
+}
 
-    {{#if (has-block 'actions')}}
-      {{yield to='actions'}}
-    {{else if @retryAction}}
+class Action extends Component<ActionSignature> {
+  <template>
+    {{#if @action}}
       <Button
-        {{on 'click' @retryAction}}
-        class='retry-button'
+        {{on 'click' @action}}
+        class='action-button'
         @size='small'
         @kind='primary'
-        data-test-alert-retry-button
-        data-test-ai-bot-retry-button
+        data-test-alert-action-button
       >
-        Retry
+        {{@actionName}}
       </Button>
     {{/if}}
+    <style scoped>
+      .action-button {
+        --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+        --boxel-button-min-height: max-content;
+        --boxel-button-min-width: max-content;
+        border-color: transparent;
+        width: fit-content;
+        margin-left: auto;
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+      }
+    </style>
+  </template>
+}
+
+const Alert: TemplateOnlyComponent<Signature> = <template>
+  <div
+    class={{cn
+      'alert-container'
+      error-container=(eq @type 'error')
+      warning-container=(eq @type 'warning')
+    }}
+    data-test-boxel-alert={{@type}}
+    ...attributes
+  >
+    {{yield
+      (hash Messages=(component Messages type=@type) Action=(component Action))
+    }}
   </div>
 
   <style scoped>
@@ -77,38 +141,10 @@ const Alert: TemplateOnlyComponent<Signature> = <template>
       background-color: var(--boxel-warning-200);
       color: var(--boxel-dark);
     }
-    .alert {
-      display: flex;
-      gap: var(--boxel-sp-xs);
-    }
-    .alert + .alert {
-      margin-top: var(--boxel-sp-lg);
-    }
-    .alert-icon {
-      min-width: 20px;
-      height: 20px;
-    }
     .error-container .alert-icon {
       --icon-background-color: var(--boxel-error-400);
     }
-    .message {
-      align-self: center;
-      overflow: hidden;
-      word-wrap: break-word;
-      overflow-wrap: break-word;
-      margin: 0;
-    }
-    .retry-button {
-      --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
-      --boxel-button-min-height: max-content;
-      --boxel-button-min-width: max-content;
-      border-color: transparent;
-      width: fit-content;
-      margin-left: auto;
-      font-size: var(--boxel-font-size-xs);
-      font-weight: 500;
-    }
-    .alert + .retry-button {
+    .alert-container > :deep(* + *) {
       margin-top: var(--boxel-sp-sm);
     }
   </style>

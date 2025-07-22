@@ -299,10 +299,14 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
             <Alert
               data-test-error-message={{this.codeDiffResource.errorMessage}}
               @type='error'
-              @messages={{array
-                (this.errorMessage this.codeDiffResource.errorMessage)
-              }}
-            />
+              as |Alert|
+            >
+              <Alert.Messages
+                @messages={{array
+                  (this.errorMessage this.codeDiffResource.errorMessage)
+                }}
+              />
+            </Alert>
           {{/if}}
           {{#if this.codeDiffResource.isDataLoaded}}
             <codeBlock.diffEditorHeader
