@@ -35,7 +35,6 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
-import RealmServiceClass from '@cardstack/host/services/realm';
 import { type CardErrorJSONAPI } from '@cardstack/host/services/store';
 
 import { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
@@ -780,18 +779,14 @@ module('Integration | Store', function (hooks) {
   });
 
   test<TestContextWithSave>('an instance will NOT auto save when its data changes, if the user does not have write permissions', async function (assert) {
-    class StubRealmService extends RealmServiceClass {
-      permissions = () => ({
-        get canRead() {
-          return true;
-        },
-        get canWrite() {
-          return false;
-        },
-      });
-    }
-    //inject stub service
-    (store as any).realm = new StubRealmService(this.owner);
+    (store as any).realm.permissions = () => ({
+      get canRead() {
+        return true;
+      },
+      get canWrite() {
+        return false;
+      },
+    });
     let instance = await store.get(`${testRealmURL}Person/hassan`);
     this.onSave(() => {
       assert.ok(false, 'should not save');
