@@ -18,6 +18,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import { type HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
+import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -30,8 +31,6 @@ import Meta from './meta';
 import UserMessage from './user-message';
 
 import type { ComponentLike } from '@glint/template';
-
-import BillingService from '@cardstack/host/services/billing-service';
 
 interface Signature {
   Element: HTMLElement;
