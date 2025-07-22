@@ -271,6 +271,77 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
   });
 
+  test('should generate a prompt from the user when spec pane is active', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hey',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/experiments',
+              submode: 'code',
+              codeMode: {
+                currentFile: 'http://localhost:4201/experiments/author.gts',
+                moduleInspectorPanel: 'spec',
+                activeSpecId:
+                  'http://localhost:4201/experiments/Spec/author-spec-1',
+                selectedCodeRef: {
+                  module: 'http://localhost:4201/experiments/author',
+                  name: 'Author',
+                },
+              },
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    // Should have a system prompt and a user prompt
+    assert.equal(result.length, 3);
+    assert.equal(result[0].role, 'system');
+    assert.equal(result[1].role, 'system');
+    assert.equal(result[2].role, 'user');
+    assert.equal(result[2].content, 'Hey');
+
+    assert.equal(
+      result[1].content,
+      `The user is currently viewing the following user interface:
+Room ID: room1
+Submode: code
+Workspace: http://localhost:4201/experiments
+The user has no open cards.
+File open in code editor: http://localhost:4201/experiments/author.gts
+  Selected declaration: Author from http://localhost:4201/experiments/author
+Module inspector panel: spec
+Active spec card: http://localhost:4201/experiments/Spec/author-spec-1
+
+Current date and time: 2025-06-11T11:43:00.533Z
+`,
+    );
+  });
+
   test('should generate a more structured response if the user uploads a card', async () => {
     const history: DiscreteMatrixEvent[] = [
       {

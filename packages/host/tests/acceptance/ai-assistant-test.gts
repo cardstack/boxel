@@ -1173,6 +1173,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       undefined,
       'Context sent with message contains undefined inheritanceChain when no selectedCodeRef',
     );
+    assert.strictEqual(
+      contextSent.codeMode!.activeSpecId,
+      undefined,
+      'Context sent with message contains undefined activeSpecId when spec panel is not active',
+    );
     assert.deepEqual(
       contextSent.realmPermissions,
       {
@@ -1369,6 +1374,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       },
       'Context sent with message contains correct selectedCodeRef',
     );
+    assert.strictEqual(
+      contextSent.codeMode!.activeSpecId,
+      undefined,
+      'Context sent with message contains undefined activeSpecId when spec panel is not active',
+    );
     assert.deepEqual(
       contextSent.realmPermissions,
       {
@@ -1425,6 +1435,14 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         name: 'Plant',
       },
       'Context sent with message contains correct selectedCodeRef',
+    );
+    assert.ok(
+      contextSent.codeMode!.activeSpecId,
+      'Context sent with message contains activeSpecId when spec panel is active',
+    );
+    assert.true(
+      contextSent.codeMode!.activeSpecId!.startsWith(testRealmURL),
+      'activeSpecId should start with test realm URL',
     );
     assert.deepEqual(
       contextSent.realmPermissions,
