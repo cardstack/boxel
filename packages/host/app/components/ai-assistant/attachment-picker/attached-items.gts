@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -78,6 +79,30 @@ export default class AttachedItems extends Component<Signature> {
     return cardError.realm ?? this.operatorModeStateService.realmURL.href;
   }
 
+  @action
+  private handleRemoveCard(cardId: string) {
+    this.args.removeCard(cardId);
+  }
+
+  @action
+  private handleChooseCard(cardId: string) {
+    if (this.args.chooseCard) {
+      this.args.chooseCard(cardId);
+    }
+  }
+
+  @action
+  private handleChooseFile(file: FileDef) {
+    if (this.args.chooseFile) {
+      this.args.chooseFile(file);
+    }
+  }
+
+  @action
+  private handleRemoveFile(file: FileDef) {
+    this.args.removeFile(file);
+  }
+
   <template>
     <div class='attached-items'>
       {{#if @isLoaded}}
@@ -88,10 +113,17 @@ export default class AttachedItems extends Component<Signature> {
                 <:trigger>
                   <CardPill
                     @cardId={{this.getCardErrorId item}}
-                    @isAutoAttachedCard={{true}}
-                    @removeCard={{@removeCard}}
-                    @chooseCard={{@chooseCard}}
+                    @borderType='dashed'
+                    @onClick={{fn
+                      this.handleChooseCard
+                      (this.getCardErrorId item)
+                    }}
+                    @onRemove={{fn
+                      this.handleRemoveCard
+                      (this.getCardErrorId item)
+                    }}
                     @urlForRealmLookup={{this.getCardErrorRealm item}}
+                    data-test-autoattached-card={{this.getCardErrorId item}}
                   />
                 </:trigger>
 
@@ -108,9 +140,11 @@ export default class AttachedItems extends Component<Signature> {
             {{else}}
               <CardPill
                 @cardId={{this.getCardErrorId item}}
-                @isAutoAttachedCard={{true}}
-                @removeCard={{@removeCard}}
-                @chooseCard={{@chooseCard}}
+                @borderType='solid'
+                @onRemove={{fn
+                  this.handleRemoveCard
+                  (this.getCardErrorId item)
+                }}
                 @urlForRealmLookup={{this.getCardErrorRealm item}}
               />
             {{/if}}
@@ -120,10 +154,11 @@ export default class AttachedItems extends Component<Signature> {
                 <:trigger>
                   <CardPill
                     @cardId={{idFor item}}
-                    @isAutoAttachedCard={{true}}
-                    @removeCard={{@removeCard}}
-                    @chooseCard={{@chooseCard}}
+                    @borderType='dashed'
+                    @onClick={{fn this.handleChooseCard (idFor item)}}
+                    @onRemove={{fn this.handleRemoveCard (idFor item)}}
                     @urlForRealmLookup={{urlForRealmLookup item}}
+                    data-test-autoattached-card={{idFor item}}
                   />
                 </:trigger>
 
@@ -138,9 +173,8 @@ export default class AttachedItems extends Component<Signature> {
             {{else}}
               <CardPill
                 @cardId={{idFor item}}
-                @isAutoAttachedCard={{false}}
-                @removeCard={{@removeCard}}
-                @chooseCard={{@chooseCard}}
+                @borderType='solid'
+                @onRemove={{fn this.handleRemoveCard (idFor item)}}
                 @urlForRealmLookup={{urlForRealmLookup item}}
               />
             {{/if}}
@@ -150,9 +184,10 @@ export default class AttachedItems extends Component<Signature> {
                 <:trigger>
                   <FilePill
                     @file={{item}}
-                    @isAutoAttachedFile={{true}}
-                    @removeFile={{@removeFile}}
-                    @chooseFile={{@chooseFile}}
+                    @borderType='dashed'
+                    @onClick={{fn this.handleChooseFile item}}
+                    @onRemove={{fn this.handleRemoveFile item}}
+                    data-test-autoattached-file={{item.sourceUrl}}
                   />
                 </:trigger>
                 <:content>
@@ -162,9 +197,8 @@ export default class AttachedItems extends Component<Signature> {
             {{else}}
               <FilePill
                 @file={{item}}
-                @isAutoAttachedFile={{false}}
-                @removeFile={{@removeFile}}
-                @chooseFile={{@chooseFile}}
+                @borderType='solid'
+                @onRemove={{fn this.handleRemoveFile item}}
               />
             {{/if}}
           {{/if}}

@@ -25,6 +25,7 @@ const Attachments: TemplateOnlyComponent<Signature> = <template>
           <li>
             <CardPill
               @cardId={{card.id}}
+              @borderType='solid'
               @urlForRealmLookup={{urlForRealmLookup card}}
             />
           </li>
@@ -33,7 +34,8 @@ const Attachments: TemplateOnlyComponent<Signature> = <template>
         <li>
           <FilePill
             @file={{item}}
-            @downloadFile={{if @downloadFile @downloadFile}}
+            @borderType='solid'
+            @onDownload={{downloadFile item @downloadFile}}
           />
         </li>
       {{/if}}
@@ -55,6 +57,13 @@ function isCardCollectionResource(
   obj: any,
 ): obj is ReturnType<getCardCollection> {
   return 'value' in obj;
+}
+
+function downloadFile(
+  item: FileDef,
+  downLoadFile?: (file: FileDef) => Promise<void>,
+) {
+  return downloadFile ? () => downLoadFile(item) : undefined;
 }
 
 export default Attachments;

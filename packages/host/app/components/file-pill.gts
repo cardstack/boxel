@@ -15,10 +15,10 @@ interface FilePillSignature {
   Element: HTMLDivElement | HTMLButtonElement;
   Args: {
     file: FileDef;
-    isAutoAttachedFile?: boolean;
-    removeFile?: (file: FileDef) => void;
-    downloadFile?: (file: FileDef) => void;
-    chooseFile?: (file: FileDef) => void;
+    borderType?: 'dashed' | 'solid';
+    onClick?: () => void;
+    onRemove?: () => void;
+    onDownload?: () => void;
   };
 }
 
@@ -29,8 +29,8 @@ export default class FilePill extends Component<FilePillSignature> {
 
   @action
   private handleFileClick() {
-    if (this.args.isAutoAttachedFile && this.args.chooseFile) {
-      this.args.chooseFile(this.args.file);
+    if (this.args.onClick) {
+      this.args.onClick();
     }
   }
 
@@ -38,8 +38,8 @@ export default class FilePill extends Component<FilePillSignature> {
   private handleRemoveClick(event: Event) {
     // Prevent the click from bubbling up to the pill button
     event.stopPropagation();
-    if (this.args.removeFile) {
-      this.args.removeFile(this.args.file);
+    if (this.args.onRemove) {
+      this.args.onRemove();
     }
   }
 
@@ -47,23 +47,36 @@ export default class FilePill extends Component<FilePillSignature> {
   private handleDownloadClick(event: Event) {
     // Prevent the click from bubbling up to the pill button
     event.stopPropagation();
-    if (this.args.downloadFile) {
-      this.args.downloadFile(this.args.file);
+    if (this.args.onDownload) {
+      this.args.onDownload();
     }
   }
 
   private get pillKind() {
-    return this.args.isAutoAttachedFile && this.args.chooseFile
-      ? 'button'
-      : 'default';
+    return this.args.onClick ? 'button' : 'default';
+  }
+
+  private get borderStyle() {
+    return this.args.borderType === 'dashed' ? 'dashed' : 'solid';
+  }
+
+  private get borderClass() {
+    return `border-${this.borderStyle}`;
+  }
+
+  private get hideIconRight() {
+    return !this.args.onRemove && !this.args.onDownload;
   }
 
   <template>
     <Pill
       @kind={{this.pillKind}}
-      class={{cn 'file-pill' is-autoattached=@isAutoAttachedFile}}
+      class={{cn
+        'file-pill'
+        this.borderClass
+        hide-icon-right=this.hideIconRight
+      }}
       data-test-attached-file={{@file.sourceUrl}}
-      data-test-autoattached-file={{@isAutoAttachedFile}}
       {{on 'click' this.handleFileClick}}
       ...attributes
     >
@@ -76,7 +89,7 @@ export default class FilePill extends Component<FilePillSignature> {
         </div>
       </:default>
       <:iconRight>
-        {{#if @removeFile}}
+        {{#if @onRemove}}
           <IconButton
             class='remove-button'
             @icon={{IconX}}
@@ -86,7 +99,7 @@ export default class FilePill extends Component<FilePillSignature> {
             data-test-remove-file-btn
           />
         {{/if}}
-        {{#if @downloadFile}}
+        {{#if @onDownload}}
           <IconButton
             class='download-button'
             @icon={{Download}}
@@ -107,8 +120,14 @@ export default class FilePill extends Component<FilePillSignature> {
         overflow: hidden;
         padding-left: 3px;
       }
-      .is-autoattached {
+      .border-dashed {
         border-style: dashed;
+      }
+      .border-solid {
+        border-style: solid;
+      }
+      .hide-icon-right :deep(figure.icon):last-child {
+        display: none;
       }
 
       .file-content {
