@@ -1,0 +1,51 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Luke Rules",
+      "modelSettings": [
+        {
+          "role": "",
+          "forAssistantUse": true,
+          "forAgenticUse": true,
+          "isDisabled": false
+        }
+      ],
+      "shortcutSettings": [
+        {
+          "name": "surf"
+        }
+      ],
+      "description": "Updated summary block styling to use square rectangles for a more modern look",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "parent": {
+        "links": {
+          "self": "./dfd82124-c2c9-452e-b3a6-092af5943b7e"
+        }
+      },
+      "modelSettings.0.model": {
+        "links": {
+          "self": "../Model/c5d6e7f8-a9b0-4123-c456-123456789012"
+        }
+      },
+      "shortcutSettings.0.preferredModel": {
+        "links": {
+          "self": "../Model/a7b8c9d0-e1f2-4345-a678-9abcdef01234"
+        }
+      },
+      "shortcutSettings.0.requiredSkills.0": {
+        "links": {
+          "self": "../../Skill/homework-grader"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../environment",
+        "name": "Environment"
+      }
+    }
+  }
+}

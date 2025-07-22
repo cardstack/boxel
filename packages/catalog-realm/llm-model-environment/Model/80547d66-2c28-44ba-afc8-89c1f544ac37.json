@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "anthropic/claude-3.7-sonnet",
+      "modelName": "Claude 3.7 Sonnet",
+      "displayName": "Claude 3.7",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../model",
+        "name": "Model"
+      }
+    }
+  }
+}

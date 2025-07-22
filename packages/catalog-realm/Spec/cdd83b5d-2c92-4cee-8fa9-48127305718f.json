@@ -1,0 +1,52 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "ModelSettingsField",
+        "module": "../model"
+      },
+      "specType": "field",
+      "containedExamples": [
+        {
+          "role": "Best for Coding",
+          "forAssistantUse": true,
+          "forAgenticUse": true,
+          "isDisabled": false
+        }
+      ],
+      "title": "ModelSettingsField",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      },
+      "containedExamples.0.model": {
+        "links": {
+          "self": "../llm-model-environment/Model/662c28b4-ba6f-4889-81f5-44ac3788930c"
+        }
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../llm-model-environment/model",
+              "name": "ModelSettingsField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

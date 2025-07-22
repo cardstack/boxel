@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "Environment",
+        "module": "../llm-model-environment/environment"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "Environment",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
