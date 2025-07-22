@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Workflow Planner",
+      "summary": "Professional project workflow management system with step-by-step tracking - organize tasks, deadlines, and project timelines while viewing progress-based visual indicators. Features numbered step sequences, completion status tracking, due date management, markdown description support, and clean productivity-focused design for comprehensive workflow coordination.",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/workflow-planner-listing/screenshot_01.png"
+      ],
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/workflow-planner-listing/thumbnail.png"
+    },
+    "relationships": {
+      "specs.0": {
+        "links": { "self": "../Spec/c6c5c3b6-29fd-4697-89b5-2fe07815f69a" }
+      },
+      "publisher": {
+        "links": { "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0" }
+      },
+      "categories.0": {
+        "links": {
+          "self": "/catalog/Category/c9b52fe0-7815-469a-a3cf-55f96153e313"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../workflow-planner/WorkflowPlanner/f3876d4f-0d72-4db2-b896-810d7454141c"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "CardListing"
+      }
+    }
+  }
+}
