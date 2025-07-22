@@ -29,9 +29,10 @@ module('Integration | commands | patch-code', function (hooks) {
 
   const testFileName = 'task.gts';
   const fileUrl = `${testRealmURL}${testFileName}`;
+  let adapter: any;
 
   hooks.beforeEach(async function () {
-    let { adapter } = await setupIntegrationTestRealm({
+    let realmSetup = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
         [testFileName]: `import {
@@ -50,6 +51,7 @@ export class Task extends CardDef {
 }`,
       },
     });
+    adapter = realmSetup.adapter;
     adapter.lintStub = async (
       request: Request,
       _requestContext: any,
@@ -69,6 +71,28 @@ export class Task extends CardDef {
   test('lint-fixes contents before returning them', async function (assert) {
     let commandService = getService('command-service');
     let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
+
+    // Set up a custom lintStub that verifies the filename header
+    adapter.lintStub = async (
+      request: Request,
+      _requestContext: any,
+    ): Promise<LintResult> => {
+      // Verify that X-Filename header is passed correctly
+      const filename = request.headers.get('X-Filename');
+      assert.strictEqual(
+        filename,
+        testFileName,
+        'X-Filename header should be set correctly',
+      );
+
+      return {
+        output:
+          "import { eq } from '@cardstack/boxel-ui/helpers';\n" +
+          (await request.text()),
+        fixed: true,
+        messages: [],
+      };
+    };
 
     // note that `eq` import will be missing after this is applied
     const codeBlock = `${SEARCH_MARKER}

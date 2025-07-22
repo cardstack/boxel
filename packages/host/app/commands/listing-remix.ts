@@ -1,7 +1,5 @@
 import { service } from '@ember/service';
 
-import { timeout } from 'ember-concurrency';
-
 import { isResolvedCodeRef, RealmPaths } from '@cardstack/runtime-common';
 
 import * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -95,10 +93,6 @@ export default class RemixCommand extends HostBaseCommand<
           fieldName: undefined,
         },
       );
-
-      // before switching to code mode, the FileResource is not ready immediately for the selected file
-      // so we need to wait for 1 second before switching to code mode to ensure the file is ready for now
-      await timeout(1000);
 
       await new SwitchSubmodeCommand(this.commandContext).execute({
         submode: 'code',

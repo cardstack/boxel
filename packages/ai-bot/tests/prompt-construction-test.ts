@@ -190,6 +190,22 @@ Current date and time: 2025-06-11T11:43:00.533Z
                   module: 'http://localhost:4201/experiments/author',
                   name: 'Address',
                 },
+                inheritanceChain: [
+                  {
+                    module: 'http://localhost:4201/experiments/author',
+                    name: 'Address',
+                  },
+                  {
+                    module: 'https://cardstack.com/base/card-api',
+                    name: 'CardDef',
+                  },
+                ],
+                selectionRange: {
+                  startLine: 10,
+                  startColumn: 5,
+                  endLine: 12,
+                  endColumn: 20,
+                },
                 moduleInspectorPanel: 'preview',
                 previewPanelSelection: {
                   cardId: 'http://localhost:4201/experiments/Author/1',
@@ -234,6 +250,11 @@ Workspace: http://localhost:4201/experiments
 The user has no open cards.
 File open in code editor: http://localhost:4201/experiments/author.gts
   Selected declaration: Address from http://localhost:4201/experiments/author
+  Inheritance chain:
+    1. Address from http://localhost:4201/experiments/author
+      2. CardDef from https://cardstack.com/base/card-api
+  Selected text: lines 10-12 (1-based), columns 5-20 (1-based)
+  Note: Line numbers in selection refer to the original file. Attached file contents below show line numbers for reference.
 Module inspector panel: preview
 Viewing card instance: http://localhost:4201/experiments/Author/1
 In format: isolated
@@ -834,8 +855,10 @@ Attached Files (files with newer versions don't show their content):
       userMessages[2]?.content?.includes(
         `
 Attached Files (files with newer versions don't show their content):
-[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts): this is the content of the spaghetti-recipe.gts file
-[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt): this is the content of the best-friends.txt file
+[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts):
+  1: this is the content of the spaghetti-recipe.gts file
+[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt):
+  1: this is the content of the best-friends.txt file
       `.trim(),
       ),
     );
@@ -2080,7 +2103,6 @@ Attached Files (files with newer versions don't show their content):
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    console.log(messages);
     assert.true(messages!.length > 0);
     assert.equal(messages![0].role, 'system');
     assert.true(messages![0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
@@ -3662,7 +3684,8 @@ Current date and time: 2025-06-11T11:43:00.533Z
       toolCallMessage!.content!.includes(
         `
 Attached Files (files with newer versions don't show their content):
-[postcard.gts](http://test-realm-server/user/test-realm/postcard.gts): export default Postcard extends CardDef {}
+[postcard.gts](http://test-realm-server/user/test-realm/postcard.gts):
+  1: export default Postcard extends CardDef {}
       `.trim(),
       ),
       'Tool call result should include attached files',
@@ -3752,7 +3775,8 @@ Attached Cards (cards with newer versions don't show their content):
       lastUserMessage!.content!.includes(
         `
 Attached Files (files with newer versions don't show their content):
-[postcard.gts](http://test-realm-server/user/test-realm/postcard.gts): export default Postcard extends CardDef { /* after */ }
+[postcard.gts](http://test-realm-server/user/test-realm/postcard.gts):
+  1: export default Postcard extends CardDef { /* after */ }
       `.trim(),
       ),
       'Code patch result should include attached files',

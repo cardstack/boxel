@@ -1117,6 +1117,16 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       `${testRealmURL}Plant/highbush-blueberry.json`,
       'Context sent with message contains correct currentFile',
     );
+    assert.deepEqual(
+      contextSent.codeMode.selectionRange,
+      {
+        startLine: 1,
+        startColumn: 1,
+        endLine: 1,
+        endColumn: 1,
+      },
+      'Context sent with message contains correct selectionRange',
+    );
     assert.strictEqual(
       contextSent.codeMode.moduleInspectorPanel,
       'preview',
@@ -1134,6 +1144,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       contextSent.codeMode.selectedCodeRef,
       undefined,
       'Context sent with message contains correct selectedCodeRef',
+    );
+    assert.deepEqual(
+      contextSent.codeMode.inheritanceChain,
+      undefined,
+      'Context sent with message contains undefined inheritanceChain when no selectedCodeRef',
     );
     assert.deepEqual(
       contextSent.realmPermissions,
@@ -1172,6 +1187,16 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       `${testRealmURL}plant.gts`,
       'Context sent with message contains correct currentFile',
     );
+    assert.deepEqual(
+      contextSent.codeMode.selectionRange,
+      {
+        startLine: 3,
+        startColumn: 45,
+        endLine: 3,
+        endColumn: 45,
+      },
+      'Context sent with message contains correct selectionRange',
+    );
     assert.strictEqual(
       contextSent.codeMode.moduleInspectorPanel,
       'schema',
@@ -1190,6 +1215,33 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       },
       'Context sent with message contains correct selectedCodeRef',
     );
+    assert.ok(
+      contextSent.codeMode.inheritanceChain,
+      'Context sent with message contains inheritanceChain',
+    );
+    // The first item should be the Plant card itself
+    assert.deepEqual(
+      contextSent.codeMode.inheritanceChain[0],
+      {
+        module: 'http://test-realm/test/plant',
+        name: 'Plant',
+      },
+      'First item in inheritanceChain is the Plant card',
+    );
+    // The last item should be CardDef from the base realm
+    let lastInheritanceItem =
+      contextSent.codeMode.inheritanceChain[
+        contextSent.codeMode.inheritanceChain.length - 1
+      ];
+    assert.strictEqual(
+      lastInheritanceItem.name,
+      'CardDef',
+      'Last item in inheritanceChain is CardDef',
+    );
+    assert.ok(
+      lastInheritanceItem.module.includes('card-api'),
+      'Last item in inheritanceChain comes from card-api module',
+    );
     assert.deepEqual(
       contextSent.realmPermissions,
       {
@@ -1202,6 +1254,17 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click(
       '[data-test-boxel-button][data-test-module-inspector-view="preview"]',
     );
+    // Select some text in the monaco editor for testing selectionRange
+    let monacoService = getService('monaco-service');
+    let editor = monacoService.editor;
+    if (editor?.setSelection) {
+      editor.setSelection({
+        startLineNumber: 3,
+        startColumn: 45,
+        endLineNumber: 6,
+        endColumn: 1,
+      });
+    }
 
     await fillIn('[data-test-message-field]', `Message - 3`);
     await click('[data-test-send-message-btn]');
@@ -1229,6 +1292,16 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       contextSent.codeMode.currentFile,
       `${testRealmURL}plant.gts`,
       'Context sent with message contains correct currentFile',
+    );
+    assert.deepEqual(
+      contextSent.codeMode.selectionRange,
+      {
+        startLine: 3,
+        startColumn: 45,
+        endLine: 6,
+        endColumn: 1,
+      },
+      'Context sent with message contains correct selectionRange',
     );
     assert.strictEqual(
       contextSent.codeMode.moduleInspectorPanel,
