@@ -7,7 +7,7 @@ import stringify from 'safe-stable-stringify';
 
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { ResolvedCodeRef, baseRealm } from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_ACTIVE_LLM,
@@ -17,6 +17,8 @@ import {
   DEFAULT_LLM_ID_TO_NAME,
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
+
+import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 
 import {
   setupLocalIndexing,
@@ -1096,7 +1098,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let roomEvents = mockMatrixUtils.getRoomEvents(matrixRoomId);
     let lastMessageEvent = roomEvents[roomEvents.length - 1];
-    let contextSent = JSON.parse(lastMessageEvent.content.data).context;
+    let contextSent: BoxelContext = JSON.parse(
+      lastMessageEvent.content.data,
+    ).context;
     assert.strictEqual(
       contextSent.realmUrl,
       testRealmURL,
@@ -1113,12 +1117,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Context sent with message contains correct openCardIds',
     );
     assert.strictEqual(
-      contextSent.codeMode.currentFile,
+      contextSent.codeMode!.currentFile,
       `${testRealmURL}Plant/highbush-blueberry.json`,
       'Context sent with message contains correct currentFile',
     );
     assert.deepEqual(
-      contextSent.codeMode.selectionRange,
+      contextSent.codeMode!.selectionRange,
       {
         startLine: 1,
         startColumn: 1,
@@ -1128,12 +1132,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Context sent with message contains correct selectionRange',
     );
     assert.strictEqual(
-      contextSent.codeMode.moduleInspectorPanel,
+      contextSent.codeMode!.moduleInspectorPanel,
       'preview',
       'Context sent with message contains correct moduleInspectorPanel',
     );
     assert.deepEqual(
-      contextSent.codeMode.previewPanelSelection,
+      contextSent.codeMode!.previewPanelSelection,
       {
         cardId: `${testRealmURL}Plant/highbush-blueberry`,
         format: 'isolated',
@@ -1141,12 +1145,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Context sent with message contains correct previewPanelSelection',
     );
     assert.deepEqual(
-      contextSent.codeMode.selectedCodeRef,
+      contextSent.codeMode!.selectedCodeRef,
       undefined,
       'Context sent with message contains correct selectedCodeRef',
     );
     assert.deepEqual(
-      contextSent.codeMode.inheritanceChain,
+      contextSent.codeMode!.inheritanceChain,
       undefined,
       'Context sent with message contains undefined inheritanceChain when no selectedCodeRef',
     );
@@ -1183,12 +1187,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Context sent with message contains correct openCardIds',
     );
     assert.strictEqual(
-      contextSent.codeMode.currentFile,
+      contextSent.codeMode!.currentFile,
       `${testRealmURL}plant.gts`,
       'Context sent with message contains correct currentFile',
     );
     assert.deepEqual(
-      contextSent.codeMode.selectionRange,
+      contextSent.codeMode!.selectionRange,
       {
         startLine: 3,
         startColumn: 45,
@@ -1198,17 +1202,17 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Context sent with message contains correct selectionRange',
     );
     assert.strictEqual(
-      contextSent.codeMode.moduleInspectorPanel,
+      contextSent.codeMode!.moduleInspectorPanel,
       'schema',
       'Context sent with message contains correct moduleInspectorPanel',
     );
     assert.strictEqual(
-      contextSent.codeMode.previewPanelSelection,
+      contextSent.codeMode!.previewPanelSelection,
       undefined,
       'Context sent with message contains correct previewPanelSelection',
     );
     assert.deepEqual(
-      contextSent.codeMode.selectedCodeRef,
+      contextSent.codeMode!.selectedCodeRef,
       {
         module: 'http://test-realm/test/plant',
         name: 'Plant',
@@ -1216,30 +1220,52 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Context sent with message contains correct selectedCodeRef',
     );
     assert.ok(
-      contextSent.codeMode.inheritanceChain,
+      contextSent.codeMode!.inheritanceChain,
       'Context sent with message contains inheritanceChain',
     );
     // The first item should be the Plant card itself
     assert.deepEqual(
-      contextSent.codeMode.inheritanceChain[0],
+      contextSent.codeMode!.inheritanceChain![0].codeRef,
       {
         module: 'http://test-realm/test/plant',
         name: 'Plant',
       },
       'First item in inheritanceChain is the Plant card',
     );
+    // Verify that the Plant card has its own fields
+    assert.ok(
+      Array.isArray(contextSent.codeMode!.inheritanceChain![0].fields),
+      'Plant card has fields array',
+    );
+    assert.ok(
+      contextSent.codeMode!.inheritanceChain![0].fields.includes('commonName'),
+      'Plant card includes commonName field',
+    );
     // The last item should be CardDef from the base realm
     let lastInheritanceItem =
-      contextSent.codeMode.inheritanceChain[
-        contextSent.codeMode.inheritanceChain.length - 1
+      contextSent.codeMode!.inheritanceChain![
+        contextSent.codeMode!.inheritanceChain!.length - 1
       ];
     assert.strictEqual(
-      lastInheritanceItem.name,
+      (lastInheritanceItem.codeRef as ResolvedCodeRef).name,
       'CardDef',
       'Last item in inheritanceChain is CardDef',
     );
+    // Verify that each item in the inheritance chain has fields
+    contextSent.codeMode!.inheritanceChain!.forEach((item, index) => {
+      assert.ok(
+        Array.isArray(item.fields),
+        `Inheritance chain item ${index} has fields array`,
+      );
+      assert.ok(
+        'codeRef' in item,
+        `Inheritance chain item ${index} has codeRef property`,
+      );
+    });
     assert.ok(
-      lastInheritanceItem.module.includes('card-api'),
+      (lastInheritanceItem.codeRef as ResolvedCodeRef).module.includes(
+        'card-api',
+      ),
       'Last item in inheritanceChain comes from card-api module',
     );
     assert.deepEqual(
@@ -1289,12 +1315,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Context sent with message contains correct openCardIds',
     );
     assert.strictEqual(
-      contextSent.codeMode.currentFile,
+      contextSent.codeMode!.currentFile,
       `${testRealmURL}plant.gts`,
       'Context sent with message contains correct currentFile',
     );
     assert.deepEqual(
-      contextSent.codeMode.selectionRange,
+      contextSent.codeMode!.selectionRange,
       {
         startLine: 3,
         startColumn: 45,
@@ -1304,12 +1330,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Context sent with message contains correct selectionRange',
     );
     assert.strictEqual(
-      contextSent.codeMode.moduleInspectorPanel,
+      contextSent.codeMode!.moduleInspectorPanel,
       'preview',
       'Context sent with message contains correct moduleInspectorPanel',
     );
     assert.deepEqual(
-      contextSent.codeMode.previewPanelSelection,
+      contextSent.codeMode!.previewPanelSelection,
       {
         cardId: `${testRealmURL}Plant/highbush-blueberry`,
         format: 'isolated',
@@ -1317,7 +1343,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Context sent with message contains correct previewPanelSelection',
     );
     assert.deepEqual(
-      contextSent.codeMode.selectedCodeRef,
+      contextSent.codeMode!.selectedCodeRef,
       {
         module: 'http://test-realm/test/plant',
         name: 'Plant',
@@ -1359,22 +1385,22 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Context sent with message contains correct openCardIds',
     );
     assert.strictEqual(
-      contextSent.codeMode.currentFile,
+      contextSent.codeMode!.currentFile,
       `${testRealmURL}plant.gts`,
       'Context sent with message contains correct currentFile',
     );
     assert.strictEqual(
-      contextSent.codeMode.moduleInspectorPanel,
+      contextSent.codeMode!.moduleInspectorPanel,
       'spec',
       'Context sent with message contains correct moduleInspectorPanel',
     );
     assert.strictEqual(
-      contextSent.codeMode.previewPanelSelection,
+      contextSent.codeMode!.previewPanelSelection,
       undefined,
       'Context sent with message contains correct previewPanelSelection',
     );
     assert.deepEqual(
-      contextSent.codeMode.selectedCodeRef,
+      contextSent.codeMode!.selectedCodeRef,
       {
         module: 'http://test-realm/test/plant',
         name: 'Plant',

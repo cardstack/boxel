@@ -1018,9 +1018,12 @@ export const buildContextMessage = async (
           context.codeMode.inheritanceChain.length > 0
         ) {
           result += `  Inheritance chain:\n`;
-          context.codeMode.inheritanceChain.forEach((codeRef, index) => {
+          context.codeMode.inheritanceChain.forEach((item, index) => {
             const indent = index === 0 ? '    ' : '      ';
-            result += `${indent}${index + 1}. ${humanReadable(codeRef)}\n`;
+            result += `${indent}${index + 1}. ${humanReadable(item.codeRef)}\n`;
+            if (item.fields && item.fields.length > 0) {
+              result += `${indent}   Fields: ${item.fields.join(', ')}\n`;
+            }
           });
         }
       }

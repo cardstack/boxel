@@ -192,12 +192,18 @@ Current date and time: 2025-06-11T11:43:00.533Z
                 },
                 inheritanceChain: [
                   {
-                    module: 'http://localhost:4201/experiments/author',
-                    name: 'Address',
+                    codeRef: {
+                      module: 'http://localhost:4201/experiments/author',
+                      name: 'Address',
+                    },
+                    fields: ['street', 'city', 'state'],
                   },
                   {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
+                    codeRef: {
+                      module: 'https://cardstack.com/base/card-api',
+                      name: 'CardDef',
+                    },
+                    fields: [],
                   },
                 ],
                 selectionRange: {
@@ -252,6 +258,7 @@ File open in code editor: http://localhost:4201/experiments/author.gts
   Selected declaration: Address from http://localhost:4201/experiments/author
   Inheritance chain:
     1. Address from http://localhost:4201/experiments/author
+       Fields: street, city, state
       2. CardDef from https://cardstack.com/base/card-api
   Selected text: lines 10-12 (1-based), columns 5-20 (1-based)
   Note: Line numbers in selection refer to the original file. Attached file contents below show line numbers for reference.
