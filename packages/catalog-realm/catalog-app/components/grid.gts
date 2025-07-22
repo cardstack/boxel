@@ -107,6 +107,16 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
                         </CardContainer>
                       {{/let}}
                     {{/if}}
+                  {{else if card.isError}}
+                    <CardContainer
+                      class='card instance-error'
+                      @displayBoundaries={{true}}
+                      data-test-instance-error={{card.isError}}
+                      data-test-cards-grid-item={{removeFileExtension card.url}}
+                      data-cards-grid-item={{removeFileExtension card.url}}
+                    >
+                      <card.component />
+                    </CardContainer>
                   {{else}}
                     <CardContainer
                       class='card'
@@ -171,6 +181,10 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
         );
       }
 
+      .cards li {
+        cursor: pointer;
+      }
+
       .card {
         container-name: fitted-card;
         container-type: size;
@@ -180,7 +194,6 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
       .card:hover {
         cursor: pointer;
         border: 1px solid var(--boxel-purple);
-        transform: translateY(-1px);
       }
 
       .cards :deep(.field-component-card.fitted-format) {
@@ -191,6 +204,30 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
         font: 600 var(--boxel-font-lg);
         text-align: left;
         padding: var(--boxel-sp-6xs);
+      }
+      .instance-error {
+        --instance-error-z-index: 1;
+        position: relative;
+      }
+      .instance-error::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: var(--instance-error-z-index);
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 0, 0, 0.1);
+      }
+      .instance-error:hover {
+        border: none;
+        transform: none;
+      }
+      .instance-error.boundaries {
+        box-shadow: 0 0 0 1px var(--boxel-error-300);
+      }
+      .instance-error.boundaries:hover {
+        box-shadow: 0 0 0 1px var(--boxel-dark);
       }
     </style>
   </template>

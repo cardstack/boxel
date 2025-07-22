@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Photo Collage - Minimalist Photography Collection",
+      "summary": "Dynamic photo collage with masonry grid layout - upload multiple images with captions while viewing an adaptive grid display. Features varied sizing patterns, hover-reveal captions, smooth scaling animations, and elegant dark mode aesthetics for professional photo presentations.",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/photo-collage---minimalist-photography-collection-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/photo-collage---minimalist-photography-collection-listing/screenshot_02.png"
+      ],
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/photo-collage---minimalist-photography-collection-listing/thumbnail.png"
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/eb5d5424-d2ee-4497-94d6-36166772f516"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/76d07175-1762-4920-95e4-e28d7eb576e6"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../photo-collage/PhotoCollage/a2c50a4a-67ee-4c84-9a53-fe17243bbc24"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "CardListing"
+      }
+    }
+  }
+}

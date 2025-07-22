@@ -1,0 +1,54 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "module": "../llm-model-environment/environment",
+        "name": "ShortcutSettingsField"
+      },
+      "specType": "field",
+      "containedExamples": [
+        {
+          "name": null
+        }
+      ],
+      "title": "ShortcutSettingsField",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      },
+      "containedExamples.0.preferredModel": {
+        "links": {
+          "self": null
+        }
+      },
+      "containedExamples.0.requiredSkills": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../llm-model-environment/environment",
+              "name": "ShortcutSettingsField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
