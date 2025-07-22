@@ -1057,9 +1057,9 @@ export default class OperatorModeStateService extends Service {
     return undefined;
   }
 
-  getSummaryForAIBot(
+  async getSummaryForAIBot(
     openCardIdsSet: Set<string> = new Set([...this.getOpenCardIds()]),
-  ): BoxelContext {
+  ): Promise<BoxelContext> {
     let codeMode: BoxelContext['codeMode'] = undefined;
     if (this._state.workspaceChooserOpened) {
       let userWorkspaces = this.realmServer.userRealmURLs.map((url) => ({
@@ -1111,6 +1111,8 @@ export default class OperatorModeStateService extends Service {
             }
           : undefined;
         codeMode.selectedCodeRef = this.codeSemanticsService.selectedCodeRef;
+        codeMode.inheritanceChain =
+          await this.codeSemanticsService.getInheritanceChain();
       }
     }
 

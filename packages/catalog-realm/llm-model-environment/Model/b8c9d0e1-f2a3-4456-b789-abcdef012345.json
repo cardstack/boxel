@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "moonshotai/kimi-vl-a3b-thinking:free",
+      "modelName": "Kimi VL Thinking",
+      "displayName": "Kimi VL - Vision-Language Multimodal",
+      "forAssistantUse": false
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../model",
+        "name": "Model"
+      }
+    }
+  }
+}

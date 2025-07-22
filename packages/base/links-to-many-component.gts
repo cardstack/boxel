@@ -180,7 +180,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         >
           {{#each @arrayField.children as |boxedElement i|}}
             <li
-              class='editor'
+              class='editor {{if permissions.canWrite "can-write"}}'
               data-test-item={{i}}
               {{sortableItem
                 groupName=this.sortableGroupId
@@ -250,6 +250,8 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       .editor {
         position: relative;
         display: grid;
+      }
+      .editor.can-write {
         grid-template-columns: var(--boxel-icon-lg) 1fr var(--boxel-icon-lg);
       }
       .remove {

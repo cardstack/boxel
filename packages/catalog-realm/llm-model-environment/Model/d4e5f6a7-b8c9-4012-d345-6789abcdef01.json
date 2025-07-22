@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "nvidia/llama-3.1-nemotron-ultra-253b-v1",
+      "modelName": "Nemotron Ultra",
+      "displayName": "Nemotron Ultra 253B - Complex Task Processing",
+      "forAssistantUse": false
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../model",
+        "name": "Model"
+      }
+    }
+  }
+}

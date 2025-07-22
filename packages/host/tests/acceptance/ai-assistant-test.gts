@@ -1146,6 +1146,11 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Context sent with message contains correct selectedCodeRef',
     );
     assert.deepEqual(
+      contextSent.codeMode.inheritanceChain,
+      undefined,
+      'Context sent with message contains undefined inheritanceChain when no selectedCodeRef',
+    );
+    assert.deepEqual(
       contextSent.realmPermissions,
       {
         canRead: true,
@@ -1209,6 +1214,33 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         name: 'Plant',
       },
       'Context sent with message contains correct selectedCodeRef',
+    );
+    assert.ok(
+      contextSent.codeMode.inheritanceChain,
+      'Context sent with message contains inheritanceChain',
+    );
+    // The first item should be the Plant card itself
+    assert.deepEqual(
+      contextSent.codeMode.inheritanceChain[0],
+      {
+        module: 'http://test-realm/test/plant',
+        name: 'Plant',
+      },
+      'First item in inheritanceChain is the Plant card',
+    );
+    // The last item should be CardDef from the base realm
+    let lastInheritanceItem =
+      contextSent.codeMode.inheritanceChain[
+        contextSent.codeMode.inheritanceChain.length - 1
+      ];
+    assert.strictEqual(
+      lastInheritanceItem.name,
+      'CardDef',
+      'Last item in inheritanceChain is CardDef',
+    );
+    assert.ok(
+      lastInheritanceItem.module.includes('card-api'),
+      'Last item in inheritanceChain comes from card-api module',
     );
     assert.deepEqual(
       contextSent.realmPermissions,

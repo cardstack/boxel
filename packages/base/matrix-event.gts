@@ -193,6 +193,7 @@ export interface BoxelContext {
       format: string;
     };
     selectedCodeRef?: CodeRef;
+    inheritanceChain?: CodeRef[];
     selectionRange?: {
       startLine: number;
       startColumn: number;

@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Reading & Literature",
+      "description": "Book collections, reading lists, literary analysis, author studies, and book club participation.",
+      "color": "#059669",
+      "order": 5
+    },
+    "relationships": {
+      "sphere": {
+        "links": {
+          "self": "../Sphere/67ffc7a9-70d6-4cd3-93f0-b32a8fbbd34e"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/category",
+        "name": "Category"
+      }
+    }
+  }
+}

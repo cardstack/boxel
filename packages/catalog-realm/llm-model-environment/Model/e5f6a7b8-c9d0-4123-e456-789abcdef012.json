@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "openai/o4-mini-high",
+      "modelName": "O4 Mini High",
+      "displayName": "O4 Mini High - Enhanced Reasoning for Code Logic",
+      "forAssistantUse": false
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../model",
+        "name": "Model"
+      }
+    }
+  }
+}

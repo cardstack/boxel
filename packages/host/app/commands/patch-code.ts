@@ -134,10 +134,12 @@ export default class PatchCodeCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.LintAndFixResult> {
     let lintCommand = new LintAndFixCommand(this.commandContext);
     let realmURL = this.realm.url(fileUrl);
+    let filename = new URL(fileUrl).pathname.split('/').pop() || 'input.gts';
 
     return await lintCommand.execute({
       realm: realmURL,
       fileContent: content,
+      filename: filename,
     });
   }
 
