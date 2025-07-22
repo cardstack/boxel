@@ -38,7 +38,7 @@ interface ExtraCreditsPaymentLink extends StripeLink {
 
 export default class BillingService extends Service {
   @tracked private _subscriptionData: SubscriptionData | null = null;
-  @tracked private _fetchingSubscriptionData = false;
+  @tracked private _loadingSubscriptionData = false;
 
   @service declare private realmServer: RealmServerService;
   @service declare private network: NetworkService;
@@ -49,7 +49,7 @@ export default class BillingService extends Service {
     super(owner);
     this.realmServer.subscribeEvent(
       'billing-notification',
-      this.fetchSubscriptionData.bind(this),
+      this.loadSubscriptionData.bind(this),
     );
     this.reset.register(this);
   }
@@ -195,27 +195,31 @@ export default class BillingService extends Service {
     return this._subscriptionData;
   }
 
-  get fetchingSubscriptionData() {
-    return this._fetchingSubscriptionData;
+  get loadingSubscriptionData() {
+    return this._loadingSubscriptionData;
   }
 
   async initializeSubscriptionData() {
     if (this.subscriptionData) {
       return;
     }
-    await this.fetchSubscriptionData();
+    await this.loadSubscriptionData();
   }
 
   async fetchSubscriptionData() {
-    this._fetchingSubscriptionData = true;
+    return await this.network.fetch(`${this.url.origin}/_user`, {
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${await this.getToken()}`,
+      },
+    });
+  }
+
+  async loadSubscriptionData() {
+    this._loadingSubscriptionData = true;
     try {
-      let response = await this.network.fetch(`${this.url.origin}/_user`, {
-        headers: {
-          Accept: SupportedMimeType.JSONAPI,
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${await this.getToken()}`,
-        },
-      });
+      let response = await this.fetchSubscriptionData();
 
       if (!response.ok) {
         console.error(
@@ -236,6 +240,7 @@ export default class BillingService extends Service {
       let stripeCustomerId = json.data?.attributes?.stripeCustomerId ?? null;
       let stripeCustomerEmail =
         json.data?.attributes?.stripeCustomerEmail ?? null;
+
       this._subscriptionData = {
         plan,
         creditsAvailableInPlanAllowance,
@@ -245,7 +250,7 @@ export default class BillingService extends Service {
         stripeCustomerEmail,
       };
     } finally {
-      this._fetchingSubscriptionData = false;
+      this._loadingSubscriptionData = false;
     }
   }
 
@@ -271,5 +276,11 @@ export default class BillingService extends Service {
 
   private get url() {
     return this.realmServer.url;
+  }
+}
+
+declare module '@ember/service' {
+  interface Registry {
+    'billing-service': BillingService;
   }
 }
