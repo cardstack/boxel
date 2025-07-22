@@ -901,7 +901,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   });
 
   test<TestContextWithSave>('editing a local field from schema editor', async function (assert) {
-    assert.expect(5);
+    assert.expect(4);
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}employee.gts`,
@@ -932,11 +932,9 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     });
     await click('[data-test-save-field-button]');
 
-    assert
-      .dom(
-        '[data-test-card-schema="Employee"] [data-test-field-name="supervisedBy"] [data-test-card-display-name="Person"]',
-      )
-      .exists();
+    await waitFor(
+      '[data-test-card-schema="Employee"] [data-test-field-name="supervisedBy"] [data-test-card-display-name="Person"]',
+    );
     assert
       .dom(
         `[data-test-card-schema="Employee"] [data-test-field-name="supervisedBy"] [data-test-field-types]`,
