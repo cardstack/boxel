@@ -201,7 +201,7 @@ export default class RoomMessageCommand extends Component<Signature> {
             <Alert.Messages
               @messages={{array this.failedCommandState.message}}
             />
-            <Alert.Action @action={{@runCommand}} />
+            <Alert.Action @action={{@runCommand}} @actionName='Retry' />
           </Alert>
         {{/if}}
         {{#if this.commandResultCard.card}}
