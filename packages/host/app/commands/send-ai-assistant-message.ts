@@ -93,7 +93,7 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
 
     let clientGeneratedId = input.clientGeneratedId ?? uuidv4();
 
-    let context = operatorModeStateService.getSummaryForAIBot(
+    let context = await operatorModeStateService.getSummaryForAIBot(
       new Set(attachedOpenCards.map((c) => c.id)),
     );
 

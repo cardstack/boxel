@@ -218,7 +218,7 @@ export default class CommandService extends Service {
         command.message.roomId,
       );
       let userContextForAiBot =
-        this.operatorModeStateService.getSummaryForAIBot();
+        await this.operatorModeStateService.getSummaryForAIBot();
 
       await this.matrixService.sendCommandResultEvent(
         command.message.roomId,
@@ -323,7 +323,7 @@ export default class CommandService extends Service {
         name: fileUrl.split('/').pop(),
       });
 
-      let context = this.operatorModeStateService.getSummaryForAIBot();
+      let context = await this.operatorModeStateService.getSummaryForAIBot();
 
       let resultSends: Promise<unknown>[] = [];
       for (let i = 0; i < codeDataItems.length; i++) {

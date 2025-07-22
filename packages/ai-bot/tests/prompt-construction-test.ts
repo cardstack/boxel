@@ -190,6 +190,16 @@ Current date and time: 2025-06-11T11:43:00.533Z
                   module: 'http://localhost:4201/experiments/author',
                   name: 'Address',
                 },
+                inheritanceChain: [
+                  {
+                    module: 'http://localhost:4201/experiments/author',
+                    name: 'Address',
+                  },
+                  {
+                    module: 'https://cardstack.com/base/card-api',
+                    name: 'CardDef',
+                  },
+                ],
                 selectionRange: {
                   startLine: 10,
                   startColumn: 5,
@@ -240,6 +250,9 @@ Workspace: http://localhost:4201/experiments
 The user has no open cards.
 File open in code editor: http://localhost:4201/experiments/author.gts
   Selected declaration: Address from http://localhost:4201/experiments/author
+  Inheritance chain:
+    1. Address from http://localhost:4201/experiments/author
+      2. CardDef from https://cardstack.com/base/card-api
   Selected text: lines 10-12 (1-based), columns 5-20 (1-based)
   Note: Line numbers in selection refer to the original file. Attached file contents below show line numbers for reference.
 Module inspector panel: preview

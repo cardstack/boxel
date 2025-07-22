@@ -860,7 +860,7 @@ export default class Room extends Component<Signature> {
         ...this.autoAttachedCardIds,
       ]);
       let context =
-        this.operatorModeStateService.getSummaryForAIBot(openCardIds);
+        await this.operatorModeStateService.getSummaryForAIBot(openCardIds);
       try {
         let cards: CardDef[] | undefined;
         if (typeof cardsOrIds?.[0] === 'string') {
