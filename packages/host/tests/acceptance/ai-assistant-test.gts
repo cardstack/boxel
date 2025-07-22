@@ -215,6 +215,25 @@ module('Acceptance | AI Assistant tests', function (hooks) {
             },
           },
         },
+        'Spec/plant-spec.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              ref: {
+                name: 'Plant',
+                module: `${testRealmURL}plant`,
+              },
+              specType: 'card',
+              title: 'Plant spec',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/spec',
+                name: 'Spec',
+              },
+            },
+          },
+        },
         'index.json': new CardsGrid(),
         '.realm.json': {
           name: 'Test Workspace B',
@@ -1355,7 +1374,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
     assert.deepEqual(
       contextSent.openCardIds,
-      [],
+      ['http://test-realm/test/Spec/plant-spec'],
       'Context sent with message contains correct openCardIds',
     );
     assert.strictEqual(
@@ -1532,5 +1551,371 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert
       .dom(`[data-test-attached-file="${testRealmURL}plant.gts"]`)
       .doesNotExist();
+    // Navigate to spec panel - this should auto-select the plant spec
+    await click('[data-test-module-inspector-view="spec"]');
+
+    // Wait for the spec to be loaded and auto-selected
+    await waitFor('[data-test-spec-selector-item-path]');
+
+    // Verify spec card is auto-attached
+    assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
+
+    // Verify the auto-attached card is a spec card
+    let autoAttachedCards = document.querySelectorAll(
+      '[data-test-autoattached-card]',
+    );
+    let hasAutoAttachedSpec = Array.from(autoAttachedCards).some((card) => {
+      let cardId = card.getAttribute('data-test-attached-card');
+      return cardId?.includes('Spec/plant-spec');
+    });
+    assert.ok(
+      hasAutoAttachedSpec,
+      'Auto-attached card should be the plant spec card',
+    );
+  });
+
+  test('auto-attaches spec card when spec panel is open and spec is selected', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}plant.gts`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // Navigate to spec panel - this should auto-select the plant spec
+    await click('[data-test-module-inspector-view="spec"]');
+
+    // Wait for the spec to be loaded and auto-selected
+    await waitFor('[data-test-spec-selector-item-path]');
+
+    // Verify spec card is auto-attached
+    assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
+
+    // Verify the auto-attached card is a spec card
+    let autoAttachedCards = document.querySelectorAll(
+      '[data-test-autoattached-card]',
+    );
+    let hasAutoAttachedSpec = Array.from(autoAttachedCards).some((card) => {
+      let cardId = card.getAttribute('data-test-attached-card');
+      return cardId?.includes('Spec/plant-spec');
+    });
+    assert.ok(
+      hasAutoAttachedSpec,
+      'Auto-attached card should be the plant spec card',
+    );
+  });
+
+  test('does not auto-attach spec card when spec panel is closed', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}plant.gts`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // Navigate to spec panel briefly to load and auto-select spec, then switch away
+    await click('[data-test-module-inspector-view="spec"]');
+    await waitFor('[data-test-spec-selector-item-path]');
+
+    // Switch to schema panel (not spec)
+    await click('[data-test-module-inspector-view="schema"]');
+
+    // Verify no spec card is auto-attached
+    let autoAttachedCards = document.querySelectorAll(
+      '[data-test-autoattached-card]',
+    );
+    let hasAutoAttachedSpec = Array.from(autoAttachedCards).some((card) => {
+      let cardId = card.getAttribute('data-test-attached-card');
+      return cardId?.includes('Spec/');
+    });
+    assert.false(
+      hasAutoAttachedSpec,
+      'No spec card should be auto-attached when spec panel is closed',
+    );
+  });
+
+  test('does not auto-attach spec card when no spec is selected', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}country.gts`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // Navigate to spec panel without creating a spec
+    await click('[data-test-module-inspector-view="spec"]');
+
+    // If no specs exist yet, there should be no auto-attached spec cards
+    assert.dom('[data-test-spec-selector-item-path]').doesNotExist();
+    let autoAttachedCards = document.querySelectorAll(
+      '[data-test-autoattached-card]',
+    );
+    let hasAutoAttachedSpec = Array.from(autoAttachedCards).some((card) => {
+      let cardId = card.getAttribute('data-test-attached-card');
+      return cardId?.includes('Spec/');
+    });
+    assert.false(
+      hasAutoAttachedSpec,
+      'No spec card should be auto-attached when no spec is selected',
+    );
+  });
+
+  test('manually attached spec cards do not duplicate auto-attached ones', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}plant.gts`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // Navigate to spec panel - this should auto-select the plant spec
+    await click('[data-test-module-inspector-view="spec"]');
+    await waitFor('[data-test-spec-selector-item-path]');
+
+    // Wait for auto-attachment to occur
+    await waitUntil(() => {
+      let autoAttachedCards = document.querySelectorAll(
+        '[data-test-autoattached-card]',
+      );
+      return Array.from(autoAttachedCards).some((card) => {
+        let cardId = card.getAttribute('data-test-attached-card');
+        return cardId?.includes('Spec/plant-spec');
+      });
+    });
+
+    // Count auto-attached cards before manual attachment
+    let autoAttachedCardsBefore = document.querySelectorAll(
+      '[data-test-autoattached-card]',
+    );
+    let autoAttachedSpecId = Array.from(autoAttachedCardsBefore)
+      .find((card) => {
+        let cardId = card.getAttribute('data-test-attached-card');
+        return cardId?.includes('Spec/');
+      })
+      ?.getAttribute('data-test-attached-card');
+
+    if (autoAttachedSpecId) {
+      // Manually attach the same spec card
+      await click('[data-test-attach-button]');
+      await click('[data-test-attach-card-btn]');
+      await fillIn('[data-test-search-field]', 'Plant spec');
+      await click(`[data-test-select="${autoAttachedSpecId}"]`);
+      await click('[data-test-card-catalog-go-button]');
+
+      // Verify the spec card appears only once (not duplicated)
+      let specCards = document.querySelectorAll(
+        `[data-test-attached-card="${autoAttachedSpecId}"]`,
+      );
+      assert.strictEqual(
+        specCards.length,
+        1,
+        'Spec card should only appear once, not duplicated',
+      );
+
+      // Verify it's no longer marked as auto-attached
+      let remainingAutoAttachedCards = document.querySelectorAll(
+        '[data-test-autoattached-card]',
+      );
+      let hasAutoAttachedSpec = Array.from(remainingAutoAttachedCards).some(
+        (card) => {
+          let cardId = card.getAttribute('data-test-attached-card');
+          return cardId === autoAttachedSpecId;
+        },
+      );
+      assert.false(
+        hasAutoAttachedSpec,
+        'Manually attached spec should no longer be auto-attached',
+      );
+    } else {
+      // If no spec was auto-attached, that's a test failure but we should at least assert it
+      assert.ok(
+        false,
+        'Expected a spec card to be auto-attached, but none was found',
+      );
+    }
+  });
+
+  test('auto-attached spec card can be removed', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}plant.gts`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // Navigate to spec panel - this should auto-select the plant spec
+    await click('[data-test-module-inspector-view="spec"]');
+    await waitFor('[data-test-spec-selector-item-path]');
+
+    // Wait for auto-attachment to occur
+    await waitUntil(() => {
+      let autoAttachedCards = document.querySelectorAll(
+        '[data-test-autoattached-card]',
+      );
+      return Array.from(autoAttachedCards).some((card) => {
+        let cardId = card.getAttribute('data-test-attached-card');
+        return cardId?.includes('Spec/plant-spec');
+      });
+    });
+
+    // Find the auto-attached spec card
+    let autoAttachedSpecCard = Array.from(
+      document.querySelectorAll('[data-test-autoattached-card]'),
+    ).find((card) => {
+      let cardId = card.getAttribute('data-test-attached-card');
+      return cardId?.includes('Spec/');
+    });
+
+    if (autoAttachedSpecCard) {
+      let specCardId = autoAttachedSpecCard.getAttribute(
+        'data-test-attached-card',
+      );
+
+      // Remove the auto-attached spec card
+      await click(
+        autoAttachedSpecCard.querySelector('[data-test-remove-card-btn]')!,
+      );
+
+      // Verify the spec card is removed
+      assert.dom(`[data-test-attached-card="${specCardId}"]`).doesNotExist();
+    } else {
+      // If no spec was auto-attached, that's a test failure but we should at least assert it
+      assert.ok(
+        false,
+        'Expected a spec card to be auto-attached, but none was found',
+      );
+    }
+  });
+
+  test('spec card re-auto-attaches when switching back to spec panel', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}plant.gts`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // Navigate to spec panel - this should auto-select the plant spec
+    await click('[data-test-module-inspector-view="spec"]');
+    await waitFor('[data-test-spec-selector-item-path]');
+
+    // Wait for auto-attachment to occur
+    await waitUntil(() => {
+      let autoAttachedCards = document.querySelectorAll(
+        '[data-test-autoattached-card]',
+      );
+      return Array.from(autoAttachedCards).some((card) => {
+        let cardId = card.getAttribute('data-test-attached-card');
+        return cardId?.includes('Spec/plant-spec');
+      });
+    });
+
+    // Verify spec card is auto-attached
+    let autoAttachedSpecCards = Array.from(
+      document.querySelectorAll('[data-test-autoattached-card]'),
+    ).filter((card) => {
+      let cardId = card.getAttribute('data-test-attached-card');
+      return cardId?.includes('Spec/');
+    });
+    assert.ok(
+      autoAttachedSpecCards.length > 0,
+      'Spec card should be auto-attached when spec panel is open',
+    );
+
+    // Switch to schema panel
+    await click('[data-test-module-inspector-view="schema"]');
+
+    // Verify spec card is no longer auto-attached
+    let autoAttachedSpecCardsAfterSwitch = Array.from(
+      document.querySelectorAll('[data-test-autoattached-card]'),
+    ).filter((card) => {
+      let cardId = card.getAttribute('data-test-attached-card');
+      return cardId?.includes('Spec/');
+    });
+    assert.strictEqual(
+      autoAttachedSpecCardsAfterSwitch.length,
+      0,
+      'Spec card should not be auto-attached when spec panel is closed',
+    );
+
+    // Switch back to spec panel
+    await click('[data-test-module-inspector-view="spec"]');
+
+    // Wait for auto-attachment to occur again
+    await waitUntil(() => {
+      let autoAttachedCards = document.querySelectorAll(
+        '[data-test-autoattached-card]',
+      );
+      return Array.from(autoAttachedCards).some((card) => {
+        let cardId = card.getAttribute('data-test-attached-card');
+        return cardId?.includes('Spec/plant-spec');
+      });
+    });
+
+    // Verify spec card is auto-attached again
+    let autoAttachedSpecCardsAfterReturn = Array.from(
+      document.querySelectorAll('[data-test-autoattached-card]'),
+    ).filter((card) => {
+      let cardId = card.getAttribute('data-test-attached-card');
+      return cardId?.includes('Spec/');
+    });
+    assert.ok(
+      autoAttachedSpecCardsAfterReturn.length > 0,
+      'Spec card should be auto-attached again when returning to spec panel',
+    );
   });
 });
