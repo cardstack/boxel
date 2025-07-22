@@ -13,6 +13,8 @@ import MarkdownField from 'https://cardstack.com/base/markdown';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import DateField from 'https://cardstack.com/base/date';
 import { gt } from '@cardstack/boxel-ui/helpers';
+import { concat } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
 
 export class WorkflowStepField extends FieldDef {
   static displayName = 'Workflow Step';
@@ -100,7 +102,9 @@ export class WorkflowPlanner extends CardDef {
                 <div class='progress-bar'>
                   <div
                     class='progress-fill'
-                    style='width: {{@model.completedPercentage}}%'
+                    style={{htmlSafe
+                      (concat 'width: ' @model.completedPercentage '%')
+                    }}
                   ></div>
                 </div>
               </div>
