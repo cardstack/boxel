@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Design & Creative",
+      "description": "UI/UX design, graphic design, creative projects, design systems, and visual asset management.",
+      "color": "#ec4899",
+      "order": 3
+    },
+    "relationships": {
+      "sphere": {
+        "links": {
+          "self": "../Sphere/637767ff-c7a9-40d6-9cd3-93f0b32a8fbb"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/category",
+        "name": "Category"
+      }
+    }
+  }
+}
