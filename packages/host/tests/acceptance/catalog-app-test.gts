@@ -758,7 +758,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .doesNotExist('No tag should be selected after reset');
       });
 
-      // TODO: restore in CS-9131
+      // Possibly flaky test
       skip('should be reset when clicking "All Apps" button', async function (assert) {
         await click('[data-tab-label="Apps"]');
         assert
@@ -801,16 +801,14 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .doesNotExist('No tag should be selected after reset');
       });
 
-      // TODO: restore in CS-9131
-      skip('updates the card count correctly when filtering by a sphere group', async function (assert) {
+      test('updates the card count correctly when filtering by a sphere group', async function (assert) {
         await click('[data-test-boxel-filter-list-button="LIFE"]');
         assert
           .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
           .exists({ count: 11 });
       });
 
-      // TODO: restore in CS-9131
-      skip('updates the card count correctly when filtering by a category', async function (assert) {
+      test('updates the card count correctly when filtering by a category', async function (assert) {
         await click('[data-test-filter-list-item="LIFE"] .dropdown-toggle');
         await click('[data-test-boxel-filter-list-button="Health & Wellness"]');
         assert
