@@ -1,5 +1,5 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -8,10 +8,10 @@ import { tracked } from '@glimmer/tracking';
 import { consume } from 'ember-provide-consume-context';
 
 import {
-  IconButton,
   Pill,
   RealmIcon,
   LoadingIndicator,
+  IconButton,
 } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
@@ -27,8 +27,9 @@ interface CardPillSignature {
   Args: {
     cardId: string;
     urlForRealmLookup: string;
-    isAutoAttachedCard?: boolean;
-    removeCard?: (cardId: string) => void;
+    borderType?: 'dashed' | 'solid';
+    onClick?: () => void;
+    onRemove?: () => void;
     isEnabled?: boolean;
   };
 }
@@ -43,7 +44,7 @@ export default class CardPill extends Component<CardPillSignature> {
   };
 
   private get hideIconRight() {
-    return !this.args.removeCard;
+    return !this.args.onRemove;
   }
 
   private get cardTitle() {
@@ -62,19 +63,48 @@ export default class CardPill extends Component<CardPillSignature> {
     return this.card && !this.card.id && !this.cardError;
   }
 
+  @action
+  private handleCardClick() {
+    if (this.args.onClick) {
+      this.args.onClick();
+    }
+  }
+
+  @action
+  private handleRemoveClick(event: Event) {
+    // Prevent the click from bubbling up to the pill button
+    event.stopPropagation();
+    if (this.args.onRemove) {
+      this.args.onRemove();
+    }
+  }
+
+  private get pillKind() {
+    return this.args.onClick ? 'button' : 'default';
+  }
+
+  private get borderStyle() {
+    return this.args.borderType === 'dashed' ? 'dashed' : 'solid';
+  }
+
+  private get borderClass() {
+    return `border-${this.borderStyle}`;
+  }
+
   <template>
     {{consumeContext this.makeCardResource}}
     {{#if this.isCreating}}
       <LoadingIndicator />
     {{else}}
       <Pill
+        @kind={{this.pillKind}}
         class={{cn
           'card-pill'
-          is-autoattached=@isAutoAttachedCard
+          this.borderClass
           hide-icon-right=this.hideIconRight
         }}
         data-test-attached-card={{@cardId}}
-        data-test-autoattached-card={{@isAutoAttachedCard}}
+        {{on 'click' this.handleCardClick}}
         ...attributes
       >
         <:iconLeft>
@@ -86,13 +116,13 @@ export default class CardPill extends Component<CardPillSignature> {
           </div>
         </:default>
         <:iconRight>
-          {{#if @removeCard}}
+          {{#if @onRemove}}
             <IconButton
               class='remove-button'
               @icon={{IconX}}
               @height='10'
               @width='10'
-              {{on 'click' (fn @removeCard @cardId)}}
+              {{on 'click' this.handleRemoveClick}}
               data-test-remove-card-btn
             />
           {{/if}}
@@ -108,8 +138,11 @@ export default class CardPill extends Component<CardPillSignature> {
         height: var(--pill-height, 1.875rem);
         overflow: hidden;
       }
-      .is-autoattached {
+      .border-dashed {
         border-style: dashed;
+      }
+      .border-solid {
+        border-style: solid;
       }
       .hide-icon-right :deep(figure.icon):last-child {
         display: none;

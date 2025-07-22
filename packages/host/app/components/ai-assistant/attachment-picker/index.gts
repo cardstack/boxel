@@ -41,6 +41,8 @@ interface Signature {
         | 'autoAttachedFile'
         | 'removeCard'
         | 'removeFile'
+        | 'chooseCard'
+        | 'chooseFile'
         | 'autoAttachedCardTooltipMessage'
         | 'isLoaded'
       >,
@@ -61,6 +63,8 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
         autoAttachedFile=@autoAttachedFile
         removeCard=@removeCard
         removeFile=@removeFile
+        chooseCard=@chooseCard
+        chooseFile=@chooseFile
         autoAttachedCardTooltipMessage=@autoAttachedCardTooltipMessage
       )
       (component AttachButton chooseCard=@chooseCard chooseFile=@chooseFile)
