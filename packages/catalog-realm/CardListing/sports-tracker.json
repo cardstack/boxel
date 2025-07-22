@@ -27,9 +27,9 @@
           "self": "../Category/sports-fitness"
         }
       },
-      "tags": {
+      "tags.0": {
         "links": {
-          "self": null
+          "self": "../Tag/stub"
         }
       },
       "license": {

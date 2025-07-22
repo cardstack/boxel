@@ -25,9 +25,9 @@
           "self": "../Category/analytics-reporting"
         }
       },
-      "tags": {
+      "tags.0": {
         "links": {
-          "self": null
+          "self": "../Tag/stub"
         }
       },
       "license": {

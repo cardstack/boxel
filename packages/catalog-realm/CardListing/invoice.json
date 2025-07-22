@@ -44,6 +44,11 @@
         "links": {
           "self": null
         }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/stub"
+        }
       }
     },
     "meta": {
