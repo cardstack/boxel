@@ -279,7 +279,9 @@ export default class AiAssistantMessage extends Component<Signature> {
                 />
               {{else if @retryAction}}
                 <div class='credits-action-row'>
-                  <div class='credits-added'>Credits added!</div>
+                  <div class='credits-added' data-test-credits-added>
+                    Credits added!
+                  </div>
                   <Alert.Action @actionName='Retry' @action={{@retryAction}} />
                 </div>
               {{/if}}
@@ -342,7 +344,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
       .credits-added {
         font-size: var(--boxel-font-size-xs);
-        font-weight: 500;
+        font-weight: bold;
       }
     </style>
   </template>
