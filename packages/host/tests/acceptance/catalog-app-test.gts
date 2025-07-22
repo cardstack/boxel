@@ -758,7 +758,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .doesNotExist('No tag should be selected after reset');
       });
 
-      // Possibly flaky test
+      // TODO: restore in CS-9131
       skip('should be reset when clicking "All Apps" button', async function (assert) {
         await click('[data-tab-label="Apps"]');
         assert
