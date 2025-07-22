@@ -1,5 +1,6 @@
 import Service from '@ember/service';
 
+import window from 'ember-window-mock';
 import { v4 as uuidv4 } from 'uuid';
 
 import { CurrentRoomIdPersistenceKey } from '../utils/local-storage-keys';

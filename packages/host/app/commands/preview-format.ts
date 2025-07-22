@@ -1,6 +1,5 @@
 import { service } from '@ember/service';
 
-import type { Format } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -29,7 +28,6 @@ export default class PreviewFormatCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.PreviewFormatInput,
   ): Promise<undefined> {
-    debugger;
     // 1. Switch to code submode
     await new SwitchSubmodeCommand(this.commandContext).execute({
       submode: 'code',
