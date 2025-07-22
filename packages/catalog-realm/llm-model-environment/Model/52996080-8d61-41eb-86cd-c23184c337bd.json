@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "meta-llama/llama-3.2-3b-instruct",
+      "modelName": "Llama 3.2 3B Instruct",
+      "displayName": "Llama 3.2 3B Instruct",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../model",
+        "name": "Model"
+      }
+    }
+  }
+}

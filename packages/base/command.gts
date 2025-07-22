@@ -128,6 +128,7 @@ export class ApplySearchReplaceBlockResult extends CardDef {
 export class LintAndFixInput extends CardDef {
   @field fileContent = contains(StringField);
   @field realm = contains(StringField);
+  @field filename = contains(StringField);
 }
 
 export class LintAndFixResult extends CardDef {
