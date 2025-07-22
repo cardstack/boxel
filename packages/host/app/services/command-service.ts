@@ -142,7 +142,10 @@ export default class CommandService extends Service {
         if (!messageCommand.name) {
           continue;
         }
-        if (messageCommand.requiresApproval === false) {
+        if (
+          roomResource.activeLLMMode === 'act' ||
+          messageCommand.requiresApproval === false
+        ) {
           this.run.perform(messageCommand);
         }
       }

@@ -66,6 +66,7 @@ import type { Skill } from 'https://cardstack.com/base/skill';
 import AiAssistantActionBar from '../ai-assistant/action-bar';
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
+import LLMModeToggle from '../ai-assistant/llm-mode-toggle';
 import LLMSelect from '../ai-assistant/llm-select';
 import { AiAssistantConversation } from '../ai-assistant/message';
 import NewSession from '../ai-assistant/new-session';
@@ -201,6 +202,14 @@ export default class Room extends Component<Signature> {
                     @disabled={{@roomResource.isActivatingLLM}}
                     @onExpand={{fn this.setSelectedBottomAction 'llm-select'}}
                     @onCollapse={{fn this.setSelectedBottomAction undefined}}
+                  />
+                {{/if}}
+                {{#if this.displayLLMModeSelect}}
+                  <LLMModeToggle
+                    class='llm-mode-toggle'
+                    @selected={{@roomResource.activeLLMMode}}
+                    @onChange={{perform @roomResource.activateLLMModeTask}}
+                    @disabled={{@roomResource.isActivatingLLMMode}}
                   />
                 {{/if}}
               </div>
@@ -965,6 +974,10 @@ export default class Room extends Component<Signature> {
     return (
       !this.selectedBottomAction || this.selectedBottomAction === 'llm-select'
     );
+  }
+
+  private get displayLLMModeSelect() {
+    return this.displaySkillMenu && this.displayLLMSelect;
   }
 
   private get displayAttachedItems() {

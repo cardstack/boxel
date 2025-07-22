@@ -49,9 +49,9 @@ import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_LLM_MODE,
   DEFAULT_CODING_LLM,
   DEFAULT_LLM_LIST,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
@@ -59,6 +59,8 @@ import {
   SLIDING_SYNC_LIST_RANGE_END,
   SLIDING_SYNC_LIST_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
+  type LLMMode,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -1319,6 +1321,10 @@ export default class MatrixService extends Service {
     await this.client.sendStateEvent(roomId, APP_BOXEL_ACTIVE_LLM, {
       model,
     });
+  }
+
+  async sendLLMModeEvent(roomId: string, mode: LLMMode) {
+    await this.client.sendStateEvent(roomId, APP_BOXEL_LLM_MODE, { mode });
   }
 
   private async addRoomEvent(event: TempEvent, oldEventId?: string) {

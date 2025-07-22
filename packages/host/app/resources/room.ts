@@ -26,6 +26,7 @@ import {
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   DEFAULT_LLM,
+  type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
@@ -94,6 +95,7 @@ export class RoomResource extends Resource<Args> {
   // To avoid delay, instead of using `roomResource.activeLLM`, we use a tracked property
   // that updates immediately after the user selects the LLM.
   @tracked private llmBeingActivated: string | undefined;
+  @tracked private llmModeBeingActivated: LLMMode | undefined;
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private commandService: CommandService;
@@ -383,6 +385,40 @@ export class RoomResource extends Resource<Args> {
       }
     } finally {
       this.llmBeingActivated = undefined;
+    }
+  });
+
+  get activeLLMMode(): LLMMode {
+    return (
+      this.llmModeBeingActivated ?? this.matrixRoom?.activeLLMMode ?? 'ask'
+    );
+  }
+
+  get isActivatingLLMMode() {
+    return this.activateLLMModeTask.isRunning;
+  }
+
+  activateLLMModeTask = restartableTask(async (mode: LLMMode) => {
+    await this.processing;
+    if (this.activeLLMMode === mode) {
+      return;
+    }
+    this.llmModeBeingActivated = mode;
+    try {
+      if (!this.matrixRoom) {
+        throw new Error('matrixRoom is required to activate LLM mode');
+      }
+      await this.matrixService.sendLLMModeEvent(this.matrixRoom.roomId, mode);
+      let remainingRetries = 20;
+      while (this.matrixRoom.activeLLMMode !== mode && remainingRetries > 0) {
+        await timeout(50);
+        remainingRetries--;
+      }
+      if (remainingRetries === 0) {
+        throw new Error('Failed to activate LLM mode');
+      }
+    } finally {
+      this.llmModeBeingActivated = undefined;
     }
   });
 

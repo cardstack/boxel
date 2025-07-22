@@ -24,6 +24,8 @@ import {
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   CodeRef,
+  APP_BOXEL_LLM_MODE,
+  type LLMMode,
 } from '@cardstack/runtime-common';
 import { type SerializedFile } from './file-api';
 
@@ -248,6 +250,13 @@ export interface ActiveLLMEvent extends RoomStateEvent {
   };
 }
 
+export interface LLMModeEvent extends RoomStateEvent {
+  type: typeof APP_BOXEL_LLM_MODE;
+  content: {
+    mode: LLMMode;
+  };
+}
+
 export interface CommandResultEvent extends BaseMatrixEvent {
   type: typeof APP_BOXEL_COMMAND_RESULT_EVENT_TYPE;
   content: CommandResultWithOutputContent | CommandResultWithNoOutputContent;
@@ -423,4 +432,5 @@ export type MatrixEvent =
   | RoomNameEvent
   | RoomPowerLevels
   | RoomTopicEvent
-  | SkillsConfigEvent;
+  | SkillsConfigEvent
+  | LLMModeEvent;
