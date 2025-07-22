@@ -35,7 +35,7 @@ const Attachments: TemplateOnlyComponent<Signature> = <template>
           <FilePill
             @file={{item}}
             @borderType='solid'
-            @onDownload={{downloadFile item @downloadFile}}
+            @onDownload={{onDownload item @downloadFile}}
           />
         </li>
       {{/if}}
@@ -59,11 +59,11 @@ function isCardCollectionResource(
   return 'value' in obj;
 }
 
-function downloadFile(
+function onDownload(
   item: FileDef,
-  downLoadFile?: (file: FileDef) => Promise<void>,
+  downloadFile?: (file: FileDef) => Promise<void>,
 ) {
-  return downloadFile ? () => downLoadFile(item) : undefined;
+  return downloadFile ? () => downloadFile(item) : undefined;
 }
 
 export default Attachments;
