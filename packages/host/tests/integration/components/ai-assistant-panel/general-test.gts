@@ -723,8 +723,11 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       .containsText(
         'There was an error processing your request, please try again later',
       );
+
     assert
-      .dom('[data-test-message-idx="1"] [data-test-ai-bot-retry-button]')
+      .dom(
+        '[data-test-message-idx="1"] [data-test-alert-action-button="Retry"]',
+      )
       .doesNotExist('Only last errored message has a retry button');
 
     assert
@@ -733,12 +736,14 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
         'There was an error processing your request, please try again later',
       );
     assert
-      .dom('[data-test-message-idx="3"] [data-test-ai-bot-retry-button]')
+      .dom(
+        '[data-test-message-idx="3"] [data-test-alert-action-button="Retry"]',
+      )
       .exists('Only last errored message has a retry button');
 
     assert.dom('[data-test-message-idx="4"]').doesNotExist();
 
-    await click('[data-test-ai-bot-retry-button]');
+    await click('[data-test-alert-action-button="Retry"]');
 
     // This below is user's previous message that is sent again after retry button is clicked
     assert

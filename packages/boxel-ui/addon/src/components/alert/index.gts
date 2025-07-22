@@ -89,7 +89,7 @@ class Action extends Component<ActionSignature> {
         class='action-button'
         @size='small'
         @kind='primary'
-        data-test-alert-action-button
+        data-test-alert-action-button={{@actionName}}
       >
         {{@actionName}}
       </Button>

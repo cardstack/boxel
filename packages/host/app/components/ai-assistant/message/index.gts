@@ -30,6 +30,7 @@ import Meta from './meta';
 import UserMessage from './user-message';
 
 import type { ComponentLike } from '@glint/template';
+
 import BillingService from '@cardstack/host/services/billing-service';
 
 interface Signature {
@@ -284,10 +285,12 @@ export default class AiAssistantMessage extends Component<Signature> {
                 </div>
               {{/if}}
             </Alert>
-          {{else if @retryAction}}
+          {{else}}
             <Alert @type='error' as |Alert|>
               <Alert.Messages @messages={{this.errorMessages}} />
-              <Alert.Action @actionName='Retry' @action={{@retryAction}} />
+              {{#if @retryAction}}
+                <Alert.Action @actionName='Retry' @action={{@retryAction}} />
+              {{/if}}
             </Alert>
           {{/if}}
         {{/if}}
