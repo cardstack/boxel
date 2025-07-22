@@ -804,7 +804,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         await click('[data-test-boxel-filter-list-button="LIFE"]');
         assert
           .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
-          .exists({ count: 6 });
+          .exists({ count: 11 });
       });
 
       test('updates the card count correctly when filtering by a category', async function (assert) {
@@ -812,7 +812,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         await click('[data-test-boxel-filter-list-button="Health & Wellness"]');
         assert
           .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
-          .exists({ count: 1 });
+          .exists({ count: 2 });
       });
 
       test('updates the card count correctly when filtering by a search input', async function (assert) {
