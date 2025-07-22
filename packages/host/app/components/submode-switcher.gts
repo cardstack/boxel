@@ -109,6 +109,10 @@ export default class SubmodeSwitcher extends Component<Signature> {
           border-bottom-left-radius var(--boxel-transition);
       }
 
+      .submode-switcher-dropdown-trigger .icon {
+        color: var(--icon-color);
+      }
+
       .submode-switcher-dropdown-trigger[aria-expanded='true'] {
         border-bottom-right-radius: 0;
         border-bottom-left-radius: 0;
