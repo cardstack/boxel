@@ -136,6 +136,8 @@ export default class OperatorModeStateService extends Service {
 
   private moduleInspectorHistory: Record<string, ModuleInspectorView>;
 
+  @tracked profileSettingsOpen = false;
+
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
   @service declare private loaderService: LoaderService;
@@ -164,6 +166,10 @@ export default class OperatorModeStateService extends Service {
       moduleInspectorHistory ? JSON.parse(moduleInspectorHistory) : {},
     );
   }
+
+  toggleProfileSettings = () => {
+    this.profileSettingsOpen = !this.profileSettingsOpen;
+  };
 
   get state() {
     return {
