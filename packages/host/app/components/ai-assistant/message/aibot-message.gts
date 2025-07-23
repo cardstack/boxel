@@ -35,6 +35,7 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import Message from './text-content';
+import { type Message as MatrixMessage } from '@cardstack/host/lib/matrix-classes/message';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -45,6 +46,7 @@ interface Signature {
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
     isLastAssistantMessage: boolean;
+    userMessageThisMessageIsRespondingTo?: MatrixMessage;
     reasoning?: {
       content: string | null;
       isExpanded: boolean;
@@ -120,6 +122,7 @@ export default class FormattedAiBotMessage extends Component<Signature> {
             }}
             @monacoSDK={{@monacoSDK}}
             @isLastAssistantMessage={{@isLastAssistantMessage}}
+            @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
             @index={{this.preTagGroupIndex index}}
             @codePatchStatus={{this.codePatchStatus htmlPart.codeData}}
           />
@@ -178,6 +181,7 @@ interface HtmlGroupCodeBlockSignature {
     onPatchCode: (codeData: CodeData) => void;
     monacoSDK: MonacoSDK;
     isLastAssistantMessage: boolean;
+    userMessageThisMessageIsRespondingTo?: MatrixMessage;
     index: number;
     codePatchStatus: CodePatchStatus | 'applying' | 'ready';
     codePatchResult: MessageCodePatchResult | undefined;
@@ -279,6 +283,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               @diffEditorStats={{null}}
               @finalFileUrlAfterCodePatching={{this.codePatchfinalFileUrlAfterCodePatching}}
               @originalUploadedFileUrl={{this.originalUploadedFileUrl}}
+              @userSubmittedMessage={{@userMessageThisMessageIsRespondingTo.body}}
             />
             <codeBlock.editor @code={{this.codeForEditor}} />
             <codeBlock.actions as |actions|>
@@ -312,6 +317,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
             <codeBlock.diffEditorHeader
               @codeData={{@codeData}}
               @diffEditorStats={{this.diffEditorStats}}
+              @userSubmittedMessage={{@userMessageThisMessageIsRespondingTo.body}}
             />
             <codeBlock.diffEditor
               @originalCode={{this.codeDiffResource.originalCode}}

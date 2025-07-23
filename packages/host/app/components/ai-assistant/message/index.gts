@@ -31,6 +31,7 @@ import Meta from './meta';
 import UserMessage from './user-message';
 
 import type { ComponentLike } from '@glint/template';
+import { type Message } from '@cardstack/host/lib/matrix-classes/message';
 
 interface Signature {
   Element: HTMLElement;
@@ -42,6 +43,7 @@ interface Signature {
     isFromAssistant: boolean;
     isStreaming: boolean;
     isLastAssistantMessage: boolean;
+    userMessageThisMessageIsRespondingTo?: Message;
     profileAvatar?: ComponentLike;
     collectionResource?: ReturnType<getCardCollection>;
     files?: FileDef[] | undefined;
@@ -239,6 +241,7 @@ export default class AiAssistantMessage extends Component<Signature> {
               @eventId={{@eventId}}
               @isStreaming={{@isStreaming}}
               @isLastAssistantMessage={{@isLastAssistantMessage}}
+              @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
               @reasoning={{if
                 @reasoningContent
                 (hash

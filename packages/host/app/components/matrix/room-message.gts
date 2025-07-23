@@ -108,6 +108,22 @@ export default class RoomMessage extends Component<Signature> {
     );
   }
 
+  private get userMessageThisMessageIsRespondingTo() {
+    if (!this.isFromAssistant) {
+      return undefined;
+    }
+
+    // Going backwards, find the first message that is not from the assistant
+    for (let i = this.args.index - 1; i >= 0; i--) {
+      let message = this.args.roomResource.messages[i];
+      if (message.author.userId !== aiBotUserId) {
+        return message;
+      }
+    }
+
+    return undefined;
+  }
+
   private run = task(async (command: MessageCommand) => {
     return this.commandService.run.unlinked().perform(command);
   });
@@ -132,6 +148,7 @@ export default class RoomMessage extends Component<Signature> {
         @eventId={{this.message.eventId}}
         @index={{@index}}
         @isLastAssistantMessage={{this.isLastAssistantMessage}}
+        @userMessageThisMessageIsRespondingTo={{this.userMessageThisMessageIsRespondingTo}}
         @registerScroller={{@registerScroller}}
         @isFromAssistant={{this.isFromAssistant}}
         @profileAvatar={{component

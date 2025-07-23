@@ -3,6 +3,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import Undo2 from '@cardstack/boxel-icons/undo-2';
+import Copy from '@cardstack/boxel-icons/copy';
 
 import { dropTask } from 'ember-concurrency';
 
@@ -33,6 +34,7 @@ export interface CodeBlockDiffEditorHeaderSignature {
     } | null;
     finalFileUrlAfterCodePatching?: string | null;
     originalUploadedFileUrl?: string | null;
+    userSubmittedMessage?: string | null;
   };
 }
 
@@ -191,6 +193,13 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
       }),
     ];
 
+    items.push(
+      new MenuItem('Copy Submitted Content', 'action', {
+        action: this.copySubmittedContent,
+        icon: Copy,
+      }),
+    );
+
     if (this.args.originalUploadedFileUrl && !this.args.codeData.isNewFile) {
       items.push(
         new MenuItem('Restore Content', 'action', {
@@ -203,6 +212,10 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
 
     return items;
   }
+
+  copySubmittedContent = () => {
+    navigator.clipboard.writeText(this.args.userSubmittedMessage!);
+  };
 
   restoreContent = dropTask(async () => {
     let originalUploadedFileUrl = this.args.originalUploadedFileUrl;
