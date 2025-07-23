@@ -94,9 +94,6 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
       box-shadow: 0 1px 0 0 rgba(0 0 0 / 15%);
       z-index: 1;
     }
-    .preview-header:not(.is-editing) {
-      background-color: var(--boxel-100);
-    }
     .field-preview-container {
       height: auto;
       padding: var(--boxel-sp);

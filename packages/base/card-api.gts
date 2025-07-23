@@ -3,7 +3,12 @@ import GlimmerComponent from '@glimmer/component';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+import {
+  BoxelInput,
+  BoxelTag,
+  ColorPicker,
+  ColorPalette,
+} from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
@@ -72,9 +77,14 @@ import DefaultCardDefTemplate from './default-templates/isolated-and-edit';
 import DefaultAtomViewTemplate from './default-templates/atom';
 import MissingTemplate from './default-templates/missing-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
+import MarkdownTemplate from './default-templates/markdown';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
+import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
+import PaintBucket from '@cardstack/boxel-icons/paint-bucket';
+import TagIcon from '@cardstack/boxel-icons/tag';
+export { sanitizedHtml } from './helpers/sanitized-html';
 
 interface CardOrFieldTypeIconSignature {
   Element: Element;
@@ -2226,6 +2236,68 @@ export class MaybeBase64Field extends StringField {
   static atom = MaybeBase64Field.embedded;
 }
 
+export class MarkdownField extends StringField {
+  static displayName = 'Markdown';
+  static icon = MarkdownIcon;
+
+  static embedded = class MarkdownViewTemplate extends Component<
+    typeof MarkdownField
+  > {
+    <template>
+      <MarkdownTemplate @content={{@model}} />
+    </template>
+  };
+  static atom = class MarkdownViewTemplate extends Component<
+    typeof MarkdownField
+  > {
+    <template>
+      <MarkdownTemplate @content={{@model}} />
+    </template>
+  };
+
+  static edit = class Edit extends Component<typeof this> {
+    <template>
+      <BoxelInput
+        class='boxel-text-area'
+        @type='textarea'
+        @value={{@model}}
+        @onInput={{@set}}
+        @disabled={{not @canEdit}}
+      />
+    </template>
+  };
+}
+
+class ColorViewTemplate extends Component<typeof ColorField> {
+  <template>
+    <ColorPicker @color={{@model}} @disabled={{true}} @showHexString={{true}} />
+  </template>
+}
+
+export class ColorField extends StringField {
+  static displayName = 'Color';
+  static icon = PaintBucket;
+
+  static embedded = ColorViewTemplate;
+  static atom = ColorViewTemplate;
+  static fitted = ColorViewTemplate;
+  static edit = class ColorEditTemplate extends Component<typeof this> {
+    <template>
+      <ColorPalette @color={{@model}} @onChange={{@set}} />
+    </template>
+  };
+}
+
+export class CardInfoField extends FieldDef {
+  static displayName = 'Card Info';
+  @field title = contains(StringField);
+  @field description = contains(StringField);
+  @field thumbnailURL = contains(MaybeBase64Field);
+  @field tags = linksToMany(() => Tag);
+  // @field theme = linksTo(Theme); // cs-9112
+  @field notes = contains(MarkdownField); // TODO: rich-text field cs-8594 & cs-9044
+}
+
 export class CardDef extends BaseDef {
   readonly [localId]: string = uuidv4();
   [isSavedInstance] = false;
@@ -2247,12 +2319,24 @@ export class CardDef extends BaseDef {
     cardTracking.set(this, true);
   }
   @field id = contains(ReadOnlyField);
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardInfo = contains(CardInfoField);
+  @field title = contains(StringField, {
+    computeVia: function (this: CardDef) {
+      return this.cardInfo.title?.trim()?.length
+        ? this.cardInfo.title
+        : this.constructor.displayName;
+    },
+  });
+  @field description = contains(StringField, {
+    computeVia: function (this: CardDef) {
+      return this.cardInfo.description;
+    },
+  });
   // TODO: this will probably be an image or image url field card when we have it
   // UPDATE: we now have a Base64ImageField card. we can probably refactor this
   // to use it directly now (or wait until a better image field comes along)
   @field thumbnailURL = contains(MaybeBase64Field);
+
   static displayName = 'Card';
   static isCardDef = true;
   static icon = CaptionsIcon;
@@ -2311,6 +2395,21 @@ export class CardDef extends BaseDef {
     let realmURLString = getCardMeta(this, 'realmURL');
     return realmURLString ? new URL(realmURLString) : undefined;
   }
+}
+
+export class Tag extends CardDef {
+  static displayName = 'Tag';
+  static icon = TagIcon;
+  @field color = contains(ColorField);
+  static atom: BaseDefComponent = class Atom extends Component<typeof this> {
+    <template>
+      <BoxelTag
+        @name={{@model.title}}
+        @ellipsize={{true}}
+        @pillColor={{if @model.color @model.color '#e2e2e2'}}
+      />
+    </template>
+  };
 }
 
 export type BaseDefConstructor = typeof BaseDef;

@@ -128,9 +128,6 @@ export default class CardRendererPanel extends Component<Signature> {
       .card-renderer-header {
         min-height: max-content;
       }
-      .card-renderer-header:not(.is-editing) {
-        background-color: var(--boxel-100);
-      }
       .card-renderer-body {
         flex-grow: 1;
         overflow-y: auto;

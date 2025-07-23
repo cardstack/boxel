@@ -794,7 +794,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
       .stack-item-header {
         --boxel-card-header-padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
-        --boxel-card-header-background-color: var(--boxel-light);
         border-radius: 0;
         z-index: 1;
         max-width: max-content;

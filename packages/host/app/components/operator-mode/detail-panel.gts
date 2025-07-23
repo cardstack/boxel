@@ -30,7 +30,10 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import { getCodeRef, getCardType } from '@cardstack/host/resources/card-type';
+import {
+  getResolvedCodeRef as getCodeRef,
+  getCardType,
+} from '@cardstack/host/resources/card-type';
 import { type Ready } from '@cardstack/host/resources/file';
 
 import {

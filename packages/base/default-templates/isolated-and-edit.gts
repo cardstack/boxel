@@ -1,45 +1,246 @@
+import { get } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
-import type { BaseDefConstructor, CardDef, Field, Format } from '../card-api';
-import { FieldContainer } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { startCase } from 'lodash';
-import { getField } from '@cardstack/runtime-common';
+
+import { FieldContainer, Header } from '@cardstack/boxel-ui/components';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
+
+import {
+  getField,
+  sanitizeHtml,
+  getFieldIcon,
+} from '@cardstack/runtime-common';
+
+import type {
+  BaseDefConstructor,
+  CardDef,
+  Field,
+  Format,
+  CardOrFieldTypeIcon,
+} from '../card-api';
+import type { BoxComponent } from '../field-component';
+
+const setBackgroundImage = (backgroundURL?: string | null) => {
+  if (!backgroundURL) {
+    return;
+  }
+  return htmlSafe(sanitizeHtml(`background-image: url(${backgroundURL});`));
+};
+
+class CardInfo extends GlimmerComponent<{
+  Args: {
+    title?: string;
+    description?: string;
+    thumbnailURL?: string;
+    icon?: CardOrFieldTypeIcon;
+  };
+  Blocks: { default: [] };
+}> {
+  <template>
+    {{#if @thumbnailURL}}
+      <div
+        class='image-container thumbnail'
+        style={{setBackgroundImage @thumbnailURL}}
+        role='presentation'
+      />
+    {{else if @icon}}
+      <div class='image-container'>
+        <@icon class='icon' width='50' height='40' />
+      </div>
+    {{/if}}
+    <div class='info'>
+      <h2 class='card-info-title'>{{@title}}</h2>
+      <p class='card-info-description'>{{@description}}</p>
+
+      {{yield}}
+    </div>
+    <style scoped>
+      @layer {
+        .image-container {
+          --thumbnail-container-size: 6.25rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
+          width: var(--thumbnail-container-size);
+          height: var(--thumbnail-container-size);
+          min-width: var(--thumbnail-container-size);
+          min-height: var(--thumbnail-container-size);
+          border-radius: var(--radius, var(--boxel-border-radius-xl));
+          background-color: var(--background, var(--boxel-light));
+        }
+        .thumbnail {
+          background-position: center;
+          background-repeat: no-repeat;
+          background-size: cover;
+        }
+        .card-info-title {
+          margin-block: 0;
+          font-size: var(--boxel-font-size);
+          font-weight: 600;
+          letter-spacing: var(--boxel-lsp-sm);
+          line-height: calc(22 / 16);
+        }
+        .card-info-description {
+          margin-block: 0;
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 400;
+          letter-spacing: var(--boxel-lsp-sm);
+          line-height: calc(18 / 13);
+        }
+        .info > * + * {
+          margin-top: var(--boxel-sp-xs);
+        }
+      }
+    </style>
+  </template>
+}
+
+type Fields = Record<string, BoxComponent>;
 
 export default class DefaultCardDefTemplate extends GlimmerComponent<{
   Args: {
     model: CardDef;
-    fields: Record<string, new () => GlimmerComponent>;
+    fields: Fields & { cardInfo: Fields };
     format: Format;
   };
 }> {
-  getFieldIcon = (key: string) => {
+  private headerFields = ['title', 'description', 'thumbnailURL'];
+  private excludedFields = [
+    'id',
+    'cardInfo',
+    ...this.headerFields,
+    'notes',
+    'tags',
+  ];
+
+  private get ownFieldsArr() {
+    return Object.entries(this.args.fields).filter(
+      ([key]) => !this.excludedFields.includes(key),
+    );
+  }
+
+  private get ownFields() {
+    return Object.fromEntries(this.ownFieldsArr) as Fields;
+  }
+
+  private isComputed = (key: string) => {
     const field: Field<BaseDefConstructor> | undefined = getField(
       this.args.model.constructor,
       key,
     );
-    let fieldInstance = field?.card;
-    return fieldInstance?.icon;
+    return Boolean(field?.computeVia);
   };
+
   <template>
     <div class={{cn 'default-card-template' @format}}>
-      {{#each-in @fields as |key Field|}}
-        {{#unless (eq key 'id')}}
-          <FieldContainer
-            {{! @glint-ignore (glint is arriving at an incorrect type signature for 'startCase') }}
-            @label={{startCase key}}
-            @icon={{this.getFieldIcon key}}
-            data-test-field={{key}}
+      <Header
+        @hasBackground={{true}}
+        @hasShadow={{true}}
+        class={{cn
+          'card-info-header'
+          card-info-edit-header=(eq @format 'edit')
+        }}
+      >
+        {{#if (eq @format 'isolated')}}
+          <CardInfo
+            @title={{@model.title}}
+            @description={{@model.description}}
+            @thumbnailURL={{@model.thumbnailURL}}
+            @icon={{@model.constructor.icon}}
           >
-            <Field />
+            <@fields.cardInfo.tags
+              class='tags'
+              @format='atom'
+              @displayContainer={{false}}
+            />
+          </CardInfo>
+        {{else}}
+          {{#each this.headerFields as |key|}}
+            <FieldContainer
+              @label={{startCase key}}
+              @icon={{getFieldIcon @model.cardInfo key}}
+              data-test-field={{key}}
+            >
+              {{#if (this.isComputed key)}}
+                {{#let (get @fields.cardInfo key) as |Field|}}
+                  <Field />
+                {{/let}}
+              {{else}}
+                {{#let (get @fields key) as |Field|}}
+                  <Field />
+                {{/let}}
+              {{/if}}
+            </FieldContainer>
+          {{/each}}
+          <FieldContainer
+            @label='Tags'
+            @icon={{getFieldIcon @model.cardInfo 'tags'}}
+            data-test-field='tags'
+          >
+            <@fields.cardInfo.tags />
           </FieldContainer>
-        {{/unless}}
-      {{/each-in}}
+        {{/if}}
+      </Header>
+      {{#if this.ownFieldsArr.length}}
+        <section class='own-fields'>
+          {{#each-in this.ownFields as |key Field|}}
+            <FieldContainer
+              @label={{startCase key}}
+              @icon={{getFieldIcon @model key}}
+              data-test-field={{key}}
+            >
+              <Field />
+            </FieldContainer>
+          {{/each-in}}
+        </section>
+      {{/if}}
+      <footer class='notes-footer'>
+        <FieldContainer
+          @label='Notes'
+          @icon={{getFieldIcon @model.cardInfo 'notes'}}
+          data-test-field='notes'
+        >
+          <@fields.cardInfo.notes />
+        </FieldContainer>
+      </footer>
     </div>
     <style scoped>
       .default-card-template {
         display: grid;
+      }
+      .card-info-header {
+        --boxel-header-min-height: 9.375rem; /* 150px */
+        --boxel-header-padding: var(--boxel-sp-lg);
+        --boxel-header-gap: var(--boxel-sp-lg);
+        align-items: flex-start;
+      }
+      .card-info-edit-header {
+        display: grid;
+      }
+      .card-info-header :deep(.info) {
+        align-self: center;
+      }
+      .own-fields {
+        display: grid;
         gap: var(--boxel-sp-lg);
         padding: var(--boxel-sp-xl);
+      }
+      .own-fields + .notes-footer {
+        border-top: var(--boxel-border);
+      }
+      .notes-footer {
+        padding: var(--boxel-sp-xl);
+      }
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xs);
+        margin-top: var(--boxel-sp-xs);
+      }
+      .default-card-template.edit > .notes-footer {
+        background-color: var(--accent-foreground, var(--boxel-100));
       }
       /* this aligns edit fields with containsMany, linksTo, and linksToMany fields */
       .default-card-template.edit
