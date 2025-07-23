@@ -23,7 +23,6 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
-  waitForCodeEditor,
   setupUserSubscription,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -303,7 +302,6 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
@@ -348,7 +346,6 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       codePath: `${testRealmURL}Person/1.json`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
     assert
@@ -390,7 +387,6 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
         codePath: `${testRealmURL}Person/1.json`,
       });
 
-      await waitForCodeEditor();
       await waitFor('[data-test-realm-name]');
       assert.dom('[data-test-realm-read-only]').exists();
     });
@@ -411,7 +407,6 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       codePath: `${testRealmURL}Person/1.json`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-realm-name="Test Workspace B"]');
     assert.dom('[data-test-realm-name]').hasText('In Test Workspace B');
 
@@ -441,7 +436,6 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       codePath: `${testRealmURL}Person/1.json`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom('[data-test-realm-name]').hasText('In Test Workspace B');
 
@@ -486,7 +480,6 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       openDirs: { [testRealmURL]: ['Person/'] },
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
@@ -530,7 +523,6 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       openDirs: { [testRealmURL]: ['Person/'] },
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
@@ -558,7 +550,6 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       openDirs: { [testRealmURL]: ['Person/'] },
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
@@ -588,8 +579,6 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       codePath: `http://test-realm/test/index`,
       openDirs: { [testRealmURL]: ['Person/'] },
     });
-
-    await waitForCodeEditor();
 
     await fillIn(
       '[data-test-card-url-bar-input]',
@@ -642,7 +631,6 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       openDirs: { [testRealmURL]: ['Person/'] },
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-realm-name]');
     assert.dom(`[data-test-realm-icon-url="${realmInfo.iconURL}"]`).exists();
     assert.dom('[data-test-realm-name]').hasText(`In ${realmInfo.name}`);
@@ -917,7 +905,6 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       codePath: `https://cardstack.com/base/cards-grid.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-file="cards-grid.gts"]');
 
     await click('[data-test-file="cards-grid.gts"]');
@@ -970,7 +957,6 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       codePath: `${testRealmURL}Person/1.json`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-file-tree-mask]', { count: 0 });
 
     let newDirName = 'new-dir';
@@ -1002,7 +988,6 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       codePath: `${testRealmURL}Person/1.json`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-file-tree-mask]', { count: 0 });
 
     let newDirName = 'new-dir';
