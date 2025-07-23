@@ -1,6 +1,6 @@
 export * as DateSerializer from './date';
 export * as DatetimeSerializer from './datetime';
-export * as BigIntegerSerializer from './biginteger';
+export * as BigIntegerSerializer from './big-integer';
 export * as BooleanSerializer from './boolean';
 export * as CodeRefSerializer from './code-ref';
 export * as EthereumAddressSerializer from './ethereum-address';
