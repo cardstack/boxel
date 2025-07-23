@@ -17,6 +17,37 @@ export function serialize(val: number | null): string | undefined {
   return val ? val.toString() : undefined;
 }
 
+export function validate(value: string | number | null): string | null {
+  if (value == null || value === '') {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return 'Input must be a finite number.';
+    }
+  } else {
+    if (value.endsWith('.')) {
+      return 'Input cannot end with a decimal point.';
+    }
+
+    const number = Number(value);
+
+    if (Number.isNaN(number)) {
+      return 'Input must be a valid number.';
+    }
+
+    let minSafe = Number.MIN_SAFE_INTEGER;
+    let maxSafe = Number.MAX_SAFE_INTEGER;
+
+    if (number > maxSafe || number < minSafe) {
+      return `Input number is out of safe range. Please enter a number between ${minSafe} and ${maxSafe}.`;
+    }
+  }
+
+  return null;
+}
+
 export async function deserialize<T extends BaseDefConstructor>(
   this: T,
   number: any,
@@ -25,6 +56,11 @@ export async function deserialize<T extends BaseDefConstructor>(
 }
 
 export function deserializeSync(number: any): number | null {
+  const validationError = validate(number);
+  if (validationError) {
+    return null;
+  }
+
   if (number == null || number === '') {
     return null;
   }

@@ -1,4 +1,3 @@
-import { isAddress, getAddress } from 'ethers';
 import {
   primitive,
   Component,
@@ -14,28 +13,8 @@ import { not } from '@cardstack/boxel-ui/helpers';
 import CurrencyEthereum from '@cardstack/boxel-icons/currency-ethereum';
 import { EthereumAddressSerializer } from '@cardstack/runtime-common';
 
-function isChecksumAddress(address: string): boolean {
-  return getAddress(address) === address;
-}
-
-function validate(value: string | null): string | null {
-  if (!value) {
-    return null;
-  }
-
-  if (!isAddress(value)) {
-    return 'Invalid Ethereum address';
-  }
-
-  if (!isChecksumAddress(value)) {
-    return 'Not a checksummed address';
-  }
-
-  return null;
-}
-
 function deserializeForUI(value: string | null): string | null {
-  const validationError = validate(value);
+  const validationError = EthereumAddressSerializer.validate(value);
   if (validationError) {
     return null;
   }
@@ -65,7 +44,7 @@ class Edit extends Component<typeof EthereumAddressField> {
     (inputVal) => this.args.set(inputVal),
     deserializeForUI,
     EthereumAddressSerializer.serialize,
-    validate,
+    EthereumAddressSerializer.validate,
   );
 }
 

@@ -11,39 +11,8 @@ import { not } from '@cardstack/boxel-ui/helpers';
 import HashIcon from '@cardstack/boxel-icons/hash';
 import { NumberSerializer } from '@cardstack/runtime-common';
 
-function validate(value: string | number | null): string | null {
-  if (value == null || value === '') {
-    return null;
-  }
-
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) {
-      return 'Input must be a finite number.';
-    }
-  } else {
-    if (value.endsWith('.')) {
-      return 'Input cannot end with a decimal point.';
-    }
-
-    const number = Number(value);
-
-    if (Number.isNaN(number)) {
-      return 'Input must be a valid number.';
-    }
-
-    let minSafe = Number.MIN_SAFE_INTEGER;
-    let maxSafe = Number.MAX_SAFE_INTEGER;
-
-    if (number > maxSafe || number < minSafe) {
-      return `Input number is out of safe range. Please enter a number between ${minSafe} and ${maxSafe}.`;
-    }
-  }
-
-  return null;
-}
-
 function deserializeForUI(value: string | number | null): number | null {
-  const validationError = validate(value);
+  const validationError = NumberSerializer.validate(value);
   if (validationError) {
     return null;
   }
@@ -82,7 +51,7 @@ export default class NumberField extends FieldDef {
       (inputVal) => this.args.set(inputVal),
       deserializeForUI,
       NumberSerializer.serialize,
-      validate,
+      NumberSerializer.validate,
     );
   };
 }

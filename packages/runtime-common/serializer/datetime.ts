@@ -13,8 +13,11 @@ export function queryableValue(date: Date | undefined) {
   return undefined;
 }
 
-export function serialize(date: Date) {
-  return format(date, datetimeFormat);
+export function serialize(date: Date | null): string | undefined {
+  if (date == null) {
+    return undefined;
+  }
+  return date.toISOString();
 }
 
 export async function deserialize<T extends BaseDefConstructor>(

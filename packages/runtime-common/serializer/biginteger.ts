@@ -12,7 +12,7 @@ export function serialize(val: bigint | null): string | undefined {
 }
 
 export function deserializeSync(bigintString: any): bigint | null {
-  if (!bigintString) {
+  if (bigintString == null) {
     return null;
   }
 
@@ -20,7 +20,7 @@ export function deserializeSync(bigintString: any): bigint | null {
     return bigintString;
   }
 
-  if (typeof bigintString === 'string') {
+  if (typeof bigintString === 'number' || typeof bigintString === 'string') {
     try {
       return BigInt(bigintString);
     } catch {
