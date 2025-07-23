@@ -48,6 +48,7 @@ jobs:
               - 'packages/boxel-ui/**'
               - 'packages/host/**'
               - 'packages/realm-server/**'
+              - 'packages/catalog-realm/**'
             ai-bot:
               - *shared
               - '.github/workflows/pr-ai-bot.yml'

@@ -551,6 +551,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           fileView: 'inspector',
           openDirs: {},
           moduleInspector: 'schema',
+          trail: [],
         })!,
       )}`;
       assert.strictEqual(currentURL(), expectedURL);
@@ -580,6 +581,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             openDirs: {},
             cardPreviewFormat: 'isolated',
             moduleInspector: 'schema',
+            trail: [],
           })!,
         )}`,
       );
@@ -752,6 +754,11 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // There is still only 1 stack
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
+      assert.dom('[data-test-neighbor-stack-trigger]').exists({ count: 2 });
+
+      await click('[data-test-workspace-chooser-toggle]');
+      assert.dom('[data-test-workspace-chooser]').exists();
+      assert.dom('[data-test-neighbor-stack-trigger]').doesNotExist();
     });
 
     test('Clicking search panel (without left and right buttons activated) replaces open card on existing stack', async function (assert) {

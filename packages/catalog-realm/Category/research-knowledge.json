@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Research & Knowledge",
+      "description": "Academic research, knowledge bases, information gathering, reference materials, and research project management.",
+      "color": "#0891b2",
+      "order": 2
+    },
+    "relationships": {
+      "sphere": {
+        "links": {
+          "self": "../Sphere/67ffc7a9-70d6-4cd3-93f0-b32a8fbbd34e"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/category",
+        "name": "Category"
+      }
+    }
+  }
+}

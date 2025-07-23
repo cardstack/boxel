@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Health & Wellness",
+      "description": "Fitness tracking, nutrition planning, medical records, mental health support, and wellness goal management.",
+      "color": "#22c55e",
+      "order": 2
+    },
+    "relationships": {
+      "sphere": {
+        "links": {
+          "self": "../Sphere/5d7420dc-c8f6-491d-9570-60c01e07b14c"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/category",
+        "name": "Category"
+      }
+    }
+  }
+}

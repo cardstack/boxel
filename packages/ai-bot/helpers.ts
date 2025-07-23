@@ -1018,9 +1018,12 @@ export const buildContextMessage = async (
           context.codeMode.inheritanceChain.length > 0
         ) {
           result += `  Inheritance chain:\n`;
-          context.codeMode.inheritanceChain.forEach((codeRef, index) => {
+          context.codeMode.inheritanceChain.forEach((item, index) => {
             const indent = index === 0 ? '    ' : '      ';
-            result += `${indent}${index + 1}. ${humanReadable(codeRef)}\n`;
+            result += `${indent}${index + 1}. ${humanReadable(item.codeRef)}\n`;
+            if (item.fields && item.fields.length > 0) {
+              result += `${indent}   Fields: ${item.fields.join(', ')}\n`;
+            }
           });
         }
       }
@@ -1037,6 +1040,9 @@ export const buildContextMessage = async (
     }
     if (context?.codeMode?.moduleInspectorPanel) {
       result += `Module inspector panel: ${context.codeMode.moduleInspectorPanel}\n`;
+    }
+    if (context?.codeMode?.activeSpecId) {
+      result += `Active spec card: ${context.codeMode.activeSpecId}\n`;
     }
     if (context?.codeMode?.previewPanelSelection) {
       result += `Viewing card instance: ${context.codeMode.previewPanelSelection.cardId}\n`;
