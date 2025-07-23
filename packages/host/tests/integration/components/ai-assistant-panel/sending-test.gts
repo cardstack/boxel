@@ -211,10 +211,10 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
 
     await waitFor('[data-test-boxel-alert="error"]');
     assert.dom('[data-test-card-error]').containsText('Failed to send');
-    assert.dom('[data-test-ai-bot-retry-button]').exists();
+    assert.dom('[data-test-alert-action-button="Retry"]').exists();
     await percySnapshot(assert);
 
-    click('[data-test-ai-bot-retry-button]');
+    click('[data-test-alert-action-button="Retry"]');
     await waitFor('[data-test-ai-assistant-message-pending]');
     assert.dom('[data-test-ai-assistant-message]').exists({ count: 1 });
     await settled();

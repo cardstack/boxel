@@ -686,6 +686,49 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     );
   });
 
+  test('it offers to buy more credits when balance is low', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    let billingService = getService('billing-service');
+
+    let attributes = {
+      creditsAvailableInPlanAllowance: 1,
+      extraCreditsAvailableInBalance: 2,
+    };
+
+    billingService.fetchSubscriptionData = async () => {
+      return new Response(JSON.stringify({ data: { attributes } }));
+    };
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'You need a minimum of 10 credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.',
+      msgtype: 'm.text',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      errorMessage:
+        'You need a minimum of 10 credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.',
+    });
+
+    await waitFor('[data-test-message-idx="0"]');
+    assert.dom('[data-test-alert-action-button="Buy More Credits"]').exists();
+    assert.dom('[data-test-credits-added]').doesNotExist();
+    await click('[data-test-alert-action-button="Buy More Credits"]');
+    assert
+      .dom('[data-test-settings-modal]')
+      .exists('Profile Settings modal (which has credit buy links) is open');
+
+    await click('[data-test-close-modal]');
+    attributes.extraCreditsAvailableInBalance = 1000;
+    await billingService.loadSubscriptionData();
+    await settled();
+    assert
+      .dom('[data-test-alert-action-button="Retry"]')
+      .exists(
+        "After adding credits, 'buy more credits' button is replaced with 'retry'",
+      );
+    assert.dom('[data-test-credits-added]').exists();
+  });
+
   test('it can retry a message when receiving an error from the AI bot', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
@@ -723,8 +766,11 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       .containsText(
         'There was an error processing your request, please try again later',
       );
+
     assert
-      .dom('[data-test-message-idx="1"] [data-test-ai-bot-retry-button]')
+      .dom(
+        '[data-test-message-idx="1"] [data-test-alert-action-button="Retry"]',
+      )
       .doesNotExist('Only last errored message has a retry button');
 
     assert
@@ -733,12 +779,14 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
         'There was an error processing your request, please try again later',
       );
     assert
-      .dom('[data-test-message-idx="3"] [data-test-ai-bot-retry-button]')
+      .dom(
+        '[data-test-message-idx="3"] [data-test-alert-action-button="Retry"]',
+      )
       .exists('Only last errored message has a retry button');
 
     assert.dom('[data-test-message-idx="4"]').doesNotExist();
 
-    await click('[data-test-ai-bot-retry-button]');
+    await click('[data-test-alert-action-button="Retry"]');
 
     // This below is user's previous message that is sent again after retry button is clicked
     assert

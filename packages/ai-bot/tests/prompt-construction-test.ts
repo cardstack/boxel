@@ -190,6 +190,22 @@ Current date and time: 2025-06-11T11:43:00.533Z
                   module: 'http://localhost:4201/experiments/author',
                   name: 'Address',
                 },
+                inheritanceChain: [
+                  {
+                    codeRef: {
+                      module: 'http://localhost:4201/experiments/author',
+                      name: 'Address',
+                    },
+                    fields: ['street', 'city', 'state'],
+                  },
+                  {
+                    codeRef: {
+                      module: 'https://cardstack.com/base/card-api',
+                      name: 'CardDef',
+                    },
+                    fields: [],
+                  },
+                ],
                 selectionRange: {
                   startLine: 10,
                   startColumn: 5,
@@ -240,11 +256,86 @@ Workspace: http://localhost:4201/experiments
 The user has no open cards.
 File open in code editor: http://localhost:4201/experiments/author.gts
   Selected declaration: Address from http://localhost:4201/experiments/author
+  Inheritance chain:
+    1. Address from http://localhost:4201/experiments/author
+       Fields: street, city, state
+      2. CardDef from https://cardstack.com/base/card-api
   Selected text: lines 10-12 (1-based), columns 5-20 (1-based)
   Note: Line numbers in selection refer to the original file. Attached file contents below show line numbers for reference.
 Module inspector panel: preview
 Viewing card instance: http://localhost:4201/experiments/Author/1
 In format: isolated
+
+Current date and time: 2025-06-11T11:43:00.533Z
+`,
+    );
+  });
+
+  test('should generate a prompt from the user when spec pane is active', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hey',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/experiments',
+              submode: 'code',
+              codeMode: {
+                currentFile: 'http://localhost:4201/experiments/author.gts',
+                moduleInspectorPanel: 'spec',
+                activeSpecId:
+                  'http://localhost:4201/experiments/Spec/author-spec-1',
+                selectedCodeRef: {
+                  module: 'http://localhost:4201/experiments/author',
+                  name: 'Author',
+                },
+              },
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    // Should have a system prompt and a user prompt
+    assert.equal(result.length, 3);
+    assert.equal(result[0].role, 'system');
+    assert.equal(result[1].role, 'system');
+    assert.equal(result[2].role, 'user');
+    assert.equal(result[2].content, 'Hey');
+
+    assert.equal(
+      result[1].content,
+      `The user is currently viewing the following user interface:
+Room ID: room1
+Submode: code
+Workspace: http://localhost:4201/experiments
+The user has no open cards.
+File open in code editor: http://localhost:4201/experiments/author.gts
+  Selected declaration: Author from http://localhost:4201/experiments/author
+Module inspector panel: spec
+Active spec card: http://localhost:4201/experiments/Spec/author-spec-1
 
 Current date and time: 2025-06-11T11:43:00.533Z
 `,

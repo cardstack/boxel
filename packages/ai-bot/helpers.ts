@@ -1011,6 +1011,21 @@ export const buildContextMessage = async (
       result += `File open in code editor: ${context.codeMode.currentFile}\n`;
       if (context?.codeMode?.selectedCodeRef) {
         result += `  Selected declaration: ${humanReadable(context.codeMode.selectedCodeRef)}\n`;
+
+        // Add inheritance chain information if available
+        if (
+          context?.codeMode?.inheritanceChain &&
+          context.codeMode.inheritanceChain.length > 0
+        ) {
+          result += `  Inheritance chain:\n`;
+          context.codeMode.inheritanceChain.forEach((item, index) => {
+            const indent = index === 0 ? '    ' : '      ';
+            result += `${indent}${index + 1}. ${humanReadable(item.codeRef)}\n`;
+            if (item.fields && item.fields.length > 0) {
+              result += `${indent}   Fields: ${item.fields.join(', ')}\n`;
+            }
+          });
+        }
       }
       if (context?.codeMode?.selectionRange) {
         const { startLine, startColumn, endLine, endColumn } =
@@ -1025,6 +1040,9 @@ export const buildContextMessage = async (
     }
     if (context?.codeMode?.moduleInspectorPanel) {
       result += `Module inspector panel: ${context.codeMode.moduleInspectorPanel}\n`;
+    }
+    if (context?.codeMode?.activeSpecId) {
+      result += `Active spec card: ${context.codeMode.activeSpecId}\n`;
     }
     if (context?.codeMode?.previewPanelSelection) {
       result += `Viewing card instance: ${context.codeMode.previewPanelSelection.cardId}\n`;

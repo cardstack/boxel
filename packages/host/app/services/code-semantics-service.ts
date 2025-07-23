@@ -7,9 +7,17 @@ import {
   identifyCard,
   isCardDocumentString,
   isResolvedCodeRef,
+  loadCardDef,
+  getAncestor,
+  CodeRef,
+  isCardDef as isCardDefHelper,
+  isFieldDef as isFieldDefHelper,
+  getField,
 } from '@cardstack/runtime-common';
 
 import { isReady } from '@cardstack/host/resources/file';
+
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 import { type Ready } from '../resources/file';
 
@@ -21,10 +29,12 @@ import {
   isCardOrFieldDeclaration,
 } from '../resources/module-contents';
 
+import type LoaderService from './loader-service';
 import type OperatorModeStateService from './operator-mode-state-service';
 
 export default class CodeSemanticsService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare loaderService: LoaderService;
 
   private onModuleEditCallback: ((state: State) => void) | undefined =
     undefined;
@@ -181,5 +191,95 @@ export default class CodeSemanticsService extends Service {
   get selectedCodeRef(): ResolvedCodeRef | undefined {
     let codeRef = identifyCard(this.selectedCardOrField?.cardOrField);
     return isResolvedCodeRef(codeRef) ? codeRef : undefined;
+  }
+
+  async getInheritanceChain(): Promise<
+    { codeRef: CodeRef; fields: string[] }[] | undefined
+  > {
+    if (!this.selectedCodeRef) {
+      return undefined;
+    }
+    try {
+      // Load the card definition to check if it's a CardDef or FieldDef descendant
+      let cardOrField = await loadCardDef(this.selectedCodeRef, {
+        loader: this.loaderService.loader,
+        relativeTo: this.codePath || undefined,
+      });
+
+      // Check if it's a CardDef or FieldDef (or descendant)
+      let isCardDef = isCardDefHelper(cardOrField);
+      let isFieldDef = isFieldDefHelper(cardOrField);
+
+      if (!isCardDef && !isFieldDef) {
+        return undefined;
+      }
+
+      let inheritanceChain: { codeRef: CodeRef; fields: string[] }[] = [];
+      let currentCard = cardOrField;
+
+      // Build the inheritance chain by walking up the prototype chain
+      // Stop when we reach CardDef or FieldDef (don't include BaseDef)
+      while (currentCard) {
+        let codeRef = identifyCard(currentCard);
+        if (codeRef) {
+          // Get fields defined at this level of the inheritance chain
+          let fields = this.getOwnFields(currentCard);
+
+          inheritanceChain.push({
+            codeRef,
+            fields,
+          });
+        }
+
+        // Stop if we've reached CardDef or FieldDef
+        if (
+          (isCardDefHelper(currentCard) && currentCard.name === 'CardDef') ||
+          (isFieldDefHelper(currentCard) && currentCard.name === 'FieldDef')
+        ) {
+          break;
+        }
+
+        // Get the parent (ancestor) card
+        let ancestor = getAncestor(currentCard);
+        if (ancestor && ancestor !== currentCard) {
+          currentCard = ancestor;
+        } else {
+          break;
+        }
+      }
+
+      return inheritanceChain.length > 0 ? inheritanceChain : undefined;
+    } catch (error) {
+      console.warn('Failed to build inheritance chain:', error);
+      return undefined;
+    }
+  }
+
+  private getOwnFields(card: typeof BaseDef): string[] {
+    // Get own property descriptors to only get fields defined at this level
+    let fields: string[] = [];
+    let obj = card.prototype;
+
+    if (obj) {
+      let descs = Object.getOwnPropertyDescriptors(obj);
+      for (let fieldName of Object.keys(descs)) {
+        if (fieldName === 'constructor') {
+          continue;
+        }
+
+        // Check if this is actually a field by trying to get it
+        try {
+          let maybeField = getField(card, fieldName);
+          if (maybeField && !maybeField.computeVia) {
+            fields.push(fieldName);
+          }
+        } catch {
+          // If getField throws, it's not a valid field
+          continue;
+        }
+      }
+    }
+
+    return fields;
   }
 }

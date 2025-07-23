@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "MinecraftInvite",
+        "module": "../minecraft-invite/minecraft-invite"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "MinecraftInvite",
+      "description": "Spec of MinecraftInvite",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

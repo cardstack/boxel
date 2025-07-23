@@ -74,6 +74,7 @@ export interface OperatorModeState {
   stacks: Stack[];
   submode: Submode;
   codePath: URL | null;
+  trail: string[];
   aiAssistantOpen: boolean;
   fileView?: FileView;
   openDirs: Map<string, string[]>;
@@ -99,6 +100,7 @@ export type SerializedState = {
   stacks: SerializedStack[];
   submode?: Submode;
   codePath?: string;
+  trail?: string[];
   fileView?: FileView;
   openDirs?: Record<string, string[]>;
   codeSelection?: string;
@@ -121,6 +123,7 @@ export default class OperatorModeStateService extends Service {
     stacks: new TrackedArray<Stack>([]),
     submode: Submodes.Interact,
     codePath: null,
+    trail: [],
     openDirs: new TrackedMap<string, string[]>(),
     aiAssistantOpen: false,
     newFileDropdownOpen: false,
@@ -132,6 +135,8 @@ export default class OperatorModeStateService extends Service {
   private cardTitles = new TrackedMap<string, string>();
 
   private moduleInspectorHistory: Record<string, ModuleInspectorView>;
+
+  @tracked profileSettingsOpen = false;
 
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
@@ -162,11 +167,16 @@ export default class OperatorModeStateService extends Service {
     );
   }
 
+  toggleProfileSettings = () => {
+    this.profileSettingsOpen = !this.profileSettingsOpen;
+  };
+
   get state() {
     return {
       stacks: this._state.stacks,
       submode: this._state.submode,
       codePath: this._state.codePath,
+      trail: this._state.trail,
       fileView: this._state.fileView,
       openDirs: this._state.openDirs,
       codeSelection: this._state.codeSelection,
@@ -207,6 +217,7 @@ export default class OperatorModeStateService extends Service {
       stacks: new TrackedArray([]),
       submode: Submodes.Interact,
       codePath: null,
+      trail: [],
       openDirs: new TrackedMap<string, string[]>(),
       aiAssistantOpen: false,
       moduleInspector: DEFAULT_MODULE_INSPECTOR_VIEW,
@@ -358,6 +369,19 @@ export default class OperatorModeStateService extends Service {
     return this._state.stacks
       .filter((stack) => stack.length > 0)
       .map((stack) => stack[stack.length - 1]);
+  }
+
+  updateTrail(trail: string[]) {
+    this._state.trail = trail;
+    this.schedulePersist();
+  }
+
+  get currentTrailItem() {
+    if (this._state.trail.length === 0) {
+      return new URL('./index.json', this.realmURL).href;
+    }
+
+    return this._state.trail[this._state.trail.length - 1];
   }
 
   get isViewingCardInCodeMode() {
@@ -681,6 +705,7 @@ export default class OperatorModeStateService extends Service {
       stacks: [],
       submode: this._state.submode,
       codePath: this._state.codePath?.toString(),
+      trail: this._state.trail,
       fileView: this._state.fileView?.toString() as FileView,
       openDirs: Object.fromEntries(this._state.openDirs.entries()),
       codeSelection: this._state.codeSelection,
@@ -749,6 +774,7 @@ export default class OperatorModeStateService extends Service {
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submodes.Interact,
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
+      trail: rawState.trail ?? [],
       fileView: rawState.fileView ?? 'inspector',
       openDirs,
       codeSelection: rawState.codeSelection,
@@ -871,6 +897,10 @@ export default class OperatorModeStateService extends Service {
     }
 
     return new URL(this.realm.defaultReadableRealm.path);
+  }
+
+  get currentRealmInfo() {
+    return this.realm.info(this.realmURL.href);
   }
 
   getWritableRealmURL = (preferredURLs: string[] = []) => {
@@ -1033,9 +1063,9 @@ export default class OperatorModeStateService extends Service {
     return undefined;
   }
 
-  getSummaryForAIBot(
+  async getSummaryForAIBot(
     openCardIdsSet: Set<string> = new Set([...this.getOpenCardIds()]),
-  ): BoxelContext {
+  ): Promise<BoxelContext> {
     let codeMode: BoxelContext['codeMode'] = undefined;
     if (this._state.workspaceChooserOpened) {
       let userWorkspaces = this.realmServer.userRealmURLs.map((url) => ({
@@ -1087,6 +1117,16 @@ export default class OperatorModeStateService extends Service {
             }
           : undefined;
         codeMode.selectedCodeRef = this.codeSemanticsService.selectedCodeRef;
+        codeMode.inheritanceChain =
+          await this.codeSemanticsService.getInheritanceChain();
+
+        // Include active spec ID when spec pane is active
+        if (
+          this.moduleInspectorPanel === 'spec' &&
+          this.specPanelService.specSelection
+        ) {
+          codeMode.activeSpecId = this.specPanelService.specSelection;
+        }
       }
     }
 
