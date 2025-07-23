@@ -1,7 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { ComponentLike } from '@glint/template';
+import type { ComponentLike } from '@glint/template';
 
 import { cn, eq } from '../../helpers.ts';
 import { FailureBordered, Warning } from '../../icons.gts';
