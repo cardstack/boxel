@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Analytics & Reporting",
+      "description": "Business intelligence, data visualization, performance metrics, dashboard creation, and automated reporting tools.",
+      "color": "#0ea5e9",
+      "order": 8
+    },
+    "relationships": {
+      "sphere": {
+        "links": {
+          "self": "../Sphere/20dcc8f6-891d-4570-a0c0-1e07b14c97ee"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/category",
+        "name": "Category"
+      }
+    }
+  }
+}

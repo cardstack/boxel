@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Video Games & Interactive",
+      "description": "Video games, interactive entertainment, gaming achievements, multiplayer coordination, and digital game collection management.",
+      "color": "#8b5cf6",
+      "order": 1
+    },
+    "relationships": {
+      "sphere": {
+        "links": {
+          "self": "../Sphere/c8f6891d-9570-40c0-9e07-b14c97eedb48"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/category",
+        "name": "Category"
+      }
+    }
+  }
+}

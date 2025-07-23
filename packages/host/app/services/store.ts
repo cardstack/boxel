@@ -823,6 +823,23 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
+  // this function is used to determine if the instance will be auto-saved or not
+  // this is a temporary function that is likely to go away with the creation of completion emphemeral state solution of the store/realm
+  // the only use-case for this function is determining if a preview instance in catalog realm (which is a read-only),
+  // st a card can be mutable without persisting to the server
+  private useEphemeralState(instance: CardDef | undefined): boolean {
+    if (!instance) {
+      return false;
+    }
+    let realmURL = instance[realmURLSymbol];
+    if (!realmURL) {
+      // if a proper cannot derived, I just revert to the default behaviour of auto-save
+      return false;
+    }
+    let permissionToWrite = this.realm.permissions(realmURL.href).canWrite;
+    return !permissionToWrite;
+  }
+
   private doAutoSave(
     idOrInstance: string | CardDef,
     opts?: { isImmediate?: true },
@@ -835,6 +852,9 @@ export default class StoreService extends Service implements StoreInterface {
       }
     } else {
       instance = idOrInstance;
+    }
+    if (this.useEphemeralState(instance)) {
+      return;
     }
     let autoSaveState = this.initOrGetAutoSaveState(instance);
     let queueName = instance.id ?? instance[localIdSymbol];

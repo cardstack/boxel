@@ -48,7 +48,8 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
   <template>
     <PermissionsConsumer as |permissions|>
       <div
-        class='links-to-editor'
+        class='links-to-editor
+          {{if permissions.canWrite "can-write" "read-only"}}'
         data-test-links-to-editor={{@field.name}}
         ...attributes
       >
@@ -93,7 +94,9 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       .links-to-editor {
         position: relative;
         display: grid;
-        grid-template-columns: 1fr max-content;
+      }
+      .links-to-editor.can-write {
+        grid-template-columns: 1fr var(--boxel-icon-lg);
       }
       .links-to-editor > :deep(.boxel-card-container.embedded-format) {
         order: -1;

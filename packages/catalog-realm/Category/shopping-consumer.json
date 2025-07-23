@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Shopping & Consumer",
+      "description": "Product research, price comparison, wish lists, purchase tracking, and consumer review management.",
+      "color": "#f59e0b",
+      "order": 7
+    },
+    "relationships": {
+      "sphere": {
+        "links": {
+          "self": "../Sphere/5d7420dc-c8f6-491d-9570-60c01e07b14c"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/category",
+        "name": "Category"
+      }
+    }
+  }
+}

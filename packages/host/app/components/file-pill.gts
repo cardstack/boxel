@@ -1,5 +1,5 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 
 import Component from '@glimmer/component';
 
@@ -15,9 +15,10 @@ interface FilePillSignature {
   Element: HTMLDivElement | HTMLButtonElement;
   Args: {
     file: FileDef;
-    isAutoAttachedFile?: boolean;
-    removeFile?: (file: FileDef) => void;
-    downloadFile?: (file: FileDef) => void;
+    borderType?: 'dashed' | 'solid';
+    onClick?: () => void;
+    onRemove?: () => void;
+    onDownload?: () => void;
   };
 }
 
@@ -26,11 +27,57 @@ export default class FilePill extends Component<FilePillSignature> {
     return this.args.file.constructor.getComponent(this.args.file);
   }
 
+  @action
+  private handleFileClick() {
+    if (this.args.onClick) {
+      this.args.onClick();
+    }
+  }
+
+  @action
+  private handleRemoveClick(event: Event) {
+    // Prevent the click from bubbling up to the pill button
+    event.stopPropagation();
+    if (this.args.onRemove) {
+      this.args.onRemove();
+    }
+  }
+
+  @action
+  private handleDownloadClick(event: Event) {
+    // Prevent the click from bubbling up to the pill button
+    event.stopPropagation();
+    if (this.args.onDownload) {
+      this.args.onDownload();
+    }
+  }
+
+  private get pillKind() {
+    return this.args.onClick ? 'button' : 'default';
+  }
+
+  private get borderStyle() {
+    return this.args.borderType === 'dashed' ? 'dashed' : 'solid';
+  }
+
+  private get borderClass() {
+    return `border-${this.borderStyle}`;
+  }
+
+  private get hideIconRight() {
+    return !this.args.onRemove && !this.args.onDownload;
+  }
+
   <template>
     <Pill
-      class={{cn 'file-pill' is-autoattached=@isAutoAttachedFile}}
+      @kind={{this.pillKind}}
+      class={{cn
+        'file-pill'
+        this.borderClass
+        hide-icon-right=this.hideIconRight
+      }}
       data-test-attached-file={{@file.sourceUrl}}
-      data-test-autoattached-file={{@isAutoAttachedFile}}
+      {{on 'click' this.handleFileClick}}
       ...attributes
     >
       <:iconLeft>
@@ -42,23 +89,23 @@ export default class FilePill extends Component<FilePillSignature> {
         </div>
       </:default>
       <:iconRight>
-        {{#if @removeFile}}
+        {{#if @onRemove}}
           <IconButton
             class='remove-button'
             @icon={{IconX}}
             @height='10'
             @width='10'
-            {{on 'click' (fn @removeFile @file)}}
+            {{on 'click' this.handleRemoveClick}}
             data-test-remove-file-btn
           />
         {{/if}}
-        {{#if @downloadFile}}
+        {{#if @onDownload}}
           <IconButton
             class='download-button'
             @icon={{Download}}
             @height='10'
             @width='10'
-            {{on 'click' (fn @downloadFile @file)}}
+            {{on 'click' this.handleDownloadClick}}
             data-test-download-file-btn
           />
         {{/if}}
@@ -73,8 +120,14 @@ export default class FilePill extends Component<FilePillSignature> {
         overflow: hidden;
         padding-left: 3px;
       }
-      .is-autoattached {
+      .border-dashed {
         border-style: dashed;
+      }
+      .border-solid {
+        border-style: solid;
+      }
+      .hide-icon-right :deep(figure.icon):last-child {
+        display: none;
       }
 
       .file-content {
