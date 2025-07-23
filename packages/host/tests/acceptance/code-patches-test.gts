@@ -128,6 +128,14 @@ Hello, world!
 ${SEPARATOR_MARKER}
 Hi, world!
 ${REPLACE_MARKER}\n\`\`\``;
+
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
+      body: 'Hey there respond with a code patch to update the hello.txt file',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
     let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: codeBlock,
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -139,6 +147,15 @@ ${REPLACE_MARKER}\n\`\`\``;
     await waitFor('[data-test-apply-code-button]');
     await click('[data-test-apply-code-button]');
     await waitUntil(() => getMonacoContent() === 'Hi, world!');
+
+    // The bound value of this attribute is used in the "Copy Submitted Content" menu item,
+    // but we can't test that because navigator.clipboard is not available in test environment
+    assert
+      .dom('[data-test-copy-submitted-content]')
+      .hasAttribute(
+        'data-test-copy-submitted-content',
+        'Hey there respond with a code patch to update the hello.txt file',
+      );
 
     let codePatchResultEvents = getRoomEvents(roomId).filter(
       (event) =>

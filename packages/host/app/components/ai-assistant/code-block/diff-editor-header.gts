@@ -62,6 +62,8 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
               @kind='secondary-dark'
               class='file-info-button'
               data-code-patch-dropdown-button={{this.fileName}}
+              {{! including this in a test attribute because navigator.clipboard is not available in test environment }}
+              data-test-copy-submitted-content={{this.args.userSubmittedMessage}}
               {{bindings}}
             >
               <span class='filename' data-test-file-name>
