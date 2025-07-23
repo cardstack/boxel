@@ -1,9 +1,12 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { service } from '@ember/service';
 import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
+
+import UserScreen from '@cardstack/boxel-icons/user-screen';
 
 import get from 'lodash/get';
 
@@ -18,10 +21,12 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import config from '@cardstack/host/config/environment';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 export const Submodes = {
   Interact: 'interact',
   Code: 'code',
+  Host: 'host',
 } as const;
 type Values<T> = T[keyof T];
 export type Submode = Values<typeof Submodes>;
@@ -104,6 +109,10 @@ export default class SubmodeSwitcher extends Component<Signature> {
           border-bottom-left-radius var(--boxel-transition);
       }
 
+      .submode-switcher-dropdown-trigger .icon {
+        color: var(--icon-color);
+      }
+
       .submode-switcher-dropdown-trigger[aria-expanded='true'] {
         border-bottom-right-radius: 0;
         border-bottom-left-radius: 0;
@@ -143,9 +152,12 @@ export default class SubmodeSwitcher extends Component<Signature> {
     </style>
   </template>
 
+  @service private declare operatorModeStateService: OperatorModeStateService;
+
   submodeIcons = {
     [Submodes.Interact]: Eye,
     [Submodes.Code]: IconCode,
+    [Submodes.Host]: UserScreen,
   };
   @tracked isExpanded = false;
 
@@ -166,6 +178,13 @@ export default class SubmodeSwitcher extends Component<Signature> {
   get buildMenuItems(): MenuItem[] {
     return Object.values(Submodes)
       .filter((submode) => submode !== this.args.submode)
+      .filter((submode) => {
+        if (submode === Submodes.Host) {
+          return this.operatorModeStateService.currentRealmInfo?.publishable;
+        }
+
+        return true;
+      })
       .map((submode) =>
         menuItemFunc(
           [

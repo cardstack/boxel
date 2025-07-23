@@ -1436,4 +1436,101 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Context sent with message contains correct workspaces',
     );
   });
+
+  test('clicking auto-attached card makes it a chosen card', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // Verify auto-attached card exists
+    assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Person/fadhlan"][data-test-autoattached-card]`,
+      )
+      .exists();
+
+    // Click on the auto-attached card (not the remove button) to make it a chosen card
+    await click(
+      `[data-test-attached-card="${testRealmURL}Person/fadhlan"][data-test-autoattached-card]`,
+    );
+
+    // Verify the card is now a regular attached card (not auto-attached)
+    assert.dom('[data-test-autoattached-card]').doesNotExist();
+    assert
+      .dom(`[data-test-attached-card="${testRealmURL}Person/fadhlan"]`)
+      .exists();
+    assert
+      .dom(
+        `[data-test-attached-card="${testRealmURL}Person/fadhlan"][data-test-autoattached-card]`,
+      )
+      .doesNotExist();
+
+    // Verify the remove button still works
+    await click(
+      `[data-test-attached-card="${testRealmURL}Person/fadhlan"] [data-test-remove-card-btn]`,
+    );
+    assert
+      .dom(`[data-test-attached-card="${testRealmURL}Person/fadhlan"]`)
+      .doesNotExist();
+  });
+
+  test('clicking auto-attached file makes it a chosen file', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}plant.gts`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // Verify auto-attached file exists
+    assert.dom('[data-test-autoattached-file]').exists({ count: 1 });
+    assert
+      .dom(
+        `[data-test-attached-file="${testRealmURL}plant.gts"][data-test-autoattached-file]`,
+      )
+      .exists();
+
+    // Click on the auto-attached file (not the remove button) to make it a chosen file
+    await click(
+      `[data-test-attached-file="${testRealmURL}plant.gts"][data-test-autoattached-file]`,
+    );
+
+    // Verify the file is now a regular attached file (not auto-attached)
+    assert.dom('[data-test-autoattached-file]').doesNotExist();
+    assert.dom(`[data-test-attached-file="${testRealmURL}plant.gts"]`).exists();
+    assert
+      .dom(
+        `[data-test-attached-file="${testRealmURL}plant.gts"][data-test-autoattached-file]`,
+      )
+      .doesNotExist();
+
+    // Verify the remove button still works
+    await click(
+      `[data-test-attached-file="${testRealmURL}plant.gts"] [data-test-remove-file-btn]`,
+    );
+    assert
+      .dom(`[data-test-attached-file="${testRealmURL}plant.gts"]`)
+      .doesNotExist();
+  });
 });
