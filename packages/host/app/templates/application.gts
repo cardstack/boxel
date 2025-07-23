@@ -30,7 +30,7 @@ class ApplicationRouteComponent extends Component<ApplicationRouteSignature> {
 
   <template>
     {{#if this.hostMode}}
-      <p>Placeholder for host mode: {{this.hostname}}</p>
+      <p {{removeLoading}}>Placeholder for host mode: {{this.hostname}}</p>
     {{else}}
       {{! The main application outlet }}
       {{outlet}}
