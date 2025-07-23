@@ -7,13 +7,7 @@ import {
   deserialize,
   formatQuery,
   queryableValue,
-  CardDef,
-  BaseDefConstructor,
-  BaseInstanceType,
   FieldDef,
-  relativeTo,
-  type SerializeOpts,
-  type JSONAPISingleResourceDocument,
 } from './card-api';
 import { restartableTask } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
@@ -21,7 +15,7 @@ import {
   type ResolvedCodeRef,
   isUrlLike,
   CardURLContextName,
-  isResolvedCodeRef,
+  CodeRefSerializer,
 } from '@cardstack/runtime-common';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
@@ -41,9 +35,8 @@ class BaseView extends Component<typeof CodeRefField> {
 class EditView extends Component<typeof CodeRefField> {
   @consume(CardURLContextName) declare cardURL: string | undefined;
   @tracked validationState: 'initial' | 'valid' | 'invalid' = 'initial';
-  @tracked private maybeCodeRef: string | undefined = maybeSerializeCodeRef(
-    this.args.model ?? undefined,
-  );
+  @tracked private maybeCodeRef: string | undefined =
+    CodeRefSerializer.queryableValue(this.args.model ?? undefined);
 
   <template>
     <BoxelInput
@@ -105,62 +98,14 @@ class EditView extends Component<typeof CodeRefField> {
   );
 }
 
-function codeRefAdjustments(
-  codeRef: any,
-  relativeTo?: string,
-  opts?: SerializeOpts,
-) {
-  if (!codeRef) {
-    return {};
-  }
-  if (!isResolvedCodeRef(codeRef)) {
-    return {};
-  }
-  if (!isUrlLike(codeRef.module)) {
-    return {};
-  }
-  if (opts?.useAbsoluteURL && relativeTo) {
-    return { module: new URL(codeRef.module, relativeTo).href };
-  }
-  if (!opts?.maybeRelativeURL) {
-    return {};
-  }
-  return { module: opts.maybeRelativeURL(codeRef.module) };
-}
-
 export default class CodeRefField extends FieldDef {
   static icon = CodeIcon;
   static [primitive]: ResolvedCodeRef;
 
-  static [serialize](
-    codeRef: ResolvedCodeRef | {},
-    doc: JSONAPISingleResourceDocument,
-    _visited?: Set<string>,
-    opts?: SerializeOpts,
-  ) {
-    return {
-      ...codeRef,
-      ...codeRefAdjustments(codeRef, doc.data.id, opts),
-    };
-  }
-  static async [deserialize]<T extends BaseDefConstructor>(
-    this: T,
-    codeRef: ResolvedCodeRef | {},
-    _relativeTo: URL | undefined,
-  ): Promise<BaseInstanceType<T>> {
-    return { ...codeRef } as BaseInstanceType<T>; // return a new object so that the model cannot be mutated from the outside
-  }
-
-  static [queryableValue](
-    codeRef: ResolvedCodeRef | {} | undefined,
-    stack: CardDef[] = [],
-  ) {
-    return maybeSerializeCodeRef(codeRef, stack);
-  }
-
-  static [formatQuery](codeRef: ResolvedCodeRef | {}) {
-    return maybeSerializeCodeRef(codeRef);
-  }
+  static [serialize] = CodeRefSerializer.serialize;
+  static [deserialize] = CodeRefSerializer.deserialize;
+  static [queryableValue] = CodeRefSerializer.queryableValue;
+  static [formatQuery] = CodeRefSerializer.formatQuery;
 
   static embedded = class Embedded extends BaseView {};
 
@@ -168,35 +113,5 @@ export default class CodeRefField extends FieldDef {
 }
 
 export class AbsoluteCodeRefField extends CodeRefField {
-  static async [deserialize]<T extends BaseDefConstructor>(
-    this: T,
-    codeRef: ResolvedCodeRef | {},
-    relativeTo: URL | undefined,
-  ): Promise<BaseInstanceType<T>> {
-    return {
-      ...codeRef,
-      ...codeRefAdjustments(codeRef, relativeTo?.toString(), {
-        useAbsoluteURL: true,
-      }),
-    } as BaseInstanceType<T>;
-  }
-}
-
-function maybeSerializeCodeRef(
-  codeRef: ResolvedCodeRef | {} | undefined,
-  stack: CardDef[] = [],
-) {
-  if (codeRef && isResolvedCodeRef(codeRef)) {
-    if (isUrlLike(codeRef.module)) {
-      // if a stack is passed in, use the containing card to resolve relative references
-      let moduleHref =
-        stack.length > 0
-          ? new URL(codeRef.module, stack[0][relativeTo]).href
-          : codeRef.module;
-      return `${moduleHref}/${codeRef.name}`;
-    } else {
-      return `${codeRef.module}/${codeRef.name}`;
-    }
-  }
-  return undefined;
+  static [deserialize] = CodeRefSerializer.deserializeAbsolute;
 }

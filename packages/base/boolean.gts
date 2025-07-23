@@ -6,8 +6,6 @@ import {
   Component,
   useIndexBasedKey,
   FieldDef,
-  BaseDefConstructor,
-  BaseInstanceType,
   deserialize,
   emptyValue,
 } from './card-api';
@@ -15,6 +13,7 @@ import { fn } from '@ember/helper';
 import { RadioInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import ToggleLeftIcon from '@cardstack/boxel-icons/toggle-left';
+import { BooleanSerializer } from '@cardstack/runtime-common';
 
 // this allows multiple radio groups rendered on the page
 // to stay independent of one another.
@@ -38,30 +37,15 @@ export default class BooleanField extends FieldDef {
   static icon = ToggleLeftIcon;
   static [primitive]: boolean;
   static [useIndexBasedKey]: never;
-  static [serialize](val: any) {
-    return Boolean(val);
-  }
+  static [serialize] = BooleanSerializer.serialize;
 
   static get [emptyValue]() {
     return false;
   }
 
-  static async [deserialize]<T extends BaseDefConstructor>(
-    this: T,
-    val: any,
-  ): Promise<BaseInstanceType<T>> {
-    if (val === undefined || val === null) {
-      return false as BaseInstanceType<T>;
-    }
-    return Boolean(val) as BaseInstanceType<T>;
-  }
-
-  static [queryableValue](val: any): boolean {
-    return asBoolean(val);
-  }
-  static [formatQuery](val: any): boolean {
-    return asBoolean(val);
-  }
+  static [deserialize] = BooleanSerializer.deserialize;
+  static [queryableValue] = BooleanSerializer.queryableValue;
+  static [formatQuery] = BooleanSerializer.formatQuery;
 
   static embedded = View;
   static atom = View;
@@ -96,11 +80,4 @@ export default class BooleanField extends FieldDef {
       return String(this.args.model);
     }
   };
-}
-
-function asBoolean(val: any): boolean {
-  if (typeof val === 'string') {
-    return val.toLowerCase() === 'true';
-  }
-  return Boolean(val);
 }

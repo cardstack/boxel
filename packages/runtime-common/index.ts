@@ -153,6 +153,7 @@ import type { CodeRef } from './code-ref';
 export type { CodeRef };
 
 export * from './code-ref';
+export * from './serializer';
 
 export type { CardDocument, SingleCardDocument } from './document-types';
 export type {

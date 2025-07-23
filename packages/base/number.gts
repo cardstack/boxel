@@ -4,34 +4,12 @@ import {
   useIndexBasedKey,
   FieldDef,
   deserialize,
-  BaseInstanceType,
-  BaseDefConstructor,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 import { not } from '@cardstack/boxel-ui/helpers';
 import HashIcon from '@cardstack/boxel-icons/hash';
-
-function serialize(val: number | null): string | undefined {
-  if (val != null && val === 0) {
-    return val.toString();
-  }
-  return val ? val.toString() : undefined;
-}
-
-function _deserialize(number: number | string | null): number | null {
-  if (number == null || number === '') {
-    return null;
-  }
-
-  let errorMessage = validate(number);
-
-  if (errorMessage) {
-    return null;
-  } else {
-    return Number(number);
-  }
-}
+import { NumberSerializer } from '@cardstack/runtime-common';
 
 function validate(value: string | number | null): string | null {
   if (value == null || value === '') {
@@ -64,6 +42,15 @@ function validate(value: string | number | null): string | null {
   return null;
 }
 
+function deserializeForUI(value: string | number | null): number | null {
+  const validationError = validate(value);
+  if (validationError) {
+    return null;
+  }
+
+  return NumberSerializer.deserializeSync(value);
+}
+
 class View extends Component<typeof NumberField> {
   <template>
     {{@model}}
@@ -75,12 +62,7 @@ export default class NumberField extends FieldDef {
   static icon = HashIcon;
   static [primitive]: number;
   static [useIndexBasedKey]: never;
-  static async [deserialize]<T extends BaseDefConstructor>(
-    this: T,
-    number: any,
-  ): Promise<BaseInstanceType<T>> {
-    return _deserialize(number) as BaseInstanceType<T>;
-  }
+  static [deserialize] = NumberSerializer.deserialize;
   static embedded = View;
   static atom = View;
 
@@ -98,8 +80,8 @@ export default class NumberField extends FieldDef {
     textInputValidator: TextInputValidator<number> = new TextInputValidator(
       () => this.args.model,
       (inputVal) => this.args.set(inputVal),
-      _deserialize,
-      serialize,
+      deserializeForUI,
+      NumberSerializer.serialize,
       validate,
     );
   };
