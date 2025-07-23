@@ -203,6 +203,7 @@ export interface BoxelContext {
       endLine: number;
       endColumn: number;
     };
+    activeSpecId?: string;
   };
   debug?: boolean;
   requireToolCall?: boolean;

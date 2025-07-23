@@ -1041,6 +1041,9 @@ export const buildContextMessage = async (
     if (context?.codeMode?.moduleInspectorPanel) {
       result += `Module inspector panel: ${context.codeMode.moduleInspectorPanel}\n`;
     }
+    if (context?.codeMode?.activeSpecId) {
+      result += `Active spec card: ${context.codeMode.activeSpecId}\n`;
+    }
     if (context?.codeMode?.previewPanelSelection) {
       result += `Viewing card instance: ${context.codeMode.previewPanelSelection.cardId}\n`;
       result += `In format: ${context.codeMode.previewPanelSelection.format}\n`;
