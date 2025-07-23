@@ -35,11 +35,6 @@ NODE_ENV=development \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='http://localhost:4201/base/' \
   \
-  --path='../experiments-realm' \
-  --username='experiments_realm' \
-  --fromUrl='http://localhost:4201/experiments/' \
-  --toUrl='http://localhost:4201/experiments/' \
-  \
   --path='../catalog-realm' \
   --username='catalog_realm' \
   --fromUrl='http://localhost:4201/catalog/' \
@@ -48,4 +43,9 @@ NODE_ENV=development \
   --path='../skills-realm/contents' \
   --username='skills_realm' \
   --fromUrl='http://localhost:4201/skills/' \
-  --toUrl='http://localhost:4201/skills/'
+  --toUrl='http://localhost:4201/skills/' \
+  \
+  --path='../experiments-realm' \
+  --username='experiments_realm' \
+  --fromUrl='http://localhost:4201/experiments/' \
+  --toUrl='http://localhost:4201/experiments/'

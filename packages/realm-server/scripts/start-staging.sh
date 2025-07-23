@@ -19,17 +19,17 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='https://realms-staging.stack.cards/base/' \
   \
-  --path='/persistent/experiments' \
-  --username='experiments_realm' \
-  --fromUrl='https://realms-staging.stack.cards/experiments/' \
-  --toUrl='https://realms-staging.stack.cards/experiments/' \
-  \
   --path='/persistent/catalog' \
   --username='catalog_realm' \
   --fromUrl='https://realms-staging.stack.cards/catalog/' \
-  --toUrl='https://realms-staging.stack.cards/catalog/'\
+  --toUrl='https://realms-staging.stack.cards/catalog/' \
   \
   --path='/persistent/skills' \
   --username='skills_realm' \
   --fromUrl='https://realms-staging.stack.cards/skills/' \
-  --toUrl='https://realms-staging.stack.cards/skills/'
+  --toUrl='https://realms-staging.stack.cards/skills/' \
+  \
+  --path='/persistent/experiments' \
+  --username='experiments_realm' \
+  --fromUrl='https://realms-staging.stack.cards/experiments/' \
+  --toUrl='https://realms-staging.stack.cards/experiments/'
