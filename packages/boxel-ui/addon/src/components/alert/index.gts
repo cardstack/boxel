@@ -66,6 +66,7 @@ const Messages: TemplateOnlyComponent<MessagesSignature> = <template>
     .alert-icon {
       min-width: 20px;
       height: 20px;
+      --icon-background-color: var(--boxel-error-400);
     }
     .message {
       align-self: center;
@@ -135,9 +136,7 @@ const Alert: TemplateOnlyComponent<Signature> = <template>
       background-color: var(--boxel-warning-200);
       color: var(--boxel-dark);
     }
-    .error-container .alert-icon {
-      --icon-background-color: var(--boxel-error-400);
-    }
+
     .alert-container > :deep(* + *) {
       margin-top: var(--boxel-sp-sm);
     }
