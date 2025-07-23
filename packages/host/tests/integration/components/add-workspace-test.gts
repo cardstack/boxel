@@ -2,6 +2,7 @@ import { fillIn, click } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 
+import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { module, test } from 'qunit';
 
 import AddWorkspace from '@cardstack/host/components/operator-mode/workspace-chooser/add-workspace';
@@ -17,6 +18,7 @@ module('Integration | add-workspace', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <AddWorkspace />
+          <FromElseWhere @name='modal-elsewhere' />
         </template>
       },
     );
