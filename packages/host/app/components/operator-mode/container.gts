@@ -13,8 +13,6 @@ import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 
 import { provide } from 'ember-provide-consume-context';
 
-import { Modal } from '@cardstack/boxel-ui/components';
-
 import { or, not } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -118,14 +116,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   <template>
-    <Modal
-      class='operator-mode'
-      @size='full-screen'
-      @isOpen={{true}}
-      @onClose={{@onClose}}
-      @isOverlayDismissalDisabled={{true}}
-      @boxelModalOverlayColor='var(--operator-mode-bg-color)'
-    >
+    <div class='operator-mode'>
       <ChooseFileModal />
       <CardCatalogModal />
       <FromElseWhere @name='restore-patched-file-modal' />
@@ -144,7 +135,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       {{else}}
         <InteractSubmode />
       {{/if}}
-    </Modal>
+    </div>
 
     <style scoped>
       :global(:root) {
@@ -177,7 +168,14 @@ export default class OperatorModeContainer extends Component<Signature> {
         display: none;
       }
       .operator-mode {
+        background: var(--operator-mode-bg-color);
+        padding: 0;
+        top: 0;
+        left: 0;
+        right: 0;
         min-width: var(--operator-mode-min-width);
+        height: 100%;
+        position: fixed;
       }
       .operator-mode > div {
         align-items: flex-start;
