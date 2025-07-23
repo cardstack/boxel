@@ -21,7 +21,6 @@ import {
   setupOnSave,
   getMonacoContent,
   visitOperatorMode,
-  waitForCodeEditor,
   setupUserSubscription,
   type TestContextWithSave,
 } from '../../helpers';
@@ -363,7 +362,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
@@ -510,7 +508,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}Person/1.json`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-code-mode-card-renderer-body]');
     assert
       .dom('[data-test-code-mode-card-renderer-body]')
@@ -528,7 +525,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}friend.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     assert
@@ -547,7 +543,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}employee.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor(
       '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
     );
@@ -585,7 +580,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-add-field-button]');
     assert.dom('[data-test-add-field-button]').exists({ count: 1 }); // Only top level card has an option to add a field
 
@@ -695,7 +689,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-add-field-button]');
 
     // Field is a card descending from FieldDef
@@ -793,7 +786,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     await click(
@@ -860,7 +852,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     // Let's edit a "linksToMany" Friend field, named friends
@@ -949,7 +940,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
     await click('[data-test-add-field-button]');
 
@@ -1009,7 +999,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     await click(
@@ -1072,7 +1061,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}ambiguous-display-names.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor(`[data-test-boxel-selector-item-text="BlogPost"]`);
     await click(`[data-test-boxel-selector-item-text="BlogPost"]`);
 
@@ -1151,7 +1139,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}empty.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-error-details]');
 
     assert.dom('[data-test-boxel-copy-button]').exists();
@@ -1168,7 +1155,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}employee.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     assert.false(

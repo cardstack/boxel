@@ -35,7 +35,6 @@ import {
   setupAcceptanceTestRealm,
   setupOnSave,
   visitOperatorMode,
-  waitForCodeEditor,
   setupUserSubscription,
   type TestContextWithSave,
   setMonacoContent,
@@ -568,8 +567,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codePath: `${testRealmURL}Person/1.json`,
     });
 
-    await waitForCodeEditor();
-
     await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-card-module-definition]');
     await waitFor('[data-test-card-instance-definition]');
@@ -620,7 +617,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-card-module-definition]');
 
@@ -661,7 +657,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-card-module-definition]');
 
@@ -694,7 +689,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codePath: `${testRealmURL}in-this-file.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
@@ -804,8 +798,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codePath: `${testRealmURL}in-this-file.gts`,
     });
 
-    await waitForCodeEditor();
-
     let localClassSelector =
       '[data-test-boxel-selector-item-text="LocalClass"]';
     let localClassElement = find(localClassSelector);
@@ -863,7 +855,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitForCodeEditor();
     await waitFor(`[data-test-action-button="Duplicate"]`);
     await click('[data-test-action-button="Duplicate"]');
     await waitFor(
@@ -894,7 +885,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
 
-    await waitForCodeEditor();
+    await settled();
     await waitFor(`[data-test-code-mode-card-renderer-header="${id}"]`);
     assert.dom('[data-test-card-resource-loaded]').containsText('Pet');
     assert
@@ -918,7 +909,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitForCodeEditor();
     await waitFor(`[data-test-action-button="Duplicate"]`);
     await click('[data-test-action-button="Duplicate"]');
     await waitFor(
@@ -955,7 +945,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
 
-    await waitForCodeEditor();
+    await settled();
     await waitFor(`[data-test-code-mode-card-renderer-header="${id}"]`);
     assert.dom('[data-test-card-resource-loaded]').containsText('Pet');
     assert
@@ -995,7 +985,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    await waitForCodeEditor();
 
     assertRecentFileURLs(
       assert,
@@ -1067,7 +1056,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
 
-    await waitForCodeEditor();
     assert.strictEqual(recentFilesService.recentFiles.length, 1);
 
     recentFilesService.addRecentFileUrl(`${testRealmURL}Pet/mango.json`);
@@ -1082,7 +1070,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .exists();
 
     await click('[data-test-confirm-delete-button]');
-    await waitForCodeEditor();
 
     assert
       .dom('[data-test-card-url-bar-input]')
@@ -1122,7 +1109,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
-    await waitForCodeEditor();
 
     recentFilesService.addRecentFileUrl(`${testRealmURL}Pet/mango.json`);
     assertRecentFileURLs(assert, recentFilesService.recentFiles, [
@@ -1135,7 +1121,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom(`[data-test-delete-modal="${testRealmURL}pet.gts"]`).exists();
 
     await click('[data-test-confirm-delete-button]');
-    await waitForCodeEditor();
     assert
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}Pet/mango.json`);
@@ -1159,7 +1144,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
-    await waitForCodeEditor();
 
     assertRecentFileURLs(
       assert,
@@ -1196,7 +1180,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}léame.md`,
     });
-    await waitForCodeEditor();
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
 
     await waitFor(`[data-test-action-button="Delete"]`);
@@ -1221,8 +1204,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     } as SerializedState;
 
     await visitOperatorMode(operatorModeState);
-
-    await waitForCodeEditor();
 
     // clicking on normal card
     let elementName = 'ChildCard1';
@@ -1283,7 +1264,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     //clicking on card which is defined locally
     await visitOperatorMode(operatorModeState);
-    await waitForCodeEditor();
 
     elementName = 'ChildCard5';
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
@@ -1299,7 +1279,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
     //clicking on field
     await visitOperatorMode(operatorModeState);
-    await waitForCodeEditor();
 
     elementName = 'ChildField1';
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
@@ -1321,11 +1300,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     await visitOperatorMode(operatorModeState);
 
-    await waitForCodeEditor();
-
     //click card type
     await visitOperatorMode(operatorModeState);
-    await waitForCodeEditor();
     await click(`[data-test-boxel-selector-item-text="ChildCard1"]`);
     let elementName = 'AncestorCard2';
     await waitFor(
@@ -1345,7 +1321,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     //click normal field
     await visitOperatorMode(operatorModeState);
-    await waitForCodeEditor();
     elementName = 'AncestorField1';
     await waitFor(
       `[data-test-card-schema="ChildCard1"] [data-test-field-name="field1"] [data-test-card-display-name="${elementName}"]`,
@@ -1363,7 +1338,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     //click linksTo card
     await visitOperatorMode(operatorModeState);
-    await waitForCodeEditor();
 
     elementName = 'AncestorCard2';
     await waitFor(
@@ -1382,7 +1356,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .hasText(`${elementName} card`);
     //click linksTo card in the same file
     await visitOperatorMode(operatorModeState);
-    await waitForCodeEditor();
 
     elementName = 'ChildCard2';
     await waitFor(
@@ -1425,7 +1398,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codePath: `${testRealmURL}re-export.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
@@ -1506,7 +1478,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codePath: `${testRealmURL}local-inherit.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
@@ -1607,7 +1578,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       )}`,
     );
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-inspector-panel]');
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
@@ -1709,7 +1679,6 @@ export class TestCard extends ExportedCard {
       codePath: `${testRealmURL}in-this-file.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
 
     await click('[data-boxel-selector-item-text="ExportedCard"]');
@@ -1743,7 +1712,7 @@ export class TestCard extends ExportedCard {
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
 
-    await waitForCodeEditor();
+    await settled();
     assert.strictEqual(
       getMonacoContent(),
       expectedSrc,
@@ -1757,7 +1726,7 @@ export class TestCard extends ExportedCard {
     assert.dom('[data-test-total-fields]').containsText('4');
 
     // assert modal state is cleared
-    await waitForCodeEditor();
+    await settled();
     await waitFor('[data-test-card-module-definition]');
 
     await click('[data-test-action-button="Inherit"]');
@@ -1783,7 +1752,6 @@ export class TestCard extends ExportedCard {
       codePath: `${testRealmURL}in-this-file.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="ExportedField"]');
 
     await click('[data-boxel-selector-item-text="ExportedField"]');
@@ -1831,7 +1799,6 @@ export class TestField extends ExportedField {
       codePath: `${testRealmURL}in-this-file.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
 
     await click('[data-boxel-selector-item-text="ExportedCard"]');
@@ -1848,7 +1815,6 @@ export class TestField extends ExportedField {
     await waitFor('[data-test-create-file-modal]', { count: 0 });
 
     // assert modal state is cleared
-    await waitForCodeEditor();
     await waitFor('[data-test-card-module-definition]');
 
     await click('[data-test-action-button="Inherit"]');
@@ -1879,7 +1845,6 @@ export class ExportedCard extends ExportedCardParent {
       codePath: `${testRealmURL}in-this-file.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
 
     await click('[data-boxel-selector-item-text="ExportedCard"]');
@@ -1905,7 +1870,7 @@ export class ExportedCard extends ExportedCardParent {
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
 
-    await waitForCodeEditor();
+    await settled();
     assert.strictEqual(
       getMonacoContent(),
       expectedSrc,
@@ -1926,7 +1891,6 @@ export class ExportedCard extends ExportedCardParent {
       codePath: `${testRealmURL}in-this-file.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
 
     await click('[data-boxel-selector-item-text="ExportedCard"]');
@@ -1967,7 +1931,6 @@ export class ExportedCard extends ExportedCardParent {
       codePath: `${testRealmURL}in-this-file.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="LocalCard"]');
 
     await click('[data-boxel-selector-item-text="LocalCard"]');
@@ -1985,7 +1948,6 @@ export class ExportedCard extends ExportedCardParent {
       codePath: `${testRealmURL}in-this-file.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
 
     await click('[data-boxel-selector-item-text="ExportedCard"]');
@@ -2053,7 +2015,6 @@ export class ExportedCard extends ExportedCardParent {
       codePath: `${testRealmURL}in-this-file.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="LocalCard"]');
 
     await click('[data-boxel-selector-item-text="LocalCard"]');
@@ -2073,7 +2034,6 @@ export class ExportedCard extends ExportedCardParent {
       codePath: `${testRealmURL}in-this-file.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="ExportedField"]');
 
     await click('[data-boxel-selector-item-text="ExportedField"]');
@@ -2091,7 +2051,6 @@ export class ExportedCard extends ExportedCardParent {
       codePath: `${testRealmURL}pet`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="Pet"]');
 
     await click('[data-boxel-selector-item-text="Pet"]');
@@ -2118,7 +2077,6 @@ export class ExportedCard extends ExportedCardParent {
       codePath: `${testRealmURL}in-this-file.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="LocalCard"]');
 
     await click('[data-boxel-selector-item-text="LocalCard"]');
@@ -2138,7 +2096,6 @@ export class ExportedCard extends ExportedCardParent {
       codePath: `${testRealmURL}in-this-file.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-boxel-selector-item-text="ExportedField"]');
 
     await click('[data-boxel-selector-item-text="ExportedField"]');
@@ -2159,7 +2116,6 @@ export class ExportedCard extends ExportedCardParent {
         submode: 'code',
         codePath: `${testRealmURL}pet.gts`,
       });
-      await waitForCodeEditor();
       await waitFor('[data-test-current-module-name="pet.gts"]');
       assert.dom('[data-test-delete-module-button]').doesNotExist();
     });
@@ -2169,7 +2125,6 @@ export class ExportedCard extends ExportedCardParent {
         submode: 'code',
         codePath: `${testRealmURL}Pet/mango.json`,
       });
-      await waitForCodeEditor();
       assert.dom('[data-test-action-button="Delete"]').doesNotExist();
     });
 
@@ -2179,7 +2134,6 @@ export class ExportedCard extends ExportedCardParent {
         submode: 'code',
         codePath: `${testRealmURL}readme.md`,
       });
-      await waitForCodeEditor();
       assert.dom('[data-test-action-button="Delete"]').doesNotExist();
     });
   });
