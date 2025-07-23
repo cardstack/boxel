@@ -47,6 +47,7 @@ export default class NeighborStackTriggerButton extends Component<Signature> {
             @triggerSide
             SearchSheetTriggers.DropCardToLeftNeighborStackButton
           }}
+          data-test-neighbor-stack-trigger
         >
           <span class='icon-container'>
             <IconPlus class='add-icon' width='10' height='10' />

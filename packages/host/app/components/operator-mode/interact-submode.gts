@@ -525,7 +525,11 @@ export default class InteractSubmode extends Component {
   // This determines whether we show the left and right button that trigger the search sheet whose card selection will go to the left or right stack
   // (there is a single stack with at least one card in it)
   private get canCreateNeighborStack() {
-    return this.allStackItems.length > 0 && this.stacks.length === 1;
+    return (
+      this.allStackItems.length > 0 &&
+      this.stacks.length === 1 &&
+      !this.operatorModeStateService.workspaceChooserOpened
+    );
   }
 
   private openSelectedSearchResultInStack = restartableTask(

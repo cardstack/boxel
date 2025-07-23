@@ -62,7 +62,7 @@ interface Signature {
   Args: {
     onSearchSheetOpened?: () => void;
     onSearchSheetClosed?: () => void;
-    onCardSelectFromSearch: (cardId: string) => void;
+    onCardSelectFromSearch?: (cardId: string) => void;
     selectedCardRef?: ResolvedCodeRef | undefined;
     newFileOptions?: NewFileOptions;
   };
@@ -71,6 +71,7 @@ interface Signature {
       {
         openSearchToPrompt: () => void;
         openSearchToResults: (term: string) => void;
+        updateSubmode: (submode: Submode) => void;
       },
     ];
   };
@@ -98,7 +99,6 @@ type PanelWidths = {
 
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
-  @tracked private profileSettingsOpened = false;
   @tracked private profileSummaryOpened = false;
 
   private aiPanelWidths: PanelWidths = new TrackedObject({
@@ -166,6 +166,21 @@ export default class SubmodeLayout extends Component<Signature> {
             : null,
         );
         break;
+      case Submodes.Host: {
+        let currentSubmode = this.operatorModeStateService.state.submode;
+
+        if (currentSubmode === Submodes.Code) {
+          this.operatorModeStateService.updateTrail([]);
+        } else if (currentSubmode === Submodes.Interact) {
+          this.operatorModeStateService.updateTrail(
+            this.lastCardIdInRightMostStack
+              ? [this.lastCardIdInRightMostStack + '.json']
+              : [],
+          );
+        }
+
+        break;
+      }
       default:
         throw assertNever(submode);
     }
@@ -195,7 +210,7 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   @action private async handleCardSelectFromSearch(cardId: string) {
-    this.args.onCardSelectFromSearch(cardId);
+    this.args.onCardSelectFromSearch?.(cardId);
     this.closeSearchSheet();
   }
 
@@ -214,7 +229,7 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   @action private toggleProfileSettings() {
-    this.profileSettingsOpened = !this.profileSettingsOpened;
+    this.operatorModeStateService.toggleProfileSettings();
 
     this.profileSummaryOpened = false;
   }
@@ -320,6 +335,7 @@ export default class SubmodeLayout extends Component<Signature> {
             (hash
               openSearchToPrompt=this.openSearchSheetToPrompt
               openSearchToResults=this.openSearchAndShowResults
+              updateSubmode=this.updateSubmode
             )
           }}
           <button
@@ -333,16 +349,18 @@ export default class SubmodeLayout extends Component<Signature> {
               @displayName={{this.matrixService.profile.displayName}}
             />
           </button>
-          <SearchSheet
-            @mode={{this.searchSheetMode}}
-            @onSetup={{this.setupSearch}}
-            @onBlur={{this.closeSearchSheet}}
-            @onCancel={{this.closeSearchSheet}}
-            @onFocus={{this.openSearchSheetToPrompt}}
-            @onSearch={{this.expandSearchToShowResults}}
-            @onCardSelect={{this.handleCardSelectFromSearch}}
-            @onInputInsertion={{this.storeSearchElement}}
-          />
+          {{#if @onCardSelectFromSearch}}
+            <SearchSheet
+              @mode={{this.searchSheetMode}}
+              @onSetup={{this.setupSearch}}
+              @onBlur={{this.closeSearchSheet}}
+              @onCancel={{this.closeSearchSheet}}
+              @onFocus={{this.openSearchSheetToPrompt}}
+              @onSearch={{this.expandSearchToShowResults}}
+              @onCardSelect={{this.handleCardSelectFromSearch}}
+              @onInputInsertion={{this.storeSearchElement}}
+            />
+          {{/if}}
           <AiAssistantToast
             @hide={{this.aiAssistantPanelService.isOpen}}
             @onViewInChatClick={{this.aiAssistantPanelService.openPanel}}
@@ -396,7 +414,7 @@ export default class SubmodeLayout extends Component<Signature> {
       </ResizablePanelGroup>
     </div>
 
-    {{#if this.profileSettingsOpened}}
+    {{#if this.operatorModeStateService.profileSettingsOpen}}
       <ProfileSettingsModal
         @toggleProfileSettings={{this.toggleProfileSettings}}
       />
