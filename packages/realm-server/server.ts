@@ -244,6 +244,7 @@ export class RealmServer {
         config = merge({}, config, {
           hostsOwnAssets: false,
           assetsURL: this.assetsURL.href,
+          hostModeDomainRoot: this.hostModeDomainRoot,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       },
