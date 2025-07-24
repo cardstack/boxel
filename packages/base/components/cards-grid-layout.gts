@@ -177,6 +177,8 @@ export default class CardsGridLayout extends Component<Signature> {
         width: var(--sidebar-max-width);
         min-width: var(--sidebar-min-width);
         padding: var(--boxel-cards-grid-layout-sidebar-padding, var(--padding));
+        background-color: var(--sidebar);
+        color: var(--sidebar-foreground);
       }
       .content {
         position: relative;
@@ -199,6 +201,7 @@ export default class CardsGridLayout extends Component<Signature> {
         flex-grow: 1;
         margin-block: 0;
         font: 600 var(--boxel-font-lg);
+        font-family: inherit;
         letter-spacing: var(--boxel-lsp-xxs);
       }
     </style>
