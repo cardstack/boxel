@@ -26,7 +26,7 @@ module.exports = function (deployTarget) {
     },
     cloudfront: {
       objectPaths: ['/*'],
-      distribution: process.env.AWS_CLOUDFRONT_DISTRIBUTION,
+      distribution: process.env.AWS_CLOUDFRONT_DISTRIBUTIONS.split(','),
     },
   };
 
