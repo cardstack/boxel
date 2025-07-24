@@ -174,5 +174,13 @@ module(basename(__filename), function () {
         adapter,
       });
     });
+
+    test('can invalidate instances that depend on deleted files when dependencies are only in production index', async function (assert) {
+      await runSharedTest(indexWriterTests, assert, {
+        indexWriter,
+        indexQueryEngine,
+        adapter,
+      });
+    });
   });
 });

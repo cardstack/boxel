@@ -175,4 +175,12 @@ module('Unit | index-writer', function (hooks) {
       adapter,
     });
   });
+
+  test('can invalidate instances that depend on deleted files when dependencies are only in production index', async function (assert) {
+    await runSharedTest(indexWriterTests, assert, {
+      indexWriter,
+      indexQueryEngine,
+      adapter,
+    });
+  });
 });

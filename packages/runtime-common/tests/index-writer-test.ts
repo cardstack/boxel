@@ -1555,6 +1555,90 @@ const tests = Object.freeze({
       'correct card type summary after indexing is done',
     );
   },
+
+  'can invalidate instances that depend on deleted files when dependencies are only in production index':
+    async (assert, { indexWriter, adapter }) => {
+      // Set up production index with instances that depend on a file
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        // Production index has instances with dependencies
+        {
+          production: [
+            {
+              url: `${testRealmURL}dependency.gts`,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'module',
+              deps: [],
+            },
+            {
+              url: `${testRealmURL}instance1.json`,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              deps: [`${testRealmURL}dependency.gts`], // depends on the file we'll delete
+            },
+            {
+              url: `${testRealmURL}instance2.json`,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              deps: [`${testRealmURL}dependency.gts`], // also depends on the file
+            },
+            {
+              url: `${testRealmURL}unrelated.json`,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              deps: [], // doesn't depend on the file
+            },
+          ],
+          working: [],
+        },
+      );
+
+      // Create a new batch and invalidate the dependency file
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let invalidations = await batch.invalidate([
+        new URL(`${testRealmURL}dependency.gts`),
+      ]);
+
+      // Should invalidate the dependency file and all instances that depend on it
+      assert.deepEqual(invalidations.sort(), [
+        `${testRealmURL}dependency.gts`,
+        `${testRealmURL}instance1.json`,
+        `${testRealmURL}instance2.json`,
+      ]);
+
+      // Check that the dependent instances are tombstoned in the working table
+      let tombstonedEntries = await adapter.execute(
+        'SELECT url, is_deleted FROM boxel_index_working WHERE realm_version = 2 AND is_deleted = TRUE ORDER BY url COLLATE "POSIX"',
+        { coerceTypes: { is_deleted: 'BOOLEAN' } },
+      );
+
+      assert.deepEqual(
+        tombstonedEntries,
+        [
+          { url: `${testRealmURL}dependency.gts`, is_deleted: true },
+          { url: `${testRealmURL}instance1.json`, is_deleted: true },
+          { url: `${testRealmURL}instance2.json`, is_deleted: true },
+        ],
+        'instances that depend on the deleted file should be tombstoned with is_deleted: true',
+      );
+
+      // Verify that unrelated instances are not tombstoned
+      let untombstonedEntries = await adapter.execute(
+        'SELECT url FROM boxel_index_working WHERE url = $1',
+        { bind: [`${testRealmURL}unrelated.json`] },
+      );
+
+      assert.deepEqual(
+        untombstonedEntries,
+        [],
+        'unrelated instances should not be added to working table if they are not invalidated',
+      );
+    },
 } as SharedTests<{
   indexWriter: IndexWriter;
   indexQueryEngine: IndexQueryEngine;
