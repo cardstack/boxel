@@ -37,7 +37,6 @@ test.describe('Card Chooser', () => {
     await setupUserSubscribed('@user1:localhost', realmServer);
     await login(page, 'user1', 'pass', {
       url: serverIndexUrl,
-      skipOpeningAssistant: true,
     });
     await createRealm(page, realm1Name);
     await createRealm(page, realm2Name);

@@ -34,6 +34,7 @@ module('Integration | add-workspace', function (hooks) {
       class TestDriver extends GlimmerComponent {
         <template>
           <AddWorkspace />
+          <FromElseWhere @name='modal-elsewhere' />
         </template>
       },
     );
