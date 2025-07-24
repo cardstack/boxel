@@ -149,6 +149,10 @@ test.describe('Skills', () => {
     await expect(page.locator('[data-test-pill-menu-header]')).toContainText(
       'Skills: 3 of 4 active',
     );
+
+    await expect(page.locator('[data-test-active-skills-count]')).toContainText(
+      '3 Skills',
+    );
   });
 
   test('it will attach code editing skills in code mode by default', async ({
