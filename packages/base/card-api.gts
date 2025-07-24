@@ -28,6 +28,7 @@ import {
   isField,
   primitive,
   identifyCard,
+  fieldSerializer,
   isCardInstance as _isCardInstance,
   isBaseInstance,
   loadCardDef,
@@ -46,6 +47,7 @@ import {
   baseRef,
   getAncestor,
   isCardError,
+  assertIsSerializerName,
   type Format,
   type Meta,
   type CardFields,
@@ -63,6 +65,7 @@ import {
   type getCardCollection,
   type Store,
   type PrerenderedCardComponentSignature,
+  getSerializer,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
@@ -396,7 +399,13 @@ function callSerializeHook(
   opts?: SerializeOpts,
 ) {
   if (value != null) {
-    return card[serialize](value, doc, visited, opts);
+    if (primitive in card && fieldSerializer in card) {
+      assertIsSerializerName(card[fieldSerializer]);
+      let serializer = getSerializer(card[fieldSerializer]);
+      return serializer.serialize(value, doc, visited, opts);
+    } else {
+      return card[serialize](value, doc, visited, opts);
+    }
   } else {
     return null;
   }
@@ -533,13 +542,20 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       return null;
     }
 
+    let serializer: ReturnType<typeof getSerializer> | undefined;
+    if (primitive in this.card && fieldSerializer in this.card) {
+      assertIsSerializerName(this.card[fieldSerializer]);
+      serializer = getSerializer(this.card[fieldSerializer]);
+    }
     // Need to replace the WatchedArray proxy with an actual array because the
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
     // TODO: can this be simplified since we don't have the worker anymore?
     let results = [...instances]
       .map((instance) => {
-        return this.card[queryableValue](instance, stack);
+        return serializer
+          ? serializer.queryableValue(instance, stack)
+          : this.card[queryableValue](instance, stack);
       })
       .filter((i) => i != null);
     return results.length === 0 ? null : results;
@@ -685,6 +701,17 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       await Promise.all(
         value.map(async (entry, index) => {
           if (primitive in this.card) {
+            if (fieldSerializer in this.card) {
+              assertIsSerializerName(this.card[fieldSerializer]);
+              let serializer = getSerializer(this.card[fieldSerializer]);
+              return serializer.deserialize<FieldT>(
+                entry,
+                relativeTo,
+                doc,
+                identityContext,
+                opts,
+              );
+            }
             return this.card[deserialize](
               entry,
               relativeTo,
@@ -832,7 +859,14 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
 
   queryableValue(instance: any, stack: BaseDef[]): any {
     if (primitive in this.card) {
-      let result = this.card[queryableValue](instance, stack);
+      let result: any;
+      if (fieldSerializer in this.card) {
+        assertIsSerializerName(this.card[fieldSerializer]);
+        let serializer = getSerializer(this.card[fieldSerializer]);
+        result = serializer.queryableValue(instance, stack);
+      } else {
+        result = this.card[queryableValue](instance, stack);
+      }
       assertScalar(result, this.card);
       return result;
     }
@@ -923,6 +957,17 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     opts: DeserializeOpts,
   ): Promise<BaseInstanceType<CardT>> {
     if (primitive in this.card) {
+      if (fieldSerializer in this.card) {
+        assertIsSerializerName(this.card[fieldSerializer]);
+        let serializer = getSerializer(this.card[fieldSerializer]);
+        return serializer.deserialize(
+          value,
+          relativeTo,
+          doc,
+          identityContext,
+          opts,
+        );
+      }
       return this.card[deserialize](
         value,
         relativeTo,
@@ -2561,7 +2606,14 @@ export function getQueryableValue(
   stack: BaseDef[] = [],
 ): any {
   if ('baseDef' in fieldOrCard) {
-    let result = fieldOrCard[queryableValue](value, stack);
+    let serializer: ReturnType<typeof getSerializer> | undefined;
+    if (primitive in fieldOrCard && fieldSerializer in fieldOrCard) {
+      assertIsSerializerName(fieldOrCard[fieldSerializer]);
+      serializer = getSerializer(fieldOrCard[fieldSerializer]);
+    }
+    let result = serializer
+      ? serializer.queryableValue(value, stack)
+      : fieldOrCard[queryableValue](value, stack);
     if (primitive in fieldOrCard) {
       assertScalar(result, fieldOrCard);
     }
@@ -2574,7 +2626,14 @@ export function formatQueryValue(
   field: Field<typeof BaseDef>,
   queryValue: any,
 ): any {
-  return field.card[formatQuery](queryValue);
+  let serializer: ReturnType<typeof getSerializer> | undefined;
+  if (primitive in field.card && fieldSerializer in field.card) {
+    assertIsSerializerName(field.card[fieldSerializer]);
+    serializer = getSerializer(field.card[fieldSerializer]);
+  }
+  return (
+    serializer?.formatQuery?.(queryValue) ?? field.card[formatQuery](queryValue)
+  );
 }
 
 function peekAtField(instance: BaseDef, fieldName: string): any {
@@ -2796,7 +2855,7 @@ export function serializeCard(
   return doc;
 }
 
-interface DeserializeOpts {
+export interface DeserializeOpts {
   ignoreBrokenLinks?: true;
 }
 
