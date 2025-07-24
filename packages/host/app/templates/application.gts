@@ -16,7 +16,7 @@ class ApplicationRouteComponent extends Component<ApplicationRouteSignature> {
       let hostModeDomainRoot = config.hostModeDomainRoot;
       let currentHost = window.location.hostname;
 
-      if (currentHost.endsWith(hostModeDomainRoot)) {
+      if (currentHost.endsWith(`.${hostModeDomainRoot}`)) {
         return true;
       }
     }
