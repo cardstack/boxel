@@ -672,7 +672,7 @@ importers:
         version: 1.3.0(typescript@5.1.6)
       '@glint/environment-ember-loose':
         specifier: 1.3.0
-        version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)))
+        version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
       '@glint/environment-ember-template-imports':
         specifier: 1.3.0
         version: 1.3.0(@glint/environment-ember-loose@1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5))))(@glint/template@1.3.0)
@@ -849,9 +849,6 @@ importers:
       ember-template-lint:
         specifier: 'catalog:'
         version: 7.8.1
-      ethers:
-        specifier: 'catalog:'
-        version: 6.6.2
       matrix-js-sdk:
         specifier: 'catalog:'
         version: 31.0.0(patch_hash=e48a62d3beba2bd8e529374a29cd1b08fa45c4e8b1d6bbe0ec26d0abc3b42dca)
@@ -891,7 +888,7 @@ importers:
         version: 1.8.9
       '@glint/environment-ember-loose':
         specifier: 1.3.0
-        version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)))
+        version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
       '@glint/template':
         specifier: 1.3.0
         version: 1.3.0
@@ -1012,7 +1009,7 @@ importers:
         version: 1.1.2(@babel/core@7.26.10)
       '@glint/environment-ember-loose':
         specifier: 1.3.0
-        version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)))
+        version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
       '@glint/template':
         specifier: 1.3.0
         version: 1.3.0
@@ -1205,7 +1202,7 @@ importers:
         version: 1.3.0(typescript@5.1.6)
       '@glint/environment-ember-loose':
         specifier: 1.3.0
-        version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)))
+        version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
       '@glint/environment-ember-template-imports':
         specifier: 1.3.0
         version: 1.3.0(@glint/environment-ember-loose@1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5))))(@glint/template@1.3.0)
@@ -1397,7 +1394,7 @@ importers:
         version: 1.6.3
       '@glint/environment-ember-loose':
         specifier: 1.3.0
-        version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)))
+        version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
       '@glint/template':
         specifier: 1.3.0
         version: 1.3.0
@@ -1584,7 +1581,7 @@ importers:
     dependencies:
       '@glint/environment-ember-loose':
         specifier: 1.3.0
-        version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)))
+        version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
     devDependencies:
       '@babel/core':
         specifier: 'catalog:'
@@ -2035,7 +2032,7 @@ importers:
         version: 1.3.0(typescript@5.1.6)
       '@glint/environment-ember-loose':
         specifier: 1.3.0
-        version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)))
+        version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
       '@glint/environment-ember-template-imports':
         specifier: 1.3.0
         version: 1.3.0(@glint/environment-ember-loose@1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5))))(@glint/template@1.3.0)
@@ -2824,6 +2821,9 @@ importers:
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
+      ethers:
+        specifier: 'catalog:'
+        version: 6.6.2
       flat:
         specifier: 'catalog:'
         version: 5.0.2
@@ -2893,7 +2893,7 @@ importers:
         version: 7.26.10(supports-color@8.1.1)
       '@glint/environment-ember-loose':
         specifier: 1.3.0
-        version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)))
+        version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
       '@glint/environment-ember-template-imports':
         specifier: 1.3.0
         version: 1.3.0(@glint/environment-ember-loose@1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5))))(@glint/template@1.3.0)
@@ -2950,7 +2950,7 @@ importers:
         version: 1.3.0(typescript@5.1.6)
       '@glint/environment-ember-loose':
         specifier: ^1.3.0
-        version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)))
+        version: 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
       '@glint/environment-ember-template-imports':
         specifier: ^1.3.0
         version: 1.3.0(@glint/environment-ember-loose@1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5))))(@glint/template@1.3.0)
@@ -15125,7 +15125,7 @@ snapshots:
       ember-cli-babel: 7.26.11
       ember-source: 5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)
     optionalDependencies:
-      '@glint/environment-ember-loose': 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)))
+      '@glint/environment-ember-loose': 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
       '@glint/template': 1.3.0
     transitivePeerDependencies:
       - supports-color
@@ -15701,7 +15701,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@glint/environment-ember-loose@1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)))':
+  '@glint/environment-ember-loose@1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))':
     dependencies:
       '@glimmer/component': 1.1.2(@babel/core@7.26.10)
       '@glint/template': 1.3.0
@@ -15711,7 +15711,7 @@ snapshots:
 
   '@glint/environment-ember-template-imports@1.3.0(@glint/environment-ember-loose@1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5))))(@glint/template@1.3.0)':
     dependencies:
-      '@glint/environment-ember-loose': 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)))
+      '@glint/environment-ember-loose': 1.3.0(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)))
       '@glint/template': 1.3.0
       ember-template-imports: 3.4.2
     transitivePeerDependencies:
