@@ -40,7 +40,13 @@ export default class PillMenu extends Component<Signature> {
             {{yield to='headerIcon'}}
           </:icon>
           <:detail>
-            {{yield to='headerDetail'}}
+            <button
+              {{on 'click' this.collapseMenu}}
+              class='detail-close-button'
+              data-test-pill-menu-detail-close
+            >
+              {{yield to='headerDetail'}}
+            </button>
           </:detail>
           <:actions>
             <button
@@ -144,6 +150,11 @@ export default class PillMenu extends Component<Signature> {
       .header-button:focus:focus-visible {
         outline-color: var(--boxel-highlight);
       }
+
+      .detail-close-button {
+        border: none;
+      }
+
       .expandable-header-button {
         width: var(
           --boxel-pill-menu-expandable-header-button-width,
