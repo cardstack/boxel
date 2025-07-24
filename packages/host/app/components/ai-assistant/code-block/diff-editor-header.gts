@@ -25,6 +25,11 @@ import MatrixService from '@cardstack/host/services/matrix-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
+
+import { type Message as MatrixMessage } from '@cardstack/host/lib/matrix-classes/message';
+import { on } from '@ember/modifier';
+
 export interface CodeBlockDiffEditorHeaderSignature {
   Args: {
     codeData: Partial<CodeData>;
@@ -34,7 +39,8 @@ export interface CodeBlockDiffEditorHeaderSignature {
     } | null;
     finalFileUrlAfterCodePatching?: string | null;
     originalUploadedFileUrl?: string | null;
-    userSubmittedMessage?: string | null;
+    codePatchStatus: CodePatchStatus | 'applying' | 'ready';
+    userMessageThisMessageIsRespondingTo?: MatrixMessage;
   };
 }
 
@@ -63,8 +69,9 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
               class='file-info-button'
               data-code-patch-dropdown-button={{this.fileName}}
               {{! including this in a test attribute because navigator.clipboard is not available in test environment }}
-              data-test-copy-submitted-content={{this.args.userSubmittedMessage}}
+              data-test-copy-submitted-content={{this.submittedContent}}
               {{bindings}}
+              {{on 'click' (perform this.loadSubmittedContent)}}
             >
               <span class='filename' data-test-file-name>
                 {{this.fileName}}
@@ -172,6 +179,26 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
   @service private declare matrixService: MatrixService;
   @service private declare cardService: CardService;
   @tracked isRestorePatchedFileModalOpen = false;
+  submittedContent: string | null = null;
+
+  private loadSubmittedContent = dropTask(async () => {
+    let userAttachedFiles =
+      this.args.userMessageThisMessageIsRespondingTo?.attachedFiles;
+    let relevantAttachedFile = userAttachedFiles?.find(
+      (file) => file.sourceUrl === this.args.codeData.fileUrl,
+    );
+
+    if (!relevantAttachedFile) {
+      throw new Error(
+        'bug: unable to figure out which attached file to load when copying submitted content',
+      );
+    }
+    let response = await this.matrixService.fetchMatrixHostedFile(
+      relevantAttachedFile.url,
+    );
+    let content = await response.text();
+    this.submittedContent = content;
+  });
 
   private get fileUrl() {
     return (
@@ -202,7 +229,11 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
       }),
     );
 
-    if (this.args.originalUploadedFileUrl && !this.args.codeData.isNewFile) {
+    if (
+      this.args.originalUploadedFileUrl &&
+      !this.args.codeData.isNewFile &&
+      this.args.codePatchStatus === 'applied'
+    ) {
       items.push(
         new MenuItem('Restore Content', 'action', {
           action: this.toggleRestorePatchedFileModal,
@@ -215,8 +246,11 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
     return items;
   }
 
-  copySubmittedContent = () => {
-    navigator.clipboard.writeText(this.args.userSubmittedMessage!);
+  copySubmittedContent = async () => {
+    if (this.loadSubmittedContent.isRunning) {
+      await this.loadSubmittedContent.perform();
+    }
+    navigator.clipboard.writeText(this.submittedContent!);
   };
 
   restoreContent = dropTask(async () => {

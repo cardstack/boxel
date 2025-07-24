@@ -185,6 +185,7 @@ interface HtmlGroupCodeBlockSignature {
     index: number;
     codePatchStatus: CodePatchStatus | 'applying' | 'ready';
     codePatchResult: MessageCodePatchResult | undefined;
+    originalUploadedFileUrl?: string | null;
   };
 }
 
@@ -262,12 +263,6 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
       : null;
   }
 
-  private get originalUploadedFileUrl() {
-    return this.args.codePatchStatus === 'applied'
-      ? this.args.codePatchResult?.originalUploadedFileUrl
-      : null;
-  }
-
   <template>
     <CodeBlock
       @monacoSDK={{@monacoSDK}}
@@ -282,8 +277,9 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               @codeData={{@codeData}}
               @diffEditorStats={{null}}
               @finalFileUrlAfterCodePatching={{this.codePatchfinalFileUrlAfterCodePatching}}
-              @originalUploadedFileUrl={{this.originalUploadedFileUrl}}
-              @userSubmittedMessage={{@userMessageThisMessageIsRespondingTo.body}}
+              @originalUploadedFileUrl={{@originalUploadedFileUrl}}
+              @codePatchStatus={{@codePatchStatus}}
+              @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
             />
             <codeBlock.editor @code={{this.codeForEditor}} />
             <codeBlock.actions as |actions|>
@@ -317,7 +313,9 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
             <codeBlock.diffEditorHeader
               @codeData={{@codeData}}
               @diffEditorStats={{this.diffEditorStats}}
-              @userSubmittedMessage={{@userMessageThisMessageIsRespondingTo.body}}
+              @originalUploadedFileUrl={{@originalUploadedFileUrl}}
+              @codePatchStatus={{@codePatchStatus}}
+              @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
             />
             <codeBlock.diffEditor
               @originalCode={{this.codeDiffResource.originalCode}}
@@ -342,6 +340,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
           <codeBlock.diffEditorHeader
             @codeData={{@codeData}}
             @diffEditorStats={{null}}
+            @codePatchStatus={{@codePatchStatus}}
           />
         {{/if}}
         <codeBlock.editor @code={{this.codeForEditor}} />

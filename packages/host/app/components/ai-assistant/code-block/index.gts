@@ -26,6 +26,7 @@ import CodeBlockDiffEditorHeader, {
 
 import type { ComponentLike } from '@glint/template';
 
+import { type Message as MatrixMessage } from '@cardstack/host/lib/matrix-classes/message';
 interface CodeBlockEditorSignature {
   Args: {
     code?: string | null;
@@ -61,6 +62,7 @@ interface Signature {
       linesAdded: number;
       linesRemoved: number;
     }) => void;
+    userMessageThisMessageIsRespondingTo?: MatrixMessage;
   };
   Blocks: {
     default: [
@@ -85,6 +87,7 @@ const CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
           CodeBlockDiffEditorHeader
           codeData=@codeData
           diffEditorStats=@diffEditorStats
+          userMessageThisMessageIsRespondingTo=@userMessageThisMessageIsRespondingTo
         )
         editor=(component
           CodeBlockEditor monacoSDK=@monacoSDK codeData=@codeData
