@@ -32,7 +32,7 @@ export {
 interface Serializer {
   serialize(
     value: any,
-    doc: JSONAPISingleResourceDocument,
+    doc?: JSONAPISingleResourceDocument,
     visited?: Set<string>,
     opts?: SerializeOpts,
   ): any;

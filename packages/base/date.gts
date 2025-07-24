@@ -4,7 +4,12 @@ import { fn } from '@ember/helper';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
-import { DateSerializer, fieldSerializer } from '@cardstack/runtime-common';
+import {
+  type SerializerName,
+  DateSerializer,
+  fieldSerializer,
+  getSerializer,
+} from '@cardstack/runtime-common';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
 // it in the application route at app startup.
@@ -31,7 +36,7 @@ class View extends Component<typeof DateField> {
 export default class DateField extends FieldDef {
   static icon = CalendarIcon;
   static [primitive]: Date;
-  static [fieldSerializer] = 'date';
+  static [fieldSerializer]: SerializerName = 'date';
   static displayName = 'Date';
   static embedded = View;
   static atom = View;
@@ -59,7 +64,9 @@ export default class DateField extends FieldDef {
       if (!this.args.model) {
         return;
       }
-      return DateSerializer.serialize(this.args.model);
+      return getSerializer(DateField[fieldSerializer]).serialize(
+        this.args.model,
+      );
     }
   };
 }
