@@ -16,7 +16,6 @@ declare const config: {
 
   resolvedBaseRealmURL: string;
   resolvedSkillsRealmURL: string;
-  hostModeDomainRoot?: string;
   hostsOwnAssets: boolean;
   realmsServed?: string[];
   logLevels: string;

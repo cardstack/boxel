@@ -74,8 +74,6 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 
 const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
 
-const HOST_MODE_DOMAIN_ROOT = process.env.HOST_MODE_DOMAIN_ROOT;
-
 let {
   port,
   matrixURL,
@@ -150,10 +148,6 @@ let {
       description:
         'The port the worker manager is running on. used to wait for the workers to be ready',
       type: 'number',
-    },
-    hostModeDomainRoot: {
-      description: 'The domain root for host mode',
-      type: 'string',
     },
   })
   .parseSync();
@@ -285,7 +279,6 @@ let autoMigrate = migrateDB || undefined;
     getRegistrationSecret: useRegistrationSecretFunction
       ? getRegistrationSecret
       : undefined,
-    hostModeDomainRoot: HOST_MODE_DOMAIN_ROOT,
   });
 
   let httpServer = server.listen(port);
