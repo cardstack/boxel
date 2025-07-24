@@ -58,7 +58,7 @@ const serializerMapping: { [name: string]: Serializer } = {
   'image-size': ImageSizeSerializer,
 };
 
-export type SerializerName =
+type SerializerName =
   | 'date'
   | 'datetime'
   | 'big-integer'

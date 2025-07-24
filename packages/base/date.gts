@@ -5,7 +5,6 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
 import {
-  type SerializerName,
   DateSerializer,
   fieldSerializer,
   getSerializer,
@@ -36,7 +35,7 @@ class View extends Component<typeof DateField> {
 export default class DateField extends FieldDef {
   static icon = CalendarIcon;
   static [primitive]: Date;
-  static [fieldSerializer]: SerializerName = 'date';
+  static [fieldSerializer] = 'date' as const;
   static displayName = 'Date';
   static embedded = View;
   static atom = View;
