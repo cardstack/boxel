@@ -2,6 +2,8 @@ import Route from '@ember/routing/route';
 import RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 
+import { TrackedMap } from 'tracked-built-ins';
+
 import {
   isCardInstance,
   LooseSingleCardDocument,
@@ -15,7 +17,7 @@ import RealmService from '../services/realm';
 import RealmServerService from '../services/realm-server';
 import StoreService from '../services/store';
 
-export type Model = CardDef;
+export type Model = { instance: CardDef; ready: boolean };
 
 export default class RenderRoute extends Route<Model> {
   @service declare store: StoreService;
@@ -24,6 +26,26 @@ export default class RenderRoute extends Route<Model> {
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
   @service declare private network: NetworkService;
+
+  errorHandler = (event: Event) => {
+    let element: HTMLElement = document.querySelector('[data-prerender]')!;
+    element.innerHTML = `
+      it broke
+    `;
+    element.dataset.prerenderStatus = 'error';
+
+    event.preventDefault();
+  };
+
+  activate() {
+    window.addEventListener('error', this.errorHandler);
+    window.addEventListener('unhandledrejection', this.errorHandler);
+  }
+
+  deactivate() {
+    window.removeEventListener('error', this.errorHandler);
+    window.removeEventListener('unhandledrejection', this.errorHandler);
+  }
 
   async model({ id }: { id: string }) {
     // Make it easy for Puppeteer to do regular Ember transitions
@@ -74,6 +96,19 @@ export default class RenderRoute extends Route<Model> {
     if (!isCardInstance(instance)) {
       throw new Error('todo: failed to load');
     }
-    return instance;
+
+    // todo: Placeholder for checking in-flight loads
+    let state = new TrackedMap();
+    state.set('ready', false);
+    Promise.resolve().then(() => {
+      state.set('ready', true);
+    });
+
+    return {
+      instance,
+      get ready(): boolean {
+        return Boolean(state.get('ready'));
+      },
+    };
   }
 }
