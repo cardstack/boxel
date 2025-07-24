@@ -32,6 +32,9 @@ import {
   ResolvedCodeRef,
   isCardInstance,
   Deferred,
+  SEARCH_MARKER,
+  REPLACE_MARKER,
+  SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
 
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
@@ -1608,8 +1611,9 @@ export default class MatrixService extends Service {
       // Check if the message contains code patches by looking for search/replace blocks
       let body = event.content.body as string;
       if (
-        body.includes('╔═══ SEARCH ════╗') &&
-        body.includes('╚═══ REPLACE ═══╝')
+        body.includes(SEARCH_MARKER) &&
+        body.includes(SEPARATOR_MARKER) &&
+        body.includes(REPLACE_MARKER)
       ) {
         this.commandService.queueEventForCodePatchProcessing(event);
       }

@@ -1007,17 +1007,7 @@ export default class Room extends Component<Signature> {
   private get readyCodePatches() {
     let lastMessage = this.messages[this.messages.length - 1];
     if (!lastMessage || !lastMessage.htmlParts) return [];
-    let result = [];
-    for (let i = 0; i < lastMessage.htmlParts.length; i++) {
-      let htmlPart = lastMessage.htmlParts[i];
-      let codeData = htmlPart.codeData;
-      if (!codeData || !codeData.searchReplaceBlock) continue;
-      let status = this.commandService.getCodePatchStatus(codeData);
-      if (status && status === 'ready') {
-        result.push(codeData);
-      }
-    }
-    return result;
+    return this.commandService.getReadyCodePatches(lastMessage.htmlParts);
   }
 
   private get generatingResults() {
@@ -1055,20 +1045,13 @@ export default class Room extends Component<Signature> {
   }
 
   private async executeReadyCodePatches() {
-    // Group code patches by fileUrl
-    let grouped: Record<string, typeof this.readyCodePatches> = {};
-    for (let codeData of this.readyCodePatches) {
-      if (!codeData.fileUrl) continue;
-      if (!grouped[codeData.fileUrl]) grouped[codeData.fileUrl] = [];
-      grouped[codeData.fileUrl].push(codeData);
-    }
-    for (let [fileUrl, codeDataItems] of Object.entries(grouped)) {
-      await this.commandService.patchCode(
-        codeDataItems[0].roomId,
-        fileUrl,
-        codeDataItems,
-      );
-    }
+    let lastMessage = this.messages[this.messages.length - 1];
+    if (!lastMessage || !lastMessage.htmlParts) return;
+
+    await this.commandService.executeReadyCodePatches(
+      this.args.roomId,
+      lastMessage.htmlParts,
+    );
   }
 
   private executeAllReadyActionsTask = task(async () => {

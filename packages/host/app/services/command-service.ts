@@ -31,6 +31,7 @@ import type LoaderService from './loader-service';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmServerService from './realm-server';
 import type StoreService from './store';
+import type { CodeData } from '../lib/formatted-message/utils';
 import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
 import type MessageCommand from '../lib/matrix-classes/message-command';
 
@@ -249,7 +250,6 @@ export default class CommandService extends Service {
       let messageTimestamp = message.created.getTime();
       let activeModeAtMessageTime =
         roomResource.getActiveLLMModeAtTimestamp(messageTimestamp);
-      console.log('activeModeAtMessageTime', activeModeAtMessageTime);
       // Only auto-apply if in 'act' mode
       if (activeModeAtMessageTime !== 'act') {
         continue;
@@ -257,34 +257,7 @@ export default class CommandService extends Service {
 
       // Auto-apply all ready code patches from this message
       if (message.htmlParts) {
-        let readyCodePatches: typeof message.htmlParts = [];
-        for (let i = 0; i < message.htmlParts.length; i++) {
-          let htmlPart = message.htmlParts[i];
-          let codeData = htmlPart.codeData;
-          if (!codeData || !codeData.searchReplaceBlock) continue;
-          let status = this.getCodePatchStatus(codeData);
-          if (status && status === 'ready') {
-            readyCodePatches.push(htmlPart);
-          }
-        }
-
-        // Group code patches by fileUrl and apply them
-        let grouped: Record<string, typeof readyCodePatches> = {};
-        for (let htmlPart of readyCodePatches) {
-          let codeData = htmlPart.codeData!;
-          if (!codeData.fileUrl) continue;
-          if (!grouped[codeData.fileUrl]) grouped[codeData.fileUrl] = [];
-          grouped[codeData.fileUrl].push(htmlPart);
-        }
-
-        for (let [fileUrl, htmlParts] of Object.entries(grouped)) {
-          let codeDataItems = htmlParts.map((htmlPart) => ({
-            searchReplaceBlock: htmlPart.codeData!.searchReplaceBlock,
-            eventId: message!.eventId,
-            codeBlockIndex: htmlPart.codeData!.codeBlockIndex,
-          }));
-          await this.patchCode(roomId!, fileUrl, codeDataItems);
-        }
+        await this.executeReadyCodePatches(roomId!, message.htmlParts);
       }
     }
     finishedProcessingCodePatches!();
@@ -490,6 +463,46 @@ export default class CommandService extends Service {
           `${codeData.eventId}:${codeData.codeBlockIndex}`,
         );
       }
+    }
+  };
+
+  getReadyCodePatches = (
+    htmlParts: Array<{ codeData: CodeData | null }>,
+  ): CodeData[] => {
+    let result: CodeData[] = [];
+    for (let i = 0; i < htmlParts.length; i++) {
+      let htmlPart = htmlParts[i];
+      let codeData = htmlPart.codeData;
+      if (!codeData || !codeData.searchReplaceBlock) continue;
+      let status = this.getCodePatchStatus(codeData);
+      if (status && status === 'ready') {
+        result.push(codeData);
+      }
+    }
+    return result;
+  };
+
+  executeReadyCodePatches = async (
+    roomId: string,
+    htmlParts: Array<{ codeData: CodeData | null }>,
+  ) => {
+    let readyCodePatches = this.getReadyCodePatches(htmlParts);
+
+    // Group code patches by fileUrl and apply them
+    let grouped: Record<string, CodeData[]> = {};
+    for (let codeData of readyCodePatches) {
+      if (!codeData.fileUrl) continue;
+      if (!grouped[codeData.fileUrl]) grouped[codeData.fileUrl] = [];
+      grouped[codeData.fileUrl].push(codeData);
+    }
+
+    for (let [fileUrl, codeDataItems] of Object.entries(grouped)) {
+      let patchItems = codeDataItems.map((codeData) => ({
+        searchReplaceBlock: codeData.searchReplaceBlock,
+        eventId: codeData.eventId,
+        codeBlockIndex: codeData.codeBlockIndex,
+      }));
+      await this.patchCode(roomId, fileUrl, patchItems);
     }
   };
 

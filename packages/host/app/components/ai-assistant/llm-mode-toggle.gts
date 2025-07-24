@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
+import { Tooltip } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import type { LLMMode } from '@cardstack/runtime-common/matrix-constants';
@@ -21,29 +22,49 @@ interface Signature {
 export default class LLMModeToggle extends Component<Signature> {
   <template>
     <div class='llm-mode-toggle' ...attributes>
-      <button
-        type='button'
-        class='llm-mode-option {{if (eq @selected "ask") "selected"}}'
-        data-test-llm-mode-option='ask'
-        disabled={{@disabled}}
-        {{on 'click' (fn this.handleOptionClick 'ask')}}
-      >
-        Ask
-      </button>
-      <button
-        type='button'
-        class='llm-mode-option {{if (eq @selected "act") "selected"}}'
-        data-test-llm-mode-option='act'
-        disabled={{@disabled}}
-        {{on 'click' (fn this.handleOptionClick 'act')}}
-      >
-        Act
-      </button>
+      <Tooltip @placement='top'>
+        <:trigger>
+          <button
+            type='button'
+            class='llm-mode-option {{if (eq @selected "ask") "selected"}}'
+            data-test-llm-mode-option='ask'
+            disabled={{@disabled}}
+            {{on 'click' (fn this.handleOptionClick 'ask')}}
+          >
+            Ask
+          </button>
+        </:trigger>
+        <:content>
+          <div class='llm-mode-option-tooltip'>
+            Ask mode: Get answers and explanations without making changes
+          </div>
+        </:content>
+      </Tooltip>
+
+      <Tooltip @placement='top'>
+        <:trigger>
+          <button
+            type='button'
+            class='llm-mode-option {{if (eq @selected "act") "selected"}}'
+            data-test-llm-mode-option='act'
+            disabled={{@disabled}}
+            {{on 'click' (fn this.handleOptionClick 'act')}}
+          >
+            Act
+          </button>
+        </:trigger>
+        <:content>
+          <div class='llm-mode-option-tooltip'>
+            Act mode: Automatically apply code changes and execute commands
+          </div>
+        </:content>
+      </Tooltip>
     </div>
     <style scoped>
       .llm-mode-toggle {
         display: flex;
         align-items: center;
+        justify-content: center;
         background: var(--boxel-650);
         border-radius: var(--boxel-pill-radius, 999px);
         overflow: hidden;
@@ -74,6 +95,9 @@ export default class LLMModeToggle extends Component<Signature> {
       .llm-mode-option:disabled {
         opacity: 0.5;
         cursor: not-allowed;
+      }
+      .llm-mode-option-tooltip {
+        max-width: 160px;
       }
     </style>
   </template>
