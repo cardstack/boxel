@@ -134,6 +134,15 @@ ${REPLACE_MARKER}\n\`\`\``;
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
+      data: {
+        attachedFiles: [
+          {
+            url: 'http://test-realm/test/hello.txt',
+            name: 'hello.txt',
+            sourceUrl: 'http://test-realm/test/hello.txt',
+          },
+        ],
+      },
     });
 
     let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
@@ -148,14 +157,21 @@ ${REPLACE_MARKER}\n\`\`\``;
     await click('[data-test-apply-code-button]');
     await waitUntil(() => getMonacoContent() === 'Hi, world!');
 
-    // The bound value of this attribute is used in the "Copy Submitted Content" menu item,
-    // but we can't test that because navigator.clipboard is not available in test environment
-    assert
-      .dom('[data-test-copy-submitted-content]')
-      .hasAttribute(
-        'data-test-copy-submitted-content',
-        'Hey there respond with a code patch to update the hello.txt file',
-      );
+    let mockedFileContent = 'Hello, world!';
+    getService('matrix-service').fetchMatrixHostedFile = async (_url) => {
+      return new Response(mockedFileContent);
+    };
+
+    // We test the value of the attribute because navigator.clipboard is not available in test environment
+    // (we can't test if the content is copied to the clipboard but we can assert the value of the attribute)
+    await click('[data-code-patch-dropdown-button="hello.txt"]');
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-copy-submitted-content]')
+          ?.getAttribute('data-test-copy-submitted-content') ===
+        mockedFileContent,
+    );
 
     let codePatchResultEvents = getRoomEvents(roomId).filter(
       (event) =>

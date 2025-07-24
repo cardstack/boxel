@@ -179,7 +179,7 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
   @service private declare matrixService: MatrixService;
   @service private declare cardService: CardService;
   @tracked isRestorePatchedFileModalOpen = false;
-  submittedContent: string | null = null;
+  @tracked submittedContent: string | null = null;
 
   private loadSubmittedContent = dropTask(async () => {
     let userAttachedFiles =
@@ -189,8 +189,8 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
     );
 
     if (!relevantAttachedFile) {
-      throw new Error(
-        'bug: unable to figure out which attached file to load when copying submitted content',
+      return console.error(
+        "bug: can't load content for copying submitted content: unable to figure out which attached file to load when copying submitted content",
       );
     }
     let response = await this.matrixService.fetchMatrixHostedFile(
