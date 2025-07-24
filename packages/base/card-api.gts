@@ -79,6 +79,8 @@ import FieldDefEditTemplate from './default-templates/field-edit';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
+import ThemeIcon from '@cardstack/boxel-icons/palette';
+import TextAreaIcon from '@cardstack/boxel-icons/align-left';
 
 interface CardOrFieldTypeIconSignature {
   Element: Element;
@@ -2270,6 +2272,56 @@ export class MaybeBase64Field extends StringField {
   static atom = MaybeBase64Field.embedded;
 }
 
+export class TextAreaField extends StringField {
+  static displayName = 'TextArea';
+  static icon = TextAreaIcon;
+  static edit = class Edit extends Component<typeof this> {
+    <template>
+      <BoxelInput
+        class='boxel-text-area'
+        @value={{@model}}
+        @onInput={{@set}}
+        @type='textarea'
+        @disabled={{not @canEdit}}
+      />
+    </template>
+  };
+}
+
+export class CSSField extends TextAreaField {
+  static displayName = 'CSS Field';
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <pre class='css-field'>
+        {{if
+          @model
+          @model
+          '/* No CSS defined */'
+        }}
+      </pre>
+      <style scoped>
+        .css-field {
+          margin-block: 0;
+          padding: var(--boxel-sp-xxs);
+          background-color: var(--muted, var(--boxel-100));
+          border-radius: var(--radius, var(--boxel-border-radius));
+          color: var(--muted-foreground, var(--boxel-700));
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
+          white-space: pre-wrap;
+        }
+      </style>
+    </template>
+  };
+}
+
+export class CardInfoField extends FieldDef {
+  static displayName = 'Card Info';
+  @field theme = linksTo(() => Theme);
+}
+
 export class CardDef extends BaseDef {
   readonly [localId]: string = uuidv4();
   [isSavedInstance] = false;
@@ -2291,6 +2343,7 @@ export class CardDef extends BaseDef {
     cardTracking.set(this, true);
   }
   @field id = contains(ReadOnlyField);
+  @field cardInfo = contains(CardInfoField);
   @field title = contains(StringField);
   @field description = contains(StringField);
   // TODO: this will probably be an image or image url field card when we have it
@@ -2355,6 +2408,12 @@ export class CardDef extends BaseDef {
     let realmURLString = getCardMeta(this, 'realmURL');
     return realmURLString ? new URL(realmURLString) : undefined;
   }
+}
+
+export class Theme extends CardDef {
+  static displayName = 'Theme';
+  static icon = ThemeIcon;
+  @field cssVariables = contains(CSSField);
 }
 
 export type BaseDefConstructor = typeof BaseDef;
