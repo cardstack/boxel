@@ -142,10 +142,24 @@ export default class CommandService extends Service {
         if (!messageCommand.name) {
           continue;
         }
+
+        // Get the LLM mode that was active when this message was created
+        let messageTimestamp = message.created.getTime();
+        let activeModeAtMessageTime =
+          roomResource.getActiveLLMModeAtTimestamp(messageTimestamp);
+
+        // Auto-execute if LLM mode is 'act' AND the command came after the LLM mode was set to 'act',
+        // or if requiresApproval is false
+        let shouldAutoExecute = false;
+
         if (
-          roomResource.activeLLMMode === 'act' ||
-          messageCommand.requiresApproval === false
+          messageCommand.requiresApproval === false ||
+          activeModeAtMessageTime === 'act'
         ) {
+          shouldAutoExecute = true;
+        }
+
+        if (shouldAutoExecute) {
           this.run.perform(messageCommand);
         }
       }

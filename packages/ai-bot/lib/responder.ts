@@ -12,7 +12,6 @@ import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
 import MatrixResponsePublisher from './matrix/response-publisher';
 import ResponseState from './response-state';
-import { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
 let log = logger('ai-bot');
 
@@ -34,40 +33,10 @@ export class Responder {
     return false;
   }
 
-  /**
-   * Returns true if the event should definitely trigger a bot response.
-   * - For user messages, always returns true.
-   * - For command/code patch result events, returns true only if the latest LLM mode is 'act'.
-   *   (Requires passing the eventList/history as the second argument.)
-   * - If eventList is not provided, falls back to the old logic (never for command/code patch results).
-   */
-  static eventWillDefinitelyTriggerResponse(
-    event: DiscreteMatrixEvent,
-    eventList?: MatrixEvent[],
-  ) {
-    if (!isCommandOrCodePatchResult(event)) {
-      return this.eventMayTriggerResponse(event);
-    }
-    // If eventList/history is provided, check the latest LLM mode
-    if (eventList) {
-      // Find the latest LLM mode event in the history
-      const APP_BOXEL_LLM_MODE = 'app.boxel.llm-mode';
-      const lastLLMModeEvent = [...eventList]
-        .reverse()
-        .find((e) => (e as any).type === APP_BOXEL_LLM_MODE) as
-        | DiscreteMatrixEvent
-        | undefined;
-      if (
-        lastLLMModeEvent &&
-        (lastLLMModeEvent as any).content &&
-        (lastLLMModeEvent as any).content.mode === 'act'
-      ) {
-        return true;
-      }
-      return false;
-    }
-    // Fallback: do not respond to command/code patch result events by default
-    return false;
+  static eventWillDefinitelyTriggerResponse(event: DiscreteMatrixEvent) {
+    return (
+      this.eventMayTriggerResponse(event) && !isCommandOrCodePatchResult(event)
+    );
   }
 
   constructor(client: MatrixClient, roomId: string, agentId: string) {

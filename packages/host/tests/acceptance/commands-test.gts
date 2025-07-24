@@ -896,7 +896,7 @@ module('Acceptance | Commands tests', function (hooks) {
       .exists({ count: 2 });
   });
 
-  test('LLM mode event controls auto-apply of switch-submode command', async function (assert) {
+  test('LLM mode event controls auto-apply of switch-submode command with timestamp checking', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -991,6 +991,85 @@ module('Acceptance | Commands tests', function (hooks) {
     assert
       .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
       .exists('Command is auto-applied in act mode');
+
+    // Now test that commands sent BEFORE switching to act mode are NOT auto-applied
+    // Switch back to 'ask' mode
+    await click('[data-test-llm-mode-option="ask"]');
+    assert.dom('[data-test-llm-mode-option="ask"]').hasClass('selected');
+
+    // Simulate a command message from the bot (this should NOT be auto-applied)
+    let commandId3 = 'switch-submode-cmd-3';
+    simulateRemoteMessage(matrixRoomId, '@aibot:localhost', {
+      body: 'Switch to code mode again',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: commandId3,
+          name: 'switch-submode_dd88',
+          arguments: JSON.stringify({ attributes: { submode: 'code' } }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+
+    await waitFor('[data-test-message-idx="2"]');
+    // In 'ask' mode, the apply button should be visible and not auto-applied
+    assert
+      .dom('[data-test-message-idx="2"] [data-test-command-apply]')
+      .exists('Apply button is shown in ask mode');
+    assert
+      .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
+      .doesNotExist('Command is not auto-applied in ask mode');
+
+    // Now switch to 'act' mode again - the previous command should still NOT be auto-applied
+    await click('[data-test-llm-mode-option="act"]');
+    assert.dom('[data-test-llm-mode-option="act"]').hasClass('selected');
+
+    // Wait a moment to ensure the mode change is processed
+    await waitFor('[data-test-llm-mode-option="act"].selected');
+
+    // The command from message idx 2 should still not be auto-applied because it was sent before act mode
+    assert
+      .dom('[data-test-message-idx="2"] [data-test-command-apply]')
+      .exists('Apply button is still shown for command sent before act mode');
+    assert
+      .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
+      .doesNotExist('Command sent before act mode is not auto-applied');
+
+    // Simulate a new command message from the bot AFTER switching to act mode
+    let commandId4 = 'switch-submode-cmd-4';
+    simulateRemoteMessage(matrixRoomId, '@aibot:localhost', {
+      body: 'Switch to interact mode again',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: commandId4,
+          name: 'switch-submode_dd88',
+          arguments: JSON.stringify({ attributes: { submode: 'interact' } }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+
+    // Wait for the new message to appear and be auto-applied
+    await waitFor(
+      '[data-test-message-idx="3"] [data-test-apply-state="applied"]',
+    );
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-apply-state="applied"]')
+      .exists('New command sent after act mode is auto-applied');
   });
 
   module('suspending global error hook', (hooks) => {

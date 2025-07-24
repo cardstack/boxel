@@ -322,7 +322,7 @@ Common issues are:
         const agentId = contentData.context?.agentId;
         const responder = new Responder(client, room.roomId, agentId);
 
-        if (Responder.eventWillDefinitelyTriggerResponse(event, eventList)) {
+        if (Responder.eventWillDefinitelyTriggerResponse(event)) {
           await responder.ensureThinkingMessageSent();
         }
 
