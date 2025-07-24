@@ -24,11 +24,14 @@ module.exports = function (deployTarget) {
       bucket: process.env.AWS_S3_BUCKET,
       region: process.env.AWS_REGION,
     },
-    cloudfront: {
+  };
+
+  if (process.env.AWS_CLOUDFRONT_DISTRIBUTIONS) {
+    ENV.cloudfront = {
       objectPaths: ['/*'],
       distribution: process.env.AWS_CLOUDFRONT_DISTRIBUTIONS.split(','),
-    },
-  };
+    };
+  }
 
   if (deployTarget === 'staging') {
     ENV.build.environment = 'production';
