@@ -9,5 +9,5 @@ permissions:
 
 jobs:
   diff-skills:
-    uses: cardstack/gh-actions/.github/workflows/diff-skills.yml@main
+    uses: cardstack/gh-actions/.github/workflows/diff-skills.yml@no-diff-skills-empty-matrix-cs-9158
     secrets: inherit
