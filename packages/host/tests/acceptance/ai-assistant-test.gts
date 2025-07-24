@@ -1491,7 +1491,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
           url: 'http://localhost:4201/catalog/',
         },
         {
-          name: 'Cardstack Skills',
+          name: 'Boxel Skills',
           type: 'catalog-workspace',
           url: 'http://localhost:4201/skills/',
         },
