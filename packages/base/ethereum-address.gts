@@ -1,51 +1,25 @@
-import { isAddress, getAddress } from 'ethers';
 import {
   primitive,
   Component,
   useIndexBasedKey,
   FieldDef,
+  serialize,
   deserialize,
-  BaseInstanceType,
-  BaseDefConstructor,
   queryableValue,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 import { not } from '@cardstack/boxel-ui/helpers';
 import CurrencyEthereum from '@cardstack/boxel-icons/currency-ethereum';
+import { EthereumAddressSerializer } from '@cardstack/runtime-common';
 
-function isChecksumAddress(address: string): boolean {
-  return getAddress(address) === address;
-}
-
-function validate(value: string | null): string | null {
-  if (!value) {
+function deserializeForUI(value: string | null): string | null {
+  const validationError = EthereumAddressSerializer.validate(value);
+  if (validationError) {
     return null;
   }
 
-  if (!isAddress(value)) {
-    return 'Invalid Ethereum address';
-  }
-
-  if (!isChecksumAddress(value)) {
-    return 'Not a checksummed address';
-  }
-
-  return null;
-}
-
-function serialize(val: string | null): string | undefined {
-  return val ? val : undefined;
-}
-
-function _deserialize(string: string | null): string | null {
-  let errorMessage = validate(string);
-
-  if (errorMessage) {
-    return null;
-  } else {
-    return string;
-  }
+  return EthereumAddressSerializer.deserializeSync(value);
 }
 
 class View extends Component<typeof EthereumAddressField> {
@@ -68,9 +42,9 @@ class Edit extends Component<typeof EthereumAddressField> {
   textInputValidator: TextInputValidator<string> = new TextInputValidator(
     () => this.args.model,
     (inputVal) => this.args.set(inputVal),
-    _deserialize,
-    serialize,
-    validate,
+    deserializeForUI,
+    EthereumAddressSerializer.serialize,
+    EthereumAddressSerializer.validate,
   );
 }
 
@@ -79,15 +53,9 @@ export default class EthereumAddressField extends FieldDef {
   static icon = CurrencyEthereum;
   static [primitive]: string;
   static [useIndexBasedKey]: never;
-  static async [deserialize]<T extends BaseDefConstructor>(
-    this: T,
-    address: any,
-  ): Promise<BaseInstanceType<T>> {
-    return _deserialize(address) as BaseInstanceType<T>;
-  }
-  static [queryableValue](val: string | undefined): string | undefined {
-    return serialize(val ?? null);
-  }
+  static [serialize] = EthereumAddressSerializer.serialize;
+  static [deserialize] = EthereumAddressSerializer.deserialize;
+  static [queryableValue] = EthereumAddressSerializer.queryableValue;
   static embedded = View;
   static atom = View;
   static edit = Edit;
