@@ -277,7 +277,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               @codeData={{@codeData}}
               @diffEditorStats={{null}}
               @finalFileUrlAfterCodePatching={{this.codePatchfinalFileUrlAfterCodePatching}}
-              @originalUploadedFileUrl={{@originalUploadedFileUrl}}
+              @originalUploadedFileUrl={{@codePatchResult.originalUploadedFileUrl}}
               @codePatchStatus={{@codePatchStatus}}
               @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
             />
@@ -313,7 +313,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
             <codeBlock.diffEditorHeader
               @codeData={{@codeData}}
               @diffEditorStats={{this.diffEditorStats}}
-              @originalUploadedFileUrl={{@originalUploadedFileUrl}}
+              @originalUploadedFileUrl={{@codePatchResult.originalUploadedFileUrl}}
               @codePatchStatus={{@codePatchStatus}}
               @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
             />
