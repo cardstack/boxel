@@ -1,9 +1,10 @@
+import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import Undo2 from '@cardstack/boxel-icons/undo-2';
 import Copy from '@cardstack/boxel-icons/copy';
+import Undo2 from '@cardstack/boxel-icons/undo-2';
 
 import { dropTask } from 'ember-concurrency';
 
@@ -19,6 +20,7 @@ import RestorePatchedFileModal from '@cardstack/host/components/ai-assistant/res
 
 import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
 
+import { type Message as MatrixMessage } from '@cardstack/host/lib/matrix-classes/message';
 import CardService from '@cardstack/host/services/card-service';
 
 import MatrixService from '@cardstack/host/services/matrix-service';
@@ -26,9 +28,6 @@ import MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
-
-import { type Message as MatrixMessage } from '@cardstack/host/lib/matrix-classes/message';
-import { on } from '@ember/modifier';
 
 export interface CodeBlockDiffEditorHeaderSignature {
   Args: {

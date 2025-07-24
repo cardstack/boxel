@@ -20,6 +20,7 @@ import {
   CodeData,
 } from '@cardstack/host/lib/formatted-message/utils';
 
+import { type Message as MatrixMessage } from '@cardstack/host/lib/matrix-classes/message';
 import type MessageCodePatchResult from '@cardstack/host/lib/matrix-classes/message-code-patch-result';
 
 import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
@@ -35,7 +36,6 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import Message from './text-content';
-import { type Message as MatrixMessage } from '@cardstack/host/lib/matrix-classes/message';
 
 interface Signature {
   Element: HTMLDivElement;

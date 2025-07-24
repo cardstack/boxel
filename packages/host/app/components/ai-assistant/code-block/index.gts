@@ -6,6 +6,7 @@ import { tracked } from '@glimmer/tracking';
 
 import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
 
+import { type Message as MatrixMessage } from '@cardstack/host/lib/matrix-classes/message';
 import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 import MonacoDiffEditor from '@cardstack/host/modifiers/monaco-diff-editor';
 import MonacoEditor, {
@@ -26,7 +27,6 @@ import CodeBlockDiffEditorHeader, {
 
 import type { ComponentLike } from '@glint/template';
 
-import { type Message as MatrixMessage } from '@cardstack/host/lib/matrix-classes/message';
 interface CodeBlockEditorSignature {
   Args: {
     code?: string | null;
