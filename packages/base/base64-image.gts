@@ -198,12 +198,12 @@ export class ImageSizeField extends FieldDef {
   static [primitive]: 'actual' | 'contain' | 'cover';
   static [useIndexBasedKey]: never;
   static [deserialize] = ImageSizeSerializer.deserialize;
-  static embedded = class Embedded extends Component<typeof this> {
+  static embedded = class Embedded extends Component<typeof ImageSizeField> {
     <template>
       {{@model}}
     </template>
   };
-  static edit = class Edit extends Component<typeof this> {
+  static edit = class Edit extends Component<typeof ImageSizeField> {
     <template>
       <div class='radio-group' data-test-radio-group={{@fieldName}}>
         <RadioInput

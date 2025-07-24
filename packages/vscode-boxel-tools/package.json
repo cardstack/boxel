@@ -255,7 +255,7 @@
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:js": "eslint . --report-unused-disable-directives --cache",
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
-    "lint:glint": "glint",
+    "lint:glint": "glint --noEmit",
     "watch": "node esbuild.mjs --watch"
   },
   "dependencies": {
@@ -264,10 +264,10 @@
   "devDependencies": {
     "@babel/preset-typescript": "catalog:",
     "@cardstack/runtime-common": "workspace:*",
-    "@glint/core": "^1.3.0",
-    "@glint/environment-ember-loose": "^1.3.0",
-    "@glint/environment-ember-template-imports": "^1.3.0",
-    "@glint/template": "^1.3.0",
+    "@glint/core": "catalog:",
+    "@glint/environment-ember-loose": "catalog:",
+    "@glint/environment-ember-template-imports": "catalog:",
+    "@glint/template": "catalog:",
     "@types/node": "^18.19.39",
     "@types/vscode": "^1.73.0",
     "@typescript-eslint/eslint-plugin": "catalog:",
