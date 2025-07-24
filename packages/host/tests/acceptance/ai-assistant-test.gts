@@ -1477,6 +1477,34 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'workspace-chooser',
       'Context sent with message contains correct submode',
     );
+    console.log(
+      'contextSent.workspaces',
+      JSON.stringify(contextSent.workspaces, null, 2),
+    );
+    console.log(
+      'expected',
+      JSON.stringify(
+        [
+          {
+            name: 'Test Workspace B',
+            type: 'user-workspace',
+            url: testRealmURL,
+          },
+          {
+            name: 'Cardstack Catalog',
+            type: 'catalog-workspace',
+            url: 'http://localhost:4201/catalog/',
+          },
+          {
+            name: 'Cardstack Skills',
+            type: 'catalog-workspace',
+            url: 'http://localhost:4201/skills/',
+          },
+        ],
+        null,
+        2,
+      ),
+    );
     assert.deepEqual(
       contextSent.workspaces,
       [
