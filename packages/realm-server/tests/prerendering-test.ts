@@ -11,7 +11,7 @@ import {
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(basename(__filename), function () {
+module.only(basename(__filename), function () {
   module('prerender', function (hooks) {
     let { virtualNetwork } = createVirtualNetworkAndLoader();
     let realmURL: string;
