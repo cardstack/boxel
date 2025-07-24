@@ -1150,4 +1150,159 @@ ${REPLACE_MARKER}
 
     matrixServer.fetchMatrixHostedFile = originalFetchMatrixHostedFile;
   });
+
+  test('LLM mode event controls auto-apply of code patches with timestamp checking', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    // Start in 'ask' mode (default)
+    assert
+      .dom('[data-test-llm-mode-option="ask"]')
+      .hasClass('selected', 'LLM mode starts in ask mode');
+
+    // Send a code patch in 'ask' mode - should NOT be auto-applied
+    let codeBlock1 = `\`\`\`
+http://test-realm/test/hello.txt
+${SEARCH_MARKER}
+Hello, world!
+${SEPARATOR_MARKER}
+Hi, world!
+${REPLACE_MARKER}
+\`\`\``;
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock1,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+
+    await waitFor('[data-test-apply-code-button]');
+    assert
+      .dom('[data-test-apply-code-button]')
+      .exists('Apply button is shown in ask mode');
+    assert
+      .dom('[data-test-apply-state="applied"]')
+      .doesNotExist('Code patch is not auto-applied in ask mode');
+
+    // Switch to 'act' mode
+    await click('[data-test-llm-mode-option="act"]');
+    assert
+      .dom('[data-test-llm-mode-option="act"]')
+      .hasClass('selected', 'LLM mode updates to act');
+
+    // Send a new code patch in 'act' mode - should be auto-applied
+    let codeBlock2 = `\`\`\`
+http://test-realm/test/hello.txt
+${SEARCH_MARKER}
+Hello, world!
+${SEPARATOR_MARKER}
+Hi, again (auto applied)!
+${REPLACE_MARKER}
+\`\`\``;
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock2,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+
+    // Wait for the code patch to be auto-applied
+    await waitFor(
+      '[data-test-message-idx="1"] [data-test-apply-state="applied"]',
+    );
+    assert
+      .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
+      .exists('Code patch is auto-applied in act mode');
+
+    // Switch back to 'ask' mode
+    await click('[data-test-llm-mode-option="ask"]');
+    assert
+      .dom('[data-test-llm-mode-option="ask"]')
+      .hasClass('selected', 'LLM mode updates back to ask');
+
+    // Send another code patch - should NOT be auto-applied
+    let codeBlock3 = `\`\`\`
+http://test-realm/test/hello.txt
+${SEARCH_MARKER}
+Hi, again (auto applied)!
+${SEPARATOR_MARKER}
+Goodbye, world!
+${REPLACE_MARKER}
+\`\`\``;
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock3,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+    await waitFor('[data-test-apply-code-button]');
+    assert
+      .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
+      .doesNotExist('Code patch sent before act mode is not auto-applied');
+
+    // Switch back to 'act' mode
+    await click('[data-test-llm-mode-option="act"]');
+    assert
+      .dom('[data-test-llm-mode-option="act"]')
+      .hasClass('selected', 'LLM mode updates to act again');
+
+    // Send a final code patch after switching to 'act' mode - should be auto-applied
+    let codeBlock4 = `\`\`\`
+http://test-realm/test/hello.txt
+${SEARCH_MARKER}
+Hi, again (auto applied)!
+${SEPARATOR_MARKER}
+Final message, world!
+${REPLACE_MARKER}
+\`\`\``;
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock4,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+
+    // Wait for the code patch to be auto-applied
+    await waitFor(
+      '[data-test-message-idx="3"] [data-test-apply-state="applied"]',
+    );
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-apply-state="applied"]')
+      .exists('New code patch sent after act mode is auto-applied');
+
+    // Verify that the previous code patch (sent before act mode) is still not applied
+    assert
+      .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
+      .doesNotExist(
+        'Code patch sent before act mode is still not auto-applied',
+      );
+  });
 });

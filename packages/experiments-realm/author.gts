@@ -108,7 +108,7 @@ export class Author extends CardDef {
           margin-right: auto;
           margin-left: auto;
           padding: 3em 1em;
-          font-size: 1rem;
+          font-size: 1.5rem;
           font-family: 'Lora', serif;
           text-wrap: pretty;
         }

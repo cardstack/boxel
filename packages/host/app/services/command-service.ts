@@ -51,7 +51,9 @@ export default class CommandService extends Service {
   currentlyExecutingCommandRequestIds = new TrackedSet<string>();
   executedCommandRequestIds = new TrackedSet<string>();
   private commandProcessingEventQueue: string[] = [];
+  private codePatchProcessingEventQueue: string[] = [];
   private flushCommandProcessingQueue: Promise<void> | undefined;
+  private flushCodePatchProcessingQueue: Promise<void> | undefined;
 
   public queueEventForCommandProcessing(event: Partial<IEvent>) {
     let eventId = event.event_id;
@@ -77,6 +79,32 @@ export default class CommandService extends Service {
     this.commandProcessingEventQueue.push(compoundKey);
 
     debounce(this, this.drainCommandProcessingQueue, 100);
+  }
+
+  public queueEventForCodePatchProcessing(event: Partial<IEvent>) {
+    let eventId = event.event_id;
+    if (event.content?.['m.relates_to']?.rel_type === 'm.replace') {
+      eventId = event.content?.['m.relates_to']!.event_id;
+    }
+    if (!eventId) {
+      throw new Error(
+        'No event id found for event with code patches, this should not happen',
+      );
+    }
+    let roomId = event.room_id;
+    if (!roomId) {
+      throw new Error(
+        'No room id found for event with code patches, this should not happen',
+      );
+    }
+    let compoundKey = `${roomId}|${eventId}`;
+    if (this.codePatchProcessingEventQueue.includes(compoundKey)) {
+      return;
+    }
+
+    this.codePatchProcessingEventQueue.push(compoundKey);
+
+    debounce(this, this.drainCodePatchProcessingQueue, 100);
   }
 
   private async drainCommandProcessingQueue() {
@@ -165,6 +193,101 @@ export default class CommandService extends Service {
       }
     }
     finishedProcessingCommands!();
+  }
+
+  private async drainCodePatchProcessingQueue() {
+    await this.flushCodePatchProcessingQueue;
+
+    let finishedProcessingCodePatches: () => void;
+    this.flushCodePatchProcessingQueue = new Promise(
+      (res) => (finishedProcessingCodePatches = res),
+    );
+
+    let codePatchSpecs = [...this.codePatchProcessingEventQueue];
+    this.codePatchProcessingEventQueue = [];
+
+    while (codePatchSpecs.length > 0) {
+      let [roomId, eventId] = codePatchSpecs.shift()!.split('|');
+
+      let roomResource = this.matrixService.roomResources.get(roomId!);
+      if (!roomResource) {
+        throw new Error(
+          `Room resource not found for room id ${roomId}, this should not happen`,
+        );
+      }
+      let timeout = Date.now() + 60_000; // reset the timer to avoid a long wait if the room resource is processing
+      let currentRoomProcessingTimestamp = roomResource.processingLastStartedAt;
+      while (
+        roomResource.isProcessing &&
+        currentRoomProcessingTimestamp ===
+          roomResource.processingLastStartedAt &&
+        Date.now() < timeout
+      ) {
+        // wait for the room resource to finish processing
+        await delay(100);
+      }
+      if (
+        roomResource.isProcessing &&
+        currentRoomProcessingTimestamp === roomResource.processingLastStartedAt
+      ) {
+        // room seems to be stuck processing, so we will log and skip this event
+        console.error(
+          `Room resource for room ${roomId} seems to be stuck processing, skipping code patch event ${eventId}`,
+        );
+        continue;
+      }
+      let message = roomResource.messages.find((m) => m.eventId === eventId);
+      if (!message) {
+        continue;
+      }
+      if (message.agentId !== this.matrixService.agentId) {
+        // This code patch was sent by another agent, so we will not auto-execute it
+        continue;
+      }
+
+      // Get the LLM mode that was active when this message was created
+      let messageTimestamp = message.created.getTime();
+      let activeModeAtMessageTime =
+        roomResource.getActiveLLMModeAtTimestamp(messageTimestamp);
+      console.log('activeModeAtMessageTime', activeModeAtMessageTime);
+      // Only auto-apply if in 'act' mode
+      if (activeModeAtMessageTime !== 'act') {
+        continue;
+      }
+
+      // Auto-apply all ready code patches from this message
+      if (message.htmlParts) {
+        let readyCodePatches: typeof message.htmlParts = [];
+        for (let i = 0; i < message.htmlParts.length; i++) {
+          let htmlPart = message.htmlParts[i];
+          let codeData = htmlPart.codeData;
+          if (!codeData || !codeData.searchReplaceBlock) continue;
+          let status = this.getCodePatchStatus(codeData);
+          if (status && status === 'ready') {
+            readyCodePatches.push(htmlPart);
+          }
+        }
+
+        // Group code patches by fileUrl and apply them
+        let grouped: Record<string, typeof readyCodePatches> = {};
+        for (let htmlPart of readyCodePatches) {
+          let codeData = htmlPart.codeData!;
+          if (!codeData.fileUrl) continue;
+          if (!grouped[codeData.fileUrl]) grouped[codeData.fileUrl] = [];
+          grouped[codeData.fileUrl].push(htmlPart);
+        }
+
+        for (let [fileUrl, htmlParts] of Object.entries(grouped)) {
+          let codeDataItems = htmlParts.map((htmlPart) => ({
+            searchReplaceBlock: htmlPart.codeData!.searchReplaceBlock,
+            eventId: message!.eventId,
+            codeBlockIndex: htmlPart.codeData!.codeBlockIndex,
+          }));
+          await this.patchCode(roomId!, fileUrl, codeDataItems);
+        }
+      }
+    }
+    finishedProcessingCodePatches!();
   }
 
   get commandContext(): CommandContext {

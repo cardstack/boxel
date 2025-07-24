@@ -1598,6 +1598,22 @@ export default class MatrixService extends Service {
     ) {
       this.commandService.queueEventForCommandProcessing(event);
     }
+
+    // Queue code patches for processing
+    if (
+      event.type === 'm.room.message' &&
+      event.content?.body &&
+      event.content?.isStreamingFinished
+    ) {
+      // Check if the message contains code patches by looking for search/replace blocks
+      let body = event.content.body as string;
+      if (
+        body.includes('╔═══ SEARCH ════╗') &&
+        body.includes('╚═══ REPLACE ═══╝')
+      ) {
+        this.commandService.queueEventForCodePatchProcessing(event);
+      }
+    }
   }
 
   private clearAuth() {
