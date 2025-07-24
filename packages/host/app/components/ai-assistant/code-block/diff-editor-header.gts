@@ -70,6 +70,9 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
               {{! including this in a test attribute because navigator.clipboard is not available in test environment }}
               data-test-copy-submitted-content={{this.submittedContent}}
               {{bindings}}
+              {{! Since this content is not available to us immediately and we need to load it,
+              we try to load it in advance - when the user clicks on the file dropdown. Then, when the user
+              tryes to copy the content, we should have it ready. }}
               {{on 'click' (perform this.loadSubmittedContent)}}
             >
               <span class='filename' data-test-file-name>
@@ -247,7 +250,7 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
 
   copySubmittedContent = async () => {
     if (this.loadSubmittedContent.isRunning) {
-      await this.loadSubmittedContent.perform();
+      await this.loadSubmittedContent.perform(); // Should be dropped if loading is already running
     }
     navigator.clipboard.writeText(this.submittedContent!);
   };
