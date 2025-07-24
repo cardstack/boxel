@@ -1,3 +1,4 @@
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { modifier } from 'ember-modifier';
@@ -11,8 +12,10 @@ interface ApplicationRouteSignature {
 }
 
 class ApplicationRouteComponent extends Component<ApplicationRouteSignature> {
+  @service declare fastboot: { isFastBoot: boolean };
+
   get hostMode() {
-    if (config.hostModeDomainRoot) {
+    if (!this.fastboot.isFastBoot && config.hostModeDomainRoot) {
       let hostModeDomainRoot = config.hostModeDomainRoot;
       let currentHost = window.location.hostname;
 
