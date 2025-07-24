@@ -11,6 +11,7 @@ export type PillMenuItem = {
   cardId: string;
   realmURL: string | undefined;
   isActive: boolean;
+  nothing?: boolean;
 };
 
 interface Signature {
