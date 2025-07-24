@@ -25,7 +25,6 @@ import {
   setMonacoContent,
   setupAcceptanceTestRealm,
   visitOperatorMode,
-  waitForCodeEditor,
   setupUserSubscription,
   withSlowSave,
   type TestContextWithSave,
@@ -309,7 +308,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}Pet/mango.json`,
     });
-    await waitForCodeEditor();
 
     assert.false(
       monacoService?.editor?.getOption(MonacoSDK.editor.EditorOption.readOnly),
@@ -349,7 +347,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}Person/john-with-bad-pet-link.json`,
     });
-    await waitFor('[data-test-editor]');
 
     let editedCard: LooseSingleCardDocument = {
       data: {
@@ -419,7 +416,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       codePath: `${testRealmURL}Pet/mango.json`,
     });
 
-    await waitForCodeEditor();
     assert
       .dom('[data-test-code-mode-card-renderer-body] [data-test-field="name"]')
       .containsText('Mango');
@@ -468,7 +464,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       codePath: `${testRealmURL}Pet/mango.json`,
     });
 
-    await waitForCodeEditor();
     assert
       .dom('[data-test-code-mode-card-renderer-body] [data-test-field="name"]')
       .containsText('Mango');
@@ -519,7 +514,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}Pet/mango.json`,
     });
-    await waitForCodeEditor();
 
     this.onSave((url, json) => {
       if (typeof json === 'string') {
@@ -549,7 +543,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}README.txt`,
     });
-    await waitForCodeEditor();
 
     this.onSave((url, content) => {
       if (typeof content !== 'string') {
@@ -570,7 +563,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}README.txt`,
     });
-    await waitForCodeEditor();
 
     this.onSave((url, content) => {
       if (typeof content !== 'string') {
@@ -593,7 +585,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}README.txt`,
     });
-    await waitForCodeEditor();
     let deferred = new Deferred<void>();
     this.onSave((url, content) => {
       if (typeof content !== 'string') {
@@ -629,7 +620,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}Pet/mango.json`,
     });
-    await waitForCodeEditor();
 
     this.onSave((url, json) => {
       if (typeof json === 'string') {
@@ -664,7 +654,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}Pet/mango.json`,
     });
-    await waitForCodeEditor();
 
     this.onSave(() => {
       assert.ok(false, `save should never happen`);
@@ -713,7 +702,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
-    await waitForCodeEditor();
 
     setMonacoContent(expected);
     await settled();
@@ -739,8 +727,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         submode: 'code',
         codePath: `${testRealmURL}pet.gts`,
       });
-
-      await waitForCodeEditor();
 
       assert.true(
         monacoService?.editor?.getOption(

@@ -74,11 +74,11 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
 
   constructor(...args: [any, any]) {
     super(...args);
-    this.fetchSubscriptionData.perform();
+    this.loadSubscriptionData.perform();
   }
 
   private get isLoading() {
-    return this.billingService.fetchingSubscriptionData;
+    return this.billingService.loadingSubscriptionData;
   }
 
   private get plan() {
@@ -125,8 +125,8 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
     );
   }
 
-  private fetchSubscriptionData = task(async () => {
-    await this.billingService.fetchSubscriptionData();
+  private loadSubscriptionData = task(async () => {
+    await this.billingService.loadSubscriptionData();
   });
 
   <template>

@@ -135,16 +135,7 @@ export class CardType extends Resource<Args> {
     if (superCard && card !== superCard) {
       superType = await this.toType(superCard, [card, ...stack]);
     }
-    if (isCodeRefType(superType)) {
-      throw new Error(
-        `bug: encountered cycle in card ancestor: ${[
-          superType,
-          ...stack.map((c) => identifyCard(c)),
-        ]
-          .map((r) => JSON.stringify(r))
-          .join()}`,
-      );
-    }
+
     let fieldTypes: FieldOfType[] = await Promise.all(
       Object.entries(fields).map(
         async ([name, field]: [string, Field<typeof BaseDef, any>]) => ({
@@ -159,7 +150,7 @@ export class CardType extends Resource<Args> {
     let type: Type = {
       id,
       module: moduleIdentifier,
-      super: superType,
+      super: isCodeRefType(superType) ? undefined : superType,
       displayName: card.prototype.constructor.displayName || 'Card',
       fields: fieldTypes,
       moduleInfo,
@@ -250,13 +241,20 @@ export function isFieldOfType(obj: any): obj is FieldOfType {
   return obj && 'card' in obj;
 }
 
-export function getCodeRef(t: Type | FieldOfType): ResolvedCodeRef | undefined {
+export function getCodeRef(t: Type | FieldOfType): CodeRef {
   let codeRef: CodeRef;
   if (isFieldOfType(t)) {
-    codeRef = isCodeRefType(t.card) ? t.card : t.card.codeRef;
+    codeRef = isCodeRefType(t.card) ? t.card : (t.card as Type).codeRef;
   } else {
     codeRef = t.codeRef;
   }
+  return codeRef;
+}
+
+export function getResolvedCodeRef(
+  t: Type | FieldOfType,
+): ResolvedCodeRef | undefined {
+  let codeRef = getCodeRef(t);
   if (!isResolvedCodeRef(codeRef)) {
     return undefined;
   }

@@ -962,9 +962,9 @@ test.describe('Room messages', () => {
     await expect(page.locator('[data-test-card-error]')).toContainText(
       'Message is too large',
     );
-    await expect(page.locator('[data-test-ai-bot-retry-button]')).toHaveCount(
-      0,
-    );
+    await expect(
+      page.locator('[data-test-alert-action-button="Retry"]'),
+    ).toHaveCount(0);
   });
 
   test('filters out messages with m.replace when loading room history', async ({

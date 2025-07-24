@@ -136,6 +136,8 @@ export default class OperatorModeStateService extends Service {
 
   private moduleInspectorHistory: Record<string, ModuleInspectorView>;
 
+  @tracked profileSettingsOpen = false;
+
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
   @service declare private loaderService: LoaderService;
@@ -164,6 +166,10 @@ export default class OperatorModeStateService extends Service {
       moduleInspectorHistory ? JSON.parse(moduleInspectorHistory) : {},
     );
   }
+
+  toggleProfileSettings = () => {
+    this.profileSettingsOpen = !this.profileSettingsOpen;
+  };
 
   get state() {
     return {
@@ -1113,6 +1119,14 @@ export default class OperatorModeStateService extends Service {
         codeMode.selectedCodeRef = this.codeSemanticsService.selectedCodeRef;
         codeMode.inheritanceChain =
           await this.codeSemanticsService.getInheritanceChain();
+
+        // Include active spec ID when spec pane is active
+        if (
+          this.moduleInspectorPanel === 'spec' &&
+          this.specPanelService.specSelection
+        ) {
+          codeMode.activeSpecId = this.specPanelService.specSelection;
+        }
       }
     }
 

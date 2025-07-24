@@ -35,7 +35,6 @@ import {
   setupLocalIndexing,
   testRealmURL,
   visitOperatorMode,
-  waitForCodeEditor,
   setupUserSubscription,
   assertMessages,
 } from '../helpers';
@@ -773,7 +772,6 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}Person/1.json`,
       });
 
-      await waitForCodeEditor();
       await waitFor('[data-test-file-view-header]');
 
       assert
@@ -815,7 +813,6 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}z01.json`,
       });
 
-      await waitForCodeEditor();
       await waitFor('[data-test-file-definition]');
 
       assert.dom('[data-test-definition-file-extension]').hasText('.json');
@@ -845,7 +842,6 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}not-json.json`,
       });
 
-      await waitForCodeEditor();
       await waitFor('[data-test-file-definition]');
 
       assert.dom('[data-test-definition-file-extension]').hasText('.json');
@@ -1091,8 +1087,6 @@ module('Acceptance | code submode tests', function (_hooks) {
         openDirs: { [testRealmURL]: ['Person/'] },
       });
 
-      await waitForCodeEditor();
-
       await fillIn(
         '[data-test-card-url-bar-input]',
         `http://unknown-domain.com/test/mango.png`,
@@ -1122,7 +1116,6 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}Person/fadhlan.json`,
       });
 
-      await waitForCodeEditor();
       await waitFor('[data-test-card-resource-loaded]');
 
       assert
@@ -1177,8 +1170,6 @@ module('Acceptance | code submode tests', function (_hooks) {
         submode: 'code',
         codePath: `${testRealmURL}employee.gts`,
       });
-
-      await waitForCodeEditor();
 
       await waitFor('[data-test-loading-indicator]', { count: 0 });
 
@@ -1242,8 +1233,6 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}employee.gts`,
       });
 
-      await waitForCodeEditor();
-
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       // Click on search-input
@@ -1262,7 +1251,6 @@ module('Acceptance | code submode tests', function (_hooks) {
       // Click on search result
       await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
 
-      await waitForCodeEditor(); // The card appears in the editor
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('results'); // Search sheet is closed
       assert.deepEqual(JSON.parse(getMonacoContent()), {
         data: {
@@ -1285,7 +1273,6 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}in-this-file.gts`,
       });
 
-      await waitForCodeEditor();
       await waitFor('[data-test-card-inspector-panel]');
       await waitFor('[data-test-current-module-name]');
       await waitFor('[data-test-in-this-file-selector]');
@@ -1333,7 +1320,6 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}in-this-file.gts`,
       });
 
-      await waitForCodeEditor();
       await waitFor('[data-test-card-inspector-panel]');
       await waitFor('[data-test-current-module-name]');
       await waitFor('[data-test-in-this-file-selector]');
@@ -1389,8 +1375,6 @@ module('Acceptance | code submode tests', function (_hooks) {
           codePath: `${testRealmURL}in-this-file.gts`,
         })!;
 
-        await waitForCodeEditor();
-
         let originalPosition: MonacoSDK.Position | undefined | null;
 
         setMonacoContent(`// This is a change \n${inThisFileSource}`);
@@ -1422,8 +1406,6 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}employee.gts`,
       });
 
-      await waitForCodeEditor();
-
       await waitFor(`[data-boxel-selector-item-text="Employee"]`);
       await click(`[data-boxel-selector-item-text="Employee"]`);
       let lineCursorOn = monacoService.getLineCursorOn();
@@ -1447,8 +1429,6 @@ module('Acceptance | code submode tests', function (_hooks) {
         submode: 'code',
         codePath: `${testRealmURL}employee.gts`,
       });
-
-      await waitForCodeEditor();
 
       await waitFor(`[data-boxel-selector-item-text="Employee"]`);
       await click(`[data-boxel-selector-item-text="Employee"]`);
@@ -1480,7 +1460,6 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}Pet/mango.json`,
       });
 
-      await waitForCodeEditor();
       await waitFor('[data-test-code-mode-card-renderer-body]');
 
       await scrollTo('[data-test-code-mode-card-renderer-body]', 0, 100);
@@ -1502,7 +1481,6 @@ module('Acceptance | code submode tests', function (_hooks) {
         submode: 'code',
         codePath: `${testRealmURL}Person/fadhlan.json`,
       });
-      await waitForCodeEditor();
       await waitFor('[data-test-code-mode-card-renderer-body]');
 
       await click('[data-test-format-chooser="edit"]');
@@ -1567,7 +1545,6 @@ module('Acceptance | code submode tests', function (_hooks) {
         submode: 'code',
         codePath: `${testRealmURL}Person/fadhlan.json`,
       });
-      await waitForCodeEditor();
       await waitUntil(() => getMonacoContent().includes('Fadhlan'));
 
       await realm.write(

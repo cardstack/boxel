@@ -99,7 +99,6 @@ type PanelWidths = {
 
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
-  @tracked private profileSettingsOpened = false;
   @tracked private profileSummaryOpened = false;
 
   private aiPanelWidths: PanelWidths = new TrackedObject({
@@ -230,7 +229,7 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   @action private toggleProfileSettings() {
-    this.profileSettingsOpened = !this.profileSettingsOpened;
+    this.operatorModeStateService.toggleProfileSettings();
 
     this.profileSummaryOpened = false;
   }
@@ -415,7 +414,7 @@ export default class SubmodeLayout extends Component<Signature> {
       </ResizablePanelGroup>
     </div>
 
-    {{#if this.profileSettingsOpened}}
+    {{#if this.operatorModeStateService.profileSettingsOpen}}
       <ProfileSettingsModal
         @toggleProfileSettings={{this.toggleProfileSettings}}
       />

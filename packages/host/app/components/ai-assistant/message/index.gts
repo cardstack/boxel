@@ -12,11 +12,16 @@ import throttle from 'lodash/throttle';
 import { Alert } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 
-import { type getCardCollection } from '@cardstack/runtime-common';
+import {
+  MINIMUM_AI_CREDITS_TO_CONTINUE,
+  type getCardCollection,
+} from '@cardstack/runtime-common';
 
 import { type HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
+import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -174,6 +179,8 @@ function collectionResourceError(id: string | null | undefined) {
 
 export default class AiAssistantMessage extends Component<Signature> {
   @service private declare matrixService: MatrixService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare billingService: BillingService;
 
   private get isReasoningExpandedByDefault() {
     let result =
@@ -262,11 +269,31 @@ export default class AiAssistantMessage extends Component<Signature> {
         {{yield}}
 
         {{#if this.errorMessages.length}}
-          <Alert
-            @type='error'
-            @messages={{this.errorMessages}}
-            @retryAction={{@retryAction}}
-          />
+          {{#if this.isOutOfCreditsErrorMessage}}
+            <Alert @type='error' as |Alert|>
+              <Alert.Messages @messages={{this.errorMessages}} />
+              {{#if this.isOutOfCredits}}
+                <Alert.Action
+                  @actionName='Buy More Credits'
+                  @action={{this.operatorModeStateService.toggleProfileSettings}}
+                />
+              {{else if @retryAction}}
+                <div class='credits-action-row'>
+                  <div class='credits-added' data-test-credits-added>
+                    Credits added!
+                  </div>
+                  <Alert.Action @actionName='Retry' @action={{@retryAction}} />
+                </div>
+              {{/if}}
+            </Alert>
+          {{else}}
+            <Alert @type='error' as |Alert|>
+              <Alert.Messages @messages={{this.errorMessages}} />
+              {{#if @retryAction}}
+                <Alert.Action @actionName='Retry' @action={{@retryAction}} />
+              {{/if}}
+            </Alert>
+          {{/if}}
         {{/if}}
       </div>
     </section>
@@ -294,6 +321,30 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
       :deep(code) {
         overflow-wrap: break-word;
+      }
+
+      .add-more-credits-button {
+        --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+        --boxel-button-min-height: max-content;
+        --boxel-button-min-width: max-content;
+        border-color: transparent;
+        width: fit-content;
+        margin-left: auto;
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 500;
+      }
+      .credits-action-row {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: var(--boxel-sp-sm);
+      }
+      .credits-action-row :deep(.action-button) {
+        margin-left: 0;
+      }
+      .credits-added {
+        font-size: var(--boxel-font-size-xs);
+        font-weight: bold;
       }
     </style>
   </template>
@@ -329,6 +380,24 @@ export default class AiAssistantMessage extends Component<Signature> {
         collectionResourceError(error.id),
       ) ?? []),
     ];
+  }
+
+  private get isOutOfCreditsErrorMessage(): boolean {
+    return this.errorMessages.some((error) =>
+      /You need a minimum of \d+ credits to continue using the AI bot\. Please upgrade to a larger plan, or top up your account\./.test(
+        error,
+      ),
+    );
+  }
+
+  private get hasMinimumCreditsToContinue(): boolean {
+    return (
+      this.billingService.availableCredits >= MINIMUM_AI_CREDITS_TO_CONTINUE
+    );
+  }
+
+  private get isOutOfCredits() {
+    return !this.hasMinimumCreditsToContinue;
   }
 }
 
