@@ -11,7 +11,6 @@ import {
   testRealmURL,
   setupOnSave,
   setupAcceptanceTestRealm,
-  waitForCodeEditor,
   getMonacoContent,
   visitOperatorMode as _visitOperatorMode,
   type TestContextWithSave,
@@ -178,7 +177,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     menuSelection: string,
     expectedRealmName = 'Test Workspace A',
   ) {
-    await waitForCodeEditor();
     await waitFor('[data-test-new-file-button]');
     await click('[data-test-new-file-button]');
     await click(`[data-test-boxel-menu-item-text="${menuSelection}"]`);
@@ -612,7 +610,6 @@ export class TrèsTestCard extends CardDef {
       });
       await click('[data-test-create-definition]');
       await waitFor('[data-test-create-file-modal]', { count: 0 });
-      await waitForCodeEditor();
       assert.strictEqual(
         getMonacoContent(),
         expectedSrc,
@@ -1079,7 +1076,6 @@ export class TestCard extends CardDef {
 
       test('read only realm is not present in realm drop down when duplicating card instance', async function (assert) {
         await visitOperatorMode(`${testRealmURL}Pet/mango.json`);
-        await waitForCodeEditor();
         await waitFor(`[data-test-action-button="Duplicate"]`);
         await click('[data-test-action-button="Duplicate"]');
         await assertRealmDropDownIsCorrect(assert);
@@ -1087,7 +1083,6 @@ export class TestCard extends CardDef {
 
       test('read only realm is not present in realm drop down when inheriting card definition', async function (assert) {
         await visitOperatorMode(`${testRealmURL}pet.gts`);
-        await waitForCodeEditor();
         await waitFor(`[data-test-action-button="Inherit"]`);
         await click('[data-test-action-button="Inherit"]');
         await assertRealmDropDownIsCorrect(assert);
@@ -1095,7 +1090,6 @@ export class TestCard extends CardDef {
 
       test('read only realm is not present in realm drop down when creating instance of card definition', async function (assert) {
         await visitOperatorMode(`${testRealmURL}pet.gts`);
-        await waitForCodeEditor();
         await waitFor(`[data-test-action-button="Create Instance"]`);
         await click('[data-test-action-button="Create Instance"]');
         await assertRealmDropDownIsCorrect(assert);
@@ -1150,7 +1144,6 @@ export class TestCard extends CardDef {
 
       test('read only realm is not present in realm drop down when duplicating card instance', async function (assert) {
         await visitOperatorMode(`${testRealmURL}Pet/mango.json`);
-        await waitForCodeEditor();
         await waitFor(`[data-test-action-button="Duplicate"]`);
         await click('[data-test-action-button="Duplicate"]');
         await assertRealmDropDownIsCorrect(assert);
@@ -1158,7 +1151,6 @@ export class TestCard extends CardDef {
 
       test('read only realm is not present in realm drop down when inheriting card definition', async function (assert) {
         await visitOperatorMode(`${testRealmURL}pet.gts`);
-        await waitForCodeEditor();
         await waitFor(`[data-test-action-button="Inherit"]`);
         await click('[data-test-action-button="Inherit"]');
         await assertRealmDropDownIsCorrect(assert);
@@ -1166,7 +1158,6 @@ export class TestCard extends CardDef {
 
       test('read only realm is not present in realm drop down when creating instance of card definition', async function (assert) {
         await visitOperatorMode(`${testRealmURL}pet.gts`);
-        await waitForCodeEditor();
         await waitFor(`[data-test-action-button="Create Instance"]`);
         await click('[data-test-action-button="Create Instance"]');
         await assertRealmDropDownIsCorrect(assert);

@@ -5,6 +5,7 @@ import Modifier from 'ember-modifier';
 import { makeCodeDiffStats } from '@cardstack/host/lib/formatted-message/utils';
 
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
+import { createMonacoWaiterManager } from '@cardstack/host/utils/monaco-test-waiter';
 
 import { MonacoEditorOptions } from './monaco';
 
@@ -30,6 +31,7 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
   private monacoState: {
     editor: _MonacoSDK.editor.IStandaloneDiffEditor;
   } | null = null;
+  private waiterManager = createMonacoWaiterManager();
 
   modify(
     element: HTMLElement,
@@ -66,6 +68,12 @@ export default class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature
         element,
         editorDisplayOptions,
       );
+
+      // Track editor initialization for test waiters
+      if (this.waiterManager) {
+        const operationId = `monaco-diff-editor-modifier-init-${editor.getId()}`;
+        this.waiterManager.trackEditorInit(editor, operationId);
+      }
 
       let originalModel = monacoSDK.editor.createModel(
         originalCode ?? '',

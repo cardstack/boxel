@@ -29,7 +29,7 @@ import {
   type Type,
   type CodeRefType,
   type FieldOfType,
-  getCodeRef,
+  getResolvedCodeRef,
 } from '@cardstack/host/resources/card-type';
 
 import type { Ready } from '@cardstack/host/resources/file';
@@ -247,7 +247,7 @@ export default class CardSchemaEditor extends Component<Signature> {
       class='schema-editor-container'
       data-test-card-schema={{@cardType.displayName}}
     >
-      {{#let (getCodeRef @cardType) as |codeRef|}}
+      {{#let (getResolvedCodeRef @cardType) as |codeRef|}}
         <div class='header'>
           <Tooltip @placement='bottom'>
             <:trigger>
@@ -323,7 +323,7 @@ export default class CardSchemaEditor extends Component<Signature> {
               </div>
               <div class='right'>
                 {{#let (this.fieldModuleURL field) as |moduleUrl|}}
-                  {{#let (getCodeRef field) as |codeRef|}}
+                  {{#let (getResolvedCodeRef field) as |codeRef|}}
                     {{#if (this.isOverridden field)}}
                       <BoxelButton
                         @kind='text-only'
@@ -580,7 +580,7 @@ export default class CardSchemaEditor extends Component<Signature> {
       return;
     }
 
-    let codeRef = getCodeRef(this.args.cardType);
+    let codeRef = getResolvedCodeRef(this.args.cardType);
     if (!codeRef) {
       return undefined;
     }

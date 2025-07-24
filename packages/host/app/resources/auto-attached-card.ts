@@ -23,6 +23,7 @@ interface Args {
     moduleInspectorPanel: string | undefined; // 'preview' | 'spec' | 'schema' | 'card-renderer'
     autoAttachedFileUrl: string | undefined;
     playgroundPanelCardId: string | undefined;
+    activeSpecId: string | null | undefined; // selected spec card ID from SpecPanelService
     topMostStackItems: StackItem[];
     attachedCardIds: string[] | undefined; // cards manually attached in ai panel
     removedCardIds: string[] | undefined;
@@ -44,6 +45,7 @@ export class AutoAttachment extends Resource<Args> {
       moduleInspectorPanel,
       autoAttachedFileUrl,
       playgroundPanelCardId,
+      activeSpecId,
       topMostStackItems,
       attachedCardIds,
       removedCardIds,
@@ -53,6 +55,7 @@ export class AutoAttachment extends Resource<Args> {
       moduleInspectorPanel,
       autoAttachedFileUrl,
       playgroundPanelCardId,
+      activeSpecId,
       topMostStackItems,
       attachedCardIds,
       removedCardIds,
@@ -65,6 +68,7 @@ export class AutoAttachment extends Resource<Args> {
       moduleInspectorPanel: string | undefined,
       autoAttachedFileUrl: string | undefined,
       playgroundPanelCardId: string | undefined,
+      activeSpecId: string | null | undefined,
       topMostStackItems: StackItem[],
       attachedCardIds: string[] | undefined,
       removedCardIds: string[] | undefined,
@@ -109,6 +113,14 @@ export class AutoAttachment extends Resource<Args> {
         ) {
           this.cardIds.add(playgroundPanelCardId);
         }
+        if (
+          moduleInspectorPanel === 'spec' &&
+          activeSpecId &&
+          !removedCardIds?.includes(activeSpecId) &&
+          !attachedCardIds?.includes(activeSpecId)
+        ) {
+          this.cardIds.add(activeSpecId);
+        }
       }
     },
   );
@@ -121,6 +133,7 @@ export function getAutoAttachment(
     moduleInspectorPanel: () => string | undefined;
     autoAttachedFileUrl: () => string | undefined;
     playgroundPanelCardId: () => string | undefined;
+    activeSpecId: () => string | null | undefined;
     topMostStackItems: () => StackItem[];
     attachedCardIds: () => string[] | undefined;
     removedCardIds: () => string[] | undefined;
@@ -132,6 +145,7 @@ export function getAutoAttachment(
       moduleInspectorPanel: args.moduleInspectorPanel(),
       autoAttachedFileUrl: args.autoAttachedFileUrl(),
       playgroundPanelCardId: args.playgroundPanelCardId(),
+      activeSpecId: args.activeSpecId(),
       topMostStackItems: args.topMostStackItems(),
       attachedCardIds: args.attachedCardIds(),
       removedCardIds: args.removedCardIds(),

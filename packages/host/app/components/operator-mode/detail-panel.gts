@@ -30,7 +30,10 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import { getCodeRef, getCardType } from '@cardstack/host/resources/card-type';
+import {
+  getResolvedCodeRef,
+  getCardType,
+} from '@cardstack/host/resources/card-type';
 import { type Ready } from '@cardstack/host/resources/file';
 
 import {
@@ -439,7 +442,10 @@ export default class DetailPanel extends Component<Signature> {
             />
             <Divider @label='Adopts From' />
             {{#if this.cardInstanceType.type}}
-              {{#let (getCodeRef this.cardInstanceType.type) as |codeRef|}}
+              {{#let
+                (getResolvedCodeRef this.cardInstanceType.type)
+                as |codeRef|
+              }}
                 <ClickableModuleDefinitionContainer
                   @title='Card Definition'
                   @fileURL={{this.cardInstanceType.type.module}}
@@ -468,7 +474,10 @@ export default class DetailPanel extends Component<Signature> {
                   @actions={{this.definitionActions}}
                 />
                 {{#if this.cardType.type.super}}
-                  {{#let (getCodeRef this.cardType.type.super) as |codeRef|}}
+                  {{#let
+                    (getResolvedCodeRef this.cardType.type.super)
+                    as |codeRef|
+                  }}
                     <Divider @label='Inherits From' />
                     <ClickableModuleDefinitionContainer
                       @title={{definitionTitle}}
@@ -483,7 +492,7 @@ export default class DetailPanel extends Component<Signature> {
                 {{/if}}
               {{else if (isReexportCardOrField @selectedDeclaration)}}
                 {{#if this.cardType.type}}
-                  {{#let (getCodeRef this.cardType.type) as |codeRef|}}
+                  {{#let (getResolvedCodeRef this.cardType.type) as |codeRef|}}
                     <ClickableModuleDefinitionContainer
                       @title={{definitionTitle}}
                       @fileURL={{this.cardType.type.module}}

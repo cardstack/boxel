@@ -7,8 +7,6 @@ import {
   Component,
   primitive,
   useIndexBasedKey,
-  BaseDefConstructor,
-  BaseInstanceType,
   deserialize,
 } from './card-api';
 import { tracked } from '@glimmer/tracking';
@@ -21,6 +19,7 @@ import { htmlSafe } from '@ember/template';
 import { RadioInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import PhotoIcon from '@cardstack/boxel-icons/photo';
+import { ImageSizeSerializer } from '@cardstack/runtime-common';
 
 const atomImgHeight = 200;
 
@@ -198,16 +197,7 @@ export class ImageSizeField extends FieldDef {
   static displayName = 'Image Size';
   static [primitive]: 'actual' | 'contain' | 'cover';
   static [useIndexBasedKey]: never;
-
-  static async [deserialize]<T extends BaseDefConstructor>(
-    this: T,
-    val: any,
-  ): Promise<BaseInstanceType<T>> {
-    if (val === undefined || val === null) {
-      return 'actual' as BaseInstanceType<T>;
-    }
-    return val as BaseInstanceType<T>;
-  }
+  static [deserialize] = ImageSizeSerializer.deserialize;
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       {{@model}}

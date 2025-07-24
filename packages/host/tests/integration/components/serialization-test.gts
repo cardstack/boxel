@@ -12,6 +12,7 @@ import {
   NotLoaded,
   PermissionsContextName,
   localId,
+  fields,
   type LooseSingleCardDocument,
   type Permissions,
 } from '@cardstack/runtime-common';
@@ -2257,6 +2258,189 @@ module('Integration | serialization', function (hooks) {
         name: 'Employee',
       },
     });
+  });
+
+  test('can serialize a polymorphic primitive contains field', async function (assert) {
+    class SpecialStringA extends StringField {}
+    class TestCard extends CardDef {
+      @field specialField = contains(StringField);
+    }
+    let card = new TestCard({
+      specialField: 'Mango',
+      [fields]: {
+        specialField: SpecialStringA,
+      },
+    });
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { TestCard, SpecialStringA },
+      },
+    });
+
+    let serialized = serializeCard(card, {
+      includeUnrenderedFields: true,
+    });
+    assert.strictEqual(
+      serialized.data.attributes?.specialField,
+      'Mango',
+      'field value is correct',
+    );
+    assert.deepEqual(serialized.data.meta?.fields?.specialField, {
+      adoptsFrom: {
+        module: `${testRealmURL}test-cards`,
+        name: 'SpecialStringA',
+      },
+    });
+  });
+
+  test('can serialize a polymorphic primitive containsMany field', async function (assert) {
+    class SpecialStringA extends StringField {}
+    class SpecialStringB extends StringField {}
+    class TestCard extends CardDef {
+      @field specialField = containsMany(StringField);
+    }
+    let card = new TestCard({
+      specialField: ['Mango', 'Van Gogh'],
+      [fields]: {
+        'specialField.0': SpecialStringA,
+        'specialField.1': SpecialStringB,
+      },
+    });
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { TestCard, SpecialStringA, SpecialStringB },
+      },
+    });
+
+    let serialized = serializeCard(card, {
+      includeUnrenderedFields: true,
+    });
+    assert.deepEqual(
+      serialized.data.attributes?.specialField,
+      ['Mango', 'Van Gogh'],
+      'field value is correct',
+    );
+    assert.deepEqual(serialized.data.meta?.fields, {
+      'specialField.0': {
+        adoptsFrom: {
+          module: `${testRealmURL}test-cards`,
+          name: 'SpecialStringA',
+        },
+      },
+      'specialField.1': {
+        adoptsFrom: {
+          module: `${testRealmURL}test-cards`,
+          name: 'SpecialStringB',
+        },
+      },
+    });
+  });
+
+  test('can deserialize a polymorphic primitive contains field', async function (assert) {
+    class SpecialStringA extends StringField {}
+    class TestCard extends CardDef {
+      @field specialField = contains(StringField);
+    }
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { TestCard, SpecialStringA },
+      },
+    });
+
+    let doc: LooseSingleCardDocument = {
+      data: {
+        attributes: {
+          specialField: 'Mango',
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'TestCard',
+          },
+          fields: {
+            specialField: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'SpecialStringA',
+              },
+            },
+          },
+        },
+      },
+    };
+
+    let instance = await createFromSerialized<typeof TestCard>(
+      doc.data,
+      doc,
+      undefined,
+    );
+
+    assert.strictEqual(instance.specialField, 'Mango');
+    assert.deepEqual(
+      instance[fields],
+      { specialField: SpecialStringA },
+      'field override is correct',
+    );
+  });
+
+  test('can deserialize a polymorphic primitive containsMany field', async function (assert) {
+    class SpecialStringA extends StringField {}
+    class SpecialStringB extends StringField {}
+    class TestCard extends CardDef {
+      @field specialField = containsMany(StringField);
+    }
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { TestCard, SpecialStringA, SpecialStringB },
+      },
+    });
+
+    let doc: LooseSingleCardDocument = {
+      data: {
+        attributes: {
+          specialField: ['Mango', 'Van Gogh'],
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'TestCard',
+          },
+          fields: {
+            'specialField.0': {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'SpecialStringA',
+              },
+            },
+            'specialField.1': {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'SpecialStringB',
+              },
+            },
+          },
+        },
+      },
+    };
+
+    let instance = await createFromSerialized<typeof TestCard>(
+      doc.data,
+      doc,
+      undefined,
+    );
+
+    assert.deepEqual(instance.specialField, ['Mango', 'Van Gogh']);
+    assert.deepEqual(
+      instance[fields],
+      { 'specialField.0': SpecialStringA, 'specialField.1': SpecialStringB },
+      'field override is correct',
+    );
   });
 
   test('can serialize a composite field that has been edited', async function (assert) {

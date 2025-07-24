@@ -4,64 +4,20 @@ import {
   useIndexBasedKey,
   FieldDef,
   deserialize,
-  BaseInstanceType,
-  BaseDefConstructor,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 import { not } from '@cardstack/boxel-ui/helpers';
 import HashIcon from '@cardstack/boxel-icons/hash';
+import { NumberSerializer } from '@cardstack/runtime-common';
 
-function serialize(val: number | null): string | undefined {
-  if (val != null && val === 0) {
-    return val.toString();
-  }
-  return val ? val.toString() : undefined;
-}
-
-function _deserialize(number: number | string | null): number | null {
-  if (number == null || number === '') {
+function deserializeForUI(value: string | number | null): number | null {
+  const validationError = NumberSerializer.validate(value);
+  if (validationError) {
     return null;
   }
 
-  let errorMessage = validate(number);
-
-  if (errorMessage) {
-    return null;
-  } else {
-    return Number(number);
-  }
-}
-
-function validate(value: string | number | null): string | null {
-  if (value == null || value === '') {
-    return null;
-  }
-
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) {
-      return 'Input must be a finite number.';
-    }
-  } else {
-    if (value.endsWith('.')) {
-      return 'Input cannot end with a decimal point.';
-    }
-
-    const number = Number(value);
-
-    if (Number.isNaN(number)) {
-      return 'Input must be a valid number.';
-    }
-
-    let minSafe = Number.MIN_SAFE_INTEGER;
-    let maxSafe = Number.MAX_SAFE_INTEGER;
-
-    if (number > maxSafe || number < minSafe) {
-      return `Input number is out of safe range. Please enter a number between ${minSafe} and ${maxSafe}.`;
-    }
-  }
-
-  return null;
+  return NumberSerializer.deserializeSync(value);
 }
 
 class View extends Component<typeof NumberField> {
@@ -75,12 +31,7 @@ export default class NumberField extends FieldDef {
   static icon = HashIcon;
   static [primitive]: number;
   static [useIndexBasedKey]: never;
-  static async [deserialize]<T extends BaseDefConstructor>(
-    this: T,
-    number: any,
-  ): Promise<BaseInstanceType<T>> {
-    return _deserialize(number) as BaseInstanceType<T>;
-  }
+  static [deserialize] = NumberSerializer.deserialize;
   static embedded = View;
   static atom = View;
 
@@ -98,9 +49,9 @@ export default class NumberField extends FieldDef {
     textInputValidator: TextInputValidator<number> = new TextInputValidator(
       () => this.args.model,
       (inputVal) => this.args.set(inputVal),
-      _deserialize,
-      serialize,
-      validate,
+      deserializeForUI,
+      NumberSerializer.serialize,
+      NumberSerializer.validate,
     );
   };
 }

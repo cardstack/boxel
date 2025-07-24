@@ -6,7 +6,7 @@ import {
   internalKeyFor,
 } from '@cardstack/runtime-common';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -16,7 +16,7 @@ import type PlaygroundPanelService from '../services/playground-panel-service';
 import type StoreService from '../services/store';
 
 export default class ShowCardCommand extends HostBaseCommand<
-  typeof BaseCommandModule.CardIdCard
+  typeof BaseCommandModule.ShowCardInput
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private playgroundPanelService: PlaygroundPanelService;
@@ -29,11 +29,13 @@ export default class ShowCardCommand extends HostBaseCommand<
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
-    const { CardIdCard } = commandModule;
-    return CardIdCard;
+    const { ShowCardInput } = commandModule;
+    return ShowCardInput;
   }
 
-  protected async run(input: BaseCommandModule.CardIdCard): Promise<undefined> {
+  protected async run(
+    input: BaseCommandModule.ShowCardInput,
+  ): Promise<undefined> {
     let { operatorModeStateService, store } = this;
     if (operatorModeStateService.workspaceChooserOpened) {
       operatorModeStateService.closeWorkspaceChooser();
@@ -46,6 +48,7 @@ export default class ShowCardCommand extends HostBaseCommand<
       let newStackItem = await operatorModeStateService.createStackItem(
         input.cardId,
         newStackIndex,
+        (input.format as 'isolated' | 'edit') || 'isolated',
       );
       operatorModeStateService.addItemToStack(newStackItem);
     } else if (operatorModeStateService.state?.submode === 'code') {
@@ -69,7 +72,7 @@ export default class ShowCardCommand extends HostBaseCommand<
       this.playgroundPanelService.persistSelections(
         internalKeyFor(cardDefRef, undefined),
         input.cardId,
-        'isolated',
+        (input.format as Format) || 'isolated',
         undefined,
       );
     } else {

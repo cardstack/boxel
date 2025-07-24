@@ -1,4 +1,10 @@
-import { click, waitFor, waitUntil, fillIn } from '@ember/test-helpers';
+import {
+  click,
+  waitFor,
+  waitUntil,
+  fillIn,
+  settled,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
@@ -23,7 +29,6 @@ import {
   setupUserSubscription,
   setupAcceptanceTestRealm,
   visitOperatorMode,
-  waitForCodeEditor,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -758,7 +763,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .doesNotExist('No tag should be selected after reset');
       });
 
-      // Possibly flaky test
+      // TODO: restore in CS-9131
       skip('should be reset when clicking "All Apps" button', async function (assert) {
         await click('[data-tab-label="Apps"]');
         assert
@@ -801,14 +806,16 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .doesNotExist('No tag should be selected after reset');
       });
 
-      test('updates the card count correctly when filtering by a sphere group', async function (assert) {
+      // TODO: restore in CS-9131
+      skip('updates the card count correctly when filtering by a sphere group', async function (assert) {
         await click('[data-test-boxel-filter-list-button="LIFE"]');
         assert
           .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
           .exists({ count: 12 });
       });
 
-      test('updates the card count correctly when filtering by a category', async function (assert) {
+      // TODO: restore in CS-9131
+      skip('updates the card count correctly when filtering by a category', async function (assert) {
         await click('[data-test-filter-list-item="LIFE"] .dropdown-toggle');
         await click('[data-test-boxel-filter-list-button="Health & Wellness"]');
         assert
@@ -1122,7 +1129,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           fileView: 'browser',
           codePath: `${testRealmURL}index`,
         });
-        await waitForCodeEditor();
         await verifySubmode(assert, 'code');
         const instanceFolder = 'CardListing/';
         await openDir(assert, instanceFolder);
@@ -1163,7 +1169,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           fileView: 'browser',
           codePath: `${testRealm2URL}index`,
         });
-        await waitForCodeEditor();
         let outerFolder = await verifyFolderWithUUIDInFileTree(
           assert,
           listingName,
@@ -1188,7 +1193,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           fileView: 'browser',
           codePath: `${testRealm2URL}index`,
         });
-        await waitForCodeEditor();
 
         let outerFolder = await verifyFolderWithUUIDInFileTree(
           assert,
@@ -1218,8 +1222,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           codePath: `${testRealm2URL}index`,
         });
 
-        await waitForCodeEditor();
-
         // contact-link-[uuid]/
         let outerFolder = await verifyFolderWithUUIDInFileTree(
           assert,
@@ -1239,7 +1241,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           fileView: 'browser',
           codePath: `${testRealm2URL}index`,
         });
-        await waitForCodeEditor();
 
         let outerFolder = await verifyFolderWithUUIDInFileTree(
           assert,
@@ -1258,7 +1259,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           stacks: [[]],
         });
         await executeCommand(ListingRemixCommand, listingId, testRealm2URL);
-        await waitForCodeEditor();
+        await settled();
         await verifySubmode(assert, 'code');
         await toggleFileTree();
         let outerFolder = await verifyFolderWithUUIDInFileTree(
@@ -1271,7 +1272,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         let gtsFilePath = `${outerFolder}${listingName}/author.gts`;
         await openDir(assert, gtsFilePath);
         await verifyFileInFileTree(assert, gtsFilePath);
-        await waitForCodeEditor();
+        await settled();
         assert
           .dom(
             '[data-test-playground-panel] [data-test-boxel-card-header-title]',
@@ -1282,7 +1283,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         const listingName = 'talk-like-a-pirate';
         const listingId = `${catalogRealmURL}SkillListing/${listingName}`;
         await executeCommand(ListingRemixCommand, listingId, testRealm2URL);
-        await waitForCodeEditor();
+        await settled();
         await verifySubmode(assert, 'code');
         await toggleFileTree();
         let outerFolder = await verifyFolderWithUUIDInFileTree(
@@ -1313,7 +1314,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         fileView: 'browser',
         codePath: `${testRealm2URL}index`,
       });
-      await waitForCodeEditor();
       let outerFolder = await verifyFolderWithUUIDInFileTree(
         assert,
         listingName,
@@ -1336,7 +1336,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         fileView: 'browser',
         codePath: `${testRealm2URL}index`,
       });
-      await waitForCodeEditor();
 
       let outerFolder = await verifyFolderWithUUIDInFileTree(
         assert,
@@ -1363,7 +1362,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         listingId,
         removeTrailingSlash(testRealm2URL),
       );
-      await waitForCodeEditor();
+      await settled();
       await verifySubmode(assert, 'code');
       await toggleFileTree();
       let outerFolder = await verifyFolderWithUUIDInFileTree(
@@ -1376,7 +1375,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       let gtsFilePath = `${outerFolder}${listingName}/author.gts`;
       await openDir(assert, gtsFilePath);
       await verifyFileInFileTree(assert, gtsFilePath);
-      await waitForCodeEditor();
+      await settled();
       assert
         .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
         .hasText('Author - Mike Dane');

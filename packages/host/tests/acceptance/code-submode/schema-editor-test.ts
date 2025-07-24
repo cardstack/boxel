@@ -21,7 +21,6 @@ import {
   setupOnSave,
   getMonacoContent,
   visitOperatorMode,
-  waitForCodeEditor,
   setupUserSubscription,
   type TestContextWithSave,
 } from '../../helpers';
@@ -83,23 +82,56 @@ const employeeCardSource = `
   import {
     contains,
     field,
+    linksTo,
     Component,
+    FieldDef,
   } from 'https://cardstack.com/base/card-api';
   import StringField from 'https://cardstack.com/base/string';
+  import BooleanField from 'https://cardstack.com/base/boolean';
+  import DateField from 'https://cardstack.com/base/date';
   import { Person } from './person';
+
+  class Supervisor extends Person {
+    static displayName = 'Supervisor';
+    @field canApproveTimesheets = contains(BooleanField);
+  }
+
+  export class EmploymentInfo extends FieldDef {
+    static displayName = 'Employment Info';
+    @field startDate = contains(DateField);
+    @field role = contains(StringField);
+    @field hiringManager = linksTo(() => Manager);
+    static embedded = class Embedded extends Component<typeof this> {
+      <template>
+        <div>Start Date: <@fields.startDate /></div>
+        <div>Role: <@fields.role /></div>
+        <div>Hiring Manager: <@fields.hiringManager /></div>
+      </template>
+    };
+  }
 
   export class Employee extends Person {
     static displayName = 'Employee';
     @field employeeId = contains(StringField);
     @field department = contains(StringField);
+    @field supervisor = linksTo(Supervisor);
+    @field employmentInfo = contains(EmploymentInfo);
 
     static isolated = class Isolated extends Component<typeof this> {
       <template>
         <@fields.firstName /> <@fields.lastName />
 
         Department: <@fields.department />
+        Supervisor: <@fields.supervisor />
+        <hr>
+        Employment Details: <@fields.employmentInfo />
       </template>
     };
+  }
+
+  export class Manager extends Employee {
+    static displayName = 'Manager';
+    @field departmentSize = contains(StringField);
   }
 `;
 
@@ -330,7 +362,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
@@ -456,13 +487,27 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
   });
 
+  test('can list the inheritance chain of a card with complex cyclic relationships', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    });
+    await click('[data-test-boxel-selector-item-text="Employee"]');
+    assert.dom('[data-test-definition-name]').containsText('Employee');
+    assert
+      .dom('[data-test-card-schema="Employee"] [data-test-total-fields]')
+      .containsText('4');
+    assert
+      .dom('[data-field-name="employmentInfo"]')
+      .hasText('employmentInfo Employment Info');
+  });
+
   test('when selecting card definition from a card instance in code mode, the right hand panel changes from card preview to schema mode', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}Person/1.json`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-code-mode-card-renderer-body]');
     assert
       .dom('[data-test-code-mode-card-renderer-body]')
@@ -480,7 +525,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}friend.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     assert
@@ -499,7 +543,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}employee.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor(
       '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
     );
@@ -537,7 +580,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-add-field-button]');
     assert.dom('[data-test-add-field-button]').exists({ count: 1 }); // Only top level card has an option to add a field
 
@@ -647,7 +689,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-add-field-button]');
 
     // Field is a card descending from FieldDef
@@ -745,7 +786,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     await click(
@@ -812,7 +852,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     // Let's edit a "linksToMany" Friend field, named friends
@@ -852,6 +891,48 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     );
   });
 
+  test<TestContextWithSave>('editing a local field from schema editor', async function (assert) {
+    assert.expect(4);
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    });
+    assert
+      .dom(
+        `[data-test-card-schema="Employee"] [data-test-field-name="supervisor"] [data-test-field-types]`,
+      )
+      .hasText('Link');
+
+    await click(
+      '[data-test-card-schema="Employee"] [data-test-field-name="supervisor"] [data-test-schema-editor-field-contextual-button]',
+    );
+    await click('[data-test-boxel-menu-item-text="Edit Field Settings"]');
+    assert.dom('[data-test-selected-type="Supervisor"]').exists();
+
+    await click('[data-test-choose-card-button]');
+    await click(`[data-test-select="${testRealmURL}person-entry"]`);
+    await click('[data-test-card-catalog-go-button]');
+    await fillIn('[data-test-field-name-input]', 'supervisedBy');
+    await click('[data-test-boxel-radio-option-id="many"]');
+
+    this.onSave((_, content) => {
+      if (typeof content !== 'string') {
+        throw new Error('expected string save data');
+      }
+      assert.ok(content.includes('supervisedBy = linksToMany(Person)'));
+    });
+    await click('[data-test-save-field-button]');
+
+    await waitFor(
+      '[data-test-card-schema="Employee"] [data-test-field-name="supervisedBy"] [data-test-card-display-name="Person"]',
+    );
+    assert
+      .dom(
+        `[data-test-card-schema="Employee"] [data-test-field-name="supervisedBy"] [data-test-field-types]`,
+      )
+      .hasText('Link, Collection');
+  });
+
   test<TestContextWithSave>('adding a "default" field type from the schema editor', async function (assert) {
     assert.expect(1);
     await visitOperatorMode({
@@ -859,7 +940,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
     await click('[data-test-add-field-button]');
 
@@ -919,7 +999,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     await click(
@@ -982,7 +1061,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}ambiguous-display-names.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor(`[data-test-boxel-selector-item-text="BlogPost"]`);
     await click(`[data-test-boxel-selector-item-text="BlogPost"]`);
 
@@ -1061,7 +1139,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}empty.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-error-details]');
 
     assert.dom('[data-test-boxel-copy-button]').exists();
@@ -1078,7 +1155,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}employee.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-schema]');
 
     assert.false(

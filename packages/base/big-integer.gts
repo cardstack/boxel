@@ -3,32 +3,14 @@ import {
   Component,
   serialize,
   FieldDef,
-  BaseDefConstructor,
   deserialize,
-  BaseInstanceType,
   queryableValue,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 import { not } from '@cardstack/boxel-ui/helpers';
 import Number99SmallIcon from '@cardstack/boxel-icons/number-99-small';
-
-function _serialize(val: bigint | null): string | undefined {
-  return val == null ? undefined : String(val);
-}
-
-function _deserialize(string: string | null): bigint | null {
-  if (!string) {
-    return null;
-  }
-
-  let errorMessage = validate(string);
-  if (errorMessage) {
-    return null;
-  } else {
-    return BigInt(string);
-  }
-}
+import { BigIntegerSerializer } from '@cardstack/runtime-common';
 
 function validate(value: string | null): string | null {
   if (!value) {
@@ -43,9 +25,18 @@ function validate(value: string | null): string | null {
   return null;
 }
 
+function deserializeForUI(value: string | null): bigint | null {
+  const validationError = validate(value);
+  if (validationError) {
+    return null;
+  }
+
+  return BigIntegerSerializer.deserializeSync(value);
+}
+
 class View extends Component<typeof BigIntegerField> {
   <template>
-    {{_serialize @model}}
+    {{BigIntegerSerializer.serialize @model}}
   </template>
 }
 
@@ -63,8 +54,8 @@ class Edit extends Component<typeof BigIntegerField> {
   textInputValidator: TextInputValidator<bigint> = new TextInputValidator(
     () => this.args.model,
     (inputVal) => this.args.set(inputVal),
-    _deserialize,
-    _serialize,
+    deserializeForUI,
+    BigIntegerSerializer.serialize,
     validate,
   );
 }
@@ -73,18 +64,9 @@ export default class BigIntegerField extends FieldDef {
   static displayName = 'BigInteger';
   static icon = Number99SmallIcon;
   static [primitive]: bigint;
-  static [serialize](val: bigint | null) {
-    return _serialize(val);
-  }
-  static async [deserialize]<T extends BaseDefConstructor>(
-    this: T,
-    bigintString: any,
-  ): Promise<BaseInstanceType<T>> {
-    return _deserialize(bigintString ?? null) as BaseInstanceType<T>;
-  }
-  static [queryableValue](val: bigint | undefined): string | undefined {
-    return _serialize(val ?? null);
-  }
+  static [serialize] = BigIntegerSerializer.serialize;
+  static [deserialize] = BigIntegerSerializer.deserialize;
+  static [queryableValue] = BigIntegerSerializer.queryableValue;
   static embedded = View;
   static atom = View;
   static edit = Edit;

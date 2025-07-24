@@ -6,6 +6,7 @@ pnpm setup:skills-in-deployment
 NODE_NO_WARNINGS=1 \
   MATRIX_URL=https://matrix.boxel.ai \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
+  HOST_MODE_DOMAIN_ROOT=boxel.site \
   ts-node \
   --transpileOnly main \
   --port=3000 \
@@ -19,11 +20,6 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl='https://app.boxel.ai/base/' \
   \
-  --path='/persistent/experiments' \
-  --username='experiments_realm' \
-  --fromUrl='https://app.boxel.ai/experiments/' \
-  --toUrl='https://app.boxel.ai/experiments/' \
-  \
   --path='/persistent/catalog' \
   --username='catalog_realm' \
   --fromUrl='https://app.boxel.ai/catalog/' \
@@ -32,5 +28,10 @@ NODE_NO_WARNINGS=1 \
   --path='/persistent/skills' \
   --username='skills_realm' \
   --fromUrl='https://app.boxel.ai/skills/' \
-  --toUrl='https://app.boxel.ai/skills/'
+  --toUrl='https://app.boxel.ai/skills/' \
+  \
+  --path='/persistent/experiments' \
+  --username='experiments_realm' \
+  --fromUrl='https://app.boxel.ai/experiments/' \
+  --toUrl='https://app.boxel.ai/experiments/'
 

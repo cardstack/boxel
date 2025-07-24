@@ -110,11 +110,6 @@ export function cleanupMonacoEditorModels() {
   }
 }
 
-export async function waitForCodeEditor() {
-  // need a moment for the monaco SDK to load
-  return await waitFor('[data-test-editor]', { timeout: 3000 });
-}
-
 export async function getDbAdapter() {
   let dbAdapter = (globalThis as any).__sqliteAdapter as
     | SQLiteAdapter
