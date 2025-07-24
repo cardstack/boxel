@@ -150,6 +150,7 @@ test.describe('Skills', () => {
       'Skills: 3 of 4 active',
     );
 
+    await page.locator('[data-test-pill-menu-detail-close]').click();
     await expect(page.locator('[data-test-active-skills-count]')).toContainText(
       '3 Skills',
     );
