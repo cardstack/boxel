@@ -92,6 +92,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return this.args.model.skills && this.args.model?.skills?.length > 0;
   }
 
+  get testSkillsDisabled() {
+    return !this.isSkillListing || !this.hasSkills;
+  }
+
   get remixDisabled() {
     return (
       (!this.isSkillListing && !this.hasOneOrMoreSpec) ||
@@ -206,6 +210,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 class='action-button'
                 data-test-catalog-listing-embedded-add-skill-to-room-button
                 @loading={{this._addSkillsToRoom.isRunning}}
+                @disabled={{this.testSkillsDisabled}}
                 {{on 'click' this.testSkills}}
               >
                 Add Skill
