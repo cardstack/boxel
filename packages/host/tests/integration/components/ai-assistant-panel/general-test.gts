@@ -1313,6 +1313,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
   });
 
   test('new session settings menu opens on hover and checkboxes work', async function (assert) {
+    await renderAiAssistantPanel();
     await fillIn('[data-test-boxel-input-id="ai-chat-input"]', 'Test message');
     await click('[data-test-send-message-btn]');
 
@@ -1342,28 +1343,28 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       .exists('Third option is present');
 
     assert
-      .dom('[data-test-new-session-settings-checkbox]')
-      .isChecked({ count: 0 });
+      .dom('[data-test-new-session-settings-option].checked')
+      .doesNotExist('No checkboxes are initially checked');
 
     await click('[data-test-new-session-settings-checkbox="Add Same Skills"]');
 
     assert
-      .dom('[data-test-new-session-settings-checkbox]')
-      .isChecked({ count: 1 });
+      .dom('[data-test-new-session-settings-option].checked')
+      .exists({ count: 1 });
 
     await click(
       '[data-test-new-session-settings-checkbox="Copy File History"]',
     );
 
     assert
-      .dom('[data-test-new-session-settings-checkbox]')
-      .isChecked({ count: 2 });
+      .dom('[data-test-new-session-settings-option].checked')
+      .exists({ count: 2 });
 
     await click('[data-test-new-session-settings-checkbox="Add Same Skills"]');
 
     assert
-      .dom('[data-test-new-session-settings-checkbox]')
-      .isChecked({ count: 1 });
+      .dom('[data-test-new-session-settings-option].checked')
+      .exists({ count: 1 });
 
     await triggerEvent('[data-test-create-room-btn]', 'mouseleave');
 
