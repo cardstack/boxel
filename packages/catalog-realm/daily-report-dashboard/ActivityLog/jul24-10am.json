@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "timestamp": "2025-07-24T10:00:00Z",
+      "activity": "Excellent progress on Project Alpha phase 3 - implemented yesterday's recommendations about focusing 80% effort here. Created vendor communication log as suggested. New supplier identified as backup option. Weather has turned cloudy, moved outdoor tasks indoors as contingency."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../activity-log",
+        "name": "ActivityLog"
+      }
+    }
+  }
+}

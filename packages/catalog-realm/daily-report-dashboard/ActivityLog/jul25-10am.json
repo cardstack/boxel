@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "timestamp": "2025-07-25T10:00:00Z",
+      "activity": "Workshop first session exceeded expectations! Complex material delivered during peak morning energy window. Participants highly engaged, excellent questions. First staggered break implemented at 10:15 - Alex and Maria taking extended break while others continue. Seamless transition."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../activity-log",
+        "name": "ActivityLog"
+      }
+    }
+  }
+}
