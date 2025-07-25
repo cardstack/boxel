@@ -3690,6 +3690,39 @@ module(`Integration | realm indexing`, function (hooks) {
     );
   });
 
+  test("indexing identifies an instance's card module dependencies", async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {},
+    });
+    let refs = (await getInstance(realm, new URL(`${testRealmURL}mango`)))
+      ?.deps;
+    function sanitizeDeps(deps: string[]) {
+      return deps.filter((dep) => {
+        if (dep.includes('.glimmer-scoped.css')) {
+          return false;
+        }
+        if (
+          [
+            'https://cardstack.com',
+            'https://packages',
+            'https://boxel-icons.boxel.ai',
+          ].some((urlStem) => dep.startsWith(urlStem))
+        ) {
+          return false;
+        }
+        return true;
+      });
+    }
+    let sanitizedRefs = sanitizeDeps(refs ?? []);
+
+    assert.deepEqual(
+      sanitizedRefs.sort(),
+      ['http://localhost:4202/test/person'],
+      'the card references for the instance are correct',
+    );
+  });
+
   test("indexing identifies an instance's polymorphic contained references", async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,

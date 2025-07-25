@@ -5,6 +5,8 @@ import {
   type Realm,
   fetcher,
   maybeHandleScopedCSSRequest,
+  type LooseCardResource,
+  moduleFrom,
 } from '@cardstack/runtime-common';
 import { dirSync, DirResult } from 'tmp';
 import {
@@ -21,6 +23,24 @@ import { copySync } from 'fs-extra';
 import { shimExternals } from '../lib/externals';
 import { Server } from 'http';
 import { join, basename } from 'path';
+
+function sanitizeDeps(deps: string[]) {
+  return deps.filter((dep) => {
+    if (dep.endsWith('.glimmer-scoped.css')) {
+      return false;
+    }
+    if (
+      [
+        'https://cardstack.com',
+        'https://packages',
+        'https://boxel-icons.boxel.ai',
+      ].some((urlStem) => dep.startsWith(urlStem))
+    ) {
+      return false;
+    }
+    return true;
+  });
+}
 
 module(basename(__filename), function () {
   module('loader', function (hooks) {
@@ -108,6 +128,42 @@ module(basename(__filename), function () {
         `${testRealmHref}cycle-two`,
       );
       assert.deepEqual(modules, [`${testRealmHref}cycle-one`]);
+    });
+
+    test('can verify card module dependencies are minimal and necessary', async function (assert) {
+      let loader = createLoader();
+
+      // Test Card 1: Friend
+      await loader.import<{ Friend: unknown }>(`${testRealmHref}hassan`);
+      let friendDeps = await loader.getConsumedModules(
+        `${testRealmHref}hassan`,
+      );
+      let sanitizedFriendDeps = sanitizeDeps(friendDeps);
+
+      // Friend should depend on friend.gts, but not include unnecessary modules
+      let expectedFriendDeps = [`${testRealmHref}friend.gts`];
+
+      assert.deepEqual(
+        sanitizedFriendDeps.sort(),
+        expectedFriendDeps.sort(),
+        'Friend card should only depend on friend.gts',
+      );
+
+      // Test Card 2: Person
+      await loader.import<{ Person: unknown }>(`${testRealmHref}person-1`);
+      let personDeps = await loader.getConsumedModules(
+        `${testRealmHref}person-1`,
+      );
+      let sanitizedPersonDeps = sanitizeDeps(personDeps);
+
+      // Person should have minimal dependencies
+      let expectedPersonDeps = [`${testRealmHref}person.gts`];
+
+      assert.deepEqual(
+        sanitizedPersonDeps.sort(),
+        expectedPersonDeps.sort(),
+        'Person card should only depend on person.gts',
+      );
     });
 
     test('supports identify API', async function (assert) {

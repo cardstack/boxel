@@ -1118,7 +1118,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
     module('"create"', async function () {
       test('card listing', async function (assert) {
-        const cardId = testRealmURL + 'author/Author/example';
+        const cardId = testRealmURL + 'fadhlan';
         const commandService = getService('command-service');
         const command = new ListingCreateCommand(commandService.commandContext);
         await command.execute({
@@ -1140,6 +1140,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           const listing = (await getService('store').get(
             listingId,
           )) as CardListing;
+          console.log('listing', listing);
           assert.ok(listing, 'Listing should be created');
           assert.strictEqual(
             listing.specs.length,

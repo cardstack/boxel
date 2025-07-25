@@ -17,6 +17,25 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
+import { isScopedCSSRequest } from 'glimmer-scoped-css';
+
+function sanitizeDeps(deps: string[]) {
+  return deps.filter((dep) => {
+    if (isScopedCSSRequest(dep)) {
+      return false;
+    }
+    if (
+      [
+        'https://cardstack.com',
+        'https://packages',
+        'https://boxel-icons.boxel.ai',
+      ].some((urlStem) => dep.startsWith(urlStem))
+    ) {
+      return false;
+    }
+    return true;
+  });
+}
 
 let loader: Loader;
 
@@ -171,6 +190,21 @@ module('Integration | card-prerender', function (hooks) {
             },
           },
         },
+        'alice.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'test card: person alice',
+              firstName: 'Alice',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person',
+                name: 'Person',
+              },
+            },
+          },
+        },
       },
     }));
   });
@@ -299,5 +333,29 @@ module('Integration | card-prerender', function (hooks) {
       `),
       );
     });
+  });
+
+  test('indexer returns correct dependencies from an instance', async function (assert) {
+    let result1 = await realm.realmIndexQueryEngine.instance(
+      new URL(`${testRealmURL}Pet/mango`),
+    );
+    let deps1 = sanitizeDeps(result1?.deps ?? []);
+    assert.deepEqual(deps1, [`${testRealmURL}pet`]);
+
+    let result2 = await realm.realmIndexQueryEngine.instance(
+      new URL(`${testRealmURL}jane`),
+    );
+    let deps2 = sanitizeDeps(result2?.deps ?? []);
+    assert.deepEqual(deps2, [
+      `${testRealmURL}fancy-person`,
+      `${testRealmURL}person`,
+    ]);
+
+    let result3 = await realm.realmIndexQueryEngine.instance(
+      new URL(`${testRealmURL}hassan`),
+    );
+    console.log('result3', result3);
+    let deps3 = sanitizeDeps(result3?.deps ?? []);
+    assert.deepEqual(deps3, [`${testRealmURL}person`]);
   });
 });

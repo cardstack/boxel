@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, only, test } from 'qunit';
 import { dirSync } from 'tmp';
 import {
   baseRealm,
@@ -7,6 +7,9 @@ import {
   Realm,
   RealmPermissions,
   type IndexedInstance,
+  type LooseCardResource,
+  moduleFrom,
+  type Loader,
 } from '@cardstack/runtime-common';
 import {
   createRealm,
@@ -31,6 +34,50 @@ function trimCardContainer(text: string) {
     /<div .*? data-test-field-component-card>\s?[<!---->]*? (.*?) <\/div>/g,
     '$1',
   );
+}
+
+export function directModuleDeps(
+  resource: LooseCardResource,
+  instanceURL: URL,
+): string[] {
+  let result = [
+    // we always depend on our own adoptsFrom
+    new URL(moduleFrom(resource.meta.adoptsFrom), instanceURL).href,
+  ];
+
+  // we might also depend on any polymorphic types in meta.fields
+  if (resource.meta.fields) {
+    for (let fieldMeta of Object.values(resource.meta.fields)) {
+      if (Array.isArray(fieldMeta)) {
+        for (let meta of fieldMeta) {
+          if (meta.adoptsFrom) {
+            result.push(new URL(moduleFrom(meta.adoptsFrom), instanceURL).href);
+          }
+        }
+      } else {
+        if (fieldMeta.adoptsFrom) {
+          result.push(
+            new URL(moduleFrom(fieldMeta.adoptsFrom), instanceURL).href,
+          );
+        }
+      }
+    }
+  }
+  return result;
+}
+
+export async function recursiveModuleDeps(
+  directDeps: string[],
+  loader: Loader,
+) {
+  return new Set([
+    ...directDeps,
+    ...(
+      await Promise.all(
+        directDeps.map((moduleDep) => loader.getConsumedModules(moduleDep)),
+      )
+    ).flat(),
+  ]);
 }
 
 let testDbAdapter: DBAdapter;
@@ -832,6 +879,80 @@ module(basename(__filename), function () {
         'module',
         'Pet module is successfully indexed',
       );
+    });
+
+    only('can provide actual module dependencies', async function (assert) {
+      // Use the realm's loader which has access to the test realm's virtual network
+      let realmLoader = realm.realmIndexUpdater.loader;
+
+      let ringo = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}ringo`),
+      );
+
+      /*    if (ringo?.type === 'instance') {
+        let moduleDeps = directModuleDeps(
+          ringo.instance,
+          new URL(`${testRealm}ringo`),
+        );
+        console.log('moduleDeps', moduleDeps);
+        assert.deepEqual(
+          moduleDeps,
+          [`${testRealm}pet`],
+          'direct module dependencies are correct',
+        );
+
+        let recursiveDeps = await recursiveModuleDeps(moduleDeps, realmLoader);
+        console.log('recursiveDeps', recursiveDeps);
+        let sortedDeps = [...recursiveDeps].sort();
+        console.log('sortedDeps', sortedDeps);
+        assert.ok(
+          sortedDeps.includes(`${testRealm}pet`),
+          'recursive deps includes pet module',
+        );
+        assert.ok(
+          sortedDeps.length > 1,
+          'recursive deps includes more than just direct deps',
+        );
+      } else {
+        assert.ok(false, 'expected search entry to be a document');
+      } */
+
+      console.log('=====TEST START=====');
+
+      let hassan = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}hassan`),
+      );
+      if (hassan?.type === 'instance') {
+        let moduleDeps = directModuleDeps(
+          hassan.instance,
+          new URL(`${testRealm}hassan`),
+        );
+        console.log('moduleDeps', moduleDeps);
+        assert.deepEqual(
+          moduleDeps,
+          [`${testRealm}pet-person`],
+          'direct module dependencies are correct',
+        );
+
+        let recursiveDeps = await recursiveModuleDeps(moduleDeps, realmLoader);
+        console.log('recursiveDeps', recursiveDeps);
+        let sortedDeps = [...recursiveDeps].sort();
+        console.log('sortedDeps', sortedDeps);
+        assert.ok(
+          sortedDeps.includes(`${testRealm}pet-person`),
+          'recursive deps includes pet-person module',
+        );
+        assert.ok(
+          sortedDeps.includes(`${testRealm}pet`),
+          'recursive deps includes pet module dependency',
+        );
+        assert.ok(
+          sortedDeps.length > 2,
+          'recursive deps includes more than just direct deps',
+        );
+      } else {
+        assert.ok(false, 'expected search entry to be a document');
+      }
     });
 
     test('can successfully create instance after module sequence error is resolved', async function (assert) {

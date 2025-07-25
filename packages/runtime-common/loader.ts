@@ -143,6 +143,7 @@ export class Loader {
     consumed: string[] = [],
     initialIdentifier = moduleIdentifier,
   ): Promise<string[]> {
+    console.log('getConsumedModules', moduleIdentifier);
     if (consumed.includes(moduleIdentifier)) {
       return [];
     }
@@ -179,6 +180,7 @@ export class Loader {
       }
       cached = consumed;
       this.consumptionCache.set(module, cached);
+      console.log('consumptionCache', this.consumptionCache);
 
       return [...new Set(cached)]; // Get rid of duplicates
     }
@@ -215,6 +217,7 @@ export class Loader {
   }
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
+    console.log('import', moduleIdentifier);
     moduleIdentifier = this.resolveImport(moduleIdentifier);
     let resolvedModule = new URL(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
