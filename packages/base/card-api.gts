@@ -47,6 +47,7 @@ import {
   baseRef,
   getAncestor,
   isCardError,
+  relativeTo,
   assertIsSerializerName,
   type Format,
   type Meta,
@@ -85,7 +86,15 @@ interface CardOrFieldTypeIconSignature {
 
 export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
 
-export { meta, localId, realmURL, primitive, isField, type BoxComponent };
+export {
+  meta,
+  localId,
+  realmURL,
+  primitive,
+  relativeTo,
+  isField,
+  type BoxComponent,
+};
 export const serialize = Symbol.for('cardstack-serialize');
 export const deserialize = Symbol.for('cardstack-deserialize');
 export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
@@ -93,7 +102,6 @@ export const fieldDecorator = Symbol.for('cardstack-field-decorator');
 export const fieldType = Symbol.for('cardstack-field-type');
 export const queryableValue = Symbol.for('cardstack-queryable-value');
 export const formatQuery = Symbol.for('cardstack-format-query');
-export const relativeTo = Symbol.for('cardstack-relative-to');
 export const realmInfo = Symbol.for('cardstack-realm-info');
 export const emptyValue = Symbol.for('cardstack-empty-value');
 // intentionally not exporting this so that the outside world

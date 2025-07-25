@@ -10,6 +10,8 @@ import {
   type ResolvedCodeRef,
   getClass,
   isCardInstance,
+  codeRefWithAbsoluteURL,
+  relativeTo,
 } from '@cardstack/runtime-common';
 
 import {
@@ -294,7 +296,11 @@ export default class MessageBuilder {
 
     // Find command in skills
     let skillCommand:
-      | { codeRef: ResolvedCodeRef; requiresApproval: boolean }
+      | {
+          codeRef: ResolvedCodeRef;
+          requiresApproval: boolean;
+          [relativeTo]: URL | undefined;
+        }
       | undefined;
     findCommand: for (let skill of this.builderContext.skills) {
       let skillCard = await this.store.get<Skill>(skill.cardId);
@@ -310,9 +316,15 @@ export default class MessageBuilder {
     }
 
     let actionVerb = 'Apply';
-    if (skillCommand?.codeRef) {
+    let absoluteCodeRef = skillCommand?.codeRef
+      ? (codeRefWithAbsoluteURL(
+          skillCommand?.codeRef,
+          skillCommand[relativeTo],
+        ) as ResolvedCodeRef)
+      : undefined;
+    if (absoluteCodeRef) {
       let CommandKlass = (await getClass(
-        skillCommand?.codeRef,
+        absoluteCodeRef,
         this.loaderService.loader,
       )) as { actionVerb: string };
       if (CommandKlass?.actionVerb) {
@@ -323,7 +335,7 @@ export default class MessageBuilder {
     let messageCommand = new MessageCommand(
       message,
       commandRequest,
-      skillCommand?.codeRef,
+      absoluteCodeRef,
       this.builderContext.effectiveEventId,
       skillCommand?.requiresApproval ?? true,
       actionVerb,
