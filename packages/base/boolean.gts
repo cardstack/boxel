@@ -32,7 +32,7 @@ export default class BooleanField extends FieldDef {
   static displayName = 'Boolean';
   static icon = ToggleLeftIcon;
   static [primitive]: boolean;
-  static [fieldSerializer] = 'boolean' as const;
+  static [fieldSerializer] = 'boolean';
   static [useIndexBasedKey]: never;
 
   static get [emptyValue]() {
