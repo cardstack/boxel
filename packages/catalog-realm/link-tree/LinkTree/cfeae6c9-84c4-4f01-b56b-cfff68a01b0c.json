@@ -1,0 +1,85 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "profileName": "Maya Rodriguez",
+      "bio": "✨ Fashion Creative & Style Curator ✨\nSustainable fashion advocate | NYC based | Vintage lover",
+      "profileImageUrl": "https://plus.unsplash.com/premium_photo-1690407617542-2f210cf20d7e?q=80&w=687&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+      "backgroundGradient": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+      "links": [
+        {
+          "title": "Latest Outfit Video",
+          "url": "https://youtube.com/watch?v=example1",
+          "description": "5 ways to style vintage denim for fall",
+          "backgroundColor": "#f4437e",
+          "textColor": "#FFFFFF",
+          "isActive": true
+        },
+        {
+          "title": "Shop My Closet",
+          "url": "https://depop.com/mayastyle",
+          "description": "Curated vintage pieces & sustainable finds",
+          "backgroundColor": "#8B5CF6",
+          "textColor": "#FFFFFF",
+          "isActive": true
+        },
+        {
+          "title": "Style Newsletter",
+          "url": "https://substack.com/mayafashion",
+          "description": "Weekly fashion tips & sustainable brand spotlights",
+          "backgroundColor": "#06D6A0",
+          "textColor": "#FFFFFF",
+          "isActive": true
+        },
+        {
+          "title": "Instagram",
+          "url": "https://instagram.com/mayastylecurator",
+          "description": "Daily outfit inspiration & behind the scenes",
+          "backgroundColor": "#E91E63",
+          "textColor": "#FFFFFF",
+          "isActive": true
+        },
+        {
+          "title": "TikTok",
+          "url": "https://tiktok.com/@mayafashion",
+          "description": "Quick styling tips & fashion hacks",
+          "backgroundColor": "#000000",
+          "textColor": "#FFFFFF",
+          "isActive": false
+        },
+        {
+          "title": "Ethical Fashion Guide",
+          "url": "https://notion.so/maya-sustainable-fashion",
+          "description": "My complete guide to building a sustainable wardrobe",
+          "backgroundColor": "#F59E0B",
+          "textColor": "#FFFFFF",
+          "isActive": false
+        },
+        {
+          "title": "Personal Styling Services",
+          "url": "https://calendly.com/maya-styling",
+          "description": "Book a virtual styling consultation",
+          "backgroundColor": "#3B82F6",
+          "textColor": "#FFFFFF",
+          "isActive": false
+        },
+        {
+          "title": "Vintage Collection Launch",
+          "url": "https://maya-vintage.com/collection",
+          "description": "Limited edition curated vintage pieces - launching soon!",
+          "backgroundColor": "#DC2626",
+          "textColor": "#FFFFFF",
+          "isActive": false
+        }
+      ],
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../link-tree",
+        "name": "LinkTree"
+      }
+    }
+  }
+}

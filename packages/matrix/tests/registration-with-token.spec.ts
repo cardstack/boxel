@@ -175,7 +175,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     // assert workspaces state don't leak into other sessions
     await login(page, 'user2', 'pass', {
       url: serverIndexUrl,
-      skipOpeningAssistant: true,
     });
 
     await assertLoggedIn(page, {
@@ -201,7 +200,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await assertLoggedOut(page);
     await login(page, 'user1', 'mypassword1!', {
       url: serverIndexUrl,
-      skipOpeningAssistant: true,
     });
     await assertLoggedIn(page, { displayName: 'Test User' });
     await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
@@ -236,7 +234,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     await login(page, 'user1', 'mypassword1!', {
       url: newRealmURL,
-      skipOpeningAssistant: true,
     });
     await assertLoggedIn(page, { displayName: 'Test User' });
     await expect(
