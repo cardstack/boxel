@@ -32,6 +32,9 @@ import {
   ResolvedCodeRef,
   isCardInstance,
   Deferred,
+  SEARCH_MARKER,
+  REPLACE_MARKER,
+  SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
 
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
@@ -49,9 +52,9 @@ import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_LLM_MODE,
   DEFAULT_CODING_LLM,
   DEFAULT_LLM_LIST,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
@@ -59,6 +62,8 @@ import {
   SLIDING_SYNC_LIST_RANGE_END,
   SLIDING_SYNC_LIST_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
+  type LLMMode,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -1321,6 +1326,10 @@ export default class MatrixService extends Service {
     });
   }
 
+  async sendLLMModeEvent(roomId: string, mode: LLMMode) {
+    await this.client.sendStateEvent(roomId, APP_BOXEL_LLM_MODE, { mode });
+  }
+
   private async addRoomEvent(event: TempEvent, oldEventId?: string) {
     let { room_id: roomId } = event;
 
@@ -1591,6 +1600,23 @@ export default class MatrixService extends Service {
       event.content?.isStreamingFinished
     ) {
       this.commandService.queueEventForCommandProcessing(event);
+    }
+
+    // Queue code patches for processing
+    if (
+      event.type === 'm.room.message' &&
+      event.content?.body &&
+      event.content?.isStreamingFinished
+    ) {
+      // Check if the message contains code patches by looking for search/replace blocks
+      let body = event.content.body as string;
+      if (
+        body.includes(SEARCH_MARKER) &&
+        body.includes(SEPARATOR_MARKER) &&
+        body.includes(REPLACE_MARKER)
+      ) {
+        this.commandService.queueEventForCodePatchProcessing(event);
+      }
     }
   }
 
