@@ -249,11 +249,15 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
   }
 
   copySubmittedContent = async () => {
+    this.copySubmittedContentTask.perform();
+  };
+
+  copySubmittedContentTask = dropTask(async () => {
     if (this.loadSubmittedContent.isRunning) {
       await this.loadSubmittedContent.perform(); // Should be dropped if loading is already running
     }
     navigator.clipboard.writeText(this.submittedContent!);
-  };
+  });
 
   restoreContent = dropTask(async () => {
     let originalUploadedFileUrl = this.args.originalUploadedFileUrl;
