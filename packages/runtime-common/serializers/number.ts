@@ -4,17 +4,11 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 export function queryableValue(val: number | undefined): number | undefined {
-  if (val != null && val === 0) {
-    return val;
-  }
-  return val ? val : undefined;
+  return val != null ? val : undefined;
 }
 
 export function serialize(val: number | null): number | undefined {
-  if (val != null && val === 0) {
-    return val;
-  }
-  return val ? val : undefined;
+  return val != null ? val : undefined;
 }
 
 export function validate(value: string | number | null): string | null {
