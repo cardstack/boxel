@@ -125,7 +125,7 @@ export default class OperatorModeStateService extends Service {
     codePath: null,
     trail: [],
     openDirs: new TrackedMap<string, string[]>(),
-    aiAssistantOpen: false,
+    aiAssistantOpen: true,
     newFileDropdownOpen: false,
     cardPreviewFormat: 'isolated' as Format,
     workspaceChooserOpened: false,

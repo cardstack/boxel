@@ -55,7 +55,6 @@ test.describe('Live Cards', () => {
     await clearLocalStorage(page, serverIndexUrl);
     await login(page, 'user1', 'pass', {
       url: serverIndexUrl,
-      skipOpeningAssistant: true,
     });
     await createRealm(page, realmName);
     let instanceUrl = await postNewCard(page, realmURL, {
@@ -200,7 +199,6 @@ test.describe('Live Cards', () => {
     await clearLocalStorage(page, serverIndexUrl);
     await login(page, 'user1', 'pass', {
       url: serverIndexUrl,
-      skipOpeningAssistant: true,
     });
     await createRealm(page, realmName);
     let instanceUrl = await postNewCard(page, realmURL, {
