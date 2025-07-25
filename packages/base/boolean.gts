@@ -1,19 +1,15 @@
 import {
   primitive,
-  serialize,
-  queryableValue,
-  formatQuery,
   Component,
   useIndexBasedKey,
   FieldDef,
-  deserialize,
   emptyValue,
 } from './card-api';
 import { fn } from '@ember/helper';
 import { RadioInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import ToggleLeftIcon from '@cardstack/boxel-icons/toggle-left';
-import { BooleanSerializer } from '@cardstack/runtime-common';
+import { fieldSerializer } from '@cardstack/runtime-common';
 
 // this allows multiple radio groups rendered on the page
 // to stay independent of one another.
@@ -36,16 +32,12 @@ export default class BooleanField extends FieldDef {
   static displayName = 'Boolean';
   static icon = ToggleLeftIcon;
   static [primitive]: boolean;
+  static [fieldSerializer] = 'boolean' as const;
   static [useIndexBasedKey]: never;
-  static [serialize] = BooleanSerializer.serialize;
 
   static get [emptyValue]() {
     return false;
   }
-
-  static [deserialize] = BooleanSerializer.deserialize;
-  static [queryableValue] = BooleanSerializer.queryableValue;
-  static [formatQuery] = BooleanSerializer.formatQuery;
 
   static embedded = View;
   static atom = View;

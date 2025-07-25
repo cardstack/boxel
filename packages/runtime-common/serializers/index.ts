@@ -43,7 +43,7 @@ interface Serializer {
     identityContext?: IdentityContext,
     opts?: DeserializeOpts,
   ): Promise<BaseInstanceType<T>>;
-  queryableValue(value: any, stack: BaseDef[]): any;
+  queryableValue(value: any, stack?: BaseDef[]): any;
   formatQuery?(value: any): any;
 }
 
