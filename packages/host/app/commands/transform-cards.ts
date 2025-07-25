@@ -28,9 +28,6 @@ export default class TransformCardsCommand extends HostBaseCommand<
     ).execute({
       query: input.query,
     });
-    // hmmm, i'm not sure if we can guarantee the code ref is an absolute URL
-    // which is a requirement for `getClass()`. May need to use
-    // codeRefWithAbsoluteURL() here...
     let CommandClass = await getClass(
       input.commandRef,
       this.loaderService.loader,

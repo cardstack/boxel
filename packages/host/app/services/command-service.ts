@@ -10,14 +10,12 @@ import { IEvent } from 'matrix-js-sdk';
 import { TrackedSet } from 'tracked-built-ins';
 
 import {
-  codeRefWithAbsoluteURL,
   Command,
   CommandContext,
   CommandContextStamp,
   delay,
   getClass,
   identifyCard,
-  type ResolvedCodeRef,
   type PatchData,
 } from '@cardstack/runtime-common';
 
@@ -183,7 +181,7 @@ export default class CommandService extends Service {
       let commandCodeRef = command.codeRef;
       if (commandCodeRef) {
         let CommandConstructor = (await getClass(
-          codeRefWithAbsoluteURL(commandCodeRef) as ResolvedCodeRef,
+          commandCodeRef,
           this.loaderService.loader,
         )) as { new (context: CommandContext): Command<any, any> };
         commandToRun = new CommandConstructor(this.commandContext);

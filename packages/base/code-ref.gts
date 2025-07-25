@@ -1,6 +1,6 @@
 import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
-import { Component, primitive, deserialize, FieldDef } from './card-api';
+import { Component, primitive, FieldDef } from './card-api';
 import { restartableTask } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
 import {
@@ -100,5 +100,5 @@ export default class CodeRefField extends FieldDef {
 }
 
 export class AbsoluteCodeRefField extends CodeRefField {
-  static [deserialize] = CodeRefSerializer.deserializeAbsolute;
+  static [fieldSerializer] = 'absolute-code-ref';
 }
