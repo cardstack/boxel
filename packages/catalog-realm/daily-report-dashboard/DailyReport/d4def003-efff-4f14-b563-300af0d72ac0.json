@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "reportDate": "2025-07-25",
+      "summary": "## Key Accomplishments\n✅ **Project Alpha Phase 3**: Excellent progress implementing 80/20 rule\n✅ **Vendor Communication**: Created communication log, identified backup supplier  \n✅ **Workshop Preparation**: All materials finalized, equipment tested\n✅ **Data Analysis**: Elena confirmed 12% efficiency drop in 2-4 PM window\n✅ **Process Improvement**: Documented staggered break schedule\n\n## Challenges & Solutions\n🔴 **Challenge**: Post-lunch efficiency drop (2-4 PM)\n✅ **Solution**: Elena recommended staggered break schedule\n\n🔴 **Challenge**: Weather affected outdoor operations\n✅ **Solution**: Moved tasks indoors as contingency\n\n## Metrics\n- **Overall Productivity**: 88%\n- **Equipment Uptime**: 100% \n- **Team Effectiveness**: High\n- **Schedule Performance**: Ahead (delivery advanced to Saturday)",
+      "recommendations": "## Priority Actions for July 25, 2025\n\n1. **Implement Staggered Break Schedule**: Test Elena's recommendation during workshop\n2. **Workshop Execution**: Deliver complex content during morning peak energy (8-10 AM)\n3. **Saturday Delivery Coordination**: Prepare for advanced vendor delivery\n4. **Monitor Break System**: Evaluate effectiveness of new schedule\n\n## Strategic Focus\n- **Energy Management**: Use morning hours for complex workshop content\n- **Team Optimization**: Stagger afternoon breaks to maintain coverage\n- **Continuous Improvement**: Document break schedule effectiveness\n- **Supply Chain**: Leverage early delivery advantage\n\n## Process Improvements\n- Continue vendor communication logging\n- Maintain equipment checks following successful Station 3 results\n- Apply data-driven approach to team energy management",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "policyManual": {
+        "links": {
+          "self": "../PolicyManual/operations-manual"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../daily-report",
+        "name": "DailyReport"
+      }
+    }
+  }
+}

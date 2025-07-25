@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "GenerateDailyReport",
+        "module": "../commands/generate-daily-report"
+      },
+      "specType": "command",
+      "containedExamples": [],
+      "title": "Generate Daily Report",
+      "description": "Spec for Generate Daily Report command",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

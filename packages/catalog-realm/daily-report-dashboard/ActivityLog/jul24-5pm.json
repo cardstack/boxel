@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "timestamp": "2025-07-24T17:00:00Z",
+      "activity": "Strong finish to the day. Energy levels recovered after 4 PM as expected from data pattern. Completed final Project Alpha phase 3 review. Tomorrow's workshop is fully prepared. Team briefed on new staggered break schedule starting Friday. All equipment secured for evening."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../activity-log",
+        "name": "ActivityLog"
+      }
+    }
+  }
+}

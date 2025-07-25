@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "timestamp": "2025-07-23T09:00:00Z",
+      "activity": "Completed safety inspection of primary work area. All systems operational. Began working on Project Alpha - made significant progress on phase 2 documentation. Team meeting scheduled for 10:30 AM to discuss resource allocation."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../activity-log",
+        "name": "ActivityLog"
+      }
+    }
+  }
+}

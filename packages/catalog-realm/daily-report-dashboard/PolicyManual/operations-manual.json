@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "manualTitle": "Operations Manual",
+      "content": "#Operations Manual\n\n## Daily Operations Guidelines\n\n### Activity Logging Protocol\n- Log activities hourly during active operations\n- Include specific details about tasks completed\n- Note any challenges or obstacles encountered\n- Record time spent on each major activity\n\n### Quality Standards\n- Maintain detailed records of all work performed\n- Follow safety protocols at all times\n- Report any incidents immediately\n- Complete daily summaries by end of shift\n\n### Best Practices\n\n#### Time Management\n- Prioritize high-impact activities\n- Use the 80/20 rule for task allocation\n- Take regular breaks to maintain focus\n- Review and adjust schedules as needed\n\n#### Communication\n- Update team members on progress regularly\n- Document all important decisions\n- Escalate issues when appropriate\n- Maintain professional correspondence\n\n### Improvement Recommendations\n\n#### Daily Review Process\n1. **Reflect on the day's activities**\n   - What went well?\n   - What could be improved?\n   - What obstacles were encountered?\n\n2. **Identify patterns**\n   - Look for recurring issues\n   - Note successful strategies\n   - Recognize efficiency opportunities\n\n3. **Plan improvements**\n   - Set specific goals for tomorrow\n   - Allocate resources appropriately\n   - Communicate changes to team\n\n#### Continuous Learning\n- Stay updated on industry best practices\n- Attend relevant training sessions\n- Share knowledge with team members\n- Implement feedback from supervisors\n\n### Emergency Procedures\n- Know location of all safety equipment\n- Follow evacuation procedures\n- Report emergencies to appropriate personnel\n- Maintain calm and professional demeanor",
+      "lastUpdated": "2025-07-20",
+      "version": "2.1",
+      "activityLogCardType": {
+        "module": "../activity-log",
+        "name": "ActivityLog"
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../policy-manual",
+        "name": "PolicyManual"
+      }
+    }
+  }
+}

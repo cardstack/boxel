@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "timestamp": "2025-07-24T15:00:00Z",
+      "activity": "Right in the 2-4 PM efficiency drop window Elena identified. Indeed feeling the post-lunch fatigue she predicted. Switched to lighter admin tasks as efficiency protocol suggests. Completed inventory review - we're well stocked for next week. Documented staggered break schedule for team implementation tomorrow."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../activity-log",
+        "name": "ActivityLog"
+      }
+    }
+  }
+}

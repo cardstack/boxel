@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "timestamp": "2025-07-25T08:00:00Z",
+      "activity": "Workshop day! Arrived 30 minutes early as planned. All equipment double-checked and functioning perfectly. Team briefed on staggered break schedule - everyone enthusiastic about trying Elena's efficiency optimization. Morning energy high, perfect for complex workshop content."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../activity-log",
+        "name": "ActivityLog"
+      }
+    }
+  }
+}
