@@ -14,18 +14,18 @@ function deserializeForUI(value: string | number | null): number | null {
   return NumberSerializer.deserializeSync(value);
 }
 
-class View extends Component<typeof NumberField> {
-  <template>
-    {{@model}}
-  </template>
-}
-
 function serializeForUI(val: number | null): string | undefined {
   let serialized = NumberSerializer.serialize(val);
   if (serialized != null) {
     return String(serialized);
   }
   return undefined;
+}
+
+class View extends Component<typeof NumberField> {
+  <template>
+    {{@model}}
+  </template>
 }
 
 export default class NumberField extends FieldDef {
