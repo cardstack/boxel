@@ -16,6 +16,24 @@ import {
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
+function sanitizeDeps(deps: string[]) {
+  return deps.filter((dep) => {
+    if (dep.endsWith('.glimmer-scoped.css')) {
+      return false;
+    }
+    if (
+      [
+        'https://cardstack.com',
+        'https://packages',
+        'https://boxel-icons.boxel.ai',
+      ].some((urlStem) => dep.startsWith(urlStem))
+    ) {
+      return false;
+    }
+    return true;
+  });
+}
+
 module(basename(__filename), function () {
   module(
     'Realm-specific Endpoints | card dependencies requests',
@@ -74,8 +92,9 @@ module(basename(__filename), function () {
 
             let result: string[] = JSON.parse(response.text.trim());
 
-            assert.ok(
-              result.includes('http://127.0.0.1:4444/person.gts'),
+            assert.deepEqual(
+              sanitizeDeps(result),
+              ['http://127.0.0.1:4444/person.gts'],
               'person.gts is a dependency',
             );
           });
@@ -90,8 +109,9 @@ module(basename(__filename), function () {
               );
             let result: string[] = JSON.parse(response.text.trim());
 
-            assert.ok(
-              result.includes('http://127.0.0.1:4444/person.gts'),
+            assert.deepEqual(
+              sanitizeDeps(result),
+              ['http://127.0.0.1:4444/person.gts'],
               'person.gts is a dependency',
             );
           });
