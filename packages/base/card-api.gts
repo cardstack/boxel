@@ -2605,12 +2605,12 @@ export function getQueryableValue(
   value: any,
   stack: BaseDef[] = [],
 ): any {
+  let serializer: ReturnType<typeof getSerializer> | undefined;
+  if (primitive in fieldOrCard && fieldSerializer in fieldOrCard) {
+    assertIsSerializerName(fieldOrCard[fieldSerializer]);
+    serializer = getSerializer(fieldOrCard[fieldSerializer]);
+  }
   if ('baseDef' in fieldOrCard) {
-    let serializer: ReturnType<typeof getSerializer> | undefined;
-    if (primitive in fieldOrCard && fieldSerializer in fieldOrCard) {
-      assertIsSerializerName(fieldOrCard[fieldSerializer]);
-      serializer = getSerializer(fieldOrCard[fieldSerializer]);
-    }
     let result = serializer
       ? serializer.queryableValue(value, stack)
       : fieldOrCard[queryableValue](value, stack);
@@ -2619,7 +2619,9 @@ export function getQueryableValue(
     }
     return result;
   }
-  return fieldOrCard.queryableValue(value, stack);
+  return serializer
+    ? serializer.queryableValue(value, stack)
+    : fieldOrCard.queryableValue(value, stack);
 }
 
 export function formatQueryValue(

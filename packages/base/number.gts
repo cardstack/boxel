@@ -20,6 +20,14 @@ class View extends Component<typeof NumberField> {
   </template>
 }
 
+function serializeForUI(val: number | null): string | undefined {
+  let serialized = NumberSerializer.serialize(val);
+  if (serialized != null) {
+    return String(serialized);
+  }
+  return undefined;
+}
+
 export default class NumberField extends FieldDef {
   static displayName = 'Number';
   static icon = HashIcon;
@@ -44,7 +52,7 @@ export default class NumberField extends FieldDef {
       () => this.args.model,
       (inputVal) => this.args.set(inputVal),
       deserializeForUI,
-      NumberSerializer.serialize,
+      serializeForUI,
       NumberSerializer.validate,
     );
   };

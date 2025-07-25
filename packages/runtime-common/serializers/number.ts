@@ -3,18 +3,18 @@ import {
   type BaseInstanceType,
 } from 'https://cardstack.com/base/card-api';
 
-export function queryableValue(val: number | undefined): string | undefined {
+export function queryableValue(val: number | undefined): number | undefined {
   if (val != null && val === 0) {
-    return val.toString();
+    return val;
   }
-  return val ? val.toString() : undefined;
+  return val ? val : undefined;
 }
 
-export function serialize(val: number | null): string | undefined {
+export function serialize(val: number | null): number | undefined {
   if (val != null && val === 0) {
-    return val.toString();
+    return val;
   }
-  return val ? val.toString() : undefined;
+  return val ? val : undefined;
 }
 
 export function validate(value: string | number | null): string | null {
