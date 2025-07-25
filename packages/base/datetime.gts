@@ -1,17 +1,10 @@
-import {
-  Component,
-  primitive,
-  serialize,
-  deserialize,
-  queryableValue,
-  FieldDef,
-} from './card-api';
+import { Component, primitive, FieldDef } from './card-api';
 import { format, parseISO } from 'date-fns';
 import { fn } from '@ember/helper';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import CalendarClockIcon from '@cardstack/boxel-icons/calendar-clock';
-import { DatetimeSerializer } from '@cardstack/runtime-common';
+import { fieldSerializer, DatetimeSerializer } from '@cardstack/runtime-common';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
 // it in the application route at app startup.
@@ -42,9 +35,7 @@ export default class DatetimeField extends FieldDef {
   static displayName = 'DateTime';
   static icon = CalendarClockIcon;
   static [primitive]: Date;
-  static [serialize] = DatetimeSerializer.serialize;
-  static [deserialize] = DatetimeSerializer.deserialize;
-  static [queryableValue] = DatetimeSerializer.queryableValue;
+  static [fieldSerializer] = 'datetime';
 
   static embedded = View;
   static atom = View;

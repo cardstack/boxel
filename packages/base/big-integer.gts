@@ -1,16 +1,12 @@
-import {
-  primitive,
-  Component,
-  serialize,
-  FieldDef,
-  deserialize,
-  queryableValue,
-} from './card-api';
+import { primitive, Component, FieldDef } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 import { not } from '@cardstack/boxel-ui/helpers';
 import Number99SmallIcon from '@cardstack/boxel-icons/number-99-small';
-import { BigIntegerSerializer } from '@cardstack/runtime-common';
+import {
+  fieldSerializer,
+  BigIntegerSerializer,
+} from '@cardstack/runtime-common';
 
 function validate(value: string | null): string | null {
   if (!value) {
@@ -64,9 +60,7 @@ export default class BigIntegerField extends FieldDef {
   static displayName = 'BigInteger';
   static icon = Number99SmallIcon;
   static [primitive]: bigint;
-  static [serialize] = BigIntegerSerializer.serialize;
-  static [deserialize] = BigIntegerSerializer.deserialize;
-  static [queryableValue] = BigIntegerSerializer.queryableValue;
+  static [fieldSerializer] = 'big-integer';
   static embedded = View;
   static atom = View;
   static edit = Edit;

@@ -1,15 +1,9 @@
-import {
-  primitive,
-  Component,
-  useIndexBasedKey,
-  FieldDef,
-  deserialize,
-} from './card-api';
+import { primitive, Component, useIndexBasedKey, FieldDef } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputValidator } from './text-input-validator';
 import { not } from '@cardstack/boxel-ui/helpers';
 import HashIcon from '@cardstack/boxel-icons/hash';
-import { NumberSerializer } from '@cardstack/runtime-common';
+import { fieldSerializer, NumberSerializer } from '@cardstack/runtime-common';
 
 function deserializeForUI(value: string | number | null): number | null {
   const validationError = NumberSerializer.validate(value);
@@ -18,6 +12,14 @@ function deserializeForUI(value: string | number | null): number | null {
   }
 
   return NumberSerializer.deserializeSync(value);
+}
+
+function serializeForUI(val: number | null): string | undefined {
+  let serialized = NumberSerializer.serialize(val);
+  if (serialized != null) {
+    return String(serialized);
+  }
+  return undefined;
 }
 
 class View extends Component<typeof NumberField> {
@@ -30,8 +32,8 @@ export default class NumberField extends FieldDef {
   static displayName = 'Number';
   static icon = HashIcon;
   static [primitive]: number;
+  static [fieldSerializer] = 'number';
   static [useIndexBasedKey]: never;
-  static [deserialize] = NumberSerializer.deserialize;
   static embedded = View;
   static atom = View;
 
@@ -50,7 +52,7 @@ export default class NumberField extends FieldDef {
       () => this.args.model,
       (inputVal) => this.args.set(inputVal),
       deserializeForUI,
-      NumberSerializer.serialize,
+      serializeForUI,
       NumberSerializer.validate,
     );
   };

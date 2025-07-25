@@ -76,7 +76,7 @@ function maybeSerializeCodeRef(
       // if a stack is passed in, use the containing card to resolve relative references
       let moduleHref =
         stack.length > 0
-          ? new URL(codeRef.module, (stack[0] as any).id).href
+          ? new URL(codeRef.module, stack.find((i) => i.id).id).href
           : codeRef.module;
       return `${moduleHref}/${codeRef.name}`;
     } else {
