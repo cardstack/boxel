@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "timestamp": "2025-07-24T11:00:00Z",
+      "activity": "Data specialist meeting completed - Elena confirmed the efficiency pattern is significant. Efficiency drops 12% during 2-4 PM window consistently. Root cause appears to be post-lunch fatigue. Elena recommends staggered break schedule starting tomorrow. This aligns with operations manual guidance on team energy management."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../activity-log",
+        "name": "ActivityLog"
+      }
+    }
+  }
+}

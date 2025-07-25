@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "timestamp": "2025-07-24T08:00:00Z",
+      "activity": "Morning startup following yesterday's recommendations. Reviewed efficiency trend data first thing - pattern is more significant than initially thought. Scheduled 11 AM meeting with data specialist Elena. All equipment checks completed, Station 3 running perfectly after yesterday's calibration."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../activity-log",
+        "name": "ActivityLog"
+      }
+    }
+  }
+}

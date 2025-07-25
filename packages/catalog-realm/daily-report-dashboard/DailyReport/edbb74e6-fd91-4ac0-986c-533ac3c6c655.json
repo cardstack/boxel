@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "reportDate": "2025-07-25",
+      "summary": "**Workshop Day Success - July 25, 2025**\n\n**Morning Operations (8:00 AM - 12:00 PM)**\n• Arrived 30 minutes early as planned for workshop day\n• All equipment double-checked and functioning perfectly\n• Team briefed on staggered break schedule implementation\n• First workshop session exceeded expectations with high participant engagement\n• Staggered break system successfully tested at 10:15 AM (Alex and Maria)\n• Morning sessions completed successfully by noon\n\n**Afternoon Operations (12:00 PM - 2:00 PM)**\n• Lunch break coordination using staggered system (Sarah and Tom)\n• Afternoon materials prepared while maintaining coverage\n• Saturday delivery coordination briefed and ready\n• Efficiency testing zone implemented with lighter workshop content\n• Interactive sessions and collaborative work scheduled as planned\n\n**Key Achievements**\n• Workshop delivery exceeded expectations despite efficiency concerns\n• Staggered break system proved effective for maintaining coverage\n• Team energy sustained throughout the day using Elena's optimization strategy\n• Complex material successfully delivered during peak morning hours\n• Saturday delivery preparations completed ahead of schedule\n\n**Challenges Addressed**\n• 2-4 PM efficiency drop mitigated through lighter content scheduling\n• Workshop format adjusted to accommodate energy patterns\n• Break coverage maintained through staggered system",
+      "recommendations": "**For Tomorrow (July 26, 2025)**\n1. **Continue Staggered Break Implementation**\n   - Monitor team feedback on new break schedule\n   - Document efficiency improvements for future reference\n   - Maintain coverage protocols established today\n\n2. **Saturday Delivery Preparation**\n   - Coordinate with delivery team for early morning arrival\n   - Ensure receiving area is prepared\n   - Have backup personnel available if needed\n\n3. **Workshop Follow-up**\n   - Collect participant feedback from today's sessions\n   - Document what worked well for future workshop planning\n   - Review engagement strategies that proved successful\n\n4. **Efficiency Optimization**\n   - Continue monitoring 2-4 PM energy patterns\n   - Evaluate effectiveness of lighter afternoon content\n   - Consider extending staggered break approach to regular operations\n\n5. **Equipment and Safety**\n   - Continue daily equipment checks\n   - Maintain safety protocol compliance\n   - Prepare for next week's Project Alpha phase 4 activities\n\n**Best Practices Applied**\n• 80/20 task allocation principle successfully implemented\n• Regular team communication maintained throughout day\n• Operations manual guidelines for energy management followed\n• Continuous improvement mindset applied to break scheduling",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "policyManual": {
+        "links": {
+          "self": "../PolicyManual/operations-manual"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../daily-report",
+        "name": "DailyReport"
+      }
+    }
+  }
+}

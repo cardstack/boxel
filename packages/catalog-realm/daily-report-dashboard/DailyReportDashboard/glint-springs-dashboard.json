@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Glint Springs Dashboard",
+      "description": "Operations dashboard displaying daily reports and key metrics with automated report generation capabilities",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "policyManual": {
+        "links": {
+          "self": "../PolicyManual/operations-manual"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../daily-report-dashboard",
+        "name": "DailyReportDashboard"
+      }
+    }
+  }
+}
