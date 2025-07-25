@@ -1311,4 +1311,68 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     assert.dom('.menu-content').containsText('non-standard-llm-1');
     assert.dom('.menu-content').containsText('non-standard-llm-2');
   });
+
+  test('new session settings menu opens on hover and checkboxes work', async function (assert) {
+    await fillIn('[data-test-boxel-input-id="ai-chat-input"]', 'Test message');
+    await click('[data-test-send-message-btn]');
+
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .doesNotExist('Menu should not be visible initially');
+
+    await triggerEvent('[data-test-create-room-btn]', 'mouseenter');
+
+    await waitFor('[data-test-new-session-settings-menu]');
+
+    assert
+      .dom('[data-test-new-session-settings-title]')
+      .hasText('New Session Options', 'Menu title is displayed correctly');
+
+    assert
+      .dom('[data-test-new-session-settings-option]')
+      .exists({ count: 3 }, 'All three options are present');
+    assert
+      .dom('[data-test-new-session-settings-label="Add Same Skills"]')
+      .exists('First option is present');
+    assert
+      .dom('[data-test-new-session-settings-label="Copy File History"]')
+      .exists('Second option is present');
+    assert
+      .dom('[data-test-new-session-settings-label="Summarize Current Session"]')
+      .exists('Third option is present');
+
+    assert
+      .dom('[data-test-new-session-settings-checkbox]')
+      .isChecked({ count: 0 });
+
+    await click('[data-test-new-session-settings-checkbox="Add Same Skills"]');
+
+    assert
+      .dom('[data-test-new-session-settings-checkbox]')
+      .isChecked({ count: 1 });
+
+    await click(
+      '[data-test-new-session-settings-checkbox="Copy File History"]',
+    );
+
+    assert
+      .dom('[data-test-new-session-settings-checkbox]')
+      .isChecked({ count: 2 });
+
+    await click('[data-test-new-session-settings-checkbox="Add Same Skills"]');
+
+    assert
+      .dom('[data-test-new-session-settings-checkbox]')
+      .isChecked({ count: 1 });
+
+    await triggerEvent('[data-test-create-room-btn]', 'mouseleave');
+
+    await waitUntil(
+      () => !document.querySelector('[data-test-new-session-settings-menu]'),
+    );
+
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .doesNotExist('Menu should be hidden after mouse leave');
+  });
 });
