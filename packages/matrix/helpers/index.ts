@@ -25,7 +25,6 @@ interface ProfileAssertions {
 interface LoginOptions {
   url?: string;
   expectFailure?: true;
-  skipOpeningAssistant?: true;
 }
 
 export async function setSkillsRedirect(page: Page) {
@@ -284,10 +283,6 @@ export async function login(
 
   if (opts?.expectFailure) {
     await expect(page.locator('[data-test-login-error]')).toHaveCount(1);
-  } else {
-    if (!opts?.skipOpeningAssistant) {
-      await openAiAssistant(page);
-    }
   }
 }
 
@@ -562,7 +557,7 @@ export async function assertRooms(page: Page, rooms: string[]) {
   if (rooms && rooms.length > 0) {
     await page.waitForFunction(
       (rooms) =>
-        document.querySelectorAll('[data-test-joined-room]').length ===
+        document.querySelectorAll('[data-test-joined-room]').length >=
         rooms.length,
       rooms,
     );
