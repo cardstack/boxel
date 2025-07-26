@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "consumee": {
+        "links": {
+          "self": "../Consumee/4beb581c-c3d0-4a93-aedb-1a029b9e5179"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../test-link",
+        "name": "Consuming"
+      }
+    }
+  }
+}

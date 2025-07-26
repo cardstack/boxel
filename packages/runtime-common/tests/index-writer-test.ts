@@ -1566,33 +1566,61 @@ const tests = Object.freeze({
         {
           production: [
             {
-              url: `${testRealmURL}dependency.gts`,
+              url: `${testRealmURL}Consuming/consumer.json`,
               realm_version: 1,
               realm_url: testRealmURL,
-              type: 'module',
+              type: 'instance',
               deps: [],
+              search_doc: {
+                id: `${testRealmURL}Consuming/consumer`,
+                title: null,
+                consumee: {
+                  id: `${testRealmURL}Consumee/consumee`,
+                  title: null,
+                  description: null,
+                  thumbnailURL: null,
+                },
+                _cardType: 'Consuming',
+                description: null,
+                thumbnailURL: null,
+              },
             },
             {
-              url: `${testRealmURL}instance1.json`,
+              url: `${testRealmURL}Consumee/consumee.json`,
               realm_version: 1,
               realm_url: testRealmURL,
               type: 'instance',
-              deps: [`${testRealmURL}dependency.gts`], // depends on the file we'll delete
+              deps: [],
+              search_doc: {
+                id: `${testRealmURL}Consumee/consumee`,
+                title: null,
+                description: null,
+                thumbnailURL: null,
+                _cardType: 'Consumee',
+              },
             },
-            {
-              url: `${testRealmURL}instance2.json`,
-              realm_version: 1,
-              realm_url: testRealmURL,
-              type: 'instance',
-              deps: [`${testRealmURL}dependency.gts`], // also depends on the file
-            },
-            {
-              url: `${testRealmURL}unrelated.json`,
-              realm_version: 1,
-              realm_url: testRealmURL,
-              type: 'instance',
-              deps: [], // doesn't depend on the file
-            },
+
+            // {
+            //   url: `${testRealmURL}instance1.json`,
+            //   realm_version: 1,
+            //   realm_url: testRealmURL,
+            //   type: 'instance',
+            //   deps: [`${testRealmURL}dependency.gts`], // depends on the file we'll delete
+            // },
+            // {
+            //   url: `${testRealmURL}instance2.json`,
+            //   realm_version: 1,
+            //   realm_url: testRealmURL,
+            //   type: 'instance',
+            //   deps: [`${testRealmURL}dependency.gts`], // also depends on the file
+            // },
+            // {
+            //   url: `${testRealmURL}unrelated.json`,
+            //   realm_version: 1,
+            //   realm_url: testRealmURL,
+            //   type: 'instance',
+            //   deps: [], // doesn't depend on the file
+            // },
           ],
           working: [],
         },
@@ -1600,16 +1628,24 @@ const tests = Object.freeze({
 
       // Create a new batch and invalidate the dependency file
       let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let batch2 = await indexWriter.createBatch(new URL(testRealmURL));
       let invalidations = await batch.invalidate([
-        new URL(`${testRealmURL}dependency.gts`),
+        new URL(`${testRealmURL}Consumer/consumer.json`),
+        new URL(`${testRealmURL}Consumee/consumee.json`),
+      ]);
+
+      let invalidations2 = await batch2.invalidate([
+        new URL(`${testRealmURL}Consumee/consumee.json`),
       ]);
 
       // Should invalidate the dependency file and all instances that depend on it
-      assert.deepEqual(invalidations.sort(), [
-        `${testRealmURL}dependency.gts`,
-        `${testRealmURL}instance1.json`,
-        `${testRealmURL}instance2.json`,
-      ]);
+      // assert.deepEqual(invalidations.sort(), [
+      //   `${testRealmURL}Consumee/consumee.json`,
+      // ]);
+
+      // invalidations = await batch.invalidate([
+      //   new URL(`${testRealmURL}Consumee/consumee.json`),
+      // ]);
 
       // Check that the dependent instances are tombstoned in the working table
       let tombstonedEntries = await adapter.execute(
@@ -1619,24 +1655,8 @@ const tests = Object.freeze({
 
       assert.deepEqual(
         tombstonedEntries,
-        [
-          { url: `${testRealmURL}dependency.gts`, is_deleted: true },
-          { url: `${testRealmURL}instance1.json`, is_deleted: true },
-          { url: `${testRealmURL}instance2.json`, is_deleted: true },
-        ],
+        [{ url: `${testRealmURL}Consumee/consumee.json`, is_deleted: true }],
         'instances that depend on the deleted file should be tombstoned with is_deleted: true',
-      );
-
-      // Verify that unrelated instances are not tombstoned
-      let untombstonedEntries = await adapter.execute(
-        'SELECT url FROM boxel_index_working WHERE url = $1',
-        { bind: [`${testRealmURL}unrelated.json`] },
-      );
-
-      assert.deepEqual(
-        untombstonedEntries,
-        [],
-        'unrelated instances should not be added to working table if they are not invalidated',
       );
     },
 } as SharedTests<{

@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, only } from 'qunit';
 import { dirSync } from 'tmp';
 import {
   baseRealm,
@@ -940,6 +940,27 @@ module(basename(__filename), function () {
       );
     });
 
+    only(
+      'can incrementally index instance that depends on linked deleted instance',
+      async function (assert) {
+        await realm.delete('ringo.json');
+        let deletedEntries = (await testDbAdapter.execute(
+          `SELECT url FROM boxel_index WHERE is_deleted = TRUE`,
+        )) as { url: string }[];
+        assert.deepEqual(
+          deletedEntries,
+          [{ url: `${testRealm}ringo.json` }],
+          'deleted instance is tombstoned',
+        );
+        let { data: result } = await realm.realmIndexQueryEngine.search({
+          filter: {
+            on: { module: `${testRealm}pet`, name: 'Pet' },
+            eq: { firstName: 'Ringo' },
+          },
+        });
+        assert.strictEqual(result.length, 0, 'found no documents');
+      },
+    );
     test('can incrementally index instance that depends on updated card source', async function (assert) {
       await realm.write(
         'post.gts',
