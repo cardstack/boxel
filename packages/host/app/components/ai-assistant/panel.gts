@@ -7,7 +7,6 @@ import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
 import HistoryIcon from '@cardstack/boxel-icons/history';
-import PlusIcon from '@cardstack/boxel-icons/plus';
 import XIcon from '@cardstack/boxel-icons/x';
 
 import { restartableTask } from 'ember-concurrency';
@@ -30,12 +29,14 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 import CommandService from '../../services/command-service';
 import { type MonacoSDK } from '../../services/monaco-service';
 import NewSession from '../ai-assistant/new-session';
+
 import AiAssistantPastSessionsList from '../ai-assistant/past-sessions';
 import RenameSession from '../ai-assistant/rename-session';
 import Room from '../matrix/room';
 import DeleteModal from '../operator-mode/delete-modal';
 
 import assistantIcon from './ai-assist-icon.webp';
+import NewSessionButton from './new-session-button';
 
 import type MatrixService from '../../services/matrix-service';
 import type MonacoService from '../../services/monaco-service';
@@ -82,20 +83,13 @@ export default class AiAssistantPanel extends Component<Signature> {
               {{title}}
             </h3>
           {{/let}}
-          <Button
-            title='New Session'
-            class='button new-session-button'
-            @kind='text-only'
-            @size='extra-small'
+          <NewSessionButton
             @disabled={{not this.roomResource.messages.length}}
-            {{on
-              'click'
-              (fn this.aiAssistantPanelService.createNewSession false)
+            @onCreateNewSession={{fn
+              this.aiAssistantPanelService.createNewSession
+              false
             }}
-            data-test-create-room-btn
-          >
-            <PlusIcon />
-          </Button>
+          />
           {{#let
             this.aiAssistantPanelService.loadingRooms
             as |pastSessionsLoading|
@@ -192,9 +186,9 @@ export default class AiAssistantPanel extends Component<Signature> {
 
     <style scoped>
       :global(:root) {
-        --past-sessions-background: #4f4b57;
+        --ai-assistant-menu-background: #4f4b57;
         --past-sessions-divider-color: #75707e;
-        --past-sessions-hover-background: #797788;
+        --ai-assistant-menu-hover-background: #797788;
       }
 
       .left-border {
