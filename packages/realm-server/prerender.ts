@@ -16,42 +16,44 @@ export async function prerenderCard(url: string): Promise<RenderResponse> {
   });
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
+  try {
+    if (process.env.BOXEL_SESSION) {
+      // Run this in browser to copy your own session into here:
+      // console.log(`export BOXEL_SESSION="${btoa(localStorage.getItem("boxel-session"))}"`)
+      const auth = atob(process.env.BOXEL_SESSION!);
+      page.evaluateOnNewDocument((auth) => {
+        localStorage.setItem('boxel-session', auth);
+      }, auth);
+    }
 
-  if (process.env.BOXEL_SESSION) {
-    // Run this in browser to copy your own session into here:
-    // console.log(`export BOXEL_SESSION="${btoa(localStorage.getItem("boxel-session"))}"`)
-    const auth = atob(process.env.BOXEL_SESSION!);
-    page.evaluateOnNewDocument((auth) => {
-      localStorage.setItem('boxel-session', auth);
-    }, auth);
-  }
-
-  await page.goto(
-    `http://localhost:4200/render/${encodeURIComponent(url)}/meta`,
-  );
-  await page.waitForSelector('[data-render-output="ready"]');
-  const meta: PrerenderMeta = await page.evaluate(() => {
-    return JSON.parse(
-      document.querySelector('[data-render-output="ready"]')!.textContent!,
+    await page.goto(
+      `http://localhost:4200/render/${encodeURIComponent(url)}/meta`,
     );
-  });
+    let result = await captureResult(page, 'textContent');
+    if (result.status === 'error') {
+      throw new Error('todo: make error doc');
+    }
 
-  const isolatedHTML = await renderHTML(page, 'isolated', 0);
-  const atomHTML = await renderHTML(page, 'atom', 0);
-  const embeddedHTML = await renderAncestors(page, 'embedded', meta.types);
-  const fittedHTML = await renderAncestors(page, 'fitted', meta.types);
-  const iconHTML = await renderIcon(page);
+    const meta: PrerenderMeta = JSON.parse(result.value);
 
-  await context.close();
-  await browser.close();
-  return {
-    ...meta,
-    iconHTML,
-    isolatedHTML,
-    atomHTML,
-    embeddedHTML,
-    fittedHTML,
-  };
+    const isolatedHTML = await renderHTML(page, 'isolated', 0);
+    const atomHTML = await renderHTML(page, 'atom', 0);
+    const embeddedHTML = await renderAncestors(page, 'embedded', meta.types);
+    const fittedHTML = await renderAncestors(page, 'fitted', meta.types);
+    const iconHTML = await renderIcon(page);
+
+    return {
+      ...meta,
+      iconHTML,
+      isolatedHTML,
+      atomHTML,
+      embeddedHTML,
+      fittedHTML,
+    };
+  } finally {
+    await context.close();
+    await browser.close();
+  }
 }
 
 async function transitionTo(
@@ -82,16 +84,40 @@ async function renderHTML(
   ancestorLevel: number,
 ): Promise<string> {
   await transitionTo(page, 'render.html', format, String(ancestorLevel));
-  await page.waitForSelector('[data-render-output="ready"]');
-  return await page.evaluate(() => {
-    return document.querySelector('[data-render-output="ready"]')!.innerHTML;
-  });
+  let result = await captureResult(page, 'innerHTML');
+  if (result.status === 'error') {
+    throw new Error('todo: error doc');
+  }
+  return result.value;
 }
 
 async function renderIcon(page: Page): Promise<string> {
   await transitionTo(page, 'render.icon');
-  await page.waitForSelector('[data-render-output="ready"]');
-  return await page.evaluate(() => {
-    return document.querySelector('[data-render-output="ready"]')!.outerHTML;
-  });
+  let result = await captureResult(page, 'outerHTML');
+  if (result.status === 'error') {
+    throw new Error('todo: error doc');
+  }
+
+  return result.value;
+}
+
+async function captureResult(
+  page: Page,
+  capture: 'textContent' | 'innerHTML' | 'outerHTML',
+): Promise<{ status: 'ready' | 'error'; value: string }> {
+  await page.waitForSelector(
+    '[data-prerender-status="ready"], [data-prerender-status="error"]',
+  );
+  return await page.evaluate(
+    (capture: 'textContent' | 'innerHTML' | 'outerHTML') => {
+      let element = document.querySelector('[data-prerender]') as HTMLElement;
+      let status = element.dataset.prerenderStatus as 'ready' | 'error';
+      if (status === 'error') {
+        return { status, value: element.innerHTML! };
+      } else {
+        return { status, value: element.children[0][capture]! };
+      }
+    },
+    capture,
+  );
 }

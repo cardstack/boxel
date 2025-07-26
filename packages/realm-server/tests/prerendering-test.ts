@@ -11,7 +11,7 @@ import {
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-module(basename(__filename), function () {
+module.only(basename(__filename), function () {
   module('prerender', function (hooks) {
     let { virtualNetwork } = createVirtualNetworkAndLoader();
     let realmURL: string;
@@ -146,18 +146,14 @@ module(basename(__filename), function () {
       });
     });
 
-    module('errors', function (hooks) {
-      let result: RenderResponse;
-
-      hooks.before(async () => {
+    module('errors', function () {
+      test('error during render', async function (assert) {
         const testCardURL = `${realmURL}2`;
-        result = await prerenderCard(testCardURL);
-      });
-
-      QUnit.skip('error during render', function (assert) {
-        assert.ok(
-          /TODO: error result here/.test(result.isolatedHTML),
-          `failed to match embedded html:${JSON.stringify(result.isolatedHTML)}`,
+        assert.rejects(
+          (async () => {
+            await prerenderCard(testCardURL);
+          })(),
+          /todo: error doc/,
         );
       });
     });
