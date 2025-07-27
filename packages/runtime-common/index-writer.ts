@@ -527,7 +527,7 @@ export class Batch {
           ...(!this.nodeResolvedInvalidations.includes(alias)
             ? [url.href]
             : []),
-          ...(alias ? await this.calculateInvalidations(alias, visited) : []),
+          ...(alias ? await this.calculateInvalidations(alias, visited, false) : []),
         ]),
       ];
       invalidations = [...new Set([...invalidations, ...workingInvalidations])];
@@ -581,12 +581,15 @@ export class Batch {
     return invalidations;
   }
 
-  private async itemsThatReference(
+  async itemsThatReference(
     resolvedPath: string,
   ): Promise<
     { url: string; alias: string; type: 'instance' | 'module' | 'error' }[]
   > {
     let start = Date.now();
+    this.#perfLog.debug(
+      `${jobIdentity(this.jobInfo)} starting itemsThatReference for ${resolvedPath}`,
+    );
     const pageSize = 1000;
     let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
       type: 'instance' | 'module' | 'error';
@@ -629,10 +632,9 @@ export class Batch {
       results = [...results, ...rows];
       pageNumber++;
     } while (rows.length === pageSize);
+    let duration = Date.now() - start;
     this.#perfLog.debug(
-      `${jobIdentity(this.jobInfo)} time to determine items that reference ${resolvedPath} ${
-        Date.now() - start
-      } ms (page count=${pageNumber})`,
+      `${jobIdentity(this.jobInfo)} completed itemsThatReference for ${resolvedPath} in ${duration} ms - found ${results.length} references (page count=${pageNumber})`,
     );
     return results.map(({ url, file_alias, type }) => ({
       url,
@@ -644,7 +646,15 @@ export class Batch {
   private async calculateInvalidations(
     resolvedPath: string,
     visited: Set<string>,
+    isTopLevel: boolean = true,
   ): Promise<string[]> {
+    let start = isTopLevel ? Date.now() : 0;
+    if (isTopLevel) {
+      this.#perfLog.debug(
+        `${jobIdentity(this.jobInfo)} starting calculateInvalidations for ${resolvedPath}`,
+      );
+    }
+    
     if (
       visited.has(resolvedPath) ||
       this.nodeResolvedInvalidations.includes(resolvedPath)
@@ -662,11 +672,20 @@ export class Batch {
       ...invalidations,
       ...flatten(
         await Promise.all(
-          aliases.map((a) => this.calculateInvalidations(a, visited)),
+          aliases.map((a) => this.calculateInvalidations(a, visited, false)),
         ),
       ),
     ];
-    return [...new Set(results)];
+    let finalResults = [...new Set(results)];
+    
+    if (isTopLevel) {
+      let duration = Date.now() - start;
+      this.#perfLog.debug(
+        `${jobIdentity(this.jobInfo)} completed calculateInvalidations for ${resolvedPath} in ${duration} ms - found ${finalResults.length} total invalidations`,
+      );
+    }
+    
+    return finalResults;
   }
 
   private copiedRealmURL(fromRealm: URL, file: URL): URL {
