@@ -174,5 +174,37 @@ module(basename(__filename), function () {
         adapter,
       });
     });
+
+    test('itemsThatReference returns correct dependencies for single item', async function (assert) {
+      await runSharedTest(indexWriterTests, assert, {
+        indexWriter,
+        indexQueryEngine,
+        adapter,
+      });
+    });
+
+    test('itemsThatReference handles module dependencies correctly', async function (assert) {
+      await runSharedTest(indexWriterTests, assert, {
+        indexWriter,
+        indexQueryEngine,
+        adapter,
+      });
+    });
+
+    test('itemsThatReference returns empty array when no dependencies exist', async function (assert) {
+      await runSharedTest(indexWriterTests, assert, {
+        indexWriter,
+        indexQueryEngine,
+        adapter,
+      });
+    });
+
+    test('itemsThatReference respects realm boundaries', async function (assert) {
+      await runSharedTest(indexWriterTests, assert, {
+        indexWriter,
+        indexQueryEngine,
+        adapter,
+      });
+    });
   });
 });

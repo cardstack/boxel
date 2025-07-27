@@ -1555,6 +1555,178 @@ const tests = Object.freeze({
       'correct card type summary after indexing is done',
     );
   },
+
+  'itemsThatReference returns correct dependencies for single item': async (
+    assert,
+    { indexWriter, adapter },
+  ) => {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [
+        {
+          url: `${testRealmURL}base.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [],
+        },
+        {
+          url: `${testRealmURL}child1.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}base.json`],
+        },
+        {
+          url: `${testRealmURL}child2.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}base.json`],
+        },
+        {
+          url: `${testRealmURL}unrelated.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [],
+        },
+      ],
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let references = await batch.itemsThatReference(`${testRealmURL}base.json`);
+
+    assert.deepEqual(
+      references.sort((a, b) => a.url.localeCompare(b.url)),
+      [
+        {
+          url: `${testRealmURL}child1.json`,
+          alias: `${testRealmURL}child1`,
+          type: 'instance',
+        },
+        {
+          url: `${testRealmURL}child2.json`,
+          alias: `${testRealmURL}child2`,
+          type: 'instance',
+        },
+      ],
+    );
+  },
+
+  'itemsThatReference handles module dependencies correctly': async (
+    assert,
+    { indexWriter, adapter },
+  ) => {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [
+        {
+          url: `${testRealmURL}base-card.gts`,
+          file_alias: `${testRealmURL}base-card`,
+          type: 'module',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [],
+        },
+        {
+          url: `${testRealmURL}extended-card.gts`,
+          file_alias: `${testRealmURL}extended-card`,
+          type: 'module',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}base-card`],
+        },
+        {
+          url: `${testRealmURL}instance.json`,
+          file_alias: `${testRealmURL}instance.json`,
+          type: 'instance',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}extended-card`],
+        },
+      ],
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let references = await batch.itemsThatReference(`${testRealmURL}base-card`);
+
+    assert.deepEqual(references, [
+      {
+        url: `${testRealmURL}extended-card.gts`,
+        alias: `${testRealmURL}extended-card`,
+        type: 'module',
+      },
+    ]);
+  },
+
+  'itemsThatReference returns empty array when no dependencies exist': async (
+    assert,
+    { indexWriter, adapter },
+  ) => {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [
+        {
+          url: `${testRealmURL}isolated.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [],
+        },
+      ],
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let references = await batch.itemsThatReference(
+      `${testRealmURL}isolated.json`,
+    );
+
+    assert.deepEqual(references, []);
+  },
+
+  'itemsThatReference respects realm boundaries': async (
+    assert,
+    { indexWriter, adapter },
+  ) => {
+    await setupIndex(
+      adapter,
+      [
+        { realm_url: testRealmURL, current_version: 1 },
+        { realm_url: testRealmURL2, current_version: 1 },
+      ],
+      [
+        {
+          url: `${testRealmURL}base.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [],
+        },
+        {
+          url: `${testRealmURL}child1.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}base.json`],
+        },
+        {
+          url: `${testRealmURL2}child2.json`,
+          realm_version: 1,
+          realm_url: testRealmURL2,
+          deps: [`${testRealmURL}base.json`], // Cross-realm dependency
+        },
+      ],
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let references = await batch.itemsThatReference(`${testRealmURL}base.json`);
+
+    // Should only return items from the same realm
+    assert.deepEqual(references, [
+      {
+        url: `${testRealmURL}child1.json`,
+        alias: `${testRealmURL}child1`,
+        type: 'instance',
+      },
+    ]);
+  },
 } as SharedTests<{
   indexWriter: IndexWriter;
   indexQueryEngine: IndexQueryEngine;
