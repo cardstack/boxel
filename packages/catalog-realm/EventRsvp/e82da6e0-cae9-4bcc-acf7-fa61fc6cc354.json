@@ -20,7 +20,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../school-calendar/components/EventRsvp/event-rsvp",
+        "module": "../school-calendar/components/event-rsvp",
         "name": "EventRsvp"
       }
     }
