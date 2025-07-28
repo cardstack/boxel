@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "Linktree2",
+        "module": "../link-tree-2/link-tree-2"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "Linktree2",
+      "description": "Spec of LinkTree2",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
