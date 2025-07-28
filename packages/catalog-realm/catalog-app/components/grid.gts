@@ -33,11 +33,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
   cardResource = this.args.context?.getCard(this, () => this.hydratedCardId);
 
   @action
-  async hydrateCard(card: PrerenderedCardLike | undefined) {
-    if (!card) {
-      this.hydratedCardId = undefined;
-      return;
-    }
+  async hydrateCard(card: PrerenderedCardLike) {
     const cardId = removeFileExtension(card.url);
     this.hydratedCardId = cardId;
   }
