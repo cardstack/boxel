@@ -42,12 +42,31 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
         'Requires userId to execute CreateAiAssistantRoomCommand',
       );
     }
-    let { defaultSkills } = input;
+    let { defaultSkills, skillConfig } = input;
     let skillFileDefs: FileDef[] | undefined;
     let commandFileDefs: FileDef[] | undefined;
-    if (defaultSkills) {
+    let disabledSkillFileDefs: FileDef[] | undefined;
+
+    if (
+      skillConfig.enabledSkillCards.length ||
+      skillConfig.disabledSkillCards.length ||
+      skillConfig.commandDefinitions.length
+    ) {
+      // Use provided skill configuration
+      skillFileDefs = skillConfig.enabledSkillCards.map((fileDef: any) =>
+        matrixService.fileAPI.createFileDef(fileDef),
+      );
+      disabledSkillFileDefs = skillConfig.disabledSkillCards.map(
+        (fileDef: any) => matrixService.fileAPI.createFileDef(fileDef),
+      );
+      commandFileDefs = skillConfig.commandDefinitions.map((fileDef: any) =>
+        matrixService.fileAPI.createFileDef(fileDef),
+      );
+    } else if (defaultSkills) {
+      // Fall back to existing defaultSkills logic
       let skills = input.defaultSkills;
       skillFileDefs = await matrixService.uploadCards(input.defaultSkills);
+      disabledSkillFileDefs = []; // Default to empty for new rooms
       const commandDefinitions = skills.flatMap((skill) => skill.commands);
       commandFileDefs =
         await matrixService.uploadCommandDefinitions(commandDefinitions);
@@ -85,7 +104,10 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
                 skillFileDefs?.map((skillFileDef) =>
                   skillFileDef.serialize(),
                 ) ?? [],
-              disabledSkillCards: [],
+              disabledSkillCards:
+                disabledSkillFileDefs?.map((skillFileDef) =>
+                  skillFileDef.serialize(),
+                ) ?? [],
               commandDefinitions:
                 commandFileDefs?.map((commandFileDef) =>
                   commandFileDef.serialize(),

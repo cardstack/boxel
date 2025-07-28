@@ -85,10 +85,7 @@ export default class AiAssistantPanel extends Component<Signature> {
           {{/let}}
           <NewSessionButton
             @disabled={{not this.roomResource.messages.length}}
-            @onCreateNewSession={{fn
-              this.aiAssistantPanelService.createNewSession
-              false
-            }}
+            @onCreateNewSession={{this.aiAssistantPanelService.createNewSession}}
           />
           {{#let
             this.aiAssistantPanelService.loadingRooms

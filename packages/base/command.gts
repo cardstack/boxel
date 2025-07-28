@@ -7,12 +7,12 @@ import {
   field,
   linksTo,
   linksToMany,
-  primitive,
 } from './card-api';
 import CodeRefField from './code-ref';
 import BooleanField from './boolean';
 import NumberField from './number';
 import { Skill } from './skill';
+import { SkillConfigField } from './skill-config-field';
 import {
   JsonField,
   QueryField,
@@ -20,11 +20,6 @@ import {
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
 } from './commands/search-card-result';
-import { SerializedFileDef } from './file-api';
-
-export class FileDefField extends FieldDef {
-  static [primitive]: SerializedFileDef;
-}
 
 export type CommandStatus = 'applied' | 'ready' | 'applying';
 
@@ -154,6 +149,7 @@ export class PatchCodeInput extends CardDef {
 export class CreateAIAssistantRoomInput extends CardDef {
   @field name = contains(StringField);
   @field defaultSkills = linksToMany(Skill);
+  @field skillConfig = contains(SkillConfigField);
 }
 
 export class CreateAIAssistantRoomResult extends CardDef {

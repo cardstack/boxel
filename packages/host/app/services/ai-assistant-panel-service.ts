@@ -9,9 +9,13 @@ import { timeout } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
+import * as SkillConfigFieldModule from 'https://cardstack.com/base/skill-config-field';
+
 import CreateAiAssistantRoomCommand from '../commands/create-ai-assistant-room';
+
 import { Submodes } from '../components/submode-switcher';
 import { eventDebounceMs, isMatrixError } from '../lib/matrix-utils';
+import { importResource } from '../resources/import';
 import { NewSessionIdPersistenceKey } from '../utils/local-storage-keys';
 
 import LocalPersistenceService from './local-persistence-service';
@@ -46,6 +50,26 @@ export default class AiAssistantPanelService extends Service {
     if (this.isOpen) {
       this.loadRoomsTask.perform();
     }
+  }
+
+  private skillConfigFieldResource = importResource(
+    this,
+    () => 'https://cardstack.com/base/skill-config-field',
+  );
+
+  get skillConfigFieldModule() {
+    if (this.skillConfigFieldResource.error) {
+      throw new Error(
+        `Error loading SkillConfigField: ${JSON.stringify(this.skillConfigFieldResource.error)}`,
+      );
+    }
+    if (!this.skillConfigFieldResource.module) {
+      throw new Error(
+        `bug: SkillConfigField has not loaded yet--make sure to await this.loaded before using the api`,
+      );
+    }
+    return this.skillConfigFieldResource
+      .module as typeof SkillConfigFieldModule;
   }
 
   get isOpen() {
@@ -87,13 +111,19 @@ export default class AiAssistantPanelService extends Service {
   }
 
   @action
-  async createNewSession() {
+  async createNewSession(addSameSkills: boolean = false) {
     this.displayRoomError = false;
     if (this.newSessionId) {
       this.enterRoom(this.newSessionId);
       return;
     }
-    await this.doCreateRoom.perform();
+
+    let skillConfig;
+    if (addSameSkills && this.currentRoomResource?.matrixRoom?.skillsConfig) {
+      skillConfig = this.currentRoomResource.matrixRoom.skillsConfig;
+    }
+
+    await this.doCreateRoom.perform('New AI Assistant Chat', skillConfig);
   }
 
   private get newSessionId() {
@@ -112,19 +142,50 @@ export default class AiAssistantPanelService extends Service {
     return this.doCreateRoom.isIdle;
   }
 
+  get currentRoomResource() {
+    if (!this.matrixService.currentRoomId) {
+      return undefined;
+    }
+    return this.matrixService.roomResources.get(
+      this.matrixService.currentRoomId,
+    );
+  }
+
   private doCreateRoom = restartableTask(
-    async (name: string = 'New AI Assistant Chat') => {
+    async (name: string = 'New AI Assistant Chat', skillConfig?: any) => {
       try {
-        const defaultSkills = await this.matrixService.loadDefaultSkills(
-          this.operatorModeStateService.state.submode,
-        );
         let createRoomCommand = new CreateAiAssistantRoomCommand(
           this.commandService.commandContext,
         );
-        let { roomId } = await createRoomCommand.execute({
-          name,
-          defaultSkills,
-        });
+
+        let input: any = { name };
+
+        if (skillConfig) {
+          await this.skillConfigFieldResource.loaded;
+          const skillConfigField =
+            new this.skillConfigFieldModule.SkillConfigField({
+              enabledSkillCards: skillConfig.enabledSkillCards.map(
+                (fileDef: any) =>
+                  this.matrixService.fileAPI.createFileDef(fileDef),
+              ),
+              disabledSkillCards: skillConfig.disabledSkillCards.map(
+                (fileDef: any) =>
+                  this.matrixService.fileAPI.createFileDef(fileDef),
+              ),
+              commandDefinitions: skillConfig.commandDefinitions.map(
+                (fileDef: any) =>
+                  this.matrixService.fileAPI.createFileDef(fileDef),
+              ),
+            });
+          input.skillConfig = skillConfigField;
+        } else {
+          console.log('here');
+          input.defaultSkills = await this.matrixService.loadDefaultSkills(
+            this.operatorModeStateService.state.submode,
+          );
+        }
+
+        let { roomId } = await createRoomCommand.execute(input);
 
         window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);
         this.enterRoom(roomId);
