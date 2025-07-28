@@ -25,17 +25,17 @@
       },
       "specs.1": {
         "links": {
-          "self": "../Spec/7ea60742-019c-49e8-9f8c-7cd0848cb9cd"
+          "self": "../Spec/de3daa01-e091-42bc-bc41-4a8196ac3890"
         }
       },
       "specs.2": {
         "links": {
-          "self": "../Spec/3f124b97-7ea6-4742-819c-69e89f8c7cd0"
+          "self": "../Spec/aa01e091-e2bc-4c41-8a81-96ac38906273"
         }
       },
       "specs.3": {
         "links": {
-          "self": "../Spec/4b977ea6-0742-419c-a9e8-9f8c7cd0848c"
+          "self": "../Spec/e091e2bc-bc41-4a81-96ac-389062734642"
         }
       },
       "publisher": {
@@ -61,6 +61,41 @@
       "examples.0": {
         "links": {
           "self": "../school-calendar/SchoolCalendar/01541fcf-020e-4f78-8141-25e9c307a195"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../school-calendar/CalendarEvent/4a39e583-ce46-4b44-9d40-303aec3dfe60"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../school-calendar/CalendarEvent/a93a4a39-e583-4e46-9b44-9d40303aec3d"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../school-calendar/CalendarEvent/e583ce46-5b44-4d40-b03a-ec3dfe60eef5"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../school-calendar/CalendarEvent/ef0ea93a-4a39-4583-8e46-5b449d40303a"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../school-calendar/ScheduleItem/2fc799ef-ef0e-493a-8a39-e583ce465b44"
+        }
+      },
+      "examples.6": {
+        "links": {
+          "self": "../school-calendar/ScheduleItem/4cacfd06-d018-4fc7-99ef-ef0ea93a4a39"
+        }
+      },
+      "examples.7": {
+        "links": {
+          "self": "../school-calendar/EventRsvp/e82da6e0-cae9-4bcc-acf7-fa61fc6cc354"
         }
       }
     },

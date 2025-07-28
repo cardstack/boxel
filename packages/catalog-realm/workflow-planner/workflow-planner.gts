@@ -12,6 +12,7 @@ import StringField from 'https://cardstack.com/base/string';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import DateField from 'https://cardstack.com/base/date';
+import DateRangeField from 'https://cardstack.com/base/date-range-field';
 import { gt } from '@cardstack/boxel-ui/helpers';
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
@@ -32,8 +33,7 @@ export class WorkflowPlanner extends CardDef {
   @field title = contains(StringField);
   @field description = contains(MarkdownField);
   @field steps = containsMany(WorkflowStepField);
-  @field startDate = contains(DateField);
-  @field endDate = contains(DateField);
+  @field dateRange = contains(DateRangeField);
 
   @field completedTasks = contains(NumberField, {
     computeVia: function (this: WorkflowPlanner) {
@@ -61,13 +61,13 @@ export class WorkflowPlanner extends CardDef {
                   <div class='date-content'>
                     <span class='date-label'>Start</span>
                     <span class='date-value'>{{dayjsFormat
-                        @model.startDate
+                        @model.dateRange.start
                         'MMM D, YYYY'
                       }}</span>
                   </div>
                 </div>
               {{/if}}
-              {{#if @model.endDate}}
+              {{#if @model.dateRange.end}}
                 <div class='date-badge end-date'>
                   <div class='date-content'>
                     <span class='date-label'>End</span>
@@ -503,16 +503,9 @@ export class WorkflowPlanner extends CardDef {
             <@fields.description />
           </div>
 
-          <div class='date-fields'>
-            <div class='field-container'>
-              <label>Start Date</label>
-              <@fields.startDate />
-            </div>
-
-            <div class='field-container'>
-              <label>End Date</label>
-              <@fields.endDate />
-            </div>
+          <div class='field-container'>
+            <label>Date Range</label>
+            <@fields.dateRange />
           </div>
 
           <div class='field-container'>
@@ -559,16 +552,6 @@ export class WorkflowPlanner extends CardDef {
 
         .field-container {
           margin-bottom: 24px;
-        }
-
-        .date-fields {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 24px;
-        }
-
-        .date-fields .field-container {
-          margin-bottom: 0;
         }
 
         label {
