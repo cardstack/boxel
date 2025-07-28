@@ -14,10 +14,6 @@ interface ApplicationRouteSignature {
 class ApplicationRouteComponent extends Component<ApplicationRouteSignature> {
   @service declare hostModeService: HostModeService;
 
-  get hostname() {
-    return window.location.hostname;
-  }
-
   <template>
     {{#if this.hostModeService.isActive}}
       {{outlet}}
