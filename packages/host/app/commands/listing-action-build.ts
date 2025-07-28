@@ -1,6 +1,8 @@
 import { service } from '@ember/service';
 
+import type { Skill } from 'https://cardstack.com/base/skill';
 import { isCardInstance } from '@cardstack/runtime-common';
+import { DEFAULT_CODING_LLM } from '@cardstack/runtime-common/matrix-constants';
 
 import * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -11,6 +13,7 @@ import AddSkillsToRoomCommand from './add-skills-to-room';
 import CreateAiAssistantRoomCommand from './create-ai-assistant-room';
 import OpenAiAssistantRoomCommand from './open-ai-assistant-room';
 import SendAiAssistantMessageCommand from './send-ai-assistant-message';
+import SetActiveLLMCommand from './set-active-llm';
 import SwitchSubmodeCommand from './switch-submode';
 
 import type StoreService from '../services/store';
@@ -51,14 +54,27 @@ export default class ListingActionBuildCommand extends HostBaseCommand<
       skillCardURL('source-code-editing'),
     ];
 
-    const skills = await Promise.all(
+    const loadedSkills = await Promise.all(
       defaultSkills.map(async (skillCardURL) => {
-        let maybeCard = await this.store.get<SkillModule.Skill>(skillCardURL);
+        let maybeCard = await this.store.get<Skill>(skillCardURL);
         return isCardInstance(maybeCard) ? maybeCard : undefined;
       }),
     );
+    const skills = loadedSkills.filter(
+      (skill) => skill !== undefined,
+    ) as Skill[];
 
     if (roomId) {
+      await new SwitchSubmodeCommand(this.commandContext).execute({
+        submode: 'code',
+        codePath: `${realmUrl}index.json`,
+      });
+
+      await new SetActiveLLMCommand(this.commandContext).execute({
+        roomId,
+        model: DEFAULT_CODING_LLM,
+      });
+
       await new AddSkillsToRoomCommand(this.commandContext).execute({
         roomId,
         skills,
@@ -68,11 +84,6 @@ export default class ListingActionBuildCommand extends HostBaseCommand<
         roomId,
         prompt,
         attachedCards: [listing],
-      });
-
-      await new SwitchSubmodeCommand(this.commandContext).execute({
-        submode: 'code',
-        codePath: `${realmUrl}index.json`,
       });
 
       await new OpenAiAssistantRoomCommand(this.commandContext).execute({
