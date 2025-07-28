@@ -4,19 +4,9 @@ import RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 
-import { consume } from 'ember-provide-consume-context';
 import stringify from 'safe-stable-stringify';
 
-import {
-  GetCardContextName,
-  GetCardsContextName,
-  GetCardCollectionContextName,
-  RealmPaths,
-  SupportedMimeType,
-  type getCard,
-  type getCards,
-  type getCardCollection,
-} from '@cardstack/runtime-common';
+import { RealmPaths, SupportedMimeType } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 import { type SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
@@ -36,11 +26,6 @@ import type StoreService from '../services/store';
 const { hostsOwnAssets } = ENV;
 
 export default class HostMode extends Route<void> {
-  @consume(GetCardContextName) declare private getCard: getCard;
-  @consume(GetCardsContextName) declare private getCards: getCards;
-  @consume(GetCardCollectionContextName)
-  declare private getCardCollection: getCardCollection;
-
   @service declare private matrixService: MatrixService;
   @service declare private billingService: BillingService;
   @service declare private cardService: CardService;
