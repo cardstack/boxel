@@ -295,6 +295,7 @@ export default class Room extends Component<Signature> {
 
       .llm-mode-toggle {
         margin-left: auto;
+        border-width: 0;
       }
 
       :deep(.ai-assistant-conversation > *:first-child) {
