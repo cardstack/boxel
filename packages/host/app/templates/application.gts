@@ -21,16 +21,15 @@ class ApplicationRouteComponent extends Component<ApplicationRouteSignature> {
   <template>
     {{#if this.hostModeService.isActive}}
       {{outlet}}
-      <p {{removeLoading}}>{{! FIXME how to remove without some element }}</p>
     {{else}}
       {{! The main application outlet }}
       {{outlet}}
       <CardPrerender />
-
-      {{! this is a signal for the Realm DOM tests to know that app has loaded }}
-      {{! template-lint-disable no-inline-styles }}
-      <div data-test-boxel-root style='display: none;' {{removeLoading}}></div>
     {{/if}}
+
+    {{! this is a signal for the Realm DOM tests to know that app has loaded }}
+    {{! template-lint-disable no-inline-styles }}
+    <div data-test-boxel-root style='display: none;' {{removeLoading}}></div>
   </template>
 }
 
