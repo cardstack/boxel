@@ -47,7 +47,6 @@ test.describe('Create Realm via Dashboard', () => {
 
     await login(page, 'user1', 'pass', {
       url: serverIndexUrl,
-      skipOpeningAssistant: true,
     });
 
     await createRealm(page, 'new-workspace', '1New Workspace');

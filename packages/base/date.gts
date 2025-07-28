@@ -1,18 +1,14 @@
-import {
-  Component,
-  primitive,
-  serialize,
-  deserialize,
-  queryableValue,
-  BaseInstanceType,
-  BaseDefConstructor,
-  FieldDef,
-} from './card-api';
-import { parse, format } from 'date-fns';
+import { Component, primitive, FieldDef } from './card-api';
+import { parse } from 'date-fns';
 import { fn } from '@ember/helper';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
+import {
+  DateSerializer,
+  fieldSerializer,
+  getSerializer,
+} from '@cardstack/runtime-common';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
 // it in the application route at app startup.
@@ -22,7 +18,7 @@ const Format = new Intl.DateTimeFormat('en-US', {
   day: 'numeric',
 });
 
-const dateFormat = `yyyy-MM-dd`;
+const { dateFormat } = DateSerializer;
 
 class View extends Component<typeof DateField> {
   <template>
@@ -39,28 +35,8 @@ class View extends Component<typeof DateField> {
 export default class DateField extends FieldDef {
   static icon = CalendarIcon;
   static [primitive]: Date;
-  static [serialize](date: Date) {
-    return format(date, dateFormat);
-  }
+  static [fieldSerializer] = 'date' as const;
   static displayName = 'Date';
-
-  static async [deserialize]<T extends BaseDefConstructor>(
-    this: T,
-    date: any,
-  ): Promise<BaseInstanceType<T>> {
-    if (date == null) {
-      return date;
-    }
-    return parse(date, dateFormat, new Date()) as BaseInstanceType<T>;
-  }
-
-  static [queryableValue](date: Date | undefined) {
-    if (date) {
-      return format(date, dateFormat);
-    }
-    return undefined;
-  }
-
   static embedded = View;
   static atom = View;
 
@@ -87,7 +63,9 @@ export default class DateField extends FieldDef {
       if (!this.args.model) {
         return;
       }
-      return DateField[serialize](this.args.model);
+      return getSerializer(DateField[fieldSerializer]).serialize(
+        this.args.model,
+      );
     }
   };
 }

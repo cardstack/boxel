@@ -40,10 +40,11 @@ export interface MonacoWaiterManager {
   ): void;
 }
 
+const waiter = buildWaiter('monaco-rendering');
+
 export function createMonacoWaiterManager(): MonacoWaiterManager | null {
   if (!isTesting()) return null;
 
-  const waiter = buildWaiter('monaco-rendering');
   const pendingOperations = new Map<string, unknown>();
 
   return {

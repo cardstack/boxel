@@ -169,3 +169,9 @@ export default class PlaygroundPanelService extends Service {
     return JSON.parse(selections)?.[moduleId];
   }
 }
+
+declare module '@ember/service' {
+  interface Registry {
+    'playground-panel-service': PlaygroundPanelService;
+  }
+}

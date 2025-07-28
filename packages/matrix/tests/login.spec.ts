@@ -313,7 +313,6 @@ test.describe('Login', () => {
     await registerUser(synapse, 'user2', 'pass');
     await login(page, 'user2', 'pass', {
       url: appURL,
-      skipOpeningAssistant: true,
     });
     await expect(
       page.locator(

@@ -6,6 +6,7 @@ import { tracked } from '@glimmer/tracking';
 
 import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
 
+import { type Message as MatrixMessage } from '@cardstack/host/lib/matrix-classes/message';
 import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 import MonacoDiffEditor from '@cardstack/host/modifiers/monaco-diff-editor';
 import MonacoEditor, {
@@ -61,6 +62,7 @@ interface Signature {
       linesAdded: number;
       linesRemoved: number;
     }) => void;
+    userMessageThisMessageIsRespondingTo?: MatrixMessage;
   };
   Blocks: {
     default: [
@@ -85,6 +87,7 @@ const CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
           CodeBlockDiffEditorHeader
           codeData=@codeData
           diffEditorStats=@diffEditorStats
+          userMessageThisMessageIsRespondingTo=@userMessageThisMessageIsRespondingTo
         )
         editor=(component
           CodeBlockEditor monacoSDK=@monacoSDK codeData=@codeData

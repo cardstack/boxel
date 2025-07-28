@@ -332,7 +332,32 @@ module('Integration | Command | show-card', function (hooks) {
   });
 
   module('code submode', function () {
-    test('updates code path and persists selections when in code submode', async function (assert) {
+    test('uses specified format when provided', async function (assert) {
+      const cardId = `${testRealmURL}Person/alice`;
+      mockOperatorModeStateService.state = {
+        submode: 'code',
+        codeSelection: undefined,
+      };
+
+      await command.execute({ cardId, format: 'edit' });
+
+      // Verify that playground panel service was called with correct format
+      assert.strictEqual(
+        mockPlaygroundPanelService.persistedSelections.length,
+        1,
+        'One selection was persisted',
+      );
+
+      const persistedSelection =
+        mockPlaygroundPanelService.persistedSelections[0];
+      assert.strictEqual(
+        persistedSelection.format,
+        'edit',
+        'Persisted selection has correct format',
+      );
+    });
+
+    test('defaults to isolated format when format is not provided', async function (assert) {
       const cardId = `${testRealmURL}Person/alice`;
       mockOperatorModeStateService.state = {
         submode: 'code',
@@ -340,6 +365,31 @@ module('Integration | Command | show-card', function (hooks) {
       };
 
       await command.execute({ cardId });
+
+      // Verify that playground panel service was called with default format
+      assert.strictEqual(
+        mockPlaygroundPanelService.persistedSelections.length,
+        1,
+        'One selection was persisted',
+      );
+
+      const persistedSelection =
+        mockPlaygroundPanelService.persistedSelections[0];
+      assert.strictEqual(
+        persistedSelection.format,
+        'isolated',
+        'Persisted selection has default isolated format',
+      );
+    });
+
+    test('updates code path and persists selections when in code submode', async function (assert) {
+      const cardId = `${testRealmURL}Person/alice`;
+      mockOperatorModeStateService.state = {
+        submode: 'code',
+        codeSelection: undefined,
+      };
+
+      await command.execute({ cardId, format: 'isolated' });
 
       // Verify that playground panel service was called with correct parameters
       assert.strictEqual(
@@ -477,7 +527,7 @@ module('Integration | Command | show-card', function (hooks) {
       );
     });
 
-    test('getInputType returns CardIdCard', async function (assert) {
+    test('getInputType returns ShowCardInput', async function (assert) {
       const inputType = await command.getInputType();
       assert.ok(inputType, 'Input type is defined');
       // We can't easily test the exact type without mocking the command module loading

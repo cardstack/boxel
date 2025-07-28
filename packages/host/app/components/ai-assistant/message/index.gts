@@ -18,6 +18,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import { type HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
+import { type Message } from '@cardstack/host/lib/matrix-classes/message';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -42,6 +43,7 @@ interface Signature {
     isFromAssistant: boolean;
     isStreaming: boolean;
     isLastAssistantMessage: boolean;
+    userMessageThisMessageIsRespondingTo?: Message;
     profileAvatar?: ComponentLike;
     collectionResource?: ReturnType<getCardCollection>;
     files?: FileDef[] | undefined;
@@ -239,6 +241,7 @@ export default class AiAssistantMessage extends Component<Signature> {
               @eventId={{@eventId}}
               @isStreaming={{@isStreaming}}
               @isLastAssistantMessage={{@isLastAssistantMessage}}
+              @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
               @reasoning={{if
                 @reasoningContent
                 (hash

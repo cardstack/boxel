@@ -20,7 +20,6 @@
     "ember-modifier": "^3.2.1",
     "ember-resources": "catalog:",
     "ember-template-lint": "catalog:",
-    "ethers": "catalog:",
     "matrix-js-sdk": "catalog:",
     "super-fast-md5": "catalog:",
     "tracked-built-ins": "^2.0.1"

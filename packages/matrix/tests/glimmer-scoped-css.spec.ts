@@ -51,7 +51,6 @@ test.describe('glimmer-scoped-css', () => {
     await clearLocalStorage(page, serverIndexUrl);
     await login(page, 'user1', 'pass', {
       url: serverIndexUrl,
-      skipOpeningAssistant: true,
     });
     await createRealm(page, realmName);
 
