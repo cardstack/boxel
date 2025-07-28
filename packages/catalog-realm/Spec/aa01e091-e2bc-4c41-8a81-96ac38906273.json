@@ -4,13 +4,13 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "ScheduleItem",
-        "module": "../components/ScheduleItem/schedule-item"
+        "name": "EventRsvp",
+        "module": "../school-calendar/components/event-rsvp"
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "ScheduleItem",
-      "description": "Spec of Schedule Item",
+      "title": "EventRsvp",
+      "description": null,
       "thumbnailURL": null
     },
     "relationships": {

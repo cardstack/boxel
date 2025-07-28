@@ -13,7 +13,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../components/ScheduleItem/schedule-item",
+        "module": "../components/schedule-item",
         "name": "ScheduleItem"
       }
     }

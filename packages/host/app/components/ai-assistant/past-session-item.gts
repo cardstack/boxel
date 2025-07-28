@@ -140,7 +140,7 @@ export default class PastSessionItem extends Component<Signature> {
       }
 
       .session:hover {
-        background-color: var(--past-sessions-hover-background);
+        background-color: var(--ai-assistant-menu-hover-background);
         cursor: pointer;
       }
       .session[data-is-current-room] {
@@ -191,7 +191,7 @@ export default class PastSessionItem extends Component<Signature> {
         --boxel-menu-item-content-padding: var(--boxel-sp-xxs)
           var(--boxel-sp-sm);
 
-        background: var(--past-sessions-background);
+        background: var(--ai-assistant-menu-background);
         border: 1px solid var(--past-sessions-divider-color);
         color: var(--boxel-light);
         padding: var(--boxel-sp-xs);

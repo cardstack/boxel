@@ -25,7 +25,9 @@ import {
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
+  APP_BOXEL_LLM_MODE,
   DEFAULT_LLM,
+  type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
@@ -94,6 +96,7 @@ export class RoomResource extends Resource<Args> {
   // To avoid delay, instead of using `roomResource.activeLLM`, we use a tracked property
   // that updates immediately after the user selects the LLM.
   @tracked private llmBeingActivated: string | undefined;
+  @tracked private llmModeBeingActivated: LLMMode | undefined;
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private commandService: CommandService;
@@ -383,6 +386,71 @@ export class RoomResource extends Resource<Args> {
       }
     } finally {
       this.llmBeingActivated = undefined;
+    }
+  });
+
+  get activeLLMMode(): LLMMode {
+    return (
+      this.llmModeBeingActivated ?? this.matrixRoom?.activeLLMMode ?? 'ask'
+    );
+  }
+
+  @cached
+  get llmModeEvents(): DiscreteMatrixEvent[] {
+    return this.events.filter((event) => event.type === APP_BOXEL_LLM_MODE);
+  }
+
+  /**
+   * Get the active LLM mode at a specific timestamp by looking at the most recent
+   * LLM mode event that occurred before or at the given timestamp.
+   */
+  getActiveLLMModeAtTimestamp(timestamp: number): LLMMode {
+    let latestLLMModeEvent: DiscreteMatrixEvent | undefined;
+
+    for (let event of this.llmModeEvents) {
+      if (event.origin_server_ts <= timestamp) {
+        if (
+          !latestLLMModeEvent ||
+          event.origin_server_ts > latestLLMModeEvent.origin_server_ts
+        ) {
+          latestLLMModeEvent = event;
+        }
+      }
+    }
+
+    // If no LLM mode event found before the timestamp, default to 'ask'
+    if (!latestLLMModeEvent) {
+      return 'ask';
+    }
+
+    return (latestLLMModeEvent as any).content?.mode ?? 'ask';
+  }
+
+  get isActivatingLLMMode() {
+    return this.activateLLMModeTask.isRunning;
+  }
+
+  activateLLMModeTask = restartableTask(async (mode: LLMMode) => {
+    await this.processing;
+    if (this.activeLLMMode === mode) {
+      return;
+    }
+    this.llmModeBeingActivated = mode;
+    try {
+      if (!this.matrixRoom) {
+        throw new Error('matrixRoom is required to activate LLM mode');
+      }
+      await this.matrixService.sendLLMModeEvent(this.matrixRoom.roomId, mode);
+      let remainingRetries = 20;
+      while (this.matrixRoom.activeLLMMode !== mode && remainingRetries > 0) {
+        await timeout(50);
+        remainingRetries--;
+      }
+      if (remainingRetries === 0) {
+        throw new Error('Failed to activate LLM mode');
+      }
+    } finally {
+      this.llmModeBeingActivated = undefined;
     }
   });
 

@@ -33,5 +33,6 @@ declare const config: {
   stripePaymentLink: string;
   featureFlags?: {
     SHOW_ASK_AI?: boolean;
+    SHOW_NEW_SESSION_SETTINGS?: boolean;
   };
 };

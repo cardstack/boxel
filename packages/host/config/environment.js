@@ -46,6 +46,8 @@ module.exports = function (environment) {
       process.env.RESOLVED_SKILLS_REALM_URL || 'http://localhost:4201/skills/',
     featureFlags: {
       SHOW_ASK_AI: process.env.SHOW_ASK_AI === 'true' || false,
+      SHOW_NEW_SESSION_SETTINGS:
+        process.env.SHOW_NEW_SESSION_SETTINGS === 'true' || false,
     },
   };
 
@@ -55,6 +57,7 @@ module.exports = function (environment) {
     // ENV.APP.LOG_TRANSITIONS = true;
     // ENV.APP.LOG_TRANSITIONS_INTERNAL = true;
     // ENV.APP.LOG_VIEW_LOOKUPS = true;
+    ENV.featureFlags.SHOW_NEW_SESSION_SETTINGS = true;
   }
 
   if (environment === 'test') {
@@ -76,6 +79,7 @@ module.exports = function (environment) {
     ENV.sqlSchema = sqlSchema;
     ENV.featureFlags = {
       SHOW_ASK_AI: true,
+      SHOW_NEW_SESSION_SETTINGS: true,
     };
   }
 

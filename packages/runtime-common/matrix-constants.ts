@@ -25,6 +25,8 @@ export const APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY =
   'app.boxel.has-continuation';
 export const APP_BOXEL_CONTINUATION_OF_CONTENT_KEY =
   'app.boxel.continuation-of';
+export const APP_BOXEL_LLM_MODE = 'app.boxel.llm-mode';
+export type LLMMode = 'ask' | 'act';
 export const DEFAULT_LLM = 'openai/gpt-4.1';
 export const DEFAULT_CODING_LLM = 'anthropic/claude-sonnet-4';
 export const DEFAULT_REMIX_LLM = 'openai/gpt-4.1-nano';
