@@ -79,13 +79,6 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
         realmUrl: this.operatorModeStateService.realmURL.href,
       });
       return sendMessageResult;
-    } else {
-      let commandModule = await this.loadCommandModule();
-      const { SendAiAssistantMessageResult } = commandModule;
-      return new SendAiAssistantMessageResult({
-        roomId,
-        eventId: '',
-      });
     }
   }
 
