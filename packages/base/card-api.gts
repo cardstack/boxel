@@ -1501,7 +1501,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
       throw new NotLoaded(instance, notLoadedRefs, this.name);
     }
 
-    return value;
+    return value as BaseInstanceType<FieldT>;
   }
 
   queryableValue(instances: any[] | null, stack: CardDef[]): any[] | null {
