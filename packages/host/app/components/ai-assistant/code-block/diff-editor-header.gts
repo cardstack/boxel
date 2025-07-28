@@ -47,7 +47,7 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
   <template>
     {{#if this.isRestorePatchedFileModalOpen}}
       <ToElsewhere
-        @named='restore-patched-file-modal'
+        @named='modal-elsewhere'
         @send={{component
           RestorePatchedFileModal
           onConfirm=(perform this.restoreContent)

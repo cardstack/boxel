@@ -28,7 +28,6 @@ import {
   getRoomsFromSync,
   initialRoomName,
   setupUserSubscribed,
-  openAiAssistant,
   setSkillsRedirect,
   waitUntil,
 } from '../helpers';
@@ -71,7 +70,6 @@ test.describe('Room creation', () => {
     const context = page.context();
     const page2 = await context.newPage();
     await page2.goto(appURL);
-    await openAiAssistant(page2);
     await openRoom(page, room1);
     await openRoom(page2, room2);
     await page.reload();
@@ -248,12 +246,9 @@ test.describe('Room creation', () => {
 
     await logout(page);
     await login(page, 'xuser', 'pass', {
-      skipOpeningAssistant: true,
       url: appURL,
     });
 
-    // Open assistant without waiting for [data-test-room] which won't show on a new account
-    await page.locator('[data-test-open-ai-assistant]').click();
     await expect(page.locator(`[data-test-close-ai-assistant]`)).toHaveCount(1);
     await expect(page.locator(`[data-test-chat-title]`)).not.toHaveText(
       newRoomName,

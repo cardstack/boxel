@@ -119,7 +119,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     <div class='operator-mode'>
       <ChooseFileModal />
       <CardCatalogModal />
-      <FromElseWhere @name='restore-patched-file-modal' />
+      <FromElseWhere @name='modal-elsewhere' />
 
       {{#if
         (or
