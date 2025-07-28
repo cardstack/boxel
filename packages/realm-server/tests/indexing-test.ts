@@ -777,6 +777,21 @@ module(basename(__filename), function () {
           },
           'card-def meta is correct',
         );
+
+        // this is a crazy long list that includes encoded CSS, so we'll just
+        // check a few deps
+        assert.ok(
+          entry!.deps!.includes(`${testRealm}post`),
+          'deps include ./post',
+        );
+        assert.ok(
+          entry!.deps!.includes(`${testRealm}person`),
+          'deps include ./person',
+        );
+        assert.ok(
+          entry!.deps!.includes(`https://cardstack.com/base/card-api`),
+          'deps include card api',
+        );
       } else {
         assert.ok('false', 'expected entry to be a card def');
       }
