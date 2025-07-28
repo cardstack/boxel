@@ -73,8 +73,6 @@ export default class HostMode extends Route<void> {
 
     let gotten = await this.store.get(cardURL.href);
 
-    console.log('gotten', gotten);
-
     return gotten;
 
     /*
