@@ -1,18 +1,108 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
+import type { ComponentLike } from '@glint/template';
 
 import { cn, eq } from '../../helpers.ts';
 import { FailureBordered, Warning } from '../../icons.gts';
 import Button from '../button/index.gts';
 
-interface Signature {
+interface MessagesSignature {
   Args: {
     messages: string[];
-    retryAction?: () => void;
     type?: 'error' | 'warning';
   };
   Element: HTMLDivElement;
 }
+
+interface ActionSignature {
+  Args: {
+    action?: () => void;
+    actionName?: string;
+  };
+  Element: HTMLDivElement;
+}
+
+interface Signature {
+  Args: {
+    type?: 'error' | 'warning';
+  };
+  Blocks: {
+    default: [
+      {
+        Action: ComponentLike<ActionSignature>;
+        Messages: ComponentLike<MessagesSignature>;
+      },
+    ];
+  };
+  Element: HTMLDivElement;
+}
+
+const Messages: TemplateOnlyComponent<MessagesSignature> = <template>
+  {{#each @messages as |message i|}}
+    <div class='alert'>
+      {{#if (eq @type 'error')}}
+        <FailureBordered class='alert-icon' />
+      {{else if (eq @type 'warning')}}
+        <Warning class='alert-icon' />
+      {{/if}}
+      <p
+        class='message'
+        data-test-alert-message='{{i}}'
+        data-test-card-error={{eq @type 'error'}}
+      >
+        {{message}}
+      </p>
+    </div>
+  {{/each}}
+  <style scoped>
+    .alert {
+      display: flex;
+      gap: var(--boxel-sp-xs);
+    }
+    .alert + .alert {
+      margin-top: var(--boxel-sp-lg);
+    }
+    .alert-icon {
+      min-width: 20px;
+      height: 20px;
+      --icon-background-color: var(--boxel-error-400);
+    }
+    .message {
+      align-self: center;
+      overflow: hidden;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      margin: 0;
+    }
+  </style>
+</template>;
+
+const Action: TemplateOnlyComponent<ActionSignature> = <template>
+  {{#if @action}}
+    <Button
+      {{on 'click' @action}}
+      class='action-button'
+      @size='small'
+      @kind='primary'
+      data-test-alert-action-button={{@actionName}}
+    >
+      {{@actionName}}
+    </Button>
+  {{/if}}
+  <style scoped>
+    .action-button {
+      --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+      --boxel-button-min-height: max-content;
+      --boxel-button-min-width: max-content;
+      border-color: transparent;
+      width: fit-content;
+      margin-left: auto;
+      font-size: var(--boxel-font-size-xs);
+      font-weight: 500;
+    }
+  </style>
+</template>;
 
 const Alert: TemplateOnlyComponent<Signature> = <template>
   <div
@@ -24,35 +114,9 @@ const Alert: TemplateOnlyComponent<Signature> = <template>
     data-test-boxel-alert={{@type}}
     ...attributes
   >
-    {{#each @messages as |message i|}}
-      <div class='alert'>
-        {{#if (eq @type 'error')}}
-          <FailureBordered class='alert-icon' />
-        {{else if (eq @type 'warning')}}
-          <Warning class='alert-icon' />
-        {{/if}}
-        <p
-          class='message'
-          data-test-alert-message='{{i}}'
-          data-test-card-error={{eq @type 'error'}}
-        >
-          {{message}}
-        </p>
-      </div>
-    {{/each}}
-
-    {{#if @retryAction}}
-      <Button
-        {{on 'click' @retryAction}}
-        class='retry-button'
-        @size='small'
-        @kind='primary'
-        data-test-alert-retry-button
-        data-test-ai-bot-retry-button
-      >
-        Retry
-      </Button>
-    {{/if}}
+    {{yield
+      (hash Messages=(component Messages type=@type) Action=(component Action))
+    }}
   </div>
 
   <style scoped>
@@ -72,38 +136,8 @@ const Alert: TemplateOnlyComponent<Signature> = <template>
       background-color: var(--boxel-warning-200);
       color: var(--boxel-dark);
     }
-    .alert {
-      display: flex;
-      gap: var(--boxel-sp-xs);
-    }
-    .alert + .alert {
-      margin-top: var(--boxel-sp-lg);
-    }
-    .alert-icon {
-      min-width: 20px;
-      height: 20px;
-    }
-    .error-container .alert-icon {
-      --icon-background-color: var(--boxel-error-400);
-    }
-    .message {
-      align-self: center;
-      overflow: hidden;
-      word-wrap: break-word;
-      overflow-wrap: break-word;
-      margin: 0;
-    }
-    .retry-button {
-      --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
-      --boxel-button-min-height: max-content;
-      --boxel-button-min-width: max-content;
-      border-color: transparent;
-      width: fit-content;
-      margin-left: auto;
-      font-size: var(--boxel-font-size-xs);
-      font-weight: 500;
-    }
-    .alert + .retry-button {
+
+    .alert-container > :deep(* + *) {
       margin-top: var(--boxel-sp-sm);
     }
   </style>

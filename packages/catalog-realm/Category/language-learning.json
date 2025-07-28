@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Language Learning",
+      "description": "Foreign language study, vocabulary building, grammar exercises, pronunciation practice, and cultural immersion activities.",
+      "color": "#dc2626",
+      "order": 4
+    },
+    "relationships": {
+      "sphere": {
+        "links": {
+          "self": "../Sphere/67ffc7a9-70d6-4cd3-93f0-b32a8fbbd34e"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/category",
+        "name": "Category"
+      }
+    }
+  }
+}

@@ -28,6 +28,7 @@ import {
   isField,
   primitive,
   identifyCard,
+  fieldSerializer,
   isCardInstance as _isCardInstance,
   isBaseInstance,
   loadCardDef,
@@ -46,6 +47,7 @@ import {
   baseRef,
   getAncestor,
   isCardError,
+  assertIsSerializerName,
   type Format,
   type Meta,
   type CardFields,
@@ -63,6 +65,7 @@ import {
   type getCardCollection,
   type Store,
   type PrerenderedCardComponentSignature,
+  getSerializer,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
@@ -164,6 +167,15 @@ export interface CardContext<T extends CardDef = CardDef> {
   getCards: getCards;
   getCardCollection: getCardCollection;
   store: Store;
+}
+
+export interface FieldConstructor<T> {
+  cardThunk: () => T;
+  computeVia: undefined | (() => unknown);
+  name: string;
+  description: string | undefined;
+  isUsed?: true;
+  isPolymorphic?: true;
 }
 
 function isNotLoadedValue(val: any): val is NotLoadedValue {
@@ -346,7 +358,8 @@ export interface Field<
   // use the rendering mechanism to tell if a card is used or not,
   // in which case we need to tell the runtime that a card is
   // explicitly being used.
-  isUsed?: undefined | true;
+  isUsed?: true;
+  isPolymorphic?: true;
   serialize(
     value: any,
     doc: JSONAPISingleResourceDocument,
@@ -386,7 +399,13 @@ function callSerializeHook(
   opts?: SerializeOpts,
 ) {
   if (value != null) {
-    return card[serialize](value, doc, visited, opts);
+    if (primitive in card && fieldSerializer in card) {
+      assertIsSerializerName(card[fieldSerializer]);
+      let serializer = getSerializer(card[fieldSerializer]);
+      return serializer.serialize(value, doc, visited, opts);
+    } else {
+      return card[serialize](value, doc, visited, opts);
+    }
   } else {
     return null;
   }
@@ -478,13 +497,27 @@ class ContainsMany<FieldT extends FieldDefConstructor>
   implements Field<FieldT, any[] | null>
 {
   readonly fieldType = 'containsMany';
-  constructor(
-    private cardThunk: () => FieldT,
-    readonly computeVia: undefined | (() => unknown),
-    readonly name: string,
-    readonly description: string | undefined,
-    readonly isUsed: undefined | true,
-  ) {}
+  private cardThunk: () => FieldT;
+  readonly computeVia: undefined | (() => unknown);
+  readonly name: string;
+  readonly description: string | undefined;
+  readonly isUsed: undefined | true;
+  readonly isPolymorphic: undefined | true;
+  constructor({
+    cardThunk,
+    computeVia,
+    name,
+    description,
+    isUsed,
+    isPolymorphic,
+  }: FieldConstructor<FieldT>) {
+    this.cardThunk = cardThunk;
+    this.computeVia = computeVia;
+    this.name = name;
+    this.description = description;
+    this.isUsed = isUsed;
+    this.isPolymorphic = isPolymorphic;
+  }
 
   get card(): FieldT {
     return this.cardThunk();
@@ -509,13 +542,20 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       return null;
     }
 
+    let serializer: ReturnType<typeof getSerializer> | undefined;
+    if (primitive in this.card && fieldSerializer in this.card) {
+      assertIsSerializerName(this.card[fieldSerializer]);
+      serializer = getSerializer(this.card[fieldSerializer]);
+    }
     // Need to replace the WatchedArray proxy with an actual array because the
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
     // TODO: can this be simplified since we don't have the worker anymore?
     let results = [...instances]
       .map((instance) => {
-        return this.card[queryableValue](instance, stack);
+        return serializer
+          ? serializer.queryableValue(instance, stack)
+          : this.card[queryableValue](instance, stack);
       })
       .filter((i) => i != null);
     return results.length === 0 ? null : results;
@@ -532,18 +572,44 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     if (isNotLoadedValue(values)) {
       return { attributes: {} };
     }
-
+    let serialized =
+      values === null
+        ? null
+        : values.map((value) =>
+            callSerializeHook(this.card, value, doc, undefined, opts),
+          );
     if (primitive in this.card) {
-      return {
-        attributes: {
-          [this.name]:
-            values === null
-              ? null
-              : values.map((value) =>
-                  callSerializeHook(this.card, value, doc, undefined, opts),
-                ),
-        },
-      };
+      if (opts?.overrides) {
+        let meta: Partial<Meta> = {};
+        if (Array.isArray(serialized)) {
+          for (let [index] of serialized.entries()) {
+            let fieldName = `${this.name}.${index}`;
+            let override = opts.overrides.get(fieldName);
+            if (!override) {
+              continue;
+            }
+            meta.fields = meta.fields ?? {};
+            meta.fields[fieldName] = {
+              adoptsFrom: identifyCard(
+                override,
+                opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeURL,
+              ),
+            };
+          }
+        }
+        return {
+          attributes: {
+            [this.name]: serialized,
+          },
+          meta,
+        };
+      } else {
+        return {
+          attributes: {
+            [this.name]: serialized,
+          },
+        };
+      }
     } else {
       let relationships: Record<string, Relationship> = {};
       let serialized =
@@ -635,6 +701,17 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       await Promise.all(
         value.map(async (entry, index) => {
           if (primitive in this.card) {
+            if (fieldSerializer in this.card) {
+              assertIsSerializerName(this.card[fieldSerializer]);
+              let serializer = getSerializer(this.card[fieldSerializer]);
+              return serializer.deserialize<FieldT>(
+                entry,
+                relativeTo,
+                doc,
+                identityContext,
+                opts,
+              );
+            }
             return this.card[deserialize](
               entry,
               relativeTo,
@@ -743,13 +820,27 @@ class ContainsMany<FieldT extends FieldDefConstructor>
 
 class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   readonly fieldType = 'contains';
-  constructor(
-    private cardThunk: () => CardT,
-    readonly computeVia: undefined | (() => unknown),
-    readonly name: string,
-    readonly description: string | undefined,
-    readonly isUsed: undefined | true,
-  ) {}
+  private cardThunk: () => CardT;
+  readonly computeVia: undefined | (() => unknown);
+  readonly name: string;
+  readonly description: string | undefined;
+  readonly isUsed: undefined | true;
+  readonly isPolymorphic: undefined | true;
+  constructor({
+    cardThunk,
+    computeVia,
+    name,
+    description,
+    isUsed,
+    isPolymorphic,
+  }: FieldConstructor<CardT>) {
+    this.cardThunk = cardThunk;
+    this.computeVia = computeVia;
+    this.name = name;
+    this.description = description;
+    this.isUsed = isUsed;
+    this.isPolymorphic = isPolymorphic;
+  }
 
   get card(): CardT {
     return this.cardThunk();
@@ -768,7 +859,14 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
 
   queryableValue(instance: any, stack: BaseDef[]): any {
     if (primitive in this.card) {
-      let result = this.card[queryableValue](instance, stack);
+      let result: any;
+      if (fieldSerializer in this.card) {
+        assertIsSerializerName(this.card[fieldSerializer]);
+        let serializer = getSerializer(this.card[fieldSerializer]);
+        result = serializer.queryableValue(instance, stack);
+      } else {
+        result = this.card[queryableValue](instance, stack);
+      }
       assertScalar(result, this.card);
       return result;
     }
@@ -794,7 +892,23 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
       let serialized: JSONAPISingleResourceDocument['data'] & {
         meta: Record<string, any>;
       } = callSerializeHook(this.card, value, doc, undefined, opts);
-      return { attributes: { [this.name]: serialized } };
+      if (this.isPolymorphic) {
+        return {
+          attributes: { [this.name]: serialized },
+          meta: {
+            fields: {
+              [this.name]: {
+                adoptsFrom: identifyCard(
+                  this.card,
+                  opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeURL,
+                ),
+              },
+            },
+          },
+        };
+      } else {
+        return { attributes: { [this.name]: serialized } };
+      }
     } else {
       let serialized: JSONAPISingleResourceDocument['data'] & {
         meta: Record<string, any>;
@@ -843,6 +957,17 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     opts: DeserializeOpts,
   ): Promise<BaseInstanceType<CardT>> {
     if (primitive in this.card) {
+      if (fieldSerializer in this.card) {
+        assertIsSerializerName(this.card[fieldSerializer]);
+        let serializer = getSerializer(this.card[fieldSerializer]);
+        return serializer.deserialize(
+          value,
+          relativeTo,
+          doc,
+          identityContext,
+          opts,
+        );
+      }
       return this.card[deserialize](
         value,
         relativeTo,
@@ -912,13 +1037,27 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
 
 class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
-  constructor(
-    private cardThunk: () => CardT,
-    readonly computeVia: undefined | (() => unknown),
-    readonly name: string,
-    readonly description: string | undefined,
-    readonly isUsed: undefined | true,
-  ) {}
+  private cardThunk: () => CardT;
+  readonly computeVia: undefined | (() => unknown);
+  readonly name: string;
+  readonly description: string | undefined;
+  readonly isUsed: undefined | true;
+  readonly isPolymorphic: undefined | true;
+  constructor({
+    cardThunk,
+    computeVia,
+    name,
+    description,
+    isUsed,
+    isPolymorphic,
+  }: FieldConstructor<CardT>) {
+    this.cardThunk = cardThunk;
+    this.computeVia = computeVia;
+    this.name = name;
+    this.description = description;
+    this.isUsed = isUsed;
+    this.isPolymorphic = isPolymorphic;
+  }
 
   get card(): CardT {
     return this.cardThunk();
@@ -1020,9 +1159,10 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       if (
         (!(doc.included ?? []).find((r) => 'id' in r && r.id === value.id) &&
           doc.data.id !== value.id) ||
-        (!(doc.included ?? []).find(
-          (r) => 'lid' in r && r.lid === value[localId],
-        ) &&
+        (!value.id &&
+          !(doc.included ?? []).find(
+            (r) => 'lid' in r && r.lid === value[localId],
+          ) &&
           doc.data.lid !== value[localId])
       ) {
         doc.included = doc.included ?? [];
@@ -1277,13 +1417,27 @@ class LinksToMany<FieldT extends CardDefConstructor>
   implements Field<FieldT, any[] | null>
 {
   readonly fieldType = 'linksToMany';
-  constructor(
-    private cardThunk: () => FieldT,
-    readonly computeVia: undefined | (() => unknown),
-    readonly name: string,
-    readonly description: string | undefined,
-    readonly isUsed: undefined | true,
-  ) {}
+  private cardThunk: () => FieldT;
+  readonly computeVia: undefined | (() => unknown);
+  readonly name: string;
+  readonly description: string | undefined;
+  readonly isUsed: undefined | true;
+  readonly isPolymorphic: undefined | true;
+  constructor({
+    cardThunk,
+    computeVia,
+    name,
+    description,
+    isUsed,
+    isPolymorphic,
+  }: FieldConstructor<FieldT>) {
+    this.cardThunk = cardThunk;
+    this.computeVia = computeVia;
+    this.name = name;
+    this.description = description;
+    this.isUsed = isUsed;
+    this.isPolymorphic = isPolymorphic;
+  }
 
   get card(): FieldT {
     return this.cardThunk();
@@ -1419,9 +1573,10 @@ class LinksToMany<FieldT extends CardDefConstructor>
       if (
         (!(doc.included ?? []).find((r) => 'id' in r && r.id === value.id) &&
           doc.data.id !== value.id) ||
-        (!(doc.included ?? []).find(
-          (r) => 'lid' in r && r.lid === value[localId],
-        ) &&
+        (!value.id &&
+          !(doc.included ?? []).find(
+            (r) => 'lid' in r && r.lid === value[localId],
+          ) &&
           doc.data.lid !== value[localId])
       ) {
         doc.included = doc.included ?? [];
@@ -1771,14 +1926,15 @@ export function containsMany<FieldT extends FieldDefConstructor>(
 ): BaseInstanceType<FieldT>[] {
   return {
     setupField(fieldName: string) {
+      let { computeVia, description, isUsed } = options ?? {};
       return makeDescriptor(
-        new ContainsMany(
-          cardThunk(field),
-          options?.computeVia,
-          fieldName,
-          options?.description,
-          options?.isUsed,
-        ),
+        new ContainsMany({
+          cardThunk: cardThunk(field),
+          computeVia,
+          name: fieldName,
+          description,
+          isUsed,
+        }),
       );
     },
   } as any;
@@ -1791,14 +1947,15 @@ export function contains<FieldT extends FieldDefConstructor>(
 ): BaseInstanceType<FieldT> {
   return {
     setupField(fieldName: string) {
+      let { computeVia, description, isUsed } = options ?? {};
       return makeDescriptor(
-        new Contains(
-          cardThunk(field),
-          options?.computeVia,
-          fieldName,
-          options?.description,
-          options?.isUsed,
-        ),
+        new Contains({
+          cardThunk: cardThunk(field),
+          computeVia,
+          name: fieldName,
+          description,
+          isUsed,
+        }),
       );
     },
   } as any;
@@ -1811,14 +1968,15 @@ export function linksTo<CardT extends CardDefConstructor>(
 ): BaseInstanceType<CardT> {
   return {
     setupField(fieldName: string) {
+      let { computeVia, description, isUsed } = options ?? {};
       return makeDescriptor(
-        new LinksTo(
-          cardThunk(cardOrThunk),
-          options?.computeVia,
-          fieldName,
-          options?.description,
-          options?.isUsed,
-        ),
+        new LinksTo({
+          cardThunk: cardThunk(cardOrThunk),
+          computeVia,
+          name: fieldName,
+          description,
+          isUsed,
+        }),
       );
     },
   } as any;
@@ -1831,14 +1989,15 @@ export function linksToMany<CardT extends CardDefConstructor>(
 ): BaseInstanceType<CardT>[] {
   return {
     setupField(fieldName: string) {
+      let { computeVia, description, isUsed } = options ?? {};
       return makeDescriptor(
-        new LinksToMany(
-          cardThunk(cardOrThunk),
-          options?.computeVia,
-          fieldName,
-          options?.description,
-          options?.isUsed,
-        ),
+        new LinksToMany({
+          cardThunk: cardThunk(cardOrThunk),
+          computeVia,
+          name: fieldName,
+          description,
+          isUsed,
+        }),
       );
     },
   } as any;
@@ -2447,7 +2606,14 @@ export function getQueryableValue(
   stack: BaseDef[] = [],
 ): any {
   if ('baseDef' in fieldOrCard) {
-    let result = fieldOrCard[queryableValue](value, stack);
+    let serializer: ReturnType<typeof getSerializer> | undefined;
+    if (primitive in fieldOrCard && fieldSerializer in fieldOrCard) {
+      assertIsSerializerName(fieldOrCard[fieldSerializer]);
+      serializer = getSerializer(fieldOrCard[fieldSerializer]);
+    }
+    let result = serializer
+      ? serializer.queryableValue(value, stack)
+      : fieldOrCard[queryableValue](value, stack);
     if (primitive in fieldOrCard) {
       assertScalar(result, fieldOrCard);
     }
@@ -2460,7 +2626,14 @@ export function formatQueryValue(
   field: Field<typeof BaseDef>,
   queryValue: any,
 ): any {
-  return field.card[formatQuery](queryValue);
+  let serializer: ReturnType<typeof getSerializer> | undefined;
+  if (primitive in field.card && fieldSerializer in field.card) {
+    assertIsSerializerName(field.card[fieldSerializer]);
+    serializer = getSerializer(field.card[fieldSerializer]);
+  }
+  return (
+    serializer?.formatQuery?.(queryValue) ?? field.card[formatQuery](queryValue)
+  );
 }
 
 function peekAtField(instance: BaseDef, fieldName: string): any {
@@ -2597,6 +2770,7 @@ export interface SerializeOpts {
   useAbsoluteURL?: boolean;
   omitFields?: [typeof BaseDef];
   maybeRelativeURL?: (possibleURL: string) => string;
+  overrides?: Map<string, typeof BaseDef>;
 }
 
 function serializeCardResource(
@@ -2617,6 +2791,8 @@ function serializeCardResource(
     ...fieldOpts,
     usedLinksToFieldsOnly: !opts?.includeUnrenderedFields,
   });
+  let overrides = getFieldOverrides(model);
+  opts = { ...(opts ?? {}), overrides };
   let fieldResources = Object.entries(fields)
     .filter(([_fieldName, field]) =>
       opts?.omitFields ? !opts.omitFields.includes(field.card) : true,
@@ -2679,7 +2855,7 @@ export function serializeCard(
   return doc;
 }
 
-interface DeserializeOpts {
+export interface DeserializeOpts {
   ignoreBrokenLinks?: true;
 }
 
@@ -2844,7 +3020,25 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       return result;
     }, Object.create(null));
 
+  let existingOverrides = getFieldOverrides(instance);
   let loadedValues = getDataBucket(instance);
+  async function setDeserializedFieldOverride(
+    fieldName: string,
+    resource: LooseCardResource,
+  ) {
+    let serializedFieldOverride = resource.meta.fields?.[fieldName];
+    if (
+      !Array.isArray(serializedFieldOverride) &&
+      serializedFieldOverride?.adoptsFrom
+    ) {
+      let override = await loadCardDef(serializedFieldOverride.adoptsFrom, {
+        loader: myLoader(),
+        relativeTo: resource.id ? new URL(resource.id) : undefined,
+      });
+      existingOverrides.set(fieldName, override);
+    }
+  }
+
   let values = (await Promise.all(
     Object.entries({
       ...resource.attributes,
@@ -2859,6 +3053,18 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         // mismatch and try to serialize it anyway so that the client can see still see the instance data
         // and have a chance to fix it so that it adheres to the definition
         return [];
+      }
+      if (primitive in field.card) {
+        if (Array.isArray(value)) {
+          for (let [index] of value.entries()) {
+            await setDeserializedFieldOverride(
+              `${fieldName}.${index}`,
+              resource,
+            );
+          }
+        } else {
+          await setDeserializedFieldOverride(fieldName, resource);
+        }
       }
       let relativeToVal =
         'id' in instance && typeof instance.id === 'string'

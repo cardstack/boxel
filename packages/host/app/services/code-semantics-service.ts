@@ -12,9 +12,12 @@ import {
   CodeRef,
   isCardDef as isCardDefHelper,
   isFieldDef as isFieldDefHelper,
+  getField,
 } from '@cardstack/runtime-common';
 
 import { isReady } from '@cardstack/host/resources/file';
+
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 import { type Ready } from '../resources/file';
 
@@ -190,7 +193,9 @@ export default class CodeSemanticsService extends Service {
     return isResolvedCodeRef(codeRef) ? codeRef : undefined;
   }
 
-  async getInheritanceChain(): Promise<CodeRef[] | undefined> {
+  async getInheritanceChain(): Promise<
+    { codeRef: CodeRef; fields: string[] }[] | undefined
+  > {
     if (!this.selectedCodeRef) {
       return undefined;
     }
@@ -209,7 +214,7 @@ export default class CodeSemanticsService extends Service {
         return undefined;
       }
 
-      let inheritanceChain: CodeRef[] = [];
+      let inheritanceChain: { codeRef: CodeRef; fields: string[] }[] = [];
       let currentCard = cardOrField;
 
       // Build the inheritance chain by walking up the prototype chain
@@ -217,7 +222,13 @@ export default class CodeSemanticsService extends Service {
       while (currentCard) {
         let codeRef = identifyCard(currentCard);
         if (codeRef) {
-          inheritanceChain.push(codeRef);
+          // Get fields defined at this level of the inheritance chain
+          let fields = this.getOwnFields(currentCard);
+
+          inheritanceChain.push({
+            codeRef,
+            fields,
+          });
         }
 
         // Stop if we've reached CardDef or FieldDef
@@ -242,5 +253,33 @@ export default class CodeSemanticsService extends Service {
       console.warn('Failed to build inheritance chain:', error);
       return undefined;
     }
+  }
+
+  private getOwnFields(card: typeof BaseDef): string[] {
+    // Get own property descriptors to only get fields defined at this level
+    let fields: string[] = [];
+    let obj = card.prototype;
+
+    if (obj) {
+      let descs = Object.getOwnPropertyDescriptors(obj);
+      for (let fieldName of Object.keys(descs)) {
+        if (fieldName === 'constructor') {
+          continue;
+        }
+
+        // Check if this is actually a field by trying to get it
+        try {
+          let maybeField = getField(card, fieldName);
+          if (maybeField && !maybeField.computeVia) {
+            fields.push(fieldName);
+          }
+        } catch {
+          // If getField throws, it's not a valid field
+          continue;
+        }
+      }
+    }
+
+    return fields;
   }
 }

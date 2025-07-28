@@ -9,6 +9,7 @@ import * as MonacoSDK from 'monaco-editor';
 
 import config from '@cardstack/host/config/environment';
 import type MonacoService from '@cardstack/host/services/monaco-service';
+import { createMonacoWaiterManager } from '@cardstack/host/utils/monaco-test-waiter';
 import '@cardstack/requirejs-monaco-ember-polyfill';
 
 interface Signature {
@@ -39,6 +40,7 @@ export default class Monaco extends Modifier<Signature> {
   private lastContent: string | undefined;
   private lastModified = Date.now();
   private lastCursorPosition: MonacoSDK.Position | undefined;
+  private waiterManager = createMonacoWaiterManager();
   @service declare private monacoService: MonacoService;
 
   modify(
@@ -131,6 +133,12 @@ export default class Monaco extends Modifier<Signature> {
     }
 
     this.editor = monacoSDK.editor.create(element, editorOptions);
+
+    // Track editor initialization for test waiters
+    if (this.waiterManager) {
+      const operationId = `monaco-modifier-init-${this.editor.getId()}`;
+      this.waiterManager.trackEditorInit(this.editor, operationId);
+    }
 
     onSetup?.(this.editor);
 

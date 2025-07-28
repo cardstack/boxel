@@ -1,5 +1,6 @@
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
+
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
@@ -16,6 +17,7 @@ import {
   extendConfig,
   languageConfigs,
 } from '@cardstack/host/utils/editor-language';
+import { createMonacoWaiterManager } from '@cardstack/host/utils/monaco-test-waiter';
 
 import type * as _MonacoSDK from 'monaco-editor';
 
@@ -31,6 +33,8 @@ export default class MonacoService extends Service {
   @service declare cardService: CardService;
   // this is in the service so that we can manipulate it in our tests
   serverEchoDebounceMs = serverEchoDebounceMs;
+
+  private waiterManager = createMonacoWaiterManager();
 
   constructor(owner: Owner) {
     super(owner);
@@ -55,6 +59,9 @@ export default class MonacoService extends Service {
         return;
       }
 
+      // Track editor initialization with shared waiter manager
+      const initOperation = `editor-init-${editor.getId()}`;
+
       this.editor = editor;
       this.editor.onDidFocusEditorText(() => {
         this.hasFocus = true;
@@ -62,6 +69,11 @@ export default class MonacoService extends Service {
       this.editor.onDidBlurEditorText(() => {
         this.hasFocus = false;
       });
+
+      // Use shared waiter manager to track editor initialization
+      if (this.waiterManager) {
+        this.waiterManager.trackEditorInit(this.editor, initOperation);
+      }
     });
     await Promise.all(promises);
     return monaco;

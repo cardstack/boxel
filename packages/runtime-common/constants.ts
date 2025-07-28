@@ -30,6 +30,7 @@ export const realmURL = Symbol.for('cardstack-realm-url');
 export const localId = Symbol.for('cardstack-local-id');
 export const meta = Symbol.for('cardstack-meta');
 export const fields = Symbol.for('cardstack-fields');
+export const fieldSerializer = Symbol.for('cardstack-field-serializer');
 export const fieldsUntracked = Symbol.for('cardstack-fields-untracked');
 export const isBaseInstance = Symbol.for('isBaseInstance');
 
@@ -55,3 +56,5 @@ export interface Permissions {
 export const SEARCH_MARKER: string = '╔═══ SEARCH ════╗';
 export const SEPARATOR_MARKER: string = '╠═══════════════╣';
 export const REPLACE_MARKER: string = '╚═══ REPLACE ═══╝';
+
+export const MINIMUM_AI_CREDITS_TO_CONTINUE = 10;

@@ -8,6 +8,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
@@ -32,69 +33,33 @@ import ModalContainer from '../../modal-container';
 
 import ItemContainer from './item-container';
 
-interface Signature {
-  Element: HTMLButtonElement;
+interface AddWorkspaceModalSignature {
+  Element: HTMLDivElement;
+  Args: {
+    displayName: string;
+    endpoint: string;
+    setDisplayName: (value: string) => void;
+    setEndpoint: (value: string) => void;
+    createWorkspaceTask?: ReturnType<typeof task>;
+    error: string | null;
+    onClose: () => void;
+  };
 }
 
-export default class AddWorkspace extends Component<Signature> {
-  @service private declare matrixService: MatrixService;
-  @tracked private isModalOpen = false;
-  @tracked private endpoint = '';
-  @tracked private displayName = '';
-  @tracked private hasUserEditedEndpoint = false;
-  @tracked private error: string | null = null;
-  private setEndpoint = (value: string) => {
-    this.hasUserEditedEndpoint = true;
-    this.endpoint = value;
-  };
-  private setDisplayName = (value: string) => {
-    this.displayName = value;
-    // if the user starts typing in the endpoint field, then stop helping them
-    if (!this.hasUserEditedEndpoint) {
-      this.endpoint = cleanseString(value);
-    }
-  };
-  private closeModal = () => {
-    this.isModalOpen = false;
-  };
-  private createWorkspaceTask = task(async () => {
-    this.error = null;
-    try {
-      await this.matrixService.createPersonalRealmForUser({
-        endpoint: this.endpoint,
-        name: this.displayName,
-        iconURL: iconURLFor(this.displayName),
-        backgroundURL: getRandomBackgroundURL(),
-      });
-      this.closeModal();
-    } catch (e: any) {
-      this.error = e.message;
-    }
-  });
+class AddWorkspaceModal extends Component<AddWorkspaceModalSignature> {
   private get isCreateWorkspaceButtonDisabled() {
-    return !this.endpoint || !this.displayName;
+    return !this.args.endpoint || !this.args.displayName;
   }
   <template>
-    <ItemContainer
-      {{on 'click' (fn (mut this.isModalOpen) true)}}
-      class='container'
-      data-test-add-workspace
-    >
-      <div class='content'>
-        <IconPlus width='40px' height='40px' role='presentation' class='icon' />
-        <br />
-        New workspace
-      </div>
-    </ItemContainer>
     <ModalContainer
       @title='Add Workspace'
       @size='medium'
-      @isOpen={{this.isModalOpen}}
-      @onClose={{fn (mut this.isModalOpen) false}}
+      @isOpen={{true}}
+      @onClose={{@onClose}}
       @cardContainerClass='create-workspace'
       class='create-workspace-modal'
       {{focusTrap
-        isActive=this.createWorkspaceTask.isIdle
+        isActive=@createWorkspaceTask.isIdle
         focusTrapOptions=(hash
           initialFocus='.create-workspace-modal input' allowOutsideClick=true
         )
@@ -102,97 +67,72 @@ export default class AddWorkspace extends Component<Signature> {
       data-test-create-workspace-modal
     >
       <:content>
-        {{#if this.isModalOpen}}
-          {{#if this.createWorkspaceTask.isRunning}}
-            <div class='spinner-container'>
-              <div class='spinner-inner-container'>
-                <LoadingIndicator class='spinner' />
-                <div>
-                  Creating workspace...
-                </div>
+        {{#if @createWorkspaceTask.isRunning}}
+          <div class='spinner-container'>
+            <div class='spinner-inner-container'>
+              <LoadingIndicator class='spinner' />
+              <div>
+                Creating workspace...
               </div>
             </div>
-          {{else}}
-            <FieldContainer @label='Display Name' @tag='label' class='field'>
-              <BoxelInput
-                data-test-display-name-field
-                placeholder='Workspace Display Name'
-                @value={{this.displayName}}
-                @onInput={{this.setDisplayName}}
-                @helperText='This is how your workspace will appear in the UI.'
-              />
-            </FieldContainer>
-            <FieldContainer
-              @label='Workspace Endpoint'
-              @tag='label'
-              class='field'
-            >
-              <BoxelInput
-                data-test-endpoint-field
-                placeholder='Workspace Endpoint'
-                @value={{this.endpoint}}
-                @onInput={{this.setEndpoint}}
-                @helperText='The endpoint is the unique identifier for your workspace. Use letters, numbers, and hyphens only.'
-              />
-            </FieldContainer>
-          {{/if}}
+          </div>
+        {{else}}
+          <FieldContainer @label='Display Name' @tag='label' class='field'>
+            <BoxelInput
+              data-test-display-name-field
+              placeholder='Workspace Display Name'
+              @value={{@displayName}}
+              @onInput={{@setDisplayName}}
+              @helperText='This is how your workspace will appear in the UI.'
+            />
+          </FieldContainer>
+          <FieldContainer
+            @label='Workspace Endpoint'
+            @tag='label'
+            class='field'
+          >
+            <BoxelInput
+              data-test-endpoint-field
+              placeholder='Workspace Endpoint'
+              @value={{@endpoint}}
+              @onInput={{@setEndpoint}}
+              @helperText='The endpoint is the unique identifier for your workspace. Use letters, numbers, and hyphens only.'
+            />
+          </FieldContainer>
         {{/if}}
-        {{#if this.error}}
+        {{#if @error}}
           <div class='error-message' data-test-error-message>
-            {{this.error}}
+            {{@error}}
           </div>
         {{/if}}
       </:content>
       <:footer>
-        {{#if this.isModalOpen}}
-          {{#unless this.createWorkspaceTask.isRunning}}
-            <div class='footer-buttons'>
-              <Button
-                {{on 'click' this.closeModal}}
-                {{onKeyMod 'Escape'}}
-                @size='tall'
-                data-test-cancel-create-workspace
-              >
-                Cancel
-              </Button>
-              <Button
-                @kind='primary'
-                @size='tall'
-                @loading={{this.createWorkspaceTask.isRunning}}
-                @disabled={{this.isCreateWorkspaceButtonDisabled}}
-                {{on 'click' (perform this.createWorkspaceTask)}}
-                {{onKeyMod 'Enter'}}
-                data-test-create-workspace-submit
-              >
-                Create
-              </Button>
-            </div>
-          {{/unless}}
-        {{/if}}
+        {{#unless @createWorkspaceTask.isRunning}}
+          <div class='footer-buttons'>
+            <Button
+              {{on 'click' @onClose}}
+              {{onKeyMod 'Escape'}}
+              @size='tall'
+              data-test-cancel-create-workspace
+            >
+              Cancel
+            </Button>
+            <Button
+              @kind='primary'
+              @size='tall'
+              @loading={{@createWorkspaceTask.isRunning}}
+              @disabled={{this.isCreateWorkspaceButtonDisabled}}
+              {{on 'click' (perform @createWorkspaceTask)}}
+              {{onKeyMod 'Enter'}}
+              data-test-create-workspace-submit
+            >
+              Create
+            </Button>
+          </div>
+        {{/unless}}
       </:footer>
     </ModalContainer>
     <style scoped>
-      .container {
-        border-style: dashed;
-        background: transparent;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-      }
-      .icon {
-        --icon-color: var(--boxel-highlight);
-      }
-      .icon :deep(path) {
-        stroke: none;
-      }
-      .content {
-        color: var(--boxel-light);
-        text-align: center;
-      }
-      .content .icon {
-        color: var(--boxel-highlight);
-      }
-
       .create-workspace-modal > :deep(.boxel-modal__inner) {
         display: flex;
       }
@@ -231,6 +171,101 @@ export default class AddWorkspace extends Component<Signature> {
       }
       .spinner {
         --boxel-loading-indicator-size: 2.5rem;
+      }
+    </style>
+  </template>
+}
+
+interface Signature {
+  Element: HTMLButtonElement;
+}
+
+export default class AddWorkspace extends Component<Signature> {
+  @service private declare matrixService: MatrixService;
+  @tracked private isModalOpen: boolean = false;
+  @tracked private endpoint = '';
+  @tracked private displayName = '';
+  @tracked private hasUserEditedEndpoint = false;
+  @tracked private error: string | null = null;
+  private setEndpoint = (value: string) => {
+    this.hasUserEditedEndpoint = true;
+    this.endpoint = value;
+  };
+  private setDisplayName = (value: string) => {
+    this.displayName = value;
+    // if the user starts typing in the endpoint field, then stop helping them
+    if (!this.hasUserEditedEndpoint) {
+      this.endpoint = cleanseString(value);
+    }
+  };
+  private closeModal = () => {
+    this.isModalOpen = false;
+  };
+  private createWorkspaceTask = task(async () => {
+    this.error = null;
+    try {
+      await this.matrixService.createPersonalRealmForUser({
+        endpoint: this.endpoint,
+        name: this.displayName,
+        iconURL: iconURLFor(this.displayName),
+        backgroundURL: getRandomBackgroundURL(),
+      });
+      this.closeModal();
+    } catch (e: any) {
+      this.error = e.message;
+    }
+  });
+  private setIsModalOpen = (value: boolean) => {
+    this.isModalOpen = value;
+  };
+  <template>
+    <ItemContainer
+      {{on 'click' (fn (mut this.isModalOpen) true)}}
+      class='container'
+      data-test-add-workspace
+    >
+      <div class='content'>
+        <IconPlus width='40px' height='40px' role='presentation' class='icon' />
+        <br />
+        New workspace
+      </div>
+    </ItemContainer>
+    {{#if this.isModalOpen}}
+      <ToElsewhere
+        @named='modal-elsewhere'
+        @send={{component
+          AddWorkspaceModal
+          displayName=this.displayName
+          endpoint=this.endpoint
+          setDisplayName=this.setDisplayName
+          setEndpoint=this.setEndpoint
+          createWorkspaceTask=this.createWorkspaceTask
+          error=this.error
+          onClose=(fn this.setIsModalOpen false)
+        }}
+        }}
+      />
+    {{/if}}
+    <style scoped>
+      .container {
+        border-style: dashed;
+        background: transparent;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      .icon {
+        --icon-color: var(--boxel-highlight);
+      }
+      .icon :deep(path) {
+        stroke: none;
+      }
+      .content {
+        color: var(--boxel-light);
+        text-align: center;
+      }
+      .content .icon {
+        color: var(--boxel-highlight);
       }
     </style>
   </template>

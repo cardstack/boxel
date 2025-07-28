@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Data Management",
+      "description": "Database systems, data storage, backup solutions, data migration, ETL processes, data warehousing, and information architecture tools.",
+      "color": "#0891b2",
+      "order": 15
+    },
+    "relationships": {
+      "sphere": {
+        "links": {
+          "self": "../Sphere/637767ff-c7a9-40d6-9cd3-93f0b32a8fbb"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/category",
+        "name": "Category"
+      }
+    }
+  }
+}

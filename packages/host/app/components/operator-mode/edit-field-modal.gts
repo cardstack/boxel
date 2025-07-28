@@ -26,14 +26,18 @@ import {
   loadCardDef,
   identifyCard,
   specRef,
-  CodeRef,
+  type CodeRef,
   isCardInstance,
+  moduleFrom,
 } from '@cardstack/runtime-common';
 
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
-import { FieldOfType, Type } from '@cardstack/host/resources/card-type';
+import {
+  getCodeRef,
+  type FieldOfType,
+} from '@cardstack/host/resources/card-type';
 
 import { Ready } from '@cardstack/host/resources/file';
 import LoaderService from '@cardstack/host/services/loader-service';
@@ -147,23 +151,15 @@ export default class EditFieldModal extends Component<Signature> {
       ? 'many'
       : 'one';
 
-    let ref: { module: string; name: string };
-
-    let fieldCardType = field.card;
-    let isCardType = 'codeRef' in fieldCardType; // To see whether we are dealing with Type or CodeRefType
-
-    if (isCardType) {
-      ref = (fieldCardType as Type).codeRef as typeof ref;
-    } else {
-      ref = fieldCardType as typeof ref;
-    }
+    let ref = getCodeRef(field);
 
     this.fieldCard = await loadCardDef(ref, {
       loader: this.loaderService.loader,
     });
 
-    this.fieldModuleURL = new URL(ref.module);
-    this.cardURL = new URL(ref.module);
+    let moduleRef = moduleFrom(ref);
+    this.fieldModuleURL = new URL(moduleRef);
+    this.cardURL = new URL(moduleRef);
     this.fieldRef = ref;
 
     // Field's card can descend from a FieldDef or a CardDef, so we need to determine which one it is. We do this by checking the field's type -

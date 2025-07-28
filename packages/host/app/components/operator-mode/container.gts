@@ -13,8 +13,6 @@ import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 
 import { provide } from 'ember-provide-consume-context';
 
-import { Modal } from '@cardstack/boxel-ui/components';
-
 import { or, not } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -26,6 +24,7 @@ import {
 import Auth from '@cardstack/host/components/matrix/auth';
 
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
+import HostSubmode from '@cardstack/host/components/operator-mode/host-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
@@ -112,18 +111,15 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.submode === Submodes.Code;
   }
 
+  private get isHostMode() {
+    return this.operatorModeStateService.state?.submode === Submodes.Host;
+  }
+
   <template>
-    <Modal
-      class='operator-mode'
-      @size='full-screen'
-      @isOpen={{true}}
-      @onClose={{@onClose}}
-      @isOverlayDismissalDisabled={{true}}
-      @boxelModalOverlayColor='var(--operator-mode-bg-color)'
-    >
+    <div class='operator-mode'>
       <ChooseFileModal />
       <CardCatalogModal />
-      <FromElseWhere @name='restore-patched-file-modal' />
+      <FromElseWhere @name='modal-elsewhere' />
 
       {{#if
         (or
@@ -134,10 +130,12 @@ export default class OperatorModeContainer extends Component<Signature> {
         <Auth />
       {{else if this.isCodeMode}}
         <CodeSubmode @saveSourceOnClose={{perform this.saveSource}} />
+      {{else if this.isHostMode}}
+        <HostSubmode />
       {{else}}
         <InteractSubmode />
       {{/if}}
-    </Modal>
+    </div>
 
     <style scoped>
       :global(:root) {
@@ -170,7 +168,14 @@ export default class OperatorModeContainer extends Component<Signature> {
         display: none;
       }
       .operator-mode {
+        background: var(--operator-mode-bg-color);
+        padding: 0;
+        top: 0;
+        left: 0;
+        right: 0;
         min-width: var(--operator-mode-min-width);
+        height: 100%;
+        position: fixed;
       }
       .operator-mode > div {
         align-items: flex-start;

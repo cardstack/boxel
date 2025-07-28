@@ -19,9 +19,7 @@ class IndexComponent extends Component<void> {
 
   <template>
     {{pageTitle this.operatorModeStateService.title}}
-    <div>
-      <OperatorModeContainer @onClose={{this.closeOperatorMode}} />
-    </div>
+    <OperatorModeContainer @onClose={{this.closeOperatorMode}} />
   </template>
 }
 

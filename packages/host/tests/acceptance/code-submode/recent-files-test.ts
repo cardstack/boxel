@@ -23,7 +23,6 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
-  waitForCodeEditor,
   setupUserSubscription,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -330,7 +329,6 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       openDirs: {},
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-file]');
     await waitFor('[data-test-directory]');
 
@@ -424,7 +422,6 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       openDirs: {},
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-file]');
     await waitFor('[data-test-directory]');
 
@@ -455,7 +452,6 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       codePath: `${testRealmURL}person.gts`,
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-card-module-definition]');
 
     assert
@@ -529,7 +525,6 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       openDirs: {},
     });
 
-    await waitForCodeEditor();
     await waitFor('[data-test-file]');
     await waitFor('[data-test-directory]');
 

@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Real Estate & Property",
+      "description": "Property management, lease tracking, tenant communication, maintenance scheduling, and real estate investment tools.",
+      "color": "#be185d",
+      "order": 10
+    },
+    "relationships": {
+      "sphere": {
+        "links": {
+          "self": "../Sphere/20dcc8f6-891d-4570-a0c0-1e07b14c97ee"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/category",
+        "name": "Category"
+      }
+    }
+  }
+}

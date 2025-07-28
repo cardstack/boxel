@@ -39,6 +39,7 @@
     "ember-eslint-parser": "0.5.9",
     "ember-source": "~5.4.0",
     "eslint": "catalog:",
+    "ethers": "catalog:",
     "flat": "catalog:",
     "glimmer-scoped-css": "catalog:",
     "http-status-codes": "catalog:",

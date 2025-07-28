@@ -53,8 +53,17 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         padding-right: var(--boxel-icon-lg);
       }
       .default-card-template.edit
-        > :deep(.boxel-field > .content > *:not(.links-to-many-editor)) {
+        > :deep(
+          .boxel-field
+            > .content
+            > *:not(.links-to-many-editor):not(.contains-many-editor)
+        ) {
         padding-left: var(--boxel-icon-lg);
+      }
+      /* Add padding for readonly fields */
+      .default-card-template.edit > :deep(.boxel-field > .content .read-only) {
+        padding-left: var(--boxel-icon-lg);
+        padding-right: var(--boxel-icon-lg);
       }
     </style>
   </template>

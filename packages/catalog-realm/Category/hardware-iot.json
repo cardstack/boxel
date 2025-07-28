@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Hardware & IoT",
+      "description": "Hardware development, IoT devices, embedded systems, circuit design, and physical computing projects.",
+      "color": "#dc2626",
+      "order": 7
+    },
+    "relationships": {
+      "sphere": {
+        "links": {
+          "self": "../Sphere/637767ff-c7a9-40d6-9cd3-93f0b32a8fbb"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/category",
+        "name": "Category"
+      }
+    }
+  }
+}

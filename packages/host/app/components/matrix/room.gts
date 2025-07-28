@@ -57,6 +57,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
@@ -338,6 +339,7 @@ export default class Room extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare loaderService: LoaderService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
+  @service private declare specPanelService: SpecPanelService;
 
   private autoAttachmentResource = getAutoAttachment(this, {
     submode: () => this.operatorModeStateService.state.submode,
@@ -345,6 +347,7 @@ export default class Room extends Component<Signature> {
       this.operatorModeStateService.moduleInspectorPanel,
     autoAttachedFileUrl: () => this.autoAttachedFileUrl,
     playgroundPanelCardId: () => this.playgroundPanelCardId,
+    activeSpecId: () => this.specPanelService.specSelection,
     topMostStackItems: () => this.topMostStackItems,
     attachedCardIds: () => this.cardIdsToAttach,
     removedCardIds: () => this.removedAttachedCardIds,
@@ -775,6 +778,11 @@ export default class Room extends Component<Signature> {
 
   @action
   private chooseCard(cardId: string) {
+    // handle the case where auto-attached card pill is clicked
+    if (this.autoAttachedCardIds.has(cardId)) {
+      this.removedAttachedCardIds.push(cardId);
+    }
+
     let cardIds = this.cardIdsToAttach ?? [];
     if (!cardIds.includes(cardId)) {
       this.matrixService.cardsToSend.set(this.args.roomId, [
@@ -806,6 +814,11 @@ export default class Room extends Component<Signature> {
 
   @action
   private chooseFile(file: FileDef) {
+    // handle the case where auto-attached file pill is clicked
+    if (this.isAutoAttachedFile(file)) {
+      this.removeAutoAttachedFile();
+    }
+
     let files = this.filesToAttach;
     if (!files?.find((f) => f.sourceUrl === file.sourceUrl)) {
       this.matrixService.filesToSend.set(this.args.roomId, [...files, file]);
