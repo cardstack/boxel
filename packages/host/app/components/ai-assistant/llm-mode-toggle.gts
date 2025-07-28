@@ -76,6 +76,7 @@ export default class LLMModeToggle extends Component<Signature> {
         flex: 1 1 0;
         background: none;
         border: none;
+        border-radius: var(--boxel-border-radius);
         color: var(--boxel-light);
         font: 500 var(--boxel-font-xs);
         cursor: pointer;
@@ -88,7 +89,6 @@ export default class LLMModeToggle extends Component<Signature> {
         color: var(--boxel-dark);
         font-weight: 600;
         height: 100%;
-        border-radius: var(--boxel-border-radius);
       }
       .llm-mode-option:disabled {
         opacity: 0.5;
