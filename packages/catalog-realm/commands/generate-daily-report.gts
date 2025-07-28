@@ -5,6 +5,7 @@ import {
   linksTo,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
+import DateField from 'https://cardstack.com/base/date';
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 import { Command, isResolvedCodeRef } from '@cardstack/runtime-common';
 import { SearchCardsByQueryCommand } from '@cardstack/boxel-host/commands/search-cards';
@@ -16,6 +17,7 @@ import GetCardCommand from '@cardstack/boxel-host/commands/get-card';
 class DailyReportInput extends CardDef {
   @field policyManual = linksTo(PolicyManual);
   @field realm = contains(StringField);
+  @field date = contains(DateField);
 }
 export class GenerateDailyReport extends Command<
   typeof DailyReportInput,
@@ -28,7 +30,7 @@ export class GenerateDailyReport extends Command<
   }
 
   protected async run(input: DailyReportInput): Promise<undefined> {
-    let { realm, policyManual } = input;
+    let { realm, policyManual, date } = input;
     if (!realm) {
       throw new Error('Realm is required');
     }
@@ -41,9 +43,11 @@ export class GenerateDailyReport extends Command<
     }
     try {
       let searchCommand = new SearchCardsByQueryCommand(this.commandContext);
-      let today = new Date();
-      let startOfDay = new Date(today.setHours(0, 0, 0, 0));
-      let endOfDay = new Date(today.setHours(23, 59, 59, 999));
+      let targetDate = date || new Date();
+      let startOfDay = new Date(targetDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      let endOfDay = new Date(targetDate);
+      endOfDay.setHours(23, 59, 59, 999);
       let results = await searchCommand.execute({
         query: {
           filter: {
@@ -76,9 +80,9 @@ export class GenerateDailyReport extends Command<
         }),
       );
       let dailyReportCard = new DailyReport({
-        reportDate: new Date(),
+        reportDate: targetDate,
         policyManual: policyManual,
-        summary: 'Analysing...',
+        summary: foundCards.length > 0 ? 'Analysing...' : 'No Reports Found',
       });
 
       await new SaveCardCommand(this.commandContext).execute({
@@ -88,9 +92,8 @@ export class GenerateDailyReport extends Command<
 
       let prompt =
         'Generate daily report for today from the attached activity log cards using the policy manual and update the attached daily report card';
-      let skillCardId = new URL('./Skill/daily-report-skill', import.meta.url)
+      let skillCardId = new URL('../Skill/daily-report-skill', import.meta.url)
         .href;
-      //seems ok skill bundled with command
       let useCommand = new UseAiAssistantCommand(this.commandContext);
       await useCommand.execute({
         roomId: 'new',
@@ -98,6 +101,7 @@ export class GenerateDailyReport extends Command<
         attachedCards: [policyManual, dailyReportCard, ...foundCards],
         openRoom: true,
         llmModel: 'anthropic/claude-sonnet-4',
+        llmMode: 'act',
         skillCardIds: [skillCardId],
       });
     } catch (error: any) {

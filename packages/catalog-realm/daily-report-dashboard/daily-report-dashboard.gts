@@ -1,8 +1,12 @@
-import { array } from '@ember/helper';
+import { array, fn } from '@ember/helper';
 import { gt } from '@cardstack/boxel-ui/helpers';
 import { CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
 import { Component, realmURL } from 'https://cardstack.com/base/card-api';
-import { Button, CardContainer } from '@cardstack/boxel-ui/components';
+import {
+  Button,
+  CardContainer,
+  BoxelInput,
+} from '@cardstack/boxel-ui/components';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
@@ -49,6 +53,16 @@ class Isolated extends Component<typeof DailyReportDashboard> {
   }
 
   @tracked currentRoomId: string | null = null;
+  @tracked selectedDate: Date = new Date();
+
+  get todayDateString() {
+    return this.selectedDate.toISOString().split('T')[0];
+  }
+
+  @action
+  updateSelectedDate(date: string) {
+    this.selectedDate = new Date(date);
+  }
 
   @action
   generateTodaysReport() {
@@ -63,6 +77,7 @@ class Isolated extends Component<typeof DailyReportDashboard> {
     await new GenerateDailyReport(commandContext).execute({
       realm: this.currentRealm!.href,
       policyManual: this.args.model.policyManual,
+      date: this.selectedDate,
     });
   });
 
@@ -115,37 +130,47 @@ class Isolated extends Component<typeof DailyReportDashboard> {
                   <div class='section-subtitle'>Recent operational reports and
                     insights</div>
                 </div>
-                <Button
-                  class='generate-report-button'
-                  @disabled={{this._generateTodaysReport.isRunning}}
-                  {{on 'click' this.generateTodaysReport}}
-                >
-                  {{#if this._generateTodaysReport.isRunning}}
-                    <svg
-                      class='button-icon spinning'
-                      viewBox='0 0 24 24'
-                      fill='none'
-                      stroke='currentColor'
-                      stroke-width='2'
-                    >
-                      <path d='M21 12a9 9 0 11-6.219-8.56' />
-                    </svg>
-                    Generating...
-                  {{else}}
-                    <svg
-                      class='button-icon'
-                      viewBox='0 0 24 24'
-                      fill='none'
-                      stroke='currentColor'
-                      stroke-width='2'
-                    >
-                      <circle cx='12' cy='12' r='10' />
-                      <line x1='12' y1='8' x2='12' y2='12' />
-                      <line x1='8' y1='12' x2='16' y2='12' />
-                    </svg>
-                    Generate Today's Report
-                  {{/if}}
-                </Button>
+                <div class='date-and-button-container'>
+                  <div class='date-input-container'>
+                    <BoxelInput
+                      @type='date'
+                      @value={{this.todayDateString}}
+                      @onInput={{this.updateSelectedDate}}
+                      placeholder='Select date'
+                    />
+                  </div>
+                  <Button
+                    class='generate-report-button'
+                    @disabled={{this._generateTodaysReport.isRunning}}
+                    {{on 'click' this.generateTodaysReport}}
+                  >
+                    {{#if this._generateTodaysReport.isRunning}}
+                      <svg
+                        class='button-icon spinning'
+                        viewBox='0 0 24 24'
+                        fill='none'
+                        stroke='currentColor'
+                        stroke-width='2'
+                      >
+                        <path d='M21 12a9 9 0 11-6.219-8.56' />
+                      </svg>
+                      Generating...
+                    {{else}}
+                      <svg
+                        class='button-icon'
+                        viewBox='0 0 24 24'
+                        fill='none'
+                        stroke='currentColor'
+                        stroke-width='2'
+                      >
+                        <circle cx='12' cy='12' r='10' />
+                        <line x1='12' y1='8' x2='12' y2='12' />
+                        <line x1='8' y1='12' x2='16' y2='12' />
+                      </svg>
+                      Generate Report
+                    {{/if}}
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -334,6 +359,17 @@ class Isolated extends Component<typeof DailyReportDashboard> {
         justify-content: space-between;
         align-items: flex-start;
         gap: 1rem;
+      }
+
+      .date-and-button-container {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+
+      .date-input-container {
+        min-width: 200px;
       }
 
       .generate-report-button {

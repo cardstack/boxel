@@ -1,30 +1,27 @@
-// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 import {
   CardDef,
   field,
   contains,
   linksTo,
   Component,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
+} from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import DateField from 'https://cardstack.com/base/date';
 import MarkdownField from 'https://cardstack.com/base/markdown';
-import CalendarIcon from '@cardstack/boxel-icons/calendar'; // ² Report icon
-import { formatDateTime } from '@cardstack/boxel-ui/helpers'; // ³ Formatting helpers
+import CalendarIcon from '@cardstack/boxel-icons/calendar';
+import { formatDateTime } from '@cardstack/boxel-ui/helpers';
 import { PolicyManual } from './policy-manual';
 
 export class DailyReport extends CardDef {
-  // ⁴ Daily report definition
   static displayName = 'Daily Report';
   static icon = CalendarIcon;
-  static prefersWideFormat = true; // ⁵ Wide format for report reading
+  static prefersWideFormat = true;
 
-  @field reportDate = contains(DateField); // ⁶ Date this report covers
-  @field summary = contains(MarkdownField); // ⁷ What happened today
-  @field recommendations = contains(MarkdownField); // ⁸ Improvement recommendations
-  @field policyManual = linksTo(PolicyManual); // ⁹ Link to policy manual used
+  @field reportDate = contains(DateField);
+  @field summary = contains(MarkdownField);
+  @field recommendations = contains(MarkdownField);
+  @field policyManual = linksTo(PolicyManual);
 
-  // ¹⁰ Compute title from date for easy identification
   @field title = contains(StringField, {
     computeVia: function (this: DailyReport) {
       try {
@@ -43,7 +40,6 @@ export class DailyReport extends CardDef {
   });
 
   static isolated = class Isolated extends Component<typeof this> {
-    // ¹¹ Full report view
     <template>
       <div class='stage'>
         <div class='report-mat'>
@@ -160,7 +156,6 @@ export class DailyReport extends CardDef {
       </div>
 
       <style scoped>
-        /* ¹² Professional report styling */
         .stage {
           width: 100%;
           height: 100%;
@@ -293,7 +288,6 @@ export class DailyReport extends CardDef {
   };
 
   static embedded = class Embedded extends Component<typeof this> {
-    // ¹³ Summary view
     <template>
       <div class='report-card'>
         <div class='report-header'>
@@ -385,7 +379,6 @@ export class DailyReport extends CardDef {
   };
 
   static fitted = class Fitted extends Component<typeof this> {
-    // ¹⁴ Grid format
     <template>
       <div class='fitted-container'>
         <div class='badge-format'>
