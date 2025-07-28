@@ -293,6 +293,10 @@ export default class Room extends Component<Signature> {
         padding: 0;
       }
 
+      .llm-mode-toggle {
+        margin-left: auto;
+      }
+
       :deep(.ai-assistant-conversation > *:first-child) {
         margin-top: auto;
       }
