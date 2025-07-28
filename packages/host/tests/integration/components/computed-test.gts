@@ -1,4 +1,4 @@
-import { RenderingTestContext } from '@ember/test-helpers';
+import { RenderingTestContext, settled } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -461,5 +461,61 @@ module('Integration | computeds', function (hooks) {
     assert
       .dom('[data-test-links-to-many="collaborators"] [data-test-remove-card]')
       .doesNotExist();
+  });
+
+  test('computed field invalidates when contained card property changes at runtime', async function (this: RenderingTestContext, assert) {
+    class Author extends FieldDef {
+      @field firstName = contains(StringField);
+      @field lastName = contains(StringField);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <span data-test-author-name><@fields.firstName />
+            <@fields.lastName /></span>
+        </template>
+      };
+    }
+
+    class Post extends CardDef {
+      @field title = contains(StringField);
+      @field author = contains(Author);
+      @field summary = contains(StringField, {
+        computeVia: function (this: Post) {
+          return `${this.title} by ${this.author.firstName} ${this.author.lastName}`;
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-summary><@fields.summary /></div>
+          <div data-test-author><@fields.author /></div>
+        </template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Post, Author },
+      },
+    });
+
+    let author = new Author({ firstName: 'John', lastName: 'Doe' });
+    let post = new Post({
+      title: 'My First Post',
+      author,
+    });
+
+    // Initial render
+    await renderCard(loader, post, 'isolated');
+    assert.dom('[data-test-summary]').hasText('My First Post by John Doe');
+    assert.dom('[data-test-author-name]').hasText('John Doe');
+
+    // Change the contained card's property at runtime
+    author.firstName = 'Jane';
+
+    await settled();
+
+    // The computed field should automatically recalculate and UI should re-render
+    assert.dom('[data-test-summary]').hasText('My First Post by Jane Doe');
+    assert.dom('[data-test-author-name]').hasText('Jane Doe');
   });
 });
