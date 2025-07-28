@@ -1,20 +1,13 @@
 import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
-import {
-  Component,
-  primitive,
-  serialize,
-  deserialize,
-  formatQuery,
-  queryableValue,
-  FieldDef,
-} from './card-api';
+import { Component, primitive, FieldDef } from './card-api';
 import { restartableTask } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
 import {
   type ResolvedCodeRef,
   isUrlLike,
   CardURLContextName,
+  fieldSerializer,
   CodeRefSerializer,
 } from '@cardstack/runtime-common';
 import { not } from '@cardstack/boxel-ui/helpers';
@@ -101,17 +94,11 @@ class EditView extends Component<typeof CodeRefField> {
 export default class CodeRefField extends FieldDef {
   static icon = CodeIcon;
   static [primitive]: ResolvedCodeRef;
-
-  static [serialize] = CodeRefSerializer.serialize;
-  static [deserialize] = CodeRefSerializer.deserialize;
-  static [queryableValue] = CodeRefSerializer.queryableValue;
-  static [formatQuery] = CodeRefSerializer.formatQuery;
-
+  static [fieldSerializer] = 'code-ref';
   static embedded = class Embedded extends BaseView {};
-
   static edit = EditView;
 }
 
 export class AbsoluteCodeRefField extends CodeRefField {
-  static [deserialize] = CodeRefSerializer.deserializeAbsolute;
+  static [fieldSerializer] = 'absolute-code-ref';
 }
