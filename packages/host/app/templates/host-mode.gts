@@ -22,6 +22,7 @@ import {
   type getCard,
   type getCards,
   type getCardCollection,
+  type CardErrorJSONAPI,
   cardTypeDisplayName,
   PermissionsContextName,
   RealmURLContextName,
@@ -42,7 +43,7 @@ type StackItemCardContext = Omit<CardContext, 'prerenderedCardSearchComponent'>;
 
 interface HostModeComponentSignature {
   Args: {
-    model: any; // FIXME
+    model: ReturnType<getCard>;
   };
 }
 
@@ -53,6 +54,10 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
   private declare getCardCollection: getCardCollection;
 
   @service private declare store: StoreService;
+
+  get isError() {
+    return isCardErrorJSONAPI(this.args.model);
+  }
 
   private get cardContext(): StackItemCardContext {
     return {
@@ -65,13 +70,25 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
 
   <template>
     {{pageTitle 'FIXME'}}
-    <CardRenderer
-      class='stack-item-preview'
-      @card={{@model}}
-      @format='isolated'
-      @cardContext={{this.cardContext}}
-    />
+    {{#if this.isError}}
+      <div data-test-error='not-found'>
+        Card not found:
+        {{@model.id}}
+      </div>
+    {{else}}
+      <CardRenderer
+        class='stack-item-preview'
+        @card={{@model}}
+        @format='isolated'
+        @cardContext={{this.cardContext}}
+      />
+
+    {{/if}}
   </template>
 }
 
 export default RouteTemplate(HostModeComponent);
+
+function isCardErrorJSONAPI(model: any): model is CardErrorJSONAPI {
+  return model.status;
+}

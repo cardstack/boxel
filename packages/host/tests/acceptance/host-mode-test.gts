@@ -148,4 +148,12 @@ module('Acceptance | host mode tests', function (hooks) {
 
     await percySnapshot(assert);
   });
+
+  test('visiting a non-existent card shows an error', async function (assert) {
+    await visit('/test/Pet/non-existent.json');
+
+    assert
+      .dom('[data-test-error="not-found"]')
+      .hasText(`Card not found: ${testRealmURL}Pet/non-existent`);
+  });
 });
