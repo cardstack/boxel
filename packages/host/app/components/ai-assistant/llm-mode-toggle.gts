@@ -77,6 +77,7 @@ export default class LLMModeToggle extends Component<Signature> {
         background: none;
         border: none;
         border-radius: var(--boxel-border-radius);
+        padding-block: 2px;
         color: var(--boxel-light);
         font: 500 var(--boxel-font-xs);
         cursor: pointer;
