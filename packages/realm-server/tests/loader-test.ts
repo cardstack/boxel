@@ -94,7 +94,14 @@ module(basename(__filename), function () {
 
     test('can determine consumed modules', async function (assert) {
       let loader = createLoader();
-      await loader.import<{ a(): string }>(`${testRealmHref}a`);
+      await loader.import(`${testRealmHref}f`);
+      assert.deepEqual(await loader.getConsumedModules(`${testRealmHref}f`), [
+        `${testRealmHref}b`,
+        `${testRealmHref}c`,
+        `${testRealmHref}g`,
+      ]);
+      // assert deps from f don't leak into a's deps (fixes CS-9159)
+      await loader.import(`${testRealmHref}a`);
       assert.deepEqual(await loader.getConsumedModules(`${testRealmHref}a`), [
         `${testRealmHref}b`,
         `${testRealmHref}c`,
