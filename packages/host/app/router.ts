@@ -14,6 +14,7 @@ Router.map(function () {
     this.route('icon');
     this.route('meta');
   });
+  this.route('host-mode', { path: '/:realm/*path' });
   this.route('card', { path: '/*path' });
 
   // this route is empty but lets the application.hbs render, so that the CardPrerender

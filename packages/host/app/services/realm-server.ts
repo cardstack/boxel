@@ -72,6 +72,10 @@ export default class RealmServerService extends Service {
     this.fetchCatalogRealms();
   }
 
+  get availableRealmsAreReady() {
+    return this.ready.promise;
+  }
+
   resetState() {
     this.logout();
   }
@@ -159,6 +163,11 @@ export default class RealmServerService extends Service {
   @cached
   get availableRealmURLs() {
     return this.availableRealms.map((r) => r.url);
+  }
+
+  @cached
+  get availableRealmsFIXME() {
+    return new TrackedArray(this.availableRealms);
   }
 
   @cached

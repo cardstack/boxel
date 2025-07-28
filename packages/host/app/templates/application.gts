@@ -5,34 +5,22 @@ import { modifier } from 'ember-modifier';
 import RouteTemplate from 'ember-route-template';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
-import config from '@cardstack/host/config/environment';
+import HostModeService from '@cardstack/host/services/host-mode-service';
 
 interface ApplicationRouteSignature {
   Args: {};
 }
 
 class ApplicationRouteComponent extends Component<ApplicationRouteSignature> {
-  @service declare fastboot: { isFastBoot: boolean };
-
-  get hostMode() {
-    if (!this.fastboot.isFastBoot && config.hostModeDomainRoot) {
-      let hostModeDomainRoot = config.hostModeDomainRoot;
-      let currentHost = window.location.hostname;
-
-      if (currentHost.endsWith(`.${hostModeDomainRoot}`)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
+  @service declare hostModeService: HostModeService;
 
   get hostname() {
     return window.location.hostname;
   }
 
   <template>
-    {{#if this.hostMode}}
+    {{#if this.hostModeService.isActive}}
+      {{outlet}}
       <p {{removeLoading}}>Placeholder for host mode: {{this.hostname}}</p>
     {{else}}
       {{! The main application outlet }}
