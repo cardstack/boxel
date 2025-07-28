@@ -728,6 +728,14 @@ module(basename(__filename), function () {
                   kind: 'file',
                 },
               },
+              'g.js': {
+                links: {
+                  related: `${testRealmHref}g.js`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
               'hassan-x.json': {
                 links: {
                   related: `${testRealmHref}hassan-x.json`,
