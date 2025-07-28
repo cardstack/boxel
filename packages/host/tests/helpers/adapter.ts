@@ -298,7 +298,6 @@ export class TestRealmAdapter implements RealmAdapter {
       path,
       content: fileRefContent,
       lastModified: this.#lastModified.get(this.#paths.fileURL(path).href)!,
-      created: this.#resourceCreatedAt.get(this.#paths.fileURL(path).href)!,
     };
 
     if (fileRefContent === shimmedModuleIndicator) {
@@ -357,7 +356,6 @@ export class TestRealmAdapter implements RealmAdapter {
     return {
       path,
       lastModified,
-      created: lastModified,
       isNew: !exists,
     };
   }

@@ -181,11 +181,10 @@ export class NodeAdapter implements RealmAdapter {
     let exists = await this.exists(path);
     ensureFileSync(absolutePath);
     writeFileSync(absolutePath, contents);
-    let { mtime, birthtime } = statSync(absolutePath);
+    let { mtime } = statSync(absolutePath);
     return {
       path: absolutePath,
       lastModified: unixTime(mtime.getTime()),
-      created: unixTime(birthtime.getTime()),
       isNew: !exists,
     };
   }
