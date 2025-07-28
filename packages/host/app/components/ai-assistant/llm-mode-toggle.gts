@@ -70,8 +70,6 @@ export default class LLMModeToggle extends Component<Signature> {
         overflow: hidden;
         border: 1px solid var(--boxel-400);
         box-shadow: none;
-        width: 84px;
-        height: 30px;
         padding: 3px;
       }
       .llm-mode-option {
