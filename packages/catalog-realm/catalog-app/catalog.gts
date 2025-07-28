@@ -56,7 +56,7 @@ import { Category } from './listing/category';
 import { Tag } from './listing/tag';
 
 type ViewOption = 'strip' | 'grid';
-type SphereName = 'BUILD' | 'LEARN' | 'LIFE' | 'PLAY' | 'WORK';
+type SphereName = 'WORK' | 'PLAY' | 'LIFE' | 'LEARN' | 'BUILD';
 
 // Showcase View
 interface ShowcaseViewArgs {
@@ -388,12 +388,21 @@ class Isolated extends Component<typeof Catalog> {
 
     // Define which icon to use for each sphere
     const sphereIconMap: Record<SphereName, typeof IconComponent> = {
-      BUILD: BuildingIcon,
-      LEARN: UsersIcon,
-      LIFE: HealthRecognition,
-      PLAY: WorldIcon,
       WORK: BuildingBank,
+      PLAY: WorldIcon,
+      LIFE: HealthRecognition,
+      LEARN: UsersIcon,
+      BUILD: BuildingIcon,
     };
+
+    // Define the desired sphere order
+    const sphereOrder: SphereName[] = [
+      'WORK',
+      'PLAY',
+      'LIFE',
+      'LEARN',
+      'BUILD',
+    ];
 
     // Group categories by their sphere
     const sphereFilters: Record<string, FilterItem> = {};
@@ -424,23 +433,18 @@ class Isolated extends Component<typeof Catalog> {
       sphereFilters[name].filters!.push(categoryFilter);
     }
 
-    // Sort categories within each sphere filter
-    for (const sphereFilter of Object.values(sphereFilters)) {
-      sphereFilter.filters!.sort((a, b) =>
-        a.displayName.localeCompare(b.displayName),
-      );
-    }
+    // Create filter items in the desired order
+    const orderedSphereFilters = sphereOrder
+      .filter((sphereName) => sphereFilters[sphereName])
+      .map((sphereName) => sphereFilters[sphereName]);
 
-    // Sort categories by their display name
     const filterItems = [
       {
         id: 'all',
         displayName: 'All',
         icon: LayoutGridPlusIcon,
       },
-      ...Object.values(sphereFilters).sort((a, b) =>
-        a.displayName.localeCompare(b.displayName),
-      ),
+      ...orderedSphereFilters,
     ];
 
     return filterItems;
