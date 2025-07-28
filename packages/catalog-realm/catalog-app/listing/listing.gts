@@ -27,16 +27,13 @@ import {
   Menu as BoxelMenu,
   CardContainer,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem } from '@cardstack/boxel-ui/helpers';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { MenuItem, eq } from '@cardstack/boxel-ui/helpers';
 
 import AppListingHeader from '../components/app-listing-header';
 import { ListingFittedTemplate } from '../components/listing-fitted';
 
 import ListingInitCommand from '@cardstack/boxel-host/commands/listing-action-init';
-import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
-import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
-import OpenAiAssistantRoomCommand from '@cardstack/boxel-host/commands/open-ai-assistant-room';
+import UseAiAssistantCommand from '@cardstack/boxel-host/commands/use-ai-assistant';
 
 import { Publisher } from './publisher';
 import { Category } from './category';
@@ -92,7 +89,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return this.args.model.skills && this.args.model?.skills?.length > 0;
   }
 
-  get testSkillsDisabled() {
+  get addSkillsDisabled() {
     return !this.isSkillListing || !this.hasSkills;
   }
 
@@ -103,40 +100,24 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     );
   }
 
-  @action testSkills() {
-    this._addSkillsToRoom.perform();
+  @action addSkillsToCurrentRoom() {
+    this._addSkillsToCurrentRoom.perform();
   }
 
-  _addSkillsToRoom = task(async () => {
+  _addSkillsToCurrentRoom = task(async () => {
     let commandContext = this.args.context?.commandContext;
     if (!commandContext) {
       throw new Error('Missing commandContext');
     }
 
-    let createRoomCommand = new CreateAiAssistantRoomCommand(commandContext);
-    let openRoomCommand = new OpenAiAssistantRoomCommand(commandContext);
-    let addSkillsCommand = new AddSkillsToRoomCommand(commandContext);
-
-    let roomId = window.sessionStorage.getItem('currentRoomId') || this.roomId;
-
-    if (!roomId) {
-      let result = await createRoomCommand.execute({
-        name: `Skill: ${this.args.model.name}`,
-      });
-      roomId = result.roomId;
-      this.roomId = roomId;
-    }
-
-    await openRoomCommand.execute({ roomId });
-
-    await addSkillsCommand.execute({
-      roomId,
-      skills: Array.isArray(this.args.model.skills)
+    let useAiAssistantCommand = new UseAiAssistantCommand(commandContext);
+    await useAiAssistantCommand.execute({
+      skillCards: Array.isArray(this.args.model.skills)
         ? [...this.args.model.skills]
         : [],
+      clientGeneratedId: `skill-test-${Date.now()}`,
+      openRoom: true, // Open the room UI if we created a new room
     });
-
-    this.roomId = null;
   });
 
   @action preview() {
@@ -209,11 +190,11 @@ class EmbeddedTemplate extends Component<typeof Listing> {
               <BoxelButton
                 class='action-button'
                 data-test-catalog-listing-embedded-add-skill-to-room-button
-                @loading={{this._addSkillsToRoom.isRunning}}
-                @disabled={{this.testSkillsDisabled}}
-                {{on 'click' this.testSkills}}
+                @loading={{this._addSkillsToCurrentRoom.isRunning}}
+                @disabled={{this.addSkillsDisabled}}
+                {{on 'click' this.addSkillsToCurrentRoom}}
               >
-                Add Skill
+                Add Skills
               </BoxelButton>
             {{/if}}
             {{#if this.hasExamples}}

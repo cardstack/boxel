@@ -29,6 +29,7 @@ import * as TransformCardsCommandModule from './transform-cards';
 import * as UpdateCodePathWithSelectionCommandModule from './update-code-path-with-selection';
 import * as UpdatePlaygroundSelectionCommandModule from './update-playground-selection';
 import * as UpdateSkillActivationCommandModule from './update-skill-activation';
+import * as UseAiAssistantCommandModule from './ai-assistant';
 import * as CommandUtilsModule from './utils';
 import * as WriteTextFileCommandModule from './write-text-file';
 
@@ -148,6 +149,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/update-skill-activation',
     UpdateSkillActivationCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/use-ai-assistant',
+    UseAiAssistantCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/utils',
