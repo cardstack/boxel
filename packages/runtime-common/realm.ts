@@ -118,7 +118,6 @@ export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
   lastModified: number;
-  created: number;
 
   [key: symbol]: object;
 }
@@ -745,12 +744,9 @@ export class Realm {
     }
 
     let results: AtomicOperationResult[] = writeResults.map(
-      ({ path, lastModified }) => ({
+      ({ path }) => ({
         data: {
           id: this.paths.fileURL(path).href,
-        },
-        meta: {
-          lastModified,
         },
       }),
     );

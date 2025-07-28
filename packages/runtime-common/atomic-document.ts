@@ -31,7 +31,6 @@ export interface AtomicOperationResult {
   };
   meta?: {
     href?: string; //local path
-    created?: number;
   };
 }
 
