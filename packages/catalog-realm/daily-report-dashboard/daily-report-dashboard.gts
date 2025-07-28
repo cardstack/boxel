@@ -1,4 +1,4 @@
-import { array, fn } from '@ember/helper';
+import { array } from '@ember/helper';
 import { gt } from '@cardstack/boxel-ui/helpers';
 import { CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
 import { Component, realmURL } from 'https://cardstack.com/base/card-api';
