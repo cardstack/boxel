@@ -12,7 +12,6 @@ import CodeRefField from './code-ref';
 import BooleanField from './boolean';
 import NumberField from './number';
 import { Skill } from './skill';
-import { SkillConfigField } from './skill-config-field';
 import {
   JsonField,
   QueryField,
@@ -144,6 +143,14 @@ export class PatchCodeCommandResult extends CardDef {
 export class PatchCodeInput extends CardDef {
   @field fileUrl = contains(StringField);
   @field codeBlocks = containsMany(StringField);
+}
+
+export class SkillConfigField extends FieldDef {
+  static displayName = 'Skill Configuration';
+
+  @field enabledSkillCards = containsMany(JsonField);
+  @field disabledSkillCards = containsMany(JsonField);
+  @field commandDefinitions = containsMany(JsonField);
 }
 
 export class CreateAIAssistantRoomInput extends CardDef {

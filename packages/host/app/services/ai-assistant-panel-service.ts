@@ -9,7 +9,7 @@ import { timeout } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
-import * as SkillConfigFieldModule from 'https://cardstack.com/base/skill-config-field';
+import * as CommandModule from 'https://cardstack.com/base/command';
 
 import CreateAiAssistantRoomCommand from '../commands/create-ai-assistant-room';
 
@@ -52,24 +52,23 @@ export default class AiAssistantPanelService extends Service {
     }
   }
 
-  private skillConfigFieldResource = importResource(
+  private commandModuleResource = importResource(
     this,
-    () => 'https://cardstack.com/base/skill-config-field',
+    () => 'https://cardstack.com/base/command',
   );
 
-  get skillConfigFieldModule() {
-    if (this.skillConfigFieldResource.error) {
+  get commandModule() {
+    if (this.commandModuleResource.error) {
       throw new Error(
-        `Error loading SkillConfigField: ${JSON.stringify(this.skillConfigFieldResource.error)}`,
+        `Error loading commandModule: ${JSON.stringify(this.commandModuleResource.error)}`,
       );
     }
-    if (!this.skillConfigFieldResource.module) {
+    if (!this.commandModuleResource.module) {
       throw new Error(
         `bug: SkillConfigField has not loaded yet--make sure to await this.loaded before using the api`,
       );
     }
-    return this.skillConfigFieldResource
-      .module as typeof SkillConfigFieldModule;
+    return this.commandModuleResource.module as typeof CommandModule;
   }
 
   get isOpen() {
@@ -161,22 +160,10 @@ export default class AiAssistantPanelService extends Service {
         let input: any = { name };
 
         if (skillConfig) {
-          await this.skillConfigFieldResource.loaded;
-          const skillConfigField =
-            new this.skillConfigFieldModule.SkillConfigField({
-              enabledSkillCards: skillConfig.enabledSkillCards.map(
-                (fileDef: any) =>
-                  this.matrixService.fileAPI.createFileDef(fileDef),
-              ),
-              disabledSkillCards: skillConfig.disabledSkillCards.map(
-                (fileDef: any) =>
-                  this.matrixService.fileAPI.createFileDef(fileDef),
-              ),
-              commandDefinitions: skillConfig.commandDefinitions.map(
-                (fileDef: any) =>
-                  this.matrixService.fileAPI.createFileDef(fileDef),
-              ),
-            });
+          await this.commandModuleResource.loaded;
+          const skillConfigField = new this.commandModule.SkillConfigField(
+            skillConfig,
+          );
           input.skillConfig = skillConfigField;
         } else {
           console.log('here');
