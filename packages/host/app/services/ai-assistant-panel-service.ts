@@ -166,7 +166,6 @@ export default class AiAssistantPanelService extends Service {
           );
           input.skillConfig = skillConfigField;
         } else {
-          console.log('here');
           input.defaultSkills = await this.matrixService.loadDefaultSkills(
             this.operatorModeStateService.state.submode,
           );
