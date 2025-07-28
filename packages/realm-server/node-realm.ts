@@ -172,6 +172,7 @@ export class NodeAdapter implements RealmAdapter {
         return lazyStream;
       },
       lastModified: unixTime(stat.mtime.getTime()),
+      created: unixTime(stat.birthtime.getTime()),
     };
   }
 

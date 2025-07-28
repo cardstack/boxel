@@ -118,6 +118,7 @@ export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
   lastModified: number;
+  created: number;
 
   [key: symbol]: object;
 }
@@ -545,10 +546,7 @@ export class Realm {
           throw new Error(e);
         }
       }
-      let { lastModified, isNew } = await this.#adapter.write(
-        path,
-        content,
-      );
+      let { lastModified, isNew } = await this.#adapter.write(path, content);
       results.push({ path, lastModified, isNew });
       urls.push(url);
     }
@@ -743,13 +741,11 @@ export class Realm {
       }
     }
 
-    let results: AtomicOperationResult[] = writeResults.map(
-      ({ path }) => ({
-        data: {
-          id: this.paths.fileURL(path).href,
-        },
-      }),
-    );
+    let results: AtomicOperationResult[] = writeResults.map(({ path }) => ({
+      data: {
+        id: this.paths.fileURL(path).href,
+      },
+    }));
     return createResponse({
       body: JSON.stringify({ 'atomic:results': results }, null, 2),
       init: {
