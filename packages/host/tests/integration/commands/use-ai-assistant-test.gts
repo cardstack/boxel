@@ -395,7 +395,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     let aiAssistantCommand = new UseAiAssistantCommand(
       commandService.commandContext,
     );
-    let result = await aiAssistantCommand.execute({
+    await aiAssistantCommand.execute({
       roomId,
       skillCards: [skillCard1, skillCard2],
     });

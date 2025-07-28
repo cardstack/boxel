@@ -33,7 +33,7 @@ import AppListingHeader from '../components/app-listing-header';
 import { ListingFittedTemplate } from '../components/listing-fitted';
 
 import ListingInitCommand from '@cardstack/boxel-host/commands/listing-action-init';
-import UseAiAssistantCommand from '@cardstack/boxel-host/commands/use-ai-assistant';
+import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 
 import { Publisher } from './publisher';
 import { Category } from './category';

@@ -18,8 +18,8 @@ import OpenAiAssistantRoomCommand from './open-ai-assistant-room';
 import SendAiAssistantMessageCommand from './send-ai-assistant-message';
 import SetActiveLLMCommand from './set-active-llm';
 
-import type StoreService from '../services/store';
 import type MatrixService from '../services/matrix-service';
+import type StoreService from '../services/store';
 
 export default class UseAiAssistantCommand extends HostBaseCommand<
   typeof BaseCommandModule.UseAiAssistantInput,
@@ -80,6 +80,11 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
       });
       return sendMessageResult;
     }
+
+    // Return a result indicating no message was sent
+    let commandModule = await this.loadCommandModule();
+    const { SendAiAssistantMessageResult } = commandModule;
+    return new SendAiAssistantMessageResult({ roomId });
   }
 
   async createRoomIfNeeded(
