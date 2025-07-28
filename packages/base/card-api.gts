@@ -200,24 +200,11 @@ function isNotLoadedValue(val: any): val is NotLoadedValue {
   return type === 'not-loaded';
 }
 
-interface StaleValue {
-  type: 'stale';
-  staleValue: any;
-}
-
 type CardChangeSubscriber = (
   instance: BaseDef,
   fieldName: string,
   fieldValue: any,
 ) => void;
-
-function isStaleValue(value: any): value is StaleValue {
-  if (value && typeof value === 'object') {
-    return 'type' in value && value.type === 'stale' && 'staleValue' in value;
-  } else {
-    return false;
-  }
-}
 const deserializedData = initSharedState(
   'deserializedData',
   () => new WeakMap<BaseDef, Map<string, any>>(),
@@ -246,9 +233,15 @@ const fieldDescriptions = initSharedState(
   'fieldDescriptions',
   () => new WeakMap<typeof BaseDef, Map<string, string>>(),
 );
+const computingFields = initSharedState(
+  'computingFields',
+  () => new WeakMap<BaseDef, Set<string>>(),
+);
+// Global flag to track if we're currently inside any computed execution
+let isComputingGlobally = false;
 
 // our place for notifying Glimmer when a card is ready to re-render (which will
-// involve rerunning async computed fields)
+// involve rerunning computed fields on-demand)
 const cardTracking = initSharedState(
   'cardTracking',
   () => new TrackedWeakMap<object, any>(),
@@ -480,17 +473,46 @@ function getter<CardT extends BaseDefConstructor>(
   cardTracking.get(instance);
 
   if (field.computeVia) {
-    let value = deserialized.get(field.name);
-    if (isStaleValue(value)) {
-      value = value.staleValue;
-    } else if (!deserialized.has(field.name)) {
-      value = field.computeVia.bind(instance)();
+    // Check for direct recursion - if we're already computing this exact field on this instance
+    let computing = computingFields.get(instance);
+    if (computing?.has(field.name)) {
+      // Direct recursion detected - return empty value to break the cycle
+      return field.emptyValue(instance) as BaseInstanceType<CardT>;
+    }
+
+    // Mark this field as being computed (for recursion detection)
+    if (!computing) {
+      computing = new Set();
+      computingFields.set(instance, computing);
+    }
+    computing.add(field.name);
+
+    // Set global flag to prevent recompute during computed execution
+    const wasComputingGlobally = isComputingGlobally;
+    isComputingGlobally = true;
+
+    try {
+      // Always execute computed fields, never cache
+      let value = field.computeVia.bind(instance)();
       if (value === undefined) {
         value = field.emptyValue(instance);
       }
-      deserialized.set(field.name, value);
+      return value as BaseInstanceType<CardT>;
+    } catch (e) {
+      if (isNotLoadedError(e)) {
+        // Re-throw NotLoaded errors with the computed field's name instead of the dependency field's name
+        throw new NotLoaded(instance, e.reference, field.name);
+      }
+      throw e;
+    } finally {
+      // Clean up recursion tracking
+      computing.delete(field.name);
+      if (computing.size === 0) {
+        computingFields.delete(instance);
+      }
+      // Restore global flag
+      isComputingGlobally = wasComputingGlobally;
     }
-    return value;
   } else {
     if (deserialized.has(field.name)) {
       return deserialized.get(field.name);
@@ -1438,26 +1460,48 @@ class LinksToMany<FieldT extends CardDefConstructor>
   }
 
   getter(instance: CardDef): BaseInstanceType<FieldT> {
-    let deserialized = getDataBucket(instance);
     cardTracking.get(instance);
-    let maybeNotLoaded = deserialized.get(this.name);
-    if (maybeNotLoaded) {
-      if (isNotLoadedValue(maybeNotLoaded)) {
-        throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
-      }
 
-      let notLoadedRefs: string[] = [];
-      for (let entry of maybeNotLoaded) {
-        if (isNotLoadedValue(entry)) {
-          notLoadedRefs = [...notLoadedRefs, entry.reference];
-        }
-      }
-      if (notLoadedRefs.length > 0) {
-        throw new NotLoaded(instance, notLoadedRefs, this.name);
-      }
+    if (this.computeVia) {
+      // For computed LinksToMany fields, use the main getter function
+      return getter(instance, this);
     }
 
-    return getter(instance, this);
+    // For non-computed LinksToMany fields, handle directly
+    let deserialized = getDataBucket(instance);
+    let value = deserialized.get(this.name);
+
+    if (!value) {
+      value = this.emptyValue(instance);
+      deserialized.set(this.name, value);
+    }
+
+    // Handle the case where the field was set to a single NotLoadedValue during deserialization
+    if (isNotLoadedValue(value)) {
+      throw new NotLoaded(instance, value.reference, this.name);
+    }
+
+    // Ensure we have an array - if not, something went wrong during deserialization
+    if (!Array.isArray(value)) {
+      throw new Error(
+        `LinksToMany field '${
+          this.name
+        }' expected array but got ${typeof value}`,
+      );
+    }
+
+    // Check if the returned array contains any NotLoadedValues
+    let notLoadedRefs: string[] = [];
+    for (let entry of value) {
+      if (isNotLoadedValue(entry)) {
+        notLoadedRefs = [...notLoadedRefs, entry.reference];
+      }
+    }
+    if (notLoadedRefs.length > 0) {
+      throw new NotLoaded(instance, notLoadedRefs, this.name);
+    }
+
+    return value;
   }
 
   queryableValue(instances: any[] | null, stack: CardDef[]): any[] | null {
@@ -1497,6 +1541,16 @@ class LinksToMany<FieldT extends CardDefConstructor>
     visited: Set<string>,
     opts?: SerializeOpts,
   ) {
+    // Check for skip-serialization marker for computed fields that can't be computed
+    if (
+      values &&
+      typeof values === 'object' &&
+      'type' in values &&
+      (values as any).type === 'skip-serialization'
+    ) {
+      return { relationships: {} };
+    }
+
     // this can be a not loaded value happen when the linksToMany is a
     // computed that consumes a linkTo field that is not loaded
     if (isNotLoadedValue(values)) {
@@ -2309,10 +2363,10 @@ export class CardDef extends BaseDef {
     if (fieldName === 'id') {
       // we need to be careful that we don't trigger the ambient recompute() in our setters
       // when we are instantiating an instance that is placed in the identityMap that has
-      // not had it's field values set yet, as computeds will be run that may assume dependent
-      // fields are available when they are not (e.g. Spec.isPrimitive trying to load
-      // it's 'ref' field). In this scenario, only the 'id' field is available. the rest of the fields
-      // will be filled in later, so just set the 'id' directly in the deserialized cache to avoid
+      // not had it's field values set yet, as computeds may assume dependent fields are
+      // available when they are not (e.g. Spec.isPrimitive trying to access its 'ref' field).
+      // In this scenario, only the 'id' field is available. The rest of the fields will be
+      // filled in later, so just set the 'id' directly in the deserialized cache to avoid
       // triggering the recompute.
       let deserialized = getDataBucket(instance);
       deserialized.set('id', value);
@@ -2641,6 +2695,22 @@ function peekAtField(instance: BaseDef, fieldName: string): any {
     // we peek specifically so that we can see the raw values
     // without worrying about encountering NotLoaded errors
     if (isNotLoadedError(e)) {
+      // For linksToMany fields (both computed and non-computed), we want to return
+      // the actual array data (which may contain NotLoadedValue entries) rather than a single NotLoadedValue
+      if (field.fieldType === 'linksToMany') {
+        let deserialized = getDataBucket(instance);
+        let rawValue = deserialized.get(field.name);
+        if (rawValue) {
+          return rawValue;
+        }
+        // For computed linksToMany fields that can't be computed, return a special marker
+        // to indicate that the field should be skipped during serialization
+        if (field.computeVia) {
+          return { type: 'skip-serialization' };
+        }
+        // For non-computed fields, fall back to returning empty array for relationshipMeta to handle
+        return [];
+      }
       return { type: 'not-loaded', reference: e.reference } as NotLoadedValue;
     }
     throw e;
@@ -3121,14 +3191,11 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       (instance as any)[meta] = resource.meta;
     }
 
-    // TODO we might want to take a more nuanced approach in the future
-    // where we initialize the instance with the server provided computed
-    // values (by simply moving this before we write out the data in the
-    // for loop above). Although keep in mind that for updateFromSerialized()
-    // we always want this to run after we set values as we're not sure which
-    // values we set that depend on computeds. Currently we do the thing that
-    // is always correct.
-    markAllComputedsStale(instance);
+    // Note: Computed fields are now always executed on-demand and never cached,
+    // so server-provided computed values would be ignored. We run recompute here
+    // primarily to populate non-computed fields and trigger any necessary loading
+    // of related cards. For updateFromSerialized() we always want this to run
+    // after we set values as we're not sure which values we set that depend on computeds.
     await recompute(instance, {
       ...(opts?.ignoreBrokenLinks ? { ignoreBrokenLinks: true } : {}),
     });
@@ -3148,19 +3215,6 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
 
   deferred.fulfill(instance);
   return instance;
-}
-
-function markAllComputedsStale(instance: BaseDef) {
-  let deserialized = getDataBucket(instance);
-  for (let computedFieldName of Object.keys(getComputedFields(instance))) {
-    let currentValue = deserialized.get(computedFieldName);
-    if (!isStaleValue(currentValue)) {
-      deserialized.set(computedFieldName, {
-        type: 'stale',
-        staleValue: currentValue,
-      } as StaleValue);
-    }
-  }
 }
 
 export function setCardAsSavedForTest(instance: CardDef, id?: string): void {
@@ -3270,20 +3324,13 @@ function setField(instance: BaseDef, field: Field, value: any) {
   value = field.validate(instance, value);
   let deserialized = getDataBucket(instance);
   deserialized.set(field.name, value);
-  // invalidate all computed fields because we don't know which ones depend on this one
-  for (let computedFieldName of Object.keys(getComputedFields(instance))) {
-    if (deserialized.has(computedFieldName)) {
-      let currentValue = deserialized.get(computedFieldName);
-      if (!isStaleValue(currentValue)) {
-        deserialized.set(computedFieldName, {
-          type: 'stale',
-          staleValue: currentValue,
-        } as StaleValue);
-      }
-    }
-  }
+  // Computed fields are always executed on-demand and never cached, so no invalidation needed
   notifySubscribers(instance, field.name, value);
-  logger.log(recompute(instance));
+
+  // Don't trigger recompute if we're inside any computed execution globally
+  if (!isComputingGlobally) {
+    logger.log(recompute(instance));
+  }
 }
 
 function notifySubscribers(
@@ -3385,7 +3432,7 @@ export async function recompute(
     let pendingFields = new Set<string>(
       Object.keys(
         getFields(model, {
-          includeComputeds: true,
+          includeComputeds: false, // Don't include computeds in recompute
           usedLinksToFieldsOnly: !opts?.recomputeAllFields,
         }),
       ),
@@ -3398,20 +3445,19 @@ export async function recompute(
           undefined,
           opts,
         );
-        if (!isStaleValue(value)) {
-          pendingFields.delete(fieldName);
-          if (recomputePromises.get(card) !== recomputePromise) {
-            return;
-          }
-          if (Array.isArray(value)) {
-            for (let item of value) {
-              if (item && isCardOrField(item) && !stack.includes(item)) {
-                await _loadModel(item, [item, ...stack]);
-              }
+        // Computed fields are executed on-demand, so all non-computed fields should be ready
+        pendingFields.delete(fieldName);
+        if (recomputePromises.get(card) !== recomputePromise) {
+          return;
+        }
+        if (Array.isArray(value)) {
+          for (let item of value) {
+            if (item && isCardOrField(item) && !stack.includes(item)) {
+              await _loadModel(item, [item, ...stack]);
             }
-          } else if (isCardOrField(value) && !stack.includes(value)) {
-            await _loadModel(value, [value, ...stack]);
           }
+        } else if (isCardOrField(value) && !stack.includes(value)) {
+          await _loadModel(value, [value, ...stack]);
         }
       }
       // TODO should we have a timeout?
@@ -3433,10 +3479,9 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
   fieldName: K,
   compute: () => T[K] | Promise<T[K]> = () => instance[fieldName],
   opts?: RecomputeOptions,
-): Promise<T[K] | T[K][] | StaleValue | undefined> {
+): Promise<T[K] | T[K][] | undefined> {
   let result: T[K] | T[K][] | undefined;
   let deserialized = getDataBucket(instance);
-  let maybeStale = deserialized.get(fieldName as string);
   let field = getField(instance, fieldName as string, { untracked: true });
   if (!field) {
     throw new Error(
@@ -3446,16 +3491,9 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
     );
   }
   if (field.computeVia) {
-    let { computeVia: _computeVia } = field;
-    if (!_computeVia) {
-      throw new Error(
-        `the field '${fieldName as string}' is not a computed field in card ${
-          instance.constructor.name
-        }`,
-      );
-    }
-    let computeVia = _computeVia as () => T[K] | Promise<T[K]>;
-    compute = computeVia.bind(instance);
+    // Computed fields are executed on-demand when accessed, so we don't need
+    // to "get them ready" - just return undefined to indicate they're "ready"
+    return undefined;
   }
   try {
     //To avoid race conditions,
@@ -3486,7 +3524,14 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
           throw innerErr;
         }
       }
-      if (result === undefined && isStaleValue(maybeStale)) {
+      if (result === undefined) {
+        // For linksToMany fields, preserve the existing array structure instead of
+        // overwriting with a single NotLoadedValue
+        if (field.fieldType === 'linksToMany') {
+          // The field should already have the correct array structure from deserialization
+          // Don't overwrite it with a single NotLoadedValue
+          return undefined;
+        }
         deserialized.set(
           fieldName as string,
           { type: 'not-loaded', reference: e.reference } as NotLoadedValue,
@@ -3498,12 +3543,13 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
     }
   }
 
-  //Only update the value of computed field.
+  // Computed fields are executed on-demand and never stored
   if (field?.computeVia) {
     if (result === undefined) {
       result = field.emptyValue(instance);
     }
-    deserialized.set(fieldName as string, result);
+    // Don't store computed values in deserialized bucket - just return the result
+    return result;
   }
   return result;
 }
@@ -3567,19 +3613,6 @@ export function getFields(
     obj = Reflect.getPrototypeOf(obj);
   }
   return fields;
-}
-
-function getComputedFields<T extends BaseDef>(
-  card: T,
-): { [P in keyof T]?: Field<BaseDefConstructor> } {
-  let fields = Object.entries(getFields(card, { includeComputeds: true })) as [
-    string,
-    Field<BaseDefConstructor>,
-  ][];
-  let computedFields = fields.filter(([_, field]) => field.computeVia);
-  return Object.fromEntries(computedFields) as {
-    [P in keyof T]?: Field<BaseDefConstructor>;
-  };
 }
 
 export class Box<T> {
