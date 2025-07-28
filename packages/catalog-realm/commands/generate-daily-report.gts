@@ -91,7 +91,7 @@ export class GenerateDailyReport extends Command<
       });
 
       let prompt =
-        'Generate daily report for today from the attached activity log cards using the policy manual and update the attached daily report card';
+        'Generate daily report for the selected date from the attached activity log cards using the policy manual and update the attached daily report card';
       let skillCardId = new URL('../Skill/daily-report-skill', import.meta.url)
         .href;
       let useCommand = new UseAiAssistantCommand(this.commandContext);

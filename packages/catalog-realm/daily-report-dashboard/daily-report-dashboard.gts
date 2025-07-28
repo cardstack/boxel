@@ -52,10 +52,9 @@ class Isolated extends Component<typeof DailyReportDashboard> {
     return this.realms.map((realm) => realm.href);
   }
 
-  @tracked currentRoomId: string | null = null;
   @tracked selectedDate: Date = new Date();
 
-  get todayDateString() {
+  get selectedDateString() {
     return this.selectedDate.toISOString().split('T')[0];
   }
 
@@ -65,11 +64,11 @@ class Isolated extends Component<typeof DailyReportDashboard> {
   }
 
   @action
-  generateTodaysReport() {
-    this._generateTodaysReport.perform();
+  generateReport() {
+    this._generateReport.perform();
   }
 
-  _generateTodaysReport = task(async () => {
+  _generateReport = task(async () => {
     let commandContext = this.args.context?.commandContext;
     if (!commandContext) {
       throw new Error('Command context not available. Please try again.');
@@ -134,17 +133,17 @@ class Isolated extends Component<typeof DailyReportDashboard> {
                   <div class='date-input-container'>
                     <BoxelInput
                       @type='date'
-                      @value={{this.todayDateString}}
+                      @value={{this.selectedDateString}}
                       @onInput={{this.updateSelectedDate}}
                       placeholder='Select date'
                     />
                   </div>
                   <Button
                     class='generate-report-button'
-                    @disabled={{this._generateTodaysReport.isRunning}}
-                    {{on 'click' this.generateTodaysReport}}
+                    @disabled={{this._generateReport.isRunning}}
+                    {{on 'click' this.generateReport}}
                   >
-                    {{#if this._generateTodaysReport.isRunning}}
+                    {{#if this._generateReport.isRunning}}
                       <svg
                         class='button-icon spinning'
                         viewBox='0 0 24 24'
