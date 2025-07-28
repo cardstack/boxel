@@ -2,6 +2,8 @@ import { service } from '@ember/service';
 
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
+import { uniqBy } from 'lodash';
+
 import {
   isCardInstance,
   loadCardDef,
@@ -34,8 +36,6 @@ import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
-
-import { uniqBy } from 'lodash';
 
 const listingTypes: Record<'card' | 'app' | 'skill', string> = {
   card: 'CardListing',

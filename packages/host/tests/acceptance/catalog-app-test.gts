@@ -43,8 +43,18 @@ const calculatorTagId = `${catalogRealmURL}Tag/c1fe433a-b3df-41f4-bdcf-d98686ee4
 const gameTagId = `${catalogRealmURL}Tag/51de249c-516a-4c4d-bd88-76e88274c483`;
 
 const authorCardSource = `
-  import { field, contains, CardDef } from 'https://cardstack.com/base/card-api';
+  import { field, contains, CardDef, FieldDef } from 'https://cardstack.com/base/card-api';
   import StringField from 'https://cardstack.com/base/string';
+
+
+  export class AuthorCompany extends FieldDef {
+    static displayName = 'AuthorCompany';
+    @field name = contains(StringField);
+    @field address = contains(StringField);
+    @field city = contains(StringField);
+    @field state = contains(StringField);
+    @field zip = contains(StringField);
+  }
 
   export class Author extends CardDef {
     static displayName = 'Author';
@@ -55,6 +65,7 @@ const authorCardSource = `
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
     });
+    @field company = contains(AuthorCompany);
   }
 `;
 
@@ -1141,13 +1152,18 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           assert.ok(listing, 'Listing should be created');
           assert.strictEqual(
             listing.specs.length,
-            1,
-            'Listing should have one spec',
+            2,
+            'Listing should have two specs',
           );
           assert.strictEqual(
-            listing.specs[0].ref.name,
-            'Author',
+            listing.specs.some((spec) => spec.ref.name === 'Author'),
+            true,
             'Listing should have an Author spec',
+          );
+          assert.strictEqual(
+            listing.specs.some((spec) => spec.ref.name === 'AuthorCompany'),
+            true,
+            'Listing should have an AuthorCompany spec',
           );
           assert.strictEqual(
             listing.examples.length,
