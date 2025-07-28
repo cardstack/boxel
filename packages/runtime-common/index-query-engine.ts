@@ -9,6 +9,7 @@ import {
   internalKeyFor,
   identifyCard,
   ResolvedCodeRef,
+  trimExecutableExtension,
 } from './index';
 import {
   type Expression,
@@ -56,6 +57,7 @@ import {
   RealmMetaTable,
   type BoxelIndexTable,
   type CardTypeSummary,
+  type CardDefMeta,
 } from './index-structure';
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
@@ -64,6 +66,15 @@ interface IndexedModule {
   executableCode: string;
   source: string;
   canonicalURL: string;
+  lastModified: number | null;
+  resourceCreatedAt: number;
+  deps: string[] | null;
+}
+
+interface IndexedCardDef {
+  type: 'card-def';
+  meta: CardDefMeta;
+  types: string[] | null;
   lastModified: number | null;
   resourceCreatedAt: number;
   deps: string[] | null;
@@ -117,6 +128,7 @@ interface InstanceError
 
 export type InstanceOrError = IndexedInstance | InstanceError;
 export type IndexedModuleOrError = IndexedModule | IndexedError;
+export type IndexedCardDefOrError = IndexedCardDef | IndexedError;
 
 type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions & PrerenderedCardOptions;
@@ -173,6 +185,54 @@ export class IndexQueryEngine {
 
   async #queryCards(query: CardExpression, loader: Loader) {
     return this.#query(await this.makeExpression(query, loader));
+  }
+
+  async getCardDef(
+    codeRef: ResolvedCodeRef,
+    opts?: GetEntryOptions,
+  ): Promise<IndexedCardDefOrError | undefined> {
+    let cleansedCodeRef = { ...codeRef };
+    cleansedCodeRef.module = trimExecutableExtension(
+      new URL(cleansedCodeRef.module),
+    ).href;
+    let key = internalKeyFor(cleansedCodeRef, undefined);
+    let rows = (await this.#query([
+      `SELECT i.*
+       FROM ${tableFromOpts(opts)} as i
+       WHERE`,
+      ...every([
+        any([[`i.url =`, param(key)]]),
+        any([
+          ['i.type =', param('card-def')],
+          ['i.type =', param('error')],
+        ]),
+      ]),
+    ] as Expression)) as unknown as BoxelIndexTable[];
+    let maybeResult: BoxelIndexTable | undefined = rows[0];
+    if (!maybeResult) {
+      return undefined;
+    }
+    if (maybeResult.is_deleted) {
+      return undefined;
+    }
+    let result = maybeResult;
+    if (result.type === 'error') {
+      return { type: 'error', error: result.error_doc! };
+    }
+    let cardDefEntry = assertIndexEntryMeta(result);
+    let {
+      meta,
+      last_modified: lastModified,
+      resource_created_at: resourceCreatedAt,
+    } = cardDefEntry;
+    return {
+      type: 'card-def',
+      meta,
+      lastModified: lastModified != null ? parseInt(lastModified) : null,
+      resourceCreatedAt: parseInt(resourceCreatedAt),
+      deps: cardDefEntry.deps,
+      types: cardDefEntry.types,
+    };
   }
 
   async getModule(
@@ -1183,6 +1243,38 @@ function assertIndexEntrySource<T>(obj: T): Omit<
   }
   return obj as Omit<T, 'source' | 'last_modified' | 'resource_created_at'> & {
     source: string;
+    last_modified: string;
+    resource_created_at: string;
+  };
+}
+
+function assertIndexEntryMeta<T>(obj: T): Omit<
+  T,
+  'meta' | 'last_modified' | 'resource_created_at'
+> & {
+  meta: CardDefMeta;
+  last_modified: string | null;
+  resource_created_at: string;
+} {
+  if (!obj || typeof obj !== 'object') {
+    throw new Error(`expected index entry is null or not an object`);
+  }
+  if (!('meta' in obj) || typeof obj.meta !== 'object') {
+    throw new Error(`expected index entry to have "meta" string property`);
+  }
+  if (!('last_modified' in obj)) {
+    throw new Error(`expected index entry to have "last_modified" property`);
+  }
+  if (
+    !('resource_created_at' in obj) ||
+    typeof obj.resource_created_at !== 'string'
+  ) {
+    throw new Error(
+      `expected index entry to have "resource_created_at" property`,
+    );
+  }
+  return obj as Omit<T, 'meta' | 'last_modified' | 'resource_created_at'> & {
+    meta: CardDefMeta;
     last_modified: string;
     resource_created_at: string;
   };

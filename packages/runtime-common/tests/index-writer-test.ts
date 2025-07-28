@@ -207,6 +207,8 @@ const tests = Object.freeze({
     ]);
   },
 
+  // TODO can perform invalidations for a card-def entry
+
   "invalidations don't cross realm boundaries": async (
     assert,
     { indexWriter, adapter },
@@ -1251,6 +1253,10 @@ const tests = Object.freeze({
       'module does not exist in production index',
     );
   },
+
+  // TODO can get a card-def entry
+
+  // TODO can get a card-def entry from working index
 
   'can get error doc for module': async (
     assert,

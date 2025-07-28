@@ -161,6 +161,7 @@ module(basename(__filename), function () {
             import { Person } from "./person";
 
             export class Post extends CardDef {
+              static displayName = 'Post';
               @field author = linksTo(Person);
               @field message = contains(StringField);
               static isolated = class Isolated extends Component<typeof this> {
@@ -631,6 +632,156 @@ module(basename(__filename), function () {
       }
     });
 
+    test('can make a card def entry in the index', async function (assert) {
+      let entry = await realm.realmIndexQueryEngine.cardDef({
+        module: `${testRealm}post.gts`,
+        name: 'Post',
+      });
+      if (entry?.type === 'card-def') {
+        assert.ok(entry.lastModified, 'last modified date is set');
+        assert.ok(entry.resourceCreatedAt, 'created date is set');
+        assert.deepEqual(
+          entry.types,
+          [
+            `${testRealm}post/Post`,
+            'https://cardstack.com/base/card-api/CardDef',
+          ],
+          'types are correct',
+        );
+        assert.deepEqual(
+          entry.meta.codeRef,
+          {
+            name: 'Post',
+            module: `${testRealm}post`,
+          },
+          'code ref is correct',
+        );
+        assert.strictEqual(
+          entry.meta.displayName,
+          'Post',
+          'display name is correct',
+        );
+
+        assert.deepEqual(
+          entry.meta.fields,
+          {
+            id: {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'ReadOnlyField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            title: {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            author: {
+              type: 'linksTo',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'Person',
+                module: `${testRealm}person`,
+              },
+              isPrimitive: false,
+            },
+            message: {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.id': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'ReadOnlyField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            description: {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.title': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            thumbnailURL: {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'MaybeBase64Field',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.firstName': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.hourlyRate': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'default',
+                module: 'https://cardstack.com/base/number',
+              },
+              isPrimitive: true,
+              serializerName: 'number',
+            },
+            'author.description': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.thumbnailURL': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'MaybeBase64Field',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+          },
+          'card-def meta is correct',
+        );
+      } else {
+        assert.ok('false', 'expected entry to be a card def');
+      }
+    });
+
     test('can incrementally index updated instance', async function (assert) {
       await realm.write(
         'mango.json',
@@ -725,6 +876,7 @@ module(basename(__filename), function () {
         [],
         'the broken type results in no instance results',
       );
+      // TODO assert card-def entry is empty/error
       await realm.write(
         'person.gts',
         `
@@ -760,6 +912,7 @@ module(basename(__filename), function () {
         2,
         'correct number of instances returned',
       );
+      // TODO assert card-def entry has recovered
     });
 
     test('can recover from a module sequence error', async function (assert) {
@@ -808,6 +961,7 @@ module(basename(__filename), function () {
         'module',
         'Name module is successfully indexed',
       );
+      // TODO assert card-def entry has recovered
 
       // Since the name is ready, the pet should be indexed and not in an error state
       assert.deepEqual(
@@ -826,12 +980,12 @@ module(basename(__filename), function () {
       let pet = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}pet`),
       );
-      // Currently, encountered error loading module "http://test-realm/pet.gts": http://test-realm/name not found
       assert.strictEqual(
         pet?.type,
         'module',
         'Pet module is successfully indexed',
       );
+      // TODO assert card-def entry has recovered
     });
 
     test('can successfully create instance after module sequence error is resolved', async function (assert) {

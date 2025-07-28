@@ -1,6 +1,7 @@
-import { type CardResource } from './index';
+import { ResolvedCodeRef, type CardResource } from './index';
 import { type SerializedError } from './error';
 import { type PgPrimitive } from './expression';
+import { type FieldType } from 'https://cardstack.com/base/card-api';
 
 export interface BoxelIndexTable {
   url: string;
@@ -17,6 +18,7 @@ export interface BoxelIndexTable {
   deps: string[] | null;
   // `types` is the adoption chain for card where each code ref is serialized
   // using `internalKeyFor()`
+  meta: CardDefMeta | null;
   types: string[] | null;
   display_names: string[] | null;
   transpiled_code: string | null;
@@ -51,6 +53,20 @@ export interface RealmMetaTable {
   indexed_at: string | null;
 }
 
+export interface CardDefMeta {
+  codeRef: ResolvedCodeRef;
+  displayName: string;
+  fields: {
+    [fieldName: string]: {
+      type: FieldType;
+      isPrimitive: boolean;
+      isComputed: boolean;
+      fieldOrCard: ResolvedCodeRef;
+      serializerName?: string;
+    };
+  };
+}
+
 export const coerceTypes = Object.freeze({
   deps: 'JSON',
   types: 'JSON',
@@ -60,6 +76,7 @@ export const coerceTypes = Object.freeze({
   embedded_html: 'JSON',
   fitted_html: 'JSON',
   display_names: 'JSON',
+  meta: 'JSON',
   is_deleted: 'BOOLEAN',
   last_modified: 'VARCHAR',
   resource_created_at: 'VARCHAR',

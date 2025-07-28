@@ -33,6 +33,7 @@ import {
   RealmMetaTable,
   type BoxelIndexTable,
   type RealmVersionsTable,
+  type CardDefMeta,
 } from './index-structure';
 
 export class IndexWriter {
@@ -60,7 +61,11 @@ export class IndexWriter {
   }
 }
 
-export type IndexEntry = InstanceEntry | ModuleEntry | ErrorEntry;
+export type IndexEntry =
+  | InstanceEntry
+  | ModuleEntry
+  | CardDefEntry
+  | ErrorEntry;
 export type LastModifiedTimes = Map<
   string,
   { type: string; lastModified: number | null }
@@ -98,6 +103,16 @@ interface ModuleEntry {
   deps: Set<string>;
 }
 
+interface CardDefEntry {
+  type: 'card-def';
+  meta: CardDefMeta;
+  types: string[];
+  fileAlias: string;
+  lastModified: number;
+  resourceCreatedAt: number;
+  deps: Set<string>;
+}
+
 export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
@@ -116,12 +131,14 @@ export class Batch {
   }
 
   get invalidations() {
-    return [...this.#invalidations];
+    // the card def id's are notional, they are not file resources that can be
+    // visited, so we don't expose them to the outside world
+    return [...this.#invalidations].filter((i) => isCardDefId(i));
   }
 
   @Memoize()
   private get nodeResolvedInvalidations() {
-    return [...this.#invalidations].map(
+    return [...this.invalidations].map(
       (href) => trimExecutableExtension(new URL(href)).href,
     );
   }
@@ -290,14 +307,25 @@ export class Batch {
               ),
               error_doc: null,
             }
-          : {
-              types: entry.types,
-              search_doc: entry.searchData,
-              // favor the last known good types over the types derived from the error state
-              ...((await this.getProductionVersion(url)) ?? {}),
-              type: 'error',
-              error_doc: entry.error,
-            }),
+          : entry.type === 'card-def'
+            ? {
+                type: 'card-def',
+                meta: entry.meta,
+                types: entry.types,
+                file_alias: entry.fileAlias,
+                deps: [...entry.deps],
+                last_modified: entry.lastModified,
+                resource_created_at: entry.resourceCreatedAt,
+                error_doc: null,
+              }
+            : {
+                types: entry.types,
+                search_doc: entry.searchData,
+                // favor the last known good types over the types derived from the error state
+                ...((await this.getProductionVersion(url)) ?? {}),
+                type: 'error',
+                error_doc: entry.error,
+              }),
     } as Omit<BoxelIndexTable, 'last_modified' | 'indexed_at'> & {
       // we do this because pg automatically casts big ints into strings, so
       // we unwind that to accurately type the structure that we want to pass
@@ -549,8 +577,14 @@ export class Batch {
     let rows = invalidations.map((id) =>
       [
         id,
-        trimExecutableExtension(new URL(id)).href,
-        hasExecutableExtension(id) ? 'module' : 'instance',
+        isCardDefId(id)
+          ? trimExportNameFromCardDefId(id)
+          : trimExecutableExtension(new URL(id)).href,
+        hasExecutableExtension(id)
+          ? 'module'
+          : isCardDefId(id)
+            ? 'card-def'
+            : 'instance',
         this.realmVersion,
         this.realmURL.href,
         true,
@@ -578,21 +612,26 @@ export class Batch {
     );
 
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
-    return invalidations;
+
+    // the card def id's are notional, they are not file resources that can be
+    // visited, so we don't expose them to the outside world
+    return invalidations.filter((i) => isCardDefId(i));
   }
 
-  private async itemsThatReference(
-    resolvedPath: string,
-  ): Promise<
-    { url: string; alias: string; type: 'instance' | 'module' | 'error' }[]
+  private async itemsThatReference(resolvedPath: string): Promise<
+    {
+      url: string;
+      alias: string;
+      type: 'instance' | 'module' | 'card-def' | 'error';
+    }[]
   > {
     let start = Date.now();
     const pageSize = 1000;
     let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: 'instance' | 'module' | 'error';
+      type: 'instance' | 'module' | 'card-def' | 'error';
     })[] = [];
     let rows: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: 'instance' | 'module' | 'error';
+      type: 'instance' | 'module' | 'card-def' | 'error';
     })[] = [];
     let pageNumber = 0;
     do {
@@ -624,7 +663,7 @@ export class Batch {
         ]),
         `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
       ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-        type: 'instance' | 'module' | 'error';
+        type: 'instance' | 'card-def' | 'module' | 'error';
       })[];
       results = [...results, ...rows];
       pageNumber++;
@@ -655,8 +694,13 @@ export class Batch {
     let items = await this.itemsThatReference(resolvedPath);
     let invalidations = items.map(({ url }) => url);
     let aliases = items.map(({ alias: moduleAlias, type, url }) =>
-      // for instances we expect that the deps for an entry always includes .json extension
-      type === 'instance' ? url : moduleAlias,
+      type === 'instance'
+        ? // for instances we expect that the deps for an entry always includes .json extension
+          url
+        : type === 'card-def'
+          ? // for card-defs we expect that the deps for an entry doesn't include the final export name path segment
+            trimExportNameFromCardDefId(url)
+          : moduleAlias,
     );
     let results = [
       ...invalidations,
@@ -708,4 +752,12 @@ export class Batch {
       }
     }
   }
+}
+
+function isCardDefId(id: string) {
+  return !hasExecutableExtension(id) && !id.endsWith('.json');
+}
+
+function trimExportNameFromCardDefId(id: string) {
+  return id.split('/').slice(0, -1).join('/');
 }
