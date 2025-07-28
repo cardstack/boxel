@@ -442,8 +442,15 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     return this.args.model.skills && this.args.model?.skills?.length > 0;
   }
 
+  get isSkillListing() {
+    return this.args.model?.constructor?.displayName === 'SkillListing';
+  }
+
   get isStub() {
-    return !this.hasOneOrMoreSpec && !this.hasSkills && this.args.model.summary;
+    return (
+      (!this.isSkillListing && !this.hasOneOrMoreSpec) ||
+      (this.isSkillListing && !this.hasSkills)
+    );
   }
 
   _remix = task(async (realmUrl: string) => {

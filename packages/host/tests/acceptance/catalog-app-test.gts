@@ -204,7 +204,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             attributes: {
               title: 'Empty',
               name: 'Empty',
-              summary: 'Empty',
+              summary: null,
               images: null,
               description: null,
               thumbnailURL: null,

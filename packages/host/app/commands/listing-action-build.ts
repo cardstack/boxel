@@ -1,10 +1,10 @@
 import { service } from '@ember/service';
 
-import type { Skill } from 'https://cardstack.com/base/skill';
 import { isCardInstance } from '@cardstack/runtime-common';
 import { DEFAULT_CODING_LLM } from '@cardstack/runtime-common/matrix-constants';
 
 import * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type { Skill } from 'https://cardstack.com/base/skill';
 
 import HostBaseCommand from '../lib/host-base-command';
 import { skillCardURL } from '../lib/utils';
