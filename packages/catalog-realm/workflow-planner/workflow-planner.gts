@@ -56,7 +56,7 @@ export class WorkflowPlanner extends CardDef {
               <h1 class='workflow-title'>{{@model.title}}</h1>
             </div>
             <div class='workflow-dates'>
-              {{#if @model.startDate}}
+              {{#if @model.dateRange.start}}
                 <div class='date-badge start-date'>
                   <div class='date-content'>
                     <span class='date-label'>Start</span>
@@ -72,7 +72,7 @@ export class WorkflowPlanner extends CardDef {
                   <div class='date-content'>
                     <span class='date-label'>End</span>
                     <span class='date-value'>{{dayjsFormat
-                        @model.endDate
+                        @model.dateRange.end
                         'MMM D, YYYY'
                       }}</span>
                   </div>
@@ -136,7 +136,7 @@ export class WorkflowPlanner extends CardDef {
                         {{#if step.dueDate}}
                           <div class='step-due'>
                             <span class='due-text'>Due:
-                              {{dayjsFormat step.dueDate 'MMM D'}}</span>
+                              {{dayjsFormat step.dueDate 'MMM D, YYYY'}}</span>
                           </div>
                         {{/if}}
                         {{#if step.isComplete}}
