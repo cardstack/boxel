@@ -10,7 +10,7 @@ import StringField from 'https://cardstack.com/base/string';
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import BooleanField from 'https://cardstack.com/base/boolean';
-import { EventRsvp } from '../EventRsvp/event-rsvp';
+import { EventRsvp } from './event-rsvp';
 import EventIcon from '@cardstack/boxel-icons/calendar-plus';
 import { dayjsFormat } from '@cardstack/boxel-ui/helpers';
 import { htmlSafe } from '@ember/template';

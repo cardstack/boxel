@@ -27,7 +27,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../components/EventRsvp/event-rsvp",
+        "module": "../components/event-rsvp",
         "name": "EventRsvp"
       }
     }
