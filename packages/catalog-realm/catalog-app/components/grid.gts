@@ -124,7 +124,6 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
                       data-test-cards-grid-item={{removeFileExtension card.url}}
                       data-cards-grid-item={{removeFileExtension card.url}}
                       {{on 'mouseenter' (fn this.hydrateCard card)}}
-                      {{on 'mouseleave' (fn this.hydrateCard undefined)}}
                     >
                       <card.component />
                     </CardContainer>
