@@ -554,7 +554,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
                   class='realm-dropdown-menu'
                   @closeMenu={{dd.close}}
                   @items={{this.buildRealmOptions}}
-                  data-test-catalog-listing-embedded-build-dropdown
+                  data-test-catalog-listing-fitted-build-dropdown
                 />
               </:content>
             </BoxelDropdown>
