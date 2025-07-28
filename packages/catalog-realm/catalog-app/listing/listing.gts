@@ -34,10 +34,7 @@ import AppListingHeader from '../components/app-listing-header';
 import { ListingFittedTemplate } from '../components/listing-fitted';
 
 import ListingInitCommand from '@cardstack/boxel-host/commands/listing-action-init';
-import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
-import OpenAiAssistantRoomCommand from '@cardstack/boxel-host/commands/open-ai-assistant-room';
-import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
-import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
+import ListingBuildCommand from '@cardstack/boxel-host/commands/listing-action-build';
 
 import { Publisher } from './publisher';
 import { Category } from './category';
@@ -79,6 +76,21 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     });
   }
 
+  _build = task(async (realm: string) => {
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('Missing commandContext');
+    }
+    try {
+      await new ListingBuildCommand(commandContext).execute({
+        realm,
+        listing: this.args.model as Listing,
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  });
+
   _remix = task(async (realm: string) => {
     let commandContext = this.args.context?.commandContext;
     if (!commandContext) {
@@ -88,32 +100,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       realm,
       actionType: 'remix',
       listing: this.args.model as Listing,
-    });
-  });
-
-  _build = task(async (realm: string) => {
-    const prompt = `Create gts file(s) for the ${this.args.model.name}. First, create the complete gts file(s) with all the code. After the code is fully generated, then switch to code mode and show preview.`;
-
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
-      throw new Error('Missing commandContext');
-    }
-    const { roomId } = await new CreateAiAssistantRoomCommand(
-      commandContext,
-    ).execute({
-      name: 'Build ' + this.args.model.name,
-    });
-    await new OpenAiAssistantRoomCommand(commandContext).execute({
-      roomId,
-    });
-    new SwitchSubmodeCommand(commandContext).execute({
-      submode: 'code',
-      codePath: `${realm}index.json`,
-    });
-    await new SendAiAssistantMessageCommand(commandContext).execute({
-      roomId,
-      prompt,
-      attachedCards: [this.args.model as CardDef],
     });
   });
 

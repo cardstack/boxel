@@ -23,6 +23,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 
 import ListingInitCommand from '@cardstack/boxel-host/commands/listing-action-init';
+import ListingBuildCommand from '@cardstack/boxel-host/commands/listing-action-build';
 
 interface Signature {
   Element: HTMLElement;
@@ -405,6 +406,17 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
       });
   }
 
+  get buildRealmOptions() {
+    return this.writableRealms.map((realm) => {
+      return new MenuItem(realm.name, 'action', {
+        action: () => {
+          this.build(realm.url);
+        },
+        iconURL: realm.iconURL ?? '/default-realm-icon.png',
+      });
+    });
+  }
+
   get firstImage() {
     return this.args.model.images?.[0];
   }
@@ -422,7 +434,19 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     return this.args.model.tags?.[0]?.name;
   }
 
-  _openRoomWithSkillAndPrompt = task(async (realmUrl: string) => {
+  get hasOneOrMoreSpec() {
+    return this.args.model.specs && this.args.model?.specs?.length > 0;
+  }
+
+  get hasSkills() {
+    return this.args.model.skills && this.args.model?.skills?.length > 0;
+  }
+
+  get isStub() {
+    return !this.hasOneOrMoreSpec && !this.hasSkills && this.args.model.summary;
+  }
+
+  _remix = task(async (realmUrl: string) => {
     let commandContext = this.args.context?.commandContext;
     if (!commandContext) {
       throw new Error('Missing commandContext');
@@ -434,8 +458,27 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     });
   });
 
+  _build = task(async (realm: string) => {
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('Missing commandContext');
+    }
+    try {
+      await new ListingBuildCommand(commandContext).execute({
+        realm,
+        listing: this.args.model as Listing,
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  });
+
+  @action build(realmUrl: string) {
+    this._build.perform(realmUrl);
+  }
+
   @action remix(realmUrl: string) {
-    this._openRoomWithSkillAndPrompt.perform(realmUrl);
+    this._remix.perform(realmUrl);
   }
 
   @action viewListingDetails(e: MouseEvent) {
@@ -492,30 +535,55 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           {{#if this.hasTags}}
             <span class='card-tags'># {{this.firstTagName}}</span>
           {{/if}}
-          <BoxelDropdown @autoClose={{true}}>
-            <:trigger as |bindings|>
-              <BoxelButton
-                data-test-catalog-listing-fitted-remix-button
-                @kind='primary'
-                @size='extra-small'
-                class='card-remix-button'
-                @loading={{this._openRoomWithSkillAndPrompt.isRunning}}
-                {{on 'click' this._stopPropagation}}
-                {{bindings}}
-                aria-label='Remix listing'
-              >
-                Remix
-              </BoxelButton>
-            </:trigger>
-            <:content as |dd|>
-              <BoxelMenu
-                class='realm-dropdown-menu'
-                @closeMenu={{dd.close}}
-                @items={{this.remixRealmOptions}}
-                data-test-catalog-listing-fitted-remix-dropdown
-              />
-            </:content>
-          </BoxelDropdown>
+          {{#if this.isStub}}
+            <BoxelDropdown @autoClose={{true}}>
+              <:trigger as |bindings|>
+                <BoxelButton
+                  class='card-build-button'
+                  data-test-catalog-listing-fitted-build-button
+                  @kind='primary'
+                  @loading={{this._build.isRunning}}
+                  {{on 'click' this._stopPropagation}}
+                  {{bindings}}
+                >
+                  Build
+                </BoxelButton>
+              </:trigger>
+              <:content as |dd|>
+                <BoxelMenu
+                  class='realm-dropdown-menu'
+                  @closeMenu={{dd.close}}
+                  @items={{this.buildRealmOptions}}
+                  data-test-catalog-listing-embedded-build-dropdown
+                />
+              </:content>
+            </BoxelDropdown>
+          {{else}}
+            <BoxelDropdown @autoClose={{true}}>
+              <:trigger as |bindings|>
+                <BoxelButton
+                  data-test-catalog-listing-fitted-remix-button
+                  @kind='primary'
+                  @size='extra-small'
+                  class='card-remix-button'
+                  @loading={{this._remix.isRunning}}
+                  {{on 'click' this._stopPropagation}}
+                  {{bindings}}
+                  aria-label='Remix listing'
+                >
+                  Remix
+                </BoxelButton>
+              </:trigger>
+              <:content as |dd|>
+                <BoxelMenu
+                  class='realm-dropdown-menu'
+                  @closeMenu={{dd.close}}
+                  @items={{this.remixRealmOptions}}
+                  data-test-catalog-listing-fitted-remix-dropdown
+                />
+              </:content>
+            </BoxelDropdown>
+          {{/if}}
         </div>
       </div>
     </div>
@@ -595,6 +663,11 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           flex: 1 1 auto;
           overflow: hidden;
         }
+        .card-build-button {
+          --boxel-button-font: 600 var(--boxel-font-sm);
+          margin-left: auto;
+          flex: 0 0 auto;
+        }
         .card-remix-button {
           --boxel-button-font: 600 var(--boxel-font-sm);
           margin-left: auto;
@@ -631,6 +704,9 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           flex-direction: row;
           justify-content: space-between;
         }
+        .card-build-button {
+          --boxel-button-padding: var(--boxel-sp-4xs) var(--boxel-sp);
+        }
         .card-remix-button {
           --boxel-button-padding: var(--boxel-sp-4xs) var(--boxel-sp);
         }
@@ -661,6 +737,9 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
         .card-display-name,
         .card-tags {
           display: none;
+        }
+        .card-build-button {
+          --boxel-button-padding: var(--boxel-sp-4xs) var(--boxel-sp);
         }
         .card-remix-button {
           --boxel-button-padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
