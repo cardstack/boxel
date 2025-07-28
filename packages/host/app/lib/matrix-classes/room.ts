@@ -7,6 +7,8 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   DEFAULT_LLM,
+  APP_BOXEL_LLM_MODE,
+  type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { SerializedFile } from 'https://cardstack.com/base/file-api';
@@ -100,6 +102,13 @@ export default class Room {
       .get(APP_BOXEL_ACTIVE_LLM)
       ?.get('')?.event;
     return (event as ActiveLLMEvent)?.content.model ?? DEFAULT_LLM;
+  }
+
+  get activeLLMMode(): LLMMode {
+    let event = this._roomState?.events.get(APP_BOXEL_LLM_MODE)?.get('')?.event;
+    return event && (event as any).content?.mode
+      ? ((event as any).content.mode as LLMMode)
+      : 'ask';
   }
 
   addEvent(event: TempEvent, oldEventId?: string) {

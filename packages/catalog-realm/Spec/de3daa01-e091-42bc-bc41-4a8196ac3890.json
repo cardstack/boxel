@@ -5,12 +5,12 @@
       "readMe": null,
       "ref": {
         "name": "CalendarEvent",
-        "module": "../components/CalenderEvent/calendar-event"
+        "module": "../school-calendar/components/calendar-event"
       },
       "specType": "card",
       "containedExamples": [],
       "title": "CalendarEvent",
-      "description": "Spec of Calendar Event",
+      "description": null,
       "thumbnailURL": null
     },
     "relationships": {
