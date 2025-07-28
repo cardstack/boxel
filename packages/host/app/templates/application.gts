@@ -21,7 +21,7 @@ class ApplicationRouteComponent extends Component<ApplicationRouteSignature> {
   <template>
     {{#if this.hostModeService.isActive}}
       {{outlet}}
-      <p {{removeLoading}}>Placeholder for host mode: {{this.hostname}}</p>
+      <p {{removeLoading}}>{{! FIXME how to remove without some element }}</p>
     {{else}}
       {{! The main application outlet }}
       {{outlet}}
