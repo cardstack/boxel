@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "timestamp": "2025-07-24T13:00:00Z",
+      "activity": "Vendor called with good news - delivery moved up from Monday to Saturday morning. This puts us ahead of schedule! Workshop materials finalized for tomorrow. Tested all presentation equipment - everything working smoothly. Implementing mid-day check-in as recommended yesterday."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../activity-log",
+        "name": "ActivityLog"
+      }
+    }
+  }
+}

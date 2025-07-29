@@ -7,6 +7,7 @@ import { module, test } from 'qunit';
 import { skillCardRef } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_LLM_MODE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -375,6 +376,55 @@ module('Integration | commands | ai-assistant', function (hooks) {
     );
   });
 
+  test('adds skill cards to room without sending prompt', async function (assert) {
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-with-skills',
+    });
+
+    let store = getService('store');
+
+    // Load skill cards
+    const skillCard1 = (await store.get(`${testRealmURL}skill1.json`)) as Skill;
+    const skillCard2 = (await store.get(`${testRealmURL}skill2.json`)) as Skill;
+
+    // Check message count BEFORE executing command
+    let initialMessageCount = getRoomEvents(roomId).filter(
+      (event) => event.type === 'm.room.message',
+    ).length;
+
+    let aiAssistantCommand = new UseAiAssistantCommand(
+      commandService.commandContext,
+    );
+    await aiAssistantCommand.execute({
+      roomId,
+      skillCards: [skillCard1, skillCard2],
+    });
+
+    // Check that skills were added to room
+    let skillsState = getRoomState(
+      roomId,
+      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      '',
+    );
+    assert.strictEqual(
+      skillsState.enabledSkillCards.length,
+      2,
+      'At least two skills should be added to room',
+    );
+
+    // Check that no message was sent (since no prompt was provided)
+    let currentMessageCount = getRoomEvents(roomId).filter(
+      (event) => event.type === 'm.room.message',
+    ).length;
+
+    assert.strictEqual(
+      currentMessageCount,
+      initialMessageCount,
+      'No message should be sent when no prompt is provided',
+    );
+  });
+
   test('loads skill cards by ID', async function (assert) {
     let roomId = createAndJoinRoom({
       sender: '@testuser:localhost',
@@ -534,6 +584,33 @@ module('Integration | commands | ai-assistant', function (hooks) {
       boxelMessageData.context.openCardIds,
       openCardIds,
       'Open card IDs should be included in message',
+    );
+  });
+
+  test('sets activeLLMMode when llmMode is provided', async function (assert) {
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-for-llm-mode-test',
+    });
+
+    let aiAssistantCommand = new UseAiAssistantCommand(
+      commandService.commandContext,
+    );
+
+    // Test setting LLM mode to 'act'
+    await aiAssistantCommand.execute({
+      prompt: 'test prompt',
+      roomId,
+      llmMode: 'act',
+    });
+
+    // Check that the LLM mode was set in room state
+    let llmModeState = getRoomState(roomId, APP_BOXEL_LLM_MODE, '');
+    assert.ok(llmModeState, 'LLM mode state should be present in room');
+    assert.strictEqual(
+      llmModeState.mode,
+      'act',
+      'LLM mode should be set to act',
     );
   });
 });

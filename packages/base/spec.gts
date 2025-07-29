@@ -42,7 +42,7 @@ import LayoutList from '@cardstack/boxel-icons/layout-list';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 
-export type SpecType = 'card' | 'field' | 'component' | 'app';
+export type SpecType = 'card' | 'field' | 'component' | 'app' | 'command';
 
 class SpecTypeField extends StringField {
   static displayName = 'Spec Type';

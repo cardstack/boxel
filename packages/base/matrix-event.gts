@@ -428,6 +428,7 @@ export type MatrixEvent =
   | InviteEvent
   | JoinEvent
   | LeaveEvent
+  | LLMModeEvent
   | MessageEvent
   | RealmEvent
   | RealmServerEvent
@@ -436,5 +437,4 @@ export type MatrixEvent =
   | RoomNameEvent
   | RoomPowerLevels
   | RoomTopicEvent
-  | SkillsConfigEvent
-  | LLMModeEvent;
+  | SkillsConfigEvent;
