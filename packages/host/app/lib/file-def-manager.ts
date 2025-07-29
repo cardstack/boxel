@@ -11,6 +11,7 @@ import {
   codeRefWithAbsoluteURL,
   getClass,
   SupportedMimeType,
+  relativeTo,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -18,7 +19,7 @@ import {
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
 import type { default as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
-import { relativeTo, CardDef } from 'https://cardstack.com/base/card-api';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as FileAPI from 'https://cardstack.com/base/file-api';
 import type {
@@ -249,7 +250,7 @@ export default class FileDefManagerImpl
     for (let commandDef of commandDefinitions) {
       let absoluteCodeRef = codeRefWithAbsoluteURL(
         commandDef.codeRef,
-        commandDef[Symbol.for('cardstack-relative-to') as typeof relativeTo],
+        commandDef[relativeTo],
       ) as ResolvedCodeRef;
       const Command = await getClass(
         absoluteCodeRef,
