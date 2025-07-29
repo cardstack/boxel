@@ -81,7 +81,6 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
         style={{this.backgroundImageStyle}}
         data-test-host-mode-container
       >
-        {{log this.realmInfo}}
         <CardContainer
           class='card'
           style={{cssVar
