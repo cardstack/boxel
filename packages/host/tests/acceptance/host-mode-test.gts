@@ -1,8 +1,8 @@
 import { getOwner } from '@ember/owner';
 import { visit } from '@ember/test-helpers';
 
-import { getPageTitle } from 'ember-page-title/test-support';
 import { getService } from '@universal-ember/test-support';
+import { getPageTitle } from 'ember-page-title/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
