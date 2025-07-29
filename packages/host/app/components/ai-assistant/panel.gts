@@ -85,10 +85,7 @@ export default class AiAssistantPanel extends Component<Signature> {
           {{/let}}
           <NewSessionButton
             @disabled={{not this.roomResource.messages.length}}
-            @onCreateNewSession={{fn
-              this.aiAssistantPanelService.createNewSession
-              false
-            }}
+            @onCreateNewSession={{this.aiAssistantPanelService.createNewSession}}
           />
           {{#let
             this.aiAssistantPanelService.loadingRooms
@@ -142,7 +139,10 @@ export default class AiAssistantPanel extends Component<Signature> {
         {{#if this.aiAssistantPanelService.displayRoomError}}
           <div class='session-error'>
             <NewSession
-              @errorAction={{this.aiAssistantPanelService.createNewSession}}
+              @errorAction={{fn
+                this.aiAssistantPanelService.createNewSession
+                false
+              }}
             />
           </div>
         {{else if this.isReady}}

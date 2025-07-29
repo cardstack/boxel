@@ -17,7 +17,7 @@ import NewSessionSettings from './new-session-settings';
 interface Signature {
   Args: {
     disabled?: boolean;
-    onCreateNewSession: () => void;
+    onCreateNewSession: (shouldCopyFileHistory?: boolean) => void;
   };
 }
 
@@ -40,6 +40,12 @@ export default class NewSessionButton extends Component<Signature> {
     this.selectedOptions = new Set(this.selectedOptions);
   }
 
+  @action
+  handleCreateNewSession() {
+    const shouldCopyFileHistory = this.selectedOptions.has('Copy File History');
+    this.args.onCreateNewSession(shouldCopyFileHistory);
+  }
+
   <template>
     <div
       class='new-session-button-container'
@@ -52,7 +58,7 @@ export default class NewSessionButton extends Component<Signature> {
         @kind='text-only'
         @size='extra-small'
         @disabled={{@disabled}}
-        {{on 'click' @onCreateNewSession}}
+        {{on 'click' this.handleCreateNewSession}}
         data-test-create-room-btn
       >
         <PlusIcon />
