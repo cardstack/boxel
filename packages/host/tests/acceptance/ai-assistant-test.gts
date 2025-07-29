@@ -1,11 +1,4 @@
-import {
-  click,
-  fillIn,
-  waitFor,
-  waitUntil,
-  visit,
-  triggerEvent,
-} from '@ember/test-helpers';
+import { click, fillIn, waitFor, waitUntil, visit } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -2058,7 +2051,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
     await click('[data-test-send-message-btn]');
 
-    await triggerEvent('[data-test-create-room-btn]', 'mouseenter');
+    await click('[data-test-create-room-btn]', { shiftKey: true });
     await click('[data-test-new-session-settings-option="Add Same Skills"]');
     await click('[data-test-create-room-btn]');
     await waitFor('[data-room-settled]');

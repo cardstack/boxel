@@ -1312,7 +1312,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     assert.dom('.menu-content').containsText('non-standard-llm-2');
   });
 
-  test('new session settings menu opens on hover and checkboxes work', async function (assert) {
+  test('new session settings menu opens on Shift+Click and checkboxes work', async function (assert) {
     await renderAiAssistantPanel();
     await fillIn('[data-test-boxel-input-id="ai-chat-input"]', 'Test message');
     await click('[data-test-send-message-btn]');
@@ -1321,7 +1321,19 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       .dom('[data-test-new-session-settings-menu]')
       .doesNotExist('Menu should not be visible initially');
 
+    // Test tooltip appears on hover
     await triggerEvent('[data-test-create-room-btn]', 'mouseenter');
+
+    await waitFor('[data-test-tooltip-content]');
+    assert
+      .dom('[data-test-tooltip-content]')
+      .hasText(
+        'New Session (Shift+Click for options)',
+        'Tooltip shows correct text',
+      );
+
+    // Test menu opens on Shift+Click
+    await click('[data-test-create-room-btn]', { shiftKey: true });
 
     await waitFor('[data-test-new-session-settings-menu]');
 
@@ -1366,7 +1378,8 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       .dom('[data-test-new-session-settings-option].checked')
       .exists({ count: 1 });
 
-    await triggerEvent('[data-test-create-room-btn]', 'mouseleave');
+    // Test menu closes on Shift+Click again
+    await click('[data-test-create-room-btn]', { shiftKey: true });
 
     await waitUntil(
       () => !document.querySelector('[data-test-new-session-settings-menu]'),
@@ -1374,6 +1387,31 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
     assert
       .dom('[data-test-new-session-settings-menu]')
-      .doesNotExist('Menu should be hidden after mouse leave');
+      .doesNotExist('Menu should be hidden after Shift+Click again');
+  });
+
+  test('new session settings menu closes when clicking outside', async function (assert) {
+    await renderAiAssistantPanel();
+    await fillIn('[data-test-boxel-input-id="ai-chat-input"]', 'Test message');
+    await click('[data-test-send-message-btn]');
+
+    // Open menu with Shift+Click
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+
+    await waitFor('[data-test-new-session-settings-menu]');
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .exists('Menu should be visible after Shift+Click');
+
+    // Click outside the menu
+    await click('[data-test-boxel-input-id="ai-chat-input"]');
+
+    await waitUntil(
+      () => !document.querySelector('[data-test-new-session-settings-menu]'),
+    );
+
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .doesNotExist('Menu should be hidden after clicking outside');
   });
 });
