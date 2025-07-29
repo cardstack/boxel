@@ -157,6 +157,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     UpdateSkillActivationCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/ai-assistant',
+    UseAiAssistantCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/utils',
     CommandUtilsModule,
   );

@@ -376,6 +376,55 @@ module('Integration | commands | ai-assistant', function (hooks) {
     );
   });
 
+  test('adds skill cards to room without sending prompt', async function (assert) {
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-with-skills',
+    });
+
+    let store = getService('store');
+
+    // Load skill cards
+    const skillCard1 = (await store.get(`${testRealmURL}skill1.json`)) as Skill;
+    const skillCard2 = (await store.get(`${testRealmURL}skill2.json`)) as Skill;
+
+    // Check message count BEFORE executing command
+    let initialMessageCount = getRoomEvents(roomId).filter(
+      (event) => event.type === 'm.room.message',
+    ).length;
+
+    let aiAssistantCommand = new UseAiAssistantCommand(
+      commandService.commandContext,
+    );
+    await aiAssistantCommand.execute({
+      roomId,
+      skillCards: [skillCard1, skillCard2],
+    });
+
+    // Check that skills were added to room
+    let skillsState = getRoomState(
+      roomId,
+      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      '',
+    );
+    assert.strictEqual(
+      skillsState.enabledSkillCards.length,
+      2,
+      'At least two skills should be added to room',
+    );
+
+    // Check that no message was sent (since no prompt was provided)
+    let currentMessageCount = getRoomEvents(roomId).filter(
+      (event) => event.type === 'm.room.message',
+    ).length;
+
+    assert.strictEqual(
+      currentMessageCount,
+      initialMessageCount,
+      'No message should be sent when no prompt is provided',
+    );
+  });
+
   test('loads skill cards by ID', async function (assert) {
     let roomId = createAndJoinRoom({
       sender: '@testuser:localhost',
