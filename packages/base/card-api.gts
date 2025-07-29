@@ -46,7 +46,6 @@ import {
   fieldsUntracked,
   baseRef,
   getAncestor,
-  isCardError,
   relativeTo,
   assertIsSerializerName,
   type Format,
@@ -213,8 +212,8 @@ const fieldOverrides = initSharedState(
   'fieldOverrides',
   () => new WeakMap<BaseDef, Map<string, any>>(),
 );
-const recomputePromises = initSharedState(
-  'recomputePromises',
+const loadLinksPromises = initSharedState(
+  'loadLinksPromises',
   () => new WeakMap<BaseDef, Promise<any>>(),
 );
 const identityContexts = initSharedState(
@@ -384,7 +383,7 @@ export interface Field<
   handleNotLoadedError(
     instance: BaseInstanceType<CardT>,
     e: NotLoaded,
-      ): Promise<
+  ): Promise<
     BaseInstanceType<CardT> | BaseInstanceType<CardT>[] | undefined | void
   >;
 }
@@ -1278,7 +1277,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   async handleNotLoadedError(
     instance: BaseInstanceType<CardT>,
     e: NotLoaded,
-      ): Promise<BaseInstanceType<CardT> | undefined> {
+  ): Promise<BaseInstanceType<CardT> | undefined> {
     let deserialized = getDataBucket(instance as BaseDef);
     let identityContext =
       identityContexts.get(instance as BaseDef) ?? new SimpleIdentityContext();
@@ -1290,15 +1289,15 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       return fieldValue as BaseInstanceType<CardT>;
     }
 
-          fieldValue = await this.loadMissingField(
-        instance,
-        e,
-        identityContext,
-        instance[relativeTo],
-      );
-      deserialized.set(this.name, fieldValue);
-      return fieldValue as BaseInstanceType<CardT>;
-      }
+    fieldValue = await this.loadMissingField(
+      instance,
+      e,
+      identityContext,
+      instance[relativeTo],
+    );
+    deserialized.set(this.name, fieldValue);
+    return fieldValue as BaseInstanceType<CardT>;
+  }
 
   private async loadMissingField(
     instance: CardDef,
@@ -1786,7 +1785,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
   async handleNotLoadedError<T extends CardDef>(
     instance: T,
     e: NotLoaded,
-      ): Promise<T[] | undefined> {
+  ): Promise<T[] | undefined> {
     let result: T[] | undefined;
     let fieldValues: CardDef[] = [];
     let identityContext =
@@ -1801,13 +1800,13 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
     }
 
-          fieldValues = await this.loadMissingFields(
-        instance,
-        e,
-        identityContext,
-        instance[relativeTo],
-      );
-    
+    fieldValues = await this.loadMissingFields(
+      instance,
+      e,
+      identityContext,
+      instance[relativeTo],
+    );
+
     if (fieldValues.length === references.length) {
       let values: T[] = [];
       let deserialized = getDataBucket(instance);
@@ -3373,28 +3372,16 @@ export function getComponent(
   return boxComponent;
 }
 
-interface RecomputeOptions {
-  loadFields?: true;
-  ignoreBrokenLinks?: true;
-  // for host initiated renders (vs indexer initiated renders), glimmer will expect
-  // all the fields to be available synchronously, in which case we need to buffer the
-  // async in the recompute using this option
-  recomputeAllFields?: true;
-}
-// TODO: rename to loadFields
-export async function recompute(
-  card: BaseDef,
-  opts?: RecomputeOptions,
-): Promise<void> {
+export async function ensureLinksLoaded(card: BaseDef): Promise<void> {
   // Note that after each async step we check to see if we are still the
   // current promise, otherwise we bail
   let done: () => void;
-  let recomputePromise = new Promise<void>((res) => (done = res));
-  recomputePromises.set(card, recomputePromise);
+  let loadLinksPromise = new Promise<void>((res) => (done = res));
+  loadLinksPromises.set(card, loadLinksPromise);
 
   // wait a full micro task before we start - this is simple debounce
   await Promise.resolve();
-  if (recomputePromises.get(card) !== recomputePromise) {
+  if (loadLinksPromises.get(card) !== loadLinksPromise) {
     return;
   }
 
@@ -3405,7 +3392,7 @@ export async function recompute(
     let pendingFields = new Set<string>(
       Object.keys(
         getFields(model, {
-          includeComputeds: false, // Don't include computeds in recompute
+          includeComputeds: false, // Not necessary to execute computed to load linked fields
           usedLinksToFieldsOnly: true,
         }),
       ),
@@ -3413,9 +3400,8 @@ export async function recompute(
     do {
       for (let fieldName of [...pendingFields]) {
         let value = await getIfReady(model, fieldName as keyof T, undefined);
-        // Computed fields are executed on-demand, so all non-computed fields should be ready
         pendingFields.delete(fieldName);
-        if (recomputePromises.get(card) !== recomputePromise) {
+        if (loadLinksPromises.get(card) !== loadLinksPromise) {
           return;
         }
         if (Array.isArray(value)) {
@@ -3433,7 +3419,7 @@ export async function recompute(
   }
 
   await _loadModel(card);
-  if (recomputePromises.get(card) !== recomputePromise) {
+  if (loadLinksPromises.get(card) !== loadLinksPromise) {
     return;
   }
 
@@ -3446,7 +3432,7 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
   instance: T,
   fieldName: K,
   compute: () => T[K] | Promise<T[K]> = () => instance[fieldName],
-  ): Promise<T[K] | T[K][] | undefined> {
+): Promise<T[K] | T[K][] | undefined> {
   let result: T[K] | T[K][] | undefined;
   let deserialized = getDataBucket(instance);
   let field = getField(instance, fieldName as string, { untracked: true });
@@ -3475,22 +3461,10 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
     if (isNotLoadedError(e)) {
       let field: Field = getField(instance, fieldName as string)!;
       let result: T[K] | T[K][] | undefined;
-      try {
-        result = (await field.handleNotLoadedError(instance, e, {
-          ...(field.isUsed ? { loadFields: true } : {}),
-          ...opts,
-        })) as T[K] | T[K][] | undefined;
-      } catch (innerErr) {
-        if (
-          opts?.ignoreBrokenLinks &&
-          isCardError(innerErr) &&
-          innerErr.status === 404
-        ) {
-          // ignoring the broken link
-        } else {
-          throw innerErr;
-        }
-      }
+      result = (await field.handleNotLoadedError(instance, e)) as
+        | T[K]
+        | T[K][]
+        | undefined;
       if (result === undefined) {
         // For linksToMany fields, preserve the existing array structure instead of
         // overwriting with a single NotLoadedValue
