@@ -3399,7 +3399,7 @@ export async function ensureLinksLoaded(card: BaseDef): Promise<void> {
     );
     do {
       for (let fieldName of [...pendingFields]) {
-        let value = await getIfReady(model, fieldName as keyof T, undefined);
+        let value = await getIfReady(model, fieldName as keyof T);
         pendingFields.delete(fieldName);
         if (loadLinksPromises.get(card) !== loadLinksPromise) {
           return;
@@ -3431,8 +3431,7 @@ export async function ensureLinksLoaded(card: BaseDef): Promise<void> {
 export async function getIfReady<T extends BaseDef, K extends keyof T>(
   instance: T,
   fieldName: K,
-  compute: () => T[K] | Promise<T[K]> = () => instance[fieldName],
-): Promise<T[K] | T[K][] | undefined> {
+  ): Promise<T[K] | T[K][] | undefined> {
   let result: T[K] | T[K][] | undefined;
   let deserialized = getDataBucket(instance);
   let field = getField(instance, fieldName as string, { untracked: true });
@@ -3444,19 +3443,11 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
     );
   }
   if (field.computeVia) {
-    // Computed fields are executed on-demand when accessed, so we don't need
-    // to "get them ready" - just return undefined to indicate they're "ready"
+    // Computed fields should never be passed to this function
     return undefined;
   }
   try {
-    //To avoid race conditions,
-    //the computeVia function should not perform asynchronous computation
-    //if it is not an async function.
-    //This ensures that other functions are not executed
-    //by the runtime before this function is finished.
-    let computeResult = compute();
-    result =
-      computeResult instanceof Promise ? await computeResult : computeResult;
+    result = instance[fieldName];
   } catch (e: any) {
     if (isNotLoadedError(e)) {
       let field: Field = getField(instance, fieldName as string)!;
@@ -3482,15 +3473,6 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
     } else {
       throw e;
     }
-  }
-
-  // Computed fields are executed on-demand and never stored
-  if (field?.computeVia) {
-    if (result === undefined) {
-      result = field.emptyValue(instance);
-    }
-    // Don't store computed values in deserialized bucket - just return the result
-    return result;
   }
   return result;
 }
