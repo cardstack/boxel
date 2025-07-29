@@ -244,19 +244,21 @@ export default class BoxelInput extends Component<Signature> {
         width: 100%;
         min-height: var(--boxel-input-height);
         padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
-        border: 1px solid var(--boxel-form-control-border-color);
-        border-radius: var(--boxel-form-control-border-radius);
-        font: var(--boxel-font-sm);
-        font-weight: 400;
-        letter-spacing: var(--boxel-lsp-xs);
+        background-color: var(--input, var(--boxel-light));
+        border: 1px solid var(--border, var(--boxel-form-control-border-color));
+        border-radius: var(--radius, var(--boxel-form-control-border-radius));
         transition: border-color var(--boxel-transition);
       }
 
       .boxel-input--large {
         --boxel-form-control-height: 4.375rem;
+        font-size: var(--boxel-font-size);
+      }
 
-        font: var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xs);
+      @supports (color: color-mix(in lab, red, red)) {
+        .boxel-input {
+          background-color: color-mix(in oklab, var(--input) 25%, transparent);
+        }
       }
 
       .boxel-text-area {
@@ -264,9 +266,8 @@ export default class BoxelInput extends Component<Signature> {
       }
 
       .boxel-input:disabled {
-        background-color: var(--boxel-light);
-        border-color: var(--boxel-purple-300);
-        color: rgb(0 0 0 / 50%);
+        background-color: var(--input, var(--boxel-light));
+        border-color: 1px solid var(--border, var(--boxel-400));
         opacity: 0.5;
       }
 
@@ -275,17 +276,17 @@ export default class BoxelInput extends Component<Signature> {
       }
 
       .invalid {
-        border-color: var(--boxel-error-100);
-        box-shadow: 0 0 0 1px var(--boxel-error-100);
+        border-color: var(--destructive, var(--boxel-error-100));
+        box-shadow: 0 0 0 1px var(--destructive, var(--boxel-error-100));
       }
 
       .invalid:focus {
         outline: 1px solid transparent; /* Make sure that we make the invalid state visible */
-        box-shadow: 0 0 0 1.5px var(--boxel-error-100);
+        box-shadow: 0 0 0 1.5px var(--destructive, var(--boxel-error-100));
       }
 
       .invalid:hover:not(:disabled) {
-        border-color: var(--boxel-error-100);
+        border-color: var(--destructive, var(--boxel-error-100));
       }
 
       .search {
@@ -347,7 +348,6 @@ export default class BoxelInput extends Component<Signature> {
 
         margin-bottom: var(--boxel-sp-xxxs);
         color: rgb(0 0 0 / 75%);
-        font: var(--boxel-font-sm);
         font-style: oblique;
         letter-spacing: var(--boxel-lsp);
         text-align: right;
@@ -359,7 +359,7 @@ export default class BoxelInput extends Component<Signature> {
         margin-top: var(--boxel-sp-xxxs);
         margin-left: calc(var(--boxel-sp-sm) + 1px);
         color: var(--boxel-error-200);
-        font: 500 var(--boxel-font-sm);
+        font-weight: 500;
         letter-spacing: var(--boxel-lsp);
       }
 
@@ -369,7 +369,6 @@ export default class BoxelInput extends Component<Signature> {
         margin-top: var(--boxel-sp-xs);
         margin-left: calc(var(--boxel-sp-sm) + 1px);
         color: rgb(0 0 0 / 75%);
-        font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp);
       }
 

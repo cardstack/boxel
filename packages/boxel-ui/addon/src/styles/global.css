@@ -1,7 +1,10 @@
 @layer reset, utilities;
 
 @layer reset {
-  * {
+  *,
+  :after,
+  :before,
+  ::backdrop {
     box-sizing: border-box;
   }
 
@@ -15,6 +18,7 @@
   }
 
   body {
+    -webkit-text-size-adjust: 100%;
     margin: 0;
     color: var(--boxel-dark, #000);
     font-family: var(
@@ -25,7 +29,8 @@
       sans-serif
     );
     background-color: var(--boxel-light, #fff);
-    font-size: 13px;
+    font-size: var(--boxel-font-size-sm, 13px);
+    letter-spacing: var(--boxel-lsp-xs);
     line-height: calc(18 / 13);
     overscroll-behavior: none;
   }
@@ -40,15 +45,56 @@
     text-decoration: none;
   }
 
+  b,
+  strong {
+    font-weight: bolder;
+  }
+
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(
+      --boxel-monospace-font-family,
+      'Roboto Mono',
+      'Courier New',
+      courier,
+      monospace
+    );
+    font-size: 1em;
+  }
+
+  small {
+    font-size: 80%;
+  }
+
+  button,
+  input,
+  select,
+  optgroup,
+  textarea {
+    font: inherit;
+    font-feature-settings: inherit;
+    font-variation-settings: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+  }
+
+  button,
+  input:where([type='button'], [type='reset'], [type='submit']) {
+    appearance: button;
+  }
+
   button {
     display: inline-block;
-    font: inherit;
   }
 
   img,
-  svg {
+  svg,
+  video {
     display: inline-block;
     max-width: 100%;
+    height: auto;
   }
 
   [alt] {
@@ -70,8 +116,8 @@
     outline-color: transparent;
   }
 
-  button:hover:not(:disabled),
-  [role='button']:hover:not(:disabled, [aria-disabled='true']) {
+  button:not(:disabled),
+  [role='button']:not(:disabled, [aria-disabled='true']) {
     cursor: pointer;
   }
 
@@ -89,6 +135,28 @@
   select:focus,
   textarea:focus {
     outline-color: var(--boxel-highlight);
+  }
+
+  ol,
+  ul,
+  menu {
+    list-style: none;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  hr {
+    height: 0;
+    color: inherit;
+    border-top-width: 1px;
   }
 }
 
@@ -109,6 +177,20 @@
     clip: rect(0 0 0 0);
     clip-path: inset(50%);
     overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .boxel-line-clamp {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: var(--boxel-line-clamp, 3);
+  }
+
+  .boxel-ellipsize {
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 }
