@@ -830,7 +830,9 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          totalIndexEntries: 16,
+          cardDefErrors: 0,
+          cardDefsIndexed: 0,
+          totalIndexEntries: 26,
         },
         'indexed correct number of files',
       );
@@ -858,9 +860,20 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          totalIndexEntries: 12,
+          cardDefErrors: 0,
+          cardDefsIndexed: 0,
+          totalIndexEntries: 20,
         },
         'indexed correct number of files',
+      );
+      let petCardDefEntry = await realm.realmIndexQueryEngine.cardDef({
+        module: `${testRealm}pet`,
+        name: 'Pet',
+      });
+      assert.strictEqual(
+        petCardDefEntry,
+        undefined,
+        'Pet card def does not exist',
       );
       await realm.write(
         'person.gts',
@@ -877,7 +890,9 @@ module(basename(__filename), function () {
           instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
           moduleErrors: 3, // post, fancy person, person
           modulesIndexed: 0,
-          totalIndexEntries: 6,
+          cardDefErrors: 0,
+          cardDefsIndexed: 0,
+          totalIndexEntries: 11,
         },
         'indexed correct number of files',
       );
@@ -891,7 +906,24 @@ module(basename(__filename), function () {
         [],
         'the broken type results in no instance results',
       );
-      // TODO assert card-def entry is empty/error
+      let personCardDefEntry = await realm.realmIndexQueryEngine.cardDef({
+        module: `${testRealm}person`,
+        name: 'Person',
+      });
+      assert.strictEqual(
+        personCardDefEntry,
+        undefined,
+        'Person card def does not exist',
+      );
+      let fancyPersonCardDefEntry = await realm.realmIndexQueryEngine.cardDef({
+        module: `${testRealm}fancy-person`,
+        name: 'FancyPerson',
+      });
+      assert.strictEqual(
+        fancyPersonCardDefEntry,
+        undefined,
+        'FancyPerson card def does not exist',
+      );
       await realm.write(
         'person.gts',
         `
@@ -911,7 +943,9 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          totalIndexEntries: 12,
+          cardDefErrors: 0,
+          cardDefsIndexed: 3, // Person card, Post card, FancyPerson card
+          totalIndexEntries: 20,
         },
         'indexed correct number of files',
       );
@@ -927,7 +961,24 @@ module(basename(__filename), function () {
         2,
         'correct number of instances returned',
       );
-      // TODO assert card-def entry has recovered
+      personCardDefEntry = await realm.realmIndexQueryEngine.cardDef({
+        module: `${testRealm}person`,
+        name: 'Person',
+      });
+      assert.strictEqual(
+        personCardDefEntry?.type,
+        'card-def',
+        'Person card def has recovered',
+      );
+      fancyPersonCardDefEntry = await realm.realmIndexQueryEngine.cardDef({
+        module: `${testRealm}fancy-person`,
+        name: 'FancyPerson',
+      });
+      assert.strictEqual(
+        fancyPersonCardDefEntry?.type,
+        'card-def',
+        'FancyPerson card def has recovered',
+      );
     });
 
     test('can recover from a module sequence error', async function (assert) {
@@ -950,9 +1001,20 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          totalIndexEntries: 12,
+          cardDefErrors: 0,
+          cardDefsIndexed: 0,
+          totalIndexEntries: 20,
         },
         'indexed correct number of files',
+      );
+      let petCardDefEntry = await realm.realmIndexQueryEngine.cardDef({
+        module: `${testRealm}pet`,
+        name: 'Pet',
+      });
+      assert.strictEqual(
+        petCardDefEntry,
+        undefined,
+        'Pet card def does not exist',
       );
       await realm.write(
         'name.gts',
@@ -976,7 +1038,15 @@ module(basename(__filename), function () {
         'module',
         'Name module is successfully indexed',
       );
-      // TODO assert card-def entry has recovered
+      petCardDefEntry = await realm.realmIndexQueryEngine.cardDef({
+        module: `${testRealm}pet`,
+        name: 'Pet',
+      });
+      assert.strictEqual(
+        petCardDefEntry?.type,
+        'card-def',
+        'Pet card def has recovered',
+      );
 
       // Since the name is ready, the pet should be indexed and not in an error state
       assert.deepEqual(
@@ -986,7 +1056,9 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          totalIndexEntries: 16,
+          cardDefErrors: 0,
+          cardDefsIndexed: 2,
+          totalIndexEntries: 26,
         },
         'indexed correct number of files',
       );
@@ -1000,7 +1072,6 @@ module(basename(__filename), function () {
         'module',
         'Pet module is successfully indexed',
       );
-      // TODO assert card-def entry has recovered
     });
 
     test('can successfully create instance after module sequence error is resolved', async function (assert) {
@@ -1025,7 +1096,10 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          totalIndexEntries: 12,
+
+          cardDefErrors: 0,
+          cardDefsIndexed: 0,
+          totalIndexEntries: 20,
         },
         'instance and module are in error state before dependency is available',
       );
@@ -1103,7 +1177,9 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          totalIndexEntries: 15,
+          cardDefErrors: 0,
+          cardDefsIndexed: 0,
+          totalIndexEntries: 25,
         },
         'index did not touch any files',
       );
@@ -1144,7 +1220,9 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 1,
-          totalIndexEntries: 16,
+          cardDefErrors: 0,
+          cardDefsIndexed: 1,
+          totalIndexEntries: 26,
         },
         'indexed correct number of files',
       );
@@ -1186,7 +1264,9 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          totalIndexEntries: 16,
+          cardDefErrors: 0,
+          cardDefsIndexed: 3,
+          totalIndexEntries: 26,
         },
         'indexed correct number of files',
       );
@@ -1237,7 +1317,9 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 0,
           modulesIndexed: 0,
-          totalIndexEntries: 14,
+          cardDefErrors: 0,
+          cardDefsIndexed: 0,
+          totalIndexEntries: 23,
         },
         'indexed correct number of files',
       );
@@ -1278,7 +1360,9 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 1,
-          totalIndexEntries: 16,
+          cardDefErrors: 0,
+          cardDefsIndexed: 1,
+          totalIndexEntries: 26,
         },
         'indexed correct number of files',
       );
@@ -1352,7 +1436,9 @@ module(basename(__filename), function () {
           instanceErrors: 6,
           modulesIndexed: 10,
           instancesIndexed: 6,
-          totalIndexEntries: 16,
+          cardDefErrors: 0,
+          cardDefsIndexed: 10,
+          totalIndexEntries: 26,
         },
         'indexed correct number of files',
       );
@@ -1782,7 +1868,9 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 2,
-          totalIndexEntries: 18,
+          cardDefErrors: 0,
+          cardDefsIndexed: 2,
+          totalIndexEntries: 30,
         },
         'indexed correct number of files',
       );
@@ -1837,7 +1925,9 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 1,
-          totalIndexEntries: 18,
+          cardDefErrors: 0,
+          cardDefsIndexed: 1,
+          totalIndexEntries: 29,
         },
         'indexed correct number of files',
       );
@@ -1965,7 +2055,9 @@ module(basename(__filename), function () {
             instanceErrors: 0,
             moduleErrors: 0,
             modulesIndexed: 1,
-            totalIndexEntries: 2,
+            cardDefErrors: 0,
+            cardDefsIndexed: 1,
+            totalIndexEntries: 3,
           },
           'has no module errors',
         );
@@ -1993,6 +2085,8 @@ module(basename(__filename), function () {
             instancesIndexed: 0,
             moduleErrors: 1,
             modulesIndexed: 0,
+            cardDefErrors: 0,
+            cardDefsIndexed: 0,
             totalIndexEntries: 0,
           },
           'has a module error',

@@ -133,7 +133,7 @@ export class Batch {
   get invalidations() {
     // the card def id's are notional, they are not file resources that can be
     // visited, so we don't expose them to the outside world
-    return [...this.#invalidations].filter((i) => isCardDefId(i));
+    return [...this.#invalidations].filter((i) => !isCardDefId(i));
   }
 
   @Memoize()
@@ -615,7 +615,7 @@ export class Batch {
 
     // the card def id's are notional, they are not file resources that can be
     // visited, so we don't expose them to the outside world
-    return invalidations.filter((i) => isCardDefId(i));
+    return invalidations.filter((i) => !isCardDefId(i));
   }
 
   private async itemsThatReference(resolvedPath: string): Promise<
