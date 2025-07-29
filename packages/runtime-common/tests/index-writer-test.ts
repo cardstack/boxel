@@ -207,7 +207,90 @@ const tests = Object.freeze({
     ]);
   },
 
-  // TODO can perform invalidations for a card-def entry
+  'card def entries are invalidated as part of module invalidations': async (
+    assert,
+    { indexWriter, adapter },
+  ) => {
+    await setupIndex(
+      adapter,
+      [
+        { realm_url: testRealmURL, current_version: 1 },
+        { realm_url: testRealmURL2, current_version: 5 },
+      ],
+      [
+        {
+          url: `${testRealmURL}person.gts`,
+          file_alias: `${testRealmURL}person`,
+          type: 'module',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [],
+        },
+        {
+          url: `${testRealmURL}person/Person`,
+          file_alias: `${testRealmURL}person`,
+          type: 'card-def',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}person`],
+        },
+        {
+          url: `${testRealmURL}employee.gts`,
+          file_alias: `${testRealmURL}employee`,
+          type: 'module',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}person`],
+        },
+        {
+          url: `${testRealmURL}employee/Employee`,
+          file_alias: `${testRealmURL}employee`,
+          type: 'card-def',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}employee`, `${testRealmURL}person`],
+        },
+        {
+          url: `${testRealmURL}1.json`,
+          file_alias: `${testRealmURL}1.json`,
+          type: 'instance',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}employee`],
+        },
+        {
+          url: `${testRealmURL}2.json`,
+          file_alias: `${testRealmURL}2.json`,
+          type: 'instance',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}1.json`],
+        },
+        {
+          url: `${testRealmURL}3.json`,
+          file_alias: `${testRealmURL}3.json`,
+          type: 'instance',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [],
+        },
+      ],
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let invalidations = await batch.invalidate([
+      new URL(`${testRealmURL}person.gts`),
+    ]);
+
+    assert.deepEqual(invalidations.sort(), [
+      `${testRealmURL}1.json`,
+      `${testRealmURL}2.json`,
+      `${testRealmURL}employee.gts`,
+      `${testRealmURL}person.gts`,
+      `${testRealmURL}person/Person`,
+      `${testRealmURL}employee/Employee`,
+    ]);
+  },
 
   "invalidations don't cross realm boundaries": async (
     assert,
@@ -1343,9 +1426,161 @@ const tests = Object.freeze({
     );
   },
 
-  // TODO can get a card-def entry
+  'can get a card-def entry': async (
+    assert,
+    { indexWriter, indexQueryEngine, adapter },
+  ) => {
+    let types = [{ module: `./person`, name: 'Person' }, baseCardRef].map((i) =>
+      internalKeyFor(i, new URL(testRealmURL)),
+    );
+    await setupIndex(adapter);
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let now = Date.now();
+    await batch.updateEntry(new URL(`${testRealmURL}person/Person`), {
+      type: 'card-def',
+      fileAlias: `${testRealmURL}person`,
+      types,
+      lastModified: now,
+      resourceCreatedAt: now,
+      deps: new Set(types),
+      meta: {
+        displayName: 'Person',
+        codeRef: {
+          module: `${testRealmURL}person`,
+          name: 'Person',
+        },
+        fields: {
+          name: {
+            type: 'contains',
+            isPrimitive: true,
+            isComputed: false,
+            fieldOrCard: {
+              module: `${testRealmURL}fancy-string`,
+              name: 'StringField',
+            },
+          },
+        },
+      },
+    });
+    await batch.done();
 
-  // TODO can get a card-def entry from working index
+    let result = await indexQueryEngine.getCardDef({
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
+
+    if (result?.type === 'card-def') {
+      assert.deepEqual(result.deps, types, 'the deps are correct');
+      assert.deepEqual(
+        result.meta,
+        {
+          displayName: 'Person',
+          codeRef: {
+            module: `${testRealmURL}person`,
+            name: 'Person',
+          },
+          fields: {
+            name: {
+              type: 'contains',
+              isPrimitive: true,
+              isComputed: false,
+              fieldOrCard: {
+                module: `${testRealmURL}fancy-string`,
+                name: 'StringField',
+              },
+            },
+          },
+        },
+        'the meta is correct',
+      );
+    } else {
+      assert.ok(false, `expected card-def not to be an error document`);
+    }
+  },
+
+  'can get a card-def entry from the working index': async (
+    assert,
+    { indexWriter, indexQueryEngine, adapter },
+  ) => {
+    let types = [{ module: `./person`, name: 'Person' }, baseCardRef].map((i) =>
+      internalKeyFor(i, new URL(testRealmURL)),
+    );
+    await setupIndex(adapter);
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    let now = Date.now();
+    await batch.updateEntry(new URL(`${testRealmURL}person/Person`), {
+      type: 'card-def',
+      fileAlias: `${testRealmURL}person`,
+      types,
+      lastModified: now,
+      resourceCreatedAt: now,
+      deps: new Set(types),
+      meta: {
+        displayName: 'Person',
+        codeRef: {
+          module: `${testRealmURL}person`,
+          name: 'Person',
+        },
+        fields: {
+          name: {
+            type: 'contains',
+            isPrimitive: true,
+            isComputed: false,
+            fieldOrCard: {
+              module: `${testRealmURL}fancy-string`,
+              name: 'StringField',
+            },
+          },
+        },
+      },
+    });
+
+    let result = await indexQueryEngine.getCardDef(
+      {
+        module: `${testRealmURL}person`,
+        name: 'Person',
+      },
+      { useWorkInProgressIndex: true },
+    );
+
+    if (result?.type === 'card-def') {
+      assert.deepEqual(result.deps, types, 'the deps are correct');
+      assert.deepEqual(
+        result.meta,
+        {
+          displayName: 'Person',
+          codeRef: {
+            module: `${testRealmURL}person`,
+            name: 'Person',
+          },
+          fields: {
+            name: {
+              type: 'contains',
+              isPrimitive: true,
+              isComputed: false,
+              fieldOrCard: {
+                module: `${testRealmURL}fancy-string`,
+                name: 'StringField',
+              },
+            },
+          },
+        },
+        'the meta is correct',
+      );
+    } else {
+      assert.ok(false, `expected card-def not to be an error document`);
+    }
+
+    let noResult = await indexQueryEngine.getCardDef({
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
+    assert.strictEqual(
+      noResult,
+      undefined,
+      'card-def does not exist in production index',
+    );
+  },
 
   'can get error doc for module': async (
     assert,

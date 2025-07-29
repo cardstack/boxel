@@ -40,6 +40,14 @@ module('Unit | index-writer', function (hooks) {
     });
   });
 
+  test('card def entries are invalidated as part of module invalidations', async function (assert) {
+    await runSharedTest(indexWriterTests, assert, {
+      indexWriter,
+      indexQueryEngine,
+      adapter,
+    });
+  });
+
   test("invalidations don't cross realm boundaries", async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
@@ -145,6 +153,22 @@ module('Unit | index-writer', function (hooks) {
   });
 
   test('can get compiled module and source from WIP index', async function (assert) {
+    await runSharedTest(indexWriterTests, assert, {
+      indexWriter,
+      indexQueryEngine,
+      adapter,
+    });
+  });
+
+  test('can get a card-def entry', async function (assert) {
+    await runSharedTest(indexWriterTests, assert, {
+      indexWriter,
+      indexQueryEngine,
+      adapter,
+    });
+  });
+
+  test('can get a card-def entry from the working index', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
       indexQueryEngine,

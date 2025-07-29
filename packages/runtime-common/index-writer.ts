@@ -164,7 +164,6 @@ export class Batch {
     return result;
   }
 
-  // TODO need to add support to copy card-def entries
   async copyFrom(sourceRealmURL: URL, destRealmInfo: RealmInfo): Promise<void> {
     let columns: string[][] | undefined;
     let sources = (await this.#query([
