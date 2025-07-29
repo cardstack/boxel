@@ -15,6 +15,10 @@ export default class HostModeService extends Service {
       if (currentHost.endsWith(`.${hostModeDomainRoot}`)) {
         return true;
       }
+
+      if (window.location.search.includes('host-mode=true')) {
+        return true;
+      }
     }
 
     return false;
