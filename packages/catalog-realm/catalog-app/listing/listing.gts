@@ -45,7 +45,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
   @tracked writableRealms: { name: string; url: string; iconURL?: string }[] =
     [];
-  @tracked roomId: string | null = null;
 
   constructor(owner: any, args: any) {
     super(owner, args);
@@ -115,8 +114,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       skillCards: Array.isArray(this.args.model.skills)
         ? [...this.args.model.skills]
         : [],
-      clientGeneratedId: `skill-test-${Date.now()}`,
-      openRoom: true, // Open the room UI if we created a new room
+      openRoom: true,
     });
   });
 
