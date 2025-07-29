@@ -106,6 +106,7 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
         height: 100%;
         background-position: center;
         background-size: cover;
+        padding: var(--boxel-sp);
       }
 
       .card {
