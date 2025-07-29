@@ -28,6 +28,7 @@ import type {
 import GetEventsFromRoomCommand from './get-events-from-room';
 
 import type MessageService from '../services/message-service';
+import { getService } from '@universal-ember/test-support';
 
 export async function waitForMatrixEvent(
   commandContext: CommandContext,
@@ -115,14 +116,11 @@ export async function waitForCompletedCommandRequest(
 }
 
 export async function addPatchTools(
-  commandContext: CommandContext,
   patchableCards: CardDef[],
   cardAPI: typeof CardAPI,
 ): Promise<Tool[]> {
   let results: Tool[] = [];
-  let loader = getOwner(commandContext)!.lookup(
-    'service:loader-service',
-  ).loader;
+  let loader = getService('loader-service').loader;
   let mappings = await basicMappings(loader);
   for (const patchableCard of patchableCards) {
     let patchSpec = generateJsonSchemaForCardType(

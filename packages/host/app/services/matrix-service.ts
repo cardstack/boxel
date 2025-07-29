@@ -872,13 +872,7 @@ export default class MatrixService extends Service {
       .filter((c) => openCardIds.includes(c.id))
       .filter((c) => this.realm.canWrite(c.id));
     // Generate tool calls for patching currently open cards permitted for modification
-    tools = tools.concat(
-      await addPatchTools(
-        this.commandService.commandContext,
-        patchableCards,
-        this.cardAPI,
-      ),
-    );
+    tools = tools.concat(await addPatchTools(patchableCards, this.cardAPI));
 
     await this.updateSkillsAndCommandsIfNeeded(roomId);
     let contentData = await this.withContextAndAttachments(
