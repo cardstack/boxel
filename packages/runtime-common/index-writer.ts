@@ -794,7 +794,7 @@ export class Batch {
 }
 
 export function isCardDefId(id: string) {
-  return !hasExecutableExtension(id) && !id.endsWith('.json');
+  return !id.split('/').pop()!.includes('.'); // URL without an extension
 }
 
 export function trimExportNameFromCardDefId(id: string) {
