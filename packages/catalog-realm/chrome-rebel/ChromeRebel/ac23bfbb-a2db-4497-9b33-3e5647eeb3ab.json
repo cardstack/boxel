@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "bikeName": "Chrome Rebel 900",
+      "engineType": "V-Twin",
+      "displacement": "700cc",
+      "buildYear": 2022,
+      "customFeatures": [
+        "Hand-stitched leather seat",
+        "Custom chrome exhaust",
+        "LED headlight conversion",
+        "Matte black powder-coated frame"
+      ],
+      "isCustomBuild": true,
+      "description": "The Chrome Rebel 900 is a custom-built motorcycle featuring a powerful V-Twin 900cc engine, hand-crafted details, and a unique blend of classic and modern styling. Designed for both performance and comfort, it stands out with its custom chrome accents and premium finishes.",
+      "thumbnailURL": "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=600&q=80"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../chrome-rebel",
+        "name": "ChromeRebel"
+      }
+    }
+  }
+}
