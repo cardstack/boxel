@@ -1,6 +1,7 @@
 import { getOwner } from '@ember/owner';
 import { visit } from '@ember/test-helpers';
 
+import { getPageTitle } from 'ember-page-title/test-support';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -148,7 +149,7 @@ module('Acceptance | host mode tests', function (hooks) {
     });
 
     assert.dom(`[data-test-card="${testRealmURL}Pet/mango"]`).exists();
-    assert.dom('[data-test-boxel-card-header-title]').hasText('Pet - Mango');
+    assert.strictEqual(getPageTitle(), 'Mango');
 
     await percySnapshot(assert);
   });
@@ -159,5 +160,9 @@ module('Acceptance | host mode tests', function (hooks) {
     assert
       .dom('[data-test-error="not-found"]')
       .hasText(`Card not found: ${testRealmURL}Pet/non-existent`);
+    assert.strictEqual(
+      getPageTitle(),
+      `Card not found: ${testRealmURL}Pet/non-existent`,
+    );
   });
 });

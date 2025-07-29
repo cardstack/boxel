@@ -7,15 +7,13 @@ import { pageTitle } from 'ember-page-title';
 import { consume } from 'ember-provide-consume-context';
 import RouteTemplate from 'ember-route-template';
 
-import { CardContainer, CardHeader } from '@cardstack/boxel-ui/components';
+import { CardContainer } from '@cardstack/boxel-ui/components';
 
 import {
   type getCard,
   type getCards,
   type getCardCollection,
   type CardErrorJSONAPI,
-  cardTypeDisplayName,
-  cardTypeIcon,
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
@@ -49,6 +47,14 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
     return isCardErrorJSONAPI(this.args.model);
   }
 
+  get title() {
+    if (this.isError) {
+      return `Card not found: ${this.args.model.id}`;
+    }
+
+    return this.args.model.title;
+  }
+
   get backgroundImageStyle() {
     let backgroundImageUrl = this.args.model?.[meta]?.realmInfo?.backgroundURL;
 
@@ -68,7 +74,7 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
   }
 
   <template>
-    {{pageTitle 'FIXME'}}
+    {{pageTitle this.title}}
     {{#if this.isError}}
       <div data-test-error='not-found'>
         Card not found:
@@ -81,11 +87,6 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
         data-test-host-mode-container
       >
         <CardContainer class='card'>
-          <CardHeader
-            @cardTypeDisplayName={{cardTypeDisplayName @model}}
-            @cardTypeIcon={{cardTypeIcon @model}}
-            @cardTitle={{@model.title}}
-          />
           <CardRenderer
             class='stack-item-preview'
             @card={{@model}}
