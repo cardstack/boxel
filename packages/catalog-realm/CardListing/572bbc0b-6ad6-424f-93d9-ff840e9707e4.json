@@ -2,13 +2,13 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Linktree 2",
+      "name": "Stylish Fashion Influencer Linktree",
       "summary": "Professional social media link aggregator with premium fashion influencer design - configure profile details, custom links, and brand colors while viewing animated Brooklyn-to-Austin aesthetic presentations. Features floating sparkle animations, premium ring effects, crown badges, agency representation indicators, and luxury gradient styling for sophisticated influencer brand management.",
       "images": [
-        "https://boxel-images.boxel.ai/app-assets/catalog/linktree-2-listing/screenshot_01.png"
+        "https://boxel-images.boxel.ai/app-assets/catalog/stylish-fashion-influencer-linktree-listing/screenshot_01.png"
       ],
       "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/linktree-2-listing/thumbnail.png"
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/stylish-fashion-influencer-linktree-listing/thumbnail.png"
     },
     "relationships": {
       "skills": {
@@ -43,7 +43,7 @@
       },
       "examples.0": {
         "links": {
-          "self": "../link-tree-2/Linktree2/0a0f8894-494b-47e4-9e7a-6c733812501f"
+          "self": "../stylish-fashion-influencer-linktree/StylishFashionInfluencerLinktree/0a0f8894-494b-47e4-9e7a-6c733812501f"
         }
       }
     },

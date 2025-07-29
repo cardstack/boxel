@@ -20,7 +20,9 @@ import SparklesIcon from '@cardstack/boxel-icons/sparkles';
 import StarIcon from '@cardstack/boxel-icons/star';
 import CrownIcon from '@cardstack/boxel-icons/crown';
 
-class IsolatedLinkTree2Template extends Component<typeof Linktree2> {
+class IsolatedTemplate extends Component<
+  typeof StylishFashionInfluencerLinktree
+> {
   @tracked sparklePositions: Array<{ x: number; y: number; delay: number }> =
     [];
 
@@ -526,7 +528,9 @@ class IsolatedLinkTree2Template extends Component<typeof Linktree2> {
   </template>
 }
 
-class EmbeddedLinktree2Template extends Component<typeof Linktree2> {
+class EmbeddedTemplate extends Component<
+  typeof StylishFashionInfluencerLinktree
+> {
   <template>
     <div
       class='embedded-linktree'
@@ -722,7 +726,7 @@ export class SocialLinkField extends FieldDef {
   };
 }
 
-export class Linktree2 extends CardDef {
+export class StylishFashionInfluencerLinktree extends CardDef {
   static displayName = 'Premium Fashion Influencer Linktree';
   static icon = CrownIcon;
   static prefersWideFormat = false;
@@ -735,11 +739,11 @@ export class Linktree2 extends CardDef {
   @field socialLinks = containsMany(SocialLinkField);
 
   @field title = contains(StringField, {
-    computeVia: function (this: Linktree2) {
+    computeVia: function (this: StylishFashionInfluencerLinktree) {
       return this.influencerName ?? 'Premium Fashion Influencer Linktree';
     },
   });
 
-  static isolated = IsolatedLinkTree2Template;
-  static embedded = EmbeddedLinktree2Template;
+  static isolated = IsolatedTemplate;
+  static embedded = EmbeddedTemplate;
 }

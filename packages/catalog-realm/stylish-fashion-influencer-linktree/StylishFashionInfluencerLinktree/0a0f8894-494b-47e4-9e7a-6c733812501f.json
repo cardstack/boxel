@@ -63,8 +63,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../link-tree-2",
-        "name": "Linktree2"
+        "module": "../stylish-fashion-influencer-linktree",
+        "name": "StylishFashionInfluencerLinktree"
       }
     }
   }

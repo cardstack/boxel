@@ -4,13 +4,13 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "Linktree2",
-        "module": "../link-tree-2/link-tree-2"
+        "name": "StylishFashionInfluencerLinktree",
+        "module": "../stylish-fashion-influencer-linktree/stylish-fashion-influencer-linktree"
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Linktree2",
-      "description": "Spec of LinkTree2",
+      "title": "StylishFashionInfluencerLinktree",
+      "description": "Spec of StylishFashionInfluencerLinktree",
       "thumbnailURL": null
     },
     "relationships": {
