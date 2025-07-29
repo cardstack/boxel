@@ -545,6 +545,7 @@ const tests = Object.freeze({
     delete (copiedIndex as Partial<BoxelIndexTable>).indexed_at;
     delete (copiedModule as Partial<BoxelIndexTable>).indexed_at;
 
+    // TODO need to add the card-def entry...
     assert.deepEqual(
       copiedIndex as Omit<BoxelIndexTable, 'indexed_at'>,
       {
@@ -600,6 +601,7 @@ const tests = Object.freeze({
         atom_html: `<span class="atom">Atom HTML</span>`,
         icon_html: '<svg>test icon</svg>',
         is_deleted: null,
+        meta: null,
       },
       'the copied instance is correct',
     );
@@ -627,6 +629,7 @@ const tests = Object.freeze({
         atom_html: null,
         icon_html: null,
         is_deleted: null,
+        meta: null,
       },
       'the copied module is correct',
     );
@@ -765,6 +768,7 @@ const tests = Object.freeze({
         resource_created_at: String(modified),
         is_deleted: null,
         icon_html: '<svg>test icon</svg>',
+        meta: null,
       },
       'the error entry includes last known good state of instance',
     );
@@ -820,6 +824,7 @@ const tests = Object.freeze({
           resource_created_at: null,
           is_deleted: false,
           icon_html: null,
+          meta: null,
         },
         'the error entry does not include last known good state of instance',
       );
