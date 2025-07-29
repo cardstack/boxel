@@ -688,6 +688,14 @@ module(basename(__filename), function () {
                   kind: 'file',
                 },
               },
+              'f.js': {
+                links: {
+                  related: `${testRealmHref}f.js`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
               'family_photo_card.gts': {
                 links: {
                   related: `${testRealmHref}family_photo_card.gts`,
@@ -715,6 +723,14 @@ module(basename(__filename), function () {
               'friend.gts': {
                 links: {
                   related: `${testRealmHref}friend.gts`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
+              'g.js': {
+                links: {
+                  related: `${testRealmHref}g.js`,
                 },
                 meta: {
                   kind: 'file',
