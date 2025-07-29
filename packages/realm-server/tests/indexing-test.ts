@@ -8,7 +8,6 @@ import {
   RealmPermissions,
   type IndexedInstance,
   RealmAdapter,
-  QueueRunner,
 } from '@cardstack/runtime-common';
 import {
   createRealm,
@@ -65,14 +64,12 @@ module(basename(__filename), function () {
     let dir: string;
     let realm: Realm;
     let adapter: RealmAdapter;
-    let testRunner: QueueRunner;
 
     setupBaseRealmServer(hooks, baseRealmServerVirtualNetwork, matrixURL);
 
     setupDB(hooks, {
       beforeEach: async (dbAdapter, publisher, runner) => {
         testDbAdapter = dbAdapter;
-        testRunner = runner;
         let virtualNetwork = createVirtualNetwork();
         dir = dirSync().name;
         ({ realm, adapter } = await createRealm({
@@ -1704,7 +1701,7 @@ module(basename(__filename), function () {
 
       await adapter.remove('test-file.json'); // incremental doesn't get triggered (like in development) here bcos there is no filewatcher enabled
       let fileExists = await adapter.exists('test-file.json');
-      assert.strictEqual(fileExists, false);
+      assert.false(fileExists);
       await realm.realmIndexUpdater.fullIndex();
 
       let deletedEntries = (await testDbAdapter.execute(
@@ -1717,9 +1714,8 @@ module(basename(__filename), function () {
         `${testRealm}test-file.json`,
         'tombstone has correct URL',
       );
-      assert.strictEqual(
+      assert.true(
         deletedEntries[0].is_deleted,
-        true,
         'tombstone is marked as deleted',
       );
 
