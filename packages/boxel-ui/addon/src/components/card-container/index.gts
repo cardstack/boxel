@@ -25,28 +25,31 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
     </Tag>
   {{/let}}
   <style scoped>
-    .boxel-card-container {
-      position: relative;
-      background-color: var(--background, var(--boxel-light));
-      border-radius: var(--radius, var(--boxel-border-radius));
-      color: var(--foreground, var(--boxel-dark));
-      font-family: var(--font-sans, var(--boxel-font-family));
-      transition:
-        max-width var(--boxel-transition),
-        box-shadow var(--boxel-transition);
-      height: 100%;
-      width: 100%;
-      overflow: hidden;
-    }
-    .boundaries {
-      box-shadow:
-        0 0 0 1px var(--border, var(--boxel-300)),
-        var(--shadow, 0 0 0 1px var(--boxel-300));
-    }
-    :deep(.boxel-card-container .boxel-card-container) {
-      background-color: var(--card, var(--boxel-light));
-      border-radius: var(--radius, var(--boxel-border-radius));
-      color: var(--card-foreground, var(--boxel-dark));
+    @layer {
+      .boxel-card-container {
+        position: relative;
+        background-color: var(--background, var(--boxel-light));
+        border-radius: var(--radius, var(--boxel-border-radius));
+        color: var(--foreground, var(--boxel-dark));
+        font-family: var(--font-sans, var(--boxel-font-family));
+        transition:
+          max-width var(--boxel-transition),
+          box-shadow var(--boxel-transition);
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+      }
+      .boundaries {
+        box-shadow:
+          0 0 0 1px var(--border, var(--boxel-300)),
+          var(--shadow, 0 0 0 1px var(--boxel-300));
+      }
+      :deep(.boxel-card-container .boxel-card-container) {
+        background-color: var(--card, var(--boxel-light));
+        border-radius: var(--radius, var(--boxel-border-radius));
+        color: var(--card-foreground, var(--boxel-dark));
+      }
     }
   </style>
 </template>;

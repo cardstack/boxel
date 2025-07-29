@@ -88,6 +88,10 @@
     --boxel-outline-color: var(--boxel-blue);
     --boxel-outline: var(--boxel-outline-width) solid var(--boxel-outline-color);
     --boxel-deep-box-shadow: 0 5px 15px 0 rgba(0 0 0 / 50%);
+    --boxel-transition-properties:
+      background-color var(--boxel-transition),
+      border-color var(--boxel-transition), box-shadow var(--boxel-transition),
+      color var(--boxel-transition);
 
     /* Container sizes */
     --boxel-xxs-container: 15.625rem; /* 250px */

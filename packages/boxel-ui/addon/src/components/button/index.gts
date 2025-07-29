@@ -101,6 +101,11 @@ export default class ButtonComponent extends Component<Signature> {
       @layer {
         /* Button */
         .boxel-button {
+          --_bg-color-mix: color-mix(
+            in oklab,
+            var(--boxel-button-color) 90%,
+            transparent
+          );
           display: inline-flex;
           justify-content: center;
           height: min-content;
@@ -137,15 +142,10 @@ export default class ButtonComponent extends Component<Signature> {
             var(--boxel-lsp-lg)
           );
         }
-        @supports (color: color-mix(in lab, red, red)) {
-          .boxel-button:not(:disabled):hover,
-          .boxel-button:not(:disabled):active {
-            background-color: color-mix(
-              in oklab,
-              var(--boxel-button-color) 90%,
-              transparent
-            );
-          }
+
+        .boxel-button:not(:disabled):hover,
+        .boxel-button:not(:disabled):active {
+          background-color: var(--_bg-color-mix);
         }
 
         .loading-indicator {
@@ -229,16 +229,16 @@ export default class ButtonComponent extends Component<Signature> {
         }
 
         .kind-secondary:not(:disabled) {
-          --boxel-button-color: var(--secondary, var(--boxel-dark));
-          --boxel-button-border: 1px solid var(--secondary, var(--boxel-dark));
+          --boxel-button-color: var(--secondary, var(--boxel-light));
+          --boxel-button-border: 1px solid var(--secondary, var(--boxel-400));
           --boxel-button-text-color: var(
             --secondary-foreground,
-            var(--boxel-light)
+            var(--boxel-dark)
           );
         }
         .kind-secondary:not(:disabled):hover,
         .kind-secondary:not(:disabled):active {
-          --boxel-button-border: 1px solid var(--secondary, var(--boxel-dark));
+          --boxel-button-border: 1px solid var(--secondary, currentColor);
         }
 
         .kind-secondary-dark:not(:disabled) {
@@ -321,7 +321,7 @@ export default class ButtonComponent extends Component<Signature> {
         }
 
         .kind-text-only:not(:disabled):hover {
-          --boxel-button-color: var(--accent, var(--boxel-200));
+          --boxel-button-color: var(--accent, var(--boxel-dark-hover));
           --boxel-button-text-color: var(
             --accent-foreground,
             var(--boxel-dark)

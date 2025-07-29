@@ -62,16 +62,21 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
 
   <style scoped>
     .boxel-select {
+      --_bg-color-mix: color-mix(in oklab, var(--input) 25%, transparent);
       position: relative;
       display: flex;
       align-items: stretch;
       overflow: hidden;
-      border: 1px solid var(--boxel-border-color);
-      border-radius: var(--boxel-border-radius-sm);
+      background-color: var(--_bg-color-mix, var(--boxel-light));
+      color: var(--foreground, var(--boxel-dark));
+      font-family: inherit;
+      border: 1px solid var(--border, var(--boxel-border-color));
+      border-radius: var(--radius, var(--boxel-form-control-border-radius));
       max-width: 100%;
       width: 100%;
     }
-    .boxel-select:hover {
+    .boxel-select:hover:not(:disabled) {
+      border-color: var(--boxel-dark);
       cursor: pointer;
     }
     .ember-power-select-trigger {
@@ -81,8 +86,8 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
   {{! template-lint-disable require-scoped-style }}
   <style>
     .boxel-select__dropdown {
-      box-shadow: var(--boxel-box-shadow);
-      border-radius: var(--boxel-form-control-border-radius);
+      box-shadow: var(--shadow, var(--boxel-box-shadow));
+      border-radius: var(--radius, var(--boxel-form-control-border-radius));
       z-index: var(
         --boxel-layer-modal-urgent
       ); /* TODO: Investigate why this is needed */
@@ -94,9 +99,9 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
     }
     .boxel-select__dropdown .ember-power-select-option {
       padding: var(--boxel-sp-xs);
-      background-color: var(--boxel-light);
-      color: var(--boxel-dark);
-      transition: background-color var(--boxel-transition);
+      background-color: var(--popover, var(--boxel-light));
+      color: var(--popover-foreground, var(--boxel-dark));
+      transition: var(--boxel-transition-properties);
     }
     .boxel-select__dropdown .ember-power-select-option[aria-selected='true'] {
       background-color: var(--boxel-highlight);
@@ -106,7 +111,8 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
       background-color: var(--boxel-highlight-hover);
     }
     .boxel-select__dropdown .ember-power-select-option:hover {
-      background-color: var(--boxel-100);
+      background-color: var(--accent, var(--boxel-100));
+      color: var(--accent-foreground);
     }
     .boxel-select__dropdown .ember-power-select-search-input:focus {
       border: 1px solid var(--boxel-outline-color);

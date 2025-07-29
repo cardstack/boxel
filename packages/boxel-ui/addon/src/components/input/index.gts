@@ -235,6 +235,7 @@ export default class BoxelInput extends Component<Signature> {
       }
 
       .boxel-input {
+        --_bg-color-mix: color-mix(in oklab, var(--input) 25%, transparent);
         --boxel-input-height: var(--boxel-form-control-height);
 
         grid-column: 1 / span 3;
@@ -244,7 +245,7 @@ export default class BoxelInput extends Component<Signature> {
         width: 100%;
         min-height: var(--boxel-input-height);
         padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
-        background-color: var(--input, var(--boxel-light));
+        background-color: var(--_bg-color-mix, var(--boxel-light));
         border: 1px solid var(--border, var(--boxel-form-control-border-color));
         border-radius: var(--radius, var(--boxel-form-control-border-radius));
         transition: border-color var(--boxel-transition);
@@ -255,19 +256,11 @@ export default class BoxelInput extends Component<Signature> {
         font-size: var(--boxel-font-size);
       }
 
-      @supports (color: color-mix(in lab, red, red)) {
-        .boxel-input {
-          background-color: color-mix(in oklab, var(--input) 25%, transparent);
-        }
-      }
-
       .boxel-text-area {
         --boxel-input-height: 10rem;
       }
 
       .boxel-input:disabled {
-        background-color: var(--input, var(--boxel-light));
-        border-color: 1px solid var(--border, var(--boxel-400));
         opacity: 0.5;
       }
 

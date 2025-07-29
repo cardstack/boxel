@@ -131,17 +131,20 @@ export class ListItem extends Component<ListItemSignature> {
         .list-item-buttons {
           display: flex;
           border-radius: var(--boxel-border-radius-sm);
-          color: var(--boxel-dark);
-          background-color: var(--boxel-light);
+          color: var(--foreground, var(--boxel-dark));
+          background-color: var(--background, var(--boxel-light));
         }
         .list-item-buttons:not(.is-selected):hover {
-          background-color: var(--boxel-200);
+          background-color: var(--accent, var(--boxel-200));
+          color: var(--accent-foreground);
         }
         .list-item-buttons.is-selected {
-          filter: invert(1);
+          background-color: var(--accent, var(--boxel-dark));
+          color: var(--accent-foreground, var(--boxel-light));
         }
         .list-item-buttons.is-expanded {
-          background-color: var(--boxel-100);
+          background-color: var(--muted, var(--boxel-100));
+          color: var(--muted-foreground);
         }
         .dropdown-toggle {
           --boxel-icon-button-width: 2rem;
@@ -158,6 +161,7 @@ export class ListItem extends Component<ListItemSignature> {
           justify-content: flex-start;
           gap: var(--boxel-sp-xs);
           font: 500 var(--boxel-font-sm);
+          font-family: inherit;
           letter-spacing: var(--boxel-lsp-xs);
           border-radius: var(--boxel-border-radius-sm);
           max-width: 100%;

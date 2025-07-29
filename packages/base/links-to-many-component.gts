@@ -359,9 +359,9 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-form-control-border-color);
-        border-radius: var(--boxel-form-control-border-radius);
+        background-color: var(--sidebar, var(--boxel-light));
+        border: 1px solid var(--border, var(--boxel-form-control-border-color));
+        border-radius: var(--radius, var(--boxel-form-control-border-radius));
       }
       .remove-item-button {
         width: 18px;

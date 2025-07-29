@@ -140,6 +140,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
       .contains-many-editor
         :deep(.compound-field.edit-format .add-button--full-width) {
         border: var(--boxel-border);
+        border-color: var(--border, var(--boxel-form-control-border-color));
       }
       .list {
         list-style: none;
@@ -156,16 +157,13 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
       .editor.can-write {
         grid-template-columns: var(--boxel-icon-lg) 1fr var(--remove-icon-size);
       }
-      .editor :deep(.boxel-input:hover) {
-        border-color: var(--boxel-form-control-border-color);
-      }
       .editor + .editor {
         margin-top: var(--boxel-sp-xs);
       }
       .item-container {
         padding: var(--boxel-sp);
-        background-color: var(--boxel-100);
-        border-radius: var(--boxel-form-control-border-radius);
+        background-color: var(--sidebar, var(--boxel-100));
+        border-radius: var(--radius, var(--boxel-form-control-border-radius));
         transition: background-color var(--boxel-transition);
       }
       .remove {
@@ -182,7 +180,8 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
       }
       .remove:focus + .item-container,
       .remove:hover + .item-container {
-        background-color: var(--boxel-200);
+        background-color: var(--accent, var(--boxel-200));
+        color: var(--accent-foreground);
       }
       .add-new {
         width: calc(100% - var(--boxel-icon-xxl));

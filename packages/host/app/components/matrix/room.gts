@@ -269,6 +269,7 @@ export default class Room extends Component<Signature> {
 
         background-color: var(--boxel-light);
         border-radius: var(--chat-input-area-border-radius);
+        color: var(--boxel-dark);
 
         position: relative;
         z-index: 2;

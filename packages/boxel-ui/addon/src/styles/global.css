@@ -135,6 +135,9 @@
   select:focus,
   textarea:focus {
     outline-color: var(--boxel-highlight);
+    outline-style: solid;
+    outline-width: var(--boxel-outline-width, 2px);
+    outline-offset: var(--boxel-outline-offset, -1px);
   }
 
   ol,

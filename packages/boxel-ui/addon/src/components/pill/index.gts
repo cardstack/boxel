@@ -62,29 +62,37 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
         --default-pill-font: 600 var(--boxel-font-sm);
         --default-pill-padding: var(--boxel-sp-5xs) var(--boxel-sp-xxxs);
         --default-pill-border: 1px solid
-          var(--pill-border-color, var(--boxel-400));
+          var(--pill-border-color, var(--border, var(--boxel-400)));
         display: inline-flex;
         align-items: center;
         gap: var(--pill-gap, var(--boxel-sp-5xs));
         padding: var(--pill-padding, var(--default-pill-padding));
-        background-color: var(--pill-background-color, var(--boxel-light));
-        color: var(--pill-font-color, var(--boxel-dark));
+        background-color: var(
+          --pill-background-color,
+          var(--background, var(--boxel-light))
+        );
+        color: var(--pill-font-color, var(--foreground, var(--boxel-dark)));
         border: var(--pill-border, var(--default-pill-border));
         border-radius: var(--pill-border-radius, var(--boxel-border-radius-sm));
         font: var(--pill-font, var(--default-pill-font));
+        font-family: inherit;
         letter-spacing: var(--boxel-lsp-xs);
         word-break: break-word;
       }
 
       .button-pill:not(:disabled):hover {
-        background-color: var(--pill-background-color-hover, var(--boxel-100));
+        background-color: var(
+          --pill-background-color-hover,
+          var(--accent, var(--boxel-100))
+        );
+        color: var(--accent-foreground);
       }
 
       .icon {
         display: flex;
         margin-block: 0;
         margin-inline: 0;
-        --icon-color: var(--pill-font-color, var(--boxel-dark));
+        --icon-color: var(--pill-font-color, currentColor);
       }
 
       .icon > :deep(*) {
