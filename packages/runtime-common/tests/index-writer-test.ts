@@ -216,6 +216,7 @@ const tests = Object.freeze({
   // publicly.
   'card def entries are not publicly invalidated as part of module invalidations':
     async (assert, { indexQueryEngine, indexWriter, adapter }) => {
+      let modified = Date.now();
       await setupIndex(
         adapter,
         [
@@ -230,6 +231,8 @@ const tests = Object.freeze({
             realm_version: 1,
             realm_url: testRealmURL,
             deps: [],
+            last_modified: String(modified),
+            resource_created_at: String(modified),
           },
           {
             url: `${testRealmURL}person/Person`,
@@ -238,6 +241,8 @@ const tests = Object.freeze({
             realm_version: 1,
             realm_url: testRealmURL,
             deps: [`${testRealmURL}person`],
+            last_modified: String(modified),
+            resource_created_at: String(modified),
           },
           {
             url: `${testRealmURL}employee.gts`,
@@ -246,6 +251,8 @@ const tests = Object.freeze({
             realm_version: 1,
             realm_url: testRealmURL,
             deps: [`${testRealmURL}person`],
+            last_modified: String(modified),
+            resource_created_at: String(modified),
           },
           {
             url: `${testRealmURL}employee/Employee`,
@@ -254,6 +261,8 @@ const tests = Object.freeze({
             realm_version: 1,
             realm_url: testRealmURL,
             deps: [`${testRealmURL}employee`, `${testRealmURL}person`],
+            last_modified: String(modified),
+            resource_created_at: String(modified),
           },
           {
             url: `${testRealmURL}1.json`,
@@ -262,6 +271,8 @@ const tests = Object.freeze({
             realm_version: 1,
             realm_url: testRealmURL,
             deps: [`${testRealmURL}employee`],
+            last_modified: String(modified),
+            resource_created_at: String(modified),
           },
           {
             url: `${testRealmURL}2.json`,
@@ -270,6 +281,8 @@ const tests = Object.freeze({
             realm_version: 1,
             realm_url: testRealmURL,
             deps: [`${testRealmURL}1.json`],
+            last_modified: String(modified),
+            resource_created_at: String(modified),
           },
           {
             url: `${testRealmURL}3.json`,
@@ -278,6 +291,8 @@ const tests = Object.freeze({
             realm_version: 1,
             realm_url: testRealmURL,
             deps: [],
+            last_modified: String(modified),
+            resource_created_at: String(modified),
           },
         ],
       );
@@ -294,7 +309,16 @@ const tests = Object.freeze({
         `${testRealmURL}person.gts`,
       ]);
 
-      let personCardDef = await indexQueryEngine.getCardDef(
+      let personCardDef = await indexQueryEngine.getCardDef({
+        module: `${testRealmURL}person`,
+        name: 'Person',
+      });
+      assert.strictEqual(
+        personCardDef?.type,
+        'card-def',
+        'card-def exists in production index',
+      );
+      personCardDef = await indexQueryEngine.getCardDef(
         {
           module: `${testRealmURL}person`,
           name: 'Person',
@@ -306,7 +330,16 @@ const tests = Object.freeze({
         undefined,
         'card-def has been marked for deletion',
       );
-      let employeeCardDef = await indexQueryEngine.getCardDef(
+      let employeeCardDef = await indexQueryEngine.getCardDef({
+        module: `${testRealmURL}employee`,
+        name: 'Employee',
+      });
+      assert.strictEqual(
+        employeeCardDef?.type,
+        'card-def',
+        'card-def exists in production index',
+      );
+      employeeCardDef = await indexQueryEngine.getCardDef(
         {
           module: `${testRealmURL}employee`,
           name: 'Employee',
