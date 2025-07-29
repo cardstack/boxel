@@ -8,7 +8,6 @@ import { consume } from 'ember-provide-consume-context';
 import RouteTemplate from 'ember-route-template';
 
 import { CardContainer, CardHeader } from '@cardstack/boxel-ui/components';
-import { cssVar } from '@cardstack/boxel-ui/helpers';
 
 import {
   type getCard,
@@ -81,12 +80,7 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
         style={{this.backgroundImageStyle}}
         data-test-host-mode-container
       >
-        <CardContainer
-          class='card'
-          style={{cssVar
-            card-error-header-height='var(--stack-item-header-height)'
-          }}
-        >
+        <CardContainer class='card'>
           <CardHeader
             @cardTypeDisplayName={{cardTypeDisplayName @model}}
             @cardTypeIcon={{cardTypeIcon @model}}
