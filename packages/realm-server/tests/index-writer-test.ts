@@ -39,7 +39,7 @@ module(basename(__filename), function () {
       });
     });
 
-    test('card def entries are invalidated as part of module invalidations', async function (assert) {
+    test('card def entries are not publicly invalidated as part of module invalidations', async function (assert) {
       await runSharedTest(indexWriterTests, assert, {
         indexWriter,
         indexQueryEngine,

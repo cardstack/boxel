@@ -207,90 +207,118 @@ const tests = Object.freeze({
     ]);
   },
 
-  'card def entries are invalidated as part of module invalidations': async (
-    assert,
-    { indexWriter, adapter },
-  ) => {
-    await setupIndex(
-      adapter,
-      [
-        { realm_url: testRealmURL, current_version: 1 },
-        { realm_url: testRealmURL2, current_version: 5 },
-      ],
-      [
-        {
-          url: `${testRealmURL}person.gts`,
-          file_alias: `${testRealmURL}person`,
-          type: 'module',
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [],
-        },
-        {
-          url: `${testRealmURL}person/Person`,
-          file_alias: `${testRealmURL}person`,
-          type: 'card-def',
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [`${testRealmURL}person`],
-        },
-        {
-          url: `${testRealmURL}employee.gts`,
-          file_alias: `${testRealmURL}employee`,
-          type: 'module',
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [`${testRealmURL}person`],
-        },
-        {
-          url: `${testRealmURL}employee/Employee`,
-          file_alias: `${testRealmURL}employee`,
-          type: 'card-def',
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [`${testRealmURL}employee`, `${testRealmURL}person`],
-        },
-        {
-          url: `${testRealmURL}1.json`,
-          file_alias: `${testRealmURL}1.json`,
-          type: 'instance',
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [`${testRealmURL}employee`],
-        },
-        {
-          url: `${testRealmURL}2.json`,
-          file_alias: `${testRealmURL}2.json`,
-          type: 'instance',
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [`${testRealmURL}1.json`],
-        },
-        {
-          url: `${testRealmURL}3.json`,
-          file_alias: `${testRealmURL}3.json`,
-          type: 'instance',
-          realm_version: 1,
-          realm_url: testRealmURL,
-          deps: [],
-        },
-      ],
-    );
+  // card def entries are notional so when you get a list of invalidations from
+  // the batch we don't reflect card-def entries as participating in the
+  // invalidation externally since there is no specific resource that they
+  // reflect in the filesystem (which is what a module does). However,
+  // invalidated card-defs are marked for deletion as part of invalidation,
+  // which shows they do actually participate in invalidation--just not
+  // publicly.
+  'card def entries are not publicly invalidated as part of module invalidations':
+    async (assert, { indexQueryEngine, indexWriter, adapter }) => {
+      await setupIndex(
+        adapter,
+        [
+          { realm_url: testRealmURL, current_version: 1 },
+          { realm_url: testRealmURL2, current_version: 5 },
+        ],
+        [
+          {
+            url: `${testRealmURL}person.gts`,
+            file_alias: `${testRealmURL}person`,
+            type: 'module',
+            realm_version: 1,
+            realm_url: testRealmURL,
+            deps: [],
+          },
+          {
+            url: `${testRealmURL}person/Person`,
+            file_alias: `${testRealmURL}person`,
+            type: 'card-def',
+            realm_version: 1,
+            realm_url: testRealmURL,
+            deps: [`${testRealmURL}person`],
+          },
+          {
+            url: `${testRealmURL}employee.gts`,
+            file_alias: `${testRealmURL}employee`,
+            type: 'module',
+            realm_version: 1,
+            realm_url: testRealmURL,
+            deps: [`${testRealmURL}person`],
+          },
+          {
+            url: `${testRealmURL}employee/Employee`,
+            file_alias: `${testRealmURL}employee`,
+            type: 'card-def',
+            realm_version: 1,
+            realm_url: testRealmURL,
+            deps: [`${testRealmURL}employee`, `${testRealmURL}person`],
+          },
+          {
+            url: `${testRealmURL}1.json`,
+            file_alias: `${testRealmURL}1.json`,
+            type: 'instance',
+            realm_version: 1,
+            realm_url: testRealmURL,
+            deps: [`${testRealmURL}employee`],
+          },
+          {
+            url: `${testRealmURL}2.json`,
+            file_alias: `${testRealmURL}2.json`,
+            type: 'instance',
+            realm_version: 1,
+            realm_url: testRealmURL,
+            deps: [`${testRealmURL}1.json`],
+          },
+          {
+            url: `${testRealmURL}3.json`,
+            file_alias: `${testRealmURL}3.json`,
+            type: 'instance',
+            realm_version: 1,
+            realm_url: testRealmURL,
+            deps: [],
+          },
+        ],
+      );
 
-    let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    let invalidations = await batch.invalidate([
-      new URL(`${testRealmURL}person.gts`),
-    ]);
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let invalidations = await batch.invalidate([
+        new URL(`${testRealmURL}person.gts`),
+      ]);
 
-    assert.deepEqual(invalidations.sort(), [
-      `${testRealmURL}1.json`,
-      `${testRealmURL}2.json`,
-      `${testRealmURL}employee.gts`,
-      `${testRealmURL}person.gts`,
-      `${testRealmURL}person/Person`,
-      `${testRealmURL}employee/Employee`,
-    ]);
-  },
+      assert.deepEqual(invalidations.sort(), [
+        `${testRealmURL}1.json`,
+        `${testRealmURL}2.json`,
+        `${testRealmURL}employee.gts`,
+        `${testRealmURL}person.gts`,
+      ]);
+
+      let personCardDef = await indexQueryEngine.getCardDef(
+        {
+          module: `${testRealmURL}person`,
+          name: 'Person',
+        },
+        { useWorkInProgressIndex: true },
+      );
+      assert.strictEqual(
+        personCardDef,
+        undefined,
+        'card-def has been marked for deletion',
+      );
+      let employeeCardDef = await indexQueryEngine.getCardDef(
+        {
+          module: `${testRealmURL}employee`,
+          name: 'Employee',
+        },
+        { useWorkInProgressIndex: true },
+      );
+      assert.strictEqual(
+        employeeCardDef,
+        undefined,
+        'card-def has been marked for deletion',
+      );
+    },
 
   "invalidations don't cross realm boundaries": async (
     assert,

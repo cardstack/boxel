@@ -40,7 +40,7 @@ module('Unit | index-writer', function (hooks) {
     });
   });
 
-  test('card def entries are invalidated as part of module invalidations', async function (assert) {
+  test('card def entries are not publicly invalidated as part of module invalidations', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
       indexQueryEngine,
