@@ -233,12 +233,10 @@ const fieldDescriptions = initSharedState(
   'fieldDescriptions',
   () => new WeakMap<typeof BaseDef, Map<string, string>>(),
 );
-const computingFields = initSharedState(
-  'computingFields',
-  () => new WeakMap<BaseDef, Set<string>>(),
-);
-// Global flag to track if we're currently inside any computed execution
-let isComputingGlobally = false;
+// const computingFields = initSharedState(
+//   'computingFields',
+//   () => new WeakMap<BaseDef, Set<string>>(),
+// );
 
 // our place for notifying Glimmer when a card is ready to re-render (which will
 // involve rerunning computed fields on-demand)
@@ -474,22 +472,18 @@ function getter<CardT extends BaseDefConstructor>(
 
   if (field.computeVia) {
     // Check for direct recursion - if we're already computing this exact field on this instance
-    let computing = computingFields.get(instance);
-    if (computing?.has(field.name)) {
-      // Direct recursion detected - return empty value to break the cycle
-      return field.emptyValue(instance) as BaseInstanceType<CardT>;
-    }
+    // let computing = computingFields.get(instance);
+    // if (computing?.has(field.name)) {
+    //   // Direct recursion detected - return empty value to break the cycle
+    //   return field.emptyValue(instance) as BaseInstanceType<CardT>;
+    // }
 
-    // Mark this field as being computed (for recursion detection)
-    if (!computing) {
-      computing = new Set();
-      computingFields.set(instance, computing);
-    }
-    computing.add(field.name);
-
-    // Set global flag to prevent recompute during computed execution
-    const wasComputingGlobally = isComputingGlobally;
-    isComputingGlobally = true;
+    // // Mark this field as being computed (for recursion detection)
+    // if (!computing) {
+    //   computing = new Set();
+    //   computingFields.set(instance, computing);
+    // }
+    // computing.add(field.name);
 
     try {
       // Always execute computed fields, never cache
@@ -506,12 +500,10 @@ function getter<CardT extends BaseDefConstructor>(
       throw e;
     } finally {
       // Clean up recursion tracking
-      computing.delete(field.name);
-      if (computing.size === 0) {
-        computingFields.delete(instance);
-      }
-      // Restore global flag
-      isComputingGlobally = wasComputingGlobally;
+      // computing.delete(field.name);
+      // if (computing.size === 0) {
+      //   computingFields.delete(instance);
+      // }
     }
   } else {
     if (deserialized.has(field.name)) {
@@ -719,7 +711,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
             arrayValue,
           );
           notifySubscribers(instance, field.name, arrayValue);
-          logger.log(recompute(instance));
+          cardTracking.set(instance, true);
         }),
       await Promise.all(
         value.map(async (entry, index) => {
@@ -783,7 +775,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
         value as BaseDef[],
       );
       notifySubscribers(instance, this.name, value);
-      logger.log(recompute(instance));
+      cardTracking.set(instance, true);
     });
   }
 
@@ -817,7 +809,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
         value as BaseDef[],
       );
       notifySubscribers(instance, this.name, value);
-      logger.log(recompute(instance));
+      cardTracking.set(instance, true); // when watched array changes, we want to re-render
     }, values);
   }
 
@@ -1737,7 +1729,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
             value as BaseDef[],
           );
           notifySubscribers(instance, this.name, value);
-          logger.log(recompute(instance));
+          cardTracking.set(instance, true);
         }),
       await Promise.all(resources),
     );
@@ -1752,7 +1744,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
         value as BaseDef[],
       );
       notifySubscribers(instance, this.name, value);
-      logger.log(recompute(instance));
+      cardTracking.set(instance, true);
     });
   }
 
@@ -1793,7 +1785,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
         value as BaseDef[],
       );
       notifySubscribers(instance, this.name, value);
-      logger.log(recompute(instance));
+      cardTracking.set(instance, true);
     }, values);
   }
 
@@ -2361,6 +2353,8 @@ export class CardDef extends BaseDef {
     value: any,
   ) {
     if (fieldName === 'id') {
+      // TODO: can we eliminate this conditional branch?
+
       // we need to be careful that we don't trigger the ambient recompute() in our setters
       // when we are instantiating an instance that is placed in the identityMap that has
       // not had it's field values set yet, as computeds may assume dependent fields are
@@ -3191,15 +3185,6 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       (instance as any)[meta] = resource.meta;
     }
 
-    // Note: Computed fields are now always executed on-demand and never cached,
-    // so server-provided computed values would be ignored. We run recompute here
-    // primarily to populate non-computed fields and trigger any necessary loading
-    // of related cards. For updateFromSerialized() we always want this to run
-    // after we set values as we're not sure which values we set that depend on computeds.
-    await recompute(instance, {
-      ...(opts?.ignoreBrokenLinks ? { ignoreBrokenLinks: true } : {}),
-    });
-
     if (isCardInstance(instance) && resource.id != null) {
       // importantly, we place this synchronously after the assignment of the model's
       // fields, such that subsequent assignment of the id field when the model is
@@ -3321,16 +3306,12 @@ function makeDescriptor<
 }
 
 function setField(instance: BaseDef, field: Field, value: any) {
+  // TODO: refactor validate to not have a return value and accomplish this normalization another way
   value = field.validate(instance, value);
   let deserialized = getDataBucket(instance);
   deserialized.set(field.name, value);
-  // Computed fields are always executed on-demand and never cached, so no invalidation needed
   notifySubscribers(instance, field.name, value);
-
-  // Don't trigger recompute if we're inside any computed execution globally
-  if (!isComputingGlobally) {
-    logger.log(recompute(instance));
-  }
+  cardTracking.set(instance, true);
 }
 
 function notifySubscribers(
@@ -3409,6 +3390,7 @@ interface RecomputeOptions {
   // async in the recompute using this option
   recomputeAllFields?: true;
 }
+// TODO: rename to loadFields
 export async function recompute(
   card: BaseDef,
   opts?: RecomputeOptions,

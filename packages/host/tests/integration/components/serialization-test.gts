@@ -3204,7 +3204,6 @@ module('Integration | serialization', function (hooks) {
       description: 'Introductory post',
       thumbnailURL: './intro.png',
     });
-    await recompute(firstPost);
     let payload = serializeCard(firstPost, { includeUnrenderedFields: true });
     assert.deepEqual(
       payload,
