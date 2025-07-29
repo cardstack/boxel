@@ -328,7 +328,7 @@ const tests = Object.freeze({
       assert.strictEqual(
         personCardDef,
         undefined,
-        'card-def has been marked for deletion',
+        'card-def has been marked for deletion in working index',
       );
       let employeeCardDef = await indexQueryEngine.getCardDef({
         module: `${testRealmURL}employee`,
@@ -349,7 +349,7 @@ const tests = Object.freeze({
       assert.strictEqual(
         employeeCardDef,
         undefined,
-        'card-def has been marked for deletion',
+        'card-def has been marked for deletion in working index',
       );
     },
 
