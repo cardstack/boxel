@@ -19,8 +19,6 @@ import SendAiAssistantMessageCommand from './send-ai-assistant-message';
 import SetActiveLLMCommand from './set-active-llm';
 
 import type MatrixService from '../services/matrix-service';
-
-import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
 
 export default class UseAiAssistantCommand extends HostBaseCommand<
@@ -29,7 +27,6 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
 > {
   @service declare private store: StoreService;
   @service declare private operatorModeStateService: OperatorModeStateService;
-  @service declare private matrixService: MatrixService;
   @service declare private matrixService: MatrixService;
 
   #cardAPI?: typeof CardAPI;
