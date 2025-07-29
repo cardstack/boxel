@@ -6,11 +6,16 @@ import { pageTitle } from 'ember-page-title';
 import { consume } from 'ember-provide-consume-context';
 import RouteTemplate from 'ember-route-template';
 
+import { CardContainer, CardHeader } from '@cardstack/boxel-ui/components';
+import { cssVar } from '@cardstack/boxel-ui/helpers';
+
 import {
   type getCard,
   type getCards,
   type getCardCollection,
   type CardErrorJSONAPI,
+  cardTypeDisplayName,
+  cardTypeIcon,
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
@@ -60,13 +65,25 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
         {{@model.id}}
       </div>
     {{else}}
-      <CardRenderer
-        class='stack-item-preview'
-        @card={{@model}}
-        @format='isolated'
-        @cardContext={{this.cardContext}}
-      />
+      <CardContainer
+        class='stack-item-card'
+        style={{cssVar
+          card-error-header-height='var(--stack-item-header-height)'
+        }}
+      >
+        <CardHeader
+          @cardTypeDisplayName={{cardTypeDisplayName @model}}
+          @cardTypeIcon={{cardTypeIcon @model}}
+          @cardTitle={{@model.title}}
+        />
+        <CardRenderer
+          class='stack-item-preview'
+          @card={{@model}}
+          @format='isolated'
+          @cardContext={{this.cardContext}}
+        />
 
+      </CardContainer>
     {{/if}}
   </template>
 }

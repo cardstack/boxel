@@ -143,6 +143,7 @@ module('Acceptance | host mode tests', function (hooks) {
     await visit('/test/Pet/mango.json');
 
     assert.dom(`[data-test-card="${testRealmURL}Pet/mango"]`).exists();
+    assert.dom('[data-test-boxel-card-header-title]').hasText('Pet - Mango');
 
     await percySnapshot(assert);
   });
