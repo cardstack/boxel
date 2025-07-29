@@ -83,7 +83,7 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
       >
         {{log this.realmInfo}}
         <CardContainer
-          class='stack-item-card'
+          class='card'
           style={{cssVar
             card-error-header-height='var(--stack-item-header-height)'
           }}
@@ -106,8 +106,16 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
 
     <style scoped>
       .host-mode-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100%;
         background-position: center;
         background-size: cover;
+      }
+
+      .card {
+        width: 50rem;
       }
     </style>
   </template>
