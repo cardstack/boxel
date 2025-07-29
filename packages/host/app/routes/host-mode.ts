@@ -3,10 +3,11 @@ import { inject as service } from '@ember/service';
 
 import { RealmPaths } from '@cardstack/runtime-common';
 
-import RealmServerService from '@cardstack/host/services/realm-server';
+import type RealmServerService from '@cardstack/host/services/realm-server';
+import type StoreService from '@cardstack/host/services/store';
 
 export default class HostMode extends Route<void> {
-  @service('store') store;
+  @service declare store: StoreService;
   @service declare realmServer: RealmServerService;
 
   didMatrixServiceStart = false;
