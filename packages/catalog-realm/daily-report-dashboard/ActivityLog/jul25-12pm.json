@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "timestamp": "2025-07-25T12:00:00Z",
+      "activity": "Workshop morning sessions complete - huge success! Staggered break system working well, maintaining coverage while giving people recovery time. Sarah and Tom taking lunch break now while others prep afternoon materials. Saturday delivery coordinator briefed and ready for tomorrow morning."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../activity-log",
+        "name": "ActivityLog"
+      }
+    }
+  }
+}
