@@ -95,13 +95,13 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
       return input.roomId;
     }
 
-    // Check if there's a current room open
+    // Check if there's a current room open (only when roomId is not 'new')
     let currentRoomId = this.matrixService.currentRoomId;
-    if (currentRoomId) {
+    if (input.roomId !== 'new' && currentRoomId) {
       return currentRoomId;
     }
 
-    // Create a new room if no current room exists
+    // Create a new room if no roomId is provided and no current room exists
     let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
       this.commandContext,
     );
