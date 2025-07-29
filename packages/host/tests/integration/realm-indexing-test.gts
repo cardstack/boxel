@@ -3324,6 +3324,8 @@ module(`Integration | realm indexing`, function (hooks) {
               id: mangoID,
               firstName: 'Mango',
               title: 'Mango',
+              description: null,
+              thumbnailURL: null,
               friends: [{ id: hassanID }],
             },
             {
@@ -3596,11 +3598,15 @@ module(`Integration | realm indexing`, function (hooks) {
               id: hassanID,
               firstName: 'Hassan',
               title: 'Hassan',
+              description: null,
+              thumbnailURL: null,
               friends: [
                 {
                   id: mangoID,
                   firstName: 'Mango',
                   title: 'Mango',
+                  description: null,
+                  thumbnailURL: null,
                   friends: [{ id: hassanID }],
                 },
                 { id: vanGoghID },
