@@ -28,7 +28,6 @@ import {
   Component,
   FieldDef,
   containsMany,
-  recompute,
   linksTo,
   linksToMany,
 } from '../../helpers/base-realm';

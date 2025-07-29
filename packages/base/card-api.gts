@@ -384,8 +384,7 @@ export interface Field<
   handleNotLoadedError(
     instance: BaseInstanceType<CardT>,
     e: NotLoaded,
-    opts?: RecomputeOptions,
-  ): Promise<
+      ): Promise<
     BaseInstanceType<CardT> | BaseInstanceType<CardT>[] | undefined | void
   >;
 }
@@ -1279,8 +1278,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   async handleNotLoadedError(
     instance: BaseInstanceType<CardT>,
     e: NotLoaded,
-    opts?: RecomputeOptions,
-  ): Promise<BaseInstanceType<CardT> | undefined> {
+      ): Promise<BaseInstanceType<CardT> | undefined> {
     let deserialized = getDataBucket(instance as BaseDef);
     let identityContext =
       identityContexts.get(instance as BaseDef) ?? new SimpleIdentityContext();
@@ -1292,8 +1290,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       return fieldValue as BaseInstanceType<CardT>;
     }
 
-    if (opts?.loadFields) {
-      fieldValue = await this.loadMissingField(
+          fieldValue = await this.loadMissingField(
         instance,
         e,
         identityContext,
@@ -1301,10 +1298,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       );
       deserialized.set(this.name, fieldValue);
       return fieldValue as BaseInstanceType<CardT>;
-    }
-
-    return;
-  }
+      }
 
   private async loadMissingField(
     instance: CardDef,
@@ -1792,8 +1786,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
   async handleNotLoadedError<T extends CardDef>(
     instance: T,
     e: NotLoaded,
-    opts?: RecomputeOptions,
-  ): Promise<T[] | undefined> {
+      ): Promise<T[] | undefined> {
     let result: T[] | undefined;
     let fieldValues: CardDef[] = [];
     let identityContext =
@@ -1808,15 +1801,13 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
     }
 
-    if (opts?.loadFields) {
-      fieldValues = await this.loadMissingFields(
+          fieldValues = await this.loadMissingFields(
         instance,
         e,
         identityContext,
         instance[relativeTo],
       );
-    }
-
+    
     if (fieldValues.length === references.length) {
       let values: T[] = [];
       let deserialized = getDataBucket(instance);
@@ -3415,18 +3406,13 @@ export async function recompute(
       Object.keys(
         getFields(model, {
           includeComputeds: false, // Don't include computeds in recompute
-          usedLinksToFieldsOnly: !opts?.recomputeAllFields,
+          usedLinksToFieldsOnly: true,
         }),
       ),
     );
     do {
       for (let fieldName of [...pendingFields]) {
-        let value = await getIfReady(
-          model,
-          fieldName as keyof T,
-          undefined,
-          opts,
-        );
+        let value = await getIfReady(model, fieldName as keyof T, undefined);
         // Computed fields are executed on-demand, so all non-computed fields should be ready
         pendingFields.delete(fieldName);
         if (recomputePromises.get(card) !== recomputePromise) {
@@ -3460,8 +3446,7 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
   instance: T,
   fieldName: K,
   compute: () => T[K] | Promise<T[K]> = () => instance[fieldName],
-  opts?: RecomputeOptions,
-): Promise<T[K] | T[K][] | undefined> {
+  ): Promise<T[K] | T[K][] | undefined> {
   let result: T[K] | T[K][] | undefined;
   let deserialized = getDataBucket(instance);
   let field = getField(instance, fieldName as string, { untracked: true });

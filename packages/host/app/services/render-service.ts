@@ -164,9 +164,7 @@ export default class RenderService extends Service {
       `${baseRealm.url}card-api`,
     );
     try {
-      await api.getIfReady(card, fieldName as keyof CardDef, undefined, {
-        loadFields: true,
-      });
+      await api.getIfReady(card, fieldName as keyof CardDef, undefined);
     } catch (error: any) {
       let errors = Array.isArray(error) ? error : [error];
       for (let err of errors) {
