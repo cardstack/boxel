@@ -512,6 +512,42 @@ export class Batch {
     }
   }
 
+  async tombstoneEntries(
+    invalidations: string[],
+    useWorkInProgressIndex = true,
+  ) {
+    // insert tombstone into next version of the realm index
+    let columns = [
+      'url',
+      'file_alias',
+      'type',
+      'realm_version',
+      'realm_url',
+      'is_deleted',
+    ].map((c) => [c]);
+    let rows = invalidations.map((id) =>
+      [
+        id,
+        trimExecutableExtension(new URL(id)).href,
+        hasExecutableExtension(id) ? 'module' : 'instance',
+        this.realmVersion,
+        this.realmURL.href,
+        true,
+      ].map((v) => [param(v)]),
+    );
+
+    await this.#query([
+      ...upsertMultipleRows(
+        useWorkInProgressIndex ? 'boxel_index_working' : 'boxel_index',
+        useWorkInProgressIndex
+          ? 'boxel_index_working_pkey'
+          : 'boxel_index_pkey',
+        columns,
+        rows,
+      ),
+    ]);
+  }
+
   async invalidate(urls: URL[]): Promise<string[]> {
     await this.ready;
     let start = Date.now();
@@ -537,35 +573,8 @@ export class Batch {
       return [];
     }
 
-    // insert tombstone into next version of the realm index
-    let columns = [
-      'url',
-      'file_alias',
-      'type',
-      'realm_version',
-      'realm_url',
-      'is_deleted',
-    ].map((c) => [c]);
-    let rows = invalidations.map((id) =>
-      [
-        id,
-        trimExecutableExtension(new URL(id)).href,
-        hasExecutableExtension(id) ? 'module' : 'instance',
-        this.realmVersion,
-        this.realmURL.href,
-        true,
-      ].map((v) => [param(v)]),
-    );
-
     let insertStart = Date.now();
-    await this.#query([
-      ...upsertMultipleRows(
-        'boxel_index_working',
-        'boxel_index_working_pkey',
-        columns,
-        rows,
-      ),
-    ]);
+    await this.tombstoneEntries(invalidations);
 
     this.#perfLog.debug(
       `${jobIdentity(this.jobInfo)} inserted invalidated rows for  ${urls.map((u) => u.href).join()} in ${

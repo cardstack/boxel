@@ -7,6 +7,8 @@ import {
   Realm,
   RealmPermissions,
   type IndexedInstance,
+  RealmAdapter,
+  QueueRunner,
 } from '@cardstack/runtime-common';
 import {
   createRealm,
@@ -62,15 +64,18 @@ module(basename(__filename), function () {
 
     let dir: string;
     let realm: Realm;
+    let adapter: RealmAdapter;
+    let testRunner: QueueRunner;
 
     setupBaseRealmServer(hooks, baseRealmServerVirtualNetwork, matrixURL);
 
     setupDB(hooks, {
       beforeEach: async (dbAdapter, publisher, runner) => {
         testDbAdapter = dbAdapter;
+        testRunner = runner;
         let virtualNetwork = createVirtualNetwork();
         dir = dirSync().name;
-        ({ realm } = await createRealm({
+        ({ realm, adapter } = await createRealm({
           withWorker: true,
           dir,
           virtualNetwork,
@@ -1671,6 +1676,61 @@ module(basename(__filename), function () {
           totalIndexEntries: 18,
         },
         'indexed correct number of files',
+      );
+    });
+
+    test('can tombstone deleted files when running fromScratch indexing', async function (assert) {
+      await realm.write(
+        'test-file.json',
+        JSON.stringify({
+          data: {
+            attributes: {
+              firstName: 'Test Person',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person',
+                name: 'Person',
+              },
+            },
+          },
+        }),
+      );
+
+      let testFile = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}test-file`),
+      );
+      assert.strictEqual(testFile?.type, 'instance', 'test file was indexed');
+
+      await adapter.remove('test-file.json'); // incremental doesn't get triggered (like in development) here bcos there is no filewatcher enabled
+      let fileExists = await adapter.exists('test-file.json');
+      assert.strictEqual(fileExists, false);
+      await realm.realmIndexUpdater.fullIndex();
+
+      let deletedEntries = (await testDbAdapter.execute(
+        `SELECT * FROM boxel_index where is_deleted = true`,
+      )) as { url: string; is_deleted: boolean }[];
+
+      assert.strictEqual(deletedEntries.length, 1, 'found tombstone entry');
+      assert.strictEqual(
+        deletedEntries[0].url,
+        `${testRealm}test-file.json`,
+        'tombstone has correct URL',
+      );
+      assert.strictEqual(
+        deletedEntries[0].is_deleted,
+        true,
+        'tombstone is marked as deleted',
+      );
+
+      // Verify the file is no longer retrievable through the query engine
+      let deletedFile = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}test-file`),
+      );
+      assert.strictEqual(
+        deletedFile,
+        undefined,
+        'deleted file is not retrievable',
       );
     });
   });
