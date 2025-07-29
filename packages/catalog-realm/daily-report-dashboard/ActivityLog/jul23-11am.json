@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "timestamp": "2025-07-23T11:00:00Z",
+      "activity": "Team meeting concluded - good alignment on priorities. Sarah raised concerns about supply chain delays. Assigned action items: 1) Contact vendor by end of day, 2) Prepare contingency plan for next week. Now focusing on data analysis for morning reports."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../activity-log",
+        "name": "ActivityLog"
+      }
+    }
+  }
+}

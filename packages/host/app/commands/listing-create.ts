@@ -30,6 +30,9 @@ import * as BaseCommandModule from 'https://cardstack.com/base/command';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import HostBaseCommand from '../lib/host-base-command';
+import { skillCardURL } from '../lib/utils';
+
+import UseAiAssistantCommand from './ai-assistant';
 
 import type CardService from '../services/card-service';
 import type NetworkService from '../services/network';
@@ -294,9 +297,19 @@ export default class ListingCreateCommand extends HostBaseCommand<
       },
     };
 
-    await this.store.add(listingDoc, {
+    const listing = await this.store.add(listingDoc, {
       realm: targetRealm,
-      doNotWaitForPersist: true,
+    });
+
+    await new UseAiAssistantCommand(this.commandContext).execute({
+      prompt: `Update information for the listing and redirect to the listing`,
+      roomId: 'new',
+      openRoom: true,
+      llmModel: 'anthropic/claude-sonnet-4',
+      llmMode: 'act',
+      openCardIds: [listing.id!],
+      attachedCards: [listing as CardAPI.CardDef],
+      skillCardIds: [skillCardURL('boxel-environment')],
     });
   }
 }

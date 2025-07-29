@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "timestamp": "2025-07-25T14:00:00Z",
+      "activity": "Entering the 2-4 PM efficiency testing zone. Workshop content deliberately lighter per yesterday's plan. Interactive sessions and collaborative work scheduled now instead of complex presentations. Elena's staggered break theory being put to the test. First impressions: team energy more sustained than usual."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../activity-log",
+        "name": "ActivityLog"
+      }
+    }
+  }
+}
