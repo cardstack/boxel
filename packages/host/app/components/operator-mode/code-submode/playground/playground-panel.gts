@@ -45,7 +45,7 @@ import {
   type PrerenderedCardLike,
 } from '@cardstack/runtime-common';
 
-import ListingInitCommand from '@cardstack/host/commands/listing-action-init';
+import ListingCreateCommand from '@cardstack/host/commands/listing-create';
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
@@ -825,9 +825,8 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   private createListingWithAI = restartableTask(async () => {
     let { commandContext } = this.commandService;
-    await new ListingInitCommand(commandContext).execute({
-      actionType: 'create',
-      attachedCard: this.card ? this.card : undefined,
+    await new ListingCreateCommand(commandContext).execute({
+      openCardId: this.card?.id,
     });
   });
 
