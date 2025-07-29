@@ -3174,7 +3174,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     if (isCardInstance(instance) && resource.id != null) {
       (instance as any)[meta] = resource.meta;
     }
-
+    cardTracking.set(instance, true);
     if (isCardInstance(instance) && resource.id != null) {
       // importantly, we place this synchronously after the assignment of the model's
       // fields, such that subsequent assignment of the id field when the model is
