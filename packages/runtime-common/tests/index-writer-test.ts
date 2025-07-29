@@ -584,7 +584,6 @@ const tests = Object.freeze({
     delete (copiedModule as Partial<BoxelIndexTable>).indexed_at;
     delete (copiedCardDef as Partial<BoxelIndexTable>).indexed_at;
 
-    // TODO need to add the card-def entry...
     assert.deepEqual(
       copiedInstance as Omit<BoxelIndexTable, 'indexed_at'>,
       {
