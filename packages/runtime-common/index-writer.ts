@@ -240,6 +240,23 @@ export class Batch {
       this.updateIds(entry.search_doc, sourceRealmURL);
       entry.indexed_at = now;
 
+      entry.meta = entry.meta
+        ? {
+            displayName: entry.meta.displayName,
+            codeRef: {
+              module: this.copiedRealmURL(
+                sourceRealmURL,
+                new URL(entry.meta.codeRef.module),
+              ).href,
+              name: entry.meta.codeRef.name,
+            },
+            fields: this.cardDefMetaWithCopiedCodeRefs(
+              sourceRealmURL,
+              entry.meta.fields,
+            ),
+          }
+        : entry.meta;
+
       let { valueExpressions, nameExpressions } = asExpressions(entry);
       columns = nameExpressions;
       return valueExpressions;
@@ -735,6 +752,27 @@ export class Batch {
     return result;
   }
 
+  private cardDefMetaWithCopiedCodeRefs(
+    fromRealm: URL,
+    fieldsMeta: CardDefMeta['fields'],
+  ): CardDefMeta['fields'] {
+    return Object.fromEntries(
+      Object.entries(fieldsMeta).map(([fieldName, meta]) => [
+        fieldName,
+        {
+          ...meta,
+          fieldOrCard: {
+            module: this.copiedRealmURL(
+              fromRealm,
+              new URL(meta.fieldOrCard.module),
+            ).href,
+            name: meta.fieldOrCard.name,
+          },
+        },
+      ]),
+    );
+  }
+
   private updateIds(obj: any, fromRealm: URL) {
     if (Array.isArray(obj)) {
       obj.forEach((i) => this.updateIds(i, fromRealm));
@@ -755,10 +793,10 @@ export class Batch {
   }
 }
 
-function isCardDefId(id: string) {
+export function isCardDefId(id: string) {
   return !hasExecutableExtension(id) && !id.endsWith('.json');
 }
 
-function trimExportNameFromCardDefId(id: string) {
+export function trimExportNameFromCardDefId(id: string) {
   return id.split('/').slice(0, -1).join('/');
 }

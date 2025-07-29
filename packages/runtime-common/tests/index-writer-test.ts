@@ -522,6 +522,44 @@ const tests = Object.freeze({
           atom_html: null,
           icon_html: null,
         },
+        {
+          url: `${testRealmURL}person/Person`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'card-def',
+          source: null,
+          transpiled_code: null,
+          pristine_doc: null,
+          search_doc: null,
+          display_names: null,
+          deps: [
+            `${testRealmURL}person`,
+            `https://cardstack.com/base/card-api.gts`,
+          ],
+          types,
+          last_modified: String(modified),
+          resource_created_at: String(modified),
+          embedded_html: null,
+          fitted_html: null,
+          isolated_html: null,
+          atom_html: null,
+          icon_html: null,
+          meta: {
+            displayName: 'Person',
+            codeRef: { module: `${testRealmURL}person`, name: 'Person' },
+            fields: {
+              name: {
+                type: 'contains',
+                isPrimitive: true,
+                isComputed: false,
+                fieldOrCard: {
+                  module: `${testRealmURL}fancy-string`,
+                  name: 'StringField',
+                },
+              },
+            },
+          },
+        },
       ],
     );
     let batch = await indexWriter.createBatch(new URL(testRealmURL2));
@@ -534,20 +572,21 @@ const tests = Object.freeze({
     )) as unknown as BoxelIndexTable[];
     assert.strictEqual(
       results.length,
-      2,
+      3,
       'correct number of items were copied',
     );
 
-    let [copiedIndex, copiedModule] = results;
-    assert.ok(copiedIndex.indexed_at, 'indexed_at was set');
+    let [copiedInstance, copiedModule, copiedCardDef] = results;
+    assert.ok(copiedInstance.indexed_at, 'indexed_at was set');
     assert.ok(copiedModule.indexed_at, 'indexed_at was set');
 
-    delete (copiedIndex as Partial<BoxelIndexTable>).indexed_at;
+    delete (copiedInstance as Partial<BoxelIndexTable>).indexed_at;
     delete (copiedModule as Partial<BoxelIndexTable>).indexed_at;
+    delete (copiedCardDef as Partial<BoxelIndexTable>).indexed_at;
 
     // TODO need to add the card-def entry...
     assert.deepEqual(
-      copiedIndex as Omit<BoxelIndexTable, 'indexed_at'>,
+      copiedInstance as Omit<BoxelIndexTable, 'indexed_at'>,
       {
         url: `${testRealmURL2}1.json`,
         file_alias: `${testRealmURL2}1`,
@@ -632,6 +671,52 @@ const tests = Object.freeze({
         meta: null,
       },
       'the copied module is correct',
+    );
+
+    assert.deepEqual(
+      copiedCardDef as Omit<BoxelIndexTable, 'indexed_at'>,
+      {
+        url: `${testRealmURL2}person/Person`,
+        file_alias: `${testRealmURL2}person`,
+        realm_version: 2,
+        realm_url: testRealmURL2,
+        type: 'card-def',
+        source: null,
+        transpiled_code: null,
+        error_doc: null,
+        pristine_doc: null,
+        search_doc: null,
+        display_names: null,
+        deps: [
+          `${testRealmURL2}person`,
+          `https://cardstack.com/base/card-api.gts`,
+        ],
+        types: destTypes,
+        last_modified: String(modified),
+        resource_created_at: String(modified),
+        embedded_html: null,
+        fitted_html: null,
+        isolated_html: null,
+        atom_html: null,
+        icon_html: null,
+        is_deleted: null,
+        meta: {
+          displayName: 'Person',
+          codeRef: { module: `${testRealmURL2}person`, name: 'Person' },
+          fields: {
+            name: {
+              type: 'contains',
+              isPrimitive: true,
+              isComputed: false,
+              fieldOrCard: {
+                module: `${testRealmURL2}fancy-string`,
+                name: 'StringField',
+              },
+            },
+          },
+        },
+      },
+      'the copied card def is correct',
     );
   },
 
