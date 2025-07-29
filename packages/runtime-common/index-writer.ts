@@ -512,10 +512,7 @@ export class Batch {
     }
   }
 
-  async tombstoneEntries(
-    invalidations: string[],
-    useWorkInProgressIndex = true,
-  ) {
+  async tombstoneEntries(invalidations: string[]) {
     // insert tombstone into next version of the realm index
     let columns = [
       'url',
@@ -538,10 +535,8 @@ export class Batch {
 
     await this.#query([
       ...upsertMultipleRows(
-        useWorkInProgressIndex ? 'boxel_index_working' : 'boxel_index',
-        useWorkInProgressIndex
-          ? 'boxel_index_working_pkey'
-          : 'boxel_index_pkey',
+        'boxel_index_working',
+        'boxel_index_working_pkey',
         columns,
         rows,
       ),

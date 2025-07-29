@@ -352,7 +352,12 @@ export class CurrentRun {
     // Check for deleted files - files that exist in index but not on filesystem
     let indexedUrls = [...indexMtimes.keys()];
     let deletedUrls = indexedUrls.filter((url) => !filesystemMtimes[url]);
-    await this.batch.tombstoneEntries(deletedUrls, false);
+    if (deletedUrls.length > 0) {
+      perfLog.debug(
+        `${jobIdentity(this.#jobInfo)} found ${deletedUrls.length} deleted files to add to invalidations: ${deletedUrls.join(', ')}`,
+      );
+      invalidationList.push(...deletedUrls);
+    }
 
     let invalidationStart = Date.now();
     await this.batch.invalidate(invalidationList.map((u) => new URL(u)));
