@@ -7,6 +7,7 @@ import { module, test } from 'qunit';
 import { skillCardRef } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_LLM_MODE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -583,6 +584,33 @@ module('Integration | commands | ai-assistant', function (hooks) {
       boxelMessageData.context.openCardIds,
       openCardIds,
       'Open card IDs should be included in message',
+    );
+  });
+
+  test('sets activeLLMMode when llmMode is provided', async function (assert) {
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-for-llm-mode-test',
+    });
+
+    let aiAssistantCommand = new UseAiAssistantCommand(
+      commandService.commandContext,
+    );
+
+    // Test setting LLM mode to 'act'
+    await aiAssistantCommand.execute({
+      prompt: 'test prompt',
+      roomId,
+      llmMode: 'act',
+    });
+
+    // Check that the LLM mode was set in room state
+    let llmModeState = getRoomState(roomId, APP_BOXEL_LLM_MODE, '');
+    assert.ok(llmModeState, 'LLM mode state should be present in room');
+    assert.strictEqual(
+      llmModeState.mode,
+      'act',
+      'LLM mode should be set to act',
     );
   });
 });

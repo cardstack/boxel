@@ -19,6 +19,8 @@ import SendAiAssistantMessageCommand from './send-ai-assistant-message';
 import SetActiveLLMCommand from './set-active-llm';
 
 import type MatrixService from '../services/matrix-service';
+
+import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
 
 export default class UseAiAssistantCommand extends HostBaseCommand<
@@ -27,6 +29,7 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
 > {
   @service declare private store: StoreService;
   @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private matrixService: MatrixService;
   @service declare private matrixService: MatrixService;
 
   #cardAPI?: typeof CardAPI;
@@ -57,11 +60,13 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
     let loadSkillsPromise = this.maybeLoadSkillCards(input, roomId);
     let attachedCardsPromise = this.ensureAttachedCardsLoaded(input);
     let setActiveLLMPromise = this.maybeSetActiveLLM(input, roomId);
+    let setLLMModePromise = this.maybeSetLLMMode(input, roomId);
     await Promise.all([
       openRoomPromise,
       loadSkillsPromise,
       attachedCardsPromise,
       setActiveLLMPromise,
+      setLLMModePromise,
     ]);
 
     // Only send message if prompt is provided
@@ -196,6 +201,15 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
         roomId,
         model: input.llmModel,
       });
+    }
+  }
+
+  async maybeSetLLMMode(
+    input: BaseCommandModule.UseAiAssistantInput,
+    roomId: string,
+  ): Promise<void> {
+    if (input.llmMode) {
+      await this.matrixService.sendLLMModeEvent(roomId, input.llmMode as any);
     }
   }
 }

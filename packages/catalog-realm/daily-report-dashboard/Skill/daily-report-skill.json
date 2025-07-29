@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "instructions": "# Daily Report Generation Skill\n\n## 🚀 AUTOMATION FLOWCHART\n\n### Trigger Recognition\nWhen user says any of these phrases:\n- \"generate today's daily report\"\n- \"create daily report for today\"\n- \"daily report generation\"\n- \"analyze today's activities\"\n- \"make today's report\"\n\n\n### 🧠 Step 1: Intelligent Analysis Engine\n\n#### Pattern Recognition Algorithm\n```\nFOR each activity log:\n  - Extract productivity indicators\n  - Identify challenge patterns\n  - Note success factors\n  - Track time allocation\n  - Assess team dynamics\n  \nAGGREGATE insights:\n  - Calculate productivity percentage\n  - Identify peak performance periods\n  - Cluster related challenges\n  - Generate efficiency trends\n```\n\n#### Policy Alignment Check\n```\n- ✅ Activity Logging Protocol compliance\n- ✅ Quality Standards adherence \n- ✅ Time Management principles\n- ✅ Communication requirements\n- ✅ Daily Review Process implementation\n```\n\n### 📝 Step 2: Automated Report Generation\n\n#### Content Structure (Auto-Generated)\n```markdown\n# Daily Summary - [Auto-calculated Date]\n\n## Key Accomplishments\n[Auto-extracted from activity logs]\n\n## Challenges & Solutions\n[Pattern-analyzed obstacles and resolutions]\n\n## Team Coordination\n[Meeting outcomes and communication analysis]\n\n## Technical Status\n[Equipment performance and system status]\n\n## Metrics\n- **Overall Productivity**: [Auto-calculated]%\n- **Equipment Uptime**: [Analyzed]%\n- **Team Effectiveness**: [Assessed level]\n\n# Recommendations for Tomorrow ([Next Date])\n[AI-generated based on patterns and policy alignment]\n```\n\n\n### ✅ Step 3: Success Confirmation\n\n#### Automated Metrics Summary\n```\n🎯 DAILY REPORT GENERATED SUCCESSFULLY\n\n📊 Processing Summary:\n- Activity Logs Found: X entries\n- Time Range: [Start] to [End]\n- Overall Productivity: X%\n- Equipment Uptime: X%\n\n💡 Key Insights:\n- [Top insight from analysis]\n- [Strategic recommendation]\n\n📁 File Created: report-[date].json\n🔄 Ready for tomorrow: [Next date focus]\n```\n\n## 🛡️ Error Handling & Fallbacks\n\n\n### Partial Data Scenarios\n```\nIF some logs found but incomplete:\n  GENERATE report with available data\n  NOTE limitations in report\n  SUGGEST areas for improvement\n```\n\n### Policy Manual Unavailable\n```\nIF operations manual not accessible:\n  GENERATE report without policy alignment section\n  FOCUS on data-driven insights\n  NOTE manual unavailability\n```\n\n",
+      "commands": [
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/write-text-file"
+          },
+          "requiresApproval": false
+        }
+      ],
+      "title": "Daily Report Generation",
+      "description": "Automatically generates comprehensive daily reports by analyzing activity logs, identifying patterns, and creating actionable recommendations for the next day.",
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/skill",
+        "name": "Skill"
+      }
+    }
+  }
+}
