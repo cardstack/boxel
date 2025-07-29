@@ -65,11 +65,6 @@ export default class ListingActionBuildCommand extends HostBaseCommand<
     ) as Skill[];
 
     if (roomId) {
-      await new SwitchSubmodeCommand(this.commandContext).execute({
-        submode: 'code',
-        codePath: `${realmUrl}index.json`,
-      });
-
       await new SetActiveLLMCommand(this.commandContext).execute({
         roomId,
         model: DEFAULT_CODING_LLM,
@@ -78,6 +73,11 @@ export default class ListingActionBuildCommand extends HostBaseCommand<
       await new AddSkillsToRoomCommand(this.commandContext).execute({
         roomId,
         skills,
+      });
+
+      await new SwitchSubmodeCommand(this.commandContext).execute({
+        submode: 'code',
+        codePath: `${realmUrl}index.json`,
       });
 
       await new SendAiAssistantMessageCommand(this.commandContext).execute({

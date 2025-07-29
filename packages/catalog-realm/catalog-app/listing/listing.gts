@@ -116,7 +116,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   }
 
   get isStub() {
-    return this.remixDisabled && this.args.model.summary;
+    return this.args.model.tags?.find((tag) => tag.name === 'Stub');
   }
 
   get remixDisabled() {

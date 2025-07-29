@@ -386,8 +386,6 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
   @tracked writableRealms: { name: string; url: string; iconURL?: string }[] =
     [];
 
-  roomId: string | null = null;
-
   constructor(owner: any, args: any) {
     super(owner, args);
     this.writableRealms = setupAllRealmsInfo(this.args);
@@ -434,23 +432,8 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     return this.args.model.tags?.[0]?.name;
   }
 
-  get hasOneOrMoreSpec() {
-    return this.args.model.specs && this.args.model?.specs?.length > 0;
-  }
-
-  get hasSkills() {
-    return this.args.model.skills && this.args.model?.skills?.length > 0;
-  }
-
-  get isSkillListing() {
-    return this.args.model?.constructor?.displayName === 'SkillListing';
-  }
-
   get isStub() {
-    return (
-      (!this.isSkillListing && !this.hasOneOrMoreSpec) ||
-      (this.isSkillListing && !this.hasSkills)
-    );
+    return this.args.model.tags?.find((tag) => tag.name === 'Stub');
   }
 
   _remix = task(async (realmUrl: string) => {
