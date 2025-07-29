@@ -2312,6 +2312,28 @@ export class CardDef extends BaseDef {
   static isCardDef = true;
   static icon = CaptionsIcon;
 
+  static assignInitialFieldValue(
+    instance: BaseDef,
+    fieldName: string,
+    value: any,
+  ) {
+    if (fieldName === 'id') {
+      // TODO: can we eliminate this conditional branch?
+
+      // we need to be careful that we don't trigger the ambient recompute() in our setters
+      // when we are instantiating an instance that is placed in the identityMap that has
+      // not had it's field values set yet, as computeds may assume dependent fields are
+      // available when they are not (e.g. Spec.isPrimitive trying to access its 'ref' field).
+      // In this scenario, only the 'id' field is available. The rest of the fields will be
+      // filled in later, so just set the 'id' directly in the deserialized cache to avoid
+      // triggering the recompute.
+      let deserialized = getDataBucket(instance);
+      deserialized.set('id', value);
+    } else {
+      super.assignInitialFieldValue(instance, fieldName, value);
+    }
+  }
+
   static embedded: BaseDefComponent = DefaultEmbeddedTemplate;
   static fitted: BaseDefComponent = DefaultFittedTemplate;
   static isolated: BaseDefComponent = DefaultCardDefTemplate;
