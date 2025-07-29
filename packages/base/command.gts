@@ -235,6 +235,11 @@ export class ListingActionInput extends CardDef {
   @field attachedCard = linksTo(CardDef);
 }
 
+export class ListingBuildInput extends CardDef {
+  @field realm = contains(StringField);
+  @field listing = linksTo(CardDef);
+}
+
 export class ListingInstallInput extends CardDef {
   @field realm = contains(StringField);
   @field listing = linksTo(CardDef);
