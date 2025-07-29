@@ -149,26 +149,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                   self: '../Spec/author',
                 },
               },
-              publisher: {
-                links: {
-                  self: null,
-                },
-              },
-              'categories.0': {
-                links: {
-                  self: null,
-                },
-              },
-              'tags.0': {
-                links: {
-                  self: null,
-                },
-              },
-              license: {
-                links: {
-                  self: null,
-                },
-              },
               'examples.0': {
                 links: {
                   self: '../author/Author/example',
