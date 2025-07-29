@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "timestamp": "2025-07-23T08:00:00Z",
+      "activity": "Started morning routine - reviewed yesterday's reports and priority tasks for today. Checked equipment status and noted that Station 3 requires maintenance check by 2 PM. Weather is clear, good conditions for outdoor operations."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../activity-log",
+        "name": "ActivityLog"
+      }
+    }
+  }
+}

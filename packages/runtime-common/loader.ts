@@ -102,7 +102,6 @@ export class Loader {
     Function,
     { module: string; name: string }
   >();
-  private consumptionCache = new WeakMap<object, string[]>();
   private static loaders = new WeakMap<Function, Loader>();
 
   private fetchImplementation: Fetch;
@@ -165,11 +164,6 @@ export class Loader {
       }
     }
     if (module?.state === 'evaluated' || module?.state === 'broken') {
-      let cached = this.consumptionCache.get(module);
-      if (cached) {
-        consumed.push(...cached);
-        return [...new Set(consumed)];
-      }
       for (let consumedModule of module?.consumedModules ?? []) {
         await this.getConsumedModules(
           consumedModule,
@@ -177,10 +171,7 @@ export class Loader {
           initialIdentifier,
         );
       }
-      cached = consumed;
-      this.consumptionCache.set(module, cached);
-
-      return [...new Set(cached)]; // Get rid of duplicates
+      return [...new Set(consumed)]; // Get rid of duplicates
     }
     return [];
   }

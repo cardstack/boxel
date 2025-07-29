@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "timestamp": "2025-07-23T16:00:00Z",
+      "activity": "Wrapped up data analysis session. Identified trend in efficiency metrics that warrants further investigation. Prepared materials for tomorrow's workshop. Completed daily equipment shutdown procedures. All systems secured for evening."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../activity-log",
+        "name": "ActivityLog"
+      }
+    }
+  }
+}

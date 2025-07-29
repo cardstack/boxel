@@ -47,6 +47,7 @@ import {
   baseRef,
   getAncestor,
   isCardError,
+  relativeTo,
   assertIsSerializerName,
   type Format,
   type Meta,
@@ -85,7 +86,15 @@ interface CardOrFieldTypeIconSignature {
 
 export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
 
-export { meta, localId, realmURL, primitive, isField, type BoxComponent };
+export {
+  meta,
+  localId,
+  realmURL,
+  primitive,
+  relativeTo,
+  isField,
+  type BoxComponent,
+};
 export const serialize = Symbol.for('cardstack-serialize');
 export const deserialize = Symbol.for('cardstack-deserialize');
 export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
@@ -93,7 +102,6 @@ export const fieldDecorator = Symbol.for('cardstack-field-decorator');
 export const fieldType = Symbol.for('cardstack-field-type');
 export const queryableValue = Symbol.for('cardstack-queryable-value');
 export const formatQuery = Symbol.for('cardstack-format-query');
-export const relativeTo = Symbol.for('cardstack-relative-to');
 export const realmInfo = Symbol.for('cardstack-realm-info');
 export const emptyValue = Symbol.for('cardstack-empty-value');
 // intentionally not exporting this so that the outside world
@@ -542,20 +550,13 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       return null;
     }
 
-    let serializer: ReturnType<typeof getSerializer> | undefined;
-    if (primitive in this.card && fieldSerializer in this.card) {
-      assertIsSerializerName(this.card[fieldSerializer]);
-      serializer = getSerializer(this.card[fieldSerializer]);
-    }
     // Need to replace the WatchedArray proxy with an actual array because the
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
     // TODO: can this be simplified since we don't have the worker anymore?
     let results = [...instances]
       .map((instance) => {
-        return serializer
-          ? serializer.queryableValue(instance, stack)
-          : this.card[queryableValue](instance, stack);
+        return this.card[queryableValue](instance, stack);
       })
       .filter((i) => i != null);
     return results.length === 0 ? null : results;
@@ -859,14 +860,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
 
   queryableValue(instance: any, stack: BaseDef[]): any {
     if (primitive in this.card) {
-      let result: any;
-      if (fieldSerializer in this.card) {
-        assertIsSerializerName(this.card[fieldSerializer]);
-        let serializer = getSerializer(this.card[fieldSerializer]);
-        result = serializer.queryableValue(instance, stack);
-      } else {
-        result = this.card[queryableValue](instance, stack);
-      }
+      let result = this.card[queryableValue](instance, stack);
       assertScalar(result, this.card);
       return result;
     }
@@ -2055,6 +2049,11 @@ export class BaseDef {
 
   static [queryableValue](value: any, stack: BaseDef[] = []): any {
     if (primitive in this) {
+      if (fieldSerializer in this) {
+        assertIsSerializerName(this[fieldSerializer]);
+        let serializer = getSerializer(this[fieldSerializer]);
+        return serializer.queryableValue(value, stack);
+      }
       return value;
     } else {
       if (value == null) {
@@ -2606,14 +2605,7 @@ export function getQueryableValue(
   stack: BaseDef[] = [],
 ): any {
   if ('baseDef' in fieldOrCard) {
-    let serializer: ReturnType<typeof getSerializer> | undefined;
-    if (primitive in fieldOrCard && fieldSerializer in fieldOrCard) {
-      assertIsSerializerName(fieldOrCard[fieldSerializer]);
-      serializer = getSerializer(fieldOrCard[fieldSerializer]);
-    }
-    let result = serializer
-      ? serializer.queryableValue(value, stack)
-      : fieldOrCard[queryableValue](value, stack);
+    let result = fieldOrCard[queryableValue](value, stack);
     if (primitive in fieldOrCard) {
       assertScalar(result, fieldOrCard);
     }

@@ -180,6 +180,7 @@ export class UseAiAssistantInput extends CardDef {
   @field roomId = contains(StringField); // pass 'new' or leave blank to create a new room
   @field roomName = contains(StringField); // only used when creating a new room
   @field llmModel = contains(StringField);
+  @field llmMode = contains(StringField); // act vs ask
   @field openRoom = contains(BooleanField);
   @field skillCards = linksToMany(Skill);
   @field skillCardIds = containsMany(StringField);
@@ -232,6 +233,11 @@ export class ListingActionInput extends CardDef {
   @field actionType = contains(StringField);
   @field listing = linksTo(CardDef);
   @field attachedCard = linksTo(CardDef);
+}
+
+export class ListingBuildInput extends CardDef {
+  @field realm = contains(StringField);
+  @field listing = linksTo(CardDef);
 }
 
 export class ListingInstallInput extends CardDef {
