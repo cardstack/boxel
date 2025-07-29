@@ -142,6 +142,11 @@ module('Acceptance | host mode tests', function (hooks) {
   test('visiting a default width card in host mode', async function (assert) {
     await visit('/test/Pet/mango.json');
 
+    assert.dom('[data-test-host-mode-container]').hasStyle({
+      'background-image':
+        'url("https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg")',
+    });
+
     assert.dom(`[data-test-card="${testRealmURL}Pet/mango"]`).exists();
     assert.dom('[data-test-boxel-card-header-title]').hasText('Pet - Mango');
 
