@@ -61,7 +61,11 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
     let patchableCards = input.attachedCards.filter((c) =>
       this.realm.canWrite(c.id),
     );
-    let tools: Tool[] = await addPatchTools(patchableCards, cardAPI);
+    let tools: Tool[] = await addPatchTools(
+      this.commandContext,
+      patchableCards,
+      cardAPI,
+    );
 
     let attachedOpenCards: CardAPI.CardDef[] = [];
     if (input.openCardIds) {
