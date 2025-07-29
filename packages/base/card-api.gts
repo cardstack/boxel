@@ -232,13 +232,8 @@ const fieldDescriptions = initSharedState(
   'fieldDescriptions',
   () => new WeakMap<typeof BaseDef, Map<string, string>>(),
 );
-// const computingFields = initSharedState(
-//   'computingFields',
-//   () => new WeakMap<BaseDef, Set<string>>(),
-// );
 
-// our place for notifying Glimmer when a card is ready to re-render (which will
-// involve rerunning computed fields on-demand)
+// our place for notifying Glimmer when a card is ready to re-render
 const cardTracking = initSharedState(
   'cardTracking',
   () => new TrackedWeakMap<object, any>(),
@@ -469,22 +464,7 @@ function getter<CardT extends BaseDefConstructor>(
   cardTracking.get(instance);
 
   if (field.computeVia) {
-    // Check for direct recursion - if we're already computing this exact field on this instance
-    // let computing = computingFields.get(instance);
-    // if (computing?.has(field.name)) {
-    //   // Direct recursion detected - return empty value to break the cycle
-    //   return field.emptyValue(instance) as BaseInstanceType<CardT>;
-    // }
-
-    // // Mark this field as being computed (for recursion detection)
-    // if (!computing) {
-    //   computing = new Set();
-    //   computingFields.set(instance, computing);
-    // }
-    // computing.add(field.name);
-
     try {
-      // Always execute computed fields, never cache
       let value = field.computeVia.bind(instance)();
       if (value === undefined) {
         value = field.emptyValue(instance);
@@ -496,12 +476,6 @@ function getter<CardT extends BaseDefConstructor>(
         throw new NotLoaded(instance, e.reference, field.name);
       }
       throw e;
-    } finally {
-      // Clean up recursion tracking
-      // computing.delete(field.name);
-      // if (computing.size === 0) {
-      //   computingFields.delete(instance);
-      // }
     }
   } else {
     if (deserialized.has(field.name)) {
@@ -807,7 +781,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
         value as BaseDef[],
       );
       notifySubscribers(instance, this.name, value);
-      cardTracking.set(instance, true); // when watched array changes, we want to re-render
+      cardTracking.set(instance, true);
     }, values);
   }
 
@@ -1850,6 +1824,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     let fieldInstances: CardDef[] = [];
 
     for (let reference of refs) {
+      // TODO: consider parallelizing these fetches and using Promise.allSettled
       let response = await fetch(reference, {
         headers: { Accept: SupportedMimeType.CardJson },
       });
@@ -3431,7 +3406,7 @@ export async function ensureLinksLoaded(card: BaseDef): Promise<void> {
 export async function getIfReady<T extends BaseDef, K extends keyof T>(
   instance: T,
   fieldName: K,
-  ): Promise<T[K] | T[K][] | undefined> {
+): Promise<T[K] | T[K][] | undefined> {
   let result: T[K] | T[K][] | undefined;
   let deserialized = getDataBucket(instance);
   let field = getField(instance, fieldName as string, { untracked: true });
