@@ -4,7 +4,7 @@ import { visit } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Realm } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 
 import HostModeService from '@cardstack/host/services/host-mode-service';
 
@@ -24,8 +24,6 @@ let matrixRoomId: string;
 class StubHostModeService extends HostModeService {}
 
 module('Acceptance | host mode tests', function (hooks) {
-  let testRealm: Realm;
-
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
@@ -97,7 +95,7 @@ module('Acceptance | host mode tests', function (hooks) {
       };
     }
 
-    ({ realm: testRealm } = await setupAcceptanceTestRealm({
+    await setupAcceptanceTestRealm({
       mockMatrixUtils,
       permissions: {
         '*': ['read'],
@@ -136,7 +134,7 @@ module('Acceptance | host mode tests', function (hooks) {
           publishable: true,
         },
       },
-    }));
+    });
 
     setActiveRealms([testRealmURL]);
   });

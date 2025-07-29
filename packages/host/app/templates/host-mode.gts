@@ -1,42 +1,26 @@
-import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { pageTitle } from 'ember-page-title';
 
+import { consume } from 'ember-provide-consume-context';
 import RouteTemplate from 'ember-route-template';
 
-import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
-
-import CardRenderer from '@cardstack/host/components/card-renderer';
-
-import OperatorModeContainer from '../components/operator-mode/container';
-
-import type OperatorModeStateService from '../services/operator-mode-state-service';
-
-import { consume } from 'ember-provide-consume-context';
-
 import {
-  type Actions,
-  type Permissions,
   type getCard,
   type getCards,
   type getCardCollection,
   type CardErrorJSONAPI,
-  cardTypeDisplayName,
-  PermissionsContextName,
-  RealmURLContextName,
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
-  Deferred,
-  cardTypeIcon,
-  CommandContext,
-  realmURL,
-  identifyCard,
 } from '@cardstack/runtime-common';
 
+import CardRenderer from '@cardstack/host/components/card-renderer';
+
 import type StoreService from '@cardstack/host/services/store';
+
+import type { CardContext } from 'https://cardstack.com/base/card-api';
 
 // FIXME copied from StackItem component
 type StackItemCardContext = Omit<CardContext, 'prerenderedCardSearchComponent'>;
