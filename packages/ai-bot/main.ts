@@ -1,6 +1,11 @@
 import './instrument';
 import './setup-logger'; // This should be first
-import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
+import {
+  RoomMemberEvent,
+  RoomEvent,
+  createClient,
+  MatrixEvent,
+} from 'matrix-js-sdk';
 import { SlidingSync, type MSC3575List } from 'matrix-js-sdk/lib/sliding-sync';
 import OpenAI from 'openai';
 import {
@@ -36,10 +41,7 @@ import {
   type MatrixClient,
   sendPromptAsDebugMessage,
 } from './lib/matrix/util';
-import type {
-  MatrixEvent as DiscreteMatrixEvent,
-  CommandResultEvent,
-} from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
 import { getAvailableCredits, saveUsageCost } from './lib/ai-billing';
@@ -158,7 +160,7 @@ class Assistant {
   async setTitle(
     roomId: string,
     history: DiscreteMatrixEvent[],
-    event?: CommandResultEvent,
+    event?: MatrixEvent,
   ) {
     return setTitle(this.openai, this.client, roomId, history, this.id, event);
   }
@@ -437,7 +439,7 @@ Common issues are:
           return await assistant.setTitle(
             room.roomId,
             promptParts.history,
-            event as unknown as CommandResultEvent,
+            event,
           );
         }
         return;
@@ -477,11 +479,7 @@ Common issues are:
         eventList,
         client,
       );
-      return await assistant.setTitle(
-        room.roomId,
-        history,
-        event as unknown as CommandResultEvent,
-      );
+      return await assistant.setTitle(room.roomId, history, event);
     } catch (e) {
       log.error(e);
       Sentry.captureException(e);

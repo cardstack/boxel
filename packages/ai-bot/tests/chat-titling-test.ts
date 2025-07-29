@@ -1,13 +1,10 @@
 import { module, test, assert } from 'qunit';
 import {
-  getLatestCommandApplyMessage,
+  getLatestResultMessage,
   setTitle,
   shouldSetRoomTitle,
 } from '../lib/set-title';
-import type {
-  CommandResultEvent,
-  MatrixEvent as DiscreteMatrixEvent,
-} from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import {
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
@@ -538,14 +535,14 @@ ${REPLACE_MARKER}\n\`\`\``;
   });
 });
 
-module('getLatestCommandApplyMessage', (hooks) => {
+module('getLatestResultMessage', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
 
   hooks.beforeEach(() => {
     fakeMatrixClient = new FakeMatrixClient();
   });
 
-  test('getLatestCommandApplyMessage correctly finds matching command request', async () => {
+  test('getLatestResultMessage correctly finds matching command request', async () => {
     const commandRequestId = 'test-command-request-id';
     const testEventId = 'test-event-id';
 
@@ -602,10 +599,10 @@ module('getLatestCommandApplyMessage', (hooks) => {
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
         commandRequestId: commandRequestId,
       }),
-    } as unknown as CommandResultEvent;
+    } as unknown as MatrixEvent;
 
     // Call the function with our test data
-    const result = getLatestCommandApplyMessage(
+    const result = getLatestResultMessage(
       history,
       '@aibot:localhost',
       commandResultEvent,
@@ -620,7 +617,7 @@ module('getLatestCommandApplyMessage', (hooks) => {
     );
   });
 
-  test('getLatestCommandApplyMessage handles missing command request', () => {
+  test('getLatestResultMessage handles missing command request', () => {
     // Create a sample event history with no matching command request
     const history: DiscreteMatrixEvent[] = [
       {
@@ -665,10 +662,10 @@ module('getLatestCommandApplyMessage', (hooks) => {
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
         commandRequestId: 'missing-id', // ID that doesn't exist in the command requests
       }),
-    } as unknown as CommandResultEvent;
+    } as unknown as MatrixEvent;
 
     // Call the function with our test data
-    const result = getLatestCommandApplyMessage(
+    const result = getLatestResultMessage(
       history,
       '@aibot:localhost',
       commandResultEvent,
@@ -682,7 +679,7 @@ module('getLatestCommandApplyMessage', (hooks) => {
     );
   });
 
-  test('getLatestCommandApplyMessage correctly finds command request when multiple requests exist', () => {
+  test('getLatestResultMessage correctly finds command request when multiple requests exist', () => {
     const commandRequestId = 'second-command';
     const testEventId = 'test-event-id';
 
@@ -740,10 +737,10 @@ module('getLatestCommandApplyMessage', (hooks) => {
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
         commandRequestId: commandRequestId,
       }),
-    } as unknown as CommandResultEvent;
+    } as unknown as MatrixEvent;
 
     // Call the function with our test data
-    const result = getLatestCommandApplyMessage(
+    const result = getLatestResultMessage(
       history,
       '@aibot:localhost',
       commandResultEvent,
@@ -863,7 +860,7 @@ module('setTitle', () => {
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
         commandRequestId: commandRequestId,
       }),
-    } as unknown as CommandResultEvent;
+    } as unknown as MatrixEvent;
 
     // Call setTitle with our test data
     await setTitle(

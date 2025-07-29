@@ -129,8 +129,7 @@ module('constructHistory', (hooks) => {
 
     const result = await constructHistory(eventlist, fakeMatrixClient);
 
-    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
-    assert.deepEqual(result, eventlist);
+    assert.deepEqual(result, eventlist as DiscreteMatrixEvent[]);
   });
 
   test('should return an array with all message events when the input array contains multiple message events', async () => {
@@ -187,8 +186,7 @@ module('constructHistory', (hooks) => {
 
     const result = await constructHistory(history, fakeMatrixClient);
 
-    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
-    assert.deepEqual(result, history);
+    assert.deepEqual(result, history as DiscreteMatrixEvent[]);
   });
 
   test('should return an array with all message events when the input array contains multiple events with the same origin_server_ts', async () => {
@@ -245,8 +243,7 @@ module('constructHistory', (hooks) => {
 
     const result = await constructHistory(history, fakeMatrixClient);
 
-    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
-    assert.deepEqual(result, history);
+    assert.deepEqual(result, history as DiscreteMatrixEvent[]);
   });
 
   test('should return all message events with preserved properties and chronological ordering', async () => {
@@ -335,8 +332,7 @@ module('constructHistory', (hooks) => {
 
     const result = await constructHistory(history, fakeMatrixClient);
 
-    assert.deepEqual(result, [
-      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
+    let expected = [
       {
         event_id: '1',
         type: 'm.room.message',
@@ -353,7 +349,6 @@ module('constructHistory', (hooks) => {
           transaction_id: '1',
         },
       },
-      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         event_id: '2',
         type: 'm.room.message',
@@ -370,7 +365,6 @@ module('constructHistory', (hooks) => {
           transaction_id: '2',
         },
       },
-      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         event_id: '3',
         type: 'm.room.message',
@@ -387,7 +381,6 @@ module('constructHistory', (hooks) => {
           transaction_id: '3',
         },
       },
-      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         event_id: '4',
         type: 'm.room.message',
@@ -404,7 +397,6 @@ module('constructHistory', (hooks) => {
           transaction_id: '4',
         },
       },
-      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         event_id: '5',
         type: 'm.room.message',
@@ -421,7 +413,8 @@ module('constructHistory', (hooks) => {
           transaction_id: '5',
         },
       },
-    ]);
+    ] as DiscreteMatrixEvent[];
+    assert.deepEqual(result, expected);
   });
 
   test('should download the card content from url', async () => {
