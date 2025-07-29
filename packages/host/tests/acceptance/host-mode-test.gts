@@ -22,7 +22,11 @@ import { setupApplicationTest } from '../helpers/setup';
 
 let matrixRoomId: string;
 
-class StubHostModeService extends HostModeService {}
+class StubHostModeService extends HostModeService {
+  get isActive() {
+    return true;
+  }
+}
 
 module('Acceptance | host mode tests', function (hooks) {
   setupApplicationTest(hooks);

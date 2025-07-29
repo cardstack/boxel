@@ -1,33 +1,23 @@
-import { service } from '@ember/service';
-import Component from '@glimmer/component';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { modifier } from 'ember-modifier';
 import RouteTemplate from 'ember-route-template';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
-import HostModeService from '@cardstack/host/services/host-mode-service';
 
 interface ApplicationRouteSignature {
   Args: {};
 }
 
-class ApplicationRouteComponent extends Component<ApplicationRouteSignature> {
-  @service declare hostModeService: HostModeService;
-
+const ApplicationRouteComponent: TemplateOnlyComponent<ApplicationRouteSignature> =
   <template>
-    {{#if this.hostModeService.isActive}}
-      {{outlet}}
-    {{else}}
-      {{! The main application outlet }}
-      {{outlet}}
-      <CardPrerender />
-    {{/if}}
+    {{outlet}}
+    <CardPrerender />
 
     {{! this is a signal for the Realm DOM tests to know that app has loaded }}
     {{! template-lint-disable no-inline-styles }}
     <div data-test-boxel-root style='display: none;' {{removeLoading}}></div>
-  </template>
-}
+  </template>;
 
 let removeLoading = modifier(() => {
   document.querySelector('#host-loading')?.remove();
