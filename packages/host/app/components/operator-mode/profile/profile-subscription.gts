@@ -13,6 +13,13 @@ import { encodeWebSafeBase64 } from '@cardstack/runtime-common';
 import WithSubscriptionData from '@cardstack/host/components/with-subscription-data';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import NetworkService from '@cardstack/host/services/network';
+import { task } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { fn } from '@ember/helper';
+import RealmServerService from '@cardstack/host/services/realm-server';
 
 interface Signature {
   Args: {};
@@ -22,6 +29,8 @@ interface Signature {
 export default class ProfileSubscription extends Component<Signature> {
   @service private declare billingService: BillingService;
   @service private declare matrixService: MatrixService;
+  @service private declare network: NetworkService;
+  @service private declare realmServer: RealmServerService;
 
   urlWithClientReferenceId = (url: string) => {
     const clientReferenceId = encodeWebSafeBase64(
@@ -39,6 +48,33 @@ export default class ProfileSubscription extends Component<Signature> {
 
     return newUrl;
   };
+
+  @action handleBuyMoreCredits(url: string) {
+    debugger;
+    this.redirectToStripeCheckout.perform(url);
+  }
+
+  redirectToStripeCheckout = task(async (url: string) => {
+    let email = this.matrixService.profile.email!;
+    let urlWithEmail = new URL(url);
+    urlWithEmail.searchParams.set('email', email);
+
+    let response = await this.realmServer.authedFetch(urlWithEmail.href, {
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      let err = `Could not create Stripe session: ${
+        response.status
+      } - ${await response.text()}`;
+      console.error(err);
+      return;
+    }
+
+    let data = await response.json();
+    debugger;
+    window.location.href = data.url;
+  });
 
   <template>
     <WithSubscriptionData as |subscriptionData|>
@@ -80,27 +116,25 @@ export default class ProfileSubscription extends Component<Signature> {
           <div class='buy-more-credits'>
             <span class='buy-more-credits__title'>Buy more credits</span>
             <div class='payment-links'>
-              {{#if this.billingService.fetchingStripePaymentLinks}}
-                <LoadingIndicator />
-              {{else}}
-                {{#each
-                  this.billingService.extraCreditsPaymentLinks
-                  as |paymentLink index|
-                }}
-                  <div class='payment-link' data-test-payment-link={{index}}>
-                    <span><IconHexagon width='16px' height='16px' />
-                      {{paymentLink.amountFormatted}}</span>
-                    <BoxelButton
-                      @as='anchor'
-                      @kind='secondary-light'
-                      @size='extra-small'
-                      @href={{this.urlWithClientReferenceId paymentLink.url}}
-                      target='_blank'
-                      data-test-pay-button={{index}}
-                    >Buy</BoxelButton>
-                  </div>
-                {{/each}}
-              {{/if}}
+              {{#each
+                this.billingService.extraCreditsPaymentLinks
+                as |paymentLink index|
+              }}
+                <div class='payment-link' data-test-payment-link={{index}}>
+                  <span><IconHexagon width='16px' height='16px' />
+                    {{paymentLink.amountFormatted}}</span>
+                  here
+                  <BoxelButton
+                    @kind='secondary-light'
+                    @size='extra-small'
+                    {{on
+                      'click'
+                      (fn this.handleBuyMoreCredits paymentLink.url)
+                    }}
+                    data-test-pay-button={{index}}
+                  >Buy</BoxelButton>
+                </div>
+              {{/each}}
             </div>
           </div>
         </div>

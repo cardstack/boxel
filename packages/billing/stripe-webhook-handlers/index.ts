@@ -87,6 +87,7 @@ export type StripeCheckoutSessionCompletedWebhookEvent = StripeEvent & {
       metadata:
         | {
             credit_reload_amount: string;
+            user_id: string;
           }
         | {};
     };

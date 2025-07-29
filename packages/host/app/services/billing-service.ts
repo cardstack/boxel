@@ -82,25 +82,35 @@ export default class BillingService extends Service {
   }
 
   get extraCreditsPaymentLinks() {
-    let links = this.stripeLinks.value
-      ?.extraCreditsPaymentLinks as ExtraCreditsPaymentLink[];
+    // let links = this.stripeLinks.value
+    //   ?.extraCreditsPaymentLinks as ExtraCreditsPaymentLink[];
 
-    if (!links) {
-      return [];
-    }
+    // if (!links) {
+    //   return [];
+    // }
 
-    return links
-      .sort((a, b) => a.creditReloadAmount - b.creditReloadAmount)
-      .map((link) => ({
-        ...link,
-        amountFormatted: `${formatNumber(link.creditReloadAmount, {
-          size: 'short',
-        })} credits for $${formatNumber(link.price)}`,
-      }));
-  }
+    // return links
+    //   .sort((a, b) => a.creditReloadAmount - b.creditReloadAmount)
+    //   .map((link) => ({
+    //     ...link,
+    //     amountFormatted: `${formatNumber(link.creditReloadAmount, {
+    //       size: 'short',
+    //     })} credits for $${formatNumber(link.price)}`,
+    //   }));
 
-  get fetchingStripePaymentLinks() {
-    return this.stripeLinks.isLoading;
+    let tokensToPriceMap: Record<number, number> = {
+      2500: 5,
+      20000: 30,
+      80000: 100,
+    };
+
+    return Object.entries(tokensToPriceMap).map(([tokens, price]) => ({
+      amount: tokens,
+      amountFormatted: `${formatNumber(Number(tokens), {
+        size: 'short',
+      })} credits for $${formatNumber(price)}`,
+      url: `${this.realmServer.url.origin}/_stripe-session?aiTokenAmount=${tokens}&returnUrl=${encodeURIComponent(window.location.href)}`,
+    }));
   }
 
   private stripeLinks = trackedFunction(this, async () => {

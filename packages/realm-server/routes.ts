@@ -24,6 +24,7 @@ import handleQueueStatusRequest from './handlers/handle-queue-status';
 import handleReindex from './handlers/handle-reindex';
 import handleRemoveJob from './handlers/handle-remove-job';
 import handleAddCredit from './handlers/handle-add-credit';
+import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -66,6 +67,11 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.get('/_catalog-realms', handleFetchCatalogRealmsRequest(args));
   router.get('/_queue-status', handleQueueStatusRequest(args));
   router.post('/_stripe-webhook', handleStripeWebhookRequest(args));
+  router.post(
+    '/_stripe-session',
+    jwtMiddleware(args.realmSecretSeed),
+    handleCreateStripeSessionRequest(args),
+  );
   router.get(
     '/_user',
     jwtMiddleware(args.realmSecretSeed),

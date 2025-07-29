@@ -82,6 +82,28 @@ export default class RealmServerService extends Service {
       window.localStorage.getItem(sessionLocalStorageKey) ?? undefined;
   }
 
+  async createStripeSession(email: string) {
+    let url = new URL(`${this.url.href}_stripe-session`);
+    url.searchParams.set('email', email);
+
+    let response = await this.network.fetch(url.href, {
+      method: 'POST',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+    });
+
+    if (!response.ok) {
+      let err = `Could not create Stripe session: ${response.status} - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
+
+    return response;
+  }
+
   async createUser(matrixUserId: string, registrationToken?: string) {
     await this.login();
     let response = await this.network.fetch(`${this.url.href}_user`, {
@@ -357,6 +379,30 @@ export default class RealmServerService extends Service {
       this.loggingIn = undefined;
     }
   });
+
+  async authedFetch(url: string, options: RequestInit = {}) {
+    const headers = new Headers(options.headers);
+    headers.set('Authorization', `Bearer ${await this.getToken()}`);
+
+    let response = await this.network.fetch(url, {
+      ...options,
+      headers,
+    });
+
+    return response;
+  }
+
+  private async getToken() {
+    if (!this.token) {
+      await this.login();
+    }
+
+    if (!this.token) {
+      throw new Error('Failed to get realm server token');
+    }
+
+    return this.token;
+  }
 }
 
 const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
