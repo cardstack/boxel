@@ -103,7 +103,7 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
         display: flex;
         justify-content: center;
         align-items: center;
-        height: 100%;
+        min-height: 100%;
         background-position: center;
         background-size: cover;
         padding: var(--boxel-sp);
