@@ -62,7 +62,7 @@ export default class RealmServerService extends Service {
   private availableRealms = new TrackedArray<AvailableRealm>([
     { type: 'base', url: baseRealm.url },
   ]);
-  private ready = new Deferred<void>();
+  private _ready = new Deferred<void>();
   private eventSubscribers: Map<string, RealmServerEventSubscriber[]> =
     new Map();
 
@@ -72,8 +72,8 @@ export default class RealmServerService extends Service {
     this.fetchCatalogRealms();
   }
 
-  get availableRealmsAreReady() {
-    return this.ready.promise;
+  get ready() {
+    return this._ready.promise;
   }
 
   resetState() {
@@ -166,11 +166,6 @@ export default class RealmServerService extends Service {
   }
 
   @cached
-  get availableRealmsFIXME() {
-    return new TrackedArray(this.availableRealms);
-  }
-
-  @cached
   get userRealmURLs() {
     return this.availableRealms
       .filter((r) => r.type === 'user')
@@ -190,7 +185,7 @@ export default class RealmServerService extends Service {
   }
 
   async setAvailableRealmURLs(userRealmURLs: string[]) {
-    await this.ready.promise;
+    await this._ready.promise;
     userRealmURLs.forEach((userRealmURL) => {
       if (!this.availableRealms.find((r) => r.url === userRealmURL)) {
         this.availableRealms.push({
@@ -235,7 +230,7 @@ export default class RealmServerService extends Service {
         });
       }
     });
-    this.ready.fulfill();
+    this._ready.fulfill();
   }
 
   async handleEvent(event: Partial<IEvent>) {

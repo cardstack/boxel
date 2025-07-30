@@ -13,7 +13,7 @@ import {
   percySnapshot,
   setupLocalIndexing,
   setupOnSave,
-  testRealmURL,
+  testHostModeRealmURL,
   setupAcceptanceTestRealm,
   setupUserSubscription,
 } from '../helpers';
@@ -22,9 +22,14 @@ import { setupApplicationTest } from '../helpers/setup';
 
 let matrixRoomId: string;
 
+// Overrides to simulate a request to a host mode domain
 class StubHostModeService extends HostModeService {
   get isActive() {
     return true;
+  }
+
+  get userSubdomain() {
+    return 'user';
   }
 }
 
@@ -35,7 +40,7 @@ module('Acceptance | host mode tests', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [testRealmURL],
+    activeRealms: [testHostModeRealmURL],
   });
 
   let { setActiveRealms, setExpiresInSec, createAndJoinRoom } = mockMatrixUtils;
@@ -101,6 +106,7 @@ module('Acceptance | host mode tests', function (hooks) {
     }
 
     await setupAcceptanceTestRealm({
+      realmURL: testHostModeRealmURL,
       mockMatrixUtils,
       permissions: {
         '*': ['read'],
@@ -114,7 +120,7 @@ module('Acceptance | host mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmURL}pet`,
+                module: `${testHostModeRealmURL}pet`,
                 name: 'Pet',
               },
             },
@@ -141,7 +147,7 @@ module('Acceptance | host mode tests', function (hooks) {
       },
     });
 
-    setActiveRealms([testRealmURL]);
+    setActiveRealms([testHostModeRealmURL]);
   });
 
   test('visiting a default width card in host mode', async function (assert) {
@@ -152,7 +158,7 @@ module('Acceptance | host mode tests', function (hooks) {
         'url("https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg")',
     });
 
-    assert.dom(`[data-test-card="${testRealmURL}Pet/mango"]`).exists();
+    assert.dom(`[data-test-card="${testHostModeRealmURL}Pet/mango"]`).exists();
     assert.strictEqual(getPageTitle(), 'Mango');
 
     await percySnapshot(assert);
@@ -163,10 +169,10 @@ module('Acceptance | host mode tests', function (hooks) {
 
     assert
       .dom('[data-test-error="not-found"]')
-      .hasText(`Card not found: ${testRealmURL}Pet/non-existent`);
+      .hasText(`Card not found: ${testHostModeRealmURL}Pet/non-existent`);
     assert.strictEqual(
       getPageTitle(),
-      `Card not found: ${testRealmURL}Pet/non-existent`,
+      `Card not found: ${testHostModeRealmURL}Pet/non-existent`,
     );
   });
 });

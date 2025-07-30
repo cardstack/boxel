@@ -23,6 +23,10 @@ export default class HostModeService extends Service {
 
     return false;
   }
+
+  get userSubdomain() {
+    return window.location.hostname.split('.')[0];
+  }
 }
 
 declare module '@ember/service' {

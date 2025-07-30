@@ -3,7 +3,10 @@ import type RouterService from '@ember/routing/router-service';
 import Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
 
+import config from '@cardstack/host/config/environment';
+
 import type HostModeService from '@cardstack/host/services/host-mode-service';
+import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
 
@@ -15,13 +18,14 @@ export type ErrorModel = {
 
 export default class Card extends Route<ReturnType<StoreService['get']>> {
   @service declare hostModeService: HostModeService;
+  @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
   @service declare router: RouterService;
   @service declare store: StoreService;
 
   async beforeModel(transition: Transition) {
     if (this.hostModeService.isActive) {
-      return this.realmServer.availableRealmsAreReady;
+      return this.realmServer.ready;
     } else {
       let path = transition.to?.params?.path;
 
@@ -36,16 +40,17 @@ export default class Card extends Route<ReturnType<StoreService['get']>> {
     let realm = segments[0];
     let remainingPath = segments.slice(1).join('/');
 
-    // FIXME this is a hack and won’t work in many circumstances
-    let matchingRealm = this.realmServer.availableRealmsFIXME.find(
-      (availableRealm) => availableRealm.url.endsWith(`/${realm}/`),
-    );
+    let realmUrlString = `${config.realmServerRoot}${this.hostModeService.userSubdomain}/${realm}/`;
 
-    if (!matchingRealm) {
-      throw new Error(`Realm not found: ${realm}`);
+    await this.realm.ensureRealmMeta(realmUrlString);
+
+    let realmUrl = this.realm.url(realmUrlString);
+
+    if (!realmUrl) {
+      throw new Error(`Realm not found: ${realmUrlString}`);
     }
 
-    let cardUrl = `${matchingRealm.url}${remainingPath}`;
+    let cardUrl = `${realmUrl}${remainingPath}`;
     return this.store.get(cardUrl);
   }
 }
