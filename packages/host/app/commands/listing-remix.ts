@@ -111,7 +111,8 @@ export default class RemixCommand extends HostBaseCommand<
       }
     }
 
-    let prompt = 'Remix done! Give me examples on how to edit this card.';
+    let prompt =
+      'Remix done! Give me example prompts on how to edit this card.';
     const skillCardIds = [
       skillCardURL('boxel-environment'),
       skillCardURL('boxel-development'),
