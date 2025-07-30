@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "ChromeRebel",
+        "module": "../chrome-rebel/chrome-rebel"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "ChromeRebel",
+      "description": "Spec of ChromeRebel",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

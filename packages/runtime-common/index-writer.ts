@@ -557,31 +557,7 @@ export class Batch {
     }
   }
 
-  async invalidate(urls: URL[]): Promise<string[]> {
-    await this.ready;
-    let start = Date.now();
-    this.#perfLog.debug(
-      `${jobIdentity} starting invalidation of ${urls.map((u) => u.href).join()}`,
-    );
-    let visited = new Set<string>();
-    let invalidations: string[] = [];
-    for (let url of urls) {
-      let alias = trimExecutableExtension(url).href;
-      let workingInvalidations = [
-        ...new Set([
-          ...(!this.nodeResolvedInvalidations.includes(alias)
-            ? [url.href]
-            : []),
-          ...(alias ? await this.calculateInvalidations(alias, visited) : []),
-        ]),
-      ];
-      invalidations = [...new Set([...invalidations, ...workingInvalidations])];
-    }
-
-    if (invalidations.length === 0) {
-      return [];
-    }
-
+  private async tombstoneEntries(invalidations: string[]) {
     // insert tombstone into next version of the realm index
     let columns = [
       'url',
@@ -608,7 +584,6 @@ export class Batch {
       ].map((v) => [param(v)]),
     );
 
-    let insertStart = Date.now();
     await this.#query([
       ...upsertMultipleRows(
         'boxel_index_working',
@@ -617,6 +592,35 @@ export class Batch {
         rows,
       ),
     ]);
+  }
+
+  async invalidate(urls: URL[]): Promise<string[]> {
+    await this.ready;
+    let start = Date.now();
+    this.#perfLog.debug(
+      `${jobIdentity} starting invalidation of ${urls.map((u) => u.href).join()}`,
+    );
+    let visited = new Set<string>();
+    let invalidations: string[] = [];
+    for (let url of urls) {
+      let alias = trimExecutableExtension(url).href;
+      let workingInvalidations = [
+        ...new Set([
+          ...(!this.nodeResolvedInvalidations.includes(alias)
+            ? [url.href]
+            : []),
+          ...(alias ? await this.calculateInvalidations(alias, visited) : []),
+        ]),
+      ];
+      invalidations = [...new Set([...invalidations, ...workingInvalidations])];
+    }
+
+    if (invalidations.length === 0) {
+      return [];
+    }
+
+    let insertStart = Date.now();
+    await this.tombstoneEntries(invalidations);
 
     this.#perfLog.debug(
       `${jobIdentity(this.jobInfo)} inserted invalidated rows for  ${urls.map((u) => u.href).join()} in ${

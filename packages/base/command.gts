@@ -163,6 +163,7 @@ export class CreateAIAssistantRoomResult extends CardDef {
 export class SetActiveLLMInput extends CardDef {
   @field roomId = contains(StringField);
   @field model = contains(StringField);
+  @field mode = contains(StringField); // 'act' or 'ask'
 }
 
 export class AddSkillsToRoomInput extends CardDef {

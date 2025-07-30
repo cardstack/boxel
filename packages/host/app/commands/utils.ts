@@ -27,6 +27,7 @@ import type {
 
 import GetEventsFromRoomCommand from './get-events-from-room';
 
+import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
 
 export async function waitForMatrixEvent(
@@ -120,8 +121,8 @@ export async function addPatchTools(
   cardAPI: typeof CardAPI,
 ): Promise<Tool[]> {
   let results: Tool[] = [];
-  let loader = getOwner(commandContext)!.lookup(
-    'service:loader-service',
+  let loader = (
+    getOwner(commandContext)!.lookup('service:loader-service') as LoaderService
   ).loader;
   let mappings = await basicMappings(loader);
   for (const patchableCard of patchableCards) {

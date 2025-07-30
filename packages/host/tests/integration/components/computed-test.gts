@@ -1,4 +1,4 @@
-import { RenderingTestContext } from '@ember/test-helpers';
+import { RenderingTestContext, settled } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -28,7 +28,6 @@ import {
   Component,
   FieldDef,
   containsMany,
-  recompute,
   linksTo,
   linksToMany,
 } from '../../helpers/base-realm';
@@ -320,12 +319,10 @@ module('Integration | computeds', function (hooks) {
         new Person({ firstName: 'Van Gogh', age: 6 }),
       ],
     });
-    await recompute(family, { recomputeAllFields: true });
     assert.strictEqual(family.totalAge, 9, 'computed is correct');
     family.people[0].age = 4;
     family.people = [...family.people];
 
-    await recompute(family, { recomputeAllFields: true });
     assert.strictEqual(family.totalAge, 10, 'computed is correct');
   });
 
@@ -461,5 +458,215 @@ module('Integration | computeds', function (hooks) {
     assert
       .dom('[data-test-links-to-many="collaborators"] [data-test-remove-card]')
       .doesNotExist();
+  });
+
+  test('computed field invalidates when contained card property changes at runtime', async function (this: RenderingTestContext, assert) {
+    class Author extends FieldDef {
+      @field firstName = contains(StringField);
+      @field lastName = contains(StringField);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <span data-test-author-name><@fields.firstName />
+            <@fields.lastName /></span>
+        </template>
+      };
+    }
+
+    class Post extends CardDef {
+      @field title = contains(StringField);
+      @field author = contains(Author);
+      @field summary = contains(StringField, {
+        computeVia: function (this: Post) {
+          return `${this.title} by ${this.author.firstName} ${this.author.lastName}`;
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-summary><@fields.summary /></div>
+          <div data-test-author><@fields.author /></div>
+        </template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Post, Author },
+      },
+    });
+
+    let author = new Author({ firstName: 'John', lastName: 'Doe' });
+    let post = new Post({
+      title: 'My First Post',
+      author,
+    });
+
+    // Initial render
+    await renderCard(loader, post, 'isolated');
+    assert.dom('[data-test-summary]').hasText('My First Post by John Doe');
+    assert.dom('[data-test-author-name]').hasText('John Doe');
+
+    // Change the contained card's property at runtime
+    author.firstName = 'Jane';
+
+    await settled();
+
+    // The computed field should automatically recalculate and UI should re-render
+    assert.dom('[data-test-summary]').hasText('My First Post by Jane Doe');
+    assert.dom('[data-test-author-name]').hasText('Jane Doe');
+  });
+
+  test('computed field re-renders when containsMany property changes at runtime', async function (this: RenderingTestContext, assert) {
+    class Tag extends FieldDef {
+      @field name = contains(StringField);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <span data-test-tag-name><@fields.name /></span>
+        </template>
+      };
+    }
+
+    class Article extends CardDef {
+      @field title = contains(StringField);
+      @field tags = containsMany(Tag);
+      @field tagSummary = contains(StringField, {
+        computeVia: function (this: Article) {
+          if (this.tags.length === 0) {
+            return `${this.title} (no tags)`;
+          }
+          let tagNames = this.tags.map((tag) => tag.name).join(', ');
+          return `${this.title} [${tagNames}]`;
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-tag-summary><@fields.tagSummary /></div>
+          <div data-test-tags><@fields.tags /></div>
+        </template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Article, Tag },
+      },
+    });
+
+    let tag1 = new Tag({ name: 'tech' });
+    let tag2 = new Tag({ name: 'web' });
+    let article = new Article({
+      title: 'My Article',
+      tags: [tag1, tag2],
+    });
+
+    // Initial render
+    await renderCard(loader, article, 'isolated');
+    assert.dom('[data-test-tag-summary]').hasText('My Article [tech, web]');
+    assert.dom('[data-test-tags] [data-test-tag-name]').exists({ count: 2 });
+
+    // Change a property of one of the contained cards at runtime
+    tag1.name = 'technology';
+
+    await settled();
+
+    // The computed field should automatically recalculate and UI should re-render
+    assert
+      .dom('[data-test-tag-summary]')
+      .hasText('My Article [technology, web]');
+    assert.dom('[data-test-tags] [data-test-tag-name]').exists({ count: 2 });
+
+    // Modify the containsMany array itself
+    let tag3 = new Tag({ name: 'javascript' });
+    article.tags.push(tag3);
+
+    await settled();
+
+    // The computed field should reflect the new tag
+    assert
+      .dom('[data-test-tag-summary]')
+      .hasText('My Article [technology, web, javascript]');
+    assert.dom('[data-test-tags] [data-test-tag-name]').exists({ count: 3 });
+  });
+
+  test('computed field re-renders when linksToMany property changes at runtime', async function (this: RenderingTestContext, assert) {
+    class Category extends CardDef {
+      @field name = contains(StringField);
+      static fitted = class Fitted extends Component<typeof this> {
+        <template>
+          <span data-test-category-name><@fields.name /></span>
+        </template>
+      };
+    }
+
+    class Blog extends CardDef {
+      @field title = contains(StringField);
+      @field categories = linksToMany(Category);
+      @field categorySummary = contains(StringField, {
+        computeVia: function (this: Blog) {
+          if (this.categories.length === 0) {
+            return `${this.title} (no categories)`;
+          }
+          let categoryNames = this.categories.map((cat) => cat.name).join(', ');
+          return `${this.title} [${categoryNames}]`;
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-category-summary><@fields.categorySummary /></div>
+          <div data-test-categories><@fields.categories /></div>
+        </template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Blog, Category },
+      },
+    });
+
+    let cat1 = new Category({ name: 'programming' });
+    let cat2 = new Category({ name: 'design' });
+    let blog = new Blog({
+      title: 'My Blog',
+      categories: [cat1, cat2],
+    });
+
+    // Initial render
+    await renderCard(loader, blog, 'isolated');
+    assert
+      .dom('[data-test-category-summary]')
+      .hasText('My Blog [programming, design]');
+    assert
+      .dom('[data-test-categories] [data-test-category-name]')
+      .exists({ count: 2 });
+
+    // Change a property of one of the linked cards at runtime
+    cat1.name = 'software-engineering';
+
+    await settled();
+
+    // The computed field should automatically recalculate and UI should re-render
+    assert
+      .dom('[data-test-category-summary]')
+      .hasText('My Blog [software-engineering, design]');
+    assert
+      .dom('[data-test-categories] [data-test-category-name]')
+      .exists({ count: 2 });
+
+    // Modify the linksToMany array itself
+    let cat3 = new Category({ name: 'tutorials' });
+    blog.categories.push(cat3);
+
+    await settled();
+
+    // The computed field should reflect the new category
+    assert
+      .dom('[data-test-category-summary]')
+      .hasText('My Blog [software-engineering, design, tutorials]');
+    assert
+      .dom('[data-test-categories] [data-test-category-name]')
+      .exists({ count: 3 });
   });
 });
