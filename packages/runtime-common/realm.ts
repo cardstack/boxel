@@ -2308,7 +2308,7 @@ export class Realm {
     let payload = parseQuery(href);
     if (!payload.codeRef) {
       return badRequest({
-        message: `The request body is missing the coderef parameter`,
+        message: `The request body is missing the codeRef parameter`,
         requestContext,
       });
     }
