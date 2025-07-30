@@ -7,16 +7,17 @@ import * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
+import { skillCardURL } from '../lib/utils';
+
+import UseAiAssistantCommand from './ai-assistant';
 import ListingInstallCommand from './listing-install';
 import SwitchSubmodeCommand from './switch-submode';
 import UpdateCodePathWithSelectionCommand from './update-code-path-with-selection';
 import UpdatePlaygroundSelectionCommand from './update-playground-selection';
-import UseAiAssistantCommand from './ai-assistant';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmServerService from '../services/realm-server';
 import type { Listing } from '@cardstack/catalog/listing/listing';
-import { skillCardURL } from '../lib/utils';
 
 export default class RemixCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInstallInput
