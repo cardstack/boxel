@@ -1,9 +1,9 @@
 import GlimmerComponent from '@glimmer/component';
-import type { BaseDefConstructor, CardDef, Field, Format } from '../card-api';
+import type { CardDef, Format } from '../card-api';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { startCase } from 'lodash';
-import { getField } from '@cardstack/runtime-common';
+import { getFieldIcon } from '@cardstack/runtime-common';
 
 export default class DefaultCardDefTemplate extends GlimmerComponent<{
   Args: {
@@ -12,22 +12,31 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
     format: Format;
   };
 }> {
-  getFieldIcon = (key: string) => {
-    const field: Field<BaseDefConstructor> | undefined = getField(
-      this.args.model.constructor,
-      key,
+  private excludedFields = ['id', 'cardInfo'];
+
+  private get displayFields() {
+    let fields = Object.entries(this.args.fields).filter(
+      ([key]) => !this.excludedFields.includes(key),
     );
-    let fieldInstance = field?.card;
-    return fieldInstance?.icon;
-  };
+    return Object.fromEntries(fields);
+  }
+
   <template>
     <div class={{cn 'default-card-template' @format}}>
-      {{#each-in @fields as |key Field|}}
+      {{#if (eq @format 'edit')}}
+        <FieldContainer
+          @label='Card Info'
+          @icon={{getFieldIcon @model 'cardInfo'}}
+          data-test-field='cardInfo'
+        >
+          <@fields.cardInfo />
+        </FieldContainer>
+      {{/if}}
+      {{#each-in this.displayFields as |key Field|}}
         {{#unless (eq key 'id')}}
           <FieldContainer
-            {{! @glint-ignore (glint is arriving at an incorrect type signature for 'startCase') }}
             @label={{startCase key}}
-            @icon={{this.getFieldIcon key}}
+            @icon={{getFieldIcon @model key}}
             data-test-field={{key}}
           >
             <Field />
