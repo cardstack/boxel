@@ -22,10 +22,8 @@ import {
   Menu as BoxelMenu,
 } from '@cardstack/boxel-ui/components';
 
-import ListingInitCommand from '@cardstack/boxel-host/commands/listing-action-init';
 import ListingBuildCommand from '@cardstack/boxel-host/commands/listing-action-build';
 import ListingRemixCommand from '@cardstack/boxel-host/commands/listing-remix';
-import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 
 interface Signature {
   Element: HTMLElement;
