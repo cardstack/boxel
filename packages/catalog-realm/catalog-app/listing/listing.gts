@@ -27,13 +27,13 @@ import {
   Menu as BoxelMenu,
   CardContainer,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem } from '@cardstack/boxel-ui/helpers';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { MenuItem, eq } from '@cardstack/boxel-ui/helpers';
 
 import AppListingHeader from '../components/app-listing-header';
 import { ListingFittedTemplate } from '../components/listing-fitted';
 
 import ListingInitCommand from '@cardstack/boxel-host/commands/listing-action-init';
+import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 import ListingBuildCommand from '@cardstack/boxel-host/commands/listing-action-build';
 
 import { Publisher } from './publisher';
@@ -115,6 +115,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return this.args.model.skills && this.args.model?.skills?.length > 0;
   }
 
+  get addSkillsDisabled() {
+    return !this.isSkillListing || !this.hasSkills;
+  }
+
   get isStub() {
     return this.args.model.tags?.find((tag) => tag.name === 'Stub');
   }
@@ -125,6 +129,25 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       (this.isSkillListing && !this.hasSkills)
     );
   }
+
+  @action addSkillsToCurrentRoom() {
+    this._addSkillsToCurrentRoom.perform();
+  }
+
+  _addSkillsToCurrentRoom = task(async () => {
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('Missing commandContext');
+    }
+
+    let useAiAssistantCommand = new UseAiAssistantCommand(commandContext);
+    await useAiAssistantCommand.execute({
+      skillCards: Array.isArray(this.args.model.skills)
+        ? [...this.args.model.skills]
+        : [],
+      openRoom: true,
+    });
+  });
 
   @action preview() {
     if (!this.args.model.examples || this.args.model.examples.length === 0) {
@@ -196,6 +219,17 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       >
         <:action>
           <div class='action-buttons'>
+            {{#if this.isSkillListing}}
+              <BoxelButton
+                class='action-button'
+                data-test-catalog-listing-embedded-add-skill-to-room-button
+                @loading={{this._addSkillsToCurrentRoom.isRunning}}
+                @disabled={{this.addSkillsDisabled}}
+                {{on 'click' this.addSkillsToCurrentRoom}}
+              >
+                Add Skills
+              </BoxelButton>
+            {{/if}}
             {{#if this.hasExamples}}
               <BoxelButton
                 class='action-button'
@@ -454,7 +488,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         gap: var(--boxel-sp-xxs);
       }
       .action-button {
-        flex: 1;
+        flex: 1 1 auto;
       }
       .realm-dropdown-menu {
         --boxel-menu-item-content-padding: var(--boxel-sp-xs);

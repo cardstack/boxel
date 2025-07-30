@@ -149,26 +149,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                   self: '../Spec/author',
                 },
               },
-              publisher: {
-                links: {
-                  self: null,
-                },
-              },
-              'categories.0': {
-                links: {
-                  self: null,
-                },
-              },
-              'tags.0': {
-                links: {
-                  self: null,
-                },
-              },
-              license: {
-                links: {
-                  self: null,
-                },
-              },
               'examples.0': {
                 links: {
                   self: '../author/Author/example',
@@ -975,6 +955,33 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           ],
         ],
       });
+    });
+
+    test('after clicking "Test Skills" button, the skill is attached to the skill menu', async function (assert) {
+      const skillListingId = `${catalogRealmURL}SkillListing/talk-like-a-pirate`;
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: skillListingId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      await click(
+        '[data-test-catalog-listing-embedded-add-skill-to-room-button]',
+      );
+
+      await waitFor('[data-room-settled]');
+      await click('[data-test-skill-menu][data-test-pill-menu-button]');
+      await waitFor('[data-test-skill-menu]');
+      assert.dom('[data-test-skill-menu]').exists('Skill menu is visible');
+      assert
+        .dom('[data-test-pill-menu-item]')
+        .containsText('Talk Like a Pirate')
+        .exists('Skill is attached to the skill menu');
     });
 
     test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
