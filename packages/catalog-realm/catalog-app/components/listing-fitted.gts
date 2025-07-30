@@ -4,6 +4,7 @@ import {
   CardContext,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
+import type { Skill } from 'https://cardstack.com/base/skill';
 import GlimmerComponent from '@glimmer/component';
 
 import { action } from '@ember/object';
@@ -24,6 +25,7 @@ import {
 
 import ListingInitCommand from '@cardstack/boxel-host/commands/listing-action-init';
 import ListingBuildCommand from '@cardstack/boxel-host/commands/listing-action-build';
+import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 
 interface Signature {
   Element: HTMLElement;
@@ -32,6 +34,8 @@ interface Signature {
     id: string | undefined;
     items: string[];
     examples?: CardDef[];
+    skills?: Skill[];
+    modelType?: string;
   };
 }
 
@@ -64,6 +68,18 @@ class CarouselComponent extends GlimmerComponent<Signature> {
 
   get hasExample() {
     return this.args.examples && this.args.examples.length > 0;
+  }
+
+  get isSkillListing() {
+    return this.args.modelType === 'SkillListing';
+  }
+
+  get hasSkills() {
+    return this.args.skills && this.args.skills?.length > 0;
+  }
+
+  get addSkillsDisabled() {
+    return !this.isSkillListing || !this.hasSkills;
   }
 
   @action
@@ -101,6 +117,27 @@ class CarouselComponent extends GlimmerComponent<Signature> {
     this.currentIndex = index;
   }
 
+  @action addSkillsToCurrentRoom() {
+    this._addSkillsToCurrentRoom.perform();
+  }
+
+  _addSkillsToCurrentRoom = task(async () => {
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('Missing commandContext');
+    }
+
+    if (this.addSkillsDisabled) {
+      throw new Error('No skills found to add to current room');
+    }
+
+    let useAiAssistantCommand = new UseAiAssistantCommand(commandContext);
+    await useAiAssistantCommand.execute({
+      skillCards: Array.isArray(this.args.skills) ? [...this.args.skills] : [],
+      openRoom: true,
+    });
+  });
+
   <template>
     <div
       class='carousel'
@@ -122,6 +159,19 @@ class CarouselComponent extends GlimmerComponent<Signature> {
             {{on 'click' this.previewExample}}
           >
             Preview
+          </BoxelButton>
+        {{/if}}
+
+        {{#if this.isSkillListing}}
+          <BoxelButton
+            @kind='secondary-dark'
+            class='add-skills-button'
+            data-test-catalog-listing-fitted-add-skills-button
+            @loading={{this._addSkillsToCurrentRoom.isRunning}}
+            aria-label='Add Skills to Current Room'
+            {{on 'click' this.addSkillsToCurrentRoom}}
+          >
+            Add Skills
           </BoxelButton>
         {{/if}}
 
@@ -331,7 +381,8 @@ class CarouselComponent extends GlimmerComponent<Signature> {
         }
 
         .preview-button,
-        .details-button {
+        .details-button,
+        .add-skills-button {
           --boxel-button-font: 600 var(--boxel-font-sm);
           --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
           --boxel-button-border: 1px solid var(--boxel-light);
@@ -340,9 +391,11 @@ class CarouselComponent extends GlimmerComponent<Signature> {
             0 15px 20px rgba(0, 0, 0, 0.12),
             0 5px 10px rgba(0, 0, 0, 0.1);
           pointer-events: auto;
+          min-width: 100px;
         }
         .preview-button:hover,
-        .details-button:hover {
+        .details-button:hover,
+        .add-skills-button:hover {
           --boxel-button-text-color: var(--boxel-light);
           --boxel-button-color: var(--boxel-purple);
           box-shadow:
@@ -356,7 +409,8 @@ class CarouselComponent extends GlimmerComponent<Signature> {
             flex-direction: column;
           }
           .preview-button,
-          .details-button {
+          .details-button,
+          .add-skills-button {
             --boxel-button-font: 600 var(--boxel-font-xs);
             --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp);
           }
@@ -436,6 +490,10 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     return this.args.model.tags?.find((tag) => tag.name === 'Stub');
   }
 
+  get modelType() {
+    return this.args.model.constructor?.name;
+  }
+
   _remix = task(async (realmUrl: string) => {
     let commandContext = this.args.context?.commandContext;
     if (!commandContext) {
@@ -498,6 +556,8 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
             @id={{@model.id}}
             @items={{@model.images}}
             @examples={{@model.examples}}
+            @skills={{@model.skills}}
+            @modelType={{this.modelType}}
           />
         {{else}}
           <@model.constructor.icon
