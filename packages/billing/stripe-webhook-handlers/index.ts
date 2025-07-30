@@ -1,4 +1,4 @@
-import { DBAdapter, decodeWebSafeBase64 } from '@cardstack/runtime-common';
+import { DBAdapter } from '@cardstack/runtime-common';
 import { handlePaymentSucceeded } from './payment-succeeded';
 import { handleCheckoutSessionCompleted } from './checkout-session-completed';
 
@@ -79,7 +79,6 @@ export type StripeCheckoutSessionCompletedWebhookEvent = StripeEvent & {
     object: {
       id: string;
       object: 'checkout.session';
-      client_reference_id: string;
       customer: string | null; // string when payment link is for subscribing to the free plan, null when buying extra credits
       customer_details: {
         email: string;
@@ -184,28 +183,19 @@ async function sendBillingNotification({
   sendMatrixEvent: (matrixUserId: string, eventType: string) => Promise<void>;
   stripeEvent: StripeEvent;
 }) {
-  let matrixUserId = await extractMatrixUserId(dbAdapter, stripeEvent);
-  await sendMatrixEvent(matrixUserId, 'billing-notification');
+  let user = await getUserFromStripeEvent(dbAdapter, stripeEvent);
+  await sendMatrixEvent(user.matrixUserId, 'billing-notification');
 }
 
-// Stripe events will have a `customer` (stripe customer id) field in the "invoice.payment_succeeded" event
-// but not in the "checkout.session.completed" event. In the latter case, we need to look up the user by
-// the `client_reference_id` field, which is a url parameter with the value of an encoded matrix user id
-// (these are the payment links for subscribing to the free plan, and buying extra credits)
-async function extractMatrixUserId(dbAdapter: DBAdapter, event: StripeEvent) {
-  let encodedMatrixUserId = event.data.object.client_reference_id;
-  let matrixUserId = encodedMatrixUserId
-    ? decodeWebSafeBase64(encodedMatrixUserId)
-    : undefined;
+async function getUserFromStripeEvent(
+  dbAdapter: DBAdapter,
+  event: StripeEvent,
+) {
+  let user = await getUserByStripeId(dbAdapter, event.data.object.customer);
 
-  if (!matrixUserId && event.data.object.customer) {
-    let user = await getUserByStripeId(dbAdapter, event.data.object.customer);
-    matrixUserId = user?.matrixUserId;
+  if (!user) {
+    throw new Error('Failed to get user from stripe event');
   }
 
-  if (!matrixUserId) {
-    throw new Error('Failed to extract matrix user id from stripe event');
-  }
-
-  return matrixUserId;
+  return user;
 }

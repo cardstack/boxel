@@ -91,7 +91,12 @@ export default class BillingService extends Service {
     }
 
     let data = await response.json();
-    window.location.href = data.url;
+    this.redirectToUrl(data.url);
+  };
+
+  // This is in a separate method so that it can be stubbed in tests
+  redirectToUrl = (url: string) => {
+    window.location.href = url;
   };
 
   @cached

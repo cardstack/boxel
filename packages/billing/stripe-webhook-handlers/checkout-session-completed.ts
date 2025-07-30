@@ -26,7 +26,7 @@ export async function handleCheckoutSessionCompleted(
 
     if (!userId) {
       throw new Error(
-        'No matrix user id found in checkout session completed event - this should be populated using metadata in the payment link',
+        'No user id found in checkout session completed event - this should be populated using metadata in the payment link',
       );
     }
 

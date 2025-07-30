@@ -1,3 +1,7 @@
+import { fn } from '@ember/helper';
+import { hash } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -9,9 +13,6 @@ import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import NetworkService from '@cardstack/host/services/network';
 
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
-import { fn } from '@ember/helper';
 import RealmServerService from '@cardstack/host/services/realm-server';
 
 interface Signature {
@@ -86,6 +87,7 @@ export default class ProfileSubscription extends Component<Signature> {
                   <BoxelButton
                     @kind='secondary-light'
                     @size='extra-small'
+                    data-test-buy-more-credits-button={{extraCreditsPricing.amount}}
                     {{on
                       'click'
                       (fn this.handleBuyMoreCredits extraCreditsPricing.amount)

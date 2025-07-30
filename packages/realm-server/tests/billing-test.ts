@@ -4,8 +4,6 @@ import {
   Subscription,
   SubscriptionCycle,
   User,
-  decodeWebSafeBase64,
-  encodeWebSafeBase64,
   param,
   query,
 } from '@cardstack/runtime-common';
@@ -38,16 +36,6 @@ import { basename } from 'path';
 
 async function fetchStripeEvents(dbAdapter: PgAdapter) {
   return await query(dbAdapter, [`SELECT * FROM stripe_events`]);
-}
-
-async function fetchUserByStripeCustomerId(
-  dbAdapter: PgAdapter,
-  stripeCustomerId: string,
-) {
-  return await query(dbAdapter, [
-    `SELECT * FROM users WHERE stripe_customer_id = `,
-    param(stripeCustomerId),
-  ]);
 }
 
 async function fetchSubscriptionCyclesBySubscriptionId(
@@ -89,19 +77,6 @@ async function fetchCreditsLedgerByUser(
 }
 
 module(basename(__filename), function () {
-  module('billing utils', function () {
-    test('encoding client_reference_id to be web safe in payment links', function (assert) {
-      assert.strictEqual(
-        decodeWebSafeBase64(encodeWebSafeBase64('@mike_1:cardstack.com')),
-        '@mike_1:cardstack.com',
-      );
-      assert.strictEqual(
-        decodeWebSafeBase64(encodeWebSafeBase64('@hans.müller:matrix.de')),
-        '@hans.müller:matrix.de',
-      );
-    });
-  });
-
   module('billing', function (hooks) {
     let dbAdapter: PgAdapter;
 
@@ -828,43 +803,6 @@ module(basename(__filename), function () {
         );
       });
 
-      test('updates user stripe customer id on checkout session completed', async function (assert) {
-        let stripeCheckoutSessionCompletedEvent = {
-          id: 'evt_1234567890',
-          object: 'event',
-          data: {
-            object: {
-              id: 'cs_test_1234567890',
-              object: 'checkout.session',
-              client_reference_id: encodeWebSafeBase64(matrixUserId),
-              customer: 'cus_123',
-              metadata: {},
-            },
-          },
-          type: 'checkout.session.completed',
-        } as StripeCheckoutSessionCompletedWebhookEvent;
-
-        await handleCheckoutSessionCompleted(
-          dbAdapter,
-          stripeCheckoutSessionCompletedEvent,
-        );
-
-        let stripeEvents = await fetchStripeEvents(dbAdapter);
-        assert.strictEqual(stripeEvents.length, 1);
-        assert.strictEqual(
-          stripeEvents[0].stripe_event_id,
-          stripeCheckoutSessionCompletedEvent.id,
-        );
-
-        const updatedUser = await fetchUserByStripeCustomerId(
-          dbAdapter,
-          'cus_123',
-        );
-        assert.strictEqual(updatedUser.length, 1);
-        assert.strictEqual(updatedUser[0].stripe_customer_id, 'cus_123');
-        assert.strictEqual(updatedUser[0].matrix_user_id, matrixUserId);
-      });
-
       module('user has a subscription', function () {
         test('add extra credits to user ledger when checkout session completed', async function (assert) {
           let creatorPlan = await insertPlan(
@@ -894,9 +832,10 @@ module(basename(__filename), function () {
                 id: 'cs_test_1234567890',
                 object: 'checkout.session',
                 customer: null,
-                client_reference_id: encodeWebSafeBase64(matrixUserId),
+
                 metadata: {
                   credit_reload_amount: '25000',
+                  user_id: user.id,
                 },
               },
             },
@@ -926,8 +865,8 @@ module(basename(__filename), function () {
                 id: 'cs_test_1234567890',
                 object: 'checkout.session',
                 customer: null,
-                client_reference_id: encodeWebSafeBase64(matrixUserId),
                 metadata: {
+                  user_id: user.id,
                   credit_reload_amount: '25000',
                 },
               },

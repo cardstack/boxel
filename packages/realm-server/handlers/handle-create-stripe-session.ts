@@ -41,6 +41,8 @@ export default function handleCreateStripeSessionRequest({
         return;
       }
 
+      const stripe = getStripe();
+
       // Get return url from request parameters
       let returnUrl = ctxt.URL.searchParams.get('returnUrl');
       if (!returnUrl) {
@@ -59,8 +61,6 @@ export default function handleCreateStripeSessionRequest({
         await sendResponseForBadRequest(ctxt, 'email parameter is required');
         return;
       }
-
-      const stripe = getStripe();
 
       // If user has customer id, use it, otherwise create a new one
       let stripeCustomerId = user.stripeCustomerId;
@@ -146,7 +146,7 @@ export default function handleCreateStripeSessionRequest({
           success_url: returnUrl,
           cancel_url: returnUrl,
           payment_method_data: {
-            allow_redisplay: 'always', // This is the important part - this is why we use a checkout session instead of payment links
+            allow_redisplay: 'always', // This is the important part - this is why we use a checkout session instead of payment links (to reuse payment methods previously used so that users don't have to re-enter their payment method)
           },
           metadata: {
             plan_name: planName,
@@ -220,7 +220,7 @@ export default function handleCreateStripeSessionRequest({
           setup_future_usage: 'off_session',
         },
         payment_method_data: {
-          allow_redisplay: 'always',
+          allow_redisplay: 'always', // This is the important part - this is why we use a checkout session instead of payment links (to reuse payment methods previously used so that users don't have to re-enter their payment method)
         },
         metadata: {
           credit_reload_amount: aiTokenAmount,
