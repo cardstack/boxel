@@ -169,7 +169,7 @@ Example:
 
 Users interact with cards through a web browser, with the card components being rendered by the host application. The host application retrieves card components by deserializing JSON format into card instances and then storing the values of each field in the data bucket.
 
-The process is facilitated by the `createFromSerialized` function. This function takes a `LooseCardResource` as input, creates a card instance based on the data in the `adoptsFrom` property, and determines the file's URL by combining it with the `relativeTo` value. Subsequently, the function extracts field values from both `attributes` and `relationships`, placing them into the data bucket. Computed fields, on the other hand, remain uncalculated until non-computed values are available.
+The process is facilitated by the `createFromSerialized` function. This function takes a `LooseCardResource` as input, creates a card instance based on the data in the `adoptsFrom` property, and determines the file's URL by combining it with the `relativeTo` value. Subsequently, the function extracts field values from both `attributes` and `relationships`, placing them into the data bucket. Computed fields are executed on-demand when accessed and are never stored in the data bucket.
 
 - `contains` Field: Values are stored within the data bucket, which functions as a map linking field names to their respective values. The content of 'contains' fields comprises a singular value. This value can be either a primitive value or a card instance, contingent on the card type assigned to that field.
 - `containsMany` Field: The values within this field consist of an array, which can encompass either an array of primitive values or an array of card instances.

@@ -1210,11 +1210,13 @@ module('Integration | Store', function (hooks) {
     );
 
     await waitFor('[data-test-card-error]');
-    assert.dom('[data-test-error-message]').hasText('intentional error thrown');
+    assert
+      .dom('[data-test-error-message]')
+      .containsText('intentional error thrown');
     await click('[data-test-toggle-details]');
     assert
       .dom('[data-test-error-details]')
-      .includesText('Stack trace: No stack trace is available.');
+      .includesText('Stack trace: Error: Encountered error rendering HTML');
 
     await testRealm.write(
       'Person/hassan.json',

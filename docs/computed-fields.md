@@ -1,6 +1,12 @@
 # Computed Fields
 
-In addition to linking to or containing card fields, a card can have a “computed” field. Its value will be determined by the output of the `computeVia` function and update when its constituent fields changes.
+When any field consumed by the computed field changes, the value will [rerender](./card-rendering.md#re-rendering-process).
+
+Computed fields are executed on-demand whenever they are accessed. They are never cached, ensuring fresh values on every access.
+
+## Supported Field Types
+
+Computed fields can be applied to `contains`, `containsMany`, `linksTo`, and `linksToMany` field types. The `computeVia` function is executed each time the field is accessed.o linking to or containing card fields, a card can have a “computed” field. Its value will be determined by the output of the `computeVia` function and update when its constituent fields changes.
 
 ```typescript
 export class Person extends CardDef {

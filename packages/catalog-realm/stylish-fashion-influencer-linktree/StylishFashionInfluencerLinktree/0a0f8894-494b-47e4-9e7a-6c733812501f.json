@@ -1,0 +1,71 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "influencerName": "Sophia Rose ✨",
+      "bio": "Fashion lover 💕 Style inspiration 🌸 Living my best life ✨ Shop my looks below! 👇",
+      "profileImageUrl": "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?q=80&w=400&auto=format&fit=crop&ixlib=rb-4.0.3",
+      "backgroundColor": "#FCA6A7",
+      "accentColor": "#fd79a8",
+      "socialLinks": [
+        {
+          "title": "Shop My Amazon Favorites ✨",
+          "url": "https://amazon.com/shop/sophiarose",
+          "backgroundColor": "#FA7F01",
+          "textColor": "#ffffff",
+          "emoji": "🛍️"
+        },
+        {
+          "title": "Instagram @sophiarose.style",
+          "url": "https://instagram.com/sophiarose.style",
+          "backgroundColor": "#E1306C",
+          "textColor": "#FFFFFF",
+          "emoji": "📸"
+        },
+        {
+          "title": "TikTok Style Videos",
+          "url": "https://tiktok.com/@sophiarose.style",
+          "backgroundColor": "#000000",
+          "textColor": "#FFFFFF",
+          "emoji": "🎵"
+        },
+        {
+          "title": "YouTube Fashion Hauls",
+          "url": "https://youtube.com/@sophiarosestyle",
+          "backgroundColor": "#FF0000",
+          "textColor": "#FFFFFF",
+          "emoji": "📹"
+        },
+        {
+          "title": "Pinterest Style Board",
+          "url": "https://pinterest.com/sophiarosestyle",
+          "backgroundColor": "#BD081C",
+          "textColor": "#FFFFFF",
+          "emoji": "📌"
+        },
+        {
+          "title": "My Fashion Blog",
+          "url": "https://sophiarosestyle.com",
+          "backgroundColor": "#FFB6C1",
+          "textColor": "#2D3436",
+          "emoji": "💄"
+        },
+        {
+          "title": "Email Newsletter 💌",
+          "url": "https://sophiarosestyle.com/newsletter",
+          "backgroundColor": "#74B9FF",
+          "textColor": "#FFFFFF",
+          "emoji": "💌"
+        }
+      ],
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../stylish-fashion-influencer-linktree",
+        "name": "StylishFashionInfluencerLinktree"
+      }
+    }
+  }
+}
