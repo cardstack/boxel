@@ -3,14 +3,9 @@ import Service from '@ember/service';
 import { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { trackedFunction } from 'reactiveweb/function';
-
 import { formatNumber } from '@cardstack/boxel-ui/helpers';
 
-import {
-  SupportedMimeType,
-  encodeWebSafeBase64,
-} from '@cardstack/runtime-common';
+import { SupportedMimeType } from '@cardstack/runtime-common';
 
 import MatrixService from './matrix-service';
 import NetworkService from './network';
@@ -24,16 +19,6 @@ interface SubscriptionData {
   extraCreditsAvailableInBalance: number | null;
   stripeCustomerId: string | null;
   stripeCustomerEmail: string | null;
-}
-
-interface StripeLink {
-  type: string;
-  url: string;
-}
-
-interface ExtraCreditsPaymentLink extends StripeLink {
-  creditReloadAmount: number;
-  price: number;
 }
 
 export default class BillingService extends Service {
@@ -54,151 +39,60 @@ export default class BillingService extends Service {
     this.reset.register(this);
   }
 
+  extraTokensPricing: Record<number, number> = {
+    2500: 5,
+    20000: 30,
+    80000: 100,
+  }; // in USD
+
   resetState() {
     this._subscriptionData = null;
   }
 
-  get customerPortalLink() {
-    if (!this.stripeLinks.value) {
-      return undefined;
-    }
-
-    let customerPortalLink = this.stripeLinks.value?.customerPortalLink?.url;
-    if (!customerPortalLink) {
-      return undefined;
-    }
-
-    let stripeCustomerEmail = this.subscriptionData?.stripeCustomerEmail;
-    if (!stripeCustomerEmail) {
-      return customerPortalLink;
-    }
-
-    const encodedEmail = encodeURIComponent(stripeCustomerEmail);
-    return `${customerPortalLink}?prefilled_email=${encodedEmail}`;
-  }
-
-  get starterPlanPaymentLink() {
-    return this.stripeLinks.value?.starterPlanPaymentLink;
-  }
-
-  get extraCreditsPaymentLinks() {
-    // let links = this.stripeLinks.value
-    //   ?.extraCreditsPaymentLinks as ExtraCreditsPaymentLink[];
-
-    // if (!links) {
-    //   return [];
-    // }
-
-    // return links
-    //   .sort((a, b) => a.creditReloadAmount - b.creditReloadAmount)
-    //   .map((link) => ({
-    //     ...link,
-    //     amountFormatted: `${formatNumber(link.creditReloadAmount, {
-    //       size: 'short',
-    //     })} credits for $${formatNumber(link.price)}`,
-    //   }));
-
-    let tokensToPriceMap: Record<number, number> = {
-      2500: 5,
-      20000: 30,
-      80000: 100,
-    };
-
-    return Object.entries(tokensToPriceMap).map(([tokens, price]) => ({
-      amount: tokens,
+  get extraCreditsPricingFormatted() {
+    return Object.entries(this.extraTokensPricing).map(([tokens, price]) => ({
+      amount: parseInt(tokens),
       amountFormatted: `${formatNumber(Number(tokens), {
         size: 'short',
       })} credits for $${formatNumber(price)}`,
-      url: `${this.realmServer.url.origin}/_stripe-session?aiTokenAmount=${tokens}&returnUrl=${encodeURIComponent(window.location.href)}`,
     }));
   }
 
-  private stripeLinks = trackedFunction(this, async () => {
-    let response = await this.network.fetch(
-      `${this.url.origin}/_stripe-links`,
-      {
-        headers: {
-          Accept: SupportedMimeType.JSONAPI,
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${await this.getToken()}`,
-        },
-      },
+  redirectToStripe = async (params: {
+    aiCreditAmount?: number;
+    plan?: string;
+  }) => {
+    let { aiCreditAmount, plan } = params;
+    let email = this.matrixService.profile.email!;
+    let url = `${this.realmServer.url.origin}/_stripe-session`;
+    let urlWithParams = new URL(url);
+    urlWithParams.searchParams.set('email', email);
+    urlWithParams.searchParams.set(
+      'returnUrl',
+      encodeURIComponent(window.location.href),
     );
-    if (!response.ok) {
-      console.error(
-        `Failed to fetch stripe payment links for realm server ${this.url.origin}: ${response.status}`,
+
+    if (aiCreditAmount) {
+      urlWithParams.searchParams.set(
+        'aiTokenAmount',
+        aiCreditAmount.toString(),
       );
+    } else if (plan) {
+      urlWithParams.searchParams.set('plan', plan);
+    }
+
+    let response = await this.realmServer.authedFetch(urlWithParams.href, {
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      console.error(response.statusText);
       return;
     }
 
-    let json = (await response.json()) as {
-      data: {
-        type: string;
-        attributes: {
-          url: string;
-          metadata?: {
-            creditReloadAmount: number;
-            price: number;
-          };
-        };
-      }[];
-    };
-
-    let links = json.data.map((data) => ({
-      type: data.type,
-      url: data.attributes.url,
-      creditReloadAmount: data.attributes.metadata?.creditReloadAmount,
-      price: data.attributes.metadata?.price,
-    })) as StripeLink[];
-
-    return {
-      customerPortalLink: links.find(
-        (link) => link.type === 'customer-portal-link',
-      ),
-      starterPlanPaymentLink: links.find(
-        (link) => link.type === 'starter-plan-payment-link',
-      ),
-      creatorPlanPaymentLink: links.find(
-        (link) => link.type === 'creator-plan-payment-link',
-      ),
-      powerUserPlanPaymentLink: links.find(
-        (link) => link.type === 'power-user-plan-payment-link',
-      ),
-      extraCreditsPaymentLinks: links.filter(
-        (link) => link.type === 'extra-credits-payment-link',
-      ),
-    };
-  });
-
-  stripePaymentLinkWithClientReference(stripeUrl: string): string {
-    let matrixUserId = this.matrixService.userId || '';
-    let matrixUserEmail = this.matrixService.profile.email || '';
-    // We use the matrix user id (@username:example.com) as the client reference id for stripe
-    // so we can identify the user payment in our system when we get the webhook
-    // the client reference id must be alphanumeric, so we encode the matrix user id
-    // https://docs.stripe.com/payment-links/url-parameters#streamline-reconciliation-with-a-url-parameter
-    const clientReferenceId = encodeWebSafeBase64(matrixUserId);
-    const encodedEmail = encodeURIComponent(matrixUserEmail);
-    return `${stripeUrl}?client_reference_id=${clientReferenceId}&prefilled_email=${encodedEmail}`;
-  }
-
-  get stripeStarterPlanPaymentLink(): string {
-    return this.stripePaymentLinkWithClientReference(
-      this.stripeLinks.value?.starterPlanPaymentLink?.url || '',
-    );
-  }
-
-  get stripeCreatorPlanPaymentLink(): string {
-    return this.stripePaymentLinkWithClientReference(
-      this.stripeLinks.value?.creatorPlanPaymentLink?.url || '',
-    );
-  }
-
-  get stripePowerUserPlanPaymentLink(): string {
-    return this.stripePaymentLinkWithClientReference(
-      this.stripeLinks.value?.powerUserPlanPaymentLink?.url || '',
-    );
-  }
+    let data = await response.json();
+    window.location.href = data.url;
+  };
 
   @cached
   get subscriptionData() {

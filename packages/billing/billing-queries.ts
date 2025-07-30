@@ -566,3 +566,19 @@ export async function spendCredits(
     }
   }
 }
+
+export async function getPlanByName(
+  dbAdapter: DBAdapter,
+  planName: string,
+): Promise<Plan | null> {
+  let results = await query(dbAdapter, [
+    `SELECT * FROM plans WHERE name = `,
+    param(planName),
+  ]);
+
+  if (results.length !== 1) {
+    return null;
+  }
+
+  return planRowToPlan(results[0]);
+}

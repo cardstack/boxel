@@ -1,27 +1,17 @@
-import { decodeWebSafeBase64, type DBAdapter } from '@cardstack/runtime-common';
+import { type DBAdapter } from '@cardstack/runtime-common';
 import {
   addToCreditsLedger,
   getCurrentActiveSubscription,
   getMostRecentSubscriptionCycle,
   getUserById,
-  getUserByMatrixUserId,
   insertStripeEvent,
   markStripeEventAsProcessed,
   updateUserStripeCustomerEmail,
-  updateUserStripeCustomerId,
 } from '../billing-queries';
 import { StripeCheckoutSessionCompletedWebhookEvent } from '.';
 
 import { PgAdapter, TransactionManager } from '@cardstack/postgres';
 
-// TODO: fix this comment
-// We are handling 2 cases here:
-// 1. User is subscribing to the free plan using the Stripe payment link after signing up for Boxel
-//   - Stripe payment link will include the client_reference_id param, set by the host app, which will be the user's matrix username
-//   - When checkout session is completed, we will get that param value here so that we can see who the customer is, and update their Stripe customer id in our db because we need it to identify the Stripe user for all subsequent stripe events
-// 2. User is adding extra credits to their account
-//   - Stripe payment link will not include the client_reference_id param in this case (but this won't break even if it's included)
-//   - Instead, we read credit_reload_amount from the metadata, which is configured for payment links in Stripe, and add that amount to the user's ledger
 export async function handleCheckoutSessionCompleted(
   dbAdapter: DBAdapter,
   event: StripeCheckoutSessionCompletedWebhookEvent,
@@ -32,7 +22,7 @@ export async function handleCheckoutSessionCompleted(
     await insertStripeEvent(dbAdapter, event);
 
     let stripeCustomerId = event.data.object.customer;
-    let userId = event.data.object.metadata.user_id;
+    let userId = event.data.object.metadata.user_id; // We are adding this in handle-create-stripe-session.ts
 
     if (!userId) {
       throw new Error(

@@ -1,4 +1,7 @@
 import { service } from '@ember/service';
+import { action } from '@ember/object';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 
 import Component from '@glimmer/component';
 
@@ -33,6 +36,10 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
 
   get isPowerUserPlan() {
     return this.currentPlan === 'Power User';
+  }
+
+  @action redirectToStripe(plan: string) {
+    this.billingService.redirectToStripe({ plan });
   }
 
   <template>
@@ -391,11 +398,12 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                 <h3 class='plan-name'>Starter</h3>
                 <div class='plan-price'>$0</div>
                 <div class='plan-period'>per month</div>
-                <a
-                  href={{this.billingService.stripeStarterPlanPaymentLink}}
+                <button
+                  type='button'
                   class='btn btn-teal btn-get-started'
                   data-test-starter-plan-button
-                >{{if this.isStarterPlan 'Manage Plan' 'Get Started'}}</a>
+                  {{on 'click' (fn this.redirectToStripe 'Starter')}}
+                >{{if this.isStarterPlan 'Manage Plan' 'Get Started'}}</button>
               </div>
               <div class='feature-cell'>
                 <div class='credit-value'>
@@ -424,11 +432,12 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                 <h3 class='plan-name'>Creator</h3>
                 <div class='plan-price'>$12</div>
                 <div class='plan-period'>per month</div>
-                <a
-                  href={{this.billingService.stripeCreatorPlanPaymentLink}}
+                <button
+                  type='button'
                   class='btn btn-dark btn-get-started'
                   data-test-creator-plan-button
-                >{{if this.isCreatorPlan 'Manage Plan' 'Get Started'}}</a>
+                  {{on 'click' (fn this.redirectToStripe 'Creator')}}
+                >{{if this.isCreatorPlan 'Manage Plan' 'Get Started'}}</button>
               </div>
               <div class='feature-cell'>
                 <div class='credit-value'>
@@ -457,11 +466,16 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                 <h3 class='plan-name'>Power User</h3>
                 <div class='plan-price'>$49</div>
                 <div class='plan-period'>per month</div>
-                <a
-                  href={{this.billingService.stripePowerUserPlanPaymentLink}}
+                <button
+                  type='button'
                   class='btn btn-dark btn-get-started'
                   data-test-power-user-plan-button
-                >{{if this.isPowerUserPlan 'Manage Plan' 'Get Started'}}</a>
+                  {{on 'click' (fn this.redirectToStripe 'Power User')}}
+                >{{if
+                    this.isPowerUserPlan
+                    'Manage Plan'
+                    'Get Started'
+                  }}</button>
               </div>
               <div class='feature-cell'>
                 <div class='credit-value'>

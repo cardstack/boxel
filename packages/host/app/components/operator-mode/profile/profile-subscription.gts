@@ -1,21 +1,14 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import {
-  BoxelButton,
-  FieldContainer,
-  LoadingIndicator,
-} from '@cardstack/boxel-ui/components';
+import { BoxelButton, FieldContainer } from '@cardstack/boxel-ui/components';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
-
-import { encodeWebSafeBase64 } from '@cardstack/runtime-common';
 
 import WithSubscriptionData from '@cardstack/host/components/with-subscription-data';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import NetworkService from '@cardstack/host/services/network';
-import { task } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
+
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
@@ -32,49 +25,9 @@ export default class ProfileSubscription extends Component<Signature> {
   @service private declare network: NetworkService;
   @service private declare realmServer: RealmServerService;
 
-  urlWithClientReferenceId = (url: string) => {
-    const clientReferenceId = encodeWebSafeBase64(
-      this.matrixService.userId as string,
-    );
-    let newUrl = `${url}?client_reference_id=${clientReferenceId}`;
-
-    const stripeCustomerEmail =
-      this.billingService.subscriptionData?.stripeCustomerEmail ||
-      this.matrixService.profile.email;
-
-    if (stripeCustomerEmail) {
-      newUrl += `&prefilled_email=${encodeURIComponent(stripeCustomerEmail)}`;
-    }
-
-    return newUrl;
-  };
-
-  @action handleBuyMoreCredits(url: string) {
-    debugger;
-    this.redirectToStripeCheckout.perform(url);
+  @action handleBuyMoreCredits(amount: number) {
+    this.billingService.redirectToStripe({ aiCreditAmount: amount });
   }
-
-  redirectToStripeCheckout = task(async (url: string) => {
-    let email = this.matrixService.profile.email!;
-    let urlWithEmail = new URL(url);
-    urlWithEmail.searchParams.set('email', email);
-
-    let response = await this.realmServer.authedFetch(urlWithEmail.href, {
-      method: 'POST',
-    });
-
-    if (!response.ok) {
-      let err = `Could not create Stripe session: ${
-        response.status
-      } - ${await response.text()}`;
-      console.error(err);
-      return;
-    }
-
-    let data = await response.json();
-    debugger;
-    window.location.href = data.url;
-  });
 
   <template>
     <WithSubscriptionData as |subscriptionData|>
@@ -91,15 +44,20 @@ export default class ProfileSubscription extends Component<Signature> {
               {{subscriptionData.monthlyCredit}}
             </div>
           </div>
-          <BoxelButton
-            @as='anchor'
-            @kind='secondary-light'
-            @size='extra-small'
-            @disabled={{this.billingService.fetchingStripePaymentLinks}}
-            @href={{this.billingService.customerPortalLink}}
-            target='_blank'
-            data-test-manage-plan-button
-          >Manage Plan</BoxelButton>
+          {{#if this.billingService.subscriptionData.plan}}
+            <BoxelButton
+              @kind='secondary-light'
+              @size='extra-small'
+              {{on
+                'click'
+                (fn
+                  this.billingService.redirectToStripe
+                  (hash plan=this.billingService.subscriptionData.plan)
+                )
+              }}
+              data-test-manage-plan-button
+            >Manage Plan</BoxelButton>
+          {{/if}}
         </div>
       </FieldContainer>
       <FieldContainer
@@ -117,21 +75,21 @@ export default class ProfileSubscription extends Component<Signature> {
             <span class='buy-more-credits__title'>Buy more credits</span>
             <div class='payment-links'>
               {{#each
-                this.billingService.extraCreditsPaymentLinks
-                as |paymentLink index|
+                this.billingService.extraCreditsPricingFormatted
+                as |extraCreditsPricing|
               }}
-                <div class='payment-link' data-test-payment-link={{index}}>
+                <div class='payment-link'>
                   <span><IconHexagon width='16px' height='16px' />
-                    {{paymentLink.amountFormatted}}</span>
-                  here
+                    {{extraCreditsPricing.amountFormatted}}
+                  </span>
+
                   <BoxelButton
                     @kind='secondary-light'
                     @size='extra-small'
                     {{on
                       'click'
-                      (fn this.handleBuyMoreCredits paymentLink.url)
+                      (fn this.handleBuyMoreCredits extraCreditsPricing.amount)
                     }}
-                    data-test-pay-button={{index}}
                   >Buy</BoxelButton>
                 </div>
               {{/each}}

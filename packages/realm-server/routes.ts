@@ -18,7 +18,6 @@ import {
   grafanaAuthorization,
 } from './middleware';
 import Koa from 'koa';
-import handleStripeLinksRequest from './handlers/handle-stripe-links';
 import handleCreateUserRequest from './handlers/handle-create-user';
 import handleQueueStatusRequest from './handlers/handle-queue-status';
 import handleReindex from './handlers/handle-reindex';
@@ -82,7 +81,6 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed),
     handleCreateUserRequest(args),
   );
-  router.get('/_stripe-links', handleStripeLinksRequest());
 
   // it's awkward that these are GET's but we are working around grafana's limitations
   router.get(
