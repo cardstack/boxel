@@ -26,8 +26,7 @@ import type StoreService from '@cardstack/host/services/store';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
-// FIXME copied from StackItem component
-type StackItemCardContext = Omit<CardContext, 'prerenderedCardSearchComponent'>;
+type HostModeCardContext = Omit<CardContext, 'prerenderedCardSearchComponent'>;
 
 interface HostModeComponentSignature {
   Args: {
@@ -68,7 +67,7 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
     return false;
   }
 
-  private get cardContext(): StackItemCardContext {
+  private get cardContext(): HostModeCardContext {
     return {
       getCard: this.getCard,
       getCards: this.getCards,
