@@ -19,7 +19,7 @@
     "relationships": {
       "currentTheme": {
         "links": {
-          "self": "../Theme/ikea"
+          "self": "../BrandTheme/ikea"
         }
       }
     },

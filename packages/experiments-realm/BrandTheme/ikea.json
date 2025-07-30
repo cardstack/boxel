@@ -11,8 +11,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../theme",
-        "name": "Theme"
+        "module": "../brand-theme",
+        "name": "BrandTheme"
       }
     }
   }
