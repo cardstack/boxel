@@ -36,7 +36,7 @@ export default class Card extends Route<ReturnType<StoreService['get']>> {
   }
 
   async model(params: { path: string }) {
-    let segments = params.path.split('/').filter(Boolean); // Remove empty segments from potential leading/trailing slashes
+    let segments = params.path.split('/').filter(Boolean); // remove empty
     let realm = segments[0];
     let remainingPath = segments.slice(1).join('/');
 
