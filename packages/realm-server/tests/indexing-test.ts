@@ -163,6 +163,7 @@ module(basename(__filename), function () {
             import { Person } from "./person";
 
             export class Post extends CardDef {
+              static displayName = 'Post';
               @field author = linksTo(Person);
               @field message = contains(StringField);
               static isolated = class Isolated extends Component<typeof this> {
@@ -633,6 +634,171 @@ module(basename(__filename), function () {
       }
     });
 
+    test('can make a card def entry in the index', async function (assert) {
+      let entry = await realm.realmIndexQueryEngine.cardDef({
+        module: `${testRealm}post.gts`,
+        name: 'Post',
+      });
+      if (entry?.type === 'card-def') {
+        assert.ok(entry.lastModified, 'last modified date is set');
+        assert.ok(entry.resourceCreatedAt, 'created date is set');
+        assert.deepEqual(
+          entry.types,
+          [
+            `${testRealm}post/Post`,
+            'https://cardstack.com/base/card-api/CardDef',
+          ],
+          'types are correct',
+        );
+        assert.deepEqual(
+          entry.meta.codeRef,
+          {
+            name: 'Post',
+            module: `${testRealm}post`,
+          },
+          'code ref is correct',
+        );
+        assert.strictEqual(
+          entry.meta.displayName,
+          'Post',
+          'display name is correct',
+        );
+
+        assert.deepEqual(
+          entry.meta.fields,
+          {
+            id: {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'ReadOnlyField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            title: {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            author: {
+              type: 'linksTo',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'Person',
+                module: `${testRealm}person`,
+              },
+              isPrimitive: false,
+            },
+            message: {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.id': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'ReadOnlyField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            description: {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.title': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            thumbnailURL: {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'MaybeBase64Field',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.firstName': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.hourlyRate': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'default',
+                module: 'https://cardstack.com/base/number',
+              },
+              isPrimitive: true,
+              serializerName: 'number',
+            },
+            'author.description': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.thumbnailURL': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'MaybeBase64Field',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+          },
+          'card-def meta is correct',
+        );
+
+        // this is a crazy long list that includes encoded CSS, so we'll just
+        // check a few deps
+        assert.ok(
+          entry!.deps!.includes(`${testRealm}post`),
+          'deps include ./post',
+        );
+        assert.ok(
+          entry!.deps!.includes(`${testRealm}person`),
+          'deps include ./person',
+        );
+        assert.ok(
+          entry!.deps!.includes(`https://cardstack.com/base/card-api`),
+          'deps include card api',
+        );
+      } else {
+        assert.ok('false', 'expected entry to be a card def');
+      }
+    });
+
     test('can incrementally index updated instance', async function (assert) {
       await realm.write(
         'mango.json',
@@ -666,7 +832,9 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          totalIndexEntries: 16,
+          cardDefErrors: 0,
+          cardDefsIndexed: 0,
+          totalIndexEntries: 26,
         },
         'indexed correct number of files',
       );
@@ -694,9 +862,20 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          totalIndexEntries: 12,
+          cardDefErrors: 0,
+          cardDefsIndexed: 0,
+          totalIndexEntries: 20,
         },
         'indexed correct number of files',
+      );
+      let petCardDefEntry = await realm.realmIndexQueryEngine.cardDef({
+        module: `${testRealm}pet`,
+        name: 'Pet',
+      });
+      assert.strictEqual(
+        petCardDefEntry,
+        undefined,
+        'Pet card def does not exist',
       );
       await realm.write(
         'person.gts',
@@ -713,7 +892,9 @@ module(basename(__filename), function () {
           instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
           moduleErrors: 3, // post, fancy person, person
           modulesIndexed: 0,
-          totalIndexEntries: 6,
+          cardDefErrors: 0,
+          cardDefsIndexed: 0,
+          totalIndexEntries: 11,
         },
         'indexed correct number of files',
       );
@@ -726,6 +907,24 @@ module(basename(__filename), function () {
         result,
         [],
         'the broken type results in no instance results',
+      );
+      let personCardDefEntry = await realm.realmIndexQueryEngine.cardDef({
+        module: `${testRealm}person`,
+        name: 'Person',
+      });
+      assert.strictEqual(
+        personCardDefEntry,
+        undefined,
+        'Person card def does not exist',
+      );
+      let fancyPersonCardDefEntry = await realm.realmIndexQueryEngine.cardDef({
+        module: `${testRealm}fancy-person`,
+        name: 'FancyPerson',
+      });
+      assert.strictEqual(
+        fancyPersonCardDefEntry,
+        undefined,
+        'FancyPerson card def does not exist',
       );
       await realm.write(
         'person.gts',
@@ -746,7 +945,9 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          totalIndexEntries: 12,
+          cardDefErrors: 0,
+          cardDefsIndexed: 3, // Person card, Post card, FancyPerson card
+          totalIndexEntries: 20,
         },
         'indexed correct number of files',
       );
@@ -761,6 +962,24 @@ module(basename(__filename), function () {
         result.length,
         2,
         'correct number of instances returned',
+      );
+      personCardDefEntry = await realm.realmIndexQueryEngine.cardDef({
+        module: `${testRealm}person`,
+        name: 'Person',
+      });
+      assert.strictEqual(
+        personCardDefEntry?.type,
+        'card-def',
+        'Person card def has recovered',
+      );
+      fancyPersonCardDefEntry = await realm.realmIndexQueryEngine.cardDef({
+        module: `${testRealm}fancy-person`,
+        name: 'FancyPerson',
+      });
+      assert.strictEqual(
+        fancyPersonCardDefEntry?.type,
+        'card-def',
+        'FancyPerson card def has recovered',
       );
     });
 
@@ -784,9 +1003,20 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          totalIndexEntries: 12,
+          cardDefErrors: 0,
+          cardDefsIndexed: 0,
+          totalIndexEntries: 20,
         },
         'indexed correct number of files',
+      );
+      let petCardDefEntry = await realm.realmIndexQueryEngine.cardDef({
+        module: `${testRealm}pet`,
+        name: 'Pet',
+      });
+      assert.strictEqual(
+        petCardDefEntry,
+        undefined,
+        'Pet card def does not exist',
       );
       await realm.write(
         'name.gts',
@@ -810,6 +1040,15 @@ module(basename(__filename), function () {
         'module',
         'Name module is successfully indexed',
       );
+      petCardDefEntry = await realm.realmIndexQueryEngine.cardDef({
+        module: `${testRealm}pet`,
+        name: 'Pet',
+      });
+      assert.strictEqual(
+        petCardDefEntry?.type,
+        'card-def',
+        'Pet card def has recovered',
+      );
 
       // Since the name is ready, the pet should be indexed and not in an error state
       assert.deepEqual(
@@ -819,7 +1058,9 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          totalIndexEntries: 16,
+          cardDefErrors: 0,
+          cardDefsIndexed: 2,
+          totalIndexEntries: 26,
         },
         'indexed correct number of files',
       );
@@ -828,7 +1069,6 @@ module(basename(__filename), function () {
       let pet = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}pet`),
       );
-      // Currently, encountered error loading module "http://test-realm/pet.gts": http://test-realm/name not found
       assert.strictEqual(
         pet?.type,
         'module',
@@ -858,7 +1098,10 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          totalIndexEntries: 12,
+
+          cardDefErrors: 0,
+          cardDefsIndexed: 0,
+          totalIndexEntries: 20,
         },
         'instance and module are in error state before dependency is available',
       );
@@ -936,7 +1179,9 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          totalIndexEntries: 15,
+          cardDefErrors: 0,
+          cardDefsIndexed: 0,
+          totalIndexEntries: 25,
         },
         'index did not touch any files',
       );
@@ -977,7 +1222,9 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 1,
-          totalIndexEntries: 16,
+          cardDefErrors: 0,
+          cardDefsIndexed: 1,
+          totalIndexEntries: 26,
         },
         'indexed correct number of files',
       );
@@ -1019,7 +1266,9 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          totalIndexEntries: 16,
+          cardDefErrors: 0,
+          cardDefsIndexed: 3,
+          totalIndexEntries: 26,
         },
         'indexed correct number of files',
       );
@@ -1070,7 +1319,9 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 0,
           modulesIndexed: 0,
-          totalIndexEntries: 14,
+          cardDefErrors: 0,
+          cardDefsIndexed: 0,
+          totalIndexEntries: 23,
         },
         'indexed correct number of files',
       );
@@ -1111,7 +1362,9 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 1,
-          totalIndexEntries: 16,
+          cardDefErrors: 0,
+          cardDefsIndexed: 1,
+          totalIndexEntries: 26,
         },
         'indexed correct number of files',
       );
@@ -1185,7 +1438,9 @@ module(basename(__filename), function () {
           instanceErrors: 6,
           modulesIndexed: 10,
           instancesIndexed: 6,
-          totalIndexEntries: 16,
+          cardDefErrors: 0,
+          cardDefsIndexed: 10,
+          totalIndexEntries: 26,
         },
         'indexed correct number of files',
       );
@@ -1615,7 +1870,9 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 2,
-          totalIndexEntries: 18,
+          cardDefErrors: 0,
+          cardDefsIndexed: 2,
+          totalIndexEntries: 30,
         },
         'indexed correct number of files',
       );
@@ -1670,7 +1927,9 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 1,
-          totalIndexEntries: 18,
+          cardDefErrors: 0,
+          cardDefsIndexed: 1,
+          totalIndexEntries: 29,
         },
         'indexed correct number of files',
       );
@@ -1705,7 +1964,7 @@ module(basename(__filename), function () {
       await realm.realmIndexUpdater.fullIndex();
 
       let deletedEntries = (await testDbAdapter.execute(
-        `SELECT * FROM boxel_index where is_deleted = true`,
+        `SELECT * FROM boxel_index where is_deleted = true and type = 'instance'`,
       )) as { url: string; is_deleted: boolean }[];
 
       assert.strictEqual(deletedEntries.length, 1, 'found tombstone entry');
@@ -1852,7 +2111,9 @@ module(basename(__filename), function () {
             instanceErrors: 0,
             moduleErrors: 0,
             modulesIndexed: 1,
-            totalIndexEntries: 2,
+            cardDefErrors: 0,
+            cardDefsIndexed: 1,
+            totalIndexEntries: 3,
           },
           'has no module errors',
         );
@@ -1880,6 +2141,8 @@ module(basename(__filename), function () {
             instancesIndexed: 0,
             moduleErrors: 1,
             modulesIndexed: 0,
+            cardDefErrors: 0,
+            cardDefsIndexed: 0,
             totalIndexEntries: 0,
           },
           'has a module error',
