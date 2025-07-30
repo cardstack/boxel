@@ -512,7 +512,7 @@ export class Batch {
     }
   }
 
-  async tombstoneEntries(invalidations: string[]) {
+  private async tombstoneEntries(invalidations: string[]) {
     // insert tombstone into next version of the realm index
     let columns = [
       'url',
