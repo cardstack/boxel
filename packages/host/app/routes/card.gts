@@ -25,8 +25,6 @@ export default class Card extends Route<void> {
     } else {
       let path = transition.to?.params?.path;
 
-      transition.abort();
-
       await this.router.replaceWith('index', {
         queryParams: { cardPath: path },
       });
