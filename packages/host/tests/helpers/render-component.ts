@@ -34,7 +34,6 @@ export async function renderCard(
   field?: Field,
 ) {
   let api = await cardApi(loader);
-  await api.recompute(card, { recomputeAllFields: true });
   await renderComponent(api.getComponent(card, field), format);
   return (getContext() as { element: Element }).element;
 }

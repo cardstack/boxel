@@ -40,7 +40,7 @@ function chunkWithReasoning(
     choices: [
       {
         delta: {
-          // @ts-ignore  Type '{ reasoning: string; }' is not assignable to type 'Delta'.
+          // @ts-expect-error  Type '{ reasoning: string; }' is not assignable to type 'Delta'.
           reasoning: reasoning,
         },
         finish_reason: null,
