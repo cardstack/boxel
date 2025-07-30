@@ -108,54 +108,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
   });
 });
 
-const expectedFields: CardDefMeta['fields'] = {
-  id: {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'ReadOnlyField',
-      module: 'https://cardstack.com/base/card-api',
-    },
-    isPrimitive: true,
-  },
-  title: {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
-    },
-    isPrimitive: true,
-  },
-  firstName: {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
-    },
-    isPrimitive: true,
-  },
-  description: {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'StringField',
-      module: 'https://cardstack.com/base/card-api',
-    },
-    isPrimitive: true,
-  },
-  thumbnailURL: {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'MaybeBase64Field',
-      module: 'https://cardstack.com/base/card-api',
-    },
-    isPrimitive: true,
-  },
-};
-
 const expectedCardDef = {
   data: {
     type: 'card-def',
@@ -166,7 +118,53 @@ const expectedCardDef = {
         module: `${testRealmHref}person`,
         name: 'Person',
       },
-      fields: expectedFields,
-    },
+      fields: {
+        id: {
+          type: 'contains',
+          isComputed: false,
+          fieldOrCard: {
+            name: 'ReadOnlyField',
+            module: 'https://cardstack.com/base/card-api',
+          },
+          isPrimitive: true,
+        },
+        title: {
+          type: 'contains',
+          isComputed: true,
+          fieldOrCard: {
+            name: 'StringField',
+            module: 'https://cardstack.com/base/card-api',
+          },
+          isPrimitive: true,
+        },
+        firstName: {
+          type: 'contains',
+          isComputed: false,
+          fieldOrCard: {
+            name: 'StringField',
+            module: 'https://cardstack.com/base/card-api',
+          },
+          isPrimitive: true,
+        },
+        description: {
+          type: 'contains',
+          isComputed: false,
+          fieldOrCard: {
+            name: 'StringField',
+            module: 'https://cardstack.com/base/card-api',
+          },
+          isPrimitive: true,
+        },
+        thumbnailURL: {
+          type: 'contains',
+          isComputed: false,
+          fieldOrCard: {
+            name: 'MaybeBase64Field',
+            module: 'https://cardstack.com/base/card-api',
+          },
+          isPrimitive: true,
+        },
+      },
+    } as CardDefMeta,
   },
 };
