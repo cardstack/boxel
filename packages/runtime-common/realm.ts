@@ -38,6 +38,7 @@ import {
   type QueuePublisher,
   type FileMeta,
   type DirectoryMeta,
+  isResolvedCodeRef,
   userInitiatedPriority,
   userIdFromUsername,
 } from './index';
@@ -394,6 +395,7 @@ export class Realm {
         SupportedMimeType.Permissions,
         this.patchRealmPermissions.bind(this),
       )
+      .get('/_card-def', SupportedMimeType.JSONAPI, this.getCardDef.bind(this))
       .get(
         '/_readiness-check',
         SupportedMimeType.RealmInfo,
@@ -2293,6 +2295,75 @@ export class Realm {
       body: JSON.stringify(doc, null, 2),
       init: {
         headers: { 'content-type': SupportedMimeType.CardJson },
+      },
+      requestContext,
+    });
+  }
+
+  private async getCardDef(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let href = new URL(request.url).search.slice(1);
+    let payload = parseQuery(href);
+    if (!payload.coderef) {
+      return badRequest({
+        message: `The request body is missing the coderef parameter`,
+        requestContext,
+      });
+    }
+    if (!isResolvedCodeRef(payload.coderef)) {
+      return badRequest({
+        message: `The coderef parameter is not a valid code ref`,
+        requestContext,
+      });
+    }
+    let { coderef } = payload;
+    let useWorkInProgressIndex = Boolean(
+      request.headers.get('X-Boxel-Building-Index'),
+    );
+    let maybeError = await this.#realmIndexQueryEngine.cardDef(coderef, {
+      useWorkInProgressIndex,
+    });
+    if (!maybeError) {
+      return notFound(request, requestContext);
+    }
+    let id = internalKeyFor(coderef, undefined);
+    if (maybeError.type === 'error') {
+      return systemError({
+        requestContext,
+        message: `cannot get card def meta, ${request.url}, from index: ${maybeError.error.message}`,
+        id,
+        additionalError: CardError.fromSerializableError(maybeError.error),
+        // This is based on https://jsonapi.org/format/#errors
+        body: {
+          id,
+          status: maybeError.error.status,
+          title: maybeError.error.title,
+          message: maybeError.error.message,
+          // note that this is actually available as part of the response
+          // header too--it's just easier for clients when it is here
+          realm: this.url,
+          meta: {
+            stack: maybeError.error.stack,
+          },
+        },
+      });
+    }
+    let { meta } = maybeError;
+    let doc: CardAPI.JSONAPISingleResourceDocument = {
+      data: {
+        id,
+        type: 'card-def',
+        attributes: {
+          ...meta,
+        },
+      },
+    };
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
       },
       requestContext,
     });
