@@ -16,7 +16,7 @@ export default class HostModeService extends Service {
         return true;
       }
 
-      if (window.location.search.includes('host-mode=true')) {
+      if (this.simulatingHostMode) {
         return true;
       }
     }
@@ -25,7 +25,9 @@ export default class HostModeService extends Service {
   }
 
   get simulatingHostMode() {
-    return new URLSearchParams(window.location.search).has('host-mode');
+    return new URLSearchParams(window.location.search).has(
+      'host-mode-subdomain',
+    );
   }
 
   get userSubdomain() {
