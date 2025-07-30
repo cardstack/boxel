@@ -24,7 +24,19 @@ export default class HostModeService extends Service {
     return false;
   }
 
+  get simulatingHostMode() {
+    return new URLSearchParams(window.location.search).has('host-mode');
+  }
+
   get userSubdomain() {
+    if (this.simulatingHostMode) {
+      return (
+        new URLSearchParams(window.location.search).get(
+          'host-mode-subdomain',
+        ) || 'user'
+      );
+    }
+
     return window.location.hostname.split('.')[0];
   }
 }
