@@ -11,10 +11,12 @@ import ListingInstallCommand from './listing-install';
 import SwitchSubmodeCommand from './switch-submode';
 import UpdateCodePathWithSelectionCommand from './update-code-path-with-selection';
 import UpdatePlaygroundSelectionCommand from './update-playground-selection';
+import UseAiAssistantCommand from './ai-assistant';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmServerService from '../services/realm-server';
 import type { Listing } from '@cardstack/catalog/listing/listing';
+import { skillCardURL } from '../lib/utils';
 
 export default class RemixCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInstallInput
@@ -93,7 +95,6 @@ export default class RemixCommand extends HostBaseCommand<
           fieldName: undefined,
         },
       );
-
       await new SwitchSubmodeCommand(this.commandContext).execute({
         submode: 'code',
         codePath: selectedCodeRef.module,
@@ -108,5 +109,18 @@ export default class RemixCommand extends HostBaseCommand<
         });
       }
     }
+
+    let prompt = 'I would like suggestions on how edit this card';
+    const defaultSkills = [
+      skillCardURL('boxel-environment'),
+      skillCardURL('boxel-development'),
+      skillCardURL('source-code-editing'),
+    ];
+    await new UseAiAssistantCommand(this.commandContext).execute({
+      roomId: 'new',
+      prompt,
+      openRoom: true,
+      skillCardIds: defaultSkills,
+    });
   }
 }
