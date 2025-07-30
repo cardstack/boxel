@@ -824,15 +824,6 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
       }
     </style>
   </template>
-
-  // Define helper functions
-  get multiply() {
-    return (a: number, b: number) => a * b;
-  }
-
-  get subtract() {
-    return (a: number, b: number) => a - b;
-  }
 }
 
 export class Solitaire extends CardDef {
