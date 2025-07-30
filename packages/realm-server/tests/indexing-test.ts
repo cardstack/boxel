@@ -1964,7 +1964,7 @@ module(basename(__filename), function () {
       await realm.realmIndexUpdater.fullIndex();
 
       let deletedEntries = (await testDbAdapter.execute(
-        `SELECT * FROM boxel_index where is_deleted = true`,
+        `SELECT * FROM boxel_index where is_deleted = true and type = 'instance'`,
       )) as { url: string; is_deleted: boolean }[];
 
       assert.strictEqual(deletedEntries.length, 1, 'found tombstone entry');
