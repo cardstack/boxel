@@ -37,9 +37,9 @@ module.exports = function (environment) {
     minSaveTaskDurationMs: 1000,
     renderTimeoutMs: 30_000,
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
-    hostModeDomainRoot: process.env.HOST_MODE_DOMAIN_ROOT || 'localhost',
 
     // the fields below may be rewritten by the realm server
+    hostModeDomainRoot: process.env.HOST_MODE_DOMAIN_ROOT || 'localhost',
     hostsOwnAssets: true,
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
