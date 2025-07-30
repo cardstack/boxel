@@ -111,17 +111,18 @@ export default class RemixCommand extends HostBaseCommand<
       }
     }
 
-    let prompt = 'I would like suggestions on how edit this card';
-    const defaultSkills = [
+    let prompt = 'Remix done! Give me examples on how to edit this card.';
+    const skillCardIds = [
       skillCardURL('boxel-environment'),
       skillCardURL('boxel-development'),
       skillCardURL('source-code-editing'),
+      skillCardURL('catalog-listing'),
     ];
     await new UseAiAssistantCommand(this.commandContext).execute({
       roomId: 'new',
       prompt,
       openRoom: true,
-      skillCardIds: defaultSkills,
+      skillCardIds,
     });
   }
 }
