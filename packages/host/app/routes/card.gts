@@ -13,7 +13,7 @@ export type ErrorModel = {
   operatorModeState: string;
 };
 
-export default class Card extends Route<void> {
+export default class Card extends Route<ReturnType<StoreService['get']>> {
   @service declare hostModeService: HostModeService;
   @service declare realmServer: RealmServerService;
   @service declare router: RouterService;
@@ -31,7 +31,7 @@ export default class Card extends Route<void> {
     }
   }
 
-  async model(params: { path: string }): Promise<void> {
+  async model(params: { path: string }) {
     let segments = params.path.split('/').filter(Boolean); // Remove empty segments from potential leading/trailing slashes
     let realm = segments[0];
     let remainingPath = segments.slice(1).join('/');

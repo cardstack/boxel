@@ -24,14 +24,14 @@ import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardContext } from 'https://cardstack.com/base/card-api';
+import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
 // FIXME copied from StackItem component
 type StackItemCardContext = Omit<CardContext, 'prerenderedCardSearchComponent'>;
 
 interface HostModeComponentSignature {
   Args: {
-    model: ReturnType<getCard>;
+    model: CardDef | CardErrorJSONAPI;
   };
 }
 
@@ -47,6 +47,10 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
     return isCardErrorJSONAPI(this.args.model);
   }
 
+  get card() {
+    return this.args.model as CardDef;
+  }
+
   get title() {
     if (this.isError) {
       return `Card not found: ${this.args.model.id}`;
@@ -56,7 +60,7 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
   }
 
   get backgroundImageStyle() {
-    let backgroundImageUrl = this.args.model?.[meta]?.realmInfo?.backgroundURL;
+    let backgroundImageUrl = this.card[meta]?.realmInfo?.backgroundURL;
 
     if (backgroundImageUrl) {
       return htmlSafe(`background-image: url(${backgroundImageUrl});`);
@@ -89,7 +93,7 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
         <CardContainer class='card'>
           <CardRenderer
             class='stack-item-preview'
-            @card={{@model}}
+            @card={{this.card}}
             @format='isolated'
             @cardContext={{this.cardContext}}
           />
