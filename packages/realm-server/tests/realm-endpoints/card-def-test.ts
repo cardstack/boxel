@@ -60,7 +60,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       test('read permission GET /_card-def', async function (assert) {
         let response = await request
           .get(
-            `/_card-def?${qs.stringify({ coderef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
+            `/_card-def?${qs.stringify({ codeRef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
           )
           .set('Accept', 'application/vnd.api+json');
 
@@ -81,7 +81,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       test('non read permission GET /_card-def', async function (assert) {
         let response = await request
           .get(
-            `/_card-def?${qs.stringify({ coderef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
+            `/_card-def?${qs.stringify({ codeRef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
           )
           .set('Accept', 'application/vnd.api+json')
           .set('Authorization', `Bearer ${createJWT(testRealm, 'not-mary')}`);
@@ -92,7 +92,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       test('read permission GET /_card-def', async function (assert) {
         let response = await request
           .get(
-            `/_card-def?${qs.stringify({ coderef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
+            `/_card-def?${qs.stringify({ codeRef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
           )
           .set('Accept', 'application/vnd.api+json')
           .set(

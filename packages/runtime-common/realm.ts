@@ -2306,29 +2306,29 @@ export class Realm {
   ): Promise<Response> {
     let href = new URL(request.url).search.slice(1);
     let payload = parseQuery(href);
-    if (!payload.coderef) {
+    if (!payload.codeRef) {
       return badRequest({
         message: `The request body is missing the coderef parameter`,
         requestContext,
       });
     }
-    if (!isResolvedCodeRef(payload.coderef)) {
+    if (!isResolvedCodeRef(payload.codeRef)) {
       return badRequest({
         message: `The coderef parameter is not a valid code ref`,
         requestContext,
       });
     }
-    let { coderef } = payload;
+    let { codeRef } = payload;
     let useWorkInProgressIndex = Boolean(
       request.headers.get('X-Boxel-Building-Index'),
     );
-    let maybeError = await this.#realmIndexQueryEngine.cardDef(coderef, {
+    let maybeError = await this.#realmIndexQueryEngine.cardDef(codeRef, {
       useWorkInProgressIndex,
     });
     if (!maybeError) {
       return notFound(request, requestContext);
     }
-    let id = internalKeyFor(coderef, undefined);
+    let id = internalKeyFor(codeRef, undefined);
     if (maybeError.type === 'error') {
       return systemError({
         requestContext,
