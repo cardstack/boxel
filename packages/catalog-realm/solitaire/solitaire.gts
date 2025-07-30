@@ -1,4 +1,10 @@
-import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  Component,
+  field,
+  contains,
+} from 'https://cardstack.com/base/card-api';
+import StringField from 'https://cardstack.com/base/string';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
@@ -831,5 +837,11 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
 
 export class Solitaire extends CardDef {
   static displayName = 'Solitaire';
+  @field title = contains(StringField, {
+    computeVia: function (this: Solitaire) {
+      return 'Solitaire';
+    },
+  });
+
   static isolated = IsolatedTemplate;
 }

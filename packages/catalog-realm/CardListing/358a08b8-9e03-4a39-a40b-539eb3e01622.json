@@ -41,9 +41,9 @@
           "self": null
         }
       },
-      "examples": {
+      "examples.0": {
         "links": {
-          "self": null
+          "self": "../solitaire/Solitaire/1ca34cd3-17e2-4b1c-932f-a40e3627a700"
         }
       }
     },
