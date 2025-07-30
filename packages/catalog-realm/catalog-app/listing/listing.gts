@@ -98,7 +98,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     }
     let listing = this.args.model as Listing;
     await new ListingRemixCommand(commandContext).execute({
-      realm: realmUrl,
+      realm,
       listing,
     });
   });
