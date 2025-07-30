@@ -223,7 +223,7 @@ class IsolatedTemplate extends Component<typeof AstralGardens> {
           0 0 20px currentColor, 0 0 40px currentColor, 0 0 60px currentColor;
 
         width: 100%;
-        height: 100vh;
+        height: auto;
         background: var(--midnight-navy);
         background-image:
           radial-gradient(
@@ -246,7 +246,6 @@ class IsolatedTemplate extends Component<typeof AstralGardens> {
           150% 150%,
           300% 300%;
         animation: kaleidoscope-bg 20s ease-in-out infinite;
-        overflow-y: auto;
         position: relative;
       }
 
