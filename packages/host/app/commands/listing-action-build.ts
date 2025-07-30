@@ -40,7 +40,7 @@ export default class ListingActionBuildCommand extends HostBaseCommand<
 
     const listing = listingInput as Listing;
 
-    const prompt = `Create gts file for the ${listing.name}. First, create the complete gts file with all the code. After the code is fully generated, then switch to code mode and show preview.`;
+    const prompt = `Generate .gts card definition for "${listing.name}" implementing all requirements from the attached listing specification, limit output to 1000 lines maximum. Do not switch code or preview until the code is fully generated. Generate incrementally after per response if needed, then preview the final code in playground panel.`;
 
     const { roomId } = await new CreateAiAssistantRoomCommand(
       this.commandContext,
@@ -68,6 +68,7 @@ export default class ListingActionBuildCommand extends HostBaseCommand<
       await new SetActiveLLMCommand(this.commandContext).execute({
         roomId,
         model: DEFAULT_CODING_LLM,
+        mode: 'act',
       });
 
       await new AddSkillsToRoomCommand(this.commandContext).execute({
