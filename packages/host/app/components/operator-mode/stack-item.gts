@@ -118,6 +118,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @consume(GetCardsContextName) private declare getCards: getCards;
   @consume(GetCardCollectionContextName)
   private declare getCardCollection: getCardCollection;
+  @consume(CardContextName) private declare parentCardContext: CardContext;
 
   @service private declare cardService: CardService;
   @service private declare environmentService: EnvironmentService;
@@ -250,15 +251,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.url === `${this.realmURL.href}index`;
   }
 
-  private get cardContext(): StackItemCardContext {
+  private get context(): StackItemCardContext {
     return {
       cardComponentModifier: this.cardTracker.trackElement,
-      actions: this.args.publicAPI,
-      commandContext: this.args.commandContext,
-      getCard: this.getCard,
-      getCards: this.getCards,
-      getCardCollection: this.getCardCollection,
-      store: this.store,
+      ...cardContext,
     };
   }
 
@@ -698,7 +694,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               class='stack-item-preview'
               @card={{this.card}}
               @format={{@item.format}}
-              @cardContext={{this.cardContext}}
+              @cardContext={{this.context}}
             />
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}

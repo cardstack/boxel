@@ -40,7 +40,6 @@ import { Publisher } from './publisher';
 import { Category } from './category';
 import { License } from './license';
 import { Tag } from './tag';
-import { setupAllRealmsInfo } from '../helper';
 
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
@@ -49,7 +48,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
   constructor(owner: any, args: any) {
     super(owner, args);
-    this.writableRealms = setupAllRealmsInfo(this.args);
   }
 
   get remixRealmOptions() {
