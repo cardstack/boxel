@@ -57,7 +57,6 @@ import CardCatalogFilters from './filters';
 
 import CardCatalog, { type NewCardArgs } from './index';
 
-import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
@@ -230,7 +229,6 @@ export default class CardCatalogModal extends Component<Signature> {
 
   private stateStack: State[] = new TrackedArray<State>();
   private stateId = 0;
-  @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realmServer: RealmServerService;

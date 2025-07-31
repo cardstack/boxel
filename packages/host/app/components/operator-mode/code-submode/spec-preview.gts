@@ -33,7 +33,6 @@ import CardRenderer from '@cardstack/host/components/card-renderer';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import { type ModuleDeclaration } from '@cardstack/host/resources/module-contents';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { ModuleInspectorView } from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -348,7 +347,6 @@ const SpecPreviewLoading: TemplateOnlyComponent<SpecPreviewLoadingSignature> =
 export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
-  @service private declare loaderService: LoaderService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare specPanelService: SpecPanelService;
   @service private declare store: StoreService;
