@@ -10,7 +10,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import { provide, consume } from 'ember-provide-consume-context';
+import { consume } from 'ember-provide-consume-context';
 
 import get from 'lodash/get';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
@@ -128,6 +128,7 @@ export default class InteractSubmode extends Component {
   @consume(GetCardsContextName) private declare getCards: getCards;
   @consume(GetCardCollectionContextName)
   private declare getCardCollection: getCardCollection;
+  @consume(CardContextName) private declare cardContext: CardContext;
 
   @service private declare cardService: CardService;
   @service private declare commandService: CommandService;
@@ -741,25 +742,6 @@ export default class InteractSubmode extends Component {
       });
     },
   );
-
-  @provide(CardContextName)
-  private get cardContext(): Omit<
-    CardContext,
-    'prerenderedCardSearchComponent'
-  > {
-    // assumption: take actions in the right-most stack
-    let stackCount = this.operatorModeStateService.numberOfStacks();
-    let rightMostStackIndex = stackCount > 0 ? stackCount - 1 : 0;
-    return {
-      actions: this.publicAPI(this, rightMostStackIndex),
-      getCard: this.getCard,
-      getCards: this.getCards,
-      getCardCollection: this.getCardCollection,
-      store: this.store,
-      // TODO: should we include this here??
-      commandContext: this.commandService.commandContext,
-    };
-  }
 
   <template>
     {{consumeContext this.getRecentCardCollection}}

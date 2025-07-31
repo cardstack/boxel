@@ -109,18 +109,17 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @service private declare specPanelService: SpecPanelService;
   @service private declare store: StoreService;
 
+  @provide(CardContextName) private declare cardContext: CardContext;
+
   private cardTracker = new ElementTracker();
 
   private get onlyOneInstance() {
     return this.args.allSpecs.length === 1;
   }
 
-  private get cardContext(): SpecPreviewCardContext {
+  private get context(): SpecPreviewCardContext {
     return {
-      getCard: this.getCard,
-      getCards: this.getCards,
-      getCardCollection: this.getCardCollection,
-      store: this.store,
+      ...this.cardContext,
       cardComponentModifier: this.cardTracker.trackElement,
     };
   }
@@ -241,13 +240,13 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
               <CardRenderer
                 @card={{@activeSpec}}
                 @format='isolated'
-                @cardContext={{this.cardContext}}
+                @cardContext={{this.context}}
               />
             {{else}}
               <CardRenderer
                 @card={{@activeSpec}}
                 @format='edit'
-                @cardContext={{this.cardContext}}
+                @cardContext={{this.context}}
               />
             {{/if}}
           </div>
