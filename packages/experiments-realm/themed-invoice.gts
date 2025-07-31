@@ -12,7 +12,7 @@ import DateField from 'https://cardstack.com/base/date';
 import { dayjsFormat } from '@cardstack/boxel-ui/helpers';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 
-import { BrandTheme as Theme, sanitize } from './brand-theme';
+import { BrandTheme as Theme, sanitize } from './theme';
 
 export class ThemedInvoice extends CardDef {
   static displayName = 'Themed Invoice';
