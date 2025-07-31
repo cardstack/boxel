@@ -52,7 +52,6 @@ export default class FileTree extends Component<Signature> {
     </style>
   </template>
 
-
   @tracked private showMask = true;
 
   constructor(owner: Owner, args: Signature['Args']) {

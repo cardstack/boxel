@@ -25,7 +25,6 @@ import { IconSearch } from '@cardstack/boxel-ui/icons';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
-
 import RealmServerService from '@cardstack/host/services/realm-server';
 
 import CardQueryResults from './card-query-results';
@@ -33,7 +32,6 @@ import CardURLResults from './card-url-results';
 
 import RecentCardsSection from './recent-cards-section';
 import { getCodeRefFromSearchKey } from './utils';
-
 
 import type StoreService from '../../services/store';
 

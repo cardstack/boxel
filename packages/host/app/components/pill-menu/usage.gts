@@ -5,13 +5,11 @@ import { tracked } from '@glimmer/tracking';
 
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-
 import headerIcon from '../ai-assistant/ai-assist-icon@2x.webp';
 
 import PillMenu from './index';
 
 export default class PillMenuUsage extends Component {
-
   @tracked private title = 'Pill Menu';
   private headerIconURL = headerIcon;
 
