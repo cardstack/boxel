@@ -2111,7 +2111,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .dom(
           '[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]',
         )
-        .hasText('Workspace - Test Workspace A');
+        .hasText('Workspace - Test Workspace B');
       assert.dom('[data-test-workspace-chooser]').doesNotExist();
 
       // Close the index card

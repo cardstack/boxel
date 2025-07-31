@@ -309,8 +309,10 @@ export default class OperatorModeStateService extends Service {
         });
     }
 
+    const realmURL =
+      this.realm.realmOfURL(new URL(item.id))?.href ?? this.realmURL.href;
     // Check if the trimmed item is an index card
-    const isIndexCard = this.isIndexCard(item);
+    const isIndexCard = this.isIndexCard(realmURL, item);
 
     if (this._state.stacks.length === 0) {
       if (isIndexCard) {
@@ -318,8 +320,6 @@ export default class OperatorModeStateService extends Service {
         this._state.workspaceChooserOpened = true;
       } else {
         // If the trimmed item was not an index card, add an index card to the stack
-        let realmURL =
-          this.realm.realmOfURL(new URL(item.id))?.href ?? this.realmURL.href;
         const indexCardId = `${realmURL}index`;
         const indexCardItem = this.createStackItem(indexCardId, 0);
         this.addItemToStack(indexCardItem);
@@ -397,9 +397,9 @@ export default class OperatorModeStateService extends Service {
     return this._state.trail[this._state.trail.length - 1];
   }
 
-  private isIndexCard(item: StackItem): boolean {
+  private isIndexCard(realmURL: string, item: StackItem): boolean {
     const itemUrl = item.id;
-    return itemUrl === `${this.realmURL.href}index`;
+    return itemUrl === `${realmURL}index`;
   }
 
   get isViewingCardInCodeMode() {
