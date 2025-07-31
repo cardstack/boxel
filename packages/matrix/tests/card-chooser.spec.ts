@@ -165,7 +165,7 @@ test.describe('Card Chooser', () => {
         `[data-test-stack-card="${consumingCardURL}"] [data-test-edit-button]`,
       )
       .click();
-    await page.locator('[data-test-add-new]').click();
+    await page.locator('[data-test-add-new="friend"]').click();
     await expect(
       page.locator(`[data-test-select="${linkedCardURL}"]`),
     ).toHaveCount(1);
