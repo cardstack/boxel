@@ -23,15 +23,6 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
 
   <template>
     <div class={{cn 'default-card-template' @format}}>
-      {{#if (eq @format 'edit')}}
-        <FieldContainer
-          @label='Card Info'
-          @icon={{getFieldIcon @model 'cardInfo'}}
-          data-test-field='cardInfo'
-        >
-          <@fields.cardInfo />
-        </FieldContainer>
-      {{/if}}
       {{#each-in this.displayFields as |key Field|}}
         {{#unless (eq key 'id')}}
           <FieldContainer
