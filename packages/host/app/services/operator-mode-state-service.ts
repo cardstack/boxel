@@ -309,12 +309,9 @@ export default class OperatorModeStateService extends Service {
         });
     }
 
-    const realmURL =
-      this.realm.realmOfURL(new URL(item.id))?.href ?? this.realmURL.href;
-    // Check if the trimmed item is an index card
-    const isIndexCard = this.isIndexCard(realmURL, item);
-
     if (this._state.stacks.length === 0) {
+      const realmURL = this.getRealmURLFromItemId(item.id);
+      const isIndexCard = this.isIndexCard(realmURL, item);
       if (isIndexCard) {
         // Only open workspace chooser if the trimmed item was an index card
         this._state.workspaceChooserOpened = true;
@@ -395,6 +392,15 @@ export default class OperatorModeStateService extends Service {
     }
 
     return this._state.trail[this._state.trail.length - 1];
+  }
+
+  private getRealmURLFromItemId(itemId: string): string {
+    try {
+      const url = new URL(itemId);
+      return this.realm.realmOfURL(url)?.href ?? this.realmURL.href;
+    } catch (error) {
+      return this.realmURL.href;
+    }
   }
 
   private isIndexCard(realmURL: string, item: StackItem): boolean {
