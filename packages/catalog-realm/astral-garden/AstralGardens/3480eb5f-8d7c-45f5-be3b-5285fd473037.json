@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "installationName": "The Astral Gardens: Voyage to Kepler-442b",
+      "tagline": "Where botanical dreams collide with cosmic reality",
+      "description": "# Journey Beyond the Stars\n\nStep into an otherworldly botanical sanctuary where the flora of distant galaxies comes alive through cutting-edge holographic technology and living bio-luminescent specimens.\n\n## What Awaits You\n\n**🌌 Four Immersive Realms**\n- **The Luminous Grove**: Ancient trees from the Andromeda galaxy pulse with ethereal light\n- **Crystal Meadows**: Singing crystalline formations harmonize with alien winds\n- **The Nebula Sanctuary**: Zero-gravity gardens where cosmic forces shape living art\n- **Stellar Pavilion**: Interactive star mapping with plant-based constellation charts\n\n**🔬 Scientific Wonder**\nEach installation is based on real exoplanet research and theoretical xenobotany, bringing you face-to-face with what plant life might look like on distant worlds.\n\n**✨ Sensory Experience**\nEngage all your senses as you walk through environments that respond to your presence with shifting lights, haunting melodies, and otherworldly fragrances.\n\n*\"The Astral Gardens transformed my understanding of what's possible beyond our world. I felt like I was actually walking on an alien planet.\"* — Dr. Elena Vasquez, Astrobiologist",
+      "experienceDuration": "90 minutes",
+      "nextShowingDate": "2025-08-15",
+      "ticketPrice": "$45 - $65 (Premium twilight slots)",
+      "location": "Meridian Arts District, 1847 Cosmic Way, Portland, Oregon",
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../astral-garden",
+        "name": "AstralGardens"
+      }
+    }
+  }
+}
