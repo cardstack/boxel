@@ -14,7 +14,6 @@ import { add, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 
 import { type Listing } from '../listing/listing';
-import { setupAllRealmsInfo } from '../helper';
 
 import {
   BoxelDropdown,
@@ -24,6 +23,7 @@ import {
 
 import ListingInitCommand from '@cardstack/boxel-host/commands/listing-action-init';
 import ListingBuildCommand from '@cardstack/boxel-host/commands/listing-action-build';
+import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
 
 interface Signature {
   Element: HTMLElement;
@@ -388,8 +388,31 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
 
   constructor(owner: any, args: any) {
     super(owner, args);
-    this.writableRealms = setupAllRealmsInfo(this.args);
+    this.loadRealms.perform();
   }
+
+  private loadRealms = task(async () => {
+    if (this.args.context?.commandContext) {
+      try {
+        let r = await new GetAllRealmMetasCommand(
+          this.args.context.commandContext,
+        ).execute();
+        if (r?.results) {
+          this.writableRealms = r.results
+            .filter(({ canWrite }) => canWrite)
+            .map(({ info }) => {
+              return {
+                name: info.name,
+                url: info.url,
+                iconURL: info.iconURL,
+              };
+            });
+        }
+      } catch (error) {
+        console.error('Failed to fetch realm info:', error);
+      }
+    }
+  });
 
   get remixRealmOptions() {
     return this.writableRealms
