@@ -309,8 +309,19 @@ export default class OperatorModeStateService extends Service {
         });
     }
 
+    // Check if the trimmed item is an index card
+    const isIndexCard = this.isIndexCard(item);
+
     if (this._state.stacks.length === 0) {
-      this._state.workspaceChooserOpened = true;
+      if (isIndexCard) {
+        // Only open workspace chooser if the trimmed item was an index card
+        this._state.workspaceChooserOpened = true;
+      } else {
+        // If the trimmed item was not an index card, add an index card to the stack
+        const indexCardId = `${this.realmURL.href}index`;
+        const indexCardItem = this.createStackItem(indexCardId, 0);
+        this.addItemToStack(indexCardItem);
+      }
     }
 
     this.schedulePersist();
@@ -382,6 +393,11 @@ export default class OperatorModeStateService extends Service {
     }
 
     return this._state.trail[this._state.trail.length - 1];
+  }
+
+  private isIndexCard(item: StackItem): boolean {
+    const itemUrl = item.id;
+    return itemUrl === `${this.realmURL.href}index`;
   }
 
   get isViewingCardInCodeMode() {
