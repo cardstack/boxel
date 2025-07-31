@@ -189,17 +189,17 @@
       },
       "shortcutSettings.0.requiredSkills.0": {
         "links": {
-          "self": "https://cardstack.com/base/Skill/boxel-development"
+          "self": "/skills/Skill/boxel-development"
         }
       },
       "shortcutSettings.0.requiredSkills.1": {
         "links": {
-          "self": "https://cardstack.com/base/Skill/boxel-environment"
+          "self": "/skills/Skill/boxel-environment"
         }
       },
       "shortcutSettings.0.requiredSkills.2": {
         "links": {
-          "self": "https://cardstack.com/base/Skill/source-code-editing"
+          "self": "/skills/Skill/source-code-editing"
         }
       },
       "shortcutSettings.1.preferredModel": {
@@ -209,17 +209,17 @@
       },
       "shortcutSettings.1.requiredSkills.0": {
         "links": {
-          "self": "../Skill/16dfe959-da4a-422e-b571-1023942888e9"
+          "self": "/skills/Skill/boxel-design"
         }
       },
       "shortcutSettings.1.requiredSkills.1": {
         "links": {
-          "self": "https://cardstack.com/base/Skill/boxel-development"
+          "self": "/skills/Skill/boxel-development"
         }
       },
       "shortcutSettings.1.requiredSkills.2": {
         "links": {
-          "self": "https://cardstack.com/base/Skill/boxel-environment"
+          "self": "/skills/Skill/boxel-environment"
         }
       },
       "shortcutSettings.2.preferredModel": {
@@ -229,17 +229,17 @@
       },
       "shortcutSettings.2.requiredSkills.0": {
         "links": {
-          "self": "https://cardstack.com/base/Skill/boxel-environment"
+          "self": "/skills/Skill/boxel-development"
         }
       },
       "shortcutSettings.2.requiredSkills.1": {
         "links": {
-          "self": "https://cardstack.com/base/Skill/boxel-development"
+          "self": "/skills/Skill/boxel-environment"
         }
       },
       "shortcutSettings.2.requiredSkills.2": {
         "links": {
-          "self": "https://cardstack.com/base/Skill/source-code-editing"
+          "self": "/skills/Skill/source-code-editing"
         }
       },
       "shortcutSettings.3.preferredModel": {
