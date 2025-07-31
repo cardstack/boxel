@@ -1823,19 +1823,22 @@ class LinksToMany<FieldT extends CardDefConstructor>
     let errors = [];
     let fieldInstances: CardDef[] = [];
 
-    for (let reference of refs) {
-      // TODO: consider parallelizing these fetches and using Promise.allSettled
-      let response = await fetch(reference, {
-        headers: { Accept: SupportedMimeType.CardJson },
-      });
-      if (!response.ok) {
-        let cardError = await CardError.fromFetchResponse(reference, response);
-        cardError.deps = [reference];
-        cardError.additionalErrors = [
-          new NotLoaded(instance, reference, this.name),
-        ];
-        errors.push(cardError);
-      } else {
+    const fetchPromises = refs.map(async (reference) => {
+      try {
+        let response = await fetch(reference, {
+          headers: { Accept: SupportedMimeType.CardJson },
+        });
+        if (!response.ok) {
+          let cardError = await CardError.fromFetchResponse(
+            reference,
+            response,
+          );
+          cardError.deps = [reference];
+          cardError.additionalErrors = [
+            new NotLoaded(instance, reference, this.name),
+          ];
+          throw cardError;
+        }
         let json = await response.json();
         if (!isSingleCardDocument(json)) {
           throw new Error(
@@ -1859,7 +1862,23 @@ class LinksToMany<FieldT extends CardDefConstructor>
             identityContext,
           },
         )) as CardDef; // A linksTo field could only be a composite card
-        fieldInstances.push(fieldInstance);
+        return { ok: true, value: fieldInstance };
+      } catch (e) {
+        return { ok: false, error: e };
+      }
+    });
+
+    const results = await Promise.allSettled(fetchPromises);
+    for (let result of results) {
+      if (result.status === 'fulfilled') {
+        const fetchResult = result.value;
+        if (fetchResult.ok && fetchResult.value) {
+          fieldInstances.push(fetchResult.value);
+        } else if (!fetchResult.ok) {
+          errors.push(fetchResult.error);
+        }
+      } else {
+        errors.push(result.reason);
       }
     }
     if (errors.length) {

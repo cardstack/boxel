@@ -52,7 +52,6 @@ import { RoomResource } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
-import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -342,7 +341,6 @@ export default class Room extends Component<Signature> {
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare loaderService: LoaderService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
   @service private declare specPanelService: SpecPanelService;
 
