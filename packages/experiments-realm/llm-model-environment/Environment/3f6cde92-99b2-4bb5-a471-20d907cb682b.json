@@ -1,0 +1,263 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Boxel Default",
+      "modelSettings": [
+        {
+          "role": "Best for Coding",
+          "forAssistantUse": true,
+          "forAgenticUse": true,
+          "isDisabled": false
+        },
+        {
+          "role": "Character Chat",
+          "forAssistantUse": false,
+          "forAgenticUse": false,
+          "isDisabled": false
+        },
+        {
+          "role": "Best for Complex Coding and Debugging",
+          "forAssistantUse": true,
+          "forAgenticUse": true,
+          "isDisabled": false
+        },
+        {
+          "role": "Extra power for refactoring",
+          "forAssistantUse": true,
+          "forAgenticUse": true,
+          "isDisabled": false
+        },
+        {
+          "role": "Recommended for general usage",
+          "forAssistantUse": true,
+          "forAgenticUse": true,
+          "isDisabled": false
+        },
+        {
+          "role": "Good for characters",
+          "forAssistantUse": true,
+          "forAgenticUse": false,
+          "isDisabled": false
+        },
+        {
+          "role": "Fast data and content transformation",
+          "forAssistantUse": true,
+          "forAgenticUse": false,
+          "isDisabled": false
+        },
+        {
+          "role": null,
+          "forAssistantUse": true,
+          "forAgenticUse": false,
+          "isDisabled": false
+        },
+        {
+          "role": "Good for coding",
+          "forAssistantUse": true,
+          "forAgenticUse": true,
+          "isDisabled": false
+        },
+        {
+          "role": "Smart Contract Development",
+          "forAssistantUse": true,
+          "forAgenticUse": false,
+          "isDisabled": false
+        },
+        {
+          "role": "NVidia best model",
+          "forAssistantUse": true,
+          "forAgenticUse": false,
+          "isDisabled": false
+        },
+        {
+          "role": "O1 like power",
+          "forAssistantUse": true,
+          "forAgenticUse": false,
+          "isDisabled": false
+        },
+        {
+          "role": "Free chat model",
+          "forAssistantUse": true,
+          "forAgenticUse": false,
+          "isDisabled": false
+        },
+        {
+          "role": null,
+          "forAssistantUse": true,
+          "forAgenticUse": true,
+          "isDisabled": true
+        }
+      ],
+      "shortcutSettings": [
+        {
+          "name": "code"
+        },
+        {
+          "name": "design"
+        },
+        {
+          "name": "fix"
+        },
+        {
+          "name": "default"
+        }
+      ],
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "parent": {
+        "links": {
+          "self": null
+        }
+      },
+      "modelSettings.0.model": {
+        "links": {
+          "self": "../Model/c889c1f5-44ac-4788-930c-13cc46881f52"
+        }
+      },
+      "modelSettings.1.model": {
+        "links": {
+          "self": "../Model/f544ac37-8893-4c13-8c46-881f52996080"
+        }
+      },
+      "modelSettings.2.model": {
+        "links": {
+          "self": "../Model/46881f52-9960-408d-a141-eb46cdc23184"
+        }
+      },
+      "modelSettings.3.model": {
+        "links": {
+          "self": "../Model/b4ba6fc8-89c1-4544-ac37-88930c13cc46"
+        }
+      },
+      "modelSettings.4.model": {
+        "links": {
+          "self": "../Model/cdc23184-c337-4d5a-83c0-0681676def80"
+        }
+      },
+      "modelSettings.5.model": {
+        "links": {
+          "self": "../Model/f544ac37-8893-4c13-8c46-881f52996080"
+        }
+      },
+      "modelSettings.6.model": {
+        "links": {
+          "self": "../Model/a3b4c5d6-e7f8-4901-a234-f01234567890"
+        }
+      },
+      "modelSettings.7.model": {
+        "links": {
+          "self": "../Model/a7b8c9d0-e1f2-4345-a678-9abcdef01234"
+        }
+      },
+      "modelSettings.8.model": {
+        "links": {
+          "self": "../Model/e5f6a7b8-c9d0-4123-e456-789abcdef012"
+        }
+      },
+      "modelSettings.9.model": {
+        "links": {
+          "self": "../Model/b4ba6fc8-89c1-4544-ac37-88930c13cc46"
+        }
+      },
+      "modelSettings.10.model": {
+        "links": {
+          "self": "../Model/d4e5f6a7-b8c9-4012-d345-6789abcdef01"
+        }
+      },
+      "modelSettings.11.model": {
+        "links": {
+          "self": "../Model/d0e1f2a3-b4c5-4678-d901-cdef01234567"
+        }
+      },
+      "modelSettings.12.model": {
+        "links": {
+          "self": "../Model/c5d6e7f8-a9b0-4123-c456-123456789012"
+        }
+      },
+      "modelSettings.13.model": {
+        "links": {
+          "self": null
+        }
+      },
+      "shortcutSettings.0.preferredModel": {
+        "links": {
+          "self": "../Model/c889c1f5-44ac-4788-930c-13cc46881f52"
+        }
+      },
+      "shortcutSettings.0.requiredSkills.0": {
+        "links": {
+          "self": "/skills/Skill/boxel-development"
+        }
+      },
+      "shortcutSettings.0.requiredSkills.1": {
+        "links": {
+          "self": "/skills/Skill/boxel-environment"
+        }
+      },
+      "shortcutSettings.0.requiredSkills.2": {
+        "links": {
+          "self": "/skills/Skill/source-code-editing"
+        }
+      },
+      "shortcutSettings.1.preferredModel": {
+        "links": {
+          "self": "../Model/c889c1f5-44ac-4788-930c-13cc46881f52"
+        }
+      },
+      "shortcutSettings.1.requiredSkills.0": {
+        "links": {
+          "self": "/skills/Skill/boxel-design"
+        }
+      },
+      "shortcutSettings.1.requiredSkills.1": {
+        "links": {
+          "self": "/skills/Skill/boxel-development"
+        }
+      },
+      "shortcutSettings.1.requiredSkills.2": {
+        "links": {
+          "self": "/skills/Skill/boxel-environment"
+        }
+      },
+      "shortcutSettings.2.preferredModel": {
+        "links": {
+          "self": "../Model/46881f52-9960-408d-a141-eb46cdc23184"
+        }
+      },
+      "shortcutSettings.2.requiredSkills.0": {
+        "links": {
+          "self": "/skills/Skill/boxel-development"
+        }
+      },
+      "shortcutSettings.2.requiredSkills.1": {
+        "links": {
+          "self": "/skills/Skill/boxel-environment"
+        }
+      },
+      "shortcutSettings.2.requiredSkills.2": {
+        "links": {
+          "self": "/skills/Skill/source-code-editing"
+        }
+      },
+      "shortcutSettings.3.preferredModel": {
+        "links": {
+          "self": "../Model/cdc23184-c337-4d5a-83c0-0681676def80"
+        }
+      },
+      "shortcutSettings.3.requiredSkills.0": {
+        "links": {
+          "self": "https://cardstack.com/base/Skill/boxel-environment"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../environment",
+        "name": "Environment"
+      }
+    }
+  }
+}

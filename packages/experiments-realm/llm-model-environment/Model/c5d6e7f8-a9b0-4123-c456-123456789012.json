@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "deepseek/deepseek-chat-v3-0324:free",
+      "modelName": "DeepSeek Chat v3 Free",
+      "displayName": "DeepSeek Chat v3 Free - Role-play & Simulation",
+      "forAssistantUse": false
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../model",
+        "name": "Model"
+      }
+    }
+  }
+}

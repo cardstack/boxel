@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "google/gemini-2.5-pro",
+      "modelName": "Gemini 2.5 Pro",
+      "displayName": "Gemini 2.5 Pro",
+      "forAssistantUse": true,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../model",
+        "name": "Model"
+      }
+    }
+  }
+}
