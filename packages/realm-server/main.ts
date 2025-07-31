@@ -153,10 +153,6 @@ let {
         'The port the worker manager is running on. used to wait for the workers to be ready',
       type: 'number',
     },
-    hostModeDomainRoot: {
-      description: 'The domain root for host mode',
-      type: 'string',
-    },
   })
   .parseSync();
 
