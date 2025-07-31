@@ -3,7 +3,6 @@ import { on } from '@ember/modifier';
 
 import { action } from '@ember/object';
 
-import RouterService from '@ember/routing/router-service';
 
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -307,7 +306,6 @@ export default class RegisterUser extends Component<Signature> {
       }
     </style>
   </template>
-  @service private declare router: RouterService;
   @tracked private email = '';
   @tracked private name = '';
   @tracked private username = '';

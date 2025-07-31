@@ -25,7 +25,6 @@ import { IconSearch } from '@cardstack/boxel-ui/icons';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import RealmServerService from '@cardstack/host/services/realm-server';
 
@@ -35,7 +34,6 @@ import CardURLResults from './card-url-results';
 import RecentCardsSection from './recent-cards-section';
 import { getCodeRefFromSearchKey } from './utils';
 
-import type LoaderService from '../../services/loader-service';
 
 import type StoreService from '../../services/store';
 
@@ -78,8 +76,6 @@ export default class SearchSheet extends Component<Signature> {
 
   @tracked private searchKey = '';
 
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare loaderService: LoaderService;
   @service private declare realmServer: RealmServerService;
   @service private declare store: StoreService;
 

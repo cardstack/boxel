@@ -2,7 +2,6 @@ import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
-import type RouterService from '@ember/routing/router-service';
 import { inject as service } from '@ember/service';
 
 import Component from '@glimmer/component';
@@ -52,7 +51,6 @@ import NewFileButton, { type NewFileOptions } from './new-file-button';
 import WorkspaceChooser from './workspace-chooser';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
-import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type StoreService from '../../services/store';
@@ -105,10 +103,8 @@ export default class SubmodeLayout extends Component<Signature> {
     defaultWidth: 30,
     minWidth: 25,
   });
-  @service private declare commandService: CommandService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
-  @service private declare router: RouterService;
   @service private declare store: StoreService;
   @service private declare aiAssistantPanelService: AiAssistantPanelService;
 
