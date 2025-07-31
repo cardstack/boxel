@@ -24,6 +24,7 @@ import {
   type CodeRef,
   type Permissions,
   ResolvedCodeRef,
+  extractCssVariables,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
@@ -205,86 +206,11 @@ export function getBoxComponent(
     };
   }
 
-  function normalizeSelector(selector: string): string {
-    const normalized = selector.trim();
-
-    // Fix common selector issues
-    if (normalized === 'root') return ':root';
-    if (normalized.startsWith('root ')) return ':root';
-    if (normalized === '.dark') return '.dark';
-    if (normalized.startsWith('@theme')) return normalized;
-
-    // Ensure :root has colon
-    if (normalized === ':root' || normalized.startsWith(':root')) {
-      return ':root';
-    }
-
-    return normalized;
-  }
-
-  function parseCSSGroups(css: string): Map<string, Map<string, string>> {
-    const groups = new Map<string, Map<string, string>>();
-
-    // ³² Remove comments and normalize whitespace
-    const cleanCSS = css
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (!cleanCSS) return groups;
-
-    // ³³ Improved CSS block parsing with better regex
-    const blockRegex = /([^{]+)\{([^}]*)\}/g;
-    let match;
-
-    while ((match = blockRegex.exec(cleanCSS)) !== null) {
-      const selector = normalizeSelector(match[1].trim());
-      const rulesText = match[2].trim();
-
-      if (selector && rulesText) {
-        // ³⁴ Parse individual rules with improved error handling
-        const rules = new Map<string, string>();
-        const declarations = rulesText.split(';').filter((decl) => decl.trim());
-
-        for (const declaration of declarations) {
-          const colonIndex = declaration.indexOf(':');
-          if (colonIndex > 0) {
-            const property = declaration.substring(0, colonIndex).trim();
-            const value = declaration.substring(colonIndex + 1).trim();
-            if (property.startsWith('--') || property.match(/^[a-z-]+$/)) {
-              rules.set(property, value);
-            }
-          }
-        }
-
-        if (rules.size > 0) {
-          groups.set(selector, rules);
-        }
-      }
-    }
-
-    return groups;
-  }
-
-  function getThemeStyles(cssVariables?: string) {
-    try {
-      if (!cssVariables) return;
-      const groups = parseCSSGroups(cssVariables);
-      const rootRules = groups.get(':root');
-      if (!rootRules?.size) {
-        return '';
-      }
-      const inlineDeclarations: string[] = [];
-      for (const [property, value] of rootRules) {
-        if (property.startsWith('--')) {
-          inlineDeclarations.push(`${property}: ${value}`);
-        }
-      }
-      return inlineDeclarations.join('; ');
-    } catch (e) {
-      console.error('Error extracting CSS variables:', e);
+  function getThemeStyles(css?: string) {
+    if (!extractCssVariables) {
       return;
     }
+    return extractCssVariables(css);
   }
 
   let component: TemplateOnlyComponent<{
@@ -334,7 +260,6 @@ export function getBoxComponent(
                       data-test-card={{card.id}}
                       data-test-card-format={{effectiveFormats.cardDef}}
                       data-test-field-component-card
-                      {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
                       ...attributes
                     >
                       <c.CardOrFieldFormatComponent
@@ -362,7 +287,6 @@ export function getBoxComponent(
                     class='compound-field {{effectiveFormats.fieldDef}}-format'
                     data-test-compound-field-format={{effectiveFormats.fieldDef}}
                     data-test-compound-field-component
-                    {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
                     ...attributes
                   >
                     <c.CardOrFieldFormatComponent
