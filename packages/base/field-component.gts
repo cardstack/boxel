@@ -34,6 +34,7 @@ import { initSharedState } from './shared-state';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 import { consume, provide } from 'ember-provide-consume-context';
 import Component from '@glimmer/component';
+import sanitizedHtml from './helpers/sanitized-html';
 
 export interface BoxComponentSignature {
   Element: HTMLElement; // This may not be true for some field components, but it's true more often than not
@@ -210,7 +211,7 @@ export function getBoxComponent(
     if (!extractCssVariables) {
       return;
     }
-    return extractCssVariables(css);
+    return sanitizedHtml(extractCssVariables(css));
   }
 
   let component: TemplateOnlyComponent<{
