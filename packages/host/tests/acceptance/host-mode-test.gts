@@ -33,6 +33,16 @@ class StubHostModeService extends HostModeService {
   }
 }
 
+class StubCustomSubdomainHostModeService extends StubHostModeService {
+  get isCustomSubdomain() {
+    return true;
+  }
+
+  customSubdomainToRealmUrl(_subdomain: string) {
+    return testHostModeRealmURL;
+  }
+}
+
 module('Acceptance | host mode tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -174,5 +184,21 @@ module('Acceptance | host mode tests', function (hooks) {
       getPageTitle(),
       `Card not found: ${testHostModeRealmURL}Pet/non-existent`,
     );
+  });
+
+  module('with a custom subdomain', function (hooks) {
+    hooks.beforeEach(function (this) {
+      getOwner(this)!.register(
+        'service:host-mode-service',
+        StubCustomSubdomainHostModeService,
+      );
+    });
+
+    test('visiting a card in host mode', async function (assert) {
+      await visit('/Pet/mango.json');
+      assert
+        .dom(`[data-test-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists();
+    });
   });
 });

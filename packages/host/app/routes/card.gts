@@ -36,21 +36,33 @@ export default class Card extends Route<ReturnType<StoreService['get']>> {
   }
 
   async model(params: { path: string }) {
-    let segments = params.path.split('/').filter(Boolean); // remove empty
-    let realm = segments[0];
-    let remainingPath = segments.slice(1).join('/');
+    let prospectiveRealmUrl;
+    let cardPath;
 
-    let realmUrlString = `${config.realmServerRoot}${this.hostModeService.userSubdomain}/${realm}/`;
+    if (this.hostModeService.isCustomSubdomain) {
+      prospectiveRealmUrl = this.hostModeService.customSubdomainToRealmUrl(
+        this.hostModeService.userSubdomain,
+      );
 
-    await this.realm.ensureRealmMeta(realmUrlString);
+      cardPath = params.path;
+    } else {
+      let segments = params.path.split('/').filter(Boolean); // remove empty
+      let realm = segments[0];
 
-    let realmUrl = this.realm.url(realmUrlString);
+      cardPath = segments.slice(1).join('/');
 
-    if (!realmUrl) {
-      throw new Error(`Realm not found: ${realmUrlString}`);
+      prospectiveRealmUrl = `${config.realmServerRoot}${this.hostModeService.userSubdomain}/${realm}/`;
     }
 
-    let cardUrl = `${realmUrl}${remainingPath}`;
+    await this.realm.ensureRealmMeta(prospectiveRealmUrl);
+
+    let realmUrl = this.realm.url(prospectiveRealmUrl);
+
+    if (!realmUrl) {
+      throw new Error(`Realm not found: ${prospectiveRealmUrl}`);
+    }
+
+    let cardUrl = `${realmUrl}${cardPath}`;
     return this.store.get(cardUrl);
   }
 }
