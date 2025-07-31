@@ -164,6 +164,78 @@ const expectedCardDef = {
           },
           isPrimitive: true,
         },
+        cardInfo: {
+          type: 'contains',
+          isComputed: false,
+          fieldOrCard: {
+            name: 'CardInfoField',
+            module: 'https://cardstack.com/base/card-api',
+          },
+          isPrimitive: false,
+        },
+        'cardInfo.theme': {
+          type: 'linksTo',
+          isComputed: false,
+          fieldOrCard: {
+            name: 'Theme',
+            module: 'https://cardstack.com/base/card-api',
+          },
+          isPrimitive: false,
+        },
+        'cardInfo.theme.id': {
+          type: 'contains',
+          isComputed: false,
+          fieldOrCard: {
+            name: 'ReadOnlyField',
+            module: 'https://cardstack.com/base/card-api',
+          },
+          isPrimitive: true,
+        },
+        'cardInfo.theme.title': {
+          type: 'contains',
+          isComputed: false,
+          fieldOrCard: {
+            name: 'StringField',
+            module: 'https://cardstack.com/base/card-api',
+          },
+          isPrimitive: true,
+        },
+        'cardInfo.theme.description': {
+          type: 'contains',
+          isComputed: false,
+          fieldOrCard: {
+            name: 'StringField',
+            module: 'https://cardstack.com/base/card-api',
+          },
+          isPrimitive: true,
+        },
+        'cardInfo.theme.thumbnailURL': {
+          type: 'contains',
+          isComputed: false,
+          fieldOrCard: {
+            name: 'MaybeBase64Field',
+            module: 'https://cardstack.com/base/card-api',
+          },
+          isPrimitive: true,
+        },
+        'cardInfo.theme.cardInfo': {
+          type: 'contains',
+          isComputed: false,
+          fieldOrCard: {
+            name: 'CardInfoField',
+            module: 'https://cardstack.com/base/card-api',
+          },
+          isPrimitive: false,
+        },
+        'cardInfo.theme.cssVariables': {
+          type: 'contains',
+          isComputed: false,
+          fieldOrCard: {
+            name: 'CSSField',
+            module: 'https://cardstack.com/base/card-api',
+          },
+          isPrimitive: true,
+        },
       },
     } as CardDefMeta,
   },
