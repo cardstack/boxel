@@ -42,34 +42,36 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
         'Requires userId to execute CreateAiAssistantRoomCommand',
       );
     }
-    let { defaultSkills, skillConfig } = input;
-    let skillFileDefs: FileDef[] | undefined;
+    let { enabledSkills, disabledSkills } = input;
+    let enabledSkillFileDefs: FileDef[] | undefined;
     let commandFileDefs: FileDef[] | undefined;
     let disabledSkillFileDefs: FileDef[] | undefined;
 
-    if (
-      skillConfig.enabledSkillCards.length ||
-      skillConfig.disabledSkillCards.length ||
-      skillConfig.commandDefinitions.length
-    ) {
-      // Use provided skill configuration
-      skillFileDefs = skillConfig.enabledSkillCards.map((fileDef: any) =>
-        matrixService.fileAPI.createFileDef(fileDef),
+    if (enabledSkills?.length) {
+      enabledSkillFileDefs = await matrixService.uploadCards(enabledSkills);
+    }
+    if (disabledSkills?.length) {
+      disabledSkillFileDefs = await matrixService.uploadCards(disabledSkills);
+    } else {
+      disabledSkillFileDefs = [];
+    }
+
+    // Combine command definitions from both enabled and disabled skills
+    const allCommandDefinitions = [
+      ...(enabledSkills?.flatMap((skill) => skill.commands) || []),
+      ...(disabledSkills?.flatMap((skill) => skill.commands) || []),
+    ];
+
+    // Remove duplicates based on command name or ID
+    const uniqueCommandDefinitions = allCommandDefinitions.filter(
+      (command, index, array) =>
+        array.findIndex((cmd) => cmd.name === command.name) === index,
+    );
+
+    if (uniqueCommandDefinitions.length) {
+      commandFileDefs = await matrixService.uploadCommandDefinitions(
+        uniqueCommandDefinitions,
       );
-      disabledSkillFileDefs = skillConfig.disabledSkillCards.map(
-        (fileDef: any) => matrixService.fileAPI.createFileDef(fileDef),
-      );
-      commandFileDefs = skillConfig.commandDefinitions.map((fileDef: any) =>
-        matrixService.fileAPI.createFileDef(fileDef),
-      );
-    } else if (defaultSkills) {
-      // Fall back to existing defaultSkills logic
-      let skills = input.defaultSkills;
-      skillFileDefs = await matrixService.uploadCards(input.defaultSkills);
-      disabledSkillFileDefs = []; // Default to empty for new rooms
-      const commandDefinitions = skills.flatMap((skill) => skill.commands);
-      commandFileDefs =
-        await matrixService.uploadCommandDefinitions(commandDefinitions);
     }
 
     // Run room creation and module loading in parallel
@@ -101,7 +103,7 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
             type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
             content: {
               enabledSkillCards:
-                skillFileDefs?.map((skillFileDef) =>
+                enabledSkillFileDefs?.map((skillFileDef) =>
                   skillFileDef.serialize(),
                 ) ?? [],
               disabledSkillCards:

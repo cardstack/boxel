@@ -145,18 +145,10 @@ export class PatchCodeInput extends CardDef {
   @field codeBlocks = containsMany(StringField);
 }
 
-export class SkillConfigField extends FieldDef {
-  static displayName = 'Skill Configuration';
-
-  @field enabledSkillCards = containsMany(JsonField);
-  @field disabledSkillCards = containsMany(JsonField);
-  @field commandDefinitions = containsMany(JsonField);
-}
-
 export class CreateAIAssistantRoomInput extends CardDef {
   @field name = contains(StringField);
-  @field defaultSkills = linksToMany(Skill);
-  @field skillConfig = contains(SkillConfigField);
+  @field enabledSkills = linksToMany(Skill);
+  @field disabledSkills = linksToMany(Skill);
 }
 
 export class CreateAIAssistantRoomResult extends CardDef {

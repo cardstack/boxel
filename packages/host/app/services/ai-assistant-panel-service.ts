@@ -9,7 +9,11 @@ import { timeout } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
+import { isCardInstance } from '@cardstack/runtime-common';
+
 import * as CommandModule from 'https://cardstack.com/base/command';
+
+import type { Skill as SkillCard } from 'https://cardstack.com/base/skill';
 
 import CreateAiAssistantRoomCommand from '../commands/create-ai-assistant-room';
 
@@ -23,6 +27,7 @@ import LocalPersistenceService from './local-persistence-service';
 import type CommandService from './command-service';
 import type MatrixService from './matrix-service';
 import type OperatorModeStateService from './operator-mode-state-service';
+import type StoreService from './store';
 import type { Message } from '../lib/matrix-classes/message';
 
 export interface SessionRoomData {
@@ -38,6 +43,7 @@ export default class AiAssistantPanelService extends Service {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private commandService: CommandService;
   @service declare private localPersistenceService: LocalPersistenceService;
+  @service declare private store: StoreService;
 
   @tracked displayRoomError = false;
   @tracked isShowingPastSessions = false;
@@ -117,12 +123,7 @@ export default class AiAssistantPanelService extends Service {
       return;
     }
 
-    let skillConfig;
-    if (addSameSkills && this.currentRoomResource?.matrixRoom?.skillsConfig) {
-      skillConfig = this.currentRoomResource.matrixRoom.skillsConfig;
-    }
-
-    await this.doCreateRoom.perform('New AI Assistant Chat', skillConfig);
+    await this.doCreateRoom.perform('New AI Assistant Chat', addSameSkills);
   }
 
   private get newSessionId() {
@@ -150,23 +151,74 @@ export default class AiAssistantPanelService extends Service {
     );
   }
 
+  private async extractSkillsFromCurrentRoom(): Promise<{
+    enabledSkills: SkillCard[];
+    disabledSkills: SkillCard[];
+  }> {
+    let enabledSkills: SkillCard[] = [];
+    let disabledSkills: SkillCard[] = [];
+
+    if (this.currentRoomResource?.matrixRoom?.skillsConfig) {
+      const skillConfig = this.currentRoomResource.matrixRoom.skillsConfig;
+
+      // Extract enabled skills from the current room
+      if (skillConfig.enabledSkillCards?.length) {
+        for (const fileDef of skillConfig.enabledSkillCards) {
+          try {
+            const skill = await this.store.get(fileDef.sourceUrl);
+            if (skill && isCardInstance(skill)) {
+              enabledSkills.push(skill as SkillCard);
+            }
+          } catch (e) {
+            console.warn(`Failed to load skill from ${fileDef.sourceUrl}:`, e);
+          }
+        }
+      }
+
+      // Extract disabled skills from the current room
+      if (skillConfig.disabledSkillCards?.length) {
+        for (const fileDef of skillConfig.disabledSkillCards) {
+          try {
+            const skill = await this.store.get(fileDef.sourceUrl);
+            if (skill && isCardInstance(skill)) {
+              disabledSkills.push(skill as SkillCard);
+            }
+          } catch (e) {
+            console.warn(`Failed to load skill from ${fileDef.sourceUrl}:`, e);
+          }
+        }
+      }
+    }
+
+    return { enabledSkills, disabledSkills };
+  }
+
   private doCreateRoom = restartableTask(
-    async (name: string = 'New AI Assistant Chat', skillConfig?: any) => {
+    async (
+      name: string = 'New AI Assistant Chat',
+      addSameSkills: boolean = false,
+    ) => {
       try {
         let createRoomCommand = new CreateAiAssistantRoomCommand(
           this.commandService.commandContext,
         );
 
         let input: any = { name };
+        let enabledSkills: SkillCard[] = [];
+        let disabledSkills: SkillCard[] = [];
 
-        if (skillConfig) {
-          await this.commandModuleResource.loaded;
-          const skillConfigField = new this.commandModule.SkillConfigField(
-            skillConfig,
-          );
-          input.skillConfig = skillConfigField;
+        if (addSameSkills) {
+          const extractedSkills = await this.extractSkillsFromCurrentRoom();
+          enabledSkills = extractedSkills.enabledSkills;
+          disabledSkills = extractedSkills.disabledSkills;
+        }
+
+        if (enabledSkills.length || disabledSkills.length) {
+          input.enabledSkills = enabledSkills;
+          input.disabledSkills = disabledSkills;
         } else {
-          input.defaultSkills = await this.matrixService.loadDefaultSkills(
+          // Use default skills
+          input.enabledSkills = await this.matrixService.loadDefaultSkills(
             this.operatorModeStateService.state.submode,
           );
         }
