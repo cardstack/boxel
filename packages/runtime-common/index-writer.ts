@@ -130,17 +130,53 @@ export class Batch {
     this.ready = this.setNextRealmVersion();
   }
 
-  get invalidations() {
+  async getInvalidations(): Promise<string[]> {
     // the card def id's are notional, they are not file resources that can be
-    // visited, so we don't expose them to the outside world
-    return [...this.#invalidations].filter((i) => !isCardDefId(i));
+    // visited, so instead we return the module that contains the card def
+    let aliases: string[] = [];
+    let urls: string[] = [];
+    for (let item of this.#invalidations) {
+      if (isCardDefId(item)) {
+        aliases.push(trimExportNameFromCardDefId(item));
+      } else {
+        urls.push(item);
+      }
+    }
+
+    if (aliases.length > 0) {
+      let results = (await this.#query([
+        `SELECT url FROM boxel_index_working WHERE`,
+        ...every([
+          [
+            'file_alias IN',
+            ...addExplicitParens(
+              separatedByCommas(aliases.map((alias) => [param(alias)])),
+            ),
+          ],
+          ['type !=', param('card-def')],
+        ]),
+      ] as Expression)) as Pick<BoxelIndexTable, 'url'>[];
+
+      let urlsFromAliases = results.map((row) => row.url);
+      // there might be errors docs from card-defs that we need to strip out
+      urlsFromAliases = urlsFromAliases.filter((u) => isCardDefId(u));
+      urls.push(...urlsFromAliases);
+    }
+
+    return [...new Set(urls)];
   }
 
   @Memoize()
   private get nodeResolvedInvalidations() {
-    return [...this.invalidations].map(
-      (href) => trimExecutableExtension(new URL(href)).href,
-    );
+    return [
+      ...new Set(
+        [...this.#invalidations].map((i) =>
+          isCardDefId(i)
+            ? trimExportNameFromCardDefId(i)
+            : trimExecutableExtension(new URL(i)).href,
+        ),
+      ),
+    ];
   }
 
   async getModifiedTimes(): Promise<LastModifiedTimes> {
@@ -594,7 +630,7 @@ export class Batch {
     ]);
   }
 
-  async invalidate(urls: URL[]): Promise<string[]> {
+  async invalidate(urls: URL[]): Promise<void> {
     await this.ready;
     let start = Date.now();
     this.#perfLog.debug(
@@ -616,7 +652,7 @@ export class Batch {
     }
 
     if (invalidations.length === 0) {
-      return [];
+      return;
     }
 
     let insertStart = Date.now();
@@ -633,10 +669,6 @@ export class Batch {
     );
 
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
-
-    // the card def id's are notional, they are not file resources that can be
-    // visited, so we don't expose them to the outside world
-    return invalidations.filter((i) => !isCardDefId(i));
   }
 
   private async itemsThatReference(resolvedPath: string): Promise<

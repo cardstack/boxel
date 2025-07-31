@@ -21,7 +21,7 @@ module('Unit | index-writer', function (hooks) {
   hooks.beforeEach(async function () {
     await adapter.reset();
     indexWriter = new IndexWriter(adapter);
-    indexQueryEngine = new IndexQueryEngine(adapter);
+    indexQueryEngine = new IndexQueryEngine(adapter, fetch);
   });
 
   test('can perform invalidations for a instance entry', async function (assert) {
@@ -40,7 +40,7 @@ module('Unit | index-writer', function (hooks) {
     });
   });
 
-  test('card def entries are not publicly invalidated as part of module invalidations', async function (assert) {
+  test('card def entries can be invalidated', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
       indexQueryEngine,

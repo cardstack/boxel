@@ -21,6 +21,7 @@ import {
   IndexWriter,
   unixTime,
   jobIdentity,
+  getFieldMeta,
   type ResolvedCodeRef,
   type CardDefMeta,
   type Batch,
@@ -62,11 +63,7 @@ import {
   IdentityContextWithErrors,
 } from '../services/render-service';
 
-import {
-  directModuleDeps,
-  recursiveModuleDeps,
-  getFieldMeta,
-} from './prerender-util';
+import { directModuleDeps, recursiveModuleDeps } from './prerender-util';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
@@ -221,7 +218,8 @@ export class CurrentRun {
       current.realmURL,
       current.#jobInfo,
     );
-    let invalidations = (await current.batch.invalidate(urls)).map(
+    await current.batch.invalidate(urls);
+    let invalidations = (await current.batch.getInvalidations()).map(
       (href) => new URL(href),
     );
 
@@ -371,7 +369,7 @@ export class CurrentRun {
     perfLog.debug(
       `${jobIdentity(this.#jobInfo)} time to invalidate ${url} ${Date.now() - invalidationStart} ms`,
     );
-    return this.batch.invalidations;
+    return await this.batch.getInvalidations();
   }
 
   private async visitFile(

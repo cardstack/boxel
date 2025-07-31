@@ -81,9 +81,8 @@ const tests = Object.freeze({
     );
 
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    let invalidations = await batch.invalidate([
-      new URL(`${testRealmURL}4.json`),
-    ]);
+    await batch.invalidate([new URL(`${testRealmURL}4.json`)]);
+    let invalidations = await batch.getInvalidations();
 
     assert.deepEqual(invalidations.sort(), [
       `${testRealmURL}1.json`,
@@ -195,9 +194,8 @@ const tests = Object.freeze({
     );
 
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    let invalidations = await batch.invalidate([
-      new URL(`${testRealmURL}person.gts`),
-    ]);
+    await batch.invalidate([new URL(`${testRealmURL}person.gts`)]);
+    let invalidations = await batch.getInvalidations();
 
     assert.deepEqual(invalidations.sort(), [
       `${testRealmURL}1.json`,
@@ -207,151 +205,147 @@ const tests = Object.freeze({
     ]);
   },
 
-  // card def entries are notional so when you get a list of invalidations from
-  // the batch we don't reflect card-def entries as participating in the
-  // invalidation externally since there is no specific resource that they
-  // reflect in the filesystem (which is what a module does). However,
-  // invalidated card-defs are marked for deletion as part of invalidation,
-  // which shows they do actually participate in invalidation--just not
-  // publicly.
-  'card def entries are not publicly invalidated as part of module invalidations':
-    async (assert, { indexQueryEngine, indexWriter, adapter }) => {
-      let modified = Date.now();
-      await setupIndex(
-        adapter,
-        [
-          { realm_url: testRealmURL, current_version: 1 },
-          { realm_url: testRealmURL2, current_version: 5 },
-        ],
-        [
-          {
-            url: `${testRealmURL}person.gts`,
-            file_alias: `${testRealmURL}person`,
-            type: 'module',
-            realm_version: 1,
-            realm_url: testRealmURL,
-            deps: [],
-            last_modified: String(modified),
-            resource_created_at: String(modified),
-          },
-          {
-            url: `${testRealmURL}person/Person`,
-            file_alias: `${testRealmURL}person`,
-            type: 'card-def',
-            realm_version: 1,
-            realm_url: testRealmURL,
-            deps: [`${testRealmURL}person`],
-            last_modified: String(modified),
-            resource_created_at: String(modified),
-          },
-          {
-            url: `${testRealmURL}employee.gts`,
-            file_alias: `${testRealmURL}employee`,
-            type: 'module',
-            realm_version: 1,
-            realm_url: testRealmURL,
-            deps: [`${testRealmURL}person`],
-            last_modified: String(modified),
-            resource_created_at: String(modified),
-          },
-          {
-            url: `${testRealmURL}employee/Employee`,
-            file_alias: `${testRealmURL}employee`,
-            type: 'card-def',
-            realm_version: 1,
-            realm_url: testRealmURL,
-            deps: [`${testRealmURL}employee`, `${testRealmURL}person`],
-            last_modified: String(modified),
-            resource_created_at: String(modified),
-          },
-          {
-            url: `${testRealmURL}1.json`,
-            file_alias: `${testRealmURL}1.json`,
-            type: 'instance',
-            realm_version: 1,
-            realm_url: testRealmURL,
-            deps: [`${testRealmURL}employee`],
-            last_modified: String(modified),
-            resource_created_at: String(modified),
-          },
-          {
-            url: `${testRealmURL}2.json`,
-            file_alias: `${testRealmURL}2.json`,
-            type: 'instance',
-            realm_version: 1,
-            realm_url: testRealmURL,
-            deps: [`${testRealmURL}1.json`],
-            last_modified: String(modified),
-            resource_created_at: String(modified),
-          },
-          {
-            url: `${testRealmURL}3.json`,
-            file_alias: `${testRealmURL}3.json`,
-            type: 'instance',
-            realm_version: 1,
-            realm_url: testRealmURL,
-            deps: [],
-            last_modified: String(modified),
-            resource_created_at: String(modified),
-          },
-        ],
-      );
+  'card def entries can be invalidated': async (
+    assert,
+    { indexQueryEngine, indexWriter, adapter },
+  ) => {
+    let modified = Date.now();
+    await setupIndex(
+      adapter,
+      [
+        { realm_url: testRealmURL, current_version: 1 },
+        { realm_url: testRealmURL2, current_version: 5 },
+      ],
+      [
+        {
+          url: `${testRealmURL}person.gts`,
+          file_alias: `${testRealmURL}person`,
+          type: 'module',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [],
+          last_modified: String(modified),
+          resource_created_at: String(modified),
+        },
+        {
+          url: `${testRealmURL}person/Person`,
+          file_alias: `${testRealmURL}person`,
+          type: 'card-def',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}person`],
+          last_modified: String(modified),
+          resource_created_at: String(modified),
+        },
+        {
+          url: `${testRealmURL}employee.gts`,
+          file_alias: `${testRealmURL}employee`,
+          type: 'module',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}person`],
+          last_modified: String(modified),
+          resource_created_at: String(modified),
+        },
+        {
+          url: `${testRealmURL}employee/Employee`,
+          file_alias: `${testRealmURL}employee`,
+          type: 'card-def',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}employee`, `${testRealmURL}person`],
+          last_modified: String(modified),
+          resource_created_at: String(modified),
+        },
+        {
+          url: `${testRealmURL}1.json`,
+          file_alias: `${testRealmURL}1.json`,
+          type: 'instance',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}employee`],
+          last_modified: String(modified),
+          resource_created_at: String(modified),
+        },
+        {
+          url: `${testRealmURL}2.json`,
+          file_alias: `${testRealmURL}2.json`,
+          type: 'instance',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [`${testRealmURL}1.json`],
+          last_modified: String(modified),
+          resource_created_at: String(modified),
+        },
+        {
+          url: `${testRealmURL}3.json`,
+          file_alias: `${testRealmURL}3.json`,
+          type: 'instance',
+          realm_version: 1,
+          realm_url: testRealmURL,
+          deps: [],
+          last_modified: String(modified),
+          resource_created_at: String(modified),
+        },
+      ],
+    );
 
-      let batch = await indexWriter.createBatch(new URL(testRealmURL));
-      let invalidations = await batch.invalidate([
-        new URL(`${testRealmURL}person.gts`),
-      ]);
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    await batch.invalidate([new URL(`${testRealmURL}person.gts`)]);
+    let invalidations = await batch.getInvalidations();
 
-      assert.deepEqual(invalidations.sort(), [
-        `${testRealmURL}1.json`,
-        `${testRealmURL}2.json`,
-        `${testRealmURL}employee.gts`,
-        `${testRealmURL}person.gts`,
-      ]);
+    // the card def id's are notional, they are not file resources that can be
+    // visited, so instead we return the module that contains the card def
+    assert.deepEqual(invalidations.sort(), [
+      `${testRealmURL}1.json`,
+      `${testRealmURL}2.json`,
+      `${testRealmURL}employee.gts`,
+      `${testRealmURL}person.gts`,
+    ]);
 
-      let personCardDef = await indexQueryEngine.getCardDef({
+    let personCardDef = await indexQueryEngine.getOwnCardDef({
+      module: `${testRealmURL}person`,
+      name: 'Person',
+    });
+    assert.strictEqual(
+      personCardDef?.type,
+      'card-def',
+      'card-def exists in production index',
+    );
+    personCardDef = await indexQueryEngine.getOwnCardDef(
+      {
         module: `${testRealmURL}person`,
         name: 'Person',
-      });
-      assert.strictEqual(
-        personCardDef?.type,
-        'card-def',
-        'card-def exists in production index',
-      );
-      personCardDef = await indexQueryEngine.getCardDef(
-        {
-          module: `${testRealmURL}person`,
-          name: 'Person',
-        },
-        { useWorkInProgressIndex: true },
-      );
-      assert.strictEqual(
-        personCardDef,
-        undefined,
-        'card-def has been marked for deletion in working index',
-      );
-      let employeeCardDef = await indexQueryEngine.getCardDef({
+      },
+      { useWorkInProgressIndex: true },
+    );
+    assert.strictEqual(
+      personCardDef,
+      undefined,
+      'card-def has been marked for deletion in working index',
+    );
+    let employeeCardDef = await indexQueryEngine.getOwnCardDef({
+      module: `${testRealmURL}employee`,
+      name: 'Employee',
+    });
+    assert.strictEqual(
+      employeeCardDef?.type,
+      'card-def',
+      'card-def exists in production index',
+    );
+    employeeCardDef = await indexQueryEngine.getOwnCardDef(
+      {
         module: `${testRealmURL}employee`,
         name: 'Employee',
-      });
-      assert.strictEqual(
-        employeeCardDef?.type,
-        'card-def',
-        'card-def exists in production index',
-      );
-      employeeCardDef = await indexQueryEngine.getCardDef(
-        {
-          module: `${testRealmURL}employee`,
-          name: 'Employee',
-        },
-        { useWorkInProgressIndex: true },
-      );
-      assert.strictEqual(
-        employeeCardDef,
-        undefined,
-        'card-def has been marked for deletion in working index',
-      );
-    },
+      },
+      { useWorkInProgressIndex: true },
+    );
+    assert.strictEqual(
+      employeeCardDef,
+      undefined,
+      'card-def has been marked for deletion in working index',
+    );
+  },
 
   "invalidations don't cross realm boundaries": async (
     assert,
@@ -383,9 +377,8 @@ const tests = Object.freeze({
       ],
     );
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    let invalidations = await batch.invalidate([
-      new URL(`${testRealmURL}person.gts`),
-    ]);
+    await batch.invalidate([new URL(`${testRealmURL}person.gts`)]);
+    let invalidations = await batch.getInvalidations();
 
     // invalidations currently do not cross realm boundaries (probably they
     // will in the future--but via a different mechanism)
@@ -1343,9 +1336,8 @@ const tests = Object.freeze({
       );
 
       let batch = await indexWriter.createBatch(new URL(testRealmURL));
-      let invalidations = await batch.invalidate([
-        new URL(`${testRealmURL}1.json`),
-      ]);
+      await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
+      let invalidations = await batch.getInvalidations();
 
       assert.ok(invalidations.length > 1000, 'Can invalidate more than 1000');
       assert.deepEqual(
@@ -1525,7 +1517,7 @@ const tests = Object.freeze({
     });
     await batch.done();
 
-    let result = await indexQueryEngine.getCardDef({
+    let result = await indexQueryEngine.getOwnCardDef({
       module: `${testRealmURL}person`,
       name: 'Person',
     });
@@ -1596,7 +1588,7 @@ const tests = Object.freeze({
       },
     });
 
-    let result = await indexQueryEngine.getCardDef(
+    let result = await indexQueryEngine.getOwnCardDef(
       {
         module: `${testRealmURL}person`,
         name: 'Person',
@@ -1632,7 +1624,7 @@ const tests = Object.freeze({
       assert.ok(false, `expected card-def not to be an error document`);
     }
 
-    let noResult = await indexQueryEngine.getCardDef({
+    let noResult = await indexQueryEngine.getOwnCardDef({
       module: `${testRealmURL}person`,
       name: 'Person',
     });
