@@ -65,7 +65,8 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
     // Remove duplicates based on command name or ID
     const uniqueCommandDefinitions = allCommandDefinitions.filter(
       (command, index, array) =>
-        array.findIndex((cmd) => cmd.name === command.name) === index,
+        array.findIndex((cmd) => command.functionName === cmd.functionName) ===
+        index,
     );
 
     if (uniqueCommandDefinitions.length) {
