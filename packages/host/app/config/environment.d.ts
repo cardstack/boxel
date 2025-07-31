@@ -17,7 +17,8 @@ declare const config: {
   realmServerRoot: string;
   resolvedBaseRealmURL: string;
   resolvedSkillsRealmURL: string;
-  hostModeDomainRoot?: string;
+  hostModeUserSubdomainRoot?: string;
+  hostModeCustomSubdomainRoot?: string;
   hostsOwnAssets: boolean;
   realmsServed?: string[];
   logLevels: string;
