@@ -156,7 +156,7 @@ module('Integration | ask-ai', function (hooks) {
 
   test('can send message to AI Assistant from workspace chooser', async function (assert) {
     operatorModeStateService.restore({
-      stacks: [[{ id: `${testRealmURL}Pet/marco`, format: 'isolated' }]],
+      stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
     });
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -166,7 +166,7 @@ module('Integration | ask-ai', function (hooks) {
         </template>
       },
     );
-    await click('[data-test-close-button]');
+    await click('[data-test-close-button]'); // close last card
     assert.dom('[data-test-workspace-chooser]').exists();
     assert.dom('[data-test-ask-ai-label]').exists();
     assert.dom('[data-test-ask-ai-input]').hasNoValue();

@@ -1675,7 +1675,10 @@ module('Acceptance | interact submode tests', function (hooks) {
         '[data-test-operator-mode-stack="0"] [data-test-close-button]',
       );
 
-      assert.dom('[data-test-workspace-chooser]').exists();
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .doesNotExist();
+      assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
     });
 
     test<TestContextWithSave>('can create a card when 2 stacks are present', async function (assert) {

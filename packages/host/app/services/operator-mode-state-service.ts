@@ -318,7 +318,9 @@ export default class OperatorModeStateService extends Service {
         this._state.workspaceChooserOpened = true;
       } else {
         // If the trimmed item was not an index card, add an index card to the stack
-        const indexCardId = `${this.realmURL.href}index`;
+        let realmURL =
+          this.realm.realmOfURL(new URL(item.id))?.href ?? this.realmURL.href;
+        const indexCardId = `${realmURL}index`;
         const indexCardItem = this.createStackItem(indexCardId, 0);
         this.addItemToStack(indexCardItem);
       }
