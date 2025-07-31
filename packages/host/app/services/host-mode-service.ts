@@ -8,16 +8,27 @@ export default class HostModeService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
 
   get isActive() {
-    if (!this.fastboot.isFastBoot && config.hostModeUserSubdomainRoot) {
-      let hostModeUserSubdomainRoot = config.hostModeUserSubdomainRoot;
-      let currentHost = window.location.hostname;
-
-      if (currentHost.endsWith(`.${hostModeUserSubdomainRoot}`)) {
+    if (!this.fastboot.isFastBoot) {
+      if (this.simulatingHostMode) {
         return true;
       }
 
-      if (this.simulatingHostMode) {
-        return true;
+      if (config.hostModeUserSubdomainRoot) {
+        let hostModeUserSubdomainRoot = config.hostModeUserSubdomainRoot;
+        let currentHost = window.location.hostname;
+
+        if (currentHost.endsWith(`.${hostModeUserSubdomainRoot}`)) {
+          return true;
+        }
+      }
+
+      if (config.hostModeCustomSubdomainRoot) {
+        let hostModeCustomSubdomainRoot = config.hostModeCustomSubdomainRoot;
+        let currentHost = window.location.hostname;
+
+        if (currentHost.endsWith(`.${hostModeCustomSubdomainRoot}`)) {
+          return true;
+        }
       }
     }
 
