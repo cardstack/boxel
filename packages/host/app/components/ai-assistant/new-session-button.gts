@@ -54,6 +54,12 @@ export default class NewSessionButton extends Component<Signature> {
     this.showMenu = false;
   }
 
+  @action
+  handleCreateNewSessionFromSettings(addSameSkills: boolean) {
+    this.args.onCreateNewSession(addSameSkills);
+    this.closeMenu();
+  }
+
   <template>
     <div class='new-session-button-container'>
       <Tooltip>
@@ -71,7 +77,11 @@ export default class NewSessionButton extends Component<Signature> {
           </Button>
         </:trigger>
         <:content>
-          New Session (Shift+Click for options)
+          {{#if this.showMenu}}
+            New Session
+          {{else}}
+            New Session (Shift+Click for options)
+          {{/if}}
         </:content>
       </Tooltip>
 
@@ -81,6 +91,8 @@ export default class NewSessionButton extends Component<Signature> {
           <NewSessionSettings
             @selectedOptions={{this.selectedOptions}}
             @onOptionChange={{this.updateOption}}
+            @onClose={{this.closeMenu}}
+            @onCreateSession={{this.handleCreateNewSessionFromSettings}}
           />
         </div>
       {{/if}}
@@ -92,7 +104,7 @@ export default class NewSessionButton extends Component<Signature> {
       }
       .new-session-menu-wrapper {
         position: absolute;
-        top: 18px;
+        top: 20px;
         right: 0;
         z-index: 1000;
       }
