@@ -92,6 +92,7 @@ module('Integration | commands | patch-instance', function (hooks) {
           nickNames: [],
           thumbnailURL: null,
           title: null,
+          cardInfo: {},
         },
         'the attributes are correct',
       );
@@ -108,6 +109,7 @@ module('Integration | commands | patch-instance', function (hooks) {
               self: null,
             },
           },
+          'cardInfo.theme': { links: { self: null } },
         },
         'the relationships are correct',
       );
@@ -145,6 +147,7 @@ module('Integration | commands | patch-instance', function (hooks) {
           nickNames: ['Paper'],
           thumbnailURL: null,
           title: null,
+          cardInfo: {},
         },
         'the attributes are correct',
       );
@@ -161,6 +164,7 @@ module('Integration | commands | patch-instance', function (hooks) {
               self: null,
             },
           },
+          'cardInfo.theme': { links: { self: null } },
         },
         'the relationships are correct',
       );
@@ -198,6 +202,7 @@ module('Integration | commands | patch-instance', function (hooks) {
           nickNames: [],
           thumbnailURL: null,
           title: null,
+          cardInfo: {},
         },
         'the attributes are correct',
       );
@@ -214,6 +219,7 @@ module('Integration | commands | patch-instance', function (hooks) {
               self: null,
             },
           },
+          'cardInfo.theme': { links: { self: null } },
         },
         'the relationships are correct',
       );
@@ -252,6 +258,7 @@ module('Integration | commands | patch-instance', function (hooks) {
           nickNames: [],
           thumbnailURL: null,
           title: null,
+          cardInfo: {},
         },
         'the attributes are correct',
       );
@@ -265,6 +272,7 @@ module('Integration | commands | patch-instance', function (hooks) {
           },
           'friends.0': { links: { self: `./germaine` } },
           'friends.1': { links: { self: `./queenzy` } },
+          'cardInfo.theme': { links: { self: null } },
         },
         'the relationships are correct',
       );
@@ -310,6 +318,7 @@ module('Integration | commands | patch-instance', function (hooks) {
           nickNames: ['Air'],
           thumbnailURL: null,
           title: null,
+          cardInfo: {},
         },
         'the attributes are correct',
       );
@@ -322,6 +331,7 @@ module('Integration | commands | patch-instance', function (hooks) {
               self: null,
             },
           },
+          'cardInfo.theme': { links: { self: null } },
         },
         'the relationships are correct',
       );

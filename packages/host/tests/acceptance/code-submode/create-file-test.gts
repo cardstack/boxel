@@ -348,6 +348,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
                 self: null,
               },
             },
+            'cardInfo.theme': { links: { self: null } },
           },
           'relationships data is correct',
         );
@@ -631,8 +632,8 @@ export class TrèsTestCard extends CardDef {
         );
       assert
         .dom('[data-test-total-fields]')
-        .containsText('3')
-        .hasAttribute('title', '3 fields');
+        .containsText('4')
+        .hasAttribute('title', '4 fields');
     });
 
     test<TestContextWithSave>('can create a new card definition in same realm as inherited definition', async function (assert) {
