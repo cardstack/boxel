@@ -10,6 +10,7 @@ export type ApplyButtonState =
   | 'applying'
   | 'applied'
   | 'failed'
+  | 'invalid'
   | 'preparing';
 
 interface Signature {
@@ -52,6 +53,8 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       {{else if (eq @state 'applied')}}
         <CheckMark width='16' height='16' />
       {{else if (eq @state 'failed')}}
+        <Exclamation width='16' height='16' />
+      {{else if (eq @state 'invalid')}}
         <Exclamation width='16' height='16' />
       {{else if (eq @state 'preparing')}}
         <BoxelButton
@@ -169,6 +172,11 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       --icon-color: var(--boxel-light);
       background-color: var(--boxel-error-200);
       border-color: var(--boxel-error-200);
+    }
+    .state-indicator.invalid {
+      --icon-color: var(--boxel-light);
+      background-color: var(--boxel-warning-200);
+      border-color: var(--boxel-warning-200);
     }
 
     @keyframes spin {
