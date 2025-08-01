@@ -87,6 +87,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
           dateTimeField: { type: 'string', format: 'date-time' },
           bigIntegerField: { type: 'string', pattern: '^-?[0-9]+$' },
         },
+        additionalProperties: false,
       },
       relationships: {
         type: 'object',
@@ -131,8 +132,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
             properties: {
               innerStringField: { type: 'string' },
             },
+            additionalProperties: false,
           },
         },
+        additionalProperties: false,
       },
       relationships: {
         type: 'object',
@@ -180,8 +183,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
             properties: {
               innerStringField: { type: 'array', items: { type: 'string' } },
             },
+            additionalProperties: false,
           },
         },
+        additionalProperties: false,
       },
       relationships: {
         type: 'object',
@@ -214,6 +219,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
         description: { type: 'string' },
         thumbnailURL: { type: 'string' },
       },
+      additionalProperties: false,
     };
     let linkedRelationship: RelationshipSchema = {
       type: 'object',
@@ -261,6 +267,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
         description: { type: 'string' },
         thumbnailURL: { type: 'string' },
       },
+      additionalProperties: false,
     };
     let linksToManyRelationship: RelationshipSchema = {
       type: 'object',
@@ -326,10 +333,13 @@ module('Unit | ai-function-generation-test', function (hooks) {
               properties: {
                 name: { type: 'string' },
               },
+              additionalProperties: false,
             },
           },
+          additionalProperties: false,
         },
       },
+      additionalProperties: false,
     };
     let linkedRelationship: RelationshipSchema = {
       type: 'object',
@@ -401,10 +411,13 @@ module('Unit | ai-function-generation-test', function (hooks) {
                 properties: {
                   goalTitle: { type: 'string' },
                 },
+                additionalProperties: false,
               },
             },
+            additionalProperties: false,
           },
         },
+        additionalProperties: false,
       },
       relationships: {
         type: 'object',
@@ -462,6 +475,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
           description: { type: 'string' },
           keepField: { type: 'string' },
         },
+        additionalProperties: false,
       },
       relationships: {
         type: 'object',
@@ -493,6 +507,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
           description: { type: 'string' },
           keepField: { type: 'string' },
         },
+        additionalProperties: false,
       },
       relationships: {
         type: 'object',
@@ -532,8 +547,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
             properties: {
               keepField: { type: 'array', items: { type: 'string' } },
             },
+            additionalProperties: false,
           },
         },
+        additionalProperties: false,
       },
       relationships: {
         type: 'object',
@@ -569,8 +586,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
             properties: {
               innerStringField: { type: 'string' },
             },
+            additionalProperties: false,
           },
         },
+        additionalProperties: false,
       },
       relationships: {
         type: 'object',
@@ -625,8 +644,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
             properties: {
               innerStringField: { type: 'string', description: 'Desc #2' },
             },
+            additionalProperties: false,
           },
         },
+        additionalProperties: false,
       },
       relationships: {
         type: 'object',
@@ -694,6 +715,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
         description: { type: 'string' },
         thumbnailURL: { type: 'string' },
       },
+      additionalProperties: false,
     };
     let relationships: RelationshipsSchema = {
       type: 'object',
@@ -756,6 +778,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
         description: { type: 'string' },
         thumbnailURL: { type: 'string' },
       },
+      additionalProperties: false,
     };
     let relationships: RelationshipsSchema = {
       type: 'object',
@@ -812,9 +835,11 @@ module('Unit | ai-function-generation-test', function (hooks) {
               properties: {
                 innerStringField: { type: 'string' },
               },
+              additionalProperties: false,
             },
           },
         },
+        additionalProperties: false,
       },
       relationships: {
         type: 'object',

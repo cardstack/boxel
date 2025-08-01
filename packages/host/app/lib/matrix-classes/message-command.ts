@@ -16,7 +16,7 @@ import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 
 import { Message } from './message';
 
-type CommandStatus = 'applied' | 'ready' | 'applying';
+type CommandStatus = 'applied' | 'ready' | 'applying' | 'invalid';
 
 export default class MessageCommand {
   @tracked commandRequest: Partial<CommandRequest>;
