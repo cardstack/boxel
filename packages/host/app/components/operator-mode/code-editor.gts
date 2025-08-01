@@ -36,7 +36,6 @@ import {
 } from '@cardstack/host/resources/module-contents';
 
 import { type ModuleAnalysis } from '@cardstack/host/resources/module-contents';
-import type CardService from '@cardstack/host/services/card-service';
 import type { SaveType } from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
@@ -67,7 +66,6 @@ const log = logger('component:code-editor');
 export default class CodeEditor extends Component<Signature> {
   @service private declare monacoService: MonacoService;
   @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare cardService: CardService;
   @service private declare environmentService: EnvironmentService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare store: StoreService;

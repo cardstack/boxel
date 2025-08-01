@@ -12,7 +12,6 @@ import RealmDropdown from '@cardstack/host/components/realm-dropdown';
 import RestoreScrollPosition from '@cardstack/host/modifiers/restore-scroll-position';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import InnerContainer from './inner-container';
@@ -35,7 +34,6 @@ interface Signature {
 
 export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
   @service private declare recentFilesService: RecentFilesService;
 
   private notifyFileBrowserIsVisible: (() => void) | undefined;

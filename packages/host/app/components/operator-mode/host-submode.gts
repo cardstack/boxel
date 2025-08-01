@@ -6,7 +6,6 @@ import Component from '@glimmer/component';
 import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import Store from '@cardstack/host/services/store';
 
 import SubmodeLayout from './submode-layout';
 
@@ -17,7 +16,6 @@ interface HostSubmodeSignature {
 
 export default class HostSubmode extends Component<HostSubmodeSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare store: Store;
 
   <template>
     <SubmodeLayout
