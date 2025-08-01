@@ -2053,7 +2053,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     await click('[data-test-create-room-btn]', { shiftKey: true });
     await click('[data-test-new-session-settings-option="Add Same Skills"]');
-    await click('[data-test-create-room-btn]');
+    await click('[data-test-new-session-settings-create-button]');
     await waitFor('[data-room-settled]');
 
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
@@ -2076,6 +2076,27 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .exists();
     assert
       .dom(`[data-test-skill-toggle="${testRealmURL}Skill/example2-off"`)
+      .exists();
+
+    // Normal click scenario
+    // Enabling create new session by sending a message
+    await fillIn(
+      '[data-test-message-field]',
+      'Enabling create new session button',
+    );
+    await click('[data-test-send-message-btn]');
+    await click('[data-test-create-room-btn]');
+    await waitFor('[data-room-settled]');
+
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await waitFor('[data-test-skill-menu]');
+    assert
+      .dom('[data-test-skill-menu] [data-test-attached-card]')
+      .exists({ count: 1 });
+    assert
+      .dom(
+        `[data-test-skill-menu] [data-test-attached-card="http://localhost:4201/skills/Skill/boxel-environment"]`,
+      )
       .exists();
   });
 });

@@ -56,18 +56,10 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
       disabledSkillFileDefs = [];
     }
 
-    // Combine command definitions from both enabled and disabled skills
-    const allCommandDefinitions = [
+    const uniqueCommandDefinitions = matrixService.getUniqueCommandDefinitions([
       ...(enabledSkills?.flatMap((skill) => skill.commands) || []),
       ...(disabledSkills?.flatMap((skill) => skill.commands) || []),
-    ];
-
-    // Remove duplicates based on command name or ID
-    const uniqueCommandDefinitions = allCommandDefinitions.filter(
-      (command, index, array) =>
-        array.findIndex((cmd) => command.functionName === cmd.functionName) ===
-        index,
-    );
+    ]);
 
     if (uniqueCommandDefinitions.length) {
       commandFileDefs = await matrixService.uploadCommandDefinitions(

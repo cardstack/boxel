@@ -1340,10 +1340,12 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
     // Test tooltip changes when menu is open
     await triggerEvent('[data-test-create-room-btn]', 'mouseenter');
-    await waitFor('[data-test-tooltip-content]');
     assert
       .dom('[data-test-tooltip-content]')
-      .hasText('New Session', 'Tooltip shows correct text when menu is open');
+      .hasText(
+        'Close New Session Settings',
+        'Tooltip shows correct text when menu is open',
+      );
 
     assert
       .dom('[data-test-new-session-settings-title]')
@@ -1401,7 +1403,19 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
     // Test menu opens again on Shift+Click
     await click('[data-test-create-room-btn]', { shiftKey: true });
+    await waitFor('[data-test-new-session-settings-menu]');
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .exists('Menu should be visible after Shift+Click again');
 
+    // Use plus button to close menu
+    await click('[data-test-create-room-btn]');
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .doesNotExist('Menu shoud be hidden after clicking plus button');
+
+    // Test menu opens again on Shift+Click
+    await click('[data-test-create-room-btn]', { shiftKey: true });
     await waitFor('[data-test-new-session-settings-menu]');
     assert
       .dom('[data-test-new-session-settings-menu]')
@@ -1418,7 +1432,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       .dom('[data-test-new-session-settings-menu]')
       .doesNotExist('Menu should be hidden after clicking create button');
 
-    // Make create button enalebed
+    // Make create button enabled
     await fillIn('[data-test-boxel-input-id="ai-chat-input"]', 'Test message');
     await click('[data-test-send-message-btn]');
     // Test menu opens again and create with options selected
@@ -1439,7 +1453,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
         'Menu should be hidden after creating with options selected',
       );
 
-    // Make create button enalebed
+    // Make create button enabled
     await fillIn('[data-test-boxel-input-id="ai-chat-input"]', 'Test message');
     await click('[data-test-send-message-btn]');
     // Test click outside functionality

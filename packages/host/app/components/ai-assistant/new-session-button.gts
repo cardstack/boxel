@@ -17,7 +17,7 @@ import NewSessionSettings from './new-session-settings';
 interface Signature {
   Args: {
     disabled?: boolean;
-    onCreateNewSession: (addSameSkills: boolean) => void;
+    onCreateNewSession: (addSameSkills?: boolean) => void;
   };
 }
 
@@ -37,16 +37,14 @@ export default class NewSessionButton extends Component<Signature> {
 
   @action
   handleCreateNewSession(event: MouseEvent) {
-    // Check if Shift key is pressed
-    if (event.shiftKey) {
+    // Check if Shift key is pressed or menu is open
+    if (event.shiftKey || this.showMenu) {
       event.preventDefault();
       this.showMenu = !this.showMenu;
       return;
     }
 
-    // Normal click behavior
-    const addSameSkills = this.selectedOptions.has('Add Same Skills');
-    this.args.onCreateNewSession(addSameSkills);
+    this.args.onCreateNewSession();
   }
 
   @action
@@ -61,12 +59,11 @@ export default class NewSessionButton extends Component<Signature> {
   }
 
   <template>
-    <div class='new-session-button-container'>
+    <div class='new-session-button-container {{if this.showMenu "menu-open"}}'>
       <Tooltip>
         <:trigger>
           <Button
-            title='New Session'
-            class='button new-session-button {{if this.showMenu "menu-open"}}'
+            class='button new-session-button'
             @kind='text-only'
             @size='extra-small'
             @disabled={{@disabled}}
@@ -78,7 +75,7 @@ export default class NewSessionButton extends Component<Signature> {
         </:trigger>
         <:content>
           {{#if this.showMenu}}
-            New Session
+            Close New Session Settings
           {{else}}
             New Session (Shift+Click for options)
           {{/if}}
@@ -119,7 +116,7 @@ export default class NewSessionButton extends Component<Signature> {
         transform: translateY(-1px);
       }
       .button:hover,
-      .button.menu-open {
+      .new-session-button-container.menu-open .button {
         --boxel-button-text-color: var(--boxel-dark);
         background-color: var(--boxel-highlight);
       }
