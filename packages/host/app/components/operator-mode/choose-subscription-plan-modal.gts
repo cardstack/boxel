@@ -1,6 +1,6 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { action } from '@ember/object';
+
 import { service } from '@ember/service';
 
 import Component from '@glimmer/component';
@@ -10,6 +10,7 @@ import { IconHexagon } from '@cardstack/boxel-ui/icons';
 import BillingService from '@cardstack/host/services/billing-service';
 
 import ModalContainer from '../modal-container';
+import { hash } from '@ember/helper';
 
 interface Signature {
   Element: HTMLButtonElement;
@@ -36,10 +37,6 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
 
   get isPowerUserPlan() {
     return this.currentPlan === 'Power User';
-  }
-
-  @action redirectToStripe(plan: string) {
-    this.billingService.redirectToStripe({ plan });
   }
 
   <template>
@@ -402,7 +399,12 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                   type='button'
                   class='btn btn-teal btn-get-started'
                   data-test-starter-plan-button
-                  {{on 'click' (fn this.redirectToStripe 'Starter')}}
+                  {{on
+                    'click'
+                    (fn
+                      this.billingService.redirectToStripe (hash plan='Starter')
+                    )
+                  }}
                 >{{if this.isStarterPlan 'Manage Plan' 'Get Started'}}</button>
               </div>
               <div class='feature-cell'>
@@ -436,7 +438,12 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                   type='button'
                   class='btn btn-dark btn-get-started'
                   data-test-creator-plan-button
-                  {{on 'click' (fn this.redirectToStripe 'Creator')}}
+                  {{on
+                    'click'
+                    (fn
+                      this.billingService.redirectToStripe (hash plan='Creator')
+                    )
+                  }}
                 >{{if this.isCreatorPlan 'Manage Plan' 'Get Started'}}</button>
               </div>
               <div class='feature-cell'>
@@ -470,7 +477,13 @@ export default class ChooseSubscriptionPlanModal extends Component<Signature> {
                   type='button'
                   class='btn btn-dark btn-get-started'
                   data-test-power-user-plan-button
-                  {{on 'click' (fn this.redirectToStripe 'Power User')}}
+                  {{on
+                    'click'
+                    (fn
+                      this.billingService.redirectToStripe
+                      (hash plan='Power User')
+                    )
+                  }}
                 >{{if
                     this.isPowerUserPlan
                     'Manage Plan'
