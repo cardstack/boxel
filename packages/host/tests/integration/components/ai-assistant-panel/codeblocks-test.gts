@@ -461,6 +461,7 @@ const data = {
 
   test('handles HTML tags outside backticks', async function (this: RenderingTestContext, assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+    await waitForResizeObserver();
     let messageWithHtmlOutsideBackticks = `Here's some HTML outside of code blocks:
 
 <p>This is a paragraph with <strong>bold text</strong> and <em>italic text</em>.</p>
@@ -506,9 +507,6 @@ And another code block without language specified:
     );
 
     await waitFor('[data-test-message-idx="0"]');
-
-    // Wait for any ResizeObserver operations to complete
-    await waitForResizeObserver();
 
     // Check that HTML outside backticks is displayed as actual HTML
     assert.ok(
