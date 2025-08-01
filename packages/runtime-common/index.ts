@@ -87,6 +87,7 @@ import { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './paths';
 export * from './cached-fetch';
+export * from './card-def-meta';
 export * from './catalog';
 export * from './commands';
 export * from './constants';
