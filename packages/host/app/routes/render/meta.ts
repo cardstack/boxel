@@ -25,7 +25,7 @@ export default class RenderRoute extends Route<Model> {
 
   async model() {
     let api = await this.cardService.getAPI();
-    let instance = this.modelFor('render') as ParentModel;
+    let { instance } = this.modelFor('render') as ParentModel;
 
     let serialized = api.serializeCard(instance, {
       includeComputeds: true,

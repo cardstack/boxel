@@ -20,6 +20,8 @@ import {
   trimExecutableExtension,
   DBAdapter,
   query,
+  isCardDefId,
+  trimExportNameFromCardDefId,
 } from '../index';
 
 import { coerceTypes } from '../index-structure';
@@ -252,10 +254,9 @@ async function indexedCardsExpressions({
             ? `${row.url}.json`
             : row.url
           : row.url;
-      row.file_alias = trimExecutableExtension(new URL(row.url)).href.replace(
-        /\.json$/,
-        '',
-      );
+      row.file_alias = isCardDefId(row.url)
+        ? trimExportNameFromCardDefId(row.url)
+        : trimExecutableExtension(new URL(row.url)).href.replace(/\.json$/, '');
       row.type = row.type ?? 'instance';
       row.last_modified = String(row.last_modified ?? now);
 

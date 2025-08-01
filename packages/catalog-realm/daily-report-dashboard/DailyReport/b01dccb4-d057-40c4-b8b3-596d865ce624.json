@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "reportDate": "2025-07-25",
+      "summary": null,
+      "recommendations": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "policyManual": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../daily-report",
+        "name": "DailyReport"
+      }
+    }
+  }
+}

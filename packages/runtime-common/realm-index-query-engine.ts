@@ -9,7 +9,9 @@ import {
   type DBAdapter,
   type QueryOptions,
   type IndexedModuleOrError,
+  type IndexedCardDefOrError,
   type InstanceOrError,
+  type ResolvedCodeRef,
 } from '.';
 import { Realm } from './realm';
 import { RealmPaths } from './paths';
@@ -196,6 +198,13 @@ export class RealmIndexQueryEngine {
     opts?: Options,
   ): Promise<IndexedModuleOrError | undefined> {
     return await this.#indexQueryEngine.getModule(url, opts);
+  }
+
+  async cardDef(
+    codeRef: ResolvedCodeRef,
+    opts?: Options,
+  ): Promise<IndexedCardDefOrError | undefined> {
+    return await this.#indexQueryEngine.getCardDef(codeRef, opts);
   }
 
   async instance(

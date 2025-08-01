@@ -17,7 +17,6 @@ import {
 
 import { CurrentRun } from '../lib/current-run';
 
-import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
 import type NetworkService from '../services/network';
 import type RenderService from '../services/render-service';
@@ -26,7 +25,6 @@ import type RenderService from '../services/render-service';
 // server-side rendering for indexing as well as by the TestRealm
 // to perform rendering for indexing in Ember test contexts.
 export default class CardPrerender extends Component {
-  @service private declare loaderService: LoaderService;
   @service private declare network: NetworkService;
   @service private declare renderService: RenderService;
   @service private declare fastboot: { isFastBoot: boolean };

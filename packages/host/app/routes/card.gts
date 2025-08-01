@@ -3,20 +3,54 @@ import type RouterService from '@ember/routing/router-service';
 import Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
 
+import config from '@cardstack/host/config/environment';
+
+import type HostModeService from '@cardstack/host/services/host-mode-service';
+import type RealmService from '@cardstack/host/services/realm';
+import type RealmServerService from '@cardstack/host/services/realm-server';
+import type StoreService from '@cardstack/host/services/store';
+
 export type ErrorModel = {
   message: string;
   loadType: 'index' | 'card' | 'stack';
   operatorModeState: string;
 };
 
-export default class Card extends Route<void> {
+export default class Card extends Route<ReturnType<StoreService['get']>> {
+  @service declare hostModeService: HostModeService;
+  @service declare realm: RealmService;
+  @service declare realmServer: RealmServerService;
   @service declare router: RouterService;
+  @service declare store: StoreService;
 
   async beforeModel(transition: Transition) {
-    let path = transition.to?.params?.path;
+    if (this.hostModeService.isActive) {
+      return this.realmServer.ready;
+    } else {
+      let path = transition.to?.params?.path;
 
-    await this.router.replaceWith('index', {
-      queryParams: { cardPath: path },
-    });
+      await this.router.replaceWith('index', {
+        queryParams: { cardPath: path },
+      });
+    }
+  }
+
+  async model(params: { path: string }) {
+    let segments = params.path.split('/').filter(Boolean); // remove empty
+    let realm = segments[0];
+    let remainingPath = segments.slice(1).join('/');
+
+    let realmUrlString = `${config.realmServerRoot}${this.hostModeService.userSubdomain}/${realm}/`;
+
+    await this.realm.ensureRealmMeta(realmUrlString);
+
+    let realmUrl = this.realm.url(realmUrlString);
+
+    if (!realmUrl) {
+      throw new Error(`Realm not found: ${realmUrlString}`);
+    }
+
+    let cardUrl = `${realmUrl}${remainingPath}`;
+    return this.store.get(cardUrl);
   }
 }

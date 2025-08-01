@@ -4,13 +4,13 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "ScheduleItem",
-        "module": "../components/ScheduleItem/schedule-item"
+        "name": "AstralGardens",
+        "module": "../astral-garden/astral-garden"
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "ScheduleItem",
-      "description": "Spec of Schedule Item",
+      "title": "AstralGardens",
+      "description": "Spec of AstralGardens",
       "thumbnailURL": null
     },
     "relationships": {

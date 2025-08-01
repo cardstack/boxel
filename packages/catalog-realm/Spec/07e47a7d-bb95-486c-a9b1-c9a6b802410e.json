@@ -4,13 +4,13 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "CalendarEvent",
-        "module": "../components/CalenderEvent/calendar-event"
+        "name": "StylishFashionInfluencerLinktree",
+        "module": "../stylish-fashion-influencer-linktree/stylish-fashion-influencer-linktree"
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "CalendarEvent",
-      "description": "Spec of Calendar Event",
+      "title": "StylishFashionInfluencerLinktree",
+      "description": "Spec of StylishFashionInfluencerLinktree",
       "thumbnailURL": null
     },
     "relationships": {

@@ -1,0 +1,57 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Stylish Fashion Influencer Linktree",
+      "summary": "Professional social media link aggregator with premium fashion influencer design - configure profile details, custom links, and brand colors while viewing animated Brooklyn-to-Austin aesthetic presentations. Features floating sparkle animations, premium ring effects, crown badges, agency representation indicators, and luxury gradient styling for sophisticated influencer brand management.",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/stylish-fashion-influencer-linktree-listing/screenshot_01.png"
+      ],
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/stylish-fashion-influencer-linktree-listing/thumbnail.png"
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/07e47a7d-bb95-486c-a9b1-c9a6b802410e"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/marketing-growth"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../stylish-fashion-influencer-linktree/StylishFashionInfluencerLinktree/0a0f8894-494b-47e4-9e7a-6c733812501f"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "CardListing"
+      }
+    }
+  }
+}

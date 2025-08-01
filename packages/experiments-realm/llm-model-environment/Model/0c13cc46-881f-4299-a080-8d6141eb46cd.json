@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "google/gemini-2.0-flash-lite-001",
+      "modelName": "Gemini 2.0 Flash Lite",
+      "displayName": "Gemini 2.0 Flash Lite",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../model",
+        "name": "Model"
+      }
+    }
+  }
+}

@@ -2,6 +2,8 @@ import { service } from '@ember/service';
 
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
+import { uniqBy } from 'lodash';
+
 import {
   isCardInstance,
   loadCardDef,
@@ -28,6 +30,9 @@ import * as BaseCommandModule from 'https://cardstack.com/base/command';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import HostBaseCommand from '../lib/host-base-command';
+import { skillCardURL } from '../lib/utils';
+
+import UseAiAssistantCommand from './ai-assistant';
 
 import type CardService from '../services/card-service';
 import type NetworkService from '../services/network';
@@ -117,25 +122,31 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
   private async guessSpecType(
     selectedDeclaration: ModuleDeclaration,
-  ): Promise<SpecType> {
-    if (selectedDeclaration.type === 'possibleCardOrField') {
-      if (
-        selectedDeclaration.super?.type === 'external' &&
-        selectedDeclaration.super.name === 'CardDef'
-      ) {
+  ): Promise<SpecType | undefined> {
+    if (
+      selectedDeclaration.type === 'possibleCardOrField' &&
+      selectedDeclaration.super?.type === 'external'
+    ) {
+      if (selectedDeclaration.super.name === 'CardDef') {
         if (this.isApp(selectedDeclaration)) {
           return 'app';
         }
         return 'card';
       }
-      if (
-        selectedDeclaration.super?.type === 'external' &&
-        selectedDeclaration.super.name === 'FieldDef'
-      ) {
+      if (selectedDeclaration.super.name === 'FieldDef') {
         return 'field';
       }
+      if (
+        selectedDeclaration.super.module === '@glimmer/component' ||
+        (selectedDeclaration.super.name === 'Component' &&
+          selectedDeclaration.super.module ===
+            'https://cardstack.com/base/card-api')
+      ) {
+        return 'component';
+      }
+      return 'card';
     }
-    throw new Error('Unidentified spec');
+    return undefined;
   }
 
   private sanitizeDeps(deps: string[]) {
@@ -207,46 +218,49 @@ export default class ListingCreateCommand extends HostBaseCommand<
       let moduleSource = (await this.cardService.getSource(url)).content;
       let moduleSyntax = new ModuleSyntax(moduleSource, url);
 
-      const moduleDeclaration = moduleSyntax.declarations.find(
+      const moduleDeclarations = moduleSyntax.declarations.filter(
         (declaration) => declaration.exportName !== undefined,
       );
-      if (!moduleDeclaration) {
-        throw new Error('Module declaration not found');
-      }
-      const specType = await this.guessSpecType(
-        moduleDeclaration as CardOrFieldDeclaration,
-      );
 
-      if (moduleDeclaration) {
-        moduleRefs.push({
-          fromModule: dep,
-          codeRefName: moduleDeclaration.exportName || '',
-          specType,
-        });
+      for (const moduleDeclaration of moduleDeclarations) {
+        const specType = await this.guessSpecType(
+          moduleDeclaration as CardOrFieldDeclaration,
+        );
+        if (moduleDeclaration && specType) {
+          moduleRefs.push({
+            fromModule: dep,
+            codeRefName: moduleDeclaration.exportName || '',
+            specType,
+          });
+        }
       }
     }
-
     // create spec from gts
-    for (const moduleRef of moduleRefs) {
-      const spec = await this.createSpecTask(
-        {
-          module: moduleRef.fromModule,
-          name: moduleRef.codeRefName || '',
-        },
-        moduleRef.specType,
-        targetRealm,
-      );
-      if (spec !== undefined) {
-        specIds.push(spec.id || '');
-      }
-    }
+    await Promise.all(
+      moduleRefs.map(async (moduleRef) => {
+        const spec = await this.createSpecTask(
+          {
+            module: moduleRef.fromModule,
+            name: moduleRef.codeRefName || '',
+          },
+          moduleRef.specType,
+          targetRealm,
+        );
+        if (spec !== undefined) {
+          specIds.push(spec.id || '');
+        }
+      }),
+    );
+
+    // dedupe same module refs to identify the listing type
+    const dedupedModuleRefs = uniqBy(moduleRefs, 'fromModule');
 
     // guess listing type
     // if there is no gts to install, we assume it's a skill
-    if (moduleRefs.length === 0) {
+    if (dedupedModuleRefs.length === 0) {
       guessListingType = 'skill';
     }
-    if (moduleRefs.length > 1) {
+    if (dedupedModuleRefs.length > 1) {
       guessListingType = 'app';
     }
 
@@ -283,9 +297,22 @@ export default class ListingCreateCommand extends HostBaseCommand<
       },
     };
 
-    await this.store.add(listingDoc, {
+    const listing = await this.store.add(listingDoc, {
       realm: targetRealm,
-      doNotWaitForPersist: true,
+    });
+
+    await new UseAiAssistantCommand(this.commandContext).execute({
+      prompt: `Update information for the listing and redirect to the listing, find the possible category and tags for the listing based in catalog-realm`,
+      roomId: 'new',
+      openRoom: true,
+      llmModel: 'anthropic/claude-sonnet-4',
+      llmMode: 'act',
+      openCardIds: [listing.id!],
+      attachedCards: [listing as CardAPI.CardDef],
+      skillCardIds: [
+        skillCardURL('boxel-environment'),
+        skillCardURL('catalog-listing'),
+      ],
     });
   }
 }
