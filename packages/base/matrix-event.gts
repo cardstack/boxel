@@ -291,13 +291,16 @@ export interface CommandDefinitionSchema {
   tool: Tool;
 }
 
+export type CommandResultStatus = 'applied' | 'failed' | 'invalid';
+
 export interface CommandResultWithOutputContent {
   'm.relates_to': {
     rel_type: typeof APP_BOXEL_COMMAND_RESULT_REL_TYPE;
-    key: string;
+    key: CommandResultStatus;
     event_id: string;
   };
   commandRequestId: string;
+  failureReason?: string; // only present if status is 'failed' or 'invalid'
   data: {
     // we retrieve the content on the server side by downloading the file
     card?: SerializedFile & { content?: string; error?: string };
@@ -311,11 +314,12 @@ export interface CommandResultWithOutputContent {
 export interface CommandResultWithNoOutputContent {
   'm.relates_to': {
     rel_type: typeof APP_BOXEL_COMMAND_RESULT_REL_TYPE;
-    key: string;
+    key: CommandResultStatus;
     event_id: string;
   };
   msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE;
   commandRequestId: string;
+  failureReason?: string; // only present if status is 'failed' or 'invalid'
   data: {
     context?: BoxelContext;
     attachedFiles?: (SerializedFile & { content?: string; error?: string })[];

@@ -20,6 +20,7 @@ export type ObjectSchema = {
     [fieldName: string]: AttributesSchema;
   };
   required?: string[];
+  additionalProperties?: boolean;
 };
 
 export type LinksToSchema = {
@@ -339,6 +340,7 @@ function generateJsonSchemaForContainsFields(
   let schema: ObjectSchema = {
     type: 'object',
     properties: {},
+    additionalProperties: false,
   };
 
   const { id: _removedIdField, ...fields } = cardApi.getFields(def, {
@@ -379,6 +381,7 @@ function generateJsonSchemaForContainsFields(
       schema.properties[fieldName].description = field.description;
     }
   }
+  schema.additionalProperties = false;
   return schema;
 }
 
