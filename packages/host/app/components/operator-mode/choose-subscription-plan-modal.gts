@@ -1,4 +1,5 @@
 import { fn } from '@ember/helper';
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 
 import { service } from '@ember/service';
@@ -10,7 +11,6 @@ import { IconHexagon } from '@cardstack/boxel-ui/icons';
 import BillingService from '@cardstack/host/services/billing-service';
 
 import ModalContainer from '../modal-container';
-import { hash } from '@ember/helper';
 
 interface Signature {
   Element: HTMLButtonElement;
