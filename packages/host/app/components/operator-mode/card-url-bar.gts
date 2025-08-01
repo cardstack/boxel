@@ -14,7 +14,6 @@ import URLBarResource, {
 
 import type RealmService from '@cardstack/host/services/realm';
 
-import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 interface Signature {
@@ -180,7 +179,6 @@ export default class CardURLBar extends Component<Signature> {
   </template>
 
   @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare cardService: CardService;
   @service private declare realm: RealmService;
 
   private urlBar: URLBarResource = urlBarResource(this, () => ({

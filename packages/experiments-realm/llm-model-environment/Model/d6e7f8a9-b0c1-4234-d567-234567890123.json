@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "deepseek/deepseek-r1-distill-qwen-7b",
+      "modelName": "DeepSeek R1 Distill",
+      "displayName": "DeepSeek R1 Distill - Multilingual QA & Translation",
+      "forAssistantUse": false
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../model",
+        "name": "Model"
+      }
+    }
+  }
+}

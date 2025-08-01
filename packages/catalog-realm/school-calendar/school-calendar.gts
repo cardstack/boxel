@@ -7,8 +7,8 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import DateField from 'https://cardstack.com/base/date';
-import { CalendarEvent } from './components/CalenderEvent/calendar-event';
-import { ScheduleItem } from './components/ScheduleItem/schedule-item';
+import { CalendarEvent } from './components/calendar-event';
+import { ScheduleItem } from './components/schedule-item';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
 import { dayjsFormat } from '@cardstack/boxel-ui/helpers';
 

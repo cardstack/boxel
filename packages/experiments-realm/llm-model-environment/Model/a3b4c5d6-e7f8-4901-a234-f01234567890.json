@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "google/gemini-2.5-flash-preview",
+      "modelName": "Gemini Flash Preview",
+      "displayName": "Gemini Flash Preview - Interactive Chat Testing",
+      "forAssistantUse": false
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../model",
+        "name": "Model"
+      }
+    }
+  }
+}

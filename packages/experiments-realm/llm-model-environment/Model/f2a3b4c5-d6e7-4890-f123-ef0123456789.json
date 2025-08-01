@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "google/gemini-2.5-flash-lite-preview-06-17",
+      "modelName": "Gemini Flash Lite",
+      "displayName": "Gemini Flash Lite - Edge Deployment",
+      "forAssistantUse": false
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../model",
+        "name": "Model"
+      }
+    }
+  }
+}

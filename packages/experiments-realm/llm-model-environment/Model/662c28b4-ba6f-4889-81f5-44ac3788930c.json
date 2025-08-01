@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "anthropic/claude-3.7-sonnet:thinking",
+      "modelName": "Claude 3.7 Sonnet Thinking",
+      "displayName": "Claude 3.7 - Thinking Model",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../model",
+        "name": "Model"
+      }
+    }
+  }
+}

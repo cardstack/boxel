@@ -18,6 +18,7 @@ import OpenAiAssistantRoomCommand from './open-ai-assistant-room';
 import SendAiAssistantMessageCommand from './send-ai-assistant-message';
 import SetActiveLLMCommand from './set-active-llm';
 
+import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
 
 export default class UseAiAssistantCommand extends HostBaseCommand<
@@ -26,6 +27,7 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
 > {
   @service declare private store: StoreService;
   @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private matrixService: MatrixService;
 
   #cardAPI?: typeof CardAPI;
 
@@ -55,33 +57,53 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
     let loadSkillsPromise = this.maybeLoadSkillCards(input, roomId);
     let attachedCardsPromise = this.ensureAttachedCardsLoaded(input);
     let setActiveLLMPromise = this.maybeSetActiveLLM(input, roomId);
+    let setLLMModePromise = this.maybeSetLLMMode(input, roomId);
     await Promise.all([
       openRoomPromise,
       loadSkillsPromise,
       attachedCardsPromise,
       setActiveLLMPromise,
+      setLLMModePromise,
     ]);
-    let sendMessageCommand = new SendAiAssistantMessageCommand(
-      this.commandContext,
-    );
-    let sendMessageResult = await sendMessageCommand.execute({
-      roomId,
-      prompt: input.prompt,
-      clientGeneratedId: input.clientGeneratedId,
-      attachedCards: [...(await attachedCardsPromise)],
-      attachedFileURLs: input.attachedFileURLs,
-      openCardIds: input.openCardIds,
-      realmUrl: this.operatorModeStateService.realmURL.href,
-    });
-    return sendMessageResult;
+
+    // Only send message if prompt is provided
+    if (input.prompt && input.prompt.trim() !== '') {
+      let sendMessageCommand = new SendAiAssistantMessageCommand(
+        this.commandContext,
+      );
+      let sendMessageResult = await sendMessageCommand.execute({
+        roomId,
+        prompt: input.prompt,
+        clientGeneratedId: input.clientGeneratedId,
+        attachedCards: [...(await attachedCardsPromise)],
+        attachedFileURLs: input.attachedFileURLs,
+        openCardIds: input.openCardIds,
+        realmUrl: this.operatorModeStateService.realmURL.href,
+      });
+      return sendMessageResult;
+    }
+
+    // Return a result indicating no message was sent
+    let commandModule = await this.loadCommandModule();
+    const { SendAiAssistantMessageResult } = commandModule;
+    return new SendAiAssistantMessageResult({ roomId });
   }
 
   async createRoomIfNeeded(
     input: BaseCommandModule.UseAiAssistantInput,
   ): Promise<string> {
+    // If a specific roomId is provided and it's not 'new', use that room
     if (input.roomId && input.roomId !== 'new') {
       return input.roomId;
     }
+
+    // Check if there's a current room open (only when roomId is not 'new')
+    let currentRoomId = this.matrixService.currentRoomId;
+    if (input.roomId !== 'new' && currentRoomId) {
+      return currentRoomId;
+    }
+
+    // Create a new room if no roomId is provided and no current room exists
     let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
       this.commandContext,
     );
@@ -176,6 +198,15 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
         roomId,
         model: input.llmModel,
       });
+    }
+  }
+
+  async maybeSetLLMMode(
+    input: BaseCommandModule.UseAiAssistantInput,
+    roomId: string,
+  ): Promise<void> {
+    if (input.llmMode) {
+      await this.matrixService.sendLLMModeEvent(roomId, input.llmMode as any);
     }
   }
 }

@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "alfredpros/codellama-7b-instruct-solidity",
+      "modelName": "CodeLlama 7B Solidity",
+      "displayName": "CodeLlama 7B - Solidity Smart Contracts",
+      "forAssistantUse": false
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../model",
+        "name": "Model"
+      }
+    }
+  }
+}

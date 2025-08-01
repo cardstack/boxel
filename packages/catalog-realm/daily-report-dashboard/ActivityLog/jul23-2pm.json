@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "timestamp": "2025-07-23T14:00:00Z",
+      "activity": "Completed Station 3 maintenance check as scheduled. Found minor calibration issue which was corrected. Equipment now running at optimal levels. Vendor contact successful - new delivery date confirmed for Monday. Updating project timeline accordingly."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../activity-log",
+        "name": "ActivityLog"
+      }
+    }
+  }
+}

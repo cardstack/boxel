@@ -62,8 +62,6 @@ import { StackItem } from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
-import type MatrixService from '@cardstack/host/services/matrix-service';
-
 import type {
   CardContext,
   CardDef,
@@ -133,7 +131,6 @@ export default class InteractSubmode extends Component {
 
   @service private declare cardService: CardService;
   @service private declare commandService: CommandService;
-  @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare store: StoreService;
   @service private declare realm: Realm;

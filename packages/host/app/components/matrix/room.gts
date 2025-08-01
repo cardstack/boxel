@@ -52,7 +52,6 @@ import { RoomResource } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
-import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -67,6 +66,7 @@ import type { Skill } from 'https://cardstack.com/base/skill';
 import AiAssistantActionBar from '../ai-assistant/action-bar';
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
+import LLMModeToggle from '../ai-assistant/llm-mode-toggle';
 import LLMSelect from '../ai-assistant/llm-select';
 import { AiAssistantConversation } from '../ai-assistant/message';
 import NewSession from '../ai-assistant/new-session';
@@ -204,6 +204,14 @@ export default class Room extends Component<Signature> {
                     @onCollapse={{fn this.setSelectedBottomAction undefined}}
                   />
                 {{/if}}
+                {{#if this.displayLLMModeSelect}}
+                  <LLMModeToggle
+                    class='llm-mode-toggle'
+                    @selected={{@roomResource.activeLLMMode}}
+                    @onChange={{perform @roomResource.activateLLMModeTask}}
+                    @disabled={{@roomResource.isActivatingLLMMode}}
+                  />
+                {{/if}}
               </div>
             </div>
           </AiAssistantAttachmentPicker>
@@ -284,6 +292,11 @@ export default class Room extends Component<Signature> {
         padding: 0;
       }
 
+      .llm-mode-toggle {
+        margin-left: auto;
+        flex-shrink: 0;
+      }
+
       :deep(.ai-assistant-conversation > *:first-child) {
         margin-top: auto;
       }
@@ -328,7 +341,6 @@ export default class Room extends Component<Signature> {
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare loaderService: LoaderService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
   @service private declare specPanelService: SpecPanelService;
 
@@ -980,6 +992,10 @@ export default class Room extends Component<Signature> {
     );
   }
 
+  private get displayLLMModeSelect() {
+    return this.displaySkillMenu && this.displayLLMSelect;
+  }
+
   private get displayAttachedItems() {
     return (
       this.filesToAttach?.length ||
@@ -1007,17 +1023,7 @@ export default class Room extends Component<Signature> {
   private get readyCodePatches() {
     let lastMessage = this.messages[this.messages.length - 1];
     if (!lastMessage || !lastMessage.htmlParts) return [];
-    let result = [];
-    for (let i = 0; i < lastMessage.htmlParts.length; i++) {
-      let htmlPart = lastMessage.htmlParts[i];
-      let codeData = htmlPart.codeData;
-      if (!codeData || !codeData.searchReplaceBlock) continue;
-      let status = this.commandService.getCodePatchStatus(codeData);
-      if (status && status === 'ready') {
-        result.push(codeData);
-      }
-    }
-    return result;
+    return this.commandService.getReadyCodePatches(lastMessage.htmlParts);
   }
 
   private get generatingResults() {
@@ -1055,20 +1061,13 @@ export default class Room extends Component<Signature> {
   }
 
   private async executeReadyCodePatches() {
-    // Group code patches by fileUrl
-    let grouped: Record<string, typeof this.readyCodePatches> = {};
-    for (let codeData of this.readyCodePatches) {
-      if (!codeData.fileUrl) continue;
-      if (!grouped[codeData.fileUrl]) grouped[codeData.fileUrl] = [];
-      grouped[codeData.fileUrl].push(codeData);
-    }
-    for (let [fileUrl, codeDataItems] of Object.entries(grouped)) {
-      await this.commandService.patchCode(
-        codeDataItems[0].roomId,
-        fileUrl,
-        codeDataItems,
-      );
-    }
+    let lastMessage = this.messages[this.messages.length - 1];
+    if (!lastMessage || !lastMessage.htmlParts) return;
+
+    await this.commandService.executeReadyCodePatches(
+      this.args.roomId,
+      lastMessage.htmlParts,
+    );
   }
 
   private executeAllReadyActionsTask = task(async () => {

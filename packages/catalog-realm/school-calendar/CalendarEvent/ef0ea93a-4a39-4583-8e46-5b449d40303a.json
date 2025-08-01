@@ -19,7 +19,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../components/CalenderEvent/calendar-event",
+        "module": "../components/calendar-event",
         "name": "CalendarEvent"
       }
     }

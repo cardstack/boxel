@@ -30,7 +30,6 @@ test.describe('Workspace Chooser', () => {
     await setupUserSubscribed('@user1:localhost', realmServer);
     await login(page, 'user1', 'pass', {
       url: serverIndexUrl,
-      skipOpeningAssistant: true,
     });
     await createRealm(page, realm1Name);
     await page.goto(realm1URL);

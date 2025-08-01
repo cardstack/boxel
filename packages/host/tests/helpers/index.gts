@@ -30,6 +30,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import {
+  testHostModeRealmURL,
   testRealmInfo,
   testRealmURL,
   testRealmURLToUsername,
@@ -60,7 +61,13 @@ import visitOperatorMode from './visit-operator-mode';
 
 import type { MockUtils } from './mock-matrix/_utils';
 
-export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
+export {
+  visitOperatorMode,
+  testHostModeRealmURL,
+  testRealmURL,
+  testRealmInfo,
+  percySnapshot,
+};
 export * from '@cardstack/runtime-common/helpers';
 export * from '@cardstack/runtime-common/helpers/indexer';
 

@@ -14,6 +14,7 @@ declare const config: {
   matrixURL: string;
   matrixServerName: string;
 
+  realmServerRoot: string;
   resolvedBaseRealmURL: string;
   resolvedSkillsRealmURL: string;
   hostModeDomainRoot?: string;
@@ -33,5 +34,6 @@ declare const config: {
   stripePaymentLink: string;
   featureFlags?: {
     SHOW_ASK_AI?: boolean;
+    SHOW_NEW_SESSION_SETTINGS?: boolean;
   };
 };

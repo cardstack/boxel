@@ -258,6 +258,7 @@ export default class PillMenu extends Component<Signature> {
         transform: rotate(180deg);
         transform-origin: center;
         margin-left: var(--boxel-sp-xs);
+        flex-shrink: 0;
       }
 
       @keyframes scroll-pill-menu-content {

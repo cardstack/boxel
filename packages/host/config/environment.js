@@ -39,13 +39,17 @@ module.exports = function (environment) {
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
 
     // the fields below may be rewritten by the realm server
+    hostModeDomainRoot: process.env.HOST_MODE_DOMAIN_ROOT || 'localhost',
     hostsOwnAssets: true,
+    realmServerRoot: process.env.REALM_SERVER_ROOT || 'http://localhost:4201/',
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
     resolvedSkillsRealmURL:
       process.env.RESOLVED_SKILLS_REALM_URL || 'http://localhost:4201/skills/',
     featureFlags: {
       SHOW_ASK_AI: process.env.SHOW_ASK_AI === 'true' || false,
+      SHOW_NEW_SESSION_SETTINGS:
+        process.env.SHOW_NEW_SESSION_SETTINGS === 'true' || false,
     },
   };
 
@@ -55,6 +59,7 @@ module.exports = function (environment) {
     // ENV.APP.LOG_TRANSITIONS = true;
     // ENV.APP.LOG_TRANSITIONS_INTERNAL = true;
     // ENV.APP.LOG_VIEW_LOOKUPS = true;
+    ENV.featureFlags.SHOW_NEW_SESSION_SETTINGS = true;
   }
 
   if (environment === 'test') {
@@ -70,12 +75,14 @@ module.exports = function (environment) {
     ENV.autoSaveDelayMs = 0;
     ENV.monacoDebounceMs = 0;
     ENV.monacoCursorDebounceMs = 0;
+    ENV.realmServerRoot = 'http://test-realm/';
     ENV.serverEchoDebounceMs = 0;
     ENV.loginMessageTimeoutMs = 0;
     ENV.minSaveTaskDurationMs = 0;
     ENV.sqlSchema = sqlSchema;
     ENV.featureFlags = {
       SHOW_ASK_AI: true,
+      SHOW_NEW_SESSION_SETTINGS: true,
     };
   }
 
