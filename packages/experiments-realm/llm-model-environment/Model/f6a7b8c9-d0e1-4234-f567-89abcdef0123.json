@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "x-ai/grok-3-mini",
+      "modelName": "Grok 3 Mini",
+      "displayName": "Grok 3 Mini - Compact Real-time Factual Assistance",
+      "forAssistantUse": false
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../model",
+        "name": "Model"
+      }
+    }
+  }
+}

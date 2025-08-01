@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "anthropic/claude-opus-4",
+      "modelName": "Claude Opus 4",
+      "displayName": "Claude Opus 4",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../model",
+        "name": "Model"
+      }
+    }
+  }
+}

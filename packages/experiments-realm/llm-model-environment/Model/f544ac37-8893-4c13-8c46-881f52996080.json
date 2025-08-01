@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "deepseek/deepseek-chat-v3-0324",
+      "modelName": "DeepSeek V3 0324",
+      "displayName": "DeepSeek V3 0324",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../model",
+        "name": "Model"
+      }
+    }
+  }
+}
