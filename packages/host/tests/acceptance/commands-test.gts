@@ -696,6 +696,58 @@ module('Acceptance | Commands tests', function (hooks) {
     );
   });
 
+  test('rendering a command request without a description fallsback to attributes.description', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    // open assistant
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+    // open skill menu
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    // add useful-commands skill, which includes the switch-submode command
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/useful-commands"]',
+    );
+    await click('[data-test-card-catalog-go-button]');
+    // simulate message
+    let roomId = getRoomIds().pop()!;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: '',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '29e8addb-197b-4d6d-b0a9-547959bf7c96',
+          name: buildCommandFunctionName({
+            module: `${testRealmURL}search-and-open-card-command`,
+            name: 'default',
+          }),
+          arguments: JSON.stringify({
+            attributes: {
+              description: 'Finding and opening Hassan card',
+              title: 'Hassan',
+            },
+          }),
+        },
+      ],
+    });
+    // Click on the apply button
+    await waitFor('[data-test-message-idx="0"]');
+    assert
+      .dom('[data-test-message-idx="0"] .command-description')
+      .containsText('Finding and opening Hassan card');
+  });
+
   test('ShowCard command added from a skill, can be automatically executed when agentId matches', async function (assert) {
     await visitOperatorMode({
       stacks: [
