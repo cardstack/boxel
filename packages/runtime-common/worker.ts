@@ -356,7 +356,7 @@ export class Worker {
     let batch = await this.#indexWriter.createBatch(new URL(args.realmURL));
     await batch.copyFrom(new URL(args.sourceRealmURL), realmInfo);
     let result = await batch.done();
-    let invalidations = await batch.getInvalidations();
+    let invalidations = batch.invalidations;
     this.#log.debug(
       `${jobIdentity(args.jobInfo)} completed copy indexing for realm ${args.realmURL}:\n${JSON.stringify(
         result,

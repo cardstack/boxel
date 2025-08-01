@@ -82,7 +82,7 @@ const tests = Object.freeze({
 
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
     await batch.invalidate([new URL(`${testRealmURL}4.json`)]);
-    let invalidations = await batch.getInvalidations();
+    let invalidations = batch.invalidations;
 
     assert.deepEqual(invalidations.sort(), [
       `${testRealmURL}1.json`,
@@ -195,7 +195,7 @@ const tests = Object.freeze({
 
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
     await batch.invalidate([new URL(`${testRealmURL}person.gts`)]);
-    let invalidations = await batch.getInvalidations();
+    let invalidations = batch.invalidations;
 
     assert.deepEqual(invalidations.sort(), [
       `${testRealmURL}1.json`,
@@ -292,7 +292,7 @@ const tests = Object.freeze({
 
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
     await batch.invalidate([new URL(`${testRealmURL}person.gts`)]);
-    let invalidations = await batch.getInvalidations();
+    let invalidations = batch.invalidations;
 
     // the card def id's are notional, they are not file resources that can be
     // visited, so instead we return the module that contains the card def
@@ -378,7 +378,7 @@ const tests = Object.freeze({
     );
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
     await batch.invalidate([new URL(`${testRealmURL}person.gts`)]);
-    let invalidations = await batch.getInvalidations();
+    let invalidations = batch.invalidations;
 
     // invalidations currently do not cross realm boundaries (probably they
     // will in the future--but via a different mechanism)
@@ -1337,7 +1337,7 @@ const tests = Object.freeze({
 
       let batch = await indexWriter.createBatch(new URL(testRealmURL));
       await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
-      let invalidations = await batch.getInvalidations();
+      let invalidations = batch.invalidations;
 
       assert.ok(invalidations.length > 1000, 'Can invalidate more than 1000');
       assert.deepEqual(

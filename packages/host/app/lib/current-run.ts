@@ -219,7 +219,7 @@ export class CurrentRun {
       current.#jobInfo,
     );
     await current.batch.invalidate(urls);
-    let invalidations = (await current.batch.getInvalidations()).map(
+    let invalidations = current.batch.invalidations.map(
       (href) => new URL(href),
     );
 
@@ -369,7 +369,7 @@ export class CurrentRun {
     perfLog.debug(
       `${jobIdentity(this.#jobInfo)} time to invalidate ${url} ${Date.now() - invalidationStart} ms`,
     );
-    return await this.batch.getInvalidations();
+    return this.batch.invalidations;
   }
 
   private async visitFile(

@@ -276,7 +276,7 @@ async function markFailedIndexEntry({
   let indexWriter = new IndexWriter(adapter);
   let batch = await indexWriter.createBatch(new URL(realm));
   await batch.invalidate([new URL(url)]);
-  let invalidations = await batch.getInvalidations();
+  let invalidations = batch.invalidations;
   for (let file of [url, ...invalidations]) {
     await batch.updateEntry(new URL(file), {
       type: 'error',
