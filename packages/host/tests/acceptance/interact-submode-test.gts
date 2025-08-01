@@ -1675,7 +1675,10 @@ module('Acceptance | interact submode tests', function (hooks) {
         '[data-test-operator-mode-stack="0"] [data-test-close-button]',
       );
 
-      assert.dom('[data-test-workspace-chooser]').exists();
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .doesNotExist();
+      assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
     });
 
     test<TestContextWithSave>('can create a card when 2 stacks are present', async function (assert) {
@@ -2080,6 +2083,43 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
       await click('[data-test-more-options-button]');
       assert.dom('[data-test-boxel-menu-item-text="Delete"]').doesNotExist();
+    });
+
+    test('opens index card when non-index card is closed and workspace chooser opens when index card is closed', async function (assert) {
+      // Start with a non-index card in the stack
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      // Verify the non-index card is displayed
+      assert.dom('[data-test-stack-card-index="0"]').includesText('Fadhlan');
+      assert.dom('[data-test-workspace-chooser]').doesNotExist();
+
+      // Close the non-index card
+      await click('[data-test-stack-card-index="0"] [data-test-close-button]');
+
+      // Verify that an index card is automatically added to the stack
+      assert.dom('[data-test-stack-card-index="0"]').exists();
+      assert
+        .dom(
+          '[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]',
+        )
+        .hasText('Workspace - Test Workspace B');
+      assert.dom('[data-test-workspace-chooser]').doesNotExist();
+
+      // Close the index card
+      await click('[data-test-stack-card-index="0"] [data-test-close-button]');
+
+      // Verify that the workspace chooser opens
+      assert.dom('[data-test-workspace-chooser]').exists();
+      assert.dom('[data-test-operator-mode-stack]').doesNotExist();
     });
   });
 });
