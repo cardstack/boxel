@@ -109,7 +109,6 @@ export default class SubmodeLayout extends Component<Signature> {
 
   private loadPersistedAiPanelWidth() {
     const persistedWidth = window.localStorage.getItem(AiAssistantPanelWidth);
-    console.log(persistedWidth);
     this.aiPanelWidths.defaultWidth = Number(persistedWidth) ?? 30;
   }
 
