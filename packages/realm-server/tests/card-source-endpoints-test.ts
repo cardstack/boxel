@@ -212,6 +212,39 @@ module(basename(__filename), function () {
         });
       });
 
+      module('published realm', function (hooks) {
+        setupPermissionedRealm(hooks, {
+          permissions: {
+            '*': ['read'],
+          },
+          onRealmSetup,
+        });
+
+        test('serves the request', async function (assert) {
+          let response = await request
+            .get('/person.gts')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'realm url header is correct',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'realm is public readable',
+          );
+          let result = response.text.trim();
+          assert.strictEqual(result, cardSrc, 'the card source is correct');
+          assert.ok(
+            response.headers['last-modified'],
+            'last-modified header exists',
+          );
+        });
+      });
+
       module('permissioned realm', function (hooks) {
         setupPermissionedRealm(hooks, {
           permissions: {

@@ -744,6 +744,7 @@ export function setupPermissionedRealm(
     onRealmSetup,
     subscribeToRealmEvents = false,
     mode = 'beforeEach',
+    published = false,
   }: {
     permissions: RealmPermissions;
     fileSystem?: Record<string, string | LooseSingleCardDocument>;
@@ -758,6 +759,7 @@ export function setupPermissionedRealm(
     }) => void;
     subscribeToRealmEvents?: boolean;
     mode?: 'beforeEach' | 'before';
+    published?: boolean;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -771,7 +773,33 @@ export function setupPermissionedRealm(
       runner: QueueRunner,
     ) => {
       let dir = dirSync();
-      let testRealmDir = join(dir.name, 'realm_server_1', 'test');
+
+      let testRealmDir;
+
+      if (published) {
+        let publishedRealmId = '50b263e8-9dda-47da-967a-e1bc89751aee';
+        testRealmDir = join(
+          dir.name,
+          'realm_server_1',
+          '_published',
+          publishedRealmId,
+        );
+
+        dbAdapter.execute(
+          `INSERT INTO
+            published_realms
+            (id, owner_username, source_realm_url, published_realm_url)
+            VALUES
+            (
+              '${publishedRealmId}',
+              'FIXME does it matter',
+              'FIXME does this matter',
+              '${testRealmHref}'
+            )`,
+        );
+      } else {
+        testRealmDir = join(dir.name, 'realm_server_1', 'test');
+      }
 
       ensureDirSync(testRealmDir);
 
