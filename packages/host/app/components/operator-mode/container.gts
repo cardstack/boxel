@@ -21,6 +21,7 @@ import {
   GetCardsContextName,
   GetCardCollectionContextName,
 } from '@cardstack/runtime-common';
+import { type CardContext } from 'https://cardstack.com/base/card-api';
 
 import Auth from '@cardstack/host/components/matrix/auth';
 
@@ -89,10 +90,8 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   @provide(CardContextName)
-  private get cardContext(): Omit<
-    CardContext,
-    'prerenderedCardSearchComponent'
-  > {
+  // @ts-ignore "getCardCollection" is declared but not used
+  private get cardContext(): Omit<CardContext> {
     return {
       getCard: this.getCard,
       getCards: this.getCards,

@@ -116,7 +116,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @consume(GetCardsContextName) private declare getCards: getCards;
   @consume(GetCardCollectionContextName)
   private declare getCardCollection: getCardCollection;
-  @consume(CardContextName) private declare parentCardContext: CardContext;
+  @consume(CardContextName) private declare cardContext: CardContext;
 
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -250,7 +250,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private get context(): StackItemCardContext {
     return {
       cardComponentModifier: this.cardTracker.trackElement,
-      ...cardContext,
+      ...this.cardContext,
     };
   }
 
