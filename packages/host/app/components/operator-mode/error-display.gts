@@ -124,7 +124,7 @@ export default class ErrorDisplay extends Component<Signature> {
           <div class='detail-item'>
             <div class='detail-title'>Stack trace:</div>
             {{#if @stack}}
-              <pre data-test-error-stack>{{@stack}}</pre>
+              <pre data-test-error-stack data-test-percy-hide>{{@stack}}</pre>
             {{else}}
               <p class='no-stack-message'>No stack trace is available. This
                 could be because the error occurred in a context where stack
