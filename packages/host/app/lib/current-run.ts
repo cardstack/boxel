@@ -24,7 +24,7 @@ import {
   jobIdentity,
   getFieldMeta,
   type ResolvedCodeRef,
-  type CardDefMeta,
+  type FieldsMeta,
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
@@ -105,10 +105,10 @@ export class CurrentRun {
   readonly stats: Stats = {
     instancesIndexed: 0,
     modulesIndexed: 0,
-    cardDefsIndexed: 0,
+    metasIndexed: 0,
     instanceErrors: 0,
     moduleErrors: 0,
-    cardDefErrors: 0,
+    metaErrors: 0,
     totalIndexEntries: 0,
   };
   @service declare private loaderService: LoaderService;
@@ -483,14 +483,14 @@ export class CurrentRun {
         `${jobIdentity(this.#jobInfo)} skipping indexing of shimmed module ${url.href}`,
       );
 
-      // for testing purposes we'll still generate card def meta for shimmed cards,
+      // for testing purposes we'll still generate meta for shimmed cards,
       // however the deps will only be the shimmed file
-      for (let [name, maybeCardDef] of Object.entries(module)) {
-        if (isBaseDef(maybeCardDef)) {
-          await this.indexCardDef({
+      for (let [name, maybeBaseDef] of Object.entries(module)) {
+        if (isBaseDef(maybeBaseDef)) {
+          await this.indexMeta({
             name,
             url: trimExecutableExtension(url),
-            cardOrFieldDef: maybeCardDef,
+            cardOrFieldDef: maybeBaseDef,
             lastModified: 0,
             resourceCreatedAt: 0,
             deps: [trimExecutableExtension(url).href],
@@ -513,12 +513,12 @@ export class CurrentRun {
     });
     this.stats.modulesIndexed++;
 
-    for (let [name, maybeCardDef] of Object.entries(module)) {
-      if (isBaseDef(maybeCardDef)) {
-        await this.indexCardDef({
+    for (let [name, maybeBaseDef] of Object.entries(module)) {
+      if (isBaseDef(maybeBaseDef)) {
+        await this.indexMeta({
           name,
           url: trimExecutableExtension(url),
-          cardOrFieldDef: maybeCardDef,
+          cardOrFieldDef: maybeBaseDef,
           lastModified: ref.lastModified,
           resourceCreatedAt: ref.created,
           deps: [...deps, trimExecutableExtension(url).href],
@@ -527,7 +527,7 @@ export class CurrentRun {
     }
   }
 
-  private async indexCardDef({
+  private async indexMeta({
     url,
     name,
     cardOrFieldDef,
@@ -551,7 +551,7 @@ export class CurrentRun {
       );
       let fields = getFieldMeta(api, cardOrFieldDef);
       let codeRef = identifyCard(cardOrFieldDef) as ResolvedCodeRef;
-      let meta: CardDefMeta = {
+      let meta: FieldsMeta = {
         codeRef,
         fields,
         type: isCardDef(cardOrFieldDef) ? 'card-def' : 'field-def',
@@ -563,9 +563,9 @@ export class CurrentRun {
         ? await this.getTypes(cardOrFieldDef)
         : { type: 'types' as const, types: [] };
       if (typesMaybeError.type === 'error') {
-        this.stats.cardDefErrors++;
+        this.stats.metaErrors++;
         log.warn(
-          `${jobIdentity(this.#jobInfo)} encountered error indexing CardDef "${url.href}/${name}": ${typesMaybeError.error.message}`,
+          `${jobIdentity(this.#jobInfo)} encountered error indexing Meta "${url.href}/${name}": ${typesMaybeError.error.message}`,
         );
         let error = {
           type: 'error',
@@ -575,7 +575,7 @@ export class CurrentRun {
         return;
       }
       await this.batch.updateEntry(codeRefURL, {
-        type: 'card-def',
+        type: 'meta',
         fileAlias: url.href,
         meta,
         lastModified,
@@ -583,17 +583,17 @@ export class CurrentRun {
         deps: new Set(deps),
         types: typesMaybeError.types.map(({ refURL }) => refURL),
       });
-      this.stats.cardDefsIndexed++;
+      this.stats.metasIndexed++;
     } catch (err: any) {
-      this.stats.cardDefErrors++;
+      this.stats.metaErrors++;
       log.warn(
-        `${jobIdentity(this.#jobInfo)} encountered error indexing CardDef "${url.href}/${name}": ${err.message}`,
+        `${jobIdentity(this.#jobInfo)} encountered error indexing Meta "${url.href}/${name}": ${err.message}`,
       );
       await this.batch.updateEntry(codeRefURL, {
         type: 'error',
         error: {
           status: err.status ?? 500,
-          message: `encountered error indexing CardDef "${url.href}/${name}": ${err.message}`,
+          message: `encountered error indexing Meta "${url.href}/${name}": ${err.message}`,
           additionalErrors: null,
           deps,
         },

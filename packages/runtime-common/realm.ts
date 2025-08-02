@@ -394,7 +394,7 @@ export class Realm {
         SupportedMimeType.Permissions,
         this.patchRealmPermissions.bind(this),
       )
-      .get('/_card-def', SupportedMimeType.JSONAPI, this.getCardDef.bind(this))
+      .get('/_meta', SupportedMimeType.JSONAPI, this.getMeta.bind(this))
       .get(
         '/_readiness-check',
         SupportedMimeType.RealmInfo,
@@ -2297,7 +2297,7 @@ export class Realm {
     });
   }
 
-  private async getCardDef(
+  private async getMeta(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
@@ -2319,7 +2319,7 @@ export class Realm {
     let useWorkInProgressIndex = Boolean(
       request.headers.get('X-Boxel-Building-Index'),
     );
-    let maybeError = await this.#realmIndexQueryEngine.getOwnCardDef(codeRef, {
+    let maybeError = await this.#realmIndexQueryEngine.getOwnMeta(codeRef, {
       useWorkInProgressIndex,
     });
     if (!maybeError) {
@@ -2329,7 +2329,7 @@ export class Realm {
     if (maybeError.type === 'error') {
       return systemError({
         requestContext,
-        message: `cannot get card def meta, ${request.url}, from index: ${maybeError.error.message}`,
+        message: `cannot get meta, ${request.url}, from index: ${maybeError.error.message}`,
         id,
         additionalError: CardError.fromSerializableError(maybeError.error),
         // This is based on https://jsonapi.org/format/#errors
@@ -2351,7 +2351,7 @@ export class Realm {
     let doc: CardAPI.JSONAPISingleResourceDocument = {
       data: {
         id,
-        type: 'card-def',
+        type: 'meta',
         attributes: {
           ...meta,
         },
@@ -2599,7 +2599,7 @@ export class Realm {
       doc.data.meta.adoptsFrom,
       relativeTo,
     ) as ResolvedCodeRef;
-    let meta = await this.realmIndexQueryEngine.getCardDef(absoluteCodeRef);
+    let meta = await this.realmIndexQueryEngine.getMeta(absoluteCodeRef);
     if (!meta) {
       throw new Error(
         `Could not find card definition for: ${JSON.stringify(absoluteCodeRef)}`,
@@ -2642,7 +2642,7 @@ export class Realm {
               relativeTo,
             ) as ResolvedCodeRef;
             let fieldMeta =
-              await this.realmIndexQueryEngine.getCardDef(absoluteCodeRef);
+              await this.realmIndexQueryEngine.getMeta(absoluteCodeRef);
             if (fieldMeta) {
               for (const [subFieldName, subFieldMeta] of Object.entries(
                 fieldMeta.fields,
@@ -2667,7 +2667,7 @@ export class Realm {
           relativeTo,
         ) as ResolvedCodeRef;
         let fieldMeta =
-          await this.realmIndexQueryEngine.getCardDef(absoluteCodeRef);
+          await this.realmIndexQueryEngine.getMeta(absoluteCodeRef);
         if (fieldMeta) {
           for (const [subFieldName, subFieldMeta] of Object.entries(
             fieldMeta.fields,

@@ -160,8 +160,8 @@ module(`Integration | realm indexing`, function (hooks) {
         instancesIndexed: 2,
         moduleErrors: 0,
         modulesIndexed: 1,
-        cardDefErrors: 0,
-        cardDefsIndexed: 1,
+        metaErrors: 0,
+        metasIndexed: 1,
         totalIndexEntries: 4,
       },
       'indexer stats are correct',
@@ -187,11 +187,11 @@ module(`Integration | realm indexing`, function (hooks) {
       } as LooseSingleCardDocument),
     );
 
-    let metaEntry = await realm.realmIndexQueryEngine.getOwnCardDef({
+    let metaEntry = await realm.realmIndexQueryEngine.getOwnMeta({
       module: `${testRealmURL}pet`,
       name: 'Pet',
     });
-    assert.strictEqual(metaEntry?.type, 'card-def', 'meta entry exists');
+    assert.strictEqual(metaEntry?.type, 'meta', 'meta entry exists');
 
     await realm.fullIndex();
 
@@ -202,8 +202,8 @@ module(`Integration | realm indexing`, function (hooks) {
         instancesIndexed: 1,
         moduleErrors: 0,
         modulesIndexed: 0,
-        cardDefErrors: 0,
-        cardDefsIndexed: 0,
+        metaErrors: 0,
+        metasIndexed: 0,
         totalIndexEntries: 4,
       },
       'indexer stats are correct',
@@ -211,11 +211,11 @@ module(`Integration | realm indexing`, function (hooks) {
 
     // meta entries are notional so we want to make sure they didn't
     // get tombstoned because the file wasn't found
-    metaEntry = await realm.realmIndexQueryEngine.getOwnCardDef({
+    metaEntry = await realm.realmIndexQueryEngine.getOwnMeta({
       module: `${testRealmURL}pet`,
       name: 'Pet',
     });
-    assert.strictEqual(metaEntry?.type, 'card-def', 'meta entry exists');
+    assert.strictEqual(metaEntry?.type, 'meta', 'meta entry exists');
   });
 
   test('can recover from indexing a card with a broken link', async function (assert) {
@@ -3228,8 +3228,8 @@ module(`Integration | realm indexing`, function (hooks) {
         instancesIndexed: 3,
         moduleErrors: 0,
         modulesIndexed: 0,
-        cardDefErrors: 0,
-        cardDefsIndexed: 0,
+        metaErrors: 0,
+        metasIndexed: 0,
         totalIndexEntries: 3,
       },
       'instances are indexed without error',

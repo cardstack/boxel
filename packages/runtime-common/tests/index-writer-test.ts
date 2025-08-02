@@ -205,7 +205,7 @@ const tests = Object.freeze({
     ]);
   },
 
-  'card def entries can be invalidated': async (
+  'meta entries can be invalidated': async (
     assert,
     { indexQueryEngine, indexWriter, adapter },
   ) => {
@@ -230,7 +230,7 @@ const tests = Object.freeze({
         {
           url: `${testRealmURL}person/Person`,
           file_alias: `${testRealmURL}person`,
-          type: 'card-def',
+          type: 'meta',
           realm_version: 1,
           realm_url: testRealmURL,
           deps: [`${testRealmURL}person`],
@@ -250,7 +250,7 @@ const tests = Object.freeze({
         {
           url: `${testRealmURL}employee/Employee`,
           file_alias: `${testRealmURL}employee`,
-          type: 'card-def',
+          type: 'meta',
           realm_version: 1,
           realm_url: testRealmURL,
           deps: [`${testRealmURL}employee`, `${testRealmURL}person`],
@@ -294,8 +294,8 @@ const tests = Object.freeze({
     await batch.invalidate([new URL(`${testRealmURL}person.gts`)]);
     let invalidations = batch.invalidations;
 
-    // the card def id's are notional, they are not file resources that can be
-    // visited, so instead we return the module that contains the card def
+    // the meta id's are notional, they are not file resources that can be
+    // visited, so instead we return the module that contains the meta
     assert.deepEqual(invalidations.sort(), [
       `${testRealmURL}1.json`,
       `${testRealmURL}2.json`,
@@ -303,16 +303,16 @@ const tests = Object.freeze({
       `${testRealmURL}person.gts`,
     ]);
 
-    let personCardDef = await indexQueryEngine.getOwnCardDef({
+    let personMeta = await indexQueryEngine.getOwnMeta({
       module: `${testRealmURL}person`,
       name: 'Person',
     });
     assert.strictEqual(
-      personCardDef?.type,
-      'card-def',
-      'card-def exists in production index',
+      personMeta?.type,
+      'meta',
+      'meta exists in production index',
     );
-    personCardDef = await indexQueryEngine.getOwnCardDef(
+    personMeta = await indexQueryEngine.getOwnMeta(
       {
         module: `${testRealmURL}person`,
         name: 'Person',
@@ -320,20 +320,20 @@ const tests = Object.freeze({
       { useWorkInProgressIndex: true },
     );
     assert.strictEqual(
-      personCardDef,
+      personMeta,
       undefined,
-      'card-def has been marked for deletion in working index',
+      'meta entry has been marked for deletion in working index',
     );
-    let employeeCardDef = await indexQueryEngine.getOwnCardDef({
+    let employeeMeta = await indexQueryEngine.getOwnMeta({
       module: `${testRealmURL}employee`,
       name: 'Employee',
     });
     assert.strictEqual(
-      employeeCardDef?.type,
-      'card-def',
-      'card-def exists in production index',
+      employeeMeta?.type,
+      'meta',
+      'meta exists in production index',
     );
-    employeeCardDef = await indexQueryEngine.getOwnCardDef(
+    employeeMeta = await indexQueryEngine.getOwnMeta(
       {
         module: `${testRealmURL}employee`,
         name: 'Employee',
@@ -341,9 +341,9 @@ const tests = Object.freeze({
       { useWorkInProgressIndex: true },
     );
     assert.strictEqual(
-      employeeCardDef,
+      employeeMeta,
       undefined,
-      'card-def has been marked for deletion in working index',
+      'meta entry has been marked for deletion in working index',
     );
   },
 
@@ -663,7 +663,7 @@ const tests = Object.freeze({
           url: `${testRealmURL}person/Person`,
           realm_version: 1,
           realm_url: testRealmURL,
-          type: 'card-def',
+          type: 'meta',
           source: null,
           transpiled_code: null,
           pristine_doc: null,
@@ -714,13 +714,13 @@ const tests = Object.freeze({
       'correct number of items were copied',
     );
 
-    let [copiedInstance, copiedModule, copiedCardDef] = results;
+    let [copiedInstance, copiedModule, copiedMeta] = results;
     assert.ok(copiedInstance.indexed_at, 'indexed_at was set');
     assert.ok(copiedModule.indexed_at, 'indexed_at was set');
 
     delete (copiedInstance as Partial<BoxelIndexTable>).indexed_at;
     delete (copiedModule as Partial<BoxelIndexTable>).indexed_at;
-    delete (copiedCardDef as Partial<BoxelIndexTable>).indexed_at;
+    delete (copiedMeta as Partial<BoxelIndexTable>).indexed_at;
 
     assert.deepEqual(
       copiedInstance as Omit<BoxelIndexTable, 'indexed_at'>,
@@ -811,13 +811,13 @@ const tests = Object.freeze({
     );
 
     assert.deepEqual(
-      copiedCardDef as Omit<BoxelIndexTable, 'indexed_at'>,
+      copiedMeta as Omit<BoxelIndexTable, 'indexed_at'>,
       {
         url: `${testRealmURL2}person/Person`,
         file_alias: `${testRealmURL2}person`,
         realm_version: 2,
         realm_url: testRealmURL2,
-        type: 'card-def',
+        type: 'meta',
         source: null,
         transpiled_code: null,
         error_doc: null,
@@ -854,7 +854,7 @@ const tests = Object.freeze({
           },
         },
       },
-      'the copied card def is correct',
+      'the copied meta is correct',
     );
   },
 
@@ -1481,7 +1481,7 @@ const tests = Object.freeze({
     );
   },
 
-  'can get a card-def entry': async (
+  'can get a meta entry': async (
     assert,
     { indexWriter, indexQueryEngine, adapter },
   ) => {
@@ -1492,7 +1492,7 @@ const tests = Object.freeze({
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person/Person`), {
-      type: 'card-def',
+      type: 'meta',
       fileAlias: `${testRealmURL}person`,
       types,
       lastModified: now,
@@ -1520,12 +1520,12 @@ const tests = Object.freeze({
     });
     await batch.done();
 
-    let result = await indexQueryEngine.getOwnCardDef({
+    let result = await indexQueryEngine.getOwnMeta({
       module: `${testRealmURL}person`,
       name: 'Person',
     });
 
-    if (result?.type === 'card-def') {
+    if (result?.type === 'meta') {
       assert.deepEqual(result.deps, types, 'the deps are correct');
       assert.deepEqual(
         result.meta,
@@ -1551,11 +1551,11 @@ const tests = Object.freeze({
         'the meta is correct',
       );
     } else {
-      assert.ok(false, `expected card-def not to be an error document`);
+      assert.ok(false, `expected meta entry not to be an error document`);
     }
   },
 
-  'can get a card-def entry from the working index': async (
+  'can get a meta entry from the working index': async (
     assert,
     { indexWriter, indexQueryEngine, adapter },
   ) => {
@@ -1566,7 +1566,7 @@ const tests = Object.freeze({
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person/Person`), {
-      type: 'card-def',
+      type: 'meta',
       fileAlias: `${testRealmURL}person`,
       types,
       lastModified: now,
@@ -1593,7 +1593,7 @@ const tests = Object.freeze({
       },
     });
 
-    let result = await indexQueryEngine.getOwnCardDef(
+    let result = await indexQueryEngine.getOwnMeta(
       {
         module: `${testRealmURL}person`,
         name: 'Person',
@@ -1601,7 +1601,7 @@ const tests = Object.freeze({
       { useWorkInProgressIndex: true },
     );
 
-    if (result?.type === 'card-def') {
+    if (result?.type === 'meta') {
       assert.deepEqual(result.deps, types, 'the deps are correct');
       assert.deepEqual(
         result.meta,
@@ -1627,17 +1627,17 @@ const tests = Object.freeze({
         'the meta is correct',
       );
     } else {
-      assert.ok(false, `expected card-def not to be an error document`);
+      assert.ok(false, `expected meta entry not to be an error document`);
     }
 
-    let noResult = await indexQueryEngine.getOwnCardDef({
+    let noResult = await indexQueryEngine.getOwnMeta({
       module: `${testRealmURL}person`,
       name: 'Person',
     });
     assert.strictEqual(
       noResult,
       undefined,
-      'card-def does not exist in production index',
+      'meta entry does not exist in production index',
     );
   },
 

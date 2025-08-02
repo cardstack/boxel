@@ -24,7 +24,7 @@ import './realm-endpoints/mtimes-test';
 import './realm-endpoints/permissions-test';
 import './realm-endpoints/search-test';
 import './realm-endpoints/user-test';
-import './realm-endpoints/card-def-test';
+import './realm-endpoints/meta-test';
 import './search-prerendered-test';
 import './server-endpoints-test';
 import './transpile-test';

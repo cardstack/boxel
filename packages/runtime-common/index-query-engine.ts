@@ -72,8 +72,8 @@ interface IndexedModule {
   deps: string[] | null;
 }
 
-interface IndexedCardDef {
-  type: 'card-def';
+interface IndexedMeta {
+  type: 'meta';
   meta: FieldsMeta;
   types: string[] | null;
   lastModified: number | null;
@@ -129,7 +129,7 @@ interface InstanceError
 
 export type InstanceOrError = IndexedInstance | InstanceError;
 export type IndexedModuleOrError = IndexedModule | IndexedError;
-export type IndexedCardDefOrError = IndexedCardDef | IndexedError;
+export type IndexedMetaOrError = IndexedMeta | IndexedError;
 
 type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions & PrerenderedCardOptions;
@@ -190,10 +190,10 @@ export class IndexQueryEngine {
     return this.#query(await this.makeExpression(query));
   }
 
-  async getOwnCardDef(
+  async getOwnMeta(
     codeRef: ResolvedCodeRef,
     opts?: GetEntryOptions,
-  ): Promise<IndexedCardDefOrError | undefined> {
+  ): Promise<IndexedMetaOrError | undefined> {
     let cleansedCodeRef = { ...codeRef };
     cleansedCodeRef.module = trimExecutableExtension(
       new URL(cleansedCodeRef.module),
@@ -206,7 +206,7 @@ export class IndexQueryEngine {
       ...every([
         any([[`i.url =`, param(key)]]),
         any([
-          ['i.type =', param('card-def')],
+          ['i.type =', param('meta')],
           ['i.type =', param('error')],
         ]),
       ]),
@@ -229,7 +229,7 @@ export class IndexQueryEngine {
       resource_created_at: resourceCreatedAt,
     } = cardDefEntry;
     return {
-      type: 'card-def',
+      type: 'meta',
       meta,
       lastModified: lastModified != null ? parseInt(lastModified) : null,
       resourceCreatedAt: parseInt(resourceCreatedAt),
@@ -384,7 +384,7 @@ export class IndexQueryEngine {
 
   // the code ref we are looking for might not reside on this server so we need
   // to use the public Realm API to retrieve it
-  public async getCardDef(
+  public async getMeta(
     codeRef: CodeRef,
     opts?: WIPOptions,
   ): Promise<FieldsMeta> {
@@ -422,7 +422,7 @@ export class IndexQueryEngine {
         `could not determine realm URL for ${codeRef.module} when getting card def meta for ${stringify(codeRef)}`,
       );
     }
-    let url = `${realmURL}_card-def?${qs.stringify({ codeRef })}`;
+    let url = `${realmURL}_meta?${qs.stringify({ codeRef })}`;
     let response: Response;
     try {
       response = await this.#fetch(url, {
@@ -982,7 +982,7 @@ export class IndexQueryEngine {
 
   private async handleFieldArity(fieldArity: FieldArity): Promise<Expression> {
     let { path, value, type, pluralValue, usePluralContainer } = fieldArity;
-    let meta = await this.getCardDef(type);
+    let meta = await this.getMeta(type);
     let exp: CardExpression = await this.walkFilterFieldPath(
       meta,
       path,
@@ -1019,7 +1019,7 @@ export class IndexQueryEngine {
 
   private async handleFieldQuery(fieldQuery: FieldQuery): Promise<Expression> {
     let { path, type, useJsonBValue } = fieldQuery;
-    let meta = await this.getCardDef(type);
+    let meta = await this.getMeta(type);
     // The rootPluralPath should line up with the tableValuedTree that was
     // used in the handleFieldArity (the multiple tableValuedTree expressions will
     // collapse into a single function)
@@ -1083,7 +1083,7 @@ export class IndexQueryEngine {
 
   private async handleFieldValue(fieldValue: FieldValue): Promise<Expression> {
     let { path, value, type } = fieldValue;
-    let meta = await this.getCardDef(type);
+    let meta = await this.getMeta(type);
     let exp = await this.makeExpression(value);
 
     return await this.walkFilterFieldPath(

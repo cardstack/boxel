@@ -61,11 +61,7 @@ export class IndexWriter {
   }
 }
 
-export type IndexEntry =
-  | InstanceEntry
-  | ModuleEntry
-  | CardDefEntry
-  | ErrorEntry;
+export type IndexEntry = InstanceEntry | ModuleEntry | MetaEntry | ErrorEntry;
 export type LastModifiedTimes = Map<
   string,
   { type: string; lastModified: number | null }
@@ -103,8 +99,8 @@ interface ModuleEntry {
   deps: Set<string>;
 }
 
-interface CardDefEntry {
-  type: 'card-def';
+interface MetaEntry {
+  type: 'meta';
   meta: FieldsMeta;
   types: string[];
   fileAlias: string;
@@ -133,7 +129,7 @@ export class Batch {
   get invalidations() {
     // the card def id's are notional, they are not file resources that can be
     // visited, so we don't expose them to the outside world
-    return [...this.#invalidations].filter((i) => !isCardDefId(i));
+    return [...this.#invalidations].filter((i) => !isMetaId(i));
   }
 
   @Memoize()
@@ -149,16 +145,16 @@ export class Batch {
        FROM boxel_index as i
           WHERE i.realm_url =`,
       param(this.realmURL.href),
-      // card-def are notional so we skip over those
-      `AND type != 'card-def'`,
+      // meta entries are notional so we skip over those
+      `AND type != 'meta'`,
     ] as Expression)) as Pick<
       BoxelIndexTable,
       'url' | 'type' | 'last_modified'
     >[];
     let result: LastModifiedTimes = new Map();
     for (let { url, type, last_modified: lastModified } of results) {
-      // there might be errors docs from card-defs that we need to strip out
-      if (isCardDefId(url)) {
+      // there might be errors docs from meta entries that we need to strip out
+      if (isMetaId(url)) {
         continue;
       }
       result.set(url, {
@@ -256,7 +252,7 @@ export class Batch {
               ).href,
               name: entry.meta.codeRef.name,
             },
-            fields: this.cardDefMetaWithCopiedCodeRefs(
+            fields: this.fieldsMetaWithCopiedCodeRefs(
               sourceRealmURL,
               entry.meta.fields,
             ),
@@ -331,9 +327,9 @@ export class Batch {
               ),
               error_doc: null,
             }
-          : entry.type === 'card-def'
+          : entry.type === 'meta'
             ? {
-                type: 'card-def',
+                type: 'meta',
                 meta: entry.meta,
                 types: entry.types,
                 file_alias: entry.fileAlias,
@@ -577,13 +573,13 @@ export class Batch {
     let rows = invalidations.map((id) =>
       [
         id,
-        isCardDefId(id)
-          ? trimExportNameFromCardDefId(id)
+        isMetaId(id)
+          ? trimExportNameFromMetaId(id)
           : trimExecutableExtension(new URL(id)).href,
         hasExecutableExtension(id)
           ? 'module'
-          : isCardDefId(id)
-            ? 'card-def'
+          : isMetaId(id)
+            ? 'meta'
             : 'instance',
         this.realmVersion,
         this.realmURL.href,
@@ -646,16 +642,16 @@ export class Batch {
     {
       url: string;
       alias: string;
-      type: 'instance' | 'module' | 'card-def' | 'error';
+      type: 'instance' | 'module' | 'meta' | 'error';
     }[]
   > {
     let start = Date.now();
     const pageSize = 1000;
     let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: 'instance' | 'module' | 'card-def' | 'error';
+      type: 'instance' | 'module' | 'meta' | 'error';
     })[] = [];
     let rows: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: 'instance' | 'module' | 'card-def' | 'error';
+      type: 'instance' | 'module' | 'meta' | 'error';
     })[] = [];
     let pageNumber = 0;
     do {
@@ -687,7 +683,7 @@ export class Batch {
         ]),
         `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
       ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-        type: 'instance' | 'card-def' | 'module' | 'error';
+        type: 'instance' | 'meta' | 'module' | 'error';
       })[];
       results = [...results, ...rows];
       pageNumber++;
@@ -721,9 +717,9 @@ export class Batch {
       type === 'instance'
         ? // for instances we expect that the deps for an entry always includes .json extension
           url
-        : type === 'card-def'
-          ? // for card-defs we expect that the deps for an entry doesn't include the final export name path segment
-            trimExportNameFromCardDefId(url)
+        : type === 'meta'
+          ? // for meta we expect that the deps for an entry doesn't include the final export name path segment
+            trimExportNameFromMetaId(url)
           : moduleAlias,
     );
     let results = [
@@ -758,7 +754,7 @@ export class Batch {
     return result;
   }
 
-  private cardDefMetaWithCopiedCodeRefs(
+  private fieldsMetaWithCopiedCodeRefs(
     fromRealm: URL,
     fieldsMeta: FieldsMeta['fields'],
   ): FieldsMeta['fields'] {
@@ -799,10 +795,10 @@ export class Batch {
   }
 }
 
-export function isCardDefId(id: string) {
+export function isMetaId(id: string) {
   return !id.split('/').pop()!.includes('.'); // URL without an extension
 }
 
-export function trimExportNameFromCardDefId(id: string) {
+export function trimExportNameFromMetaId(id: string) {
   return id.split('/').slice(0, -1).join('/');
 }

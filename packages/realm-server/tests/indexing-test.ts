@@ -634,12 +634,12 @@ module(basename(__filename), function () {
       }
     });
 
-    test('can make a card def entry in the index', async function (assert) {
-      let entry = await realm.realmIndexQueryEngine.getOwnCardDef({
+    test('can make a meta entry in the index', async function (assert) {
+      let entry = await realm.realmIndexQueryEngine.getOwnMeta({
         module: `${testRealm}post.gts`,
         name: 'Post',
       });
-      if (entry?.type === 'card-def') {
+      if (entry?.type === 'meta') {
         assert.ok(entry.lastModified, 'last modified date is set');
         assert.ok(entry.resourceCreatedAt, 'created date is set');
         assert.deepEqual(
@@ -832,8 +832,8 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          cardDefErrors: 0,
-          cardDefsIndexed: 0,
+          metaErrors: 0,
+          metasIndexed: 0,
           totalIndexEntries: 26,
         },
         'indexed correct number of files',
@@ -862,13 +862,13 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          cardDefErrors: 0,
-          cardDefsIndexed: 0,
+          metaErrors: 0,
+          metasIndexed: 0,
           totalIndexEntries: 20,
         },
         'indexed correct number of files',
       );
-      let petCardDefEntry = await realm.realmIndexQueryEngine.getOwnCardDef({
+      let petCardDefEntry = await realm.realmIndexQueryEngine.getOwnMeta({
         module: `${testRealm}pet`,
         name: 'Pet',
       });
@@ -892,8 +892,8 @@ module(basename(__filename), function () {
           instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
           moduleErrors: 3, // post, fancy person, person
           modulesIndexed: 0,
-          cardDefErrors: 0,
-          cardDefsIndexed: 0,
+          metaErrors: 0,
+          metasIndexed: 0,
           totalIndexEntries: 11,
         },
         'indexed correct number of files',
@@ -908,7 +908,7 @@ module(basename(__filename), function () {
         [],
         'the broken type results in no instance results',
       );
-      let personCardDefEntry = await realm.realmIndexQueryEngine.getOwnCardDef({
+      let personCardDefEntry = await realm.realmIndexQueryEngine.getOwnMeta({
         module: `${testRealm}person`,
         name: 'Person',
       });
@@ -918,7 +918,7 @@ module(basename(__filename), function () {
         'Person card def does not exist',
       );
       let fancyPersonCardDefEntry =
-        await realm.realmIndexQueryEngine.getOwnCardDef({
+        await realm.realmIndexQueryEngine.getOwnMeta({
           module: `${testRealm}fancy-person`,
           name: 'FancyPerson',
         });
@@ -946,8 +946,8 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          cardDefErrors: 0,
-          cardDefsIndexed: 3, // Person card, Post card, FancyPerson card
+          metaErrors: 0,
+          metasIndexed: 3, // Person card, Post card, FancyPerson card
           totalIndexEntries: 20,
         },
         'indexed correct number of files',
@@ -964,24 +964,22 @@ module(basename(__filename), function () {
         2,
         'correct number of instances returned',
       );
-      personCardDefEntry = await realm.realmIndexQueryEngine.getOwnCardDef({
+      personCardDefEntry = await realm.realmIndexQueryEngine.getOwnMeta({
         module: `${testRealm}person`,
         name: 'Person',
       });
       assert.strictEqual(
         personCardDefEntry?.type,
-        'card-def',
+        'meta',
         'Person card def has recovered',
       );
-      fancyPersonCardDefEntry = await realm.realmIndexQueryEngine.getOwnCardDef(
-        {
-          module: `${testRealm}fancy-person`,
-          name: 'FancyPerson',
-        },
-      );
+      fancyPersonCardDefEntry = await realm.realmIndexQueryEngine.getOwnMeta({
+        module: `${testRealm}fancy-person`,
+        name: 'FancyPerson',
+      });
       assert.strictEqual(
         fancyPersonCardDefEntry?.type,
-        'card-def',
+        'meta',
         'FancyPerson card def has recovered',
       );
     });
@@ -1006,13 +1004,13 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          cardDefErrors: 0,
-          cardDefsIndexed: 0,
+          metaErrors: 0,
+          metasIndexed: 0,
           totalIndexEntries: 20,
         },
         'indexed correct number of files',
       );
-      let petCardDefEntry = await realm.realmIndexQueryEngine.getOwnCardDef({
+      let petCardDefEntry = await realm.realmIndexQueryEngine.getOwnMeta({
         module: `${testRealm}pet`,
         name: 'Pet',
       });
@@ -1043,13 +1041,13 @@ module(basename(__filename), function () {
         'module',
         'Name module is successfully indexed',
       );
-      petCardDefEntry = await realm.realmIndexQueryEngine.getOwnCardDef({
+      petCardDefEntry = await realm.realmIndexQueryEngine.getOwnMeta({
         module: `${testRealm}pet`,
         name: 'Pet',
       });
       assert.strictEqual(
         petCardDefEntry?.type,
-        'card-def',
+        'meta',
         'Pet card def has recovered',
       );
 
@@ -1061,8 +1059,8 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          cardDefErrors: 0,
-          cardDefsIndexed: 3,
+          metaErrors: 0,
+          metasIndexed: 3,
           totalIndexEntries: 27,
         },
         'indexed correct number of files',
@@ -1102,8 +1100,8 @@ module(basename(__filename), function () {
           moduleErrors: 2,
           modulesIndexed: 0,
 
-          cardDefErrors: 0,
-          cardDefsIndexed: 0,
+          metaErrors: 0,
+          metasIndexed: 0,
           totalIndexEntries: 20,
         },
         'instance and module are in error state before dependency is available',
@@ -1182,8 +1180,8 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          cardDefErrors: 0,
-          cardDefsIndexed: 0,
+          metaErrors: 0,
+          metasIndexed: 0,
           totalIndexEntries: 25,
         },
         'index did not touch any files',
@@ -1225,8 +1223,8 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 1,
-          cardDefErrors: 0,
-          cardDefsIndexed: 1,
+          metaErrors: 0,
+          metasIndexed: 1,
           totalIndexEntries: 26,
         },
         'indexed correct number of files',
@@ -1269,8 +1267,8 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          cardDefErrors: 0,
-          cardDefsIndexed: 3,
+          metaErrors: 0,
+          metasIndexed: 3,
           totalIndexEntries: 26,
         },
         'indexed correct number of files',
@@ -1322,8 +1320,8 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 0,
           modulesIndexed: 0,
-          cardDefErrors: 0,
-          cardDefsIndexed: 0,
+          metaErrors: 0,
+          metasIndexed: 0,
           totalIndexEntries: 23,
         },
         'indexed correct number of files',
@@ -1365,8 +1363,8 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 1,
-          cardDefErrors: 0,
-          cardDefsIndexed: 1,
+          metaErrors: 0,
+          metasIndexed: 1,
           totalIndexEntries: 26,
         },
         'indexed correct number of files',
@@ -1441,8 +1439,8 @@ module(basename(__filename), function () {
           instanceErrors: 6,
           modulesIndexed: 10,
           instancesIndexed: 6,
-          cardDefErrors: 0,
-          cardDefsIndexed: 10,
+          metaErrors: 0,
+          metasIndexed: 10,
           totalIndexEntries: 26,
         },
         'indexed correct number of files',
@@ -1873,8 +1871,8 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 2,
-          cardDefErrors: 0,
-          cardDefsIndexed: 2,
+          metaErrors: 0,
+          metasIndexed: 2,
           totalIndexEntries: 30,
         },
         'indexed correct number of files',
@@ -1935,8 +1933,8 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          cardDefErrors: 0,
-          cardDefsIndexed: 0,
+          metaErrors: 0,
+          metasIndexed: 0,
           totalIndexEntries: 29,
         },
         'indexed correct number of files',
@@ -2119,8 +2117,8 @@ module(basename(__filename), function () {
             instanceErrors: 0,
             moduleErrors: 0,
             modulesIndexed: 1,
-            cardDefErrors: 0,
-            cardDefsIndexed: 1,
+            metaErrors: 0,
+            metasIndexed: 1,
             totalIndexEntries: 3,
           },
           'has no module errors',
@@ -2149,8 +2147,8 @@ module(basename(__filename), function () {
             instancesIndexed: 0,
             moduleErrors: 1,
             modulesIndexed: 0,
-            cardDefErrors: 0,
-            cardDefsIndexed: 0,
+            metaErrors: 0,
+            metasIndexed: 0,
             totalIndexEntries: 0,
           },
           'has a module error',

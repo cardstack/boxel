@@ -13,7 +13,7 @@ import {
   SupportedMimeType,
   getFieldMeta,
   type ResolvedCodeRef,
-  type CardDefMeta,
+  type FieldsMeta,
 } from '@cardstack/runtime-common';
 
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
@@ -196,13 +196,13 @@ module('Unit | query', function (hooks) {
 
     let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
 
-    async function serveCardDefMeta(cardDef: typeof CardDef) {
-      let doc: JSONAPISingleResourceDocument = { data: { type: 'card-def' } };
+    async function serveFieldsMeta(cardDef: typeof CardDef) {
+      let doc: JSONAPISingleResourceDocument = { data: { type: 'meta' } };
       doc.data.attributes = {
         codeRef: identifyCard(cardDef),
         displayName: cardDef.displayName,
         fields: getFieldMeta(api, cardDef),
-      } as CardDefMeta;
+      } as FieldsMeta;
       return new Response(JSON.stringify(doc), {
         headers: { 'content-type': SupportedMimeType.JSONAPI },
       });
@@ -215,21 +215,21 @@ module('Unit | query', function (hooks) {
           headers: { 'X-Boxel-Realm-Url': testRealmURL },
         });
       }
-      if (req.url.includes('/_card-def?')) {
+      if (req.url.includes('/_meta?')) {
         let query = new URL(req.url).search.slice(1);
         let { codeRef } = parseQuery(query) as { codeRef: ResolvedCodeRef };
         let key = internalKeyFor(codeRef, undefined);
         switch (key) {
           case `${testRealmURL}person/Person`:
-            return await serveCardDefMeta(Person);
+            return await serveFieldsMeta(Person);
           case `${testRealmURL}fancy-person/FancyPerson`:
-            return await serveCardDefMeta(FancyPerson);
+            return await serveFieldsMeta(FancyPerson);
           case `${testRealmURL}cat/Cat`:
-            return await serveCardDefMeta(Cat);
+            return await serveFieldsMeta(Cat);
           case `${testRealmURL}spec/SimpleSpec`:
-            return await serveCardDefMeta(SimpleSpec);
+            return await serveFieldsMeta(SimpleSpec);
           case `${testRealmURL}event/Event`:
-            return await serveCardDefMeta(Event);
+            return await serveFieldsMeta(Event);
           default:
             return null;
         }

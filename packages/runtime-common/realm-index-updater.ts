@@ -28,8 +28,8 @@ export class RealmIndexUpdater {
     modulesIndexed: 0,
     instanceErrors: 0,
     moduleErrors: 0,
-    cardDefErrors: 0,
-    cardDefsIndexed: 0,
+    metaErrors: 0,
+    metasIndexed: 0,
     totalIndexEntries: 0,
   };
   #indexWriter: IndexWriter;

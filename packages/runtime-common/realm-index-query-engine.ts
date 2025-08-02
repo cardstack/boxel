@@ -9,7 +9,7 @@ import {
   type DBAdapter,
   type QueryOptions,
   type IndexedModuleOrError,
-  type IndexedCardDefOrError,
+  type IndexedMetaOrError,
   type InstanceOrError,
   type ResolvedCodeRef,
   type FieldsMeta,
@@ -192,18 +192,18 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.getModule(url, opts);
   }
 
-  async getOwnCardDef(
+  async getOwnMeta(
     codeRef: ResolvedCodeRef,
     opts?: Options,
-  ): Promise<IndexedCardDefOrError | undefined> {
-    return await this.#indexQueryEngine.getOwnCardDef(codeRef, opts);
+  ): Promise<IndexedMetaOrError | undefined> {
+    return await this.#indexQueryEngine.getOwnMeta(codeRef, opts);
   }
 
-  async getCardDef(
+  async getMeta(
     codeRef: ResolvedCodeRef,
     opts?: Options,
   ): Promise<FieldsMeta | undefined> {
-    return await this.#indexQueryEngine.getCardDef(codeRef, opts);
+    return await this.#indexQueryEngine.getMeta(codeRef, opts);
   }
 
   async instance(
