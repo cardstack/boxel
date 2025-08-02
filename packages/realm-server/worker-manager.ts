@@ -161,18 +161,18 @@ if (port) {
 
 const shutdown = async (onShutdown?: () => void) => {
   log.info(`Shutting down server for worker manager...`);
-  
+
   // Stop all workers
   if (workers.length > 0) {
     log.info(`Stopping ${workers.length} worker(s)...`);
-    workers.forEach(worker => {
+    workers.forEach((worker) => {
       if (!worker.killed && worker.pid) {
         worker.send?.('stop');
       }
     });
     log.info(`All workers stopped.`);
   }
-  
+
   webServerInstance?.closeAllConnections();
   webServerInstance?.close((err?: Error) => {
     if (err) {
@@ -391,7 +391,7 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
   let currentState: IndexState | undefined;
 
   workers.push(worker);
-  
+
   worker.on('exit', () => {
     clearInterval(watchdog);
     // Remove from workers array
@@ -399,7 +399,7 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
     if (index > -1) {
       workers.splice(index, 1);
     }
-    
+
     if (!isExiting) {
       log.info(`worker ${name} exited. spawning replacement worker`);
       startWorker(priority, urlMappings);
