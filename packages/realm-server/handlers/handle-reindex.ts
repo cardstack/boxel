@@ -72,10 +72,12 @@ export async function reindex({
   realm,
   queue,
   dbAdapter,
+  priority = userInitiatedPriority,
 }: {
   realm: Realm;
   queue: QueuePublisher;
   dbAdapter: DBAdapter;
+  priority?: number;
 }) {
   let realmUsername = await realm.getRealmOwnerUsername();
   let args: FromScratchArgs = {
@@ -89,8 +91,10 @@ export async function reindex({
   let job = await queue.publish<FromScratchResult>({
     jobType: `from-scratch-index`,
     concurrencyGroup: `indexing:${realm.url}`,
-    timeout: 3 * 60,
-    priority: userInitiatedPriority,
+    // allow this to run longer than normal as we are forcing all files to be
+    // revisited regardless of mtime
+    timeout: 6 * 60,
+    priority,
     args,
   });
   return job;
