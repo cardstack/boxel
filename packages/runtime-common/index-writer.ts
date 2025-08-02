@@ -33,7 +33,7 @@ import {
   RealmMetaTable,
   type BoxelIndexTable,
   type RealmVersionsTable,
-  type CardDefMeta,
+  type FieldsMeta,
 } from './index-structure';
 
 export class IndexWriter {
@@ -105,7 +105,7 @@ interface ModuleEntry {
 
 interface CardDefEntry {
   type: 'card-def';
-  meta: CardDefMeta;
+  meta: FieldsMeta;
   types: string[];
   fileAlias: string;
   lastModified: number;
@@ -760,8 +760,8 @@ export class Batch {
 
   private cardDefMetaWithCopiedCodeRefs(
     fromRealm: URL,
-    fieldsMeta: CardDefMeta['fields'],
-  ): CardDefMeta['fields'] {
+    fieldsMeta: FieldsMeta['fields'],
+  ): FieldsMeta['fields'] {
     return Object.fromEntries(
       Object.entries(fieldsMeta).map(([fieldName, meta]) => [
         fieldName,

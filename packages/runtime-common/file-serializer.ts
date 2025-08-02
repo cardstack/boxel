@@ -1,8 +1,8 @@
 import {
   type LooseSingleCardDocument,
   type CardResource,
-  CardDefMeta,
-  CardDefFieldMeta,
+  FieldsMeta,
+  FieldMeta,
   isUrlLike,
   maybeRelativeURL,
   isCodeRef,
@@ -18,10 +18,10 @@ export default function serialize({
   customFieldMetas,
 }: {
   doc: LooseSingleCardDocument;
-  meta: CardDefMeta;
+  meta: FieldsMeta;
   realm: string;
   relativeTo: URL;
-  customFieldMetas?: Record<string, CardDefFieldMeta>;
+  customFieldMetas?: Record<string, FieldMeta>;
 }): LooseSingleCardDocument {
   const realmURL = new URL(realm);
   const codeRefOpts = {
@@ -113,13 +113,13 @@ function processAttributes({
   customFieldMetas,
 }: {
   attributes: Record<string, any>;
-  meta: CardDefMeta;
+  meta: FieldsMeta;
   basePath?: string;
   doc: LooseSingleCardDocument;
   relativeTo: URL;
   realmURL: URL;
   codeRefOpts: { maybeRelativeURL: (url: string) => string };
-  customFieldMetas?: Record<string, CardDefFieldMeta>;
+  customFieldMetas?: Record<string, FieldMeta>;
 }): Record<string, any> {
   const result: Record<string, any> = {};
 
@@ -192,10 +192,10 @@ function processRelationships({
   customFieldMetas,
 }: {
   relationships: NonNullable<CardResource['relationships']>;
-  meta: CardDefMeta;
+  meta: FieldsMeta;
   relativeTo: URL;
   realmURL: URL;
-  customFieldMetas?: Record<string, CardDefFieldMeta>;
+  customFieldMetas?: Record<string, FieldMeta>;
 }): NonNullable<CardResource['relationships']> | undefined {
   const result: NonNullable<CardResource['relationships']> = {};
 
@@ -266,9 +266,9 @@ function processRelationships({
 
 function getFieldMeta(
   fieldPath: string,
-  meta: CardDefMeta,
-  customFieldMetas?: Record<string, CardDefFieldMeta>,
-): CardDefFieldMeta | undefined {
+  meta: FieldsMeta,
+  customFieldMetas?: Record<string, FieldMeta>,
+): FieldMeta | undefined {
   return customFieldMetas?.[fieldPath] ?? meta.fields[fieldPath];
 }
 

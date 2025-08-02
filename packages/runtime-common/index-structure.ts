@@ -22,7 +22,7 @@ export interface BoxelIndexTable {
   deps: string[] | null;
   // `types` is the adoption chain for card where each code ref is serialized
   // using `internalKeyFor()`
-  meta: CardDefMeta | null;
+  meta: FieldsMeta | null;
   types: string[] | null;
   display_names: string[] | null;
   transpiled_code: string | null;
@@ -57,7 +57,7 @@ export interface RealmMetaTable {
   indexed_at: string | null;
 }
 
-export interface CardDefFieldMeta {
+export interface FieldMeta {
   type: FieldType;
   isPrimitive: boolean;
   isComputed: boolean;
@@ -65,12 +65,12 @@ export interface CardDefFieldMeta {
   serializerName?: SerializerName;
 }
 
-export interface CardDefMeta {
+export interface FieldsMeta {
   type: 'card-def' | 'field-def';
   codeRef: ResolvedCodeRef;
   displayName: string | null;
   fields: {
-    [fieldName: string]: CardDefFieldMeta;
+    [fieldName: string]: FieldMeta;
   };
 }
 

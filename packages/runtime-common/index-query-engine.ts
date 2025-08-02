@@ -57,8 +57,8 @@ import {
   RealmMetaTable,
   type BoxelIndexTable,
   type CardTypeSummary,
-  type CardDefMeta,
-  type CardDefFieldMeta,
+  type FieldsMeta,
+  type FieldMeta,
 } from './index-structure';
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
@@ -74,7 +74,7 @@ interface IndexedModule {
 
 interface IndexedCardDef {
   type: 'card-def';
-  meta: CardDefMeta;
+  meta: FieldsMeta;
   types: string[] | null;
   lastModified: number | null;
   resourceCreatedAt: number;
@@ -387,7 +387,7 @@ export class IndexQueryEngine {
   public async getCardDef(
     codeRef: CodeRef,
     opts?: WIPOptions,
-  ): Promise<CardDefMeta> {
+  ): Promise<FieldsMeta> {
     if (!isResolvedCodeRef(codeRef)) {
       throw new Error(
         `Your filter refers to a nonexistent type: ${stringify(codeRef)}`,
@@ -447,7 +447,7 @@ export class IndexQueryEngine {
       );
     }
     let json = await response.json();
-    return json.data.attributes as CardDefMeta;
+    return json.data.attributes as FieldsMeta;
   }
 
   // we pass the loader in so there is no ambiguity which loader to use as this
@@ -1113,7 +1113,7 @@ export class IndexQueryEngine {
   }
 
   private async walkFilterFieldPath(
-    meta: CardDefMeta,
+    meta: FieldsMeta,
     path: string,
     expression: Expression,
     handleLeafField: FilterFieldHandler<Expression>,
@@ -1121,7 +1121,7 @@ export class IndexQueryEngine {
     pathTraveled?: string[],
   ): Promise<Expression>;
   private async walkFilterFieldPath(
-    meta: CardDefMeta,
+    meta: FieldsMeta,
     path: string,
     expression: CardExpression,
     handleLeafField: FilterFieldHandler<CardExpression>,
@@ -1129,7 +1129,7 @@ export class IndexQueryEngine {
     pathTraveled?: string[],
   ): Promise<CardExpression>;
   private async walkFilterFieldPath(
-    meta: CardDefMeta,
+    meta: FieldsMeta,
     path: string,
     expression: Expression,
     handleLeafField: FilterFieldHandler<any[]>,
@@ -1202,11 +1202,11 @@ function removeBrackets(pathTraveled: string) {
   return pathTraveled.replace(/\[\]/g, '');
 }
 
-function isFieldPlural(field: CardDefFieldMeta): boolean {
+function isFieldPlural(field: FieldMeta): boolean {
   return field.type === 'containsMany' || field.type === 'linksToMany';
 }
 
-function getField(meta: CardDefMeta, pathTraveled: string): CardDefFieldMeta {
+function getField(meta: FieldsMeta, pathTraveled: string): FieldMeta {
   let cleansedPath = removeBrackets(pathTraveled);
   let field = meta.fields[cleansedPath];
   if (!field) {
@@ -1223,7 +1223,7 @@ function getField(meta: CardDefMeta, pathTraveled: string): CardDefFieldMeta {
           module: `${baseRealm.url}card-api`,
           name: 'StringField',
         },
-      } as CardDefFieldMeta;
+      } as FieldMeta;
     }
     throw new Error(
       `Your filter refers to a nonexistent field "${cleansedPath}" on type ${stringify(
@@ -1275,7 +1275,7 @@ function assertIndexEntryMeta<T>(obj: T): Omit<
   T,
   'meta' | 'last_modified' | 'resource_created_at'
 > & {
-  meta: CardDefMeta;
+  meta: FieldsMeta;
   last_modified: string | null;
   resource_created_at: string;
 } {
@@ -1297,7 +1297,7 @@ function assertIndexEntryMeta<T>(obj: T): Omit<
     );
   }
   return obj as Omit<T, 'meta' | 'last_modified' | 'resource_created_at'> & {
-    meta: CardDefMeta;
+    meta: FieldsMeta;
     last_modified: string;
     resource_created_at: string;
   };
@@ -1312,7 +1312,7 @@ function assertNever(value: never) {
 }
 
 type FilterFieldHandler<T> = (
-  meta: CardDefMeta,
+  meta: FieldsMeta,
   expression: T,
   pathTraveled: string,
 ) => Promise<T>;

@@ -38,7 +38,7 @@ import {
   type FileMeta,
   type DirectoryMeta,
   type ResolvedCodeRef,
-  type CardDefFieldMeta,
+  type FieldMeta,
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
   userInitiatedPriority,
@@ -2606,7 +2606,7 @@ export class Realm {
       );
     }
 
-    let customFieldMetas: Record<string, CardDefFieldMeta> = {};
+    let customFieldMetas: Record<string, FieldMeta> = {};
     if (doc.data.meta?.fields) {
       await this.buildCustomFieldMetas(
         doc.data.meta.fields,
@@ -2628,7 +2628,7 @@ export class Realm {
   private async buildCustomFieldMetas(
     fields: CardFields,
     basePath: string,
-    customFieldMetas: Record<string, CardDefFieldMeta>,
+    customFieldMetas: Record<string, FieldMeta>,
     relativeTo: URL,
   ): Promise<void> {
     for (const [fieldName, fieldValue] of Object.entries(fields)) {

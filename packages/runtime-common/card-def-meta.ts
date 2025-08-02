@@ -4,7 +4,7 @@ import {
   primitive,
   fieldSerializer,
   type ResolvedCodeRef,
-  type CardDefMeta,
+  type FieldsMeta,
   type SerializerName,
 } from './index';
 
@@ -19,7 +19,7 @@ const RECURSING_DEPTH = 3;
 export function getFieldMeta(
   api: typeof CardAPI,
   cardDef: typeof BaseDef,
-  results: CardDefMeta['fields'] = {},
+  results: FieldsMeta['fields'] = {},
   prefix = '',
   visited: string[] = [],
 ) {

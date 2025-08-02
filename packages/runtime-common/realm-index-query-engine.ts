@@ -12,7 +12,7 @@ import {
   type IndexedCardDefOrError,
   type InstanceOrError,
   type ResolvedCodeRef,
-  CardDefMeta,
+  type FieldsMeta,
 } from '.';
 import { Realm } from './realm';
 import { RealmPaths } from './paths';
@@ -202,7 +202,7 @@ export class RealmIndexQueryEngine {
   async getCardDef(
     codeRef: ResolvedCodeRef,
     opts?: Options,
-  ): Promise<CardDefMeta | undefined> {
+  ): Promise<FieldsMeta | undefined> {
     return await this.#indexQueryEngine.getCardDef(codeRef, opts);
   }
 
