@@ -176,6 +176,7 @@ export class RealmServer {
           serveFromRealm: this.serveFromRealm,
           sendEvent: this.sendEvent,
           queue: this.queue,
+          realms: this.realms,
         }),
       )
       .use(this.serveIndex)

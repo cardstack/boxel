@@ -7,6 +7,7 @@ import {
   triggerKeyEvent,
   settled,
   waitUntil,
+  waitFor,
 } from '@ember/test-helpers';
 
 import { triggerEvent } from '@ember/test-helpers';
@@ -2118,6 +2119,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-stack-card-index="0"] [data-test-close-button]');
 
       // Verify that the workspace chooser opens
+      await waitFor('[data-test-workspace-chooser]');
       assert.dom('[data-test-workspace-chooser]').exists();
       assert.dom('[data-test-operator-mode-stack]').doesNotExist();
     });
