@@ -18,6 +18,7 @@ import {
   loadCardDef,
   identifyCard,
   isCardDef,
+  isBaseDef,
   IndexWriter,
   unixTime,
   jobIdentity,
@@ -53,7 +54,7 @@ import { type Reader, type Stats } from '@cardstack/runtime-common/worker';
 
 import ENV from '@cardstack/host/config/environment';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import {
@@ -88,7 +89,7 @@ type TypesWithErrors =
     };
 
 export class CurrentRun {
-  #typesCache = new WeakMap<typeof CardDef, Promise<TypesWithErrors>>();
+  #typesCache = new WeakMap<typeof BaseDef, Promise<TypesWithErrors>>();
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
   #indexWriter: IndexWriter;
@@ -485,11 +486,11 @@ export class CurrentRun {
       // for testing purposes we'll still generate card def meta for shimmed cards,
       // however the deps will only be the shimmed file
       for (let [name, maybeCardDef] of Object.entries(module)) {
-        if (isCardDef(maybeCardDef)) {
+        if (isBaseDef(maybeCardDef)) {
           await this.indexCardDef({
             name,
             url: trimExecutableExtension(url),
-            cardDef: maybeCardDef,
+            cardOrFieldDef: maybeCardDef,
             lastModified: 0,
             resourceCreatedAt: 0,
             deps: [trimExecutableExtension(url).href],
@@ -513,11 +514,11 @@ export class CurrentRun {
     this.stats.modulesIndexed++;
 
     for (let [name, maybeCardDef] of Object.entries(module)) {
-      if (isCardDef(maybeCardDef)) {
+      if (isBaseDef(maybeCardDef)) {
         await this.indexCardDef({
           name,
           url: trimExecutableExtension(url),
-          cardDef: maybeCardDef,
+          cardOrFieldDef: maybeCardDef,
           lastModified: ref.lastModified,
           resourceCreatedAt: ref.created,
           deps: [...deps, trimExecutableExtension(url).href],
@@ -529,14 +530,14 @@ export class CurrentRun {
   private async indexCardDef({
     url,
     name,
-    cardDef,
+    cardOrFieldDef,
     lastModified,
     resourceCreatedAt,
     deps,
   }: {
     url: URL;
     name: string;
-    cardDef: typeof CardDef;
+    cardOrFieldDef: typeof BaseDef;
     lastModified: number;
     resourceCreatedAt: number;
     deps: string[];
@@ -548,14 +549,19 @@ export class CurrentRun {
       let api = await this.loaderService.loader.import<typeof CardAPI>(
         `${baseRealm.url}card-api`,
       );
-      let fields = getFieldMeta(api, cardDef);
-      let codeRef = identifyCard(cardDef) as ResolvedCodeRef;
+      let fields = getFieldMeta(api, cardOrFieldDef);
+      let codeRef = identifyCard(cardOrFieldDef) as ResolvedCodeRef;
       let meta: CardDefMeta = {
         codeRef,
         fields,
-        displayName: cardDef.displayName,
+        type: isCardDef(cardOrFieldDef) ? 'card-def' : 'field-def',
+        displayName: isCardDef(cardOrFieldDef)
+          ? cardOrFieldDef.displayName
+          : null,
       };
-      let typesMaybeError = await this.getTypes(cardDef);
+      let typesMaybeError = isCardDef(cardOrFieldDef)
+        ? await this.getTypes(cardOrFieldDef)
+        : { type: 'types' as const, types: [] };
       if (typesMaybeError.type === 'error') {
         this.stats.cardDefErrors++;
         log.warn(

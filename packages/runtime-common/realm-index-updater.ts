@@ -17,12 +17,10 @@ import {
 } from '.';
 import { Realm } from './realm';
 import { RealmPaths } from './paths';
-import { Loader } from './loader';
 import ignore, { type Ignore } from 'ignore';
 
 export class RealmIndexUpdater {
   #realm: Realm;
-  #loader: Loader;
   #log = logger('realm-index-updater');
   #ignoreData: Record<string, string> = {};
   #stats: Stats = {
@@ -55,15 +53,10 @@ export class RealmIndexUpdater {
     this.#indexWriter = new IndexWriter(dbAdapter);
     this.#queue = queue;
     this.#realm = realm;
-    this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
   }
 
   get stats() {
     return this.#stats;
-  }
-
-  get loader() {
-    return this.#loader;
   }
 
   @Memoize()
@@ -107,7 +100,6 @@ export class RealmIndexUpdater {
       let { ignoreData, stats } = await job.done;
       this.#stats = stats;
       this.#ignoreData = ignoreData;
-      this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
       this.#log.info(
         `Realm ${this.realmURL.href} has completed indexing: ${JSON.stringify(
           stats,
@@ -145,7 +137,6 @@ export class RealmIndexUpdater {
       let { invalidations, ignoreData, stats } = await job.done;
       this.#stats = stats;
       this.#ignoreData = ignoreData;
-      this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
       if (opts?.onInvalidation) {
         opts.onInvalidation(
           invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
@@ -178,7 +169,6 @@ export class RealmIndexUpdater {
         args,
       });
       let { invalidations } = await job.done;
-      this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
       if (onInvalidation) {
         onInvalidation(
           invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),

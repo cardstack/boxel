@@ -5,7 +5,6 @@ import {
   type SingleCardDocument,
 } from './document-types';
 import { type CardResource } from './resource-types';
-import { Loader } from './loader';
 import { RealmPaths, LocalPath, join } from './paths';
 import {
   systemError,
@@ -38,6 +37,9 @@ import {
   type QueuePublisher,
   type FileMeta,
   type DirectoryMeta,
+  type ResolvedCodeRef,
+  type CardDefFieldMeta,
+  codeRefWithAbsoluteURL,
   isResolvedCodeRef,
   userInitiatedPriority,
   userIdFromUsername,
@@ -45,6 +47,7 @@ import {
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 import cloneDeep from 'lodash/cloneDeep';
+import { type CardFields } from './resource-types';
 import {
   fileContentToText,
   readFileAsText,
@@ -64,7 +67,6 @@ import {
 } from './router';
 import { InvalidQueryError, assertQuery, parseQuery } from './query';
 import type { Readable } from 'stream';
-import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
@@ -78,6 +80,7 @@ import { RealmAuthDataSource } from './realm-auth-data-source';
 import { fetcher } from './fetcher';
 import { RealmIndexQueryEngine } from './realm-index-query-engine';
 import { RealmIndexUpdater } from './realm-index-updater';
+import serialize from './file-serializer';
 
 import {
   MatrixBackendAuthentication,
@@ -193,8 +196,6 @@ export interface RealmAdapter {
 
   unsubscribe(): void;
 
-  setLoader?(loader: Loader): void;
-
   broadcastRealmEvent(
     event: RealmEventContent,
     matrixClient: MatrixClient,
@@ -258,7 +259,7 @@ export class Realm {
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
-  #loaderTemplate: Loader;
+  readonly __fetchForTesting: typeof globalThis.fetch;
   readonly paths: RealmPaths;
 
   private visibilityPromise?: Promise<RealmVisibility>;
@@ -339,9 +340,7 @@ export class Realm {
       ),
     ]);
 
-    let loader = new Loader(_fetch, virtualNetwork.resolveImport);
-    adapter.setLoader?.(loader);
-    this.#loaderTemplate = loader;
+    this.__fetchForTesting = _fetch;
 
     this.#realmIndexUpdater = new RealmIndexUpdater({
       realm: this,
@@ -476,10 +475,6 @@ export class Realm {
       },
       requestContext,
     });
-  }
-
-  get loaderTemplate() {
-    return this.#loaderTemplate;
   }
 
   async indexing() {
@@ -834,28 +829,6 @@ export class Realm {
         });
       },
     });
-  }
-
-  private get loader() {
-    // the current loader used by the search index will contain the latest
-    // module updates as we obtain a new loader for each indexing run.
-    if (isNode) {
-      return this.realmIndexUpdater.loader;
-    } else {
-      // when we are under test (via browser) we are using a loader that was
-      // pre-configured and handed to us which is shared between the host app
-      // and the realm. in order for cards to run correctly and instance data
-      // buckets not to be smeared across different loaders we need to continue
-      // to use the same loader that we were handed in the test setup. Right now
-      // we are using `isNode` as a heuristic to determine if we are running in
-      // a test. This might need to change in the future if we want the Realm to
-      // really run in teh browser in a non testing scenario.
-      return this.loaderTemplate;
-    }
-  }
-
-  __resetLoaderForTest() {
-    this.#loaderTemplate = Loader.cloneLoader(this.#loaderTemplate);
   }
 
   get realmIndexUpdater() {
@@ -2322,7 +2295,7 @@ export class Realm {
     let useWorkInProgressIndex = Boolean(
       request.headers.get('X-Boxel-Building-Index'),
     );
-    let maybeError = await this.#realmIndexQueryEngine.cardDef(codeRef, {
+    let maybeError = await this.#realmIndexQueryEngine.getOwnCardDef(codeRef, {
       useWorkInProgressIndex,
     });
     if (!maybeError) {
@@ -2598,21 +2571,97 @@ export class Realm {
     doc: LooseSingleCardDocument,
     relativeTo: URL,
   ): Promise<LooseSingleCardDocument> {
-    let api = await this.loader.import<typeof CardAPI>(
-      'https://cardstack.com/base/card-api',
-    );
-    let card = (await api.createFromSerialized(doc.data, doc, relativeTo, {
-      ignoreBrokenLinks: true,
-    })) as CardDef;
-    await api.flushLogs();
-    let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
-    delete data.data.id; // the ID is derived from the filename, so we don't serialize it on disk
-    delete data.data.lid;
-    delete data.included;
-    for (let relationship of Object.values(data.data.relationships ?? {})) {
-      delete relationship.data;
+    let absoluteCodeRef = codeRefWithAbsoluteURL(
+      doc.data.meta.adoptsFrom,
+      relativeTo,
+    ) as ResolvedCodeRef;
+    let meta = await this.realmIndexQueryEngine.getCardDef(absoluteCodeRef);
+    if (!meta) {
+      throw new Error(
+        `Could not find card definition for: ${JSON.stringify(absoluteCodeRef)}`,
+      );
     }
-    return data;
+
+    let customFieldMetas: Record<string, CardDefFieldMeta> = {};
+    if (doc.data.meta?.fields) {
+      await this.buildCustomFieldMetas(
+        doc.data.meta.fields,
+        '',
+        customFieldMetas,
+        relativeTo,
+      );
+    }
+
+    return serialize({
+      doc,
+      meta,
+      realm: this.url,
+      relativeTo,
+      customFieldMetas,
+    });
+  }
+
+  private async buildCustomFieldMetas(
+    fields: CardFields,
+    basePath: string,
+    customFieldMetas: Record<string, CardDefFieldMeta>,
+    relativeTo: URL,
+  ): Promise<void> {
+    for (const [fieldName, fieldValue] of Object.entries(fields)) {
+      const fieldPath = basePath ? `${basePath}.${fieldName}` : fieldName;
+
+      if (Array.isArray(fieldValue)) {
+        for (const item of fieldValue) {
+          if (item.adoptsFrom) {
+            let absoluteCodeRef = codeRefWithAbsoluteURL(
+              item.adoptsFrom,
+              relativeTo,
+            ) as ResolvedCodeRef;
+            let fieldMeta =
+              await this.realmIndexQueryEngine.getCardDef(absoluteCodeRef);
+            if (fieldMeta) {
+              for (const [subFieldName, subFieldMeta] of Object.entries(
+                fieldMeta.fields,
+              )) {
+                const prefixedFieldPath = `${fieldPath}.${subFieldName}`;
+                customFieldMetas[prefixedFieldPath] = subFieldMeta;
+              }
+            }
+          }
+          if (item.fields) {
+            await this.buildCustomFieldMetas(
+              item.fields,
+              fieldPath,
+              customFieldMetas,
+              relativeTo,
+            );
+          }
+        }
+      } else if (fieldValue.adoptsFrom) {
+        let absoluteCodeRef = codeRefWithAbsoluteURL(
+          fieldValue.adoptsFrom,
+          relativeTo,
+        ) as ResolvedCodeRef;
+        let fieldMeta =
+          await this.realmIndexQueryEngine.getCardDef(absoluteCodeRef);
+        if (fieldMeta) {
+          for (const [subFieldName, subFieldMeta] of Object.entries(
+            fieldMeta.fields,
+          )) {
+            const prefixedFieldPath = `${fieldPath}.${subFieldName}`;
+            customFieldMetas[prefixedFieldPath] = subFieldMeta;
+          }
+        }
+        if (fieldValue.fields) {
+          await this.buildCustomFieldMetas(
+            fieldValue.fields,
+            fieldPath,
+            customFieldMetas,
+            relativeTo,
+          );
+        }
+      }
+    }
   }
 
   private async startFileWatcher() {

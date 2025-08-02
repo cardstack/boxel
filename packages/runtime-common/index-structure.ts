@@ -66,8 +66,9 @@ export interface CardDefFieldMeta {
 }
 
 export interface CardDefMeta {
+  type: 'card-def' | 'field-def';
   codeRef: ResolvedCodeRef;
-  displayName: string;
+  displayName: string | null;
   fields: {
     [fieldName: string]: CardDefFieldMeta;
   };

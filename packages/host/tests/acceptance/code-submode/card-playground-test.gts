@@ -1654,14 +1654,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-error-message]').hasText('Boom!');
 
       await withoutLoaderMonitoring(async () => {
-        // The loader service is shared between the realm server and the host.
+        // The loader service is shared between the indexer and the host.
         // need to reset the loader to pick up the changed module in the indexer
         getService('loader-service').resetLoader();
-        // the error was introduced in a part of the card that is run directly
-        // in the realm server so we also need to make sure to reset the realm's loader
-        // (not just the loader for the index). This is a test env idiosyncrasy
-        // that doesn't exist in real life.
-        realm.__resetLoaderForTest();
         // fix error
         await realm.write(
           'boom-pet.gts',

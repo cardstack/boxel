@@ -384,7 +384,10 @@ export class IndexQueryEngine {
 
   // the code ref we are looking for might not reside on this server so we need
   // to use the public Realm API to retrieve it
-  private async getCardDefMeta(codeRef: CodeRef): Promise<CardDefMeta> {
+  public async getCardDef(
+    codeRef: CodeRef,
+    opts?: WIPOptions,
+  ): Promise<CardDefMeta> {
     if (!isResolvedCodeRef(codeRef)) {
       throw new Error(
         `Your filter refers to a nonexistent type: ${stringify(codeRef)}`,
@@ -394,6 +397,13 @@ export class IndexQueryEngine {
     try {
       head = await this.#fetch(codeRef.module, {
         method: 'HEAD',
+        ...(opts?.useWorkInProgressIndex
+          ? {
+              headers: {
+                'X-Boxel-Building-Index': 'true',
+              },
+            }
+          : {}),
       });
     } catch (e) {
       throw new Error(
@@ -416,7 +426,14 @@ export class IndexQueryEngine {
     let response: Response;
     try {
       response = await this.#fetch(url, {
-        headers: { accept: SupportedMimeType.JSONAPI },
+        headers: {
+          accept: SupportedMimeType.JSONAPI,
+          ...(opts?.useWorkInProgressIndex
+            ? {
+                'X-Boxel-Building-Index': 'true',
+              }
+            : {}),
+        },
       });
     } catch (e) {
       throw new Error(
@@ -965,7 +982,7 @@ export class IndexQueryEngine {
 
   private async handleFieldArity(fieldArity: FieldArity): Promise<Expression> {
     let { path, value, type, pluralValue, usePluralContainer } = fieldArity;
-    let meta = await this.getCardDefMeta(type);
+    let meta = await this.getCardDef(type);
     let exp: CardExpression = await this.walkFilterFieldPath(
       meta,
       path,
@@ -1002,7 +1019,7 @@ export class IndexQueryEngine {
 
   private async handleFieldQuery(fieldQuery: FieldQuery): Promise<Expression> {
     let { path, type, useJsonBValue } = fieldQuery;
-    let meta = await this.getCardDefMeta(type);
+    let meta = await this.getCardDef(type);
     // The rootPluralPath should line up with the tableValuedTree that was
     // used in the handleFieldArity (the multiple tableValuedTree expressions will
     // collapse into a single function)
@@ -1066,7 +1083,7 @@ export class IndexQueryEngine {
 
   private async handleFieldValue(fieldValue: FieldValue): Promise<Expression> {
     let { path, value, type } = fieldValue;
-    let meta = await this.getCardDefMeta(type);
+    let meta = await this.getCardDef(type);
     let exp = await this.makeExpression(value);
 
     return await this.walkFilterFieldPath(

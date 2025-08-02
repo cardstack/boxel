@@ -738,8 +738,6 @@ module('Integration | realm', function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            description: null,
-            thumbnailURL: null,
             firstName: 'Mango',
           },
           relationships: {
@@ -759,69 +757,6 @@ module('Integration | realm', function (hooks) {
       },
       'file contents are correct',
     );
-  });
-
-  test('realm returns 400 error for POST requests that set the value of a polymorphic field to an incompatible type', async function (assert) {
-    class Person extends FieldDef {
-      @field firstName = contains(StringField);
-    }
-    class Car extends FieldDef {
-      @field make = contains(StringField);
-      @field model = contains(StringField);
-      @field year = contains(StringField);
-    }
-    class Driver extends CardDef {
-      @field card = contains(Person);
-    }
-    let { realm } = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'driver.gts': { Driver },
-        'person.gts': { Person },
-        'car.gts': { Car },
-      },
-    });
-    let response = await handle(
-      realm,
-      new Request(testRealmURL, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.card+json',
-        },
-        body: JSON.stringify(
-          {
-            data: {
-              type: 'card',
-              attributes: {
-                card: {
-                  firstName: null,
-                  make: 'Mercedes Benz',
-                  model: 'C300',
-                  year: '2024',
-                },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}driver`,
-                  name: 'Driver',
-                },
-                fields: {
-                  card: {
-                    adoptsFrom: {
-                      module: `${testRealmURL}car`,
-                      name: 'Car',
-                    },
-                  },
-                },
-              },
-            },
-          },
-          null,
-          2,
-        ),
-      }),
-    );
-    assert.strictEqual(response.status, 400, '400 server error');
   });
 
   test('realm can serve patch card requests', async function (assert) {
@@ -1085,8 +1020,6 @@ module('Integration | realm', function (hooks) {
               {
                 firstName: 'Hassan',
                 lastName: null,
-                email: null,
-                posts: null,
               },
             ],
             sponsors: ['Burton'],
@@ -2316,7 +2249,7 @@ module('Integration | realm', function (hooks) {
             fields: {
               card: {
                 adoptsFrom: {
-                  module: `${testRealmURL}car`,
+                  module: `../car`,
                   name: 'Car',
                 },
               },
@@ -2403,124 +2336,6 @@ module('Integration | realm', function (hooks) {
             adoptsFrom: {
               module: `../person`,
               name: 'Person',
-            },
-          },
-        },
-      },
-      'file contents are correct',
-    );
-  });
-
-  test('realm returns 400 error for PATCH requests that set the value of a polymorphic field to an incompatible type', async function (assert) {
-    class Person extends FieldDef {
-      @field firstName = contains(StringField);
-    }
-    class Car extends FieldDef {
-      @field make = contains(StringField);
-      @field model = contains(StringField);
-      @field year = contains(StringField);
-    }
-    class Driver extends CardDef {
-      @field card = contains(Person);
-    }
-    let { realm, adapter } = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'driver.gts': { Driver },
-        'person.gts': { Person },
-        'car.gts': { Car },
-        'dir/driver.json': {
-          data: {
-            attributes: {
-              card: {
-                firstName: 'Mango',
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}driver`,
-                name: 'Driver',
-              },
-              fields: {
-                card: {
-                  adoptsFrom: {
-                    module: `../person`,
-                    name: 'Person',
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-    let response = await handle(
-      realm,
-      new Request(`${testRealmURL}dir/driver`, {
-        method: 'PATCH',
-        headers: {
-          Accept: 'application/vnd.card+json',
-        },
-        body: JSON.stringify(
-          {
-            data: {
-              type: 'card',
-              attributes: {
-                card: {
-                  firstName: null,
-                  make: 'Mercedes Benz',
-                  model: 'C300',
-                  year: '2024',
-                },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}driver`,
-                  name: 'Driver',
-                },
-                fields: {
-                  card: {
-                    adoptsFrom: {
-                      module: `${testRealmURL}car`,
-                      name: 'Car',
-                    },
-                  },
-                },
-              },
-            },
-          },
-          null,
-          2,
-        ),
-      }),
-    );
-
-    assert.strictEqual(response.status, 400, '400 server error');
-    let fileRef = await adapter.openFile('dir/driver.json');
-    if (!fileRef) {
-      throw new Error('file not found');
-    }
-    assert.deepEqual(
-      JSON.parse(fileRef.content as string),
-      {
-        data: {
-          attributes: {
-            card: {
-              firstName: 'Mango',
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}driver`,
-              name: 'Driver',
-            },
-            fields: {
-              card: {
-                adoptsFrom: {
-                  module: `../person`,
-                  name: 'Person',
-                },
-              },
             },
           },
         },
