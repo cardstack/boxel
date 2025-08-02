@@ -231,7 +231,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
           @iconWidth='12px'
           @iconHeight='12px'
           {{on 'click' @add}}
-          data-test-add-new
+          data-test-add-new={{@field.name}}
         >
           Add
           {{getPlural @field.card.displayName}}
@@ -345,7 +345,7 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
         @iconWidth='12px'
         @iconHeight='12px'
         {{on 'click' @add}}
-        data-test-add-new
+        data-test-add-new={{@field.name}}
       >
         Add
         {{@field.card.displayName}}

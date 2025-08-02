@@ -60,7 +60,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
               @variant='full-width'
               @hideIcon={{true}}
               {{on 'click' this.add}}
-              data-test-add-new
+              data-test-add-new={{@field.name}}
             >
               Link
               {{@field.card.displayName}}

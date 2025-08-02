@@ -24,6 +24,7 @@ import {
   type CodeRef,
   type Permissions,
   ResolvedCodeRef,
+  extractCssVariables,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
@@ -33,6 +34,7 @@ import { initSharedState } from './shared-state';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 import { consume, provide } from 'ember-provide-consume-context';
 import Component from '@glimmer/component';
+import sanitizedHtml from './helpers/sanitized-html';
 
 export interface BoxComponentSignature {
   Element: HTMLElement; // This may not be true for some field components, but it's true more often than not
@@ -205,6 +207,13 @@ export function getBoxComponent(
     };
   }
 
+  function getThemeStyles(css?: string) {
+    if (!extractCssVariables) {
+      return;
+    }
+    return sanitizedHtml(extractCssVariables(css));
+  }
+
   let component: TemplateOnlyComponent<{
     Element: HTMLElement;
     Args: {
@@ -246,10 +255,12 @@ export function getBoxComponent(
                         fieldType=field.fieldType
                         fieldName=field.name
                       }}
+                      style={{getThemeStyles
+                        model.value.cardInfo.theme.cssVariables
+                      }}
                       data-test-card={{card.id}}
                       data-test-card-format={{effectiveFormats.cardDef}}
                       data-test-field-component-card
-                      {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
                       ...attributes
                     >
                       <c.CardOrFieldFormatComponent
@@ -277,7 +288,6 @@ export function getBoxComponent(
                     class='compound-field {{effectiveFormats.fieldDef}}-format'
                     data-test-compound-field-format={{effectiveFormats.fieldDef}}
                     data-test-compound-field-component
-                    {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
                     ...attributes
                   >
                     <c.CardOrFieldFormatComponent

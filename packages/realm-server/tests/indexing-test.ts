@@ -703,25 +703,7 @@ module(basename(__filename), function () {
               },
               isPrimitive: true,
             },
-            'author.id': {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'ReadOnlyField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
             description: {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            'author.title': {
               type: 'contains',
               isComputed: false,
               fieldOrCard: {
@@ -735,6 +717,96 @@ module(basename(__filename), function () {
               isComputed: false,
               fieldOrCard: {
                 name: 'MaybeBase64Field',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            cardInfo: {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CardInfoField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: false,
+            },
+            'cardInfo.theme': {
+              type: 'linksTo',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'Theme',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: false,
+            },
+            'cardInfo.theme.id': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'ReadOnlyField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'cardInfo.theme.title': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'cardInfo.theme.description': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'cardInfo.theme.thumbnailURL': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'MaybeBase64Field',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'cardInfo.theme.cardInfo': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CardInfoField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: false,
+            },
+            'cardInfo.theme.cssVariables': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CSSField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.id': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'ReadOnlyField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.title': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
                 module: 'https://cardstack.com/base/card-api',
               },
               isPrimitive: true,
@@ -772,6 +844,78 @@ module(basename(__filename), function () {
               isComputed: false,
               fieldOrCard: {
                 name: 'MaybeBase64Field',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CardInfoField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: false,
+            },
+            'author.cardInfo.theme': {
+              type: 'linksTo',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'Theme',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: false,
+            },
+            'author.cardInfo.theme.id': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'ReadOnlyField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.title': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.description': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.thumbnailURL': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'MaybeBase64Field',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CardInfoField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: false,
+            },
+            'author.cardInfo.theme.cssVariables': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'CSSField',
                 module: 'https://cardstack.com/base/card-api',
               },
               isPrimitive: true,
@@ -1386,6 +1530,7 @@ module(basename(__filename), function () {
             firstName: 'Hassan',
             description: null,
             thumbnailURL: null,
+            cardInfo: {},
           },
           'doc attributes are correct',
         );
@@ -1395,6 +1540,11 @@ module(basename(__filename), function () {
             pet: {
               links: {
                 self: './ringo',
+              },
+            },
+            'cardInfo.theme': {
+              links: {
+                self: null,
               },
             },
           },
@@ -1419,10 +1569,16 @@ module(basename(__filename), function () {
               firstName: 'Ringo',
               description: null,
               thumbnailURL: null,
+              cardInfo: {
+                theme: null,
+              },
             },
             nickName: "Ringo's buddy",
             _cardType: 'PetPerson',
             firstName: 'Hassan',
+            cardInfo: {
+              theme: null,
+            },
           },
           'searchData is correct',
         );
@@ -1467,7 +1623,7 @@ module(basename(__filename), function () {
 
             export class Task extends CardDef {
               static displayName = 'Sprint Task';
-              @field team = linksTo(() => Team, {isUsed: true}); 
+              @field team = linksTo(() => Team, {isUsed: true});
               @field shortId = contains(StringField, {
                 computeVia: function (this: Task) {
                   return this.team?.name
@@ -1643,7 +1799,7 @@ module(basename(__filename), function () {
               import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
               import StringField from "https://cardstack.com/base/string";
               import { BlogApp } from "./blog-app";
-              
+
               export class Author extends CardDef {
                 @field name = contains(StringField);
                 @field blog = linksTo(BlogApp);
@@ -1672,7 +1828,7 @@ module(basename(__filename), function () {
           import StringField from "https://cardstack.com/base/string";
           import { Author } from "./author";
           import { BlogApp } from "./blog-app";
-          
+
           export class BlogPost extends CardDef {
             @field title = contains(StringField);
             @field author = linksToMany(Author);
@@ -1687,7 +1843,7 @@ module(basename(__filename), function () {
           import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
           import type { BlogPost } from "./blog-post";
-          
+
           export class BlogApp extends CardDef {
             @field title = contains(StringField);
           }
@@ -1739,7 +1895,7 @@ module(basename(__filename), function () {
               import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
               import StringField from "https://cardstack.com/base/string";
               import { BlogApp } from "./blog-app";
-              
+
               export class Author extends CardDef {
                 @field name = contains(StringField);
                 @field blog = linksTo(() => BlogApp);
@@ -1768,7 +1924,7 @@ module(basename(__filename), function () {
           import StringField from "https://cardstack.com/base/string";
           import { Author } from "./author";
           import { BlogApp } from "./blog-app";
-          
+
           export class BlogPost extends CardDef {
             @field title = contains(StringField);
             @field author = linksToMany(() => Author);
@@ -1783,7 +1939,7 @@ module(basename(__filename), function () {
           import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
           import type { BlogPost } from "./blog-post";
-          
+
           export class BlogApp extends CardDef {
             @field title = contains(StringField);
           }

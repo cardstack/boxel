@@ -27,7 +27,7 @@ export function sanitize(css?: string) {
   return htmlSafe(sanitizeHtml(css));
 }
 
-class Isolated extends Component<typeof Theme> {
+class Isolated extends Component<typeof BrandTheme> {
   @tracked copiedValue?: string | null = null;
 
   @action
@@ -648,7 +648,7 @@ class Isolated extends Component<typeof Theme> {
   </template>
 }
 
-class Embedded extends Component<typeof Theme> {
+class Embedded extends Component<typeof BrandTheme> {
   @tracked copiedValue: string | null = null;
 
   @action
@@ -1114,7 +1114,7 @@ class Embedded extends Component<typeof Theme> {
   </template>
 }
 
-class Atom extends Component<typeof Theme> {
+class Atom extends Component<typeof BrandTheme> {
   <template>
     <div class='theme-pill' style={{sanitize @model.cssVariables}}>
       <img
@@ -1152,8 +1152,8 @@ class Atom extends Component<typeof Theme> {
   </template>
 }
 
-export class Theme extends CardDef {
-  static displayName = 'Theme';
+export class BrandTheme extends CardDef {
+  static displayName = 'Brand Theme';
 
   @field brand = contains(StringField);
   @field logoURL = contains(UrlField);
@@ -1162,7 +1162,7 @@ export class Theme extends CardDef {
   @field title = contains(StringField);
   @field description = contains(StringField);
   @field thumbnailURL = contains(UrlField, {
-    computeVia: function (this: Theme) {
+    computeVia: function (this: BrandTheme) {
       try {
         // Use the symbolURL as thumbnailURL
         return this.symbolURL || null;
@@ -1174,7 +1174,7 @@ export class Theme extends CardDef {
 
   // Extract colors and typography from cssVariables for display
   @field colorPrimary = contains(ColorField, {
-    computeVia: function (this: Theme) {
+    computeVia: function (this: BrandTheme) {
       try {
         const match = this.cssVariables?.match(
           /--color-primary: (#[0-9A-Fa-f]{3,6});/,
@@ -1187,7 +1187,7 @@ export class Theme extends CardDef {
   });
 
   @field colorSecondary = contains(StringField, {
-    computeVia: function (this: Theme) {
+    computeVia: function (this: BrandTheme) {
       try {
         const match = this.cssVariables?.match(
           /--color-secondary: (#[0-9A-Fa-f]{3,6});/,
@@ -1200,7 +1200,7 @@ export class Theme extends CardDef {
   });
 
   @field colorDark = contains(StringField, {
-    computeVia: function (this: Theme) {
+    computeVia: function (this: BrandTheme) {
       try {
         const match = this.cssVariables?.match(
           /--color-dark: (#[0-9A-Fa-f]{3,6});/,
@@ -1213,7 +1213,7 @@ export class Theme extends CardDef {
   });
 
   @field colorLight = contains(StringField, {
-    computeVia: function (this: Theme) {
+    computeVia: function (this: BrandTheme) {
       try {
         const match = this.cssVariables?.match(
           /--color-light: (#[0-9A-Fa-f]{3,6});/,
@@ -1226,7 +1226,7 @@ export class Theme extends CardDef {
   });
 
   @field colorBackground = contains(StringField, {
-    computeVia: function (this: Theme) {
+    computeVia: function (this: BrandTheme) {
       try {
         const match = this.cssVariables?.match(
           /--color-background: (#[0-9A-Fa-f]{3,6});/,
@@ -1239,7 +1239,7 @@ export class Theme extends CardDef {
   });
 
   @field fontFamily = contains(StringField, {
-    computeVia: function (this: Theme) {
+    computeVia: function (this: BrandTheme) {
       try {
         const match = this.cssVariables?.match(
           /--font-family-base: ['"](.+)['"];/,
@@ -1252,7 +1252,7 @@ export class Theme extends CardDef {
   });
 
   @field headerFontSize = contains(StringField, {
-    computeVia: function (this: Theme) {
+    computeVia: function (this: BrandTheme) {
       try {
         const match = this.cssVariables?.match(/--typescale-h1: ([0-9]+px);/);
         return match ? match[1] : '28px';
@@ -1263,7 +1263,7 @@ export class Theme extends CardDef {
   });
 
   @field bodyFontSize = contains(StringField, {
-    computeVia: function (this: Theme) {
+    computeVia: function (this: BrandTheme) {
       try {
         const match = this.cssVariables?.match(/--typescale-body: ([0-9]+px);/);
         return match ? match[1] : '14px';
@@ -1274,7 +1274,7 @@ export class Theme extends CardDef {
   });
 
   @field lineHeight = contains(StringField, {
-    computeVia: function (this: Theme) {
+    computeVia: function (this: BrandTheme) {
       try {
         const match = this.cssVariables?.match(
           /--lineheight-base: ([0-9\.]+);/,
@@ -1287,7 +1287,7 @@ export class Theme extends CardDef {
   });
 
   @field borderRadius = contains(StringField, {
-    computeVia: function (this: Theme) {
+    computeVia: function (this: BrandTheme) {
       try {
         const match = this.cssVariables?.match(/--radius-base: ([0-9]+px);/);
         return match ? match[1] : '0px';

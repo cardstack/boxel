@@ -374,6 +374,7 @@ module(basename(__filename), function () {
               firstName: 'Mango',
               description: null,
               thumbnailURL: null,
+              cardInfo: {},
             },
             meta: {
               adoptsFrom: {
@@ -388,6 +389,13 @@ module(basename(__filename), function () {
             },
             links: {
               self: newCardId,
+            },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: null,
+                },
+              },
             },
           },
         });

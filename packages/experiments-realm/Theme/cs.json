@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cssVariables": ":root {\n  --background: var(--boxel-light);\n  --foreground: var(--boxel-dark);\n  --card: var(--boxel-light);\n  --card-foreground: var(--boxel-dark);\n  --popover: var(--boxel-light);\n  --popover-foreground: var(--boxel-dark);\n  --primary: var(--boxel-highlight, #00ffba);\n  --primary-foreground: var(--boxel-dark);\n  --secondary: var(--boxel-dark);\n  --secondary-foreground: var(--boxel-light);\n  --muted: var(--boxel-100, #f8f7fa);\n  --muted-foreground: var(--boxel-450, #919191);\n  --accent: var(--boxel-200, #e8e8e8);\n  --accent-foreground: var(--boxel-dark);\n  --destructive: var(--boxel-danger, #ff5050);\n  --destructive-foreground: var(--boxel-light);\n  --border: var(--boxel-border-color, #d3d3d3);\n  --input: var(--boxel-light);\n  --ring: var(--boxel-highlight, #00ffba);\n  --sidebar: var(--boxel-light);\n  --sidebar-foreground: var(--boxel-dark);\n  --sidebar-primary: var(--boxel-dark);\n  --sidebar-primary-foreground: var(--boxel-light);\n  --sidebar-accent: var(--boxel-200, #e8e8e8);;\n  --sidebar-accent-foreground: var(--boxel-dark);\n  --sidebar-border: var(--boxel-border-color, #d3d3d3);\n  --sidebar-ring: var(--boxel-highlight, #00ffba);\n  --font-sans: var(--boxel-font-family, Poppins, sans-serif);\n  --font-serif: Playfair Display, ui-serif, serif;\n  --font-mono: var(--boxel-monospace-font-family, Roboto Mono, monospace);\n  --radius: var(--boxel-border-radius, 0.625rem);\n  /* --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.13);\n  --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.13);\n  --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.25),\n    0 1px 2px -1px hsl(0 0% 0% / 0.25); */\n  --shadow: var(--boxel-box-shadow, 0 1px 3px 0 rgba(0 0 0 / 25%));\n  /* --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.25),\n    0 2px 4px -1px hsl(0 0% 0% / 0.25); */\n  --shadow-lg: var(--boxel-box-shadow-hover, 0 3px 10px 0 rgba(0 0 0 / 15%));\n  --shadow-xl: var(--boxel-deep-box-shadow, 0 5px 15px 0 rgba(0 0 0 / 50%));\n  /* --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.63); */\n  --tracking-normal: var(--boxel-lsp-xs, 0.01em);\n  --spacing: var(--boxel-sp, 1rem);\n}",
+      "cardInfo": {},
+      "title": "CS",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/card-api",
+        "name": "Theme"
+      }
+    }
+  }
+}
