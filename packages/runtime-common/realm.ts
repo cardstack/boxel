@@ -320,7 +320,6 @@ export class Realm {
           owner = await this.getRealmOwnerUserId();
         }
         req.headers.set('X-Boxel-Assume-User', owner);
-        req.headers.set('X-Boxel-Disable-Module-Cache', 'true');
         return next(req);
       },
       async (req, next) => {
