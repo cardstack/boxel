@@ -43,6 +43,7 @@ import {
   isResolvedCodeRef,
   userInitiatedPriority,
   userIdFromUsername,
+  isCardDocumentString,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -526,7 +527,38 @@ export class Realm {
     await this.indexing();
     let results: FileWriteResult[] = [];
     let urls: URL[] = [];
+    let lastWriteType: 'module' | 'instance' | undefined;
+    let currentWriteType: 'module' | 'instance' | undefined;
+    let performIndex = async () => {
+      await this.#realmIndexUpdater.update(urls, {
+        onInvalidation: (invalidatedURLs: URL[]) => {
+          this.broadcastRealmEvent({
+            eventName: 'index',
+            indexType: 'incremental',
+            invalidations: invalidatedURLs.map((u) => u.href),
+            clientRequestId: options?.clientRequestId ?? null,
+          });
+        },
+      });
+    };
     for (let [path, content] of files) {
+      lastWriteType = currentWriteType ?? lastWriteType;
+      currentWriteType = hasExecutableExtension(path)
+        ? 'module'
+        : path.endsWith('.json') && isCardDocumentString(content)
+          ? 'instance'
+          : undefined;
+      if (lastWriteType === 'module' && currentWriteType === 'instance') {
+        // we need to generate/update possible card-def meta in order for
+        // instance file serialization that may depend on the included module to
+        // work. TODO: we could be more precise here and keep track of what
+        // modules the instances depend on and only flush the modules to index
+        // when you you see that you have an instance that you are about to
+        // write to disk that depends on a module that is part of this
+        // operation.
+        await performIndex();
+        urls = [];
+      }
       let url = this.paths.fileURL(path);
       this.sendIndexInitiationEvent(url.href);
       await this.trackOwnWrite(path);
@@ -551,16 +583,9 @@ export class Realm {
       results.push({ path, lastModified, created, isNew });
       urls.push(url);
     }
-    await this.#realmIndexUpdater.update(urls, {
-      onInvalidation: (invalidatedURLs: URL[]) => {
-        this.broadcastRealmEvent({
-          eventName: 'index',
-          indexType: 'incremental',
-          invalidations: invalidatedURLs.map((u) => u.href),
-          clientRequestId: options?.clientRequestId ?? null,
-        });
-      },
-    });
+    if (urls.length > 0) {
+      await performIndex();
+    }
     return results;
   }
 

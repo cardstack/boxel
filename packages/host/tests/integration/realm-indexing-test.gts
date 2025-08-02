@@ -187,7 +187,7 @@ module(`Integration | realm indexing`, function (hooks) {
       } as LooseSingleCardDocument),
     );
 
-    let metaEntry = await realm.realmIndexQueryEngine.cardDef({
+    let metaEntry = await realm.realmIndexQueryEngine.getOwnCardDef({
       module: `${testRealmURL}pet`,
       name: 'Pet',
     });
@@ -211,7 +211,7 @@ module(`Integration | realm indexing`, function (hooks) {
 
     // meta entries are notional so we want to make sure they didn't
     // get tombstoned because the file wasn't found
-    metaEntry = await realm.realmIndexQueryEngine.cardDef({
+    metaEntry = await realm.realmIndexQueryEngine.getOwnCardDef({
       module: `${testRealmURL}pet`,
       name: 'Pet',
     });

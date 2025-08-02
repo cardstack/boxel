@@ -113,6 +113,7 @@ const expectedCardDef = {
     type: 'card-def',
     id: `${testRealmHref}person/Person`,
     attributes: {
+      type: 'card-def',
       displayName: 'Person',
       codeRef: {
         module: `${testRealmHref}person`,
