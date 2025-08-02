@@ -1,0 +1,69 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Musician Landing Page",
+      "summary": "Professional artist portfolio with Spotify-inspired streaming aesthetics - showcase music samples, tour dates, and social links while viewing authentic music industry presentations. Features hero image overlays, embedded audio players, show booking integration, contact management, and dark theme streaming platform design for complete artist brand presence.",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/musician-landing-page-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/musician-landing-page-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/musician-landing-page-listing/screenshot_03.png"
+      ],
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/musician-landing-page-listing/thumbnail.png"
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/da8579b2-5703-4a50-952d-1a07f0234926"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/marketing-growth"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../musician-landing-page/MusicianLandingPage/django-reeves"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../musician-landing-page/MusicianLandingPage/nova-eclipse"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../musician-landing-page/MusicianLandingPage/rosie-blackwood"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "CardListing"
+      }
+    }
+  }
+}

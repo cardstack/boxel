@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "MusicianLandingPage",
+        "module": "../musician-landing-page/musician-landing-page"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "MusicianLandingPage",
+      "description": "Spec of MusicianLandingPage",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
