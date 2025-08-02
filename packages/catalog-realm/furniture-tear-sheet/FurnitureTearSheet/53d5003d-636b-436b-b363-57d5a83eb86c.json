@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "productName": "The Aurora Lounge Chair",
+      "collection": "Nordic Luxe",
+      "heroImageUrl": "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80",
+      "description": "The Aurora Lounge Chair reimagines Scandinavian comfort with a contemporary edge. This statement piece features a precision-sculpted walnut frame that flows seamlessly into plush, cloud-soft cushioning. Perfect for reading nooks, bedroom corners, or as an accent piece in modern living spaces.\n\n**Key Features:**\n- Hand-selected American walnut construction\n- Memory foam cushioning wrapped in premium linen\n- Engineered for optimal lumbar support\n- Sustainable materials and low-VOC finishes",
+      "dimensions": "32\"W × 34\"D × 30\"H (seat height: 18\")",
+      "materials": "Solid American walnut frame, high-density memory foam, 100% Belgian linen upholstery",
+      "finish": "Natural walnut oil finish with water-resistant coating",
+      "weight": "42 lbs",
+      "price": 1299,
+      "sku": "NL-AUR-CHR-001",
+      "designerNotes": "Inspired by the gentle curves of Finnish coastlines, the Aurora chair balances organic forms with geometric precision. The walnut grain is carefully selected to flow with the chair's contours, creating a visual rhythm that draws the eye naturally upward.\n\nThe cushion's unique dual-density foam provides immediate comfort while maintaining structural support over years of use. Each chair is finished by hand using traditional Danish oil techniques, ensuring the wood's natural beauty develops a rich patina over time.",
+      "careinstructions": "**Daily Care:**\n- Dust weekly with a soft, lint-free cloth\n- Rotate cushions monthly for even wear\n- Keep away from direct sunlight and heat sources\n\n**Deep Cleaning:**\n- Vacuum upholstery with soft brush attachment\n- Professional cleaning recommended annually\n- Spot clean spills immediately with damp cloth\n\n**Wood Maintenance:**\n- Apply furniture oil every 6-12 months\n- Use coasters and placemats to prevent water rings\n- Minor scratches can be buffed out with fine steel wool",
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../furniture-tear-sheet",
+        "name": "FurnitureTearSheet"
+      }
+    }
+  }
+}
