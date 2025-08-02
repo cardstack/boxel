@@ -1,7 +1,15 @@
-import { click, fillIn, waitFor, waitUntil, visit } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  waitFor,
+  waitUntil,
+  visit,
+  triggerEvent,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
+import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
@@ -1960,6 +1968,118 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.ok(
       autoAttachedSpecCardsAfterReturn.length > 0,
       'Spec card should be auto-attached again when returning to spec panel',
+    );
+  });
+
+  test('ai assistant panel width persists to localStorage', async function (assert) {
+    // Clear any existing localStorage data for AI assistant panel width
+    window.localStorage.removeItem('ai-assistant-panel-width');
+
+    // First, set a specific width in localStorage
+    const testWidth = 50; // 25% width
+    window.localStorage.setItem('ai-assistant-panel-width', String(testWidth));
+
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      aiAssistantOpen: true,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    assert.dom('[data-test-ai-assistant-panel]').exists();
+    // Verify the panel follows the width from localStorage
+    let aiAssistantPanel = document.querySelector(
+      '[data-test-ai-assistant-panel]',
+    );
+    assert.ok(aiAssistantPanel, 'AI assistant panel should exist');
+
+    let initialWidth = aiAssistantPanel!.getBoundingClientRect().width;
+    assert.ok(initialWidth > 0, 'AI assistant panel should have a width');
+
+    // Calculate the percentage width of the AI assistant panel
+    let submodeLayout = document.querySelector('[data-test-submode-layout]');
+    assert.ok(submodeLayout, 'submode layout should exist');
+    let submodeLayoutWidth = submodeLayout!.getBoundingClientRect().width;
+    let actualPercentageWidth = (initialWidth / submodeLayoutWidth) * 100;
+
+    // Verify the width was loaded from localStorage and matches the actual panel width
+    let storedWidth = window.localStorage.getItem('ai-assistant-panel-width');
+    assert.ok(storedWidth, 'Width should be in localStorage');
+    assert.strictEqual(
+      Number(storedWidth),
+      testWidth,
+      'Stored width should match the test width',
+    );
+    // Verify the actual panel width percentage matches the stored width (with some tolerance for rounding)
+    assert.ok(
+      Math.abs(actualPercentageWidth - testWidth) < 5,
+      `Actual panel width percentage (${actualPercentageWidth.toFixed(
+        1,
+      )}%) should be close to stored width (${testWidth}%)`,
+    );
+
+    // Now test resizing the panel and verify localStorage updates
+    let resizeHandle = document.querySelector(
+      '[data-boxel-panel-resize-handle-id]',
+    );
+    assert.ok(resizeHandle, 'Resize handle should exist');
+
+    let resizeHandleRect = resizeHandle!.getBoundingClientRect();
+    // Simulate a resize by triggering mouse events on the resize handle
+    // This will actually trigger the ResizablePanelGroup's resize logic
+    await triggerEvent(resizeHandle!, 'pointerdown', {
+      clientX: resizeHandleRect.x,
+      clientY: resizeHandleRect.y,
+    });
+    await triggerEvent(resizeHandle!, 'pointermove', {
+      clientX: resizeHandleRect.x + 20,
+      clientY: resizeHandleRect.y,
+    }); // Move left to make AI panel smaller
+    await triggerEvent(resizeHandle!, 'pointerup');
+
+    // Wait a moment for the layout to update
+    await waitFor('[data-test-ai-assistant-panel]');
+
+    // Verify the width has been updated in localStorage
+    let updatedStoredWidth = window.localStorage.getItem(
+      'ai-assistant-panel-width',
+    );
+    assert.ok(
+      updatedStoredWidth,
+      'Width should still be in localStorage after resize',
+    );
+
+    let updatedParsedWidth = Number(updatedStoredWidth);
+    assert.ok(
+      updatedParsedWidth > 0,
+      'Updated width should be a positive number',
+    );
+    assert.ok(
+      updatedParsedWidth <= 100,
+      'Updated width should be a percentage (<= 100)',
+    );
+
+    // Verify the width changed (it should be different from the initial test width)
+    assert.notStrictEqual(
+      updatedParsedWidth,
+      testWidth,
+      'Width should have changed after resize',
+    );
+
+    // Verify the panel width actually changed
+    let resizedWidth = aiAssistantPanel!.getBoundingClientRect().width;
+    assert.ok(
+      resizedWidth > 0,
+      'AI assistant panel should still have a width after resize',
     );
   });
 });

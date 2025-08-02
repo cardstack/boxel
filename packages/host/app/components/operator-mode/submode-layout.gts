@@ -10,8 +10,7 @@ import { tracked } from '@glimmer/tracking';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask, timeout } from 'ember-concurrency';
 
-import { modifier } from 'ember-modifier';
-
+import window from 'ember-window-mock';
 import { TrackedObject } from 'tracked-built-ins';
 
 import {
@@ -36,6 +35,7 @@ import config from '@cardstack/host/config/environment';
 import type IndexController from '@cardstack/host/controllers';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
+import { AiAssistantPanelWidth } from '@cardstack/host/utils/local-storage-keys';
 
 import SearchSheet, {
   SearchSheetMode,
@@ -75,21 +75,6 @@ interface Signature {
   };
 }
 
-let handleWindowResizeModifier = modifier(
-  (element, [onWindowResize]: [(width: number) => void]) => {
-    let updateWindowWidth = () => {
-      let boundingClient = element.getBoundingClientRect();
-      onWindowResize(boundingClient.width);
-    };
-    updateWindowWidth();
-    window.addEventListener('resize', updateWindowWidth);
-
-    return () => {
-      window.removeEventListener('resize', updateWindowWidth);
-    };
-  },
-);
-
 type PanelWidths = {
   defaultWidth: number | null;
   minWidth: number | null;
@@ -103,6 +88,12 @@ export default class SubmodeLayout extends Component<Signature> {
     defaultWidth: 30,
     minWidth: 25,
   });
+
+  constructor(owner: unknown, args: Signature['Args']) {
+    super(owner, args);
+    this.loadPersistedAiPanelWidth();
+  }
+
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service private declare store: StoreService;
@@ -112,16 +103,19 @@ export default class SubmodeLayout extends Component<Signature> {
   private suppressSearchClose = false;
   private declare doSearch: (term: string) => void;
 
-  onWindowResize = (windowWidth: number) => {
-    let aiPanelDefaultWidthInPixels = 371;
-    if (windowWidth < aiPanelDefaultWidthInPixels) {
-      aiPanelDefaultWidthInPixels = windowWidth;
-    }
-    let aiPanelDefaultWidth = (aiPanelDefaultWidthInPixels / windowWidth) * 100;
+  private loadPersistedAiPanelWidth() {
+    const persistedWidth = window.localStorage.getItem(AiAssistantPanelWidth);
+    this.aiPanelWidths.defaultWidth = Number(persistedWidth) ?? 30;
+  }
 
-    this.aiPanelWidths.defaultWidth = aiPanelDefaultWidth;
-    this.aiPanelWidths.minWidth = aiPanelDefaultWidth;
-  };
+  @action
+  private onLayoutChange(layout: number[]) {
+    if (layout.length === 2) {
+      // The second panel (index 1) is the AI assistant panel
+      this.aiPanelWidths.defaultWidth = layout[1];
+      window.localStorage.setItem(AiAssistantPanelWidth, String(layout[1]));
+    }
+  }
 
   get operatorModeController(): IndexController {
     return this.operatorModeStateService.operatorModeController;
@@ -278,12 +272,13 @@ export default class SubmodeLayout extends Component<Signature> {
 
   <template>
     <div
-      {{handleWindowResizeModifier this.onWindowResize}}
       class='submode-layout {{this.aiAssistantVisibilityClass}}'
+      data-test-submode-layout
       ...attributes
     >
       <ResizablePanelGroup
         @orientation='horizontal'
+        @onLayoutChange={{this.onLayoutChange}}
         class='columns'
         as |ResizablePanel ResizeHandle|
       >

@@ -2,6 +2,7 @@ import window from 'ember-window-mock';
 
 export const CurrentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
 export const NewSessionIdPersistenceKey = 'aiPanelNewSessionId';
+export const AiAssistantPanelWidth = 'ai-assistant-panel-width';
 export const CodeModePanelWidths = 'code-mode-panel-widths';
 export const CodeModePanelHeights = 'code-mode-panel-heights';
 export const ModuleInspectorSelections = 'code-mode-panel-selections';
@@ -15,6 +16,7 @@ export const ScrollPositions = 'scroll-positions';
 export function clearLocalStorage() {
   window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
   window.localStorage.removeItem(NewSessionIdPersistenceKey);
+  window.localStorage.removeItem(AiAssistantPanelWidth);
   window.localStorage.removeItem(CodeModePanelWidths);
   window.localStorage.removeItem(CodeModePanelHeights);
   window.localStorage.removeItem(ModuleInspectorSelections);
