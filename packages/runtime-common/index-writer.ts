@@ -247,6 +247,7 @@ export class Batch {
 
       entry.meta = entry.meta
         ? {
+            type: entry.meta.type,
             displayName: entry.meta.displayName,
             codeRef: {
               module: this.copiedRealmURL(

@@ -682,6 +682,7 @@ const tests = Object.freeze({
           atom_html: null,
           icon_html: null,
           meta: {
+            type: 'card-def',
             displayName: 'Person',
             codeRef: { module: `${testRealmURL}person`, name: 'Person' },
             fields: {
@@ -837,6 +838,7 @@ const tests = Object.freeze({
         icon_html: null,
         is_deleted: null,
         meta: {
+          type: 'card-def',
           displayName: 'Person',
           codeRef: { module: `${testRealmURL2}person`, name: 'Person' },
           fields: {
@@ -1497,6 +1499,7 @@ const tests = Object.freeze({
       resourceCreatedAt: now,
       deps: new Set(types),
       meta: {
+        type: 'card-def',
         displayName: 'Person',
         codeRef: {
           module: `${testRealmURL}person`,
@@ -1532,6 +1535,7 @@ const tests = Object.freeze({
             module: `${testRealmURL}person`,
             name: 'Person',
           },
+          type: 'card-def',
           fields: {
             name: {
               type: 'contains',
@@ -1569,6 +1573,7 @@ const tests = Object.freeze({
       resourceCreatedAt: now,
       deps: new Set(types),
       meta: {
+        type: 'card-def',
         displayName: 'Person',
         codeRef: {
           module: `${testRealmURL}person`,
@@ -1606,6 +1611,7 @@ const tests = Object.freeze({
             module: `${testRealmURL}person`,
             name: 'Person',
           },
+          type: 'card-def',
           fields: {
             name: {
               type: 'contains',
