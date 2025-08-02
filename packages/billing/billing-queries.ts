@@ -117,6 +117,28 @@ export async function updateUserStripeCustomerEmail(
   ]);
 }
 
+export async function getUserById(
+  dbAdapter: DBAdapter,
+  userId: string,
+): Promise<User | null> {
+  let results = await query(dbAdapter, [
+    `SELECT * FROM users WHERE id = `,
+    param(userId),
+  ]);
+
+  if (results.length !== 1) {
+    return null;
+  }
+
+  return {
+    id: results[0].id,
+    matrixUserId: results[0].matrix_user_id,
+    stripeCustomerId: results[0].stripe_customer_id,
+    stripeCustomerEmail: results[0].stripe_customer_email,
+    matrixRegistrationToken: results[0].matrix_registration_token,
+  } as User;
+}
+
 export async function getUserByStripeId(
   dbAdapter: DBAdapter,
   stripeCustomerId: string,
@@ -543,4 +565,20 @@ export async function spendCredits(
       });
     }
   }
+}
+
+export async function getPlanByName(
+  dbAdapter: DBAdapter,
+  planName: string,
+): Promise<Plan | null> {
+  let results = await query(dbAdapter, [
+    `SELECT * FROM plans WHERE name = `,
+    param(planName),
+  ]);
+
+  if (results.length !== 1) {
+    return null;
+  }
+
+  return planRowToPlan(results[0]);
 }

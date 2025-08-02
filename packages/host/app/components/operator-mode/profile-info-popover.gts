@@ -145,7 +145,6 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
           <BoxelButton
             @kind='primary-dark'
             @size='small'
-            @disabled={{this.billingService.fetchingStripePaymentLinks}}
             {{on 'click' @toggleSubscriptionPlans}}
             data-test-upgrade-plan-button
           >Upgrade Plan</BoxelButton>
@@ -172,7 +171,6 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
                 'secondary-light'
               }}
               @size={{if subscriptionData.isOutOfCredit 'base' 'small'}}
-              @disabled={{this.billingService.fetchingStripePaymentLinks}}
               {{on 'click' @toggleProfileSettings}}
             >Buy more credits</BoxelButton>
           </div>

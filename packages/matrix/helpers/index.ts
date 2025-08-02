@@ -617,37 +617,11 @@ export async function setupUser(
   );
 }
 
-export async function assertPaymentLink(
-  page: Page,
-  { username, email }: { username: string; email: string },
-) {
-  const paymentLink =
-    (await page.locator('[data-test-setup-payment]').getAttribute('href')) ??
-    '';
-
-  const queryString = paymentLink.split('?')[1];
-  const params = new Map(
-    queryString.split('&').map((param) => {
-      const [key, value] = param.split('=');
-      return [key, value];
-    }),
-  );
-
-  const clientReferenceId = params.get('client_reference_id');
-  expect(clientReferenceId).toBe(encodeWebSafeBase64(username));
-
-  const emailFromUrl = params.get('prefilled_email');
-  expect(emailFromUrl).toBe(encodeURIComponent(email));
-}
-
 export async function setupPayment(
   username: string,
   realmServer: IsolatedRealmServer,
   _page?: Page,
 ) {
-  // decode the username from base64
-  const decodedUsername = decodeFromAlphanumeric(username);
-
   // mock trigger stripe webhook 'checkout.session.completed'
   let starterPlan = await realmServer.executeSQL(
     `SELECT * FROM plans WHERE name = 'Starter'`,
@@ -659,11 +633,11 @@ export async function setupPayment(
   let stripeCustomerId = `cus_${randomNumber}`;
 
   await realmServer.executeSQL(
-    `UPDATE users SET stripe_customer_id = '${stripeCustomerId}' WHERE matrix_user_id = '${decodedUsername}'`,
+    `UPDATE users SET stripe_customer_id = '${stripeCustomerId}' WHERE matrix_user_id = '${username}'`,
   );
 
   let findUser = await realmServer.executeSQL(
-    `SELECT * FROM users WHERE matrix_user_id = '${decodedUsername}'`,
+    `SELECT * FROM users WHERE matrix_user_id = '${username}'`,
   );
 
   const userId = findUser[0].id;
@@ -722,9 +696,8 @@ export async function setupUserSubscribed(
   username: string,
   realmServer: IsolatedRealmServer,
 ) {
-  const matrixUserId = encodeWebSafeBase64(username);
   await setupUser(username, realmServer);
-  await setupPayment(matrixUserId, realmServer);
+  await setupPayment(username, realmServer);
 }
 
 export async function assertLoggedOut(page: Page) {
@@ -812,19 +785,6 @@ export async function waitUntil<T>(
     await new Promise((resolve) => setTimeout(resolve, interval));
   }
   throw new Error('Timeout waiting for condition');
-}
-
-export function encodeWebSafeBase64(string: string) {
-  return Buffer.from(string)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, ''); // Remove padding
-}
-
-export function decodeFromAlphanumeric(encodedString: string) {
-  const base64 = encodedString.replace(/-/g, '+').replace(/_/g, '/');
-  return Buffer.from(base64, 'base64').toString('utf8');
 }
 
 export async function postNewCard(
