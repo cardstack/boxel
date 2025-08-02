@@ -1,4 +1,11 @@
-import { click, fillIn, waitFor, waitUntil, visit } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  waitFor,
+  waitUntil,
+  visit,
+  triggerEvent,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -1961,5 +1968,82 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       autoAttachedSpecCardsAfterReturn.length > 0,
       'Spec card should be auto-attached again when returning to spec panel',
     );
+  });
+
+  test('copies file history when creating new session with option checked', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // Send first message with a card
+    await fillIn('[data-test-message-field]', 'Message with card');
+    await selectCardFromCatalog(`${testRealmURL}Person/hassan`);
+    await click('[data-test-send-message-btn]');
+
+    // Send second message with a file
+    await fillIn('[data-test-message-field]', 'Message with file');
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-file-btn]');
+    await click('[data-test-file="pet.gts"]');
+    await click('[data-test-choose-file-modal-add-button]');
+    await click('[data-test-send-message-btn]');
+
+    // Send third message with another card
+    await fillIn('[data-test-message-field]', 'Message with another card');
+    await selectCardFromCatalog(`${testRealmURL}Pet/mango`);
+    await click('[data-test-send-message-btn]');
+
+    // Verify messages were sent with attachments
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message: 'Message with card',
+        cards: [{ id: `${testRealmURL}Person/hassan`, title: 'Hassan' }],
+      },
+      {
+        from: 'testuser',
+        message: 'Message with file',
+        files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
+      },
+      {
+        from: 'testuser',
+        message: 'Message with another card',
+        cards: [{ id: `${testRealmURL}Pet/mango`, title: 'Mango' }],
+      },
+    ]);
+    // Create new session with "Copy File History" option
+    await triggerEvent('[data-test-create-room-btn]', 'mouseenter');
+    await waitFor('[data-test-new-session-settings-menu]');
+    await click(
+      '[data-test-new-session-settings-checkbox="Copy File History"]',
+    );
+    await click('[data-test-create-room-btn]');
+
+    // Wait for new room to be created and settled
+    await waitFor(`[data-room-settled]`);
+
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message:
+          'This session includes files and cards from the previous conversation for context.',
+        cards: [
+          { id: `${testRealmURL}Pet/mango`, title: 'Mango' },
+          { id: `${testRealmURL}Pet/mango`, title: 'Mango' },
+        ],
+        files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
+      },
+    ]);
   });
 });
