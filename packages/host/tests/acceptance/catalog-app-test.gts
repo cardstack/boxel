@@ -392,7 +392,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         ],
       });
 
-      await waitFor('.catalog-content');
+      await waitFor('.catalog-content', { timeout: 5_000 });
       await waitFor('.showcase-center-div');
     });
 

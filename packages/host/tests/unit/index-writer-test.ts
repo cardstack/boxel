@@ -40,7 +40,7 @@ module('Unit | index-writer', function (hooks) {
     });
   });
 
-  test('card def entries can be invalidated', async function (assert) {
+  test('meta entries can be invalidated', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
       indexQueryEngine,
@@ -160,7 +160,7 @@ module('Unit | index-writer', function (hooks) {
     });
   });
 
-  test('can get a card-def entry', async function (assert) {
+  test('can get a meta entry', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
       indexQueryEngine,
@@ -168,7 +168,7 @@ module('Unit | index-writer', function (hooks) {
     });
   });
 
-  test('can get a card-def entry from the working index', async function (assert) {
+  test('can get a meta entry from the working index', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
       indexQueryEngine,
