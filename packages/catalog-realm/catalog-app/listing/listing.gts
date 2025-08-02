@@ -32,7 +32,7 @@ import { MenuItem, eq } from '@cardstack/boxel-ui/helpers';
 import AppListingHeader from '../components/app-listing-header';
 import { ListingFittedTemplate } from '../components/listing-fitted';
 
-import ListingInitCommand from '@cardstack/boxel-host/commands/listing-action-init';
+import ListingRemixCommand from '@cardstack/boxel-host/commands/listing-remix';
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 import ListingBuildCommand from '@cardstack/boxel-host/commands/listing-action-build';
 
@@ -96,10 +96,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     if (!commandContext) {
       throw new Error('Missing commandContext');
     }
-    await new ListingInitCommand(commandContext).execute({
+    let listing = this.args.model as Listing;
+    await new ListingRemixCommand(commandContext).execute({
       realm,
-      actionType: 'remix',
-      listing: this.args.model as Listing,
+      listing,
     });
   });
 
