@@ -140,7 +140,6 @@ export interface RealmPermissions {
 export interface FileWriteResult {
   path: string;
   lastModified: number;
-  created: number;
   isNew: boolean;
 }
 
@@ -549,11 +548,8 @@ export class Realm {
           throw new Error(e);
         }
       }
-      let { lastModified, created, isNew } = await this.#adapter.write(
-        path,
-        content,
-      );
-      results.push({ path, lastModified, created, isNew });
+      let { lastModified, isNew } = await this.#adapter.write(path, content);
+      results.push({ path, lastModified, isNew });
       urls.push(url);
     }
     await this.#realmIndexUpdater.update(urls, {
@@ -747,16 +743,11 @@ export class Realm {
       }
     }
 
-    let results: AtomicOperationResult[] = writeResults.map(
-      ({ path, created }) => ({
-        data: {
-          id: this.paths.fileURL(path).href,
-        },
-        meta: {
-          created,
-        },
-      }),
-    );
+    let results: AtomicOperationResult[] = writeResults.map(({ path }) => ({
+      data: {
+        id: this.paths.fileURL(path).href,
+      },
+    }));
     return createResponse({
       body: JSON.stringify({ 'atomic:results': results }, null, 2),
       init: {
@@ -1241,7 +1232,7 @@ export class Realm {
     }
     let headers = {
       ...(options?.defaultHeaders || {}),
-      'x-created': formatRFC7231(ref.created * 1000),
+      'x-created': formatRFC7231(ref.lastModified * 1000),
       'last-modified': formatRFC7231(ref.lastModified * 1000),
       ...(Symbol.for('shimmed-module') in ref
         ? { 'X-Boxel-Shimmed-Module': 'true' }
