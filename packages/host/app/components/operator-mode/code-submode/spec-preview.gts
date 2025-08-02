@@ -26,6 +26,7 @@ import {
   realmURL as realmURLSymbol,
   localId,
   isLocalId,
+  CardContextName,
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
@@ -104,12 +105,11 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @consume(GetCardsContextName) private declare getCards: getCards;
   @consume(GetCardCollectionContextName)
   private declare getCardCollection: getCardCollection;
+  @consume(CardContextName) private declare cardContext: CardContext;
   @service private declare realm: RealmService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare specPanelService: SpecPanelService;
   @service private declare store: StoreService;
-
-  @provide(CardContextName) private declare cardContext: CardContext;
 
   private cardTracker = new ElementTracker();
 

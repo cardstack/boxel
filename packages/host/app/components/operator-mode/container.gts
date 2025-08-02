@@ -21,7 +21,6 @@ import {
   GetCardsContextName,
   GetCardCollectionContextName,
 } from '@cardstack/runtime-common';
-import { type CardContext } from 'https://cardstack.com/base/card-api';
 
 import Auth from '@cardstack/host/components/matrix/auth';
 
@@ -33,6 +32,8 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 import { getSearch } from '@cardstack/host/resources/search';
 
 import MessageService from '@cardstack/host/services/message-service';
+
+import { type CardContext } from 'https://cardstack.com/base/card-api';
 
 import CardCatalogModal from '../card-catalog/modal';
 import PrerenderedCardSearch from '../prerendered-card-search';
