@@ -8,17 +8,42 @@ export default class HostModeService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
 
   get isActive() {
-    if (!this.fastboot.isFastBoot && config.hostModeDomainRoot) {
-      let hostModeDomainRoot = config.hostModeDomainRoot;
-      let currentHost = window.location.hostname;
-
-      if (currentHost.endsWith(`.${hostModeDomainRoot}`)) {
-        return true;
-      }
-
+    if (!this.fastboot.isFastBoot) {
       if (this.simulatingHostMode) {
         return true;
       }
+
+      return this.isUserSubdomain || this.isCustomSubdomain;
+    }
+
+    return false;
+  }
+
+  get isUserSubdomain() {
+    if (this.simulatingHostMode) {
+      return true;
+    }
+
+    if (config.hostModeUserSubdomainRoot) {
+      let hostModeUserSubdomainRoot = config.hostModeUserSubdomainRoot;
+      let currentHost = window.location.hostname;
+
+      return currentHost.endsWith(`.${hostModeUserSubdomainRoot}`);
+    }
+
+    return false;
+  }
+
+  get isCustomSubdomain() {
+    if (this.simulatingHostMode) {
+      return true;
+    }
+
+    if (config.hostModeCustomSubdomainRoot) {
+      let hostModeCustomSubdomainRoot = config.hostModeCustomSubdomainRoot;
+      let currentHost = window.location.hostname;
+
+      return currentHost.endsWith(`.${hostModeCustomSubdomainRoot}`);
     }
 
     return false;
@@ -30,6 +55,7 @@ export default class HostModeService extends Service {
     );
   }
 
+  // FIXME not user probably?
   get userSubdomain() {
     if (this.simulatingHostMode) {
       return (
@@ -40,6 +66,10 @@ export default class HostModeService extends Service {
     }
 
     return window.location.hostname.split('.')[0];
+  }
+
+  customSubdomainToRealmUrl(_subdomain: string) {
+    throw Error('Unimplemented: customSubdomainToRealmURL');
   }
 }
 

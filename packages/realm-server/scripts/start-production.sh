@@ -6,7 +6,8 @@ pnpm setup:skills-in-deployment
 NODE_NO_WARNINGS=1 \
   MATRIX_URL=https://matrix.boxel.ai \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
-  HOST_MODE_DOMAIN_ROOT=boxel.site \
+  HOST_MODE_USER_SUBDOMAIN_ROOT=boxel.space \
+  HOST_MODE_CUSTOM_SUBDOMAIN_ROOT=boxel.site \
   ts-node \
   --transpileOnly main \
   --port=3000 \
