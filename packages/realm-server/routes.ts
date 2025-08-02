@@ -22,6 +22,7 @@ import handleStripeLinksRequest from './handlers/handle-stripe-links';
 import handleCreateUserRequest from './handlers/handle-create-user';
 import handleQueueStatusRequest from './handlers/handle-queue-status';
 import handleReindex from './handlers/handle-reindex';
+import handleFullReindex from './handlers/handle-full-reindex';
 import handleRemoveJob from './handlers/handle-remove-job';
 import handleAddCredit from './handlers/handle-add-credit';
 
@@ -34,6 +35,7 @@ export type CreateRoutesArgs = {
   realmSecretSeed: string;
   virtualNetwork: VirtualNetwork;
   queue: QueuePublisher;
+  realms: Realm[];
   createRealm: ({
     ownerUserId,
     endpoint,
@@ -93,6 +95,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_grafana-add-credit',
     grafanaAuthorization(args.grafanaSecret),
     handleAddCredit(args),
+  );
+  router.get(
+    '/_grafana-full-reindex',
+    grafanaAuthorization(args.grafanaSecret),
+    handleFullReindex(args),
   );
 
   return router.routes();
