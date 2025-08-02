@@ -51,6 +51,7 @@ import {
   CommandContext,
   realmURL,
   identifyCard,
+  CardContextName,
 } from '@cardstack/runtime-common';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
