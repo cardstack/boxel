@@ -671,10 +671,8 @@ export default class MatrixService extends Service {
           enabledSkillCards as CardDef[],
         );
         // get the unique subset of enabledCommandDefinitions by functionName
-        enabledCommandDefinitions = enabledCommandDefinitions.filter(
-          (command, index, self) =>
-            index ===
-            self.findIndex((c) => c.functionName === command.functionName),
+        enabledCommandDefinitions = this.getUniqueCommandDefinitions(
+          enabledCommandDefinitions,
         );
         let enabledCommandDefFileDefs = await this.uploadCommandDefinitions(
           enabledCommandDefinitions,
@@ -694,6 +692,16 @@ export default class MatrixService extends Service {
 
   async downloadAsFileInBrowser(serializedFile: FileAPI.SerializedFile) {
     return await this.client.downloadAsFileInBrowser(serializedFile);
+  }
+
+  public getUniqueCommandDefinitions(
+    commandDefinitions: SkillModule.CommandField[],
+  ): SkillModule.CommandField[] {
+    return commandDefinitions.filter(
+      (command, index, self) =>
+        index ===
+        self.findIndex((c) => c.functionName === command.functionName),
+    );
   }
 
   async uploadCards(cards: CardDef[]) {

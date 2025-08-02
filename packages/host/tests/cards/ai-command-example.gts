@@ -79,7 +79,7 @@ export class AiCommandExample extends CardDef {
       });
       let { roomId } = await createAIAssistantRoomCommand.execute({
         name: 'Weather Assistant',
-        defaultSkills: [weatherSkill],
+        enabledSkills: [weatherSkill],
       });
 
       let sendMessageCommand = new SendAiAssistantMessageCommand(
