@@ -10,7 +10,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import { consume } from 'ember-provide-consume-context';
+import { provide, consume } from 'ember-provide-consume-context';
 
 import get from 'lodash/get';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
@@ -742,6 +742,18 @@ export default class InteractSubmode extends Component {
       });
     },
   );
+
+  // TODO: after actions is removed, this is not needed
+  @provide(CardContextName)
+  private get context(): CardContext {
+    // assumption: take actions in the right-most stack
+    let stackCount = this.operatorModeStateService.numberOfStacks();
+    let rightMostStackIndex = stackCount > 0 ? stackCount - 1 : 0;
+    return {
+      actions: this.publicAPI(this, rightMostStackIndex), //TODO: This is to be removed
+      ...this.cardContext,
+    };
+  }
 
   <template>
     {{consumeContext this.getRecentCardCollection}}

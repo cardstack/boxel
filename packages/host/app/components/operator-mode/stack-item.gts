@@ -691,7 +691,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
               class='stack-item-preview'
               @card={{this.card}}
               @format={{@item.format}}
-              @cardContext={{this.context}}
             />
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
