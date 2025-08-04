@@ -1475,7 +1475,7 @@ class IsolatedPianoTemplate extends Component<typeof Piano> {
       }
 
       .main-piano.focused {
-        transform: scale(1.05);
+        transform: scale(1.03);
       }
 
       .piano-keys {
