@@ -123,6 +123,7 @@ export default class RemixCommand extends HostBaseCommand<
       roomId: 'new',
       prompt,
       openRoom: true,
+      attachedCards: [listing],
       skillCardIds,
     });
   }
