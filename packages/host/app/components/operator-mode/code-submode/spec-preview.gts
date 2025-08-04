@@ -5,7 +5,7 @@ import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
 
-import { consume } from 'ember-provide-consume-context';
+import { consume, provide } from 'ember-provide-consume-context';
 
 import {
   BoxelButton,
@@ -117,6 +117,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     return this.args.allSpecs.length === 1;
   }
 
+  @provide(CardContextName)
   private get context(): SpecPreviewCardContext {
     return {
       ...this.cardContext,
@@ -237,17 +238,9 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
               @onSelectCard={{@viewSpecInPlayground}}
             />
             {{#if this.displayIsolated}}
-              <CardRenderer
-                @card={{@activeSpec}}
-                @format='isolated'
-                @cardContext={{this.context}}
-              />
+              <CardRenderer @card={{@activeSpec}} @format='isolated' />
             {{else}}
-              <CardRenderer
-                @card={{@activeSpec}}
-                @format='edit'
-                @cardContext={{this.context}}
-              />
+              <CardRenderer @card={{@activeSpec}} @format='edit' />
             {{/if}}
           </div>
         {{/if}}
