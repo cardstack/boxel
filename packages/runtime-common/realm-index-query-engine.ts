@@ -9,11 +9,12 @@ import {
   type DBAdapter,
   type QueryOptions,
   type IndexedModuleOrError,
+  type IndexedCardDefOrError,
   type InstanceOrError,
+  type ResolvedCodeRef,
 } from '.';
 import { Realm } from './realm';
 import { RealmPaths } from './paths';
-import { Loader } from './loader';
 import type { Query } from './query';
 import { CardError, type SerializedError } from './error';
 import {
@@ -45,7 +46,6 @@ export interface SearchResultError {
 export class RealmIndexQueryEngine {
   #realm: Realm;
   #fetch: typeof globalThis.fetch;
-  #loader: Loader;
   #indexQueryEngine: IndexQueryEngine;
 
   constructor({
@@ -62,14 +62,9 @@ export class RealmIndexQueryEngine {
         `DB Adapter was not provided to SearchIndex constructor--this is required when using a db based index`,
       );
     }
-    this.#indexQueryEngine = new IndexQueryEngine(dbAdapter);
+    this.#indexQueryEngine = new IndexQueryEngine(dbAdapter, fetch);
     this.#realm = realm;
     this.#fetch = fetch;
-    this.#loader = Loader.cloneLoader(this.#realm.loaderTemplate);
-  }
-
-  get loader() {
-    return this.#loader;
   }
 
   @Memoize()
@@ -82,7 +77,6 @@ export class RealmIndexQueryEngine {
     let { cards: data, meta: _meta } = await this.#indexQueryEngine.search(
       new URL(this.#realm.url),
       query,
-      this.loader,
       opts,
     );
     doc = {
@@ -128,7 +122,6 @@ export class RealmIndexQueryEngine {
     let results = await this.#indexQueryEngine.searchPrerendered(
       new URL(this.#realm.url),
       query,
-      this.loader,
       opts,
     );
 
@@ -196,6 +189,13 @@ export class RealmIndexQueryEngine {
     opts?: Options,
   ): Promise<IndexedModuleOrError | undefined> {
     return await this.#indexQueryEngine.getModule(url, opts);
+  }
+
+  async cardDef(
+    codeRef: ResolvedCodeRef,
+    opts?: Options,
+  ): Promise<IndexedCardDefOrError | undefined> {
+    return await this.#indexQueryEngine.getOwnCardDef(codeRef, opts);
   }
 
   async instance(

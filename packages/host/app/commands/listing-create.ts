@@ -302,14 +302,17 @@ export default class ListingCreateCommand extends HostBaseCommand<
     });
 
     await new UseAiAssistantCommand(this.commandContext).execute({
-      prompt: `Update information for the listing and redirect to the listing`,
+      prompt: `Update information for the listing and redirect to the listing, find the possible category and tags for the listing based in catalog-realm`,
       roomId: 'new',
       openRoom: true,
       llmModel: 'anthropic/claude-sonnet-4',
       llmMode: 'act',
       openCardIds: [listing.id!],
       attachedCards: [listing as CardAPI.CardDef],
-      skillCardIds: [skillCardURL('boxel-environment')],
+      skillCardIds: [
+        skillCardURL('boxel-environment'),
+        skillCardURL('catalog-listing'),
+      ],
     });
   }
 }

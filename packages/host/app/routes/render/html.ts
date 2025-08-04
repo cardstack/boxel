@@ -26,7 +26,7 @@ export default class RenderRoute extends Route<Model> {
     format: string;
     ancestor_level: string;
   }) {
-    let instance = this.modelFor('render') as ParentModel;
+    let { instance } = this.modelFor('render') as ParentModel;
     if (!isValidFormat(format)) {
       throw new Error('todo: invalid format');
     }

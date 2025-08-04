@@ -16,7 +16,7 @@ module(basename(__filename), function () {
       prepareTestDB();
       adapter = new PgAdapter({ autoMigrate: true });
       indexWriter = new IndexWriter(adapter);
-      indexQueryEngine = new IndexQueryEngine(adapter);
+      indexQueryEngine = new IndexQueryEngine(adapter, fetch);
     });
 
     hooks.afterEach(async function () {
@@ -32,6 +32,14 @@ module(basename(__filename), function () {
     });
 
     test('can perform invalidations for a module entry', async function (assert) {
+      await runSharedTest(indexWriterTests, assert, {
+        indexWriter,
+        indexQueryEngine,
+        adapter,
+      });
+    });
+
+    test('card def entries can be invalidated', async function (assert) {
       await runSharedTest(indexWriterTests, assert, {
         indexWriter,
         indexQueryEngine,
@@ -144,6 +152,22 @@ module(basename(__filename), function () {
     });
 
     test('can get compiled module and source from WIP index', async function (assert) {
+      await runSharedTest(indexWriterTests, assert, {
+        indexWriter,
+        indexQueryEngine,
+        adapter,
+      });
+    });
+
+    test('can get a card-def entry', async function (assert) {
+      await runSharedTest(indexWriterTests, assert, {
+        indexWriter,
+        indexQueryEngine,
+        adapter,
+      });
+    });
+
+    test('can get a card-def entry from the working index', async function (assert) {
       await runSharedTest(indexWriterTests, assert, {
         indexWriter,
         indexQueryEngine,

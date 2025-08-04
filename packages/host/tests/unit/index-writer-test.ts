@@ -21,7 +21,7 @@ module('Unit | index-writer', function (hooks) {
   hooks.beforeEach(async function () {
     await adapter.reset();
     indexWriter = new IndexWriter(adapter);
-    indexQueryEngine = new IndexQueryEngine(adapter);
+    indexQueryEngine = new IndexQueryEngine(adapter, fetch);
   });
 
   test('can perform invalidations for a instance entry', async function (assert) {
@@ -33,6 +33,14 @@ module('Unit | index-writer', function (hooks) {
   });
 
   test('can perform invalidations for a module entry', async function (assert) {
+    await runSharedTest(indexWriterTests, assert, {
+      indexWriter,
+      indexQueryEngine,
+      adapter,
+    });
+  });
+
+  test('card def entries can be invalidated', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
       indexQueryEngine,
@@ -145,6 +153,22 @@ module('Unit | index-writer', function (hooks) {
   });
 
   test('can get compiled module and source from WIP index', async function (assert) {
+    await runSharedTest(indexWriterTests, assert, {
+      indexWriter,
+      indexQueryEngine,
+      adapter,
+    });
+  });
+
+  test('can get a card-def entry', async function (assert) {
+    await runSharedTest(indexWriterTests, assert, {
+      indexWriter,
+      indexQueryEngine,
+      adapter,
+    });
+  });
+
+  test('can get a card-def entry from the working index', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
       indexQueryEngine,

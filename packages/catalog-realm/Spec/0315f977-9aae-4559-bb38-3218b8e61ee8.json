@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "FurnitureTearSheet",
+        "module": "../furniture-tear-sheet/furniture-tear-sheet"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "FurnitureTearSheet",
+      "description": "Spec of FurnitureTearSheet",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

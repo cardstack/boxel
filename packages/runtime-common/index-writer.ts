@@ -33,6 +33,7 @@ import {
   RealmMetaTable,
   type BoxelIndexTable,
   type RealmVersionsTable,
+  type CardDefMeta,
 } from './index-structure';
 
 export class IndexWriter {
@@ -60,7 +61,11 @@ export class IndexWriter {
   }
 }
 
-export type IndexEntry = InstanceEntry | ModuleEntry | ErrorEntry;
+export type IndexEntry =
+  | InstanceEntry
+  | ModuleEntry
+  | CardDefEntry
+  | ErrorEntry;
 export type LastModifiedTimes = Map<
   string,
   { type: string; lastModified: number | null }
@@ -98,6 +103,16 @@ interface ModuleEntry {
   deps: Set<string>;
 }
 
+interface CardDefEntry {
+  type: 'card-def';
+  meta: CardDefMeta;
+  types: string[];
+  fileAlias: string;
+  lastModified: number;
+  resourceCreatedAt: number;
+  deps: Set<string>;
+}
+
 export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
@@ -116,12 +131,14 @@ export class Batch {
   }
 
   get invalidations() {
-    return [...this.#invalidations];
+    // the card def id's are notional, they are not file resources that can be
+    // visited, so we don't expose them to the outside world
+    return [...this.#invalidations].filter((i) => !isCardDefId(i));
   }
 
   @Memoize()
   private get nodeResolvedInvalidations() {
-    return [...this.#invalidations].map(
+    return [...this.invalidations].map(
       (href) => trimExecutableExtension(new URL(href)).href,
     );
   }
@@ -132,12 +149,18 @@ export class Batch {
        FROM boxel_index as i
           WHERE i.realm_url =`,
       param(this.realmURL.href),
+      // card-def are notional so we skip over those
+      `AND type != 'card-def'`,
     ] as Expression)) as Pick<
       BoxelIndexTable,
       'url' | 'type' | 'last_modified'
     >[];
     let result: LastModifiedTimes = new Map();
     for (let { url, type, last_modified: lastModified } of results) {
+      // there might be errors docs from card-defs that we need to strip out
+      if (isCardDefId(url)) {
+        continue;
+      }
       result.set(url, {
         type,
         // lastModified is unix time, so it should be safe to cast to number
@@ -222,6 +245,23 @@ export class Batch {
       this.updateIds(entry.search_doc, sourceRealmURL);
       entry.indexed_at = now;
 
+      entry.meta = entry.meta
+        ? {
+            displayName: entry.meta.displayName,
+            codeRef: {
+              module: this.copiedRealmURL(
+                sourceRealmURL,
+                new URL(entry.meta.codeRef.module),
+              ).href,
+              name: entry.meta.codeRef.name,
+            },
+            fields: this.cardDefMetaWithCopiedCodeRefs(
+              sourceRealmURL,
+              entry.meta.fields,
+            ),
+          }
+        : entry.meta;
+
       let { valueExpressions, nameExpressions } = asExpressions(entry);
       columns = nameExpressions;
       return valueExpressions;
@@ -290,14 +330,25 @@ export class Batch {
               ),
               error_doc: null,
             }
-          : {
-              types: entry.types,
-              search_doc: entry.searchData,
-              // favor the last known good types over the types derived from the error state
-              ...((await this.getProductionVersion(url)) ?? {}),
-              type: 'error',
-              error_doc: entry.error,
-            }),
+          : entry.type === 'card-def'
+            ? {
+                type: 'card-def',
+                meta: entry.meta,
+                types: entry.types,
+                file_alias: entry.fileAlias,
+                deps: [...entry.deps],
+                last_modified: entry.lastModified,
+                resource_created_at: entry.resourceCreatedAt,
+                error_doc: null,
+              }
+            : {
+                types: entry.types,
+                search_doc: entry.searchData,
+                // favor the last known good types over the types derived from the error state
+                ...((await this.getProductionVersion(url)) ?? {}),
+                type: 'error',
+                error_doc: entry.error,
+              }),
     } as Omit<BoxelIndexTable, 'last_modified' | 'indexed_at'> & {
       // we do this because pg automatically casts big ints into strings, so
       // we unwind that to accurately type the structure that we want to pass
@@ -512,7 +563,44 @@ export class Batch {
     }
   }
 
-  async invalidate(urls: URL[]): Promise<string[]> {
+  private async tombstoneEntries(invalidations: string[]) {
+    // insert tombstone into next version of the realm index
+    let columns = [
+      'url',
+      'file_alias',
+      'type',
+      'realm_version',
+      'realm_url',
+      'is_deleted',
+    ].map((c) => [c]);
+    let rows = invalidations.map((id) =>
+      [
+        id,
+        isCardDefId(id)
+          ? trimExportNameFromCardDefId(id)
+          : trimExecutableExtension(new URL(id)).href,
+        hasExecutableExtension(id)
+          ? 'module'
+          : isCardDefId(id)
+            ? 'card-def'
+            : 'instance',
+        this.realmVersion,
+        this.realmURL.href,
+        true,
+      ].map((v) => [param(v)]),
+    );
+
+    await this.#query([
+      ...upsertMultipleRows(
+        'boxel_index_working',
+        'boxel_index_working_pkey',
+        columns,
+        rows,
+      ),
+    ]);
+  }
+
+  async invalidate(urls: URL[]): Promise<void> {
     await this.ready;
     let start = Date.now();
     this.#perfLog.debug(
@@ -534,38 +622,11 @@ export class Batch {
     }
 
     if (invalidations.length === 0) {
-      return [];
+      return;
     }
 
-    // insert tombstone into next version of the realm index
-    let columns = [
-      'url',
-      'file_alias',
-      'type',
-      'realm_version',
-      'realm_url',
-      'is_deleted',
-    ].map((c) => [c]);
-    let rows = invalidations.map((id) =>
-      [
-        id,
-        trimExecutableExtension(new URL(id)).href,
-        hasExecutableExtension(id) ? 'module' : 'instance',
-        this.realmVersion,
-        this.realmURL.href,
-        true,
-      ].map((v) => [param(v)]),
-    );
-
     let insertStart = Date.now();
-    await this.#query([
-      ...upsertMultipleRows(
-        'boxel_index_working',
-        'boxel_index_working_pkey',
-        columns,
-        rows,
-      ),
-    ]);
+    await this.tombstoneEntries(invalidations);
 
     this.#perfLog.debug(
       `${jobIdentity(this.jobInfo)} inserted invalidated rows for  ${urls.map((u) => u.href).join()} in ${
@@ -578,21 +639,22 @@ export class Batch {
     );
 
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
-    return invalidations;
   }
 
-  private async itemsThatReference(
-    resolvedPath: string,
-  ): Promise<
-    { url: string; alias: string; type: 'instance' | 'module' | 'error' }[]
+  private async itemsThatReference(resolvedPath: string): Promise<
+    {
+      url: string;
+      alias: string;
+      type: 'instance' | 'module' | 'card-def' | 'error';
+    }[]
   > {
     let start = Date.now();
     const pageSize = 1000;
     let results: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: 'instance' | 'module' | 'error';
+      type: 'instance' | 'module' | 'card-def' | 'error';
     })[] = [];
     let rows: (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-      type: 'instance' | 'module' | 'error';
+      type: 'instance' | 'module' | 'card-def' | 'error';
     })[] = [];
     let pageNumber = 0;
     do {
@@ -624,7 +686,7 @@ export class Batch {
         ]),
         `LIMIT ${pageSize} OFFSET ${pageNumber * pageSize}`,
       ] as Expression)) as (Pick<BoxelIndexTable, 'url' | 'file_alias'> & {
-        type: 'instance' | 'module' | 'error';
+        type: 'instance' | 'card-def' | 'module' | 'error';
       })[];
       results = [...results, ...rows];
       pageNumber++;
@@ -655,8 +717,13 @@ export class Batch {
     let items = await this.itemsThatReference(resolvedPath);
     let invalidations = items.map(({ url }) => url);
     let aliases = items.map(({ alias: moduleAlias, type, url }) =>
-      // for instances we expect that the deps for an entry always includes .json extension
-      type === 'instance' ? url : moduleAlias,
+      type === 'instance'
+        ? // for instances we expect that the deps for an entry always includes .json extension
+          url
+        : type === 'card-def'
+          ? // for card-defs we expect that the deps for an entry doesn't include the final export name path segment
+            trimExportNameFromCardDefId(url)
+          : moduleAlias,
     );
     let results = [
       ...invalidations,
@@ -690,6 +757,27 @@ export class Batch {
     return result;
   }
 
+  private cardDefMetaWithCopiedCodeRefs(
+    fromRealm: URL,
+    fieldsMeta: CardDefMeta['fields'],
+  ): CardDefMeta['fields'] {
+    return Object.fromEntries(
+      Object.entries(fieldsMeta).map(([fieldName, meta]) => [
+        fieldName,
+        {
+          ...meta,
+          fieldOrCard: {
+            module: this.copiedRealmURL(
+              fromRealm,
+              new URL(meta.fieldOrCard.module),
+            ).href,
+            name: meta.fieldOrCard.name,
+          },
+        },
+      ]),
+    );
+  }
+
   private updateIds(obj: any, fromRealm: URL) {
     if (Array.isArray(obj)) {
       obj.forEach((i) => this.updateIds(i, fromRealm));
@@ -708,4 +796,12 @@ export class Batch {
       }
     }
   }
+}
+
+export function isCardDefId(id: string) {
+  return !id.split('/').pop()!.includes('.'); // URL without an extension
+}
+
+export function trimExportNameFromCardDefId(id: string) {
+  return id.split('/').slice(0, -1).join('/');
 }

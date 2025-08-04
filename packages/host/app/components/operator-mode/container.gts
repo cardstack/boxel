@@ -37,7 +37,6 @@ import { Submodes } from '../submode-switcher';
 
 import ChooseFileModal from './choose-file-modal';
 
-import type BillingService from '../../services/billing-service';
 import type CardService from '../../services/card-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -52,7 +51,6 @@ interface Signature {
 }
 
 export default class OperatorModeContainer extends Component<Signature> {
-  @service private declare billingService: BillingService;
   @service private declare cardService: CardService;
   @service declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;

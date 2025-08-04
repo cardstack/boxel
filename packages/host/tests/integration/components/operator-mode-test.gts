@@ -782,11 +782,10 @@ module('Integration | operator-mode', function (hooks) {
           .includesText('Delete the card Hassan?');
         await click('[data-test-confirm-delete-button]');
 
-        await waitUntil(
-          () => !document.querySelector('[data-test-stack-card]'),
-        );
-        assert.dom('[data-test-stack-card]').doesNotExist();
-        assert.dom('[data-test-workspace-list]').exists();
+        assert
+          .dom(`[data-test-stack-card="${testRealmURL}FriendWithCSS/friend-a"]`)
+          .doesNotExist();
+        assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
       });
     },
   );
@@ -1013,9 +1012,10 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-person]').isVisible();
 
     await click('[data-test-close-button]');
-    await waitUntil(() => !document.querySelector('[data-test-stack-card]'));
-    assert.dom('[data-test-person]').isNotVisible();
-    assert.dom('[data-test-workspace-chooser]').isVisible();
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+      .doesNotExist();
+    assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
     await percySnapshot(assert);
   });
 

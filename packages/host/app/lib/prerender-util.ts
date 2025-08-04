@@ -1,7 +1,7 @@
 import {
-  type Loader,
-  type LooseCardResource,
   moduleFrom,
+  type LooseCardResource,
+  type Loader,
 } from '@cardstack/runtime-common';
 
 export function directModuleDeps(
