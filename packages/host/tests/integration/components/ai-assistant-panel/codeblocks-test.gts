@@ -56,13 +56,6 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
 
-  // Helper function to wait for ResizeObserver operations to complete
-  async function waitForResizeObserver() {
-    await settled();
-    // Add a small delay to ensure ResizeObserver operations complete
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-
   hooks.beforeEach(function () {
     loader = getService('loader-service').loader;
   });
@@ -284,9 +277,6 @@ export default class MyComponent extends Component {
 
     await waitFor('[data-test-message-idx="0"]');
 
-    // Wait for any ResizeObserver operations to complete
-    await waitForResizeObserver();
-
     let monacoContent = getMonacoContent('firstAvailable');
     assert.strictEqual(
       monacoContent,
@@ -397,9 +387,6 @@ You can use these in your HTML documents to display formatted text, code snippet
 
     await waitFor('[data-test-message-idx="0"]');
 
-    // Wait for any ResizeObserver operations to complete
-    await waitForResizeObserver();
-
     assert
       .dom('.monaco-editor')
       .exists({ count: 2 }, 'Should have 2 monaco editors');
@@ -461,7 +448,6 @@ const data = {
 
   test('handles HTML tags outside backticks', async function (this: RenderingTestContext, assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
-    await waitForResizeObserver();
     let messageWithHtmlOutsideBackticks = `Here's some HTML outside of code blocks:
 
 <p>This is a paragraph with <strong>bold text</strong> and <em>italic text</em>.</p>
@@ -595,7 +581,7 @@ And some regular text with <b>HTML tags</b> that should be displayed as actual H
       let messageText = (this.element.querySelector('.message') as HTMLElement)
         ?.innerText;
       return messageText?.includes(
-        `Here's some HTML inside backticks without a language name:\n\n<div class="container">\n  <h1>Hello World</h1>\n  <p>This is a paragraph with \n    <strong>bold text</strong>.</p>\n  <ul>\n    <li>Item 1</li>\n    <li>Item 2</li>\n  </ul>\n</div>\n\nAnd here's some inline code with HTML: <span>inline HTML</span>\n\nAnd some regular text with <b>HTML tags</b> that should be displayed as actual HTML.`,
+        `Here's some HTML inside backticks without a language name:\n\n<div class="container">\n  <h1>Hello World</h1>\n  <p>This is a paragraph with <strong>bold text</strong>.</p>\n  <ul>\n    <li>Item 1</li>\n    <li>Item 2</li>\n  </ul>\n</div>\n\nAnd here's some inline code with HTML: <span>inline HTML</span>\n\nAnd some regular text with <b>HTML tags</b> that should be displayed as actual HTML.`,
       );
     });
 

@@ -2113,7 +2113,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     window.localStorage.removeItem('ai-assistant-panel-width');
 
     // First, set a specific width in localStorage
-    const testWidth = 50; // 25% width
+    const testWidth = 60; // 25% width
     window.localStorage.setItem('ai-assistant-panel-width', String(testWidth));
 
     let operatorModeStateParam = stringify({
