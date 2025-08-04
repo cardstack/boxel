@@ -110,8 +110,6 @@ export interface StackItemRenderedCardForOverlayActions
   stackItem: StackItem;
 }
 
-type StackItemCardContext = Omit<CardContext, 'prerenderedCardSearchComponent'>;
-
 export default class OperatorModeStackItem extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;

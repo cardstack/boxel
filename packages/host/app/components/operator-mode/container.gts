@@ -92,7 +92,7 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   @provide(CardContextName)
   // @ts-ignore "context" is declared but not used
-  private get context(): Omit<CardContext> {
+  private get context(): CardContext {
     return {
       getCard: this.getCard,
       getCards: this.getCards,
