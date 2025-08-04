@@ -51,6 +51,7 @@ import {
   CommandContext,
   realmURL,
   identifyCard,
+  CardContextName,
 } from '@cardstack/runtime-common';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
@@ -116,6 +117,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @consume(GetCardsContextName) private declare getCards: getCards;
   @consume(GetCardCollectionContextName)
   private declare getCardCollection: getCardCollection;
+  @consume(CardContextName) private declare cardContext: CardContext;
 
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -246,15 +248,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.url === `${this.realmURL.href}index`;
   }
 
-  private get cardContext(): StackItemCardContext {
+  @provide(CardContextName)
+  private get context(): StackItemCardContext {
+    // @ts-ignore "context" is declared but not used
     return {
+      ...this.cardContext,
       cardComponentModifier: this.cardTracker.trackElement,
-      actions: this.args.publicAPI,
-      commandContext: this.args.commandContext,
-      getCard: this.getCard,
-      getCards: this.getCards,
-      getCardCollection: this.getCardCollection,
-      store: this.store,
+      actions: this.args.publicAPI, //we put this last to overwrite card context so stackIndex is correct
     };
   }
 
@@ -694,7 +694,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
               class='stack-item-preview'
               @card={{this.card}}
               @format={{@item.format}}
-              @cardContext={{this.cardContext}}
             />
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}

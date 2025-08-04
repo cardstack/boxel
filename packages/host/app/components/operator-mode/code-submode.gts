@@ -35,6 +35,7 @@ import {
   CodeRef,
   type ResolvedCodeRef,
   type getCard,
+  CardContextName,
 } from '@cardstack/runtime-common';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
@@ -57,7 +58,11 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import type {
+  CardDef,
+  Format,
+  CardContext,
+} from 'https://cardstack.com/base/card-api';
 import { type SpecType } from 'https://cardstack.com/base/spec';
 
 import {
@@ -129,6 +134,7 @@ function urlToFilename(url: URL) {
 
 export default class CodeSubmode extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(CardContextName) private declare cardContext: CardContext;
 
   @service private declare cardService: CardService;
   @service private declare codeSemanticsService: CodeSemanticsService;

@@ -16,6 +16,7 @@ import { provide } from 'ember-provide-consume-context';
 import { or, not } from '@cardstack/boxel-ui/helpers';
 
 import {
+  CardContextName,
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
@@ -32,16 +33,20 @@ import { getSearch } from '@cardstack/host/resources/search';
 
 import MessageService from '@cardstack/host/services/message-service';
 
+import { type CardContext } from 'https://cardstack.com/base/card-api';
+
 import CardCatalogModal from '../card-catalog/modal';
+import PrerenderedCardSearch from '../prerendered-card-search';
 import { Submodes } from '../submode-switcher';
 
 import ChooseFileModal from './choose-file-modal';
 
 import type CardService from '../../services/card-service';
+import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmServerService from '../../services/realm-server';
-
+import type StoreService from '../../services/store';
 const waiter = buildWaiter('operator-mode-container:saveCard-waiter');
 
 interface Signature {
@@ -56,6 +61,8 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare messageService: MessageService;
   @service declare realmServer: RealmServerService;
+  @service private declare commandService: CommandService;
+  @service private declare store: StoreService;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -65,7 +72,6 @@ export default class OperatorModeContainer extends Component<Signature> {
       this.operatorModeStateService.clearStacks();
     });
   }
-
   @provide(GetCardContextName)
   // @ts-ignore "getCard" is declared but not used
   private get getCard() {
@@ -82,6 +88,19 @@ export default class OperatorModeContainer extends Component<Signature> {
   // @ts-ignore "getCardCollection" is declared but not used
   private get getCardCollection() {
     return getCardCollection;
+  }
+
+  @provide(CardContextName)
+  // @ts-ignore "getCardCollection" is declared but not used
+  private get cardContext(): Omit<CardContext> {
+    return {
+      getCard: this.getCard,
+      getCards: this.getCards,
+      getCardCollection: this.getCardCollection,
+      store: this.store,
+      commandContext: this.commandService.commandContext,
+      prerenderedCardSearchComponent: PrerenderedCardSearch,
+    };
   }
 
   private saveSource = task(async (url: URL, content: string) => {
