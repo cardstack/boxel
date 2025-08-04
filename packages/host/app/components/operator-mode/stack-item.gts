@@ -248,6 +248,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.url === `${this.realmURL.href}index`;
   }
 
+  @provide(CardContextName)
   private get context(): StackItemCardContext {
     return {
       cardComponentModifier: this.cardTracker.trackElement,
