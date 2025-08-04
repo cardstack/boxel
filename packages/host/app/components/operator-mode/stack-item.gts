@@ -253,6 +253,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return {
       cardComponentModifier: this.cardTracker.trackElement,
       ...this.cardContext,
+      actions: this.args.publicAPI, //we put this last to overwrite card context so stackIndex is correct
     };
   }
 
