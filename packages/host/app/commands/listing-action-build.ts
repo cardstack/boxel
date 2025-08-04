@@ -40,7 +40,7 @@ export default class ListingActionBuildCommand extends HostBaseCommand<
 
     const listing = listingInput as Listing;
 
-    const prompt = `Generate .gts card definition for "${listing.name}" implementing all requirements from the attached listing specification, limit output to 1000 lines maximum. Do not switch code or preview until the code is fully generated. Generate incrementally after per response if needed, then preview the final code in playground panel.`;
+    const prompt = `Generate .gts card definition for "${listing.name}" implementing all requirements from the attached listing specification. Then preview the final code in playground panel.`;
 
     const { roomId } = await new CreateAiAssistantRoomCommand(
       this.commandContext,
@@ -49,8 +49,8 @@ export default class ListingActionBuildCommand extends HostBaseCommand<
     });
 
     const defaultSkills = [
-      skillCardURL('boxel-environment'),
       skillCardURL('boxel-development'),
+      skillCardURL('catalog-listing'),
       skillCardURL('source-code-editing'),
     ];
 
