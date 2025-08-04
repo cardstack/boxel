@@ -1,7 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import type { CardDef, Format } from '../card-api';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn } from '@cardstack/boxel-ui/helpers';
 import { startCase } from 'lodash';
 import { getFieldIcon } from '@cardstack/runtime-common';
 
@@ -24,15 +24,13 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
   <template>
     <div class={{cn 'default-card-template' @format}}>
       {{#each-in this.displayFields as |key Field|}}
-        {{#unless (eq key 'id')}}
-          <FieldContainer
-            @label={{startCase key}}
-            @icon={{getFieldIcon @model key}}
-            data-test-field={{key}}
-          >
-            <Field />
-          </FieldContainer>
-        {{/unless}}
+        <FieldContainer
+          @label={{startCase key}}
+          @icon={{getFieldIcon @model key}}
+          data-test-field={{key}}
+        >
+          <Field />
+        </FieldContainer>
       {{/each-in}}
     </div>
     <style scoped>
