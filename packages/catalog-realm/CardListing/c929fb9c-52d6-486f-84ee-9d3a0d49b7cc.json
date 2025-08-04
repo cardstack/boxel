@@ -1,0 +1,63 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Birthday Card",
+      "summary": "Festive birthday celebration platform with animated surprise elements and wish collection - customize birthday details, surprise messages, and guest wishes while viewing animated decorations and interactive reveals. Features celebration animations, floating decorations, guest wish management, surprise button interactions, and vibrant birthday-themed styling for memorable celebrations.",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/birthday-card-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/birthday-card-listing/screenshot_02.png"
+      ],
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/birthday-card-listing/thumbnail.png"
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/a4c5f3ab-cb1b-4cec-93e4-3749fcc3fb93"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/content-creation"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/creative-projects"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "CardListing"
+      }
+    }
+  }
+}
