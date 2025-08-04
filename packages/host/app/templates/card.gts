@@ -70,7 +70,8 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
   }
 
   @provide(CardContextName)
-  private get cardContext(): HostModeCardContext {
+  // @ts-ignore "context" is declared but not used
+  private get context(): HostModeCardContext {
     return {
       getCard: this.getCard,
       getCards: this.getCards,

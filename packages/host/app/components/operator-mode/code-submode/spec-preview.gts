@@ -118,8 +118,8 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   }
 
   @provide(CardContextName)
+  // @ts-ignore "context" is declared but not used
   private get context(): SpecPreviewCardContext {
-    // @ts-ignore "context" is declared but not used
     return {
       ...this.cardContext,
       cardComponentModifier: this.cardTracker.trackElement,

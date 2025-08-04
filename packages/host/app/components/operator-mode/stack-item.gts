@@ -249,8 +249,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   @provide(CardContextName)
+  // @ts-ignore "context" is declared but not used
   private get context(): StackItemCardContext {
-    // @ts-ignore "context" is declared but not used
     return {
       ...this.cardContext,
       cardComponentModifier: this.cardTracker.trackElement,
