@@ -759,6 +759,74 @@ module('Integration | realm', function (hooks) {
     );
   });
 
+  test('realm returns 500 error for POST requests that set the value of a polymorphic field to an incompatible type', async function (assert) {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+    }
+    class Car extends FieldDef {
+      @field make = contains(StringField);
+      @field model = contains(StringField);
+      @field year = contains(StringField);
+    }
+    class Driver extends CardDef {
+      @field card = contains(Person);
+    }
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'driver.gts': { Driver },
+        'person.gts': { Person },
+        'car.gts': { Car },
+      },
+    });
+    let response = await handle(
+      realm,
+      new Request(testRealmURL, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              attributes: {
+                card: {
+                  firstName: null,
+                  make: 'Mercedes Benz',
+                  model: 'C300',
+                  year: '2024',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}driver`,
+                  name: 'Driver',
+                },
+                fields: {
+                  card: {
+                    adoptsFrom: {
+                      module: `${testRealmURL}car`,
+                      name: 'Car',
+                    },
+                  },
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      }),
+    );
+    assert.strictEqual(response.status, 500, '500 server error');
+    let json = await response.json();
+    assert.strictEqual(
+      json.errors[0].additionalErrors[0].errorDetail.message,
+      "field validation error: tried set instance of Car as field 'card' but it is not an instance of Person",
+    );
+  });
+
   test('realm can serve patch card requests', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -2341,6 +2409,98 @@ module('Integration | realm', function (hooks) {
         },
       },
       'file contents are correct',
+    );
+  });
+
+  test('realm returns 500 error for PATCH requests that set the value of a polymorphic field to an incompatible type', async function (assert) {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+    }
+    class Car extends FieldDef {
+      @field make = contains(StringField);
+      @field model = contains(StringField);
+      @field year = contains(StringField);
+    }
+    class Driver extends CardDef {
+      @field card = contains(Person);
+    }
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'driver.gts': { Driver },
+        'person.gts': { Person },
+        'car.gts': { Car },
+        'dir/driver.json': {
+          data: {
+            attributes: {
+              card: {
+                firstName: 'Mango',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}driver`,
+                name: 'Driver',
+              },
+              fields: {
+                card: {
+                  adoptsFrom: {
+                    module: `../person`,
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    let response = await handle(
+      realm,
+      new Request(`${testRealmURL}dir/driver`, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              attributes: {
+                card: {
+                  firstName: null,
+                  make: 'Mercedes Benz',
+                  model: 'C300',
+                  year: '2024',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}driver`,
+                  name: 'Driver',
+                },
+                fields: {
+                  card: {
+                    adoptsFrom: {
+                      module: `${testRealmURL}car`,
+                      name: 'Car',
+                    },
+                  },
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      }),
+    );
+
+    assert.strictEqual(response.status, 500, '500 server error');
+    let json = await response.json();
+    assert.strictEqual(
+      json.errors[0].additionalErrors[0].errorDetail.message,
+      "field validation error: tried set instance of Car as field 'card' but it is not an instance of Person",
     );
   });
 
