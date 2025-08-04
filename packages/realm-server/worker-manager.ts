@@ -159,7 +159,7 @@ if (port) {
   log.info(`worker manager HTTP listening on port ${port}`);
 }
 
-const shutdown = async (onShutdown?: () => void) => {
+const shutdown = (onShutdown?: () => void) => {
   log.info(`Shutting down server for worker manager...`);
 
   // Stop all workers
@@ -170,7 +170,6 @@ const shutdown = async (onShutdown?: () => void) => {
         worker.send?.('stop');
       }
     });
-    log.info(`All workers stopped.`);
   }
 
   webServerInstance?.closeAllConnections();
