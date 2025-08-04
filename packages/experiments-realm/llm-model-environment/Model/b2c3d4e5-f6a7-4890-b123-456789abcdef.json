@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "meta-llama/llama-4-maverick",
+      "modelName": "Llama 4 Maverick",
+      "displayName": "Llama 4 Maverick - Multimodal MoE (400B params)",
+      "forAssistantUse": false
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../model",
+        "name": "Model"
+      }
+    }
+  }
+}

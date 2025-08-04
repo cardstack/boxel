@@ -149,12 +149,18 @@ export class Batch {
        FROM boxel_index as i
           WHERE i.realm_url =`,
       param(this.realmURL.href),
+      // card-def are notional so we skip over those
+      `AND type != 'card-def'`,
     ] as Expression)) as Pick<
       BoxelIndexTable,
       'url' | 'type' | 'last_modified'
     >[];
     let result: LastModifiedTimes = new Map();
     for (let { url, type, last_modified: lastModified } of results) {
+      // there might be errors docs from card-defs that we need to strip out
+      if (isCardDefId(url)) {
+        continue;
+      }
       result.set(url, {
         type,
         // lastModified is unix time, so it should be safe to cast to number
@@ -594,7 +600,7 @@ export class Batch {
     ]);
   }
 
-  async invalidate(urls: URL[]): Promise<string[]> {
+  async invalidate(urls: URL[]): Promise<void> {
     await this.ready;
     let start = Date.now();
     this.#perfLog.debug(
@@ -616,7 +622,7 @@ export class Batch {
     }
 
     if (invalidations.length === 0) {
-      return [];
+      return;
     }
 
     let insertStart = Date.now();
@@ -633,10 +639,6 @@ export class Batch {
     );
 
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
-
-    // the card def id's are notional, they are not file resources that can be
-    // visited, so we don't expose them to the outside world
-    return invalidations.filter((i) => !isCardDefId(i));
   }
 
   private async itemsThatReference(resolvedPath: string): Promise<

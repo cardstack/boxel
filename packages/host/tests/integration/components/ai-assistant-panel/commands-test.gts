@@ -910,7 +910,8 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
     await click('[data-test-close-button]'); // close the last open card
     assert.dom(`[data-test-stack-card="${id}"]`).doesNotExist();
-    assert.dom('[data-test-workspace-chooser]').exists();
+    assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
+    await click('[data-test-close-button]'); // close index card
     assert
       .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
       .containsText('Search Results');

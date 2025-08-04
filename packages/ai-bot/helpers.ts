@@ -999,6 +999,13 @@ export const buildContextMessage = async (
     if (context?.realmUrl) {
       result += `Workspace: ${context.realmUrl}\n`;
     }
+    if (context?.workspaces) {
+      result += `Available workspaces:\n`;
+      context.workspaces.forEach((workspace) => {
+        result += ` - ${workspace.name} (${workspace.url})${workspace.type === 'catalog-workspace' ? ' - Catalog' : ''}\n`;
+      });
+      result += `\n`;
+    }
     if (context?.openCardIds && context.openCardIds.length > 0) {
       result += `Open cards:\n${context.openCardIds.map((id) => ` - ${id}\n`)}`;
     } else {

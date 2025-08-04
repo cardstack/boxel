@@ -1,4 +1,8 @@
-import { ResolvedCodeRef, type CardResource } from './index';
+import {
+  ResolvedCodeRef,
+  type CardResource,
+  type SerializerName,
+} from './index';
 import { type SerializedError } from './error';
 import { type PgPrimitive } from './expression';
 import { type FieldType } from 'https://cardstack.com/base/card-api';
@@ -53,17 +57,19 @@ export interface RealmMetaTable {
   indexed_at: string | null;
 }
 
+export interface CardDefFieldMeta {
+  type: FieldType;
+  isPrimitive: boolean;
+  isComputed: boolean;
+  fieldOrCard: ResolvedCodeRef;
+  serializerName?: SerializerName;
+}
+
 export interface CardDefMeta {
   codeRef: ResolvedCodeRef;
   displayName: string;
   fields: {
-    [fieldName: string]: {
-      type: FieldType;
-      isPrimitive: boolean;
-      isComputed: boolean;
-      fieldOrCard: ResolvedCodeRef;
-      serializerName?: string;
-    };
+    [fieldName: string]: CardDefFieldMeta;
   };
 }
 

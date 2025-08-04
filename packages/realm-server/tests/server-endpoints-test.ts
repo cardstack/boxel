@@ -1250,7 +1250,7 @@ module(basename(__filename), function () {
               moduleErrors: 0,
               instanceErrors: 0,
               modulesIndexed: 0,
-              instancesIndexed: 0,
+              instancesIndexed: 1,
               cardDefErrors: 0,
               cardDefsIndexed: 0,
               totalIndexEntries: 1,
@@ -1320,6 +1320,98 @@ module(basename(__filename), function () {
           {
             let response = await request2
               .get(`/_grafana-reindex?realm=${encodeURIComponent(realmURL)}`)
+              .set('Content-Type', 'application/json');
+            assert.strictEqual(response.status, 401, 'HTTP 401 status');
+          }
+          let finalJobs = await dbAdapter.execute('select * from jobs');
+          assert.strictEqual(
+            finalJobs.length,
+            initialJobs.length,
+            'an index job was not created',
+          );
+        });
+
+        test('can reindex all realms via grafana endpoint', async function (assert) {
+          let endpoint = `test-realm-${uuidv4()}`;
+          let owner = 'mango';
+          let ownerUserId = `@${owner}:localhost`;
+          let realmURL: string;
+          {
+            let response = await request2
+              .post('/_create-realm')
+              .set('Accept', 'application/vnd.api+json')
+              .set('Content-Type', 'application/json')
+              .set(
+                'Authorization',
+                `Bearer ${createRealmServerJWT(
+                  { user: ownerUserId, sessionRoom: 'session-room-test' },
+                  realmSecretSeed,
+                )}`,
+              )
+              .send(
+                JSON.stringify({
+                  data: {
+                    type: 'realm',
+                    attributes: {
+                      name: 'Test Realm',
+                      endpoint,
+                    },
+                  },
+                }),
+              );
+            assert.strictEqual(response.status, 201, 'HTTP 201 status');
+            realmURL = response.body.data.id;
+          }
+          let initialJobs = await dbAdapter.execute('select * from jobs');
+          assert.strictEqual(
+            initialJobs.length,
+            2,
+            'number of jobs initially is correct',
+          );
+          {
+            let response = await request2
+              .get(`/_grafana-full-reindex?authHeader=${grafanaSecret}`)
+              .set('Content-Type', 'application/json');
+            assert.deepEqual(
+              response.body.realms,
+              [testRealm2URL.href, realmURL],
+              'indexed realms are correct',
+            );
+          }
+          let finalJobs = await dbAdapter.execute('select * from jobs');
+          assert.strictEqual(
+            finalJobs.length,
+            4,
+            'realm index jobs were created',
+          );
+          let jobs = finalJobs.slice(2);
+          assert.strictEqual(
+            jobs[0].job_type,
+            'from-scratch-index',
+            'job type is correct',
+          );
+          assert.strictEqual(
+            jobs[0].concurrency_group,
+            `indexing:${testRealm2URL.href}`,
+            'concurrency group is correct',
+          );
+          assert.strictEqual(
+            jobs[1].job_type,
+            'from-scratch-index',
+            'job type is correct',
+          );
+          assert.strictEqual(
+            jobs[1].concurrency_group,
+            `indexing:${realmURL}`,
+            'concurrency group is correct',
+          );
+        });
+
+        test('returns 401 when calling grafana full reindex endpoint without a grafana secret', async function (assert) {
+          let initialJobs = await dbAdapter.execute('select * from jobs');
+          {
+            let response = await request2
+              .get(`/_grafana-full-reindex`)
               .set('Content-Type', 'application/json');
             assert.strictEqual(response.status, 401, 'HTTP 401 status');
           }

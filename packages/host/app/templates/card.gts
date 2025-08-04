@@ -17,6 +17,7 @@ import {
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
+  isCardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 import { meta } from '@cardstack/runtime-common/constants';
 
@@ -120,7 +121,3 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
 }
 
 export default RouteTemplate(HostModeComponent);
-
-function isCardErrorJSONAPI(model: any): model is CardErrorJSONAPI {
-  return model.status;
-}
