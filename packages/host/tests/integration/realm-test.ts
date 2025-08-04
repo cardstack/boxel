@@ -367,7 +367,9 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
+            cardInfo: {},
           },
+          relationships: { 'cardInfo.theme': { links: { self: null } } },
           meta: {
             adoptsFrom: {
               module: './person',
@@ -3158,6 +3160,10 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
+            cardInfo: {},
+          },
+          relationships: {
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
