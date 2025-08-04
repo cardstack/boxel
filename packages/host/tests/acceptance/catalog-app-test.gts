@@ -412,7 +412,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           assert,
           `[data-test-card="${apiDocumentationStubId}"] [data-test-catalog-listing-embedded-build-button]`,
           'Build',
-          'Generate .gts card definition for "API Documentation" implementing all requirements from the attached listing specification, limit output to 1000 lines maximum. Do not switch code or preview until the code is fully generated. Generate incrementally after per response if needed, then preview the final code in playground panel.',
+          'Generate .gts card definition for "API Documentation" implementing all requirements from the attached listing specification. Then preview the final code in playground panel.',
         );
       });
 
