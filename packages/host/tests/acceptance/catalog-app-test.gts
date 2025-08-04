@@ -533,7 +533,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .hasText('Mortgage Calculator');
       });
 
-      test('after clicking "Add Skills" button, the skill is attached to the skill menu', async function (assert) {
+      test('after clicking "Use Skills" button, the skills is attached to the skill menu', async function (assert) {
         await waitFor(
           `[data-test-card="${talkLikeAPirateCardId}"] [data-test-card-title="Talk Like a Pirate"]`,
         );
@@ -547,7 +547,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           );
 
         await click(
-          `[data-test-card="${talkLikeAPirateCardId}"] [data-test-catalog-listing-fitted-add-skill-to-room-button]`,
+          `[data-test-card="${talkLikeAPirateCardId}"] [data-test-catalog-listing-fitted-add-skills-to-room-button]`,
         );
 
         await waitFor('[data-room-settled]');
@@ -985,7 +985,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
     });
 
-    test('after clicking "Add Skills" button, the skill is attached to the skill menu', async function (assert) {
+    test('after clicking "Use Skills" button, the skills is attached to the skill menu', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -998,7 +998,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
 
       await click(
-        '[data-test-catalog-listing-embedded-add-skill-to-room-button]',
+        '[data-test-catalog-listing-embedded-add-skills-to-room-button]',
       );
 
       await waitFor('[data-room-settled]');

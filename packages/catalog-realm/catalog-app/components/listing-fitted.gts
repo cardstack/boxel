@@ -167,12 +167,12 @@ class CarouselComponent extends GlimmerComponent<Signature> {
           <BoxelButton
             @kind='secondary-dark'
             class='add-skills-button'
-            data-test-catalog-listing-fitted-add-skill-to-room-button
+            data-test-catalog-listing-fitted-add-skills-to-room-button
             @loading={{this._addSkillsToCurrentRoom.isRunning}}
             aria-label='Add Skills to Current Room'
             {{on 'click' this.addSkillsToCurrentRoom}}
           >
-            Add Skills
+            Use Skills
           </BoxelButton>
         {{/if}}
 
