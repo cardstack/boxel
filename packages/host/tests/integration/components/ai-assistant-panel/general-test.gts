@@ -1312,18 +1312,40 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     assert.dom('.menu-content').containsText('non-standard-llm-2');
   });
 
-  test('new session settings menu opens on hover and checkboxes work', async function (assert) {
+  test('new session settings menu - comprehensive functionality', async function (assert) {
     await renderAiAssistantPanel();
     await fillIn('[data-test-boxel-input-id="ai-chat-input"]', 'Test message');
     await click('[data-test-send-message-btn]');
 
+    // Test initial state
     assert
       .dom('[data-test-new-session-settings-menu]')
       .doesNotExist('Menu should not be visible initially');
 
+    // Test tooltip appears on hover
     await triggerEvent('[data-test-create-room-btn]', 'mouseenter');
 
+    await waitFor('[data-test-tooltip-content]');
+    assert
+      .dom('[data-test-tooltip-content]')
+      .hasText(
+        'New Session (Shift+Click for options)',
+        'Tooltip shows correct text when menu is closed',
+      );
+
+    // Test menu opens on Shift+Click
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+
     await waitFor('[data-test-new-session-settings-menu]');
+
+    // Test tooltip changes when menu is open
+    await triggerEvent('[data-test-create-room-btn]', 'mouseenter');
+    assert
+      .dom('[data-test-tooltip-content]')
+      .hasText(
+        'Close New Session Settings',
+        'Tooltip shows correct text when menu is open',
+      );
 
     assert
       .dom('[data-test-new-session-settings-title]')
@@ -1345,12 +1367,14 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     assert
       .dom('[data-test-new-session-settings-option].checked')
       .doesNotExist('No checkboxes are initially checked');
+    await percySnapshot(assert);
 
+    // Test checkbox functionality
     await click('[data-test-new-session-settings-checkbox="Add Same Skills"]');
 
     assert
       .dom('[data-test-new-session-settings-option].checked')
-      .exists({ count: 1 });
+      .exists({ count: 1 }, 'One checkbox should be checked');
 
     await click(
       '[data-test-new-session-settings-checkbox="Copy File History"]',
@@ -1358,22 +1382,112 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
     assert
       .dom('[data-test-new-session-settings-option].checked')
-      .exists({ count: 2 });
+      .exists({ count: 2 }, 'Two checkboxes should be checked');
 
     await click('[data-test-new-session-settings-checkbox="Add Same Skills"]');
 
     assert
       .dom('[data-test-new-session-settings-option].checked')
-      .exists({ count: 1 });
+      .exists({ count: 1 }, 'One checkbox should be checked after unchecking');
 
-    await triggerEvent('[data-test-create-room-btn]', 'mouseleave');
+    // Test close button functionality
+    assert
+      .dom('[data-test-new-session-settings-close-button]')
+      .exists('Close button should be present');
 
-    await waitUntil(
-      () => !document.querySelector('[data-test-new-session-settings-menu]'),
-    );
+    await click('[data-test-new-session-settings-close-button]');
 
     assert
       .dom('[data-test-new-session-settings-menu]')
-      .doesNotExist('Menu should be hidden after mouse leave');
+      .doesNotExist('Menu should be hidden after clicking close button');
+
+    // Test menu opens again on Shift+Click
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await waitFor('[data-test-new-session-settings-menu]');
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .exists('Menu should be visible after Shift+Click again');
+
+    // Use plus button to close menu
+    await click('[data-test-create-room-btn]');
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .doesNotExist('Menu shoud be hidden after clicking plus button');
+
+    // Test menu opens again on Shift+Click
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await waitFor('[data-test-new-session-settings-menu]');
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .exists('Menu should be visible after Shift+Click again');
+
+    // Test create button functionality
+    assert
+      .dom('[data-test-new-session-settings-create-button]')
+      .hasText('Start New Session', 'Create button should have correct text');
+
+    await click('[data-test-new-session-settings-create-button]');
+
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .doesNotExist('Menu should be hidden after clicking create button');
+
+    // Make create button enabled
+    await fillIn('[data-test-boxel-input-id="ai-chat-input"]', 'Test message');
+    await click('[data-test-send-message-btn]');
+    // Test menu opens again and create with options selected
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await waitFor('[data-test-new-session-settings-menu]');
+
+    // Select some options
+    await click('[data-test-new-session-settings-checkbox="Add Same Skills"]');
+
+    assert
+      .dom('[data-test-new-session-settings-option].checked')
+      .exists({ count: 2 }, 'Two checkboxes should be checked before creating');
+
+    await click('[data-test-new-session-settings-create-button]');
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .doesNotExist(
+        'Menu should be hidden after creating with options selected',
+      );
+
+    // Make create button enabled
+    await fillIn('[data-test-boxel-input-id="ai-chat-input"]', 'Test message');
+    await click('[data-test-send-message-btn]');
+    // Test click outside functionality
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+
+    await waitFor('[data-test-new-session-settings-menu]');
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .exists('Menu should be visible for click outside test');
+
+    // Click outside the menu
+    await click('[data-test-boxel-input-id="ai-chat-input"]');
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .doesNotExist('Menu should be hidden after clicking outside');
+
+    // Test normal click creates session immediately (without opening menu)
+    await click('[data-test-create-room-btn]');
+
+    assert
+      .dom('[data-test-new-session-settings-menu]')
+      .doesNotExist('Menu should not open on normal click');
+
+    // Make create button enalebed
+    await fillIn('[data-test-boxel-input-id="ai-chat-input"]', 'Test message');
+    await click('[data-test-send-message-btn]');
+    // Verify tooltip shows correct text after normal click
+    await triggerEvent('[data-test-create-room-btn]', 'mouseenter');
+    await waitFor('[data-test-tooltip-content]');
+    assert
+      .dom('[data-test-tooltip-content]')
+      .hasText(
+        'New Session (Shift+Click for options)',
+        'Tooltip shows correct text after normal click',
+      );
   });
 });

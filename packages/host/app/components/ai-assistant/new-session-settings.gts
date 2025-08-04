@@ -2,10 +2,16 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
+import XIcon from '@cardstack/boxel-icons/x';
+
+import { Button, IconButton } from '@cardstack/boxel-ui/components';
+
 interface Signature {
   Args: {
     selectedOptions: Set<string>;
     onOptionChange: (option: string, checked: boolean) => void;
+    onClose: () => void;
+    onCreateSession: (addSameSkills: boolean) => void;
   };
 }
 
@@ -29,12 +35,26 @@ export default class NewSessionSettings extends Component<Signature> {
     this.args.onOptionChange(option, checked);
   }
 
+  @action
+  handleCreateSession() {
+    const addSameSkills = this.args.selectedOptions.has('Add Same Skills');
+    this.args.onCreateSession(addSameSkills);
+  }
+
   <template>
     <div class='new-session-settings-menu' data-test-new-session-settings-menu>
-      <div
-        class='new-session-settings-title'
-        data-test-new-session-settings-title
-      >New Session Options</div>
+      <div class='new-session-settings-header'>
+        <div
+          class='new-session-settings-title'
+          data-test-new-session-settings-title
+        >New Session Options</div>
+        <IconButton
+          @icon={{XIcon}}
+          class='new-session-settings-close-button'
+          data-test-new-session-settings-close-button
+          {{on 'click' @onClose}}
+        />
+      </div>
       <div
         class='new-session-settings-options'
         data-test-new-session-settings-options
@@ -59,6 +79,17 @@ export default class NewSessionSettings extends Component<Signature> {
           </label>
         {{/each}}
       </div>
+      <div class='new-session-settings-footer'>
+        <Button
+          @kind='primary'
+          @size='small'
+          class='new-session-settings-create-button'
+          data-test-new-session-settings-create-button
+          {{on 'click' this.handleCreateSession}}
+        >
+          Start New Session
+        </Button>
+      </div>
     </div>
     <style scoped>
       .new-session-settings-menu {
@@ -66,8 +97,14 @@ export default class NewSessionSettings extends Component<Signature> {
         border-radius: 10px;
         box-shadow: 0 10px 15px 0 rgba(0, 0, 0, 0.25);
         border: solid 1px rgba(0, 0, 0, 0.25);
-        padding: 6.5px 11px;
+        padding: 6.5px 11px 11px 11px;
         min-width: 220px;
+      }
+      .new-session-settings-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6.5px;
       }
       .new-session-settings-title {
         font-family: Poppins, sans-serif;
@@ -79,18 +116,28 @@ export default class NewSessionSettings extends Component<Signature> {
         letter-spacing: 0.2px;
         text-align: left;
         color: #e0e0e0;
-        margin-bottom: 10px;
+      }
+      .new-session-settings-close-button {
+        --boxel-icon-button-width: 24px;
+        --boxel-icon-button-height: 24px;
+        --boxel-icon-button-color: #e0e0e0;
+        --boxel-icon-button-background: transparent;
+      }
+      .new-session-settings-close-button:hover {
+        --boxel-icon-button-color: #ffffff;
+        --boxel-icon-button-background: rgba(255, 255, 255, 0.1);
       }
       .new-session-settings-options {
         display: flex;
         flex-direction: column;
+        margin-bottom: var(--boxel-sp-sm);
       }
       .new-session-settings-option {
         display: flex;
         align-items: center;
         gap: 8px;
         cursor: pointer;
-        padding: 8px 4px;
+        padding: 7px 4px;
         border-radius: 5px;
         transition: background-color 0.2s ease;
       }
@@ -139,6 +186,13 @@ export default class NewSessionSettings extends Component<Signature> {
         text-align: left;
         color: #e0e0e0;
         text-wrap: nowrap;
+      }
+      .new-session-settings-footer {
+        display: flex;
+        justify-content: center;
+      }
+      .new-session-settings-create-button {
+        width: 100%;
       }
     </style>
   </template>
