@@ -176,6 +176,7 @@ export class RealmServer {
           serveFromRealm: this.serveFromRealm,
           sendEvent: this.sendEvent,
           queue: this.queue,
+          realms: this.realms,
         }),
       )
       .use(this.serveIndex)
@@ -245,6 +246,7 @@ export class RealmServer {
           hostsOwnAssets: false,
           assetsURL: this.assetsURL.href,
           hostModeDomainRoot: this.hostModeDomainRoot,
+          realmServerRoot: this.serverURL.href,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       },

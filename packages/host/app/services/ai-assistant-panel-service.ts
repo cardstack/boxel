@@ -12,11 +12,16 @@ import window from 'ember-window-mock';
 import { isCardInstance } from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import * as CommandModule from 'https://cardstack.com/base/command';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
+import type { Skill as SkillCard } from 'https://cardstack.com/base/skill';
+
 import CreateAiAssistantRoomCommand from '../commands/create-ai-assistant-room';
+
 import { Submodes } from '../components/submode-switcher';
 import { eventDebounceMs, isMatrixError } from '../lib/matrix-utils';
+import { importResource } from '../resources/import';
 import { NewSessionIdPersistenceKey } from '../utils/local-storage-keys';
 
 import LocalPersistenceService from './local-persistence-service';
@@ -53,6 +58,25 @@ export default class AiAssistantPanelService extends Service {
     if (this.isOpen) {
       this.loadRoomsTask.perform();
     }
+  }
+
+  private commandModuleResource = importResource(
+    this,
+    () => 'https://cardstack.com/base/command',
+  );
+
+  get commandModule() {
+    if (this.commandModuleResource.error) {
+      throw new Error(
+        `Error loading commandModule: ${JSON.stringify(this.commandModuleResource.error)}`,
+      );
+    }
+    if (!this.commandModuleResource.module) {
+      throw new Error(
+        `bug: SkillConfigField has not loaded yet--make sure to await this.loaded before using the api`,
+      );
+    }
+    return this.commandModuleResource.module as typeof CommandModule;
   }
 
   get isOpen() {
@@ -94,17 +118,89 @@ export default class AiAssistantPanelService extends Service {
   }
 
   @action
-  async createNewSession(shouldCopyFileHistory?: boolean) {
+  async createNewSession(
+    opts: {
+      addSameSkills: boolean;
+      shouldCopyFileHistory: boolean;
+    } = {
+      addSameSkills: false,
+      shouldCopyFileHistory: false,
+    },
+  ) {
     this.displayRoomError = false;
     if (this.newSessionId) {
       this.enterRoom(this.newSessionId);
       return;
     }
 
-    await this.doCreateRoom.perform(
-      'New AI Assistant Chat',
-      shouldCopyFileHistory ?? false,
+    await this.doCreateRoom.perform('New AI Assistant Chat', opts);
+  }
+
+  private get newSessionId() {
+    let id = window.localStorage.getItem(NewSessionIdPersistenceKey);
+    if (
+      id &&
+      this.matrixService.roomResources.has(id) &&
+      this.matrixService.roomResources.get(id)?.messages.length === 0
+    ) {
+      return id;
+    }
+    return undefined;
+  }
+
+  get isCreateRoomIdle() {
+    return this.doCreateRoom.isIdle;
+  }
+
+  get currentRoomResource() {
+    if (!this.matrixService.currentRoomId) {
+      return undefined;
+    }
+    return this.matrixService.roomResources.get(
+      this.matrixService.currentRoomId,
     );
+  }
+
+  private async extractSkillsFromCurrentRoom(): Promise<{
+    enabledSkills: SkillCard[];
+    disabledSkills: SkillCard[];
+  }> {
+    let enabledSkills: SkillCard[] = [];
+    let disabledSkills: SkillCard[] = [];
+
+    if (this.currentRoomResource?.matrixRoom?.skillsConfig) {
+      const skillConfig = this.currentRoomResource.matrixRoom.skillsConfig;
+
+      // Extract enabled skills from the current room
+      if (skillConfig.enabledSkillCards?.length) {
+        for (const fileDef of skillConfig.enabledSkillCards) {
+          try {
+            const skill = await this.store.get(fileDef.sourceUrl);
+            if (skill && isCardInstance(skill)) {
+              enabledSkills.push(skill as SkillCard);
+            }
+          } catch (e) {
+            console.warn(`Failed to load skill from ${fileDef.sourceUrl}:`, e);
+          }
+        }
+      }
+
+      // Extract disabled skills from the current room
+      if (skillConfig.disabledSkillCards?.length) {
+        for (const fileDef of skillConfig.disabledSkillCards) {
+          try {
+            const skill = await this.store.get(fileDef.sourceUrl);
+            if (skill && isCardInstance(skill)) {
+              disabledSkills.push(skill as SkillCard);
+            }
+          } catch (e) {
+            console.warn(`Failed to load skill from ${fileDef.sourceUrl}:`, e);
+          }
+        }
+      }
+    }
+
+    return { enabledSkills, disabledSkills };
   }
 
   private collectFileHistoryFromCurrentRoom(): {
@@ -156,38 +252,41 @@ export default class AiAssistantPanelService extends Service {
     return { attachedFiles, attachedCards };
   }
 
-  private get newSessionId() {
-    let id = window.localStorage.getItem(NewSessionIdPersistenceKey);
-    if (
-      id &&
-      this.matrixService.roomResources.has(id) &&
-      this.matrixService.roomResources.get(id)?.messages.length === 0
-    ) {
-      return id;
-    }
-    return undefined;
-  }
-
-  get isCreateRoomIdle() {
-    return this.doCreateRoom.isIdle;
-  }
-
   private doCreateRoom = restartableTask(
     async (
       name: string = 'New AI Assistant Chat',
-      shouldCopyFileHistory: boolean = false,
+      opts: {
+        addSameSkills: boolean;
+        shouldCopyFileHistory: boolean;
+      },
     ) => {
+      let { addSameSkills, shouldCopyFileHistory } = opts;
       try {
-        const defaultSkills = await this.matrixService.loadDefaultSkills(
-          this.operatorModeStateService.state.submode,
-        );
         let createRoomCommand = new CreateAiAssistantRoomCommand(
           this.commandService.commandContext,
         );
-        let { roomId } = await createRoomCommand.execute({
-          name,
-          defaultSkills,
-        });
+
+        let input: any = { name };
+        let enabledSkills: SkillCard[] = [];
+        let disabledSkills: SkillCard[] = [];
+
+        if (addSameSkills) {
+          const extractedSkills = await this.extractSkillsFromCurrentRoom();
+          enabledSkills = extractedSkills.enabledSkills;
+          disabledSkills = extractedSkills.disabledSkills;
+        }
+
+        if (enabledSkills.length || disabledSkills.length) {
+          input.enabledSkills = enabledSkills;
+          input.disabledSkills = disabledSkills;
+        } else {
+          // Use default skills
+          input.enabledSkills = await this.matrixService.loadDefaultSkills(
+            this.operatorModeStateService.state.submode,
+          );
+        }
+
+        let { roomId } = await createRoomCommand.execute(input);
 
         window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);
 
@@ -264,7 +363,7 @@ export default class AiAssistantPanelService extends Service {
       return;
     }
 
-    await this.createNewSession(false);
+    await this.createNewSession();
   }
 
   get aiSessionRooms(): SessionRoomData[] {

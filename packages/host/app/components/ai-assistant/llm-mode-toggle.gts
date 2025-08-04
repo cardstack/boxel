@@ -68,16 +68,16 @@ export default class LLMModeToggle extends Component<Signature> {
         background: var(--boxel-650);
         border-radius: var(--boxel-pill-radius, 999px);
         overflow: hidden;
-        border: 1px solid var(--boxel-400);
+        border-width: 0;
         box-shadow: none;
-        width: 84px;
-        height: 30px;
-        padding: 3px;
+        padding: 1.5px 2px 2px 2px;
       }
       .llm-mode-option {
         flex: 1 1 0;
         background: none;
         border: none;
+        border-radius: var(--boxel-border-radius);
+        padding-block: 2px;
         color: var(--boxel-light);
         font: 500 var(--boxel-font-xs);
         cursor: pointer;
@@ -90,7 +90,6 @@ export default class LLMModeToggle extends Component<Signature> {
         color: var(--boxel-dark);
         font-weight: 600;
         height: 100%;
-        border-radius: var(--boxel-border-radius);
       }
       .llm-mode-option:disabled {
         opacity: 0.5;

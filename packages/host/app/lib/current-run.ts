@@ -21,6 +21,9 @@ import {
   IndexWriter,
   unixTime,
   jobIdentity,
+  getFieldMeta,
+  type ResolvedCodeRef,
+  type CardDefMeta,
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
@@ -35,7 +38,6 @@ import {
   type LastModifiedTimes,
   type JobInfo,
   type StatusArgs,
-  ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import {
@@ -102,8 +104,10 @@ export class CurrentRun {
   readonly stats: Stats = {
     instancesIndexed: 0,
     modulesIndexed: 0,
+    cardDefsIndexed: 0,
     instanceErrors: 0,
     moduleErrors: 0,
+    cardDefErrors: 0,
     totalIndexEntries: 0,
   };
   @service declare private loaderService: LoaderService;
@@ -214,7 +218,8 @@ export class CurrentRun {
       current.realmURL,
       current.#jobInfo,
     );
-    let invalidations = (await current.batch.invalidate(urls)).map(
+    await current.batch.invalidate(urls);
+    let invalidations = current.batch.invalidations.map(
       (href) => new URL(href),
     );
 
@@ -349,6 +354,16 @@ export class CurrentRun {
       return invalidationList;
     }
 
+    // Check for deleted files - files that exist in index but not on filesystem
+    let indexedUrls = [...indexMtimes.keys()];
+    let deletedUrls = indexedUrls.filter((url) => !filesystemMtimes[url]);
+    if (deletedUrls.length > 0) {
+      perfLog.debug(
+        `${jobIdentity(this.#jobInfo)} found ${deletedUrls.length} deleted files to add to invalidations: ${deletedUrls.join(', ')}`,
+      );
+      invalidationList.push(...deletedUrls);
+    }
+
     let invalidationStart = Date.now();
     await this.batch.invalidate(invalidationList.map((u) => new URL(u)));
     perfLog.debug(
@@ -432,8 +447,9 @@ export class CurrentRun {
   }
 
   private async indexModule(url: URL, ref: TextFileRef): Promise<void> {
+    let module: Record<string, any> | undefined;
     try {
-      await this.loaderService.loader.import(url.href);
+      module = await this.loaderService.loader.import(url.href);
     } catch (err: any) {
       this.stats.moduleErrors++;
       log.warn(
@@ -465,8 +481,24 @@ export class CurrentRun {
       log.debug(
         `${jobIdentity(this.#jobInfo)} skipping indexing of shimmed module ${url.href}`,
       );
+
+      // for testing purposes we'll still generate card def meta for shimmed cards,
+      // however the deps will only be the shimmed file
+      for (let [name, maybeCardDef] of Object.entries(module)) {
+        if (isCardDef(maybeCardDef)) {
+          await this.indexCardDef({
+            name,
+            url: trimExecutableExtension(url),
+            cardDef: maybeCardDef,
+            lastModified: 0,
+            resourceCreatedAt: 0,
+            deps: [trimExecutableExtension(url).href],
+          });
+        }
+      }
       return;
     }
+
     let consumes = (
       await this.loaderService.loader.getConsumedModules(url.href)
     ).filter((u) => u !== url.href);
@@ -479,6 +511,88 @@ export class CurrentRun {
       deps: new Set(deps),
     });
     this.stats.modulesIndexed++;
+
+    for (let [name, maybeCardDef] of Object.entries(module)) {
+      if (isCardDef(maybeCardDef)) {
+        await this.indexCardDef({
+          name,
+          url: trimExecutableExtension(url),
+          cardDef: maybeCardDef,
+          lastModified: ref.lastModified,
+          resourceCreatedAt: ref.created,
+          deps: [...deps, trimExecutableExtension(url).href],
+        });
+      }
+    }
+  }
+
+  private async indexCardDef({
+    url,
+    name,
+    cardDef,
+    lastModified,
+    resourceCreatedAt,
+    deps,
+  }: {
+    url: URL;
+    name: string;
+    cardDef: typeof CardDef;
+    lastModified: number;
+    resourceCreatedAt: number;
+    deps: string[];
+  }) {
+    let codeRefURL = new URL(
+      internalKeyFor({ module: url.href, name }, undefined),
+    );
+    try {
+      let api = await this.loaderService.loader.import<typeof CardAPI>(
+        `${baseRealm.url}card-api`,
+      );
+      let fields = getFieldMeta(api, cardDef);
+      let codeRef = identifyCard(cardDef) as ResolvedCodeRef;
+      let meta: CardDefMeta = {
+        codeRef,
+        fields,
+        displayName: cardDef.displayName,
+      };
+      let typesMaybeError = await this.getTypes(cardDef);
+      if (typesMaybeError.type === 'error') {
+        this.stats.cardDefErrors++;
+        log.warn(
+          `${jobIdentity(this.#jobInfo)} encountered error indexing CardDef "${url.href}/${name}": ${typesMaybeError.error.message}`,
+        );
+        let error = {
+          type: 'error',
+          error: typesMaybeError.error,
+        } as ErrorEntry;
+        await this.updateEntry(codeRefURL, error);
+        return;
+      }
+      await this.batch.updateEntry(codeRefURL, {
+        type: 'card-def',
+        fileAlias: url.href,
+        meta,
+        lastModified,
+        resourceCreatedAt,
+        deps: new Set(deps),
+        types: typesMaybeError.types.map(({ refURL }) => refURL),
+      });
+      this.stats.cardDefsIndexed++;
+    } catch (err: any) {
+      this.stats.cardDefErrors++;
+      log.warn(
+        `${jobIdentity(this.#jobInfo)} encountered error indexing CardDef "${url.href}/${name}": ${err.message}`,
+      );
+      await this.batch.updateEntry(codeRefURL, {
+        type: 'error',
+        error: {
+          status: err.status ?? 500,
+          message: `encountered error indexing CardDef "${url.href}/${name}": ${err.message}`,
+          additionalErrors: null,
+          deps,
+        },
+      });
+    }
   }
 
   private reportStatus(

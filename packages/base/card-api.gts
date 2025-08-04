@@ -46,7 +46,6 @@ import {
   fieldsUntracked,
   baseRef,
   getAncestor,
-  isCardError,
   relativeTo,
   assertIsSerializerName,
   type Format,
@@ -200,24 +199,11 @@ function isNotLoadedValue(val: any): val is NotLoadedValue {
   return type === 'not-loaded';
 }
 
-interface StaleValue {
-  type: 'stale';
-  staleValue: any;
-}
-
 type CardChangeSubscriber = (
   instance: BaseDef,
   fieldName: string,
   fieldValue: any,
 ) => void;
-
-function isStaleValue(value: any): value is StaleValue {
-  if (value && typeof value === 'object') {
-    return 'type' in value && value.type === 'stale' && 'staleValue' in value;
-  } else {
-    return false;
-  }
-}
 const deserializedData = initSharedState(
   'deserializedData',
   () => new WeakMap<BaseDef, Map<string, any>>(),
@@ -226,8 +212,8 @@ const fieldOverrides = initSharedState(
   'fieldOverrides',
   () => new WeakMap<BaseDef, Map<string, any>>(),
 );
-const recomputePromises = initSharedState(
-  'recomputePromises',
+const loadLinksPromises = initSharedState(
+  'loadLinksPromises',
   () => new WeakMap<BaseDef, Promise<any>>(),
 );
 const identityContexts = initSharedState(
@@ -247,8 +233,7 @@ const fieldDescriptions = initSharedState(
   () => new WeakMap<typeof BaseDef, Map<string, string>>(),
 );
 
-// our place for notifying Glimmer when a card is ready to re-render (which will
-// involve rerunning async computed fields)
+// our place for notifying Glimmer when a card is ready to re-render
 const cardTracking = initSharedState(
   'cardTracking',
   () => new TrackedWeakMap<object, any>(),
@@ -393,7 +378,6 @@ export interface Field<
   handleNotLoadedError(
     instance: BaseInstanceType<CardT>,
     e: NotLoaded,
-    opts?: RecomputeOptions,
   ): Promise<
     BaseInstanceType<CardT> | BaseInstanceType<CardT>[] | undefined | void
   >;
@@ -480,17 +464,19 @@ function getter<CardT extends BaseDefConstructor>(
   cardTracking.get(instance);
 
   if (field.computeVia) {
-    let value = deserialized.get(field.name);
-    if (isStaleValue(value)) {
-      value = value.staleValue;
-    } else if (!deserialized.has(field.name)) {
-      value = field.computeVia.bind(instance)();
+    try {
+      let value = field.computeVia.bind(instance)();
       if (value === undefined) {
         value = field.emptyValue(instance);
       }
-      deserialized.set(field.name, value);
+      return value as BaseInstanceType<CardT>;
+    } catch (e) {
+      if (isNotLoadedError(e)) {
+        // Re-throw NotLoaded errors with the computed field's name instead of the dependency field's name
+        throw new NotLoaded(instance, e.reference, field.name);
+      }
+      throw e;
     }
-    return value;
   } else {
     if (deserialized.has(field.name)) {
       return deserialized.get(field.name);
@@ -697,7 +683,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
             arrayValue,
           );
           notifySubscribers(instance, field.name, arrayValue);
-          logger.log(recompute(instance));
+          cardTracking.set(instance, true);
         }),
       await Promise.all(
         value.map(async (entry, index) => {
@@ -761,7 +747,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
         value as BaseDef[],
       );
       notifySubscribers(instance, this.name, value);
-      logger.log(recompute(instance));
+      cardTracking.set(instance, true);
     });
   }
 
@@ -795,7 +781,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
         value as BaseDef[],
       );
       notifySubscribers(instance, this.name, value);
-      logger.log(recompute(instance));
+      cardTracking.set(instance, true);
     }, values);
   }
 
@@ -1265,7 +1251,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   async handleNotLoadedError(
     instance: BaseInstanceType<CardT>,
     e: NotLoaded,
-    opts?: RecomputeOptions,
   ): Promise<BaseInstanceType<CardT> | undefined> {
     let deserialized = getDataBucket(instance as BaseDef);
     let identityContext =
@@ -1278,18 +1263,14 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       return fieldValue as BaseInstanceType<CardT>;
     }
 
-    if (opts?.loadFields) {
-      fieldValue = await this.loadMissingField(
-        instance,
-        e,
-        identityContext,
-        instance[relativeTo],
-      );
-      deserialized.set(this.name, fieldValue);
-      return fieldValue as BaseInstanceType<CardT>;
-    }
-
-    return;
+    fieldValue = await this.loadMissingField(
+      instance,
+      e,
+      identityContext,
+      instance[relativeTo],
+    );
+    deserialized.set(this.name, fieldValue);
+    return fieldValue as BaseInstanceType<CardT>;
   }
 
   private async loadMissingField(
@@ -1438,26 +1419,48 @@ class LinksToMany<FieldT extends CardDefConstructor>
   }
 
   getter(instance: CardDef): BaseInstanceType<FieldT> {
-    let deserialized = getDataBucket(instance);
     cardTracking.get(instance);
-    let maybeNotLoaded = deserialized.get(this.name);
-    if (maybeNotLoaded) {
-      if (isNotLoadedValue(maybeNotLoaded)) {
-        throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
-      }
 
-      let notLoadedRefs: string[] = [];
-      for (let entry of maybeNotLoaded) {
-        if (isNotLoadedValue(entry)) {
-          notLoadedRefs = [...notLoadedRefs, entry.reference];
-        }
-      }
-      if (notLoadedRefs.length > 0) {
-        throw new NotLoaded(instance, notLoadedRefs, this.name);
-      }
+    if (this.computeVia) {
+      // For computed LinksToMany fields, use the main getter function
+      return getter(instance, this);
     }
 
-    return getter(instance, this);
+    // For non-computed LinksToMany fields, handle directly
+    let deserialized = getDataBucket(instance);
+    let value = deserialized.get(this.name);
+
+    if (!value) {
+      value = this.emptyValue(instance);
+      deserialized.set(this.name, value);
+    }
+
+    // Handle the case where the field was set to a single NotLoadedValue during deserialization
+    if (isNotLoadedValue(value)) {
+      throw new NotLoaded(instance, value.reference, this.name);
+    }
+
+    // Ensure we have an array - if not, something went wrong during deserialization
+    if (!Array.isArray(value)) {
+      throw new Error(
+        `LinksToMany field '${
+          this.name
+        }' expected array but got ${typeof value}`,
+      );
+    }
+
+    // Check if the returned array contains any NotLoadedValues
+    let notLoadedRefs: string[] = [];
+    for (let entry of value) {
+      if (isNotLoadedValue(entry)) {
+        notLoadedRefs = [...notLoadedRefs, entry.reference];
+      }
+    }
+    if (notLoadedRefs.length > 0) {
+      throw new NotLoaded(instance, notLoadedRefs, this.name);
+    }
+
+    return value as BaseInstanceType<FieldT>;
   }
 
   queryableValue(instances: any[] | null, stack: CardDef[]): any[] | null {
@@ -1497,6 +1500,16 @@ class LinksToMany<FieldT extends CardDefConstructor>
     visited: Set<string>,
     opts?: SerializeOpts,
   ) {
+    // Check for skip-serialization marker for computed fields that can't be computed
+    if (
+      values &&
+      typeof values === 'object' &&
+      'type' in values &&
+      (values as any).type === 'skip-serialization'
+    ) {
+      return { relationships: {} };
+    }
+
     // this can be a not loaded value happen when the linksToMany is a
     // computed that consumes a linkTo field that is not loaded
     if (isNotLoadedValue(values)) {
@@ -1683,7 +1696,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
             value as BaseDef[],
           );
           notifySubscribers(instance, this.name, value);
-          logger.log(recompute(instance));
+          cardTracking.set(instance, true);
         }),
       await Promise.all(resources),
     );
@@ -1698,7 +1711,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
         value as BaseDef[],
       );
       notifySubscribers(instance, this.name, value);
-      logger.log(recompute(instance));
+      cardTracking.set(instance, true);
     });
   }
 
@@ -1739,14 +1752,13 @@ class LinksToMany<FieldT extends CardDefConstructor>
         value as BaseDef[],
       );
       notifySubscribers(instance, this.name, value);
-      logger.log(recompute(instance));
+      cardTracking.set(instance, true);
     }, values);
   }
 
   async handleNotLoadedError<T extends CardDef>(
     instance: T,
     e: NotLoaded,
-    opts?: RecomputeOptions,
   ): Promise<T[] | undefined> {
     let result: T[] | undefined;
     let fieldValues: CardDef[] = [];
@@ -1762,14 +1774,12 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
     }
 
-    if (opts?.loadFields) {
-      fieldValues = await this.loadMissingFields(
-        instance,
-        e,
-        identityContext,
-        instance[relativeTo],
-      );
-    }
+    fieldValues = await this.loadMissingFields(
+      instance,
+      e,
+      identityContext,
+      instance[relativeTo],
+    );
 
     if (fieldValues.length === references.length) {
       let values: T[] = [];
@@ -1813,18 +1823,22 @@ class LinksToMany<FieldT extends CardDefConstructor>
     let errors = [];
     let fieldInstances: CardDef[] = [];
 
-    for (let reference of refs) {
-      let response = await fetch(reference, {
-        headers: { Accept: SupportedMimeType.CardJson },
-      });
-      if (!response.ok) {
-        let cardError = await CardError.fromFetchResponse(reference, response);
-        cardError.deps = [reference];
-        cardError.additionalErrors = [
-          new NotLoaded(instance, reference, this.name),
-        ];
-        errors.push(cardError);
-      } else {
+    const fetchPromises = refs.map(async (reference) => {
+      try {
+        let response = await fetch(reference, {
+          headers: { Accept: SupportedMimeType.CardJson },
+        });
+        if (!response.ok) {
+          let cardError = await CardError.fromFetchResponse(
+            reference,
+            response,
+          );
+          cardError.deps = [reference];
+          cardError.additionalErrors = [
+            new NotLoaded(instance, reference, this.name),
+          ];
+          throw cardError;
+        }
         let json = await response.json();
         if (!isSingleCardDocument(json)) {
           throw new Error(
@@ -1848,7 +1862,23 @@ class LinksToMany<FieldT extends CardDefConstructor>
             identityContext,
           },
         )) as CardDef; // A linksTo field could only be a composite card
-        fieldInstances.push(fieldInstance);
+        return { ok: true, value: fieldInstance };
+      } catch (e) {
+        return { ok: false, error: e };
+      }
+    });
+
+    const results = await Promise.allSettled(fetchPromises);
+    for (let result of results) {
+      if (result.status === 'fulfilled') {
+        const fetchResult = result.value;
+        if (fetchResult.ok && fetchResult.value) {
+          fieldInstances.push(fetchResult.value);
+        } else if (!fetchResult.ok) {
+          errors.push(fetchResult.error);
+        }
+      } else {
+        errors.push(result.reason);
       }
     }
     if (errors.length) {
@@ -2307,12 +2337,14 @@ export class CardDef extends BaseDef {
     value: any,
   ) {
     if (fieldName === 'id') {
+      // TODO: can we eliminate this conditional branch?
+
       // we need to be careful that we don't trigger the ambient recompute() in our setters
       // when we are instantiating an instance that is placed in the identityMap that has
-      // not had it's field values set yet, as computeds will be run that may assume dependent
-      // fields are available when they are not (e.g. Spec.isPrimitive trying to load
-      // it's 'ref' field). In this scenario, only the 'id' field is available. the rest of the fields
-      // will be filled in later, so just set the 'id' directly in the deserialized cache to avoid
+      // not had it's field values set yet, as computeds may assume dependent fields are
+      // available when they are not (e.g. Spec.isPrimitive trying to access its 'ref' field).
+      // In this scenario, only the 'id' field is available. The rest of the fields will be
+      // filled in later, so just set the 'id' directly in the deserialized cache to avoid
       // triggering the recompute.
       let deserialized = getDataBucket(instance);
       deserialized.set('id', value);
@@ -2641,6 +2673,22 @@ function peekAtField(instance: BaseDef, fieldName: string): any {
     // we peek specifically so that we can see the raw values
     // without worrying about encountering NotLoaded errors
     if (isNotLoadedError(e)) {
+      // For linksToMany fields (both computed and non-computed), we want to return
+      // the actual array data (which may contain NotLoadedValue entries) rather than a single NotLoadedValue
+      if (field.fieldType === 'linksToMany') {
+        let deserialized = getDataBucket(instance);
+        let rawValue = deserialized.get(field.name);
+        if (rawValue) {
+          return rawValue;
+        }
+        // For computed linksToMany fields that can't be computed, return a special marker
+        // to indicate that the field should be skipped during serialization
+        if (field.computeVia) {
+          return { type: 'skip-serialization' };
+        }
+        // For non-computed fields, fall back to returning empty array for relationshipMeta to handle
+        return [];
+      }
       return { type: 'not-loaded', reference: e.reference } as NotLoadedValue;
     }
     throw e;
@@ -3120,19 +3168,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     if (isCardInstance(instance) && resource.id != null) {
       (instance as any)[meta] = resource.meta;
     }
-
-    // TODO we might want to take a more nuanced approach in the future
-    // where we initialize the instance with the server provided computed
-    // values (by simply moving this before we write out the data in the
-    // for loop above). Although keep in mind that for updateFromSerialized()
-    // we always want this to run after we set values as we're not sure which
-    // values we set that depend on computeds. Currently we do the thing that
-    // is always correct.
-    markAllComputedsStale(instance);
-    await recompute(instance, {
-      ...(opts?.ignoreBrokenLinks ? { ignoreBrokenLinks: true } : {}),
-    });
-
+    cardTracking.set(instance, true);
     if (isCardInstance(instance) && resource.id != null) {
       // importantly, we place this synchronously after the assignment of the model's
       // fields, such that subsequent assignment of the id field when the model is
@@ -3148,19 +3184,6 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
 
   deferred.fulfill(instance);
   return instance;
-}
-
-function markAllComputedsStale(instance: BaseDef) {
-  let deserialized = getDataBucket(instance);
-  for (let computedFieldName of Object.keys(getComputedFields(instance))) {
-    let currentValue = deserialized.get(computedFieldName);
-    if (!isStaleValue(currentValue)) {
-      deserialized.set(computedFieldName, {
-        type: 'stale',
-        staleValue: currentValue,
-      } as StaleValue);
-    }
-  }
 }
 
 export function setCardAsSavedForTest(instance: CardDef, id?: string): void {
@@ -3267,23 +3290,12 @@ function makeDescriptor<
 }
 
 function setField(instance: BaseDef, field: Field, value: any) {
+  // TODO: refactor validate to not have a return value and accomplish this normalization another way
   value = field.validate(instance, value);
   let deserialized = getDataBucket(instance);
   deserialized.set(field.name, value);
-  // invalidate all computed fields because we don't know which ones depend on this one
-  for (let computedFieldName of Object.keys(getComputedFields(instance))) {
-    if (deserialized.has(computedFieldName)) {
-      let currentValue = deserialized.get(computedFieldName);
-      if (!isStaleValue(currentValue)) {
-        deserialized.set(computedFieldName, {
-          type: 'stale',
-          staleValue: currentValue,
-        } as StaleValue);
-      }
-    }
-  }
   notifySubscribers(instance, field.name, value);
-  logger.log(recompute(instance));
+  cardTracking.set(instance, true);
 }
 
 function notifySubscribers(
@@ -3354,27 +3366,16 @@ export function getComponent(
   return boxComponent;
 }
 
-interface RecomputeOptions {
-  loadFields?: true;
-  ignoreBrokenLinks?: true;
-  // for host initiated renders (vs indexer initiated renders), glimmer will expect
-  // all the fields to be available synchronously, in which case we need to buffer the
-  // async in the recompute using this option
-  recomputeAllFields?: true;
-}
-export async function recompute(
-  card: BaseDef,
-  opts?: RecomputeOptions,
-): Promise<void> {
+export async function ensureLinksLoaded(card: BaseDef): Promise<void> {
   // Note that after each async step we check to see if we are still the
   // current promise, otherwise we bail
   let done: () => void;
-  let recomputePromise = new Promise<void>((res) => (done = res));
-  recomputePromises.set(card, recomputePromise);
+  let loadLinksPromise = new Promise<void>((res) => (done = res));
+  loadLinksPromises.set(card, loadLinksPromise);
 
   // wait a full micro task before we start - this is simple debounce
   await Promise.resolve();
-  if (recomputePromises.get(card) !== recomputePromise) {
+  if (loadLinksPromises.get(card) !== loadLinksPromise) {
     return;
   }
 
@@ -3385,33 +3386,26 @@ export async function recompute(
     let pendingFields = new Set<string>(
       Object.keys(
         getFields(model, {
-          includeComputeds: true,
-          usedLinksToFieldsOnly: !opts?.recomputeAllFields,
+          includeComputeds: false, // Not necessary to execute computed to load linked fields
+          usedLinksToFieldsOnly: true,
         }),
       ),
     );
     do {
       for (let fieldName of [...pendingFields]) {
-        let value = await getIfReady(
-          model,
-          fieldName as keyof T,
-          undefined,
-          opts,
-        );
-        if (!isStaleValue(value)) {
-          pendingFields.delete(fieldName);
-          if (recomputePromises.get(card) !== recomputePromise) {
-            return;
-          }
-          if (Array.isArray(value)) {
-            for (let item of value) {
-              if (item && isCardOrField(item) && !stack.includes(item)) {
-                await _loadModel(item, [item, ...stack]);
-              }
+        let value = await getIfReady(model, fieldName as keyof T);
+        pendingFields.delete(fieldName);
+        if (loadLinksPromises.get(card) !== loadLinksPromise) {
+          return;
+        }
+        if (Array.isArray(value)) {
+          for (let item of value) {
+            if (item && isCardOrField(item) && !stack.includes(item)) {
+              await _loadModel(item, [item, ...stack]);
             }
-          } else if (isCardOrField(value) && !stack.includes(value)) {
-            await _loadModel(value, [value, ...stack]);
           }
+        } else if (isCardOrField(value) && !stack.includes(value)) {
+          await _loadModel(value, [value, ...stack]);
         }
       }
       // TODO should we have a timeout?
@@ -3419,7 +3413,7 @@ export async function recompute(
   }
 
   await _loadModel(card);
-  if (recomputePromises.get(card) !== recomputePromise) {
+  if (loadLinksPromises.get(card) !== loadLinksPromise) {
     return;
   }
 
@@ -3431,12 +3425,9 @@ export async function recompute(
 export async function getIfReady<T extends BaseDef, K extends keyof T>(
   instance: T,
   fieldName: K,
-  compute: () => T[K] | Promise<T[K]> = () => instance[fieldName],
-  opts?: RecomputeOptions,
-): Promise<T[K] | T[K][] | StaleValue | undefined> {
+): Promise<T[K] | T[K][] | undefined> {
   let result: T[K] | T[K][] | undefined;
   let deserialized = getDataBucket(instance);
-  let maybeStale = deserialized.get(fieldName as string);
   let field = getField(instance, fieldName as string, { untracked: true });
   if (!field) {
     throw new Error(
@@ -3446,47 +3437,27 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
     );
   }
   if (field.computeVia) {
-    let { computeVia: _computeVia } = field;
-    if (!_computeVia) {
-      throw new Error(
-        `the field '${fieldName as string}' is not a computed field in card ${
-          instance.constructor.name
-        }`,
-      );
-    }
-    let computeVia = _computeVia as () => T[K] | Promise<T[K]>;
-    compute = computeVia.bind(instance);
+    // Computed fields should never be passed to this function
+    return undefined;
   }
   try {
-    //To avoid race conditions,
-    //the computeVia function should not perform asynchronous computation
-    //if it is not an async function.
-    //This ensures that other functions are not executed
-    //by the runtime before this function is finished.
-    let computeResult = compute();
-    result =
-      computeResult instanceof Promise ? await computeResult : computeResult;
+    result = instance[fieldName];
   } catch (e: any) {
     if (isNotLoadedError(e)) {
       let field: Field = getField(instance, fieldName as string)!;
       let result: T[K] | T[K][] | undefined;
-      try {
-        result = (await field.handleNotLoadedError(instance, e, {
-          ...(field.isUsed ? { loadFields: true } : {}),
-          ...opts,
-        })) as T[K] | T[K][] | undefined;
-      } catch (innerErr) {
-        if (
-          opts?.ignoreBrokenLinks &&
-          isCardError(innerErr) &&
-          innerErr.status === 404
-        ) {
-          // ignoring the broken link
-        } else {
-          throw innerErr;
+      result = (await field.handleNotLoadedError(instance, e)) as
+        | T[K]
+        | T[K][]
+        | undefined;
+      if (result === undefined) {
+        // For linksToMany fields, preserve the existing array structure instead of
+        // overwriting with a single NotLoadedValue
+        if (field.fieldType === 'linksToMany') {
+          // The field should already have the correct array structure from deserialization
+          // Don't overwrite it with a single NotLoadedValue
+          return undefined;
         }
-      }
-      if (result === undefined && isStaleValue(maybeStale)) {
         deserialized.set(
           fieldName as string,
           { type: 'not-loaded', reference: e.reference } as NotLoadedValue,
@@ -3496,14 +3467,6 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
     } else {
       throw e;
     }
-  }
-
-  //Only update the value of computed field.
-  if (field?.computeVia) {
-    if (result === undefined) {
-      result = field.emptyValue(instance);
-    }
-    deserialized.set(fieldName as string, result);
   }
   return result;
 }
@@ -3567,19 +3530,6 @@ export function getFields(
     obj = Reflect.getPrototypeOf(obj);
   }
   return fields;
-}
-
-function getComputedFields<T extends BaseDef>(
-  card: T,
-): { [P in keyof T]?: Field<BaseDefConstructor> } {
-  let fields = Object.entries(getFields(card, { includeComputeds: true })) as [
-    string,
-    Field<BaseDefConstructor>,
-  ][];
-  let computedFields = fields.filter(([_, field]) => field.computeVia);
-  return Object.fromEntries(computedFields) as {
-    [P in keyof T]?: Field<BaseDefConstructor>;
-  };
 }
 
 export class Box<T> {

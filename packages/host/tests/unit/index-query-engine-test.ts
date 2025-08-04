@@ -7,6 +7,13 @@ import {
   IndexQueryEngine,
   fetcher,
   maybeHandleScopedCSSRequest,
+  parseQuery,
+  internalKeyFor,
+  identifyCard,
+  SupportedMimeType,
+  getFieldMeta,
+  type ResolvedCodeRef,
+  type CardDefMeta,
 } from '@cardstack/runtime-common';
 
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
@@ -17,7 +24,11 @@ import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import {
+  type JSONAPISingleResourceDocument,
+  type CardDef,
+} from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import { testRealmURL, p, getDbAdapter } from '../helpers';
 
@@ -183,15 +194,57 @@ module('Unit | query', function (hooks) {
       setCardAsSavedForTest(card);
     }
 
+    let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
+
+    async function serveCardDefMeta(cardDef: typeof CardDef) {
+      let doc: JSONAPISingleResourceDocument = { data: { type: 'card-def' } };
+      doc.data.attributes = {
+        codeRef: identifyCard(cardDef),
+        displayName: cardDef.displayName,
+        fields: getFieldMeta(api, cardDef),
+      } as CardDefMeta;
+      return new Response(JSON.stringify(doc), {
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      });
+    }
+
+    // mock the realm server serving the card def meta
+    virtualNetwork.mount(async (req) => {
+      if (req.method === 'HEAD') {
+        return new Response(null, {
+          headers: { 'X-Boxel-Realm-Url': testRealmURL },
+        });
+      }
+      if (req.url.includes('/_card-def?')) {
+        let query = new URL(req.url).search.slice(1);
+        let { codeRef } = parseQuery(query) as { codeRef: ResolvedCodeRef };
+        let key = internalKeyFor(codeRef, undefined);
+        switch (key) {
+          case `${testRealmURL}person/Person`:
+            return await serveCardDefMeta(Person);
+          case `${testRealmURL}fancy-person/FancyPerson`:
+            return await serveCardDefMeta(FancyPerson);
+          case `${testRealmURL}cat/Cat`:
+            return await serveCardDefMeta(Cat);
+          case `${testRealmURL}spec/SimpleSpec`:
+            return await serveCardDefMeta(SimpleSpec);
+          case `${testRealmURL}event/Event`:
+            return await serveCardDefMeta(Event);
+          default:
+            return null;
+        }
+      }
+      return null;
+    });
+
     await dbAdapter.reset();
-    indexQueryEngine = new IndexQueryEngine(dbAdapter);
+    indexQueryEngine = new IndexQueryEngine(dbAdapter, virtualNetwork.fetch);
   });
 
   test('can get all cards with empty filter', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -200,7 +253,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -209,7 +261,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -218,7 +269,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -227,7 +277,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -236,7 +285,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -245,7 +293,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -254,7 +301,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -263,7 +309,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -272,7 +317,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -281,7 +325,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -290,7 +333,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -299,7 +341,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -308,7 +349,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -317,7 +357,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -326,7 +365,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -335,7 +373,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -344,7 +381,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -353,7 +389,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -362,7 +397,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -371,7 +405,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -380,7 +413,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -389,7 +421,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -398,7 +429,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -407,7 +437,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -416,7 +445,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -425,7 +453,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -434,7 +461,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -443,7 +469,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -452,7 +477,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -461,7 +485,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -470,7 +493,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -479,7 +501,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -488,7 +509,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -497,7 +517,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -506,7 +525,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -515,7 +533,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -524,7 +541,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -533,7 +549,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -542,7 +557,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -551,7 +565,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -560,25 +573,6 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
-      testCards,
-    });
-  });
-
-  test('can get prerendered cards from the indexer', async function (assert) {
-    await runSharedTest(indexQueryEngineTests, assert, {
-      indexQueryEngine,
-      dbAdapter,
-      loader,
-      testCards,
-    });
-  });
-
-  test('can get prerendered cards in an error state from the indexer', async function (assert) {
-    await runSharedTest(indexQueryEngineTests, assert, {
-      indexQueryEngine,
-      dbAdapter,
-      loader,
       testCards,
     });
   });
@@ -587,7 +581,22 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
-      loader,
+      testCards,
+    });
+  });
+
+  test('can get prerendered cards from the indexer', async function (assert) {
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      dbAdapter,
+      testCards,
+    });
+  });
+
+  test('can get prerendered cards in an error state from the indexer', async function (assert) {
+    await runSharedTest(indexQueryEngineTests, assert, {
+      indexQueryEngine,
+      dbAdapter,
       testCards,
     });
   });

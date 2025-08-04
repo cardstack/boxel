@@ -1,15 +1,11 @@
 import type Owner from '@ember/owner';
-import type RouterService from '@ember/routing/router-service';
 
-import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
 
 import { type LocalPath } from '@cardstack/runtime-common';
-
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import Directory from './directory';
 
@@ -55,9 +51,6 @@ export default class FileTree extends Component<Signature> {
       }
     </style>
   </template>
-
-  @service private declare router: RouterService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
 
   @tracked private showMask = true;
 

@@ -1,7 +1,6 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
-import RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
@@ -24,9 +23,7 @@ import { ResolvedCodeRef, aiBotUsername } from '@cardstack/runtime-common';
 import ENV from '@cardstack/host/config/environment';
 
 import AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import CommandService from '../../services/command-service';
 import { type MonacoSDK } from '../../services/monaco-service';
 import NewSession from '../ai-assistant/new-session';
 
@@ -139,10 +136,7 @@ export default class AiAssistantPanel extends Component<Signature> {
         {{#if this.aiAssistantPanelService.displayRoomError}}
           <div class='session-error'>
             <NewSession
-              @errorAction={{fn
-                this.aiAssistantPanelService.createNewSession
-                false
-              }}
+              @errorAction={{this.aiAssistantPanelService.createNewSession}}
             />
           </div>
         {{else if this.isReady}}
@@ -395,9 +389,6 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   @service private declare matrixService: MatrixService;
   @service private declare monacoService: MonacoService;
-  @service private declare router: RouterService;
-  @service private declare commandService: CommandService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare aiAssistantPanelService: AiAssistantPanelService;
 
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;

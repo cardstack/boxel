@@ -1,11 +1,11 @@
 import format from 'date-fns/format';
+import stringify from 'safe-stable-stringify';
 import {
   baseRealm,
   IndexQueryEngine,
   internalKeyFor,
   type CodeRef,
   type LooseCardResource,
-  type Loader,
   type ResolvedCodeRef,
   DBAdapter,
 } from '../index';
@@ -15,7 +15,6 @@ import { type SharedTests } from '../helpers';
 import { setupIndex, getTypes } from '../helpers/indexer';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { cardSrc } from '../etc/test-fixtures';
 
 interface TestCards {
   [name: string]: CardDef;
@@ -24,7 +23,7 @@ interface TestCards {
 const tests = Object.freeze({
   'can get all cards with empty filter': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, paper } = testCards;
     await setupIndex(dbAdapter, [mango, vangogh, paper]);
@@ -32,7 +31,6 @@ const tests = Object.freeze({
     let { cards: results, meta } = await indexQueryEngine.search(
       new URL(testRealmURL),
       {},
-      loader,
     );
     assert.strictEqual(meta.page.total, 3, 'the total results meta is correct');
     assert.deepEqual(
@@ -48,7 +46,7 @@ const tests = Object.freeze({
 
   'deleted cards are not included in results': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, paper } = testCards;
     await setupIndex(dbAdapter, [
@@ -57,17 +55,13 @@ const tests = Object.freeze({
       { card: paper, data: { is_deleted: true } },
     ]);
 
-    let { meta } = await indexQueryEngine.search(
-      new URL(testRealmURL),
-      {},
-      loader,
-    );
+    let { meta } = await indexQueryEngine.search(new URL(testRealmURL), {});
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
   },
 
   'error docs are not included in results': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh } = testCards;
     await setupIndex(dbAdapter, [
@@ -106,7 +100,6 @@ const tests = Object.freeze({
     let { cards: results, meta } = await indexQueryEngine.search(
       new URL(testRealmURL),
       {},
-      loader,
     );
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
@@ -118,7 +111,7 @@ const tests = Object.freeze({
 
   'can filter by type': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, paper } = testCards;
 
@@ -128,7 +121,6 @@ const tests = Object.freeze({
     let { cards: results, meta } = await indexQueryEngine.search(
       new URL(testRealmURL),
       { filter: { type } },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
@@ -141,7 +133,7 @@ const tests = Object.freeze({
 
   "can filter using 'eq'": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, paper } = testCards;
     await setupIndex(dbAdapter, [
@@ -161,7 +153,6 @@ const tests = Object.freeze({
           on: type,
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
@@ -170,7 +161,7 @@ const tests = Object.freeze({
 
   "can filter using 'eq' thru nested fields": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -221,7 +212,6 @@ const tests = Object.freeze({
           eq: { 'address.city': 'Barksville' },
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
@@ -234,7 +224,7 @@ const tests = Object.freeze({
 
   "can use 'eq' to match multiple fields": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh } = testCards;
     await setupIndex(dbAdapter, [
@@ -267,7 +257,6 @@ const tests = Object.freeze({
           eq: { name: 'Van Gogh', nickNames: 'Farty' },
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
@@ -276,7 +265,7 @@ const tests = Object.freeze({
 
   "can use 'eq' to find 'null' values": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -315,7 +304,6 @@ const tests = Object.freeze({
           eq: { name: null },
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
@@ -324,7 +312,7 @@ const tests = Object.freeze({
 
   "can use 'eq' to match against number type": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh } = testCards;
     await setupIndex(dbAdapter, [
@@ -357,7 +345,6 @@ const tests = Object.freeze({
           eq: { age: 4 },
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
@@ -366,7 +353,7 @@ const tests = Object.freeze({
 
   "can use 'eq' to match against boolean type": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -409,7 +396,6 @@ const tests = Object.freeze({
             eq: { isHairy: false },
           },
         },
-        loader,
       );
 
       assert.strictEqual(
@@ -428,7 +414,6 @@ const tests = Object.freeze({
             eq: { isHairy: true },
           },
         },
-        loader,
       );
 
       assert.strictEqual(
@@ -447,7 +432,6 @@ const tests = Object.freeze({
             eq: { isHairy: null },
           },
         },
-        loader,
       );
 
       assert.strictEqual(
@@ -461,7 +445,7 @@ const tests = Object.freeze({
 
   'can filter eq from a code ref query value': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { stringFieldEntry, numberFieldEntry } = testCards;
     await setupIndex(dbAdapter, [
@@ -499,7 +483,6 @@ const tests = Object.freeze({
           },
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
@@ -512,7 +495,7 @@ const tests = Object.freeze({
 
   'can filter eq from a date query value': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mangoBirthday, vangoghBirthday } = testCards;
     await setupIndex(dbAdapter, [
@@ -549,7 +532,6 @@ const tests = Object.freeze({
           },
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
@@ -562,7 +544,7 @@ const tests = Object.freeze({
 
   "can search with a 'not' filter": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -601,7 +583,6 @@ const tests = Object.freeze({
           not: { eq: { name: 'Mango' } },
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
@@ -614,7 +595,7 @@ const tests = Object.freeze({
 
   'can handle a filter with double negatives': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -653,7 +634,6 @@ const tests = Object.freeze({
           not: { not: { not: { eq: { name: 'Mango' } } } },
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
@@ -666,7 +646,7 @@ const tests = Object.freeze({
 
   "can use a 'contains' filter": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -705,7 +685,6 @@ const tests = Object.freeze({
           contains: { name: 'ngo' },
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
@@ -718,7 +697,7 @@ const tests = Object.freeze({
 
   'contains filter is case insensitive': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -757,7 +736,6 @@ const tests = Object.freeze({
           contains: { name: 'mang' },
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
@@ -766,7 +744,7 @@ const tests = Object.freeze({
 
   "can use 'contains' to match multiple fields": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh } = testCards;
     await setupIndex(dbAdapter, [
@@ -799,7 +777,6 @@ const tests = Object.freeze({
           contains: { name: 'ngo', nickNames: 'Baby' },
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
@@ -808,7 +785,7 @@ const tests = Object.freeze({
 
   "can use a 'contains' filter to match 'null'": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh } = testCards;
     await setupIndex(dbAdapter, [
@@ -839,7 +816,6 @@ const tests = Object.freeze({
           contains: { name: null },
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
@@ -848,7 +824,7 @@ const tests = Object.freeze({
 
   "can use 'every' to combine multiple filters": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -906,7 +882,6 @@ const tests = Object.freeze({
           ],
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
@@ -915,7 +890,7 @@ const tests = Object.freeze({
 
   "can use 'any' to combine multiple filters": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -954,7 +929,6 @@ const tests = Object.freeze({
           any: [{ eq: { name: 'Mango' } }, { eq: { name: 'Van Gogh' } }],
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
@@ -967,29 +941,25 @@ const tests = Object.freeze({
 
   'gives a good error when query refers to missing card': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader },
+    { indexQueryEngine, dbAdapter },
   ) => {
     await setupIndex(dbAdapter, []);
 
     try {
-      await indexQueryEngine.search(
-        new URL(testRealmURL),
-        {
-          filter: {
-            on: {
-              module: `${testRealmURL}nonexistent`,
-              name: 'Nonexistent',
-            },
-            eq: { nonExistentField: 'hello' },
+      await indexQueryEngine.search(new URL(testRealmURL), {
+        filter: {
+          on: {
+            module: `${testRealmURL}nonexistent`,
+            name: 'Nonexistent',
           },
+          eq: { nonExistentField: 'hello' },
         },
-        loader,
-      );
+      });
       throw new Error('failed to throw expected exception');
     } catch (err: any) {
       assert.strictEqual(
         err.message,
-        `Your filter refers to nonexistent type: import { Nonexistent } from "${testRealmURL}nonexistent"`,
+        `Your filter refers to a nonexistent type: import { Nonexistent } from "${testRealmURL}nonexistent"`,
       );
     }
     let cardRef: CodeRef = {
@@ -1001,55 +971,43 @@ const tests = Object.freeze({
       },
     };
     try {
-      await indexQueryEngine.search(
-        new URL(testRealmURL),
-        {
-          filter: {
-            on: cardRef,
-            eq: { name: 'Simba' },
-          },
+      await indexQueryEngine.search(new URL(testRealmURL), {
+        filter: {
+          on: cardRef,
+          eq: { name: 'Simba' },
         },
-        loader,
-      );
+      });
       throw new Error('failed to throw expected exception');
     } catch (err: any) {
       assert.strictEqual(
         err.message,
-        `Your filter refers to nonexistent type: ${JSON.stringify(
-          cardRef,
-          null,
-          2,
-        )}`,
+        `Your filter refers to a nonexistent type: ${stringify(cardRef)}`,
       );
     }
   },
 
   'gives a good error when query refers to missing field': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     await setupIndex(dbAdapter, []);
     let type = await personCardType(testCards);
 
     try {
-      await indexQueryEngine.search(
-        new URL(testRealmURL),
-        {
-          filter: {
-            on: type,
-            eq: {
-              name: 'Cardy',
-              nonExistentField: 'hello',
-            },
+      await indexQueryEngine.search(new URL(testRealmURL), {
+        filter: {
+          on: type,
+          eq: {
+            name: 'Cardy',
+            nonExistentField: 'hello',
           },
         },
-        loader,
-      );
+      });
       throw new Error('failed to throw expected exception');
     } catch (err: any) {
       assert.strictEqual(
         err.message,
-        `Your filter refers to nonexistent field "nonExistentField" on type ${JSON.stringify(
+        `Your filter refers to a nonexistent field "nonExistentField" on type ${stringify(
           type,
         )}`,
       );
@@ -1058,7 +1016,7 @@ const tests = Object.freeze({
 
   "it can filter on a plural primitive field using 'eq'": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh } = testCards;
     await setupIndex(dbAdapter, [
@@ -1091,7 +1049,6 @@ const tests = Object.freeze({
           eq: { nickNames: 'Farty' },
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
@@ -1099,7 +1056,7 @@ const tests = Object.freeze({
   },
 
   "it can filter on a nested field within a plural composite field using 'eq'":
-    async (assert, { indexQueryEngine, dbAdapter, loader, testCards }) => {
+    async (assert, { indexQueryEngine, dbAdapter, testCards }) => {
       let { mango, vangogh } = testCards;
       await setupIndex(dbAdapter, [
         {
@@ -1137,7 +1094,6 @@ const tests = Object.freeze({
               eq: { 'friends.name': 'Van Gogh' },
             },
           },
-          loader,
         );
 
         assert.strictEqual(
@@ -1156,7 +1112,6 @@ const tests = Object.freeze({
               eq: { 'friends.name': 'Ringo' },
             },
           },
-          loader,
         );
 
         assert.strictEqual(
@@ -1174,7 +1129,7 @@ const tests = Object.freeze({
 
   'it can match a null in a plural field': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh } = testCards;
     await setupIndex(dbAdapter, [
@@ -1207,7 +1162,6 @@ const tests = Object.freeze({
           eq: { nickNames: null },
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
@@ -1216,7 +1170,7 @@ const tests = Object.freeze({
 
   'it can match a leaf plural field nested in a plural composite field': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh } = testCards;
     await setupIndex(dbAdapter, [
@@ -1255,7 +1209,6 @@ const tests = Object.freeze({
           eq: { 'friends.nickNames': 'Baby' },
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
@@ -1263,7 +1216,7 @@ const tests = Object.freeze({
   },
 
   'it can match thru a plural nested composite field that is field of a singular composite field':
-    async (assert, { indexQueryEngine, dbAdapter, loader, testCards }) => {
+    async (assert, { indexQueryEngine, dbAdapter, testCards }) => {
       let { mango, vangogh } = testCards;
       await setupIndex(dbAdapter, [
         {
@@ -1298,7 +1251,6 @@ const tests = Object.freeze({
             eq: { 'bestFriend.friends.name': 'Lucky' },
           },
         },
-        loader,
       );
 
       assert.strictEqual(
@@ -1310,7 +1262,7 @@ const tests = Object.freeze({
     },
 
   "can return a single result for a card when there are multiple matches within a result's search doc":
-    async (assert, { indexQueryEngine, dbAdapter, loader, testCards }) => {
+    async (assert, { indexQueryEngine, dbAdapter, testCards }) => {
       let { mango } = testCards;
       await setupIndex(dbAdapter, [
         {
@@ -1336,7 +1288,6 @@ const tests = Object.freeze({
             eq: { 'friends.bestFriend.name': 'Mango' },
           },
         },
-        loader,
       );
 
       assert.strictEqual(
@@ -1349,7 +1300,7 @@ const tests = Object.freeze({
 
   'can perform query against WIP version of the index': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(
@@ -1396,7 +1347,6 @@ const tests = Object.freeze({
           eq: { name: 'Mango' },
         },
       },
-      loader,
       { useWorkInProgressIndex: true },
     );
 
@@ -1410,7 +1360,7 @@ const tests = Object.freeze({
 
   'can perform query against "production" version of the index': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(
@@ -1457,7 +1407,6 @@ const tests = Object.freeze({
           eq: { name: 'Mango' },
         },
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
@@ -1466,7 +1415,7 @@ const tests = Object.freeze({
 
   'can sort search results': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -1507,7 +1456,6 @@ const tests = Object.freeze({
           },
         ],
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 3, 'the total results meta is correct');
@@ -1520,7 +1468,7 @@ const tests = Object.freeze({
 
   'can sort descending': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -1562,7 +1510,6 @@ const tests = Object.freeze({
           },
         ],
       },
-      loader,
     );
 
     assert.strictEqual(meta.page.total, 3, 'the total results meta is correct');
@@ -1575,7 +1522,7 @@ const tests = Object.freeze({
 
   'nulls are sorted to the end of search results': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -1617,7 +1564,6 @@ const tests = Object.freeze({
             },
           ],
         },
-        loader,
       );
 
       assert.strictEqual(
@@ -1643,7 +1589,6 @@ const tests = Object.freeze({
             },
           ],
         },
-        loader,
       );
 
       assert.strictEqual(
@@ -1661,7 +1606,7 @@ const tests = Object.freeze({
 
   "can filter using 'gt'": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -1707,16 +1652,12 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(
-      new URL(testRealmURL),
-      {
-        filter: {
-          on: type,
-          range: { age: { gt: 25 } },
-        },
+    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
+      filter: {
+        on: type,
+        range: { age: { gt: 25 } },
       },
-      loader,
-    );
+    });
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
@@ -1728,7 +1669,7 @@ const tests = Object.freeze({
 
   "can filter using 'gt' thru nested fields": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -1774,20 +1715,16 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(
-      new URL(testRealmURL),
-      {
-        filter: {
-          on: type,
-          range: {
-            'address.number': {
-              gt: 100,
-            },
+    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
+      filter: {
+        on: type,
+        range: {
+          'address.number': {
+            gt: 100,
           },
         },
       },
-      loader,
-    );
+    });
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
@@ -1799,7 +1736,7 @@ const tests = Object.freeze({
 
   "can filter using 'gt' thru a plural primitive field": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -1848,20 +1785,16 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(
-      new URL(testRealmURL),
-      {
-        filter: {
-          on: type,
-          range: {
-            lotteryNumbers: {
-              gt: 50,
-            },
+    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
+      filter: {
+        on: type,
+        range: {
+          lotteryNumbers: {
+            gt: 50,
           },
         },
       },
-      loader,
-    );
+    });
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
@@ -1873,7 +1806,7 @@ const tests = Object.freeze({
 
   "can filter using 'gt' thru a plural composite field": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     let mangoDoc = {
@@ -1931,20 +1864,16 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(
-      new URL(testRealmURL),
-      {
-        filter: {
-          on: type,
-          range: {
-            'friends.age': {
-              gt: 25,
-            },
+    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
+      filter: {
+        on: type,
+        range: {
+          'friends.age': {
+            gt: 25,
           },
         },
       },
-      loader,
-    );
+    });
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
@@ -1956,7 +1885,7 @@ const tests = Object.freeze({
 
   "can filter using 'gte'": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -2002,23 +1931,19 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(
-      new URL(testRealmURL),
-      {
-        filter: {
-          on: type,
-          range: { age: { gte: 25 } },
-        },
-        sort: [
-          {
-            on: type,
-            by: 'age',
-            direction: 'desc',
-          },
-        ],
+    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
+      filter: {
+        on: type,
+        range: { age: { gte: 25 } },
       },
-      loader,
-    );
+      sort: [
+        {
+          on: type,
+          by: 'age',
+          direction: 'desc',
+        },
+      ],
+    });
 
     assert.strictEqual(meta.page.total, 3, 'the total results meta is correct');
     assert.deepEqual(
@@ -2030,7 +1955,7 @@ const tests = Object.freeze({
 
   "can filter using 'lt'": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -2076,23 +2001,19 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(
-      new URL(testRealmURL),
-      {
-        filter: {
-          on: type,
-          range: { age: { lt: 35 } },
-        },
-        sort: [
-          {
-            on: type,
-            by: 'age',
-            direction: 'desc',
-          },
-        ],
+    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
+      filter: {
+        on: type,
+        range: { age: { lt: 35 } },
       },
-      loader,
-    );
+      sort: [
+        {
+          on: type,
+          by: 'age',
+          direction: 'desc',
+        },
+      ],
+    });
 
     assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
     assert.deepEqual(
@@ -2104,7 +2025,7 @@ const tests = Object.freeze({
 
   "can filter using 'lte'": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -2150,23 +2071,19 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(
-      new URL(testRealmURL),
-      {
-        filter: {
-          on: type,
-          range: { age: { lte: 35 } },
-        },
-        sort: [
-          {
-            on: type,
-            by: 'age',
-            direction: 'desc',
-          },
-        ],
+    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
+      filter: {
+        on: type,
+        range: { age: { lte: 35 } },
       },
-      loader,
-    );
+      sort: [
+        {
+          on: type,
+          by: 'age',
+          direction: 'desc',
+        },
+      ],
+    });
 
     assert.strictEqual(meta.page.total, 3, 'the total results meta is correct');
     assert.deepEqual(
@@ -2178,7 +2095,7 @@ const tests = Object.freeze({
 
   "can combine 'range' filter": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -2224,23 +2141,19 @@ const tests = Object.freeze({
     ]);
 
     let type = await personCardType(testCards);
-    let { cards, meta } = await indexQueryEngine.search(
-      new URL(testRealmURL),
-      {
-        filter: {
-          on: type,
-          range: { age: { gt: 25, lt: 35 } },
-        },
-        sort: [
-          {
-            on: type,
-            by: 'age',
-            direction: 'desc',
-          },
-        ],
+    let { cards, meta } = await indexQueryEngine.search(new URL(testRealmURL), {
+      filter: {
+        on: type,
+        range: { age: { gt: 25, lt: 35 } },
       },
-      loader,
-    );
+      sort: [
+        {
+          on: type,
+          by: 'age',
+          direction: 'desc',
+        },
+      ],
+    });
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
     assert.deepEqual(getIds(cards), [vangogh.id], 'results are correct');
@@ -2248,7 +2161,7 @@ const tests = Object.freeze({
 
   "cannot filter 'null' value using 'range'": async (
     assert,
-    { indexQueryEngine, dbAdapter, loader, testCards },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
@@ -2295,22 +2208,18 @@ const tests = Object.freeze({
 
     let type = await personCardType(testCards);
     assert.rejects(
-      indexQueryEngine.search(
-        new URL(testRealmURL),
-        {
-          filter: {
-            on: type,
-            range: { age: { gt: null } },
-          },
+      indexQueryEngine.search(new URL(testRealmURL), {
+        filter: {
+          on: type,
+          range: { age: { gt: null } },
         },
-        loader,
-      ),
+      }),
       `'null' is not a permitted value in a 'range' filter`,
     );
   },
   'can sort using a general field that is not an attribute of a card': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader },
+    { indexQueryEngine, dbAdapter },
   ) => {
     await setupIndex(dbAdapter, [
       {
@@ -2368,7 +2277,6 @@ const tests = Object.freeze({
             },
           ],
         },
-        loader,
         {
           htmlFormat: 'embedded',
         },
@@ -2395,7 +2303,6 @@ const tests = Object.freeze({
             },
           ],
         },
-        loader,
         {
           htmlFormat: 'embedded',
         },
@@ -2422,7 +2329,6 @@ const tests = Object.freeze({
             },
           ],
         },
-        loader,
         {
           htmlFormat: 'embedded',
         },
@@ -2440,8 +2346,12 @@ const tests = Object.freeze({
   },
   'can get prerendered cards from the indexer': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
+    let personCard = await personCardType(testCards);
+    let personKey = internalKeyFor(personCard, undefined);
+    let fancyPersonCard = await fancyPersonCardType(testCards);
+    let fancyPersonKey = internalKeyFor(fancyPersonCard, undefined);
     await setupIndex(dbAdapter, [
       {
         url: `${testRealmURL}vangogh.json`,
@@ -2450,19 +2360,14 @@ const tests = Object.freeze({
         realm_version: 1,
         realm_url: testRealmURL,
         deps: [],
-        types: [
-          `${testRealmURL}person/Person`,
-          'https://cardstack.com/base/card-api/CardDef',
-        ],
+        types: [personKey, 'https://cardstack.com/base/card-api/CardDef'],
         embedded_html: {
-          [`${testRealmURL}person/Person`]:
-            '<div>Van Gogh (Person embedded template)</div>',
+          [personKey]: '<div>Van Gogh (Person embedded template)</div>',
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Van Gogh (CardDef embedded template)</div>',
         },
         fitted_html: {
-          [`${testRealmURL}person/Person`]:
-            '<div>Van Gogh (Person fitted template)</div>',
+          [personKey]: '<div>Van Gogh (Person fitted template)</div>',
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Van Gogh (CardDef fitted template)</div>',
         },
@@ -2476,20 +2381,15 @@ const tests = Object.freeze({
         realm_version: 1,
         realm_url: testRealmURL,
         deps: [],
-        types: [
-          `${testRealmURL}person/Person`,
-          'https://cardstack.com/base/card-api/CardDef',
-        ],
+        types: [personKey, 'https://cardstack.com/base/card-api/CardDef'],
 
         embedded_html: {
-          [`${testRealmURL}person/Person`]:
-            '<div>Jimmy (Person embedded template)</div>',
+          [personKey]: '<div>Jimmy (Person embedded template)</div>',
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Jimmy (CardDef embedded template)</div>',
         },
         fitted_html: {
-          [`${testRealmURL}person/Person`]:
-            '<div>Jimmy (Person fitted template)</div>',
+          [personKey]: '<div>Jimmy (Person fitted template)</div>',
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Jimmy (CardDef fitted template)</div>',
         },
@@ -2504,55 +2404,24 @@ const tests = Object.freeze({
         realm_url: testRealmURL,
         deps: [],
         types: [
-          `${testRealmURL}fancy-person/FancyPerson`,
-          `${testRealmURL}person/Person`,
+          fancyPersonKey,
+          personKey,
           'https://cardstack.com/base/card-api/CardDef',
         ],
         embedded_html: {
-          [`${testRealmURL}fancy-person/FancyPerson`]:
-            '<div>Donald (FancyPerson embedded template)</div>',
-          [`${testRealmURL}person/Person`]:
-            '<div>Donald (Person embedded template)</div>',
+          [fancyPersonKey]: '<div>Donald (FancyPerson embedded template)</div>',
+          [personKey]: '<div>Donald (Person embedded template)</div>',
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Donald (CardDef embedded template)</div>',
         },
         fitted_html: {
-          [`${testRealmURL}fancy-person/FancyPerson`]:
-            '<div>Donald (FancyPerson fitted template)</div>',
-          [`${testRealmURL}person/Person`]:
-            '<div>Donald (Person fitted template)</div>',
+          [fancyPersonKey]: '<div>Donald (FancyPerson fitted template)</div>',
+          [personKey]: '<div>Donald (Person fitted template)</div>',
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Donald (CardDef fitted template)</div>',
         },
         atom_html: 'Donald',
         search_doc: { name: 'Donald' },
-      },
-      {
-        url: `${testRealmURL}fancy-person.gts`,
-        type: 'module',
-        file_alias: `${testRealmURL}fancy-person`,
-        realm_version: 1,
-        realm_url: testRealmURL,
-        source: cardSrc,
-        deps: [`${testRealmURL}person`, 'https://cardstack.com/base/card-api'],
-      },
-      {
-        url: `${testRealmURL}person.gts`,
-        type: 'module',
-        file_alias: `${testRealmURL}person`,
-        realm_version: 1,
-        realm_url: testRealmURL,
-        source: cardSrc,
-        deps: ['https://cardstack.com/base/card-api'],
-      },
-      {
-        url: `https://cardstack.com/base/card-api`,
-        type: 'module',
-        file_alias: `${testRealmURL}card-api`,
-        realm_version: 1,
-        realm_url: testRealmURL,
-        source: '',
-        deps: [],
       },
     ]);
 
@@ -2560,7 +2429,6 @@ const tests = Object.freeze({
     let { prerenderedCards, meta } = await indexQueryEngine.searchPrerendered(
       new URL(testRealmURL),
       {}, // When there is no ON filter, embedded template for CardDef is used
-      loader,
       {
         htmlFormat: 'embedded',
       },
@@ -2585,10 +2453,7 @@ const tests = Object.freeze({
       prerenderedCards[0].html,
       '<div>Donald (FancyPerson embedded template)</div>',
     );
-    assert.deepEqual(prerenderedCards[0].usedRenderType, {
-      module: `${testRealmURL}fancy-person`,
-      name: 'FancyPerson',
-    });
+    assert.deepEqual(prerenderedCards[0].usedRenderType, fancyPersonCard);
 
     assert.strictEqual(
       prerenderedCards[1].url,
@@ -2598,10 +2463,7 @@ const tests = Object.freeze({
       prerenderedCards[1].html,
       '<div>Jimmy (Person embedded template)</div>',
     );
-    assert.deepEqual(prerenderedCards[1].usedRenderType, {
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
+    assert.deepEqual(prerenderedCards[1].usedRenderType, personCard);
 
     assert.strictEqual(
       prerenderedCards[2].url,
@@ -2611,20 +2473,14 @@ const tests = Object.freeze({
       prerenderedCards[2].html,
       '<div>Van Gogh (Person embedded template)</div>',
     );
-    assert.deepEqual(prerenderedCards[2].usedRenderType, {
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
+    assert.deepEqual(prerenderedCards[2].usedRenderType, personCard);
 
     // Requesting embedded template with ON filter
     ({ prerenderedCards, meta } = await indexQueryEngine.searchPrerendered(
       new URL(testRealmURL),
       {
         filter: {
-          on: {
-            module: `${testRealmURL}fancy-person`,
-            name: 'FancyPerson',
-          },
+          on: fancyPersonCard,
           not: {
             eq: {
               name: 'Richard',
@@ -2632,7 +2488,6 @@ const tests = Object.freeze({
           },
         },
       },
-      loader,
       {
         htmlFormat: 'embedded',
       },
@@ -2652,27 +2507,20 @@ const tests = Object.freeze({
       prerenderedCards[0].html,
       '<div>Donald (FancyPerson embedded template)</div>',
     );
-    assert.deepEqual(prerenderedCards[0].usedRenderType, {
-      module: `${testRealmURL}fancy-person`,
-      name: 'FancyPerson',
-    });
+    assert.deepEqual(prerenderedCards[0].usedRenderType, fancyPersonCard);
 
     //  Requesting atom template
     ({ prerenderedCards, meta } = await indexQueryEngine.searchPrerendered(
       new URL(testRealmURL),
       {
         filter: {
-          on: {
-            module: `${testRealmURL}fancy-person`,
-            name: 'FancyPerson',
-          },
+          on: fancyPersonCard,
 
           eq: {
             name: 'Donald',
           },
         },
       },
-      loader,
       {
         htmlFormat: 'atom',
       },
@@ -2681,20 +2529,14 @@ const tests = Object.freeze({
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
     assert.strictEqual(prerenderedCards[0].url, `${testRealmURL}donald.json`);
     assert.strictEqual(prerenderedCards[0].html, 'Donald'); // Atom template
-    assert.deepEqual(prerenderedCards[0].usedRenderType, {
-      module: `${testRealmURL}fancy-person`,
-      name: 'FancyPerson',
-    });
+    assert.deepEqual(prerenderedCards[0].usedRenderType, fancyPersonCard);
 
     // Define renderType argument
     ({ prerenderedCards, meta } = await indexQueryEngine.searchPrerendered(
       new URL(testRealmURL),
       {
         filter: {
-          on: {
-            module: `${testRealmURL}fancy-person`,
-            name: 'FancyPerson',
-          },
+          on: fancyPersonCard,
           not: {
             eq: {
               name: 'Richard',
@@ -2702,13 +2544,9 @@ const tests = Object.freeze({
           },
         },
       },
-      loader,
       {
         htmlFormat: 'embedded',
-        renderType: {
-          module: `${testRealmURL}person`,
-          name: 'Person',
-        },
+        renderType: personCard,
       },
     ));
 
@@ -2726,16 +2564,17 @@ const tests = Object.freeze({
       prerenderedCards[0].html,
       '<div>Donald (Person embedded template)</div>',
     );
-    assert.deepEqual(prerenderedCards[0].usedRenderType, {
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
+    assert.deepEqual(prerenderedCards[0].usedRenderType, personCard);
   },
 
   'can get prerendered cards in an error state from the indexer': async (
     assert,
-    { indexQueryEngine, dbAdapter, loader },
+    { indexQueryEngine, dbAdapter, testCards },
   ) => {
+    let personCard = await personCardType(testCards);
+    let personKey = internalKeyFor(personCard, undefined);
+    let fancyPersonCard = await fancyPersonCardType(testCards);
+    let fancyPersonKey = internalKeyFor(fancyPersonCard, undefined);
     await setupIndex(dbAdapter, [
       {
         url: `${testRealmURL}vangogh.json`,
@@ -2744,19 +2583,14 @@ const tests = Object.freeze({
         realm_version: 1,
         realm_url: testRealmURL,
         deps: [],
-        types: [
-          `${testRealmURL}person/Person`,
-          'https://cardstack.com/base/card-api/CardDef',
-        ],
+        types: [personKey, 'https://cardstack.com/base/card-api/CardDef'],
         embedded_html: {
-          [`${testRealmURL}person/Person`]:
-            '<div>Van Gogh (Person embedded template)</div>',
+          [personKey]: '<div>Van Gogh (Person embedded template)</div>',
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Van Gogh (CardDef embedded template)</div>',
         },
         fitted_html: {
-          [`${testRealmURL}person/Person`]:
-            '<div>Van Gogh (Person fitted template)</div>',
+          [personKey]: '<div>Van Gogh (Person fitted template)</div>',
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Van Gogh (CardDef fitted template)</div>',
         },
@@ -2771,24 +2605,20 @@ const tests = Object.freeze({
         realm_url: testRealmURL,
         deps: [],
         types: [
-          `${testRealmURL}fancy-person/FancyPerson`,
-          `${testRealmURL}person/Person`,
+          fancyPersonKey,
+          personKey,
           'https://cardstack.com/base/card-api/CardDef',
         ],
 
         embedded_html: {
-          [`${testRealmURL}fancy-person/FancyPerson`]:
-            '<div>Jimmy (FancyPerson embedded template)</div>',
-          [`${testRealmURL}person/Person`]:
-            '<div>Jimmy (Person embedded template)</div>',
+          [fancyPersonKey]: '<div>Jimmy (FancyPerson embedded template)</div>',
+          [personKey]: '<div>Jimmy (Person embedded template)</div>',
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Jimmy (CardDef embedded template)</div>',
         },
         fitted_html: {
-          [`${testRealmURL}fancy-person/FancyPerson`]:
-            '<div>Jimmy (FancyPerson fitted template)</div>',
-          [`${testRealmURL}person/Person`]:
-            '<div>Jimmy (Person fitted template)</div>',
+          [fancyPersonKey]: '<div>Jimmy (FancyPerson fitted template)</div>',
+          [personKey]: '<div>Jimmy (Person fitted template)</div>',
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Jimmy (CardDef fitted template)</div>',
         },
@@ -2803,23 +2633,19 @@ const tests = Object.freeze({
         realm_url: testRealmURL,
         deps: [],
         types: [
-          `${testRealmURL}fancy-person/FancyPerson`,
-          `${testRealmURL}person/Person`,
+          fancyPersonKey,
+          personKey,
           'https://cardstack.com/base/card-api/CardDef',
         ],
         embedded_html: {
-          [`${testRealmURL}fancy-person/FancyPerson`]:
-            '<div>Donald (FancyPerson embedded template)</div>',
-          [`${testRealmURL}person/Person`]:
-            '<div>Donald (Person embedded template)</div>',
+          [fancyPersonKey]: '<div>Donald (FancyPerson embedded template)</div>',
+          [personKey]: '<div>Donald (Person embedded template)</div>',
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Donald (CardDef embedded template)</div>',
         },
         fitted_html: {
-          [`${testRealmURL}fancy-person/FancyPerson`]:
-            '<div>Donald (FancyPerson fitted template)</div>',
-          [`${testRealmURL}person/Person`]:
-            '<div>Donald (Person fitted template)</div>',
+          [fancyPersonKey]: '<div>Donald (FancyPerson fitted template)</div>',
+          [personKey]: '<div>Donald (Person fitted template)</div>',
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Donald (CardDef fitted template)</div>',
         },
@@ -2835,50 +2661,19 @@ const tests = Object.freeze({
         deps: [],
         types: null, // here we are asserting that we can handle a `null` types column
         embedded_html: {
-          [`${testRealmURL}fancy-person/FancyPerson`]:
-            '<div>Paper (FancyPerson embedded template)</div>',
-          [`${testRealmURL}person/Person`]:
-            '<div>Paper (Person embedded template)</div>',
+          [fancyPersonKey]: '<div>Paper (FancyPerson embedded template)</div>',
+          [personKey]: '<div>Paper (Person embedded template)</div>',
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Paper (CardDef embedded template)</div>',
         },
         fitted_html: {
-          [`${testRealmURL}fancy-person/FancyPerson`]:
-            '<div>Paper (FancyPerson fitted template)</div>',
-          [`${testRealmURL}person/Person`]:
-            '<div>Paper (Person fitted template)</div>',
+          [fancyPersonKey]: '<div>Paper (FancyPerson fitted template)</div>',
+          [personKey]: '<div>Paper (Person fitted template)</div>',
           'https://cardstack.com/base/card-api/CardDef':
             '<div>Paper (CardDef fitted template)</div>',
         },
         atom_html: 'Paper',
         search_doc: { name: 'Paper' },
-      },
-      {
-        url: `${testRealmURL}fancy-person.gts`,
-        type: 'module',
-        file_alias: `${testRealmURL}fancy-person`,
-        realm_version: 1,
-        realm_url: testRealmURL,
-        source: cardSrc,
-        deps: [`${testRealmURL}person`, 'https://cardstack.com/base/card-api'],
-      },
-      {
-        url: `${testRealmURL}person.gts`,
-        type: 'module',
-        file_alias: `${testRealmURL}person`,
-        realm_version: 1,
-        realm_url: testRealmURL,
-        source: cardSrc,
-        deps: ['https://cardstack.com/base/card-api'],
-      },
-      {
-        url: `https://cardstack.com/base/card-api`,
-        type: 'module',
-        file_alias: `${testRealmURL}card-api`,
-        realm_version: 1,
-        realm_url: testRealmURL,
-        source: '',
-        deps: [],
       },
     ]);
 
@@ -2886,10 +2681,7 @@ const tests = Object.freeze({
       new URL(testRealmURL),
       {
         filter: {
-          on: {
-            module: `${testRealmURL}fancy-person`,
-            name: 'FancyPerson',
-          },
+          on: fancyPersonCard,
           not: {
             eq: {
               name: 'Richard',
@@ -2897,7 +2689,6 @@ const tests = Object.freeze({
           },
         },
       },
-      loader,
       {
         htmlFormat: 'embedded',
         includeErrors: true,
@@ -2936,7 +2727,6 @@ const tests = Object.freeze({
 } as SharedTests<{
   indexQueryEngine: IndexQueryEngine;
   dbAdapter: DBAdapter;
-  loader: Loader;
   testCards: TestCards;
 }>);
 
@@ -2968,6 +2758,17 @@ async function personCardType(testCards: TestCards) {
     );
   }
   let internalKey = [...(await getTypes(vangogh))].shift()!;
+  return internalKeyToCodeRef(internalKey);
+}
+
+async function fancyPersonCardType(testCards: TestCards) {
+  let { mango } = testCards;
+  if (!mango) {
+    throw new Error(
+      `missing the 'mango' test card in the--this is the card we use to derive the FancyPerson type`,
+    );
+  }
+  let internalKey = [...(await getTypes(mango))].shift()!;
   return internalKeyToCodeRef(internalKey);
 }
 

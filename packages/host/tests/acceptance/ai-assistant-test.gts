@@ -1,11 +1,4 @@
-import {
-  click,
-  fillIn,
-  waitFor,
-  waitUntil,
-  visit,
-  triggerEvent,
-} from '@ember/test-helpers';
+import { click, fillIn, waitFor, waitUntil, visit } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -14,7 +7,11 @@ import stringify from 'safe-stable-stringify';
 
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
-import { ResolvedCodeRef, baseRealm } from '@cardstack/runtime-common';
+import {
+  ResolvedCodeRef,
+  baseRealm,
+  skillCardRef,
+} from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_ACTIVE_LLM,
@@ -240,6 +237,32 @@ module('Acceptance | AI Assistant tests', function (hooks) {
                 module: 'https://cardstack.com/base/spec',
                 name: 'Spec',
               },
+            },
+          },
+        },
+        'Skill/example.json': {
+          data: {
+            attributes: {
+              title: 'Exanple Skill',
+              description: 'This skill card is for testing purposes',
+              instructions: 'This is an example skill card',
+              commands: [],
+            },
+            meta: {
+              adoptsFrom: skillCardRef,
+            },
+          },
+        },
+        'Skill/example2.json': {
+          data: {
+            attributes: {
+              title: 'Example 2 Skill',
+              description: 'This skill card is also for testing purposes',
+              instructions: 'This is a second example skill card',
+              commands: [],
+            },
+            meta: {
+              adoptsFrom: skillCardRef,
             },
           },
         },
@@ -1970,6 +1993,113 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
   });
 
+  test('"Add Same Skills" copies skill configuration to new session', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // First, let's add some skills to the current room
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await waitFor('[data-test-skill-menu]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click(`[data-test-card-catalog-item="${testRealmURL}Skill/example"]`);
+    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click(
+      `[data-test-card-catalog-item="${testRealmURL}Skill/example2"]`,
+    );
+    await click('[data-test-card-catalog-go-button]');
+
+    assert
+      .dom('[data-test-skill-menu] [data-test-attached-card]')
+      .exists({ count: 2 });
+    assert
+      .dom(
+        `[data-test-skill-menu] [data-test-attached-card="${testRealmURL}Skill/example"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-skill-menu] [data-test-attached-card="${testRealmURL}Skill/example2"]`,
+      )
+      .exists();
+    assert
+      .dom(`[data-test-skill-toggle="${testRealmURL}Skill/example-on"`)
+      .exists();
+    assert
+      .dom(`[data-test-skill-toggle="${testRealmURL}Skill/example2-on"`)
+      .exists();
+    await click(`[data-test-skill-toggle="${testRealmURL}Skill/example2-on"`);
+    assert
+      .dom(`[data-test-skill-toggle="${testRealmURL}Skill/example2-off"`)
+      .exists();
+
+    // Enabling create new session by sending a message
+    await fillIn(
+      '[data-test-message-field]',
+      'Enabling create new session button',
+    );
+    await click('[data-test-send-message-btn]');
+
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await click('[data-test-new-session-settings-option="Add Same Skills"]');
+    await click('[data-test-new-session-settings-create-button]');
+    await waitFor('[data-room-settled]');
+
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await waitFor('[data-test-skill-menu]');
+    assert
+      .dom('[data-test-skill-menu] [data-test-attached-card]')
+      .exists({ count: 2 });
+    assert
+      .dom(
+        `[data-test-skill-menu] [data-test-attached-card="${testRealmURL}Skill/example"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-skill-menu] [data-test-attached-card="${testRealmURL}Skill/example2"]`,
+      )
+      .exists();
+    assert
+      .dom(`[data-test-skill-toggle="${testRealmURL}Skill/example-on"`)
+      .exists();
+    assert
+      .dom(`[data-test-skill-toggle="${testRealmURL}Skill/example2-off"`)
+      .exists();
+
+    // Normal click scenario
+    // Enabling create new session by sending a message
+    await fillIn(
+      '[data-test-message-field]',
+      'Enabling create new session button',
+    );
+    await click('[data-test-send-message-btn]');
+    await click('[data-test-create-room-btn]');
+    await waitFor('[data-room-settled]');
+
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await waitFor('[data-test-skill-menu]');
+    assert
+      .dom('[data-test-skill-menu] [data-test-attached-card]')
+      .exists({ count: 1 });
+    assert
+      .dom(
+        `[data-test-skill-menu] [data-test-attached-card="http://localhost:4201/skills/Skill/boxel-environment"]`,
+      )
+      .exists();
+  });
+
   test('copies file history when creating new session with option checked', async function (assert) {
     await visitOperatorMode({
       submode: 'interact',
@@ -2023,14 +2153,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       },
     ]);
     // Create new session with "Copy File History" option
-    await triggerEvent('[data-test-create-room-btn]', 'mouseenter');
-    await waitFor('[data-test-new-session-settings-menu]');
-    await click(
-      '[data-test-new-session-settings-checkbox="Copy File History"]',
-    );
-    await click('[data-test-create-room-btn]');
-
-    // Wait for new room to be created and settled
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await click('[data-test-new-session-settings-option="Copy File History"]');
+    await click('[data-test-new-session-settings-create-button]');
     await waitFor(`[data-room-settled]`);
 
     assertMessages(assert, [

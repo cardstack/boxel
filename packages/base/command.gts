@@ -7,7 +7,6 @@ import {
   field,
   linksTo,
   linksToMany,
-  primitive,
 } from './card-api';
 import CodeRefField from './code-ref';
 import BooleanField from './boolean';
@@ -20,11 +19,6 @@ import {
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
 } from './commands/search-card-result';
-import { SerializedFileDef } from './file-api';
-
-export class FileDefField extends FieldDef {
-  static [primitive]: SerializedFileDef;
-}
 
 export type CommandStatus = 'applied' | 'ready' | 'applying';
 
@@ -153,7 +147,8 @@ export class PatchCodeInput extends CardDef {
 
 export class CreateAIAssistantRoomInput extends CardDef {
   @field name = contains(StringField);
-  @field defaultSkills = linksToMany(Skill);
+  @field enabledSkills = linksToMany(Skill);
+  @field disabledSkills = linksToMany(Skill);
 }
 
 export class CreateAIAssistantRoomResult extends CardDef {
@@ -163,6 +158,7 @@ export class CreateAIAssistantRoomResult extends CardDef {
 export class SetActiveLLMInput extends CardDef {
   @field roomId = contains(StringField);
   @field model = contains(StringField);
+  @field mode = contains(StringField); // 'act' or 'ask'
 }
 
 export class AddSkillsToRoomInput extends CardDef {
@@ -233,6 +229,11 @@ export class ListingActionInput extends CardDef {
   @field actionType = contains(StringField);
   @field listing = linksTo(CardDef);
   @field attachedCard = linksTo(CardDef);
+}
+
+export class ListingBuildInput extends CardDef {
+  @field realm = contains(StringField);
+  @field listing = linksTo(CardDef);
 }
 
 export class ListingInstallInput extends CardDef {

@@ -143,6 +143,14 @@ module(`Integration | realm indexing`, function (hooks) {
             },
           },
         },
+        'pet.gts': `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class Pet extends CardDef {
+            @field firstName = contains(StringField);
+          }
+        `,
       },
     });
     assert.deepEqual(
@@ -151,8 +159,10 @@ module(`Integration | realm indexing`, function (hooks) {
         instanceErrors: 0,
         instancesIndexed: 2,
         moduleErrors: 0,
-        modulesIndexed: 0,
-        totalIndexEntries: 2,
+        modulesIndexed: 1,
+        cardDefErrors: 0,
+        cardDefsIndexed: 1,
+        totalIndexEntries: 4,
       },
       'indexer stats are correct',
     );
@@ -176,6 +186,13 @@ module(`Integration | realm indexing`, function (hooks) {
         },
       } as LooseSingleCardDocument),
     );
+
+    let metaEntry = await realm.realmIndexQueryEngine.cardDef({
+      module: `${testRealmURL}pet`,
+      name: 'Pet',
+    });
+    assert.strictEqual(metaEntry?.type, 'card-def', 'meta entry exists');
+
     await realm.fullIndex();
 
     assert.deepEqual(
@@ -185,10 +202,20 @@ module(`Integration | realm indexing`, function (hooks) {
         instancesIndexed: 1,
         moduleErrors: 0,
         modulesIndexed: 0,
-        totalIndexEntries: 2,
+        cardDefErrors: 0,
+        cardDefsIndexed: 0,
+        totalIndexEntries: 4,
       },
       'indexer stats are correct',
     );
+
+    // meta entries are notional so we want to make sure they didn't
+    // get tombstoned because the file wasn't found
+    metaEntry = await realm.realmIndexQueryEngine.cardDef({
+      module: `${testRealmURL}pet`,
+      name: 'Pet',
+    });
+    assert.strictEqual(metaEntry?.type, 'card-def', 'meta entry exists');
   });
 
   test('can recover from indexing a card with a broken link', async function (assert) {
@@ -3201,6 +3228,8 @@ module(`Integration | realm indexing`, function (hooks) {
         instancesIndexed: 3,
         moduleErrors: 0,
         modulesIndexed: 0,
+        cardDefErrors: 0,
+        cardDefsIndexed: 0,
         totalIndexEntries: 3,
       },
       'instances are indexed without error',
@@ -3324,6 +3353,8 @@ module(`Integration | realm indexing`, function (hooks) {
               id: mangoID,
               firstName: 'Mango',
               title: 'Mango',
+              description: null,
+              thumbnailURL: null,
               friends: [{ id: hassanID }],
             },
             {
@@ -3596,11 +3627,15 @@ module(`Integration | realm indexing`, function (hooks) {
               id: hassanID,
               firstName: 'Hassan',
               title: 'Hassan',
+              description: null,
+              thumbnailURL: null,
               friends: [
                 {
                   id: mangoID,
                   firstName: 'Mango',
                   title: 'Mango',
+                  description: null,
+                  thumbnailURL: null,
                   friends: [{ id: hassanID }],
                 },
                 { id: vanGoghID },

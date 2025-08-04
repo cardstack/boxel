@@ -50,8 +50,6 @@ import {
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
 import type CodeSemanticsService from '@cardstack/host/services/code-semantics-service';
-import type EnvironmentService from '@cardstack/host/services/environment-service';
-import type LoaderService from '@cardstack/host/services/loader-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
@@ -137,9 +135,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
   @service private declare recentFilesService: RecentFilesService;
-  @service private declare environmentService: EnvironmentService;
   @service private declare realm: RealmService;
-  @service private declare loaderService: LoaderService;
   @service private declare specPanelService: SpecPanelService;
 
   @tracked private loadFileError: string | null = null;
