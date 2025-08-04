@@ -630,7 +630,7 @@ export default class InteractSubmode extends Component {
   }
 
   private getRecentCardCollection = () => {
-    this.recentCardCollection = this.cardContext?.getCardCollection(
+    this.recentCardCollection = this.context?.getCardCollection(
       this,
       () => this.recentCardsService.recentCardIds,
     );
@@ -730,14 +730,14 @@ export default class InteractSubmode extends Component {
       throw new Error(`"${specId}" is not a card instance.`);
     }
 
-    await this.cardContext.actions?.createCard?.(spec.ref, new URL(specId), {
+    await this.context.actions?.createCard?.(spec.ref, new URL(specId), {
       realmURL: this.operatorModeStateService.getWritableRealmURL(),
     });
   });
 
   private createNewFromRecentType = restartableTask(
     async (codeRef: ResolvedCodeRef) => {
-      this.cardContext.actions?.createCard(codeRef, undefined, {
+      this.context.actions?.createCard(codeRef, undefined, {
         realmURL: this.operatorModeStateService.getWritableRealmURL(),
       });
     },
