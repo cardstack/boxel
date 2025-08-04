@@ -547,6 +547,28 @@ class IsolatedPianoTemplate extends Component<typeof Piano> {
   }
 
   @action
+  handleStageMouseLeave() {
+    // Reset piano focus when mouse leaves the compact-stage area
+    if (this.pianoFocused) {
+      this.pianoFocused = false;
+      this.pressedKeys.clear();
+      this.isRecording = false;
+      this.showNotationTranslation = false;
+
+      // Stop any ongoing playback
+      if (this._isPlaying || this._isPaused) {
+        this.stopPlayback();
+      }
+
+      // Clean up audio and keyboard listeners
+      this.teardownKeyboardListeners();
+      this.cleanupAudio();
+
+      console.log('Piano focus reset - mouse left stage area');
+    }
+  }
+
+  @action
   togglePianoFocus() {
     this.pianoFocused = !this.pianoFocused;
 
@@ -791,7 +813,7 @@ class IsolatedPianoTemplate extends Component<typeof Piano> {
   }
 
   <template>
-    <div class='compact-stage'>
+    <div class='compact-stage' {{on 'mouseleave' this.handleStageMouseLeave}}>
       <header class='compact-header'>
         <div class='brand-section'>
           <div class='piano-icon'>♫</div>
