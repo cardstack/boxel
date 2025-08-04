@@ -159,6 +159,13 @@ export default class RoomMessageCommand extends Component<Signature> {
     return this.matrixService.failedCommandState.get(commandRequest.id);
   }
 
+  private get invalidCommandState() {
+    return (
+      this.args.messageCommand.status === 'invalid' &&
+      !!this.args.messageCommand.failureReason
+    );
+  }
+
   <template>
     <div
       class={{cn
@@ -202,6 +209,11 @@ export default class RoomMessageCommand extends Component<Signature> {
               @messages={{array this.failedCommandState.message}}
             />
             <Alert.Action @action={{@runCommand}} @actionName='Retry' />
+          </Alert>
+        {{else if this.invalidCommandState}}
+          <Alert @type='warning' as |Alert|>
+            <Alert.Messages @messages={{array @messageCommand.failureReason}} />
+            <Alert.Action @action={{@runCommand}} @actionName='Try Anyway' />
           </Alert>
         {{/if}}
         {{#if this.commandResultCard.card}}

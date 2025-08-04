@@ -33,6 +33,7 @@ export default class MessageCommand {
     commandStatus: CommandStatus,
     commandResultFileDef: SerializedFile | undefined,
     owner: Owner,
+    public failureReason?: string | undefined,
   ) {
     setOwner(this, owner);
 

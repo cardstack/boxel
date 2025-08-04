@@ -1130,6 +1130,9 @@ module('Acceptance | Commands tests', function (hooks) {
     await waitFor(
       '[data-test-message-idx="0"] [data-test-apply-state="invalid"]',
     );
+    assert
+      .dom('[data-test-boxel-alert="warning"]')
+      .containsText('No command for the name "no-such-command" was found');
 
     assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
 
@@ -1207,6 +1210,11 @@ module('Acceptance | Commands tests', function (hooks) {
     await waitFor(
       '[data-test-message-idx="0"] [data-test-apply-state="invalid"]',
     );
+    assert
+      .dom('[data-test-boxel-alert="warning"]')
+      .containsText(
+        'Command "show-card_566f" validation failed: data/attributes must NOT have additional properties',
+      );
 
     assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
 
