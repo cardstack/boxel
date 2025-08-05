@@ -12,6 +12,52 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import { modifier } from 'ember-modifier';
+
+// Custom modifier to handle both global and element-specific events
+const pianoEventModifier = modifier(
+  (
+    element: Element,
+    [enabled, onKeyDown, onKeyUp, onBeforeUnload, onPageHide, onMouseLeave]: [
+      boolean,
+      (event: KeyboardEvent) => void,
+      (event: KeyboardEvent) => void,
+      () => void,
+      () => void,
+      (event: MouseEvent) => void,
+    ],
+  ) => {
+    if (!enabled) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => onKeyDown(event);
+    const handleKeyUp = (event: KeyboardEvent) => onKeyUp(event);
+    const handleBeforeUnload = () => onBeforeUnload();
+    const handlePageHide = () => onPageHide();
+    const handleMouseLeave = (event: MouseEvent) => onMouseLeave(event);
+
+    // Global window events
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
+
+    // Element-specific events
+    element.addEventListener('mouseleave', handleMouseLeave);
+
+    return () => {
+      // Clean up global events
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
+
+      // Clean up element-specific events
+      element.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  },
+);
 
 export class KeyField extends FieldDef {
   static displayName = 'Key';
@@ -129,20 +175,9 @@ class IsolatedPianoTemplate extends Component<typeof Piano> {
     }
   }
 
-  @action
-  setupKeyboardListeners() {
-    window.addEventListener('keydown', this.handleKeyDown);
-    window.addEventListener('keyup', this.handleKeyUp);
-    window.addEventListener('beforeunload', this.cleanupAudio);
-    window.addEventListener('pagehide', this.cleanupAudio);
-  }
-
-  @action
-  teardownKeyboardListeners() {
-    window.removeEventListener('keydown', this.handleKeyDown);
-    window.removeEventListener('keyup', this.handleKeyUp);
-    window.removeEventListener('beforeunload', this.cleanupAudio);
-    window.removeEventListener('pagehide', this.cleanupAudio);
+  // Computed property to determine if keyboard listeners should be enabled
+  get keyboardListenersEnabled() {
+    return this.pianoFocused || this.isRecording;
   }
 
   @action
@@ -547,7 +582,7 @@ class IsolatedPianoTemplate extends Component<typeof Piano> {
   }
 
   @action
-  handleStageMouseLeave() {
+  handleMouseLeave() {
     // Reset piano focus when mouse leaves the compact-stage area
     if (this.pianoFocused) {
       this.pianoFocused = false;
@@ -560,11 +595,8 @@ class IsolatedPianoTemplate extends Component<typeof Piano> {
         this.stopPlayback();
       }
 
-      // Clean up audio and keyboard listeners
-      this.teardownKeyboardListeners();
+      // Clean up audio
       this.cleanupAudio();
-
-      console.log('Piano focus reset - mouse left stage area');
     }
   }
 
@@ -578,7 +610,6 @@ class IsolatedPianoTemplate extends Component<typeof Piano> {
         piano.focus();
       }
       this.initializeAudioContext();
-      this.setupKeyboardListeners();
 
       if (this._isPlaying || this._isPaused) {
         this.stopPlayback();
@@ -587,7 +618,6 @@ class IsolatedPianoTemplate extends Component<typeof Piano> {
 
       console.log('Piano focused - keyboard mode enabled');
     } else {
-      this.teardownKeyboardListeners();
       console.log('Piano unfocused - notation mode enabled');
     }
   }
@@ -642,7 +672,6 @@ class IsolatedPianoTemplate extends Component<typeof Piano> {
         piano.focus();
       }
       this.initializeAudioContext();
-      this.setupKeyboardListeners();
     }
 
     console.log('Recording started with keyboard mode enabled');
@@ -655,7 +684,6 @@ class IsolatedPianoTemplate extends Component<typeof Piano> {
     this.args.model.notation = notation;
 
     this.pianoFocused = false;
-    this.teardownKeyboardListeners();
 
     console.log('Recording stopped, notation:', notation);
   }
@@ -809,11 +837,20 @@ class IsolatedPianoTemplate extends Component<typeof Piano> {
 
   destroy() {
     this.cleanupAudio();
-    this.teardownKeyboardListeners();
   }
 
   <template>
-    <div class='compact-stage' {{on 'mouseleave' this.handleStageMouseLeave}}>
+    <div
+      class='compact-stage'
+      {{pianoEventModifier
+        this.keyboardListenersEnabled
+        this.handleKeyDown
+        this.handleKeyUp
+        this.cleanupAudio
+        this.cleanupAudio
+        this.handleMouseLeave
+      }}
+    >
       <header class='compact-header'>
         <div class='brand-section'>
           <div class='piano-icon'>♫</div>
