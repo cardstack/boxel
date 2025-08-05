@@ -28,6 +28,7 @@ import MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
+
 import { Submodes } from '../../submode-switcher';
 
 export interface CodeBlockDiffEditorHeaderSignature {
