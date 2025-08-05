@@ -79,7 +79,9 @@ class CarouselComponent extends GlimmerComponent<Signature> {
   }
 
   get addSkillsDisabled() {
-    return !this.isSkillListing || !this.hasSkills;
+    // Only disable if it's a skill listing but has no skills
+    // The button is only shown for skill listings, so we don't need to check isSkillListing here
+    return !this.hasSkills;
   }
 
   @action
@@ -128,7 +130,8 @@ class CarouselComponent extends GlimmerComponent<Signature> {
       throw new Error('Missing commandContext');
     }
 
-    if (this.addSkillsDisabled) {
+    // Double-check that we have skills before proceeding
+    if (!this.hasSkills) {
       throw new Error('No skills found to add to current room');
     }
 
@@ -169,6 +172,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
             class='add-skills-button'
             data-test-catalog-listing-fitted-add-skills-to-room-button
             @loading={{this._addSkillsToCurrentRoom.isRunning}}
+            @disabled={{this.addSkillsDisabled}}
             aria-label='Add Skills to Current Room'
             {{on 'click' this.addSkillsToCurrentRoom}}
           >
