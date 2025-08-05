@@ -9,9 +9,17 @@ import { timeout } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
+import { isCardInstance } from '@cardstack/runtime-common';
+
+import * as CommandModule from 'https://cardstack.com/base/command';
+
+import type { Skill as SkillCard } from 'https://cardstack.com/base/skill';
+
 import CreateAiAssistantRoomCommand from '../commands/create-ai-assistant-room';
+
 import { Submodes } from '../components/submode-switcher';
 import { eventDebounceMs, isMatrixError } from '../lib/matrix-utils';
+import { importResource } from '../resources/import';
 import { NewSessionIdPersistenceKey } from '../utils/local-storage-keys';
 
 import LocalPersistenceService from './local-persistence-service';
@@ -19,6 +27,7 @@ import LocalPersistenceService from './local-persistence-service';
 import type CommandService from './command-service';
 import type MatrixService from './matrix-service';
 import type OperatorModeStateService from './operator-mode-state-service';
+import type StoreService from './store';
 import type { Message } from '../lib/matrix-classes/message';
 
 export interface SessionRoomData {
@@ -34,6 +43,7 @@ export default class AiAssistantPanelService extends Service {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private commandService: CommandService;
   @service declare private localPersistenceService: LocalPersistenceService;
+  @service declare private store: StoreService;
 
   @tracked displayRoomError = false;
   @tracked isShowingPastSessions = false;
@@ -46,6 +56,25 @@ export default class AiAssistantPanelService extends Service {
     if (this.isOpen) {
       this.loadRoomsTask.perform();
     }
+  }
+
+  private commandModuleResource = importResource(
+    this,
+    () => 'https://cardstack.com/base/command',
+  );
+
+  get commandModule() {
+    if (this.commandModuleResource.error) {
+      throw new Error(
+        `Error loading commandModule: ${JSON.stringify(this.commandModuleResource.error)}`,
+      );
+    }
+    if (!this.commandModuleResource.module) {
+      throw new Error(
+        `bug: SkillConfigField has not loaded yet--make sure to await this.loaded before using the api`,
+      );
+    }
+    return this.commandModuleResource.module as typeof CommandModule;
   }
 
   get isOpen() {
@@ -87,13 +116,14 @@ export default class AiAssistantPanelService extends Service {
   }
 
   @action
-  async createNewSession() {
+  async createNewSession(addSameSkills: boolean = false) {
     this.displayRoomError = false;
     if (this.newSessionId) {
       this.enterRoom(this.newSessionId);
       return;
     }
-    await this.doCreateRoom.perform();
+
+    await this.doCreateRoom.perform('New AI Assistant Chat', addSameSkills);
   }
 
   private get newSessionId() {
@@ -112,19 +142,88 @@ export default class AiAssistantPanelService extends Service {
     return this.doCreateRoom.isIdle;
   }
 
+  get currentRoomResource() {
+    if (!this.matrixService.currentRoomId) {
+      return undefined;
+    }
+    return this.matrixService.roomResources.get(
+      this.matrixService.currentRoomId,
+    );
+  }
+
+  private async extractSkillsFromCurrentRoom(): Promise<{
+    enabledSkills: SkillCard[];
+    disabledSkills: SkillCard[];
+  }> {
+    let enabledSkills: SkillCard[] = [];
+    let disabledSkills: SkillCard[] = [];
+
+    if (this.currentRoomResource?.matrixRoom?.skillsConfig) {
+      const skillConfig = this.currentRoomResource.matrixRoom.skillsConfig;
+
+      // Extract enabled skills from the current room
+      if (skillConfig.enabledSkillCards?.length) {
+        for (const fileDef of skillConfig.enabledSkillCards) {
+          try {
+            const skill = await this.store.get(fileDef.sourceUrl);
+            if (skill && isCardInstance(skill)) {
+              enabledSkills.push(skill as SkillCard);
+            }
+          } catch (e) {
+            console.warn(`Failed to load skill from ${fileDef.sourceUrl}:`, e);
+          }
+        }
+      }
+
+      // Extract disabled skills from the current room
+      if (skillConfig.disabledSkillCards?.length) {
+        for (const fileDef of skillConfig.disabledSkillCards) {
+          try {
+            const skill = await this.store.get(fileDef.sourceUrl);
+            if (skill && isCardInstance(skill)) {
+              disabledSkills.push(skill as SkillCard);
+            }
+          } catch (e) {
+            console.warn(`Failed to load skill from ${fileDef.sourceUrl}:`, e);
+          }
+        }
+      }
+    }
+
+    return { enabledSkills, disabledSkills };
+  }
+
   private doCreateRoom = restartableTask(
-    async (name: string = 'New AI Assistant Chat') => {
+    async (
+      name: string = 'New AI Assistant Chat',
+      addSameSkills: boolean = false,
+    ) => {
       try {
-        const defaultSkills = await this.matrixService.loadDefaultSkills(
-          this.operatorModeStateService.state.submode,
-        );
         let createRoomCommand = new CreateAiAssistantRoomCommand(
           this.commandService.commandContext,
         );
-        let { roomId } = await createRoomCommand.execute({
-          name,
-          defaultSkills,
-        });
+
+        let input: any = { name };
+        let enabledSkills: SkillCard[] = [];
+        let disabledSkills: SkillCard[] = [];
+
+        if (addSameSkills) {
+          const extractedSkills = await this.extractSkillsFromCurrentRoom();
+          enabledSkills = extractedSkills.enabledSkills;
+          disabledSkills = extractedSkills.disabledSkills;
+        }
+
+        if (enabledSkills.length || disabledSkills.length) {
+          input.enabledSkills = enabledSkills;
+          input.disabledSkills = disabledSkills;
+        } else {
+          // Use default skills
+          input.enabledSkills = await this.matrixService.loadDefaultSkills(
+            this.operatorModeStateService.state.submode,
+          );
+        }
+
+        let { roomId } = await createRoomCommand.execute(input);
 
         window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);
         this.enterRoom(roomId);

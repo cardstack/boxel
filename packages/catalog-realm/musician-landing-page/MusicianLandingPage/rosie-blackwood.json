@@ -1,0 +1,72 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "artistName": "Rosie Blackwood",
+      "headline": "Country-rock storyteller with a voice that carries generations of soul",
+      "bio": "Rosie Blackwood writes songs that feel like conversations with an old friend on a front porch at sunset. Hailing from Austin, Texas, she brings a raw authenticity to modern country music that harks back to the genre's rebellious roots while addressing contemporary themes of love, loss, and resilience.\n\nHer debut album 'Wildflower Highway' topped the country charts and earned her three Grammy nominations. Known for her powerful vocals and honest lyricism, Rosie has toured with legendary artists like Chris Stapleton and Brandi Carlile. Her live shows are intimate affairs, often featuring stripped-down arrangements that showcase her exceptional songwriting and commanding stage presence.",
+      "heroImageUrl": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=1200&h=600&fit=crop&crop=faces",
+      "primaryColor": "#B45309",
+      "socialLinks": [
+        {
+          "platform": "Apple Music",
+          "url": "https://music.apple.com/artist/rosie-blackwood",
+          "displayName": "Rosie Blackwood on Apple Music"
+        },
+        {
+          "platform": "Instagram",
+          "url": "https://instagram.com/rosieblackwoodmusic",
+          "displayName": "@rosieblackwoodmusic"
+        },
+        {
+          "platform": "TikTok",
+          "url": "https://tiktok.com/@rosieblackwood",
+          "displayName": "@rosieblackwood"
+        },
+        {
+          "platform": "Facebook",
+          "url": "https://facebook.com/rosieblackwoodofficial",
+          "displayName": "Rosie Blackwood Official"
+        }
+      ],
+      "upcomingShows": [
+        {
+          "venue": "Red Rocks Amphitheatre",
+          "date": "2025-08-30",
+          "city": "Morrison, CO",
+          "ticketUrl": "https://redrocksonline.com/rosie-blackwood"
+        },
+        {
+          "venue": "Grand Ole Opry",
+          "date": "2025-09-15",
+          "city": "Nashville, TN",
+          "ticketUrl": "https://opry.com/shows/rosie-blackwood"
+        },
+        {
+          "venue": "Austin City Limits Festival",
+          "date": "2025-10-05",
+          "city": "Austin, TX",
+          "ticketUrl": "https://aclfestival.com/artist/rosie-blackwood"
+        },
+        {
+          "venue": "The Ryman Auditorium",
+          "date": "2025-10-20",
+          "city": "Nashville, TN",
+          "ticketUrl": "https://ryman.com/events/rosie-blackwood"
+        }
+      ],
+      "musicSamples": [
+        "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
+        "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3",
+        "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-17.mp3"
+      ],
+      "contactEmail": "booking@rosieblackwood.com"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../musician-landing-page",
+        "name": "MusicianLandingPage"
+      }
+    }
+  }
+}
