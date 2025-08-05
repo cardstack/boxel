@@ -26,6 +26,7 @@ import {
   insert,
   param,
   unixTime,
+  uuidv4,
   RealmPaths,
   type MatrixConfig,
   type QueuePublisher,
@@ -778,7 +779,8 @@ export function setupPermissionedRealm(
       let testRealmDir;
 
       if (published) {
-        let publishedRealmId = '50b263e8-9dda-47da-967a-e1bc89751aee';
+        let publishedRealmId = uuidv4();
+
         testRealmDir = join(
           dir.name,
           'realm_server_1',
