@@ -42,7 +42,7 @@ import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { makeFastBootIndexRunner } from '../../fastboot';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { RealmServer } from '../../server';
+import { PUBLISHED_DIRECTORY_NAME, RealmServer } from '../../server';
 import {
   PgAdapter,
   PgQueuePublisher,
@@ -782,7 +782,7 @@ export function setupPermissionedRealm(
         testRealmDir = join(
           dir.name,
           'realm_server_1',
-          '_published',
+          PUBLISHED_DIRECTORY_NAME,
           publishedRealmId,
         );
 

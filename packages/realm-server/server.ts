@@ -51,6 +51,8 @@ const DEFAULT_PERMISSIONS = Object.freeze([
   'realm-owner',
 ]) as RealmPermissions['user'];
 
+export const PUBLISHED_DIRECTORY_NAME = '_published';
+
 export class RealmServer {
   private log = logger('realm-server');
   private realms: Realm[];
@@ -413,7 +415,7 @@ export class RealmServer {
       let owner = maybeUsername.name;
 
       // Skip published realms, loaded later
-      if (owner === '_published') {
+      if (owner === PUBLISHED_DIRECTORY_NAME) {
         continue;
       }
 
@@ -474,21 +476,24 @@ export class RealmServer {
         publishedRealms.map((r) => [r.published_realm_url, r]),
       );
 
-      let publishedDir = join(this.realmsRootPath, '_published');
+      let publishedDir = join(this.realmsRootPath, PUBLISHED_DIRECTORY_NAME);
+
       if (!existsSync(publishedDir)) {
         if (publishedRealms.length > 0) {
           this.log.warn(
-            `Found ${publishedRealms.length} published realms in database but _published directory does not exist at ${publishedDir}`,
+            `Found ${publishedRealms.length} published realms in database but ${PUBLISHED_DIRECTORY_NAME} directory does not exist at ${publishedDir}`,
           );
         }
 
         this.log.info(
-          'No _published directory found, skipping published realms',
+          `No ${PUBLISHED_DIRECTORY_NAME} directory found, skipping published realms`,
         );
         return [];
       }
 
-      this.log.info(`Scanning _published directory: ${publishedDir}`);
+      this.log.info(
+        `Scanning ${PUBLISHED_DIRECTORY_NAME} directory: ${publishedDir}`,
+      );
 
       let foundDirectories = new Set<string>();
       let publishedDirContents = readdirSync(publishedDir, {
@@ -496,7 +501,7 @@ export class RealmServer {
       });
 
       this.log.info(
-        `Found ${publishedDirContents.length} items in _published directory`,
+        `Found ${publishedDirContents.length} items in ${PUBLISHED_DIRECTORY_NAME} directory`,
       );
 
       for (let maybeRealmDir of publishedDirContents) {
@@ -580,7 +585,7 @@ export class RealmServer {
       }
 
       this.log.info(
-        `Finished loading published realms. Loaded ${realms.filter((r) => r.url.includes('_published') || foundDirectories.has(r.url)).length} published realms.`,
+        `Finished loading published realms. Loaded ${realms.filter((r) => r.url.includes(PUBLISHED_DIRECTORY_NAME) || foundDirectories.has(r.url)).length} published realms.`,
       );
     } catch (error) {
       this.log.error(`Error loading published realms: ${error}`);
