@@ -14,11 +14,9 @@ declare const config: {
   matrixURL: string;
   matrixServerName: string;
 
-  realmServerRoot: string;
+  realmServerDomain: string;
   resolvedBaseRealmURL: string;
   resolvedSkillsRealmURL: string;
-  hostModeUserSubdomainRoot?: string;
-  hostModeCustomSubdomainRoot?: string;
   hostsOwnAssets: boolean;
   realmsServed?: string[];
   logLevels: string;

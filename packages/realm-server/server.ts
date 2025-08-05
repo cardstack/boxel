@@ -250,7 +250,7 @@ export class RealmServer {
           assetsURL: this.assetsURL.href,
           hostModeUserSubdomainRoot: this.hostModeUserSubdomainRoot,
           hostModeCustomSubdomainRoot: this.hostModeCustomSubdomainRoot,
-          realmServerRoot: this.serverURL.href,
+          realmServerDomain: this.serverURL.hostname,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       },

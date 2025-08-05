@@ -51,7 +51,7 @@ export default class Card extends Route<ReturnType<StoreService['get']>> {
 
       cardPath = segments.slice(1).join('/');
 
-      prospectiveRealmUrl = `${config.realmServerRoot}${this.hostModeService.userSubdomain}/${realm}/`;
+      prospectiveRealmUrl = `${config.realmServerDomain}${this.hostModeService.userSubdomain}/${realm}/`;
     }
 
     await this.realm.ensureRealmMeta(prospectiveRealmUrl);
