@@ -457,11 +457,11 @@ export class RealmServer {
       }
     }
 
-    let publishedRealms = await this.loadPublishedRealms();
+    let publishedRealms = await this.findPublishedRealms();
     return [...realms, ...publishedRealms];
   }
 
-  private async loadPublishedRealms() {
+  private async findPublishedRealms() {
     let realms = [];
     try {
       this.log.info('Loading published realms…');
