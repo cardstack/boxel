@@ -6,13 +6,19 @@ import {
   logger,
   SupportedMimeType,
   insertPermissions,
+  query,
   Deferred,
   type VirtualNetwork,
   type DBAdapter,
   type QueuePublisher,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
-import { ensureDirSync, writeJSONSync, readdirSync } from 'fs-extra';
+import {
+  ensureDirSync,
+  writeJSONSync,
+  readdirSync,
+  existsSync,
+} from 'fs-extra';
 import { setupCloseHandler } from './node-realm';
 import {
   httpLogging,
@@ -65,7 +71,8 @@ export class RealmServer {
     | (() => Promise<string | undefined>)
     | undefined;
   private enableFileWatcher: boolean;
-  private hostModeDomainRoot: string | undefined;
+  private hostModeUserSubdomainRoot: string | undefined;
+  private hostModeCustomSubdomainRoot: string | undefined;
 
   constructor({
     serverURL,
@@ -83,7 +90,8 @@ export class RealmServer {
     matrixRegistrationSecret,
     getRegistrationSecret,
     enableFileWatcher,
-    hostModeDomainRoot,
+    hostModeUserSubdomainRoot,
+    hostModeCustomSubdomainRoot,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -100,7 +108,8 @@ export class RealmServer {
     matrixRegistrationSecret?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
     enableFileWatcher?: boolean;
-    hostModeDomainRoot?: string;
+    hostModeUserSubdomainRoot?: string;
+    hostModeCustomSubdomainRoot?: string;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -124,8 +133,9 @@ export class RealmServer {
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.getRegistrationSecret = getRegistrationSecret;
     this.enableFileWatcher = enableFileWatcher ?? false;
-    this.hostModeDomainRoot = hostModeDomainRoot;
-    this.realms = [...realms, ...this.loadRealms()];
+    this.hostModeUserSubdomainRoot = hostModeUserSubdomainRoot;
+    this.hostModeCustomSubdomainRoot = hostModeCustomSubdomainRoot;
+    this.realms = [...realms];
   }
 
   @Memoize()
@@ -176,7 +186,6 @@ export class RealmServer {
           serveFromRealm: this.serveFromRealm,
           sendEvent: this.sendEvent,
           queue: this.queue,
-          realms: this.realms,
         }),
       )
       .use(this.serveIndex)
@@ -200,6 +209,9 @@ export class RealmServer {
   }
 
   async start() {
+    let loadedRealms = await this.loadRealms();
+    this.realms.push(...loadedRealms);
+
     // ideally we'd like to use a Promise.all to start these and the ordering
     // will just fall out naturally from cross realm invalidation. Until we have
     // that we should start the realms in order.
@@ -245,7 +257,8 @@ export class RealmServer {
         config = merge({}, config, {
           hostsOwnAssets: false,
           assetsURL: this.assetsURL.href,
-          hostModeDomainRoot: this.hostModeDomainRoot,
+          hostModeUserSubdomainRoot: this.hostModeUserSubdomainRoot,
+          hostModeCustomSubdomainRoot: this.hostModeCustomSubdomainRoot,
           realmServerRoot: this.serverURL.href,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
@@ -392,15 +405,27 @@ export class RealmServer {
   // within our testing boundary. main.ts is outside of our testing boundary.
   // The only real way to test thru main.ts is with a full stack, a la matrix
   // client tests.
-  private loadRealms() {
+  private async loadRealms() {
     let realms: Realm[] = [];
+
+    console.log('realmsRootPath:', this.realmsRootPath);
+
+    // Load regular realms (existing behavior)
     for (let maybeUsername of readdirSync(this.realmsRootPath, {
       withFileTypes: true,
     })) {
+      console.log(`Checking directory: ${maybeUsername.name}`);
+
       if (!maybeUsername.isDirectory()) {
         continue;
       }
       let owner = maybeUsername.name;
+
+      // Skip published realms, loaded later
+      if (owner === '_published') {
+        continue;
+      }
+
       for (let maybeRealm of readdirSync(join(this.realmsRootPath, owner), {
         withFileTypes: true,
       })) {
@@ -438,6 +463,158 @@ export class RealmServer {
         }
       }
     }
+
+    let publishedRealms = await this.loadPublishedRealms();
+    return [...realms, ...publishedRealms];
+  }
+
+  private async loadPublishedRealms() {
+    let realms = [];
+    try {
+      this.log.info('Loading published realms...');
+
+      let publishedRealms = await getPublishedRealms(this.dbAdapter);
+
+      this.log.info(
+        `Found ${publishedRealms.length} published realms in database`,
+      );
+
+      let publishedRealmsByUrl = new Map(
+        publishedRealms.map((r) => [r.published_realm_url, r]),
+      );
+
+      let publishedDir = join(this.realmsRootPath, '_published');
+      if (!existsSync(publishedDir)) {
+        if (publishedRealms.length > 0) {
+          this.log.warn(
+            `Found ${publishedRealms.length} published realms in database but _published directory does not exist at ${publishedDir}`,
+          );
+        }
+
+        this.log.info(
+          'No _published directory found, skipping published realms',
+        );
+        return [];
+      }
+
+      this.log.info(`Scanning _published directory: ${publishedDir}`);
+
+      let foundDirectories = new Set<string>();
+      let publishedDirContents = readdirSync(publishedDir, {
+        withFileTypes: true,
+      });
+
+      this.log.info(
+        `Found ${publishedDirContents.length} items in _published directory`,
+      );
+
+      for (let maybeRealmDir of publishedDirContents) {
+        if (!maybeRealmDir.isDirectory()) {
+          continue;
+        }
+
+        let realmDirName = maybeRealmDir.name;
+        let realmPath = join(publishedDir, realmDirName);
+
+        try {
+          let maybeRealmContents = readdirSync(realmPath);
+
+          if (!maybeRealmContents.includes('.realm.json')) {
+            this.log.warn(
+              `Directory ${realmPath} exists but does not contain .realm.json, skipping`,
+            );
+            continue;
+          }
+
+          let matchingPublishedRealm = publishedRealms.find(
+            (publishedRealmRow) => publishedRealmRow.id === realmDirName,
+          );
+
+          if (!matchingPublishedRealm) {
+            this.log.warn(
+              `Found directory ${realmPath} but no matching entry in published_realms table, skipping`,
+            );
+            continue;
+          }
+
+          let publishedRealmUrl = matchingPublishedRealm.published_realm_url;
+
+          foundDirectories.add(publishedRealmUrl);
+
+          let publishedRealmRow = publishedRealmsByUrl.get(publishedRealmUrl);
+
+          if (!publishedRealmRow) {
+            this.log.warn(
+              `Found published realm directory at ${realmPath} but no corresponding entry in published_realms table for URL ${publishedRealmUrl}`,
+            );
+            continue;
+          }
+
+          let adapter = new NodeAdapter(realmPath, this.enableFileWatcher);
+          let username = publishedRealmRow.owner_username;
+
+          console.log('this is a published realm');
+          console.log('realmpath', realmPath);
+          console.log(
+            JSON.stringify(
+              {
+                url: publishedRealmUrl,
+                secretSeed: this.realmSecretSeed,
+                matrix: {
+                  url: this.matrixClient.matrixURL,
+                  username,
+                },
+              },
+              null,
+              2,
+            ),
+          );
+
+          let realm = new Realm({
+            url: publishedRealmUrl,
+            adapter,
+            secretSeed: this.realmSecretSeed,
+            virtualNetwork: this.virtualNetwork,
+            dbAdapter: this.dbAdapter,
+            queue: this.queue,
+            matrix: {
+              url: this.matrixClient.matrixURL,
+              username,
+            },
+            realmServerMatrixClient: this.matrixClient,
+          });
+
+          this.virtualNetwork.mount(realm.handle);
+          realms.push(realm);
+
+          this.log.info(
+            `Loaded published realm: ${publishedRealmUrl} from ${realmPath}`,
+          );
+        } catch (dirError) {
+          this.log.warn(
+            `Error processing published realm directory ${realmPath}: ${dirError}`,
+          );
+        }
+      }
+
+      for (let publishedRealm of publishedRealms) {
+        if (!foundDirectories.has(publishedRealm.published_realm_url)) {
+          this.log.warn(
+            `Published realm ${publishedRealm.published_realm_url} exists in database but no corresponding directory found in ${publishedDir}`,
+          );
+        }
+      }
+
+      this.log.info(
+        `Finished loading published realms. Loaded ${realms.filter((r) => r.url.includes('_published') || foundDirectories.has(r.url)).length} published realms.`,
+      );
+    } catch (error) {
+      this.log.error(`Error loading published realms: ${error}`);
+      if (error instanceof Error) {
+        this.log.error(`Stack trace: ${error.stack}`);
+      }
+    }
+
     return realms;
   }
 
@@ -513,4 +690,17 @@ function errorWithStatus(
   let error = new Error(message);
   (error as Error & { status: number }).status = status;
   return error as Error & { status: number };
+}
+
+async function getPublishedRealms(dbAdapter: DBAdapter) {
+  return (
+    await query(dbAdapter, [
+      `SELECT * FROM published_realms ORDER BY published_realm_url`,
+    ])
+  ).map((row) => ({
+    id: row.id as string,
+    owner_username: row.owner_id as string,
+    source_realm_url: row.source_realm_url as string,
+    published_realm_url: row.published_realm_url as string,
+  }));
 }
