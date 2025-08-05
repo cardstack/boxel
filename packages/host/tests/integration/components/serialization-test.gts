@@ -296,6 +296,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Mango',
+          cardInfo: {},
         },
         meta: {
           adoptsFrom: {
@@ -678,6 +679,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Hassan',
+          cardInfo: {},
         },
         relationships: {
           pet: {
@@ -703,6 +705,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             description: 'Toilet paper ghost: Poooo!',
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -716,6 +719,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Mango',
+            cardInfo: {},
           },
           relationships: {
             favoriteToy: {
@@ -799,6 +803,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Hassan',
+          cardInfo: {},
         },
         relationships: {
           pet: {
@@ -821,6 +826,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             description: 'Toilet paper ghost: Poooo!',
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -834,6 +840,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Mango',
+            cardInfo: {},
           },
           relationships: {
             favoriteToy: {
@@ -877,6 +884,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Hassan',
+          cardInfo: {},
         },
         relationships: {
           pet: {
@@ -902,6 +910,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             description: 'Toilet paper ghost: Poooo!',
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -915,6 +924,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Mango',
+            cardInfo: {},
           },
           relationships: {
             favoriteToy: {
@@ -1081,6 +1091,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Hassan',
+          cardInfo: {},
         },
         relationships: {
           pet: {
@@ -1138,6 +1149,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Hassan',
+          cardInfo: {},
         },
         relationships: {
           pet: {
@@ -1163,6 +1175,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Mango',
+          cardInfo: {},
         },
         relationships: {
           pet: {
@@ -1375,6 +1388,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Hassan',
+          cardInfo: {},
         },
         relationships: {
           friend: {
@@ -1400,6 +1414,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Mango',
+            cardInfo: {},
           },
           relationships: {
             friend: {
@@ -1444,6 +1459,7 @@ module('Integration | serialization', function (hooks) {
           description: null,
           thumbnailURL: null,
           title: null,
+          cardInfo: {},
         },
         relationships: {
           friend: {
@@ -1600,6 +1616,7 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Hassan',
+          cardInfo: {},
           pet: {
             firstName: 'Mango',
           },
@@ -1628,6 +1645,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             description: 'Toilet paper ghost: Poooo!',
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -1724,6 +1742,7 @@ module('Integration | serialization', function (hooks) {
         attributes: {
           firstName: 'Hassan',
           pet: {},
+          cardInfo: {},
         },
         relationships: {
           'pet.favoriteToy': {
@@ -1749,6 +1768,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             description: 'Toilet paper ghost: Poooo!',
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -1856,6 +1876,7 @@ module('Integration | serialization', function (hooks) {
               firstName: 'Mango',
             },
           ],
+          cardInfo: {},
         },
         relationships: {
           'pets.0.favoriteToy': {
@@ -1881,6 +1902,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             description: 'Toilet paper ghost: Poooo!',
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -2201,6 +2223,7 @@ module('Integration | serialization', function (hooks) {
       },
       description: 'Post by Mango',
       thumbnailURL: './post.jpg',
+      cardInfo: {},
     });
     // this means the field card for the value is the same as the field's card
     assert.deepEqual(serialized.data.meta.fields, undefined);
@@ -2512,6 +2535,10 @@ module('Integration | serialization', function (hooks) {
             author: {
               firstName: 'Carl Stack',
             },
+            cardInfo: {},
+          },
+          relationships: {
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -2683,6 +2710,7 @@ module('Integration | serialization', function (hooks) {
           title: null,
           description: 'Person',
           thumbnailURL: '../../person.svg',
+          cardInfo: {},
         },
         relationships: {
           pet: { links: { self: null } },
@@ -2709,6 +2737,7 @@ module('Integration | serialization', function (hooks) {
             title: null,
             description: 'Pet',
             thumbnailURL: '../pet.svg',
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -2722,6 +2751,7 @@ module('Integration | serialization', function (hooks) {
             title: null,
             description: 'Person',
             thumbnailURL: '../../person.svg',
+            cardInfo: {},
           },
           relationships: {
             pet: {
@@ -2882,6 +2912,7 @@ module('Integration | serialization', function (hooks) {
             title: null,
             description: null,
             thumbnailURL: null,
+            cardInfo: {},
           },
           relationships: {
             pet: { links: { self: null } },
@@ -3216,6 +3247,7 @@ module('Integration | serialization', function (hooks) {
             published: '2022-04-27T16:30:00.000Z',
             description: 'Introductory post',
             thumbnailURL: './intro.png',
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -3282,6 +3314,7 @@ module('Integration | serialization', function (hooks) {
             species: 'canis familiaris',
             description: 'A dog',
           },
+          cardInfo: {},
         },
         meta: {
           adoptsFrom: {
@@ -3346,6 +3379,7 @@ module('Integration | serialization', function (hooks) {
             birthdate: '2019-10-30',
             department: 'wagging',
           },
+          cardInfo: {},
         },
         meta: {
           adoptsFrom: {
@@ -3447,6 +3481,7 @@ module('Integration | serialization', function (hooks) {
               firstName: 'Van Gogh',
             },
           },
+          cardInfo: {},
         },
         meta: {
           adoptsFrom: {
@@ -3565,6 +3600,7 @@ module('Integration | serialization', function (hooks) {
               billAmount: 100,
             },
           ],
+          cardInfo: {},
         },
         meta: {
           adoptsFrom: {
@@ -3696,6 +3732,7 @@ module('Integration | serialization', function (hooks) {
               ],
             },
           ],
+          cardInfo: {},
         },
         meta: {
           adoptsFrom: {
@@ -3896,6 +3933,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Mango',
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -3972,6 +4010,7 @@ module('Integration | serialization', function (hooks) {
             author: {
               firstName: 'Mango',
             },
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -4084,6 +4123,7 @@ module('Integration | serialization', function (hooks) {
               },
             ],
             title: null,
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -4161,6 +4201,7 @@ module('Integration | serialization', function (hooks) {
               },
             },
           ],
+          cardInfo: {},
         },
         relationships: {
           'editor.certificate': {
@@ -4206,6 +4247,7 @@ module('Integration | serialization', function (hooks) {
             level: 25,
             earnedOn: '2022-05-01',
             thumbnailURL: null,
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -4221,6 +4263,7 @@ module('Integration | serialization', function (hooks) {
             level: 20,
             earnedOn: '2023-11-05',
             thumbnailURL: null,
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -4236,6 +4279,7 @@ module('Integration | serialization', function (hooks) {
             level: 18,
             earnedOn: '2023-10-01',
             thumbnailURL: null,
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -4290,6 +4334,7 @@ module('Integration | serialization', function (hooks) {
               },
             ],
             title: null,
+            cardInfo: {},
           },
           relationships: {
             'editor.certificate': {
@@ -4335,6 +4380,7 @@ module('Integration | serialization', function (hooks) {
               level: 20,
               thumbnailURL: null,
               title: null,
+              cardInfo: {},
             },
             id: `${testRealmURL}Certificate/1`,
             meta: {
@@ -4352,6 +4398,7 @@ module('Integration | serialization', function (hooks) {
               level: 18,
               thumbnailURL: null,
               title: null,
+              cardInfo: {},
             },
             id: `${testRealmURL}Certificate/2`,
             meta: {
@@ -4369,6 +4416,7 @@ module('Integration | serialization', function (hooks) {
               level: 25,
               thumbnailURL: null,
               title: null,
+              cardInfo: {},
             },
             id: `${testRealmURL}Certificate/0`,
             meta: {
@@ -4421,6 +4469,10 @@ module('Integration | serialization', function (hooks) {
         type: 'card',
         attributes: {
           birthdate: '2019-10-30',
+          cardInfo: {},
+        },
+        relationships: {
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -4445,6 +4497,10 @@ module('Integration | serialization', function (hooks) {
           title: 'Person',
           description: 'A person with birthdate',
           thumbnailURL: null,
+          cardInfo: {},
+        },
+        relationships: {
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -4488,6 +4544,7 @@ module('Integration | serialization', function (hooks) {
           title: null,
           description: null,
           thumbnailURL: null,
+          cardInfo: {},
         },
         meta: {
           adoptsFrom: {
@@ -4535,6 +4592,7 @@ module('Integration | serialization', function (hooks) {
             name: 'Mango',
             thumbnailURL: null,
             title: null,
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -4590,6 +4648,7 @@ module('Integration | serialization', function (hooks) {
             name: 'Mango',
             thumbnailURL: null,
             title: null,
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: {
@@ -4650,6 +4709,7 @@ module('Integration | serialization', function (hooks) {
             description: null,
             firstName: 'Hassan',
             thumbnailURL: null,
+            cardInfo: {},
           },
           relationships: {
             'pets.0': {
@@ -4677,6 +4737,7 @@ module('Integration | serialization', function (hooks) {
               description: null,
               firstName: 'Mango',
               thumbnailURL: null,
+              cardInfo: {},
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -4689,6 +4750,7 @@ module('Integration | serialization', function (hooks) {
               description: null,
               firstName: 'Van Gogh',
               thumbnailURL: null,
+              cardInfo: {},
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -4742,6 +4804,7 @@ module('Integration | serialization', function (hooks) {
             description: null,
             firstName: 'Hassan',
             thumbnailURL: null,
+            cardInfo: {},
           },
           relationships: {
             'pets.0': {
@@ -4763,6 +4826,7 @@ module('Integration | serialization', function (hooks) {
               description: null,
               firstName: 'Mango',
               thumbnailURL: null,
+              cardInfo: {},
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -4775,6 +4839,7 @@ module('Integration | serialization', function (hooks) {
               description: null,
               firstName: 'Van Gogh',
               thumbnailURL: null,
+              cardInfo: {},
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -4805,6 +4870,7 @@ module('Integration | serialization', function (hooks) {
             description: null,
             firstName: 'Hassan',
             thumbnailURL: null,
+            cardInfo: {},
           },
           relationships: {
             'pets.0': {
@@ -4838,6 +4904,7 @@ module('Integration | serialization', function (hooks) {
               description: null,
               firstName: 'Mango',
               thumbnailURL: null,
+              cardInfo: {},
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -4850,6 +4917,7 @@ module('Integration | serialization', function (hooks) {
               description: null,
               firstName: 'Van Gogh',
               thumbnailURL: null,
+              cardInfo: {},
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -4981,6 +5049,7 @@ module('Integration | serialization', function (hooks) {
             description: null,
             firstName: 'Hassan',
             thumbnailURL: null,
+            cardInfo: {},
           },
           relationships: {
             'pets.0': {
@@ -5001,6 +5070,7 @@ module('Integration | serialization', function (hooks) {
             attributes: {
               description: 'Toilet paper ghost: Poooo!',
               thumbnailURL: null,
+              cardInfo: {},
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Toy' },
@@ -5013,6 +5083,7 @@ module('Integration | serialization', function (hooks) {
               description: null,
               firstName: 'Mango',
               thumbnailURL: null,
+              cardInfo: {},
             },
             relationships: {
               favoriteToy: {
@@ -5105,6 +5176,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Hassan',
+            cardInfo: {},
           },
           relationships: {
             pets: {
@@ -5127,6 +5199,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Mango',
+            cardInfo: {},
           },
           relationships: {
             pets: {
@@ -5164,6 +5237,7 @@ module('Integration | serialization', function (hooks) {
             description: null,
             firstName: 'Hassan',
             thumbnailURL: null,
+            cardInfo: {},
           },
           relationships: {
             pets: {
@@ -5226,6 +5300,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Hassan',
+            cardInfo: {},
           },
           relationships: {
             'pets.0': {
@@ -5260,6 +5335,7 @@ module('Integration | serialization', function (hooks) {
             type: 'card',
             attributes: {
               firstName: 'Mango',
+              cardInfo: {},
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -5317,6 +5393,7 @@ module('Integration | serialization', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Hassan',
+            cardInfo: {},
           },
           relationships: {
             'pets.0': {
@@ -5345,6 +5422,7 @@ module('Integration | serialization', function (hooks) {
             type: 'card',
             attributes: {
               firstName: 'Mango',
+              cardInfo: {},
             },
             meta: {
               adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -5393,6 +5471,7 @@ module('Integration | serialization', function (hooks) {
           id: `${testRealmURL}Person/hassan`,
           attributes: {
             firstName: 'Hassan',
+            cardInfo: {},
           },
           relationships: {
             'friends.0': {
@@ -5414,6 +5493,7 @@ module('Integration | serialization', function (hooks) {
             type: 'card',
             attributes: {
               firstName: 'Mango',
+              cardInfo: {},
             },
             relationships: {
               friends: { links: { self: null } },
@@ -5427,6 +5507,7 @@ module('Integration | serialization', function (hooks) {
             type: 'card',
             attributes: {
               firstName: 'Van Gogh',
+              cardInfo: {},
             },
             relationships: {
               friends: { links: { self: null } },
@@ -5588,6 +5669,7 @@ module('Integration | serialization', function (hooks) {
           title: null,
           description: null,
           thumbnailURL: null,
+          cardInfo: {},
         },
         relationships: {
           friend: {
@@ -5617,6 +5699,7 @@ module('Integration | serialization', function (hooks) {
             title: null,
             description: null,
             thumbnailURL: null,
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -5630,6 +5713,7 @@ module('Integration | serialization', function (hooks) {
             title: null,
             description: null,
             thumbnailURL: null,
+            cardInfo: {},
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
@@ -5643,6 +5727,7 @@ module('Integration | serialization', function (hooks) {
             title: null,
             description: null,
             thumbnailURL: null,
+            cardInfo: {},
           },
           relationships: {
             'pets.0': {
@@ -5814,6 +5899,7 @@ module('Integration | serialization', function (hooks) {
             title: null,
             description: null,
             thumbnailURL: null,
+            cardInfo: {},
           },
           relationships: {
             friend: { links: { self: null } },

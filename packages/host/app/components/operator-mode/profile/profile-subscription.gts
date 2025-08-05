@@ -1,18 +1,19 @@
+import { fn } from '@ember/helper';
+import { hash } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import {
-  BoxelButton,
-  FieldContainer,
-  LoadingIndicator,
-} from '@cardstack/boxel-ui/components';
+import { BoxelButton, FieldContainer } from '@cardstack/boxel-ui/components';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
-
-import { encodeWebSafeBase64 } from '@cardstack/runtime-common';
 
 import WithSubscriptionData from '@cardstack/host/components/with-subscription-data';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import NetworkService from '@cardstack/host/services/network';
+
+import RealmServerService from '@cardstack/host/services/realm-server';
 
 interface Signature {
   Args: {};
@@ -22,23 +23,12 @@ interface Signature {
 export default class ProfileSubscription extends Component<Signature> {
   @service private declare billingService: BillingService;
   @service private declare matrixService: MatrixService;
+  @service private declare network: NetworkService;
+  @service private declare realmServer: RealmServerService;
 
-  urlWithClientReferenceId = (url: string) => {
-    const clientReferenceId = encodeWebSafeBase64(
-      this.matrixService.userId as string,
-    );
-    let newUrl = `${url}?client_reference_id=${clientReferenceId}`;
-
-    const stripeCustomerEmail =
-      this.billingService.subscriptionData?.stripeCustomerEmail ||
-      this.matrixService.profile.email;
-
-    if (stripeCustomerEmail) {
-      newUrl += `&prefilled_email=${encodeURIComponent(stripeCustomerEmail)}`;
-    }
-
-    return newUrl;
-  };
+  @action handleBuyMoreCredits(amount: number) {
+    this.billingService.redirectToStripe({ aiCreditAmount: amount });
+  }
 
   <template>
     <WithSubscriptionData as |subscriptionData|>
@@ -55,15 +45,20 @@ export default class ProfileSubscription extends Component<Signature> {
               {{subscriptionData.monthlyCredit}}
             </div>
           </div>
-          <BoxelButton
-            @as='anchor'
-            @kind='secondary-light'
-            @size='extra-small'
-            @disabled={{this.billingService.fetchingStripePaymentLinks}}
-            @href={{this.billingService.customerPortalLink}}
-            target='_blank'
-            data-test-manage-plan-button
-          >Manage Plan</BoxelButton>
+          {{#if this.billingService.subscriptionData.plan}}
+            <BoxelButton
+              @kind='secondary-light'
+              @size='extra-small'
+              {{on
+                'click'
+                (fn
+                  this.billingService.redirectToStripe
+                  (hash plan=this.billingService.subscriptionData.plan)
+                )
+              }}
+              data-test-manage-plan-button
+            >Manage Plan</BoxelButton>
+          {{/if}}
         </div>
       </FieldContainer>
       <FieldContainer
@@ -80,27 +75,26 @@ export default class ProfileSubscription extends Component<Signature> {
           <div class='buy-more-credits'>
             <span class='buy-more-credits__title'>Buy more credits</span>
             <div class='payment-links'>
-              {{#if this.billingService.fetchingStripePaymentLinks}}
-                <LoadingIndicator />
-              {{else}}
-                {{#each
-                  this.billingService.extraCreditsPaymentLinks
-                  as |paymentLink index|
-                }}
-                  <div class='payment-link' data-test-payment-link={{index}}>
-                    <span><IconHexagon width='16px' height='16px' />
-                      {{paymentLink.amountFormatted}}</span>
-                    <BoxelButton
-                      @as='anchor'
-                      @kind='secondary-light'
-                      @size='extra-small'
-                      @href={{this.urlWithClientReferenceId paymentLink.url}}
-                      target='_blank'
-                      data-test-pay-button={{index}}
-                    >Buy</BoxelButton>
-                  </div>
-                {{/each}}
-              {{/if}}
+              {{#each
+                this.billingService.extraCreditsPricingFormatted
+                as |extraCreditsPricing|
+              }}
+                <div class='payment-link'>
+                  <span><IconHexagon width='16px' height='16px' />
+                    {{extraCreditsPricing.amountFormatted}}
+                  </span>
+
+                  <BoxelButton
+                    @kind='secondary-light'
+                    @size='extra-small'
+                    data-test-buy-more-credits-button={{extraCreditsPricing.amount}}
+                    {{on
+                      'click'
+                      (fn this.handleBuyMoreCredits extraCreditsPricing.amount)
+                    }}
+                  >Buy</BoxelButton>
+                </div>
+              {{/each}}
             </div>
           </div>
         </div>

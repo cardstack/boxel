@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "recipientName": "Maya Rodriguez",
+      "birthdayDate": "2024-08-04",
+      "age": 25,
+      "wishes": [
+        {
+          "fromName": "Elena & Carlos (Parents)",
+          "message": "Our precious daughter, we can't believe you're 25 already! It feels like yesterday you were blowing out candles on your first birthday cake. We're so proud of the remarkable woman you've become. May this year bring you love, success, and endless reasons to smile! 💕"
+        },
+        {
+          "fromName": "Jordan Kim",
+          "message": "Happy birthday to my adventure buddy! 🎈 Remember when we said we'd climb Mount Washington before you turned 25? Well, looks like we need to plan that trip ASAP! Hope your day is filled with as much laughter as our hiking fails last summer!"
+        },
+        {
+          "fromName": "The Marketing Team",
+          "message": "Maya! 🎊 Thanks for always bringing the best energy to our Monday meetings and making work feel less like work. Your creative ideas have made this year amazing! Hope you celebrate big today - you deserve it!"
+        },
+        {
+          "fromName": "Abuela Rosa",
+          "message": "Mi nieta querida, 25 años ya! I remember teaching you to make tres leches cake when you were little. Now you make it better than me! 😊 May God bless you with health, happiness, and many more birthdays to celebrate together. Te amo mucho!"
+        },
+        {
+          "fromName": "Tyler",
+          "message": "Quarter-century club! 🎯 Welcome to the best years ahead. Thanks for being such an awesome friend and always being up for spontaneous road trips. Let's celebrate properly this weekend - I'm thinking karaoke and terrible dance moves! 🎤"
+        }
+      ],
+      "surpriseMessage": "🎉 Maya! You're absolutely incredible and deserve all the happiness in the world! This quarter-century milestone is just the beginning of amazing adventures ahead. Keep shining your bright light and spreading joy wherever you go! Here's to dreams coming true! 🌟",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../birthday-card",
+        "name": "BirthdayCard"
+      }
+    }
+  }
+}

@@ -2877,6 +2877,14 @@ module('Integration | operator-mode', function (hooks) {
             description: null,
             name: 'Mango',
             thumbnailURL: null,
+            cardInfo: {},
+          },
+          relationships: {
+            'cardInfo.theme': {
+              links: {
+                self: null,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
