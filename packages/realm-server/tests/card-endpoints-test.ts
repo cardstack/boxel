@@ -167,7 +167,7 @@ module(basename(__filename), function () {
         });
       });
 
-      module.only('published realm', function (hooks) {
+      module('published realm', function (hooks) {
         setupPermissionedRealm(hooks, {
           permissions: {
             '*': ['read'],
