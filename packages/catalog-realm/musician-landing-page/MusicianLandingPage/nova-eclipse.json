@@ -1,0 +1,72 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "artistName": "Nova Eclipse",
+      "headline": "Synthwave producer creating cinematic soundscapes for the digital age",
+      "bio": "Nova Eclipse crafts immersive electronic experiences that transport listeners to neon-lit futures and nostalgic cyberpunk dreamscapes. Based in Tokyo, this mysterious producer combines vintage synthesizer sounds with cutting-edge production techniques to create music that feels both retro and futuristic.\n\nWith over 50 million streams across platforms and music featured in major video games and Netflix series, Nova Eclipse has become a defining voice in the modern synthwave movement. The artist's identity remains shrouded in mystery, letting the music speak for itself through powerful live shows featuring synchronized LED visuals and custom-built modular synthesizer rigs.",
+      "heroImageUrl": "https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=1200&h=600&fit=crop&crop=center",
+      "primaryColor": "#EC4899",
+      "socialLinks": [
+        {
+          "platform": "SoundCloud",
+          "url": "https://soundcloud.com/nova-eclipse-official",
+          "displayName": "Nova Eclipse Music"
+        },
+        {
+          "platform": "Twitch",
+          "url": "https://twitch.tv/novaeclipselive",
+          "displayName": "Nova Eclipse Live"
+        },
+        {
+          "platform": "Discord",
+          "url": "https://discord.gg/novaeclipse",
+          "displayName": "Nova Eclipse Community"
+        },
+        {
+          "platform": "YouTube",
+          "url": "https://youtube.com/@novaeclipseofficial",
+          "displayName": "Nova Eclipse Official"
+        }
+      ],
+      "upcomingShows": [
+        {
+          "venue": "Electric Daisy Carnival",
+          "date": "2025-08-20",
+          "city": "Las Vegas, NV",
+          "ticketUrl": "https://electricdaisycarnival.com/nova-eclipse"
+        },
+        {
+          "venue": "Meow Wolf",
+          "date": "2025-09-08",
+          "city": "Santa Fe, NM",
+          "ticketUrl": "https://meowwolf.com/events/nova-eclipse"
+        },
+        {
+          "venue": "Terminal 5",
+          "date": "2025-09-22",
+          "city": "New York, NY",
+          "ticketUrl": "https://terminal5nyc.com/events/nova-eclipse"
+        },
+        {
+          "venue": "The Warfield",
+          "date": "2025-10-10",
+          "city": "San Francisco, CA",
+          "ticketUrl": "https://thewarfieldtheatre.com/nova-eclipse"
+        }
+      ],
+      "musicSamples": [
+        "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+        "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3",
+        "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-14.mp3"
+      ],
+      "contactEmail": "contact@nova-eclipse.net"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../musician-landing-page",
+        "name": "MusicianLandingPage"
+      }
+    }
+  }
+}

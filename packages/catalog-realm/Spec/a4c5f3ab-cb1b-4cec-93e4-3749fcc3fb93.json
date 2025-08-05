@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "BirthdayCard",
+        "module": "../catalog-app/birthday-card/birthday-card"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "BirthdayCard",
+      "description": "Spec of BirthdayCard",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

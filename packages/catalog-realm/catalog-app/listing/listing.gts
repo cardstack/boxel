@@ -222,12 +222,12 @@ class EmbeddedTemplate extends Component<typeof Listing> {
             {{#if this.isSkillListing}}
               <BoxelButton
                 class='action-button'
-                data-test-catalog-listing-embedded-add-skill-to-room-button
+                data-test-catalog-listing-embedded-add-skills-to-room-button
                 @loading={{this._addSkillsToCurrentRoom.isRunning}}
                 @disabled={{this.addSkillsDisabled}}
                 {{on 'click' this.addSkillsToCurrentRoom}}
               >
-                Add Skills
+                Use Skills
               </BoxelButton>
             {{/if}}
             {{#if this.hasExamples}}
