@@ -457,6 +457,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         margin: 0;
         margin-bottom: var(--boxel-sp);
       }
+
       .no-data-text {
         color: var(--boxel-400);
       }
