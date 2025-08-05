@@ -177,7 +177,7 @@ export class NodeAdapter implements RealmAdapter {
     };
   }
 
-  getCreated = (path: string, isNew: boolean): string | null => {
+  getCreated = (path: string, isNew: boolean): number | null => {
     let created: string | null;
     try {
       if (!isNew) {
@@ -188,8 +188,9 @@ export class NodeAdapter implements RealmAdapter {
       }
     } catch (e) {
       created = null;
+      return created;
     }
-    return created;
+    return unixTime(parseInt(created));
   };
 
   async write(path: string, contents: string): Promise<FileWriteResult> {
@@ -202,7 +203,7 @@ export class NodeAdapter implements RealmAdapter {
     return {
       path: absolutePath,
       lastModified: unixTime(mtime.getTime()),
-      created: created ? unixTime(parseInt(created)) : created,
+      created,
       isNew: !exists,
     };
   }
