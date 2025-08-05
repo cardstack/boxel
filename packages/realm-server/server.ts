@@ -131,7 +131,7 @@ export class RealmServer {
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.getRegistrationSecret = getRegistrationSecret;
     this.enableFileWatcher = enableFileWatcher ?? false;
-    this.realms = [...realms, ...this.loadRealms()];
+    this.realms = [...realms];
   }
 
   @Memoize()
