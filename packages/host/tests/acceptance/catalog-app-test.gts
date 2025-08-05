@@ -39,6 +39,7 @@ const catalogRealmURL = 'http://localhost:4201/catalog/';
 const testRealm2URL = `http://test-realm/test2/`;
 const mortgageCalculatorCardId = `${catalogRealmURL}CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`;
 const leafletMapCardId = `${catalogRealmURL}CardListing/552da558-5642-4541-89b0-28622db3bc84`;
+const talkLikeAPirateCardId = `${catalogRealmURL}SkillListing/talk-like-a-pirate`;
 const calculatorTagId = `${catalogRealmURL}Tag/c1fe433a-b3df-41f4-bdcf-d98686ee42d7`;
 const apiDocumentationStubId = `${catalogRealmURL}CardListing/api-documentation`;
 const gameTagId = `${catalogRealmURL}Tag/51de249c-516a-4c4d-bd88-76e88274c483`;
@@ -532,6 +533,33 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .hasText('Mortgage Calculator');
       });
 
+      test('after clicking "Use Skills" button, the skills is attached to the skill menu', async function (assert) {
+        await waitFor(
+          `[data-test-card="${talkLikeAPirateCardId}"] [data-test-card-title="Talk Like a Pirate"]`,
+        );
+        assert
+          .dom(
+            `[data-test-card="${talkLikeAPirateCardId}"] [data-test-card-title="Talk Like a Pirate"]`,
+          )
+          .containsText(
+            'Talk Like a Pirate',
+            '"Talk Like a Pirate" button exist in listing',
+          );
+
+        await click(
+          `[data-test-card="${talkLikeAPirateCardId}"] [data-test-catalog-listing-fitted-add-skills-to-room-button]`,
+        );
+
+        await waitFor('[data-room-settled]');
+        await click('[data-test-skill-menu][data-test-pill-menu-button]');
+        await waitFor('[data-test-skill-menu]');
+        assert.dom('[data-test-skill-menu]').exists('Skill menu is visible');
+        assert
+          .dom('[data-test-pill-menu-item]')
+          .containsText('Talk Like a Pirate')
+          .exists('Skill is attached to the skill menu');
+      });
+
       test('after clicking "carousel" area, the first example card opens up onto the stack', async function (assert) {
         await waitFor(
           `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
@@ -957,13 +985,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
     });
 
-    test('after clicking "Test Skills" button, the skill is attached to the skill menu', async function (assert) {
-      const skillListingId = `${catalogRealmURL}SkillListing/talk-like-a-pirate`;
+    test('after clicking "Use Skills" button, the skills is attached to the skill menu', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
             {
-              id: skillListingId,
+              id: talkLikeAPirateCardId,
               format: 'isolated',
             },
           ],
@@ -971,7 +998,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
 
       await click(
-        '[data-test-catalog-listing-embedded-add-skill-to-room-button]',
+        '[data-test-catalog-listing-embedded-add-skills-to-room-button]',
       );
 
       await waitFor('[data-room-settled]');
