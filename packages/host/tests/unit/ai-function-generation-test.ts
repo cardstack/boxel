@@ -11,6 +11,7 @@ import {
   type RelationshipSchema,
   type RelationshipsSchema,
   type ObjectSchema,
+  type AttributesSchema,
 } from '@cardstack/runtime-common/helpers/ai';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -55,6 +56,61 @@ module('Unit | ai-function-generation-test', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
+  const cardInfoSchema: ObjectSchema = {
+    properties: {},
+    type: 'object',
+  };
+
+  const cardDefAttributesProperties: { [fieldName: string]: AttributesSchema } =
+    {
+      thumbnailURL: { type: 'string' },
+      title: { type: 'string' },
+      description: { type: 'string' },
+      cardInfo: cardInfoSchema,
+    };
+
+  const linkedRelationship: RelationshipSchema = {
+    type: 'object',
+    properties: {
+      links: {
+        type: 'object',
+        properties: {
+          self: { type: 'string' },
+        },
+        required: ['self'],
+      },
+    },
+    required: ['links'],
+  };
+
+  const linksToManyRelationship: RelationshipSchema = {
+    type: 'object',
+    properties: {
+      links: {
+        type: 'object',
+        properties: {
+          self: { type: 'string' },
+        },
+        required: ['self'],
+      },
+    },
+    required: ['links'],
+  };
+
+  const cardDefRelationshipsProperties: {
+    [fieldName: string]: RelationshipSchema;
+  } = {
+    'cardInfo.theme': linkedRelationship,
+  };
+
+  const cardDefRelationshipsRequired = ['cardInfo.theme'];
+
+  const cardDefRelationships: RelationshipsSchema = {
+    type: 'object',
+    properties: cardDefRelationshipsProperties,
+    required: cardDefRelationshipsRequired,
+  };
+
   test(`generates a simple compliant schema for basic types`, async function (assert) {
     let { field, contains, CardDef } = cardApi;
     let { default: StringField } = string;
@@ -77,9 +133,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       attributes: {
         type: 'object',
         properties: {
-          thumbnailURL: { type: 'string' },
-          title: { type: 'string' },
-          description: { type: 'string' },
+          ...cardDefAttributesProperties,
           stringField: { type: 'string' },
           numberField: { type: 'number' },
           booleanField: { type: 'boolean' },
@@ -88,10 +142,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
           bigIntegerField: { type: 'string', pattern: '^-?[0-9]+$' },
         },
       },
-      relationships: {
-        type: 'object',
-        properties: {},
-      },
+      relationships: cardDefRelationships,
     });
   });
 
@@ -123,9 +174,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       attributes: {
         type: 'object',
         properties: {
-          thumbnailURL: { type: 'string' },
-          title: { type: 'string' },
-          description: { type: 'string' },
+          ...cardDefAttributesProperties,
           containerField: {
             type: 'object',
             properties: {
@@ -150,8 +199,13 @@ module('Unit | ai-function-generation-test', function (hooks) {
               required: ['links'],
             },
           },
+          ...cardDefRelationshipsProperties,
         },
-        required: ['containerField.linkedCard', 'containerField.linkedCards'],
+        required: [
+          'containerField.linkedCard',
+          'containerField.linkedCards',
+          ...cardDefRelationshipsRequired,
+        ],
       },
     });
   });
@@ -172,9 +226,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       attributes: {
         type: 'object',
         properties: {
-          thumbnailURL: { type: 'string' },
-          title: { type: 'string' },
-          description: { type: 'string' },
+          ...cardDefAttributesProperties,
           containerField: {
             type: 'object',
             properties: {
@@ -183,10 +235,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
           },
         },
       },
-      relationships: {
-        type: 'object',
-        properties: {},
-      },
+      relationships: cardDefRelationships,
     });
   });
 
@@ -210,31 +259,17 @@ module('Unit | ai-function-generation-test', function (hooks) {
       type: 'object',
       properties: {
         simpleField: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        thumbnailURL: { type: 'string' },
+        ...cardDefAttributesProperties,
       },
-    };
-    let linkedRelationship: RelationshipSchema = {
-      type: 'object',
-      properties: {
-        links: {
-          type: 'object',
-          properties: {
-            self: { type: 'string' },
-          },
-          required: ['self'],
-        },
-      },
-      required: ['links'],
     };
     let relationships: RelationshipsSchema = {
       type: 'object',
       properties: {
         linkedCard: linkedRelationship,
         linkedCard2: linkedRelationship,
+        ...cardDefRelationshipsProperties,
       },
-      required: ['linkedCard', 'linkedCard2'],
+      required: ['linkedCard', 'linkedCard2', ...cardDefRelationshipsRequired],
     };
     assert.deepEqual(schema, { attributes, relationships });
   });
@@ -257,24 +292,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
       type: 'object',
       properties: {
         simpleField: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        thumbnailURL: { type: 'string' },
+        ...cardDefAttributesProperties,
       },
     };
-    let linksToManyRelationship: RelationshipSchema = {
-      type: 'object',
-      properties: {
-        links: {
-          type: 'object',
-          properties: {
-            self: { type: 'string' },
-          },
-          required: ['self'],
-        },
-      },
-      required: ['links'],
-    };
+
     let relationships: RelationshipsSchema = {
       type: 'object',
       properties: {
@@ -282,8 +303,9 @@ module('Unit | ai-function-generation-test', function (hooks) {
           type: 'array',
           items: linksToManyRelationship,
         },
+        ...cardDefRelationshipsProperties,
       },
-      required: ['linkedCards'],
+      required: ['linkedCards', ...cardDefRelationshipsRequired],
     };
     assert.deepEqual(schema, { attributes, relationships });
   });
@@ -313,9 +335,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
     let attributes: ObjectSchema = {
       type: 'object',
       properties: {
-        title: { type: 'string' },
-        description: { type: 'string' },
-        thumbnailURL: { type: 'string' },
+        ...cardDefAttributesProperties,
         name: { type: 'string' },
         child: {
           type: 'object',
@@ -331,25 +351,13 @@ module('Unit | ai-function-generation-test', function (hooks) {
         },
       },
     };
-    let linkedRelationship: RelationshipSchema = {
-      type: 'object',
-      properties: {
-        links: {
-          type: 'object',
-          properties: {
-            self: { type: 'string' },
-          },
-          required: ['self'],
-        },
-      },
-      required: ['links'],
-    };
     let relationships: RelationshipsSchema = {
       type: 'object',
       properties: {
         'child.friend.pet': linkedRelationship,
+        ...cardDefRelationshipsProperties,
       },
-      required: ['child.friend.pet'],
+      required: ['child.friend.pet', ...cardDefRelationshipsRequired],
     };
     assert.deepEqual(schema, {
       attributes,
@@ -389,9 +397,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       attributes: {
         type: 'object',
         properties: {
-          thumbnailURL: { type: 'string' },
-          title: { type: 'string' },
-          description: { type: 'string' },
+          ...cardDefAttributesProperties,
           traveler: {
             type: 'object',
             properties: {
@@ -409,6 +415,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       relationships: {
         type: 'object',
         properties: {
+          ...cardDefRelationshipsProperties,
           'traveler.countryOfOrigin': {
             type: 'object',
             properties: { links },
@@ -432,6 +439,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
           'traveler.countryOfOrigin',
           'traveler.countriesVisited',
           'traveler.nextTravelGoal.country',
+          ...cardDefRelationshipsRequired,
         ],
       },
     });
@@ -457,16 +465,11 @@ module('Unit | ai-function-generation-test', function (hooks) {
       attributes: {
         type: 'object',
         properties: {
-          thumbnailURL: { type: 'string' },
-          title: { type: 'string' },
-          description: { type: 'string' },
+          ...cardDefAttributesProperties,
           keepField: { type: 'string' },
         },
       },
-      relationships: {
-        type: 'object',
-        properties: {},
-      },
+      relationships: cardDefRelationships,
     });
   });
 
@@ -488,16 +491,11 @@ module('Unit | ai-function-generation-test', function (hooks) {
       attributes: {
         type: 'object',
         properties: {
-          thumbnailURL: { type: 'string' },
-          title: { type: 'string' },
-          description: { type: 'string' },
+          ...cardDefAttributesProperties,
           keepField: { type: 'string' },
         },
       },
-      relationships: {
-        type: 'object',
-        properties: {},
-      },
+      relationships: cardDefRelationships,
     });
   });
 
@@ -524,9 +522,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       attributes: {
         type: 'object',
         properties: {
-          thumbnailURL: { type: 'string' },
-          title: { type: 'string' },
-          description: { type: 'string' },
+          ...cardDefAttributesProperties,
           containingField: {
             type: 'object',
             properties: {
@@ -535,10 +531,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
           },
         },
       },
-      relationships: {
-        type: 'object',
-        properties: {},
-      },
+      relationships: cardDefRelationships,
     });
   });
 
@@ -560,9 +553,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       attributes: {
         type: 'object',
         properties: {
-          thumbnailURL: { type: 'string' },
-          title: { type: 'string' },
-          description: { type: 'string' },
+          ...cardDefAttributesProperties,
           containerField: {
             type: 'object',
             description: 'Desc #1',
@@ -572,10 +563,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
           },
         },
       },
-      relationships: {
-        type: 'object',
-        properties: {},
-      },
+      relationships: cardDefRelationships,
     });
   });
 
@@ -616,9 +604,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       attributes: {
         type: 'object',
         properties: {
-          thumbnailURL: { type: 'string' },
-          title: { type: 'string' },
-          description: { type: 'string' },
+          ...cardDefAttributesProperties,
           containerField: {
             type: 'object',
             description: 'Desc #1',
@@ -659,12 +645,14 @@ module('Unit | ai-function-generation-test', function (hooks) {
               required: ['links'],
             },
           },
+          ...cardDefRelationshipsProperties,
         },
         required: [
           'containerField.linkedCard',
           'containerField.linkedCard2',
           'containerField.linkedCards',
           'containerField.linkedCards2',
+          ...cardDefRelationshipsRequired,
         ],
       },
     });
@@ -690,9 +678,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       type: 'object',
       properties: {
         simpleField: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        thumbnailURL: { type: 'string' },
+        ...cardDefAttributesProperties,
       },
     };
     let relationships: RelationshipsSchema = {
@@ -725,8 +711,9 @@ module('Unit | ai-function-generation-test', function (hooks) {
           },
           required: ['links'],
         },
+        ...cardDefRelationshipsProperties,
       },
-      required: ['linkedCard', 'linkedCard2'],
+      required: ['linkedCard', 'linkedCard2', ...cardDefRelationshipsRequired],
     };
     assert.deepEqual(schema, { attributes, relationships });
   });
@@ -752,9 +739,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       type: 'object',
       properties: {
         simpleField: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        thumbnailURL: { type: 'string' },
+        ...cardDefAttributesProperties,
       },
     };
     let relationships: RelationshipsSchema = {
@@ -777,8 +762,9 @@ module('Unit | ai-function-generation-test', function (hooks) {
             required: ['links'],
           },
         },
+        ...cardDefRelationshipsProperties,
       },
-      required: ['linkedCards'],
+      required: ['linkedCards', ...cardDefRelationshipsRequired],
     };
     assert.deepEqual(schema, { attributes, relationships });
   });
@@ -801,9 +787,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       attributes: {
         type: 'object',
         properties: {
-          thumbnailURL: { type: 'string' },
-          title: { type: 'string' },
-          description: { type: 'string' },
+          ...cardDefAttributesProperties,
           containerField: {
             type: 'array',
             description: 'Desc #1',
@@ -816,10 +800,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
           },
         },
       },
-      relationships: {
-        type: 'object',
-        properties: {},
-      },
+      relationships: cardDefRelationships,
     });
   });
 });

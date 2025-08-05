@@ -17,6 +17,7 @@ import {
   matrixURL,
   testRealmHref,
   createJWT,
+  cardInfoFieldMeta,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -63,7 +64,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             `/_card-def?${qs.stringify({ codeRef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
           )
           .set('Accept', 'application/vnd.api+json');
-
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         let json = response.body;
         assert.deepEqual(json, expectedCardDef, 'card-def response is correct');
@@ -137,15 +137,6 @@ const expectedCardDef = {
           },
           isPrimitive: true,
         },
-        firstName: {
-          type: 'contains',
-          isComputed: false,
-          fieldOrCard: {
-            name: 'StringField',
-            module: 'https://cardstack.com/base/card-api',
-          },
-          isPrimitive: true,
-        },
         description: {
           type: 'contains',
           isComputed: false,
@@ -164,6 +155,16 @@ const expectedCardDef = {
           },
           isPrimitive: true,
         },
+        firstName: {
+          type: 'contains',
+          isComputed: false,
+          fieldOrCard: {
+            name: 'StringField',
+            module: 'https://cardstack.com/base/card-api',
+          },
+          isPrimitive: true,
+        },
+        ...cardInfoFieldMeta,
       },
     } as CardDefMeta,
   },
