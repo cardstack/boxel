@@ -464,7 +464,7 @@ export class RealmServer {
   private async loadPublishedRealms() {
     let realms = [];
     try {
-      this.log.info('Loading published realms...');
+      this.log.info('Loading published realms…');
 
       let publishedRealms = await getPublishedRealms(this.dbAdapter);
 
