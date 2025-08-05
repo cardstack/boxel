@@ -21,6 +21,7 @@ import {
   IndexWriter,
   unixTime,
   jobIdentity,
+  getFieldMeta,
   type ResolvedCodeRef,
   type CardDefMeta,
   type Batch,
@@ -62,11 +63,7 @@ import {
   IdentityContextWithErrors,
 } from '../services/render-service';
 
-import {
-  directModuleDeps,
-  recursiveModuleDeps,
-  getFieldMeta,
-} from './prerender-util';
+import { directModuleDeps, recursiveModuleDeps } from './prerender-util';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
@@ -221,7 +218,8 @@ export class CurrentRun {
       current.realmURL,
       current.#jobInfo,
     );
-    let invalidations = (await current.batch.invalidate(urls)).map(
+    await current.batch.invalidate(urls);
+    let invalidations = current.batch.invalidations.map(
       (href) => new URL(href),
     );
 
@@ -483,8 +481,24 @@ export class CurrentRun {
       log.debug(
         `${jobIdentity(this.#jobInfo)} skipping indexing of shimmed module ${url.href}`,
       );
+
+      // for testing purposes we'll still generate card def meta for shimmed cards,
+      // however the deps will only be the shimmed file
+      for (let [name, maybeCardDef] of Object.entries(module)) {
+        if (isCardDef(maybeCardDef)) {
+          await this.indexCardDef({
+            name,
+            url: trimExecutableExtension(url),
+            cardDef: maybeCardDef,
+            lastModified: 0,
+            resourceCreatedAt: 0,
+            deps: [trimExecutableExtension(url).href],
+          });
+        }
+      }
       return;
     }
+
     let consumes = (
       await this.loaderService.loader.getConsumedModules(url.href)
     ).filter((u) => u !== url.href);

@@ -16,7 +16,7 @@ module(basename(__filename), function () {
       prepareTestDB();
       adapter = new PgAdapter({ autoMigrate: true });
       indexWriter = new IndexWriter(adapter);
-      indexQueryEngine = new IndexQueryEngine(adapter);
+      indexQueryEngine = new IndexQueryEngine(adapter, fetch);
     });
 
     hooks.afterEach(async function () {
@@ -39,7 +39,7 @@ module(basename(__filename), function () {
       });
     });
 
-    test('card def entries are not publicly invalidated as part of module invalidations', async function (assert) {
+    test('card def entries can be invalidated', async function (assert) {
       await runSharedTest(indexWriterTests, assert, {
         indexWriter,
         indexQueryEngine,

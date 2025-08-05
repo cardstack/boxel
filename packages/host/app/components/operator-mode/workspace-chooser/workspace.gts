@@ -10,7 +10,6 @@ import { RealmIcon } from '@cardstack/boxel-ui/components';
 import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { Group, IconGlobe, Lock } from '@cardstack/boxel-ui/icons';
 
-import CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
 
@@ -121,7 +120,6 @@ export default class Workspace extends Component<Signature> {
     </style>
   </template>
 
-  @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
 

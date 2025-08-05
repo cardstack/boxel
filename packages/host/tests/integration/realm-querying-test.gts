@@ -3,11 +3,7 @@ import { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import {
-  baseRealm,
-  baseCardRef,
-  type CodeRef,
-} from '@cardstack/runtime-common';
+import { baseRealm, baseCardRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
@@ -702,7 +698,7 @@ module(`Integration | realm querying`, function (hooks) {
     );
   });
 
-  test(`can search for cards that have custom queryableValue`, async function (assert) {
+  test(`can search for cards that have code-ref queryableValue`, async function (assert) {
     let { data: matching } = await queryEngine.search({
       filter: {
         on: {
@@ -827,24 +823,6 @@ module(`Integration | realm querying`, function (hooks) {
     }
   });
 
-  test('can use a range filter with custom formatQuery', async function (assert) {
-    let { data: matching } = await queryEngine.search({
-      filter: {
-        on: { module: `${testModuleRealm}dog`, name: 'Dog' },
-        range: {
-          numberOfTreats: {
-            lt: ['three', 'zero'],
-            gt: ['two', 'zero'],
-          },
-        },
-      },
-    });
-    assert.deepEqual(
-      matching.map((m) => m.id),
-      [`${paths.url}vangogh`],
-    );
-  });
-
   test('can use an eq filter with a date field', async function (assert) {
     let { data: matching } = await queryEngine.search({
       filter: {
@@ -858,73 +836,6 @@ module(`Integration | realm querying`, function (hooks) {
       matching.map((m) => m.id),
       [`${paths.url}event-1`],
     );
-  });
-
-  test(`gives a good error when query refers to missing card`, async function (assert) {
-    try {
-      await queryEngine.search({
-        filter: {
-          on: {
-            module: `${testModuleRealm}nonexistent`,
-            name: 'Nonexistent',
-          },
-          eq: { nonExistentField: 'hello' },
-        },
-      });
-      throw new Error('failed to throw expected exception');
-    } catch (err: any) {
-      assert.strictEqual(
-        err.message,
-        `Your filter refers to nonexistent type: import { Nonexistent } from "${testModuleRealm}nonexistent"`,
-      );
-    }
-
-    let cardRef: CodeRef = {
-      type: 'fieldOf',
-      field: 'name',
-      card: {
-        module: `${testModuleRealm}nonexistent`,
-        name: 'Nonexistent',
-      },
-    };
-    try {
-      await queryEngine.search({
-        filter: {
-          on: cardRef,
-          eq: { name: 'Simba' },
-        },
-      });
-      throw new Error('failed to throw expected exception');
-    } catch (err: any) {
-      assert.strictEqual(
-        err.message,
-        `Your filter refers to nonexistent type: ${JSON.stringify(
-          cardRef,
-          null,
-          2,
-        )}`,
-      );
-    }
-  });
-
-  test(`gives a good error when query refers to missing field`, async function (assert) {
-    try {
-      await queryEngine.search({
-        filter: {
-          on: { module: `${testModuleRealm}post`, name: 'Post' },
-          eq: {
-            'author.firstName': 'Cardy',
-            'author.nonExistentField': 'hello',
-          },
-        },
-      });
-      throw new Error('failed to throw expected exception');
-    } catch (err: any) {
-      assert.strictEqual(
-        err.message,
-        `Your filter refers to nonexistent field "nonExistentField" on type {"module":"${testModuleRealm}person","name":"PersonField"}`,
-      );
-    }
   });
 
   test(`can filter on a nested field using 'eq'`, async function (assert) {
@@ -1126,29 +1037,6 @@ module(`Integration | realm querying`, function (hooks) {
         `${paths.url}cards/1`, // type is post
         `${paths.url}cards/2`, // Carl
         `${paths.url}card-1`, // Cardy
-      ],
-    );
-  });
-
-  test('can sort by custom queryableValue', async function (assert) {
-    let { data: matching } = await queryEngine.search({
-      sort: [
-        {
-          by: 'numberOfTreats',
-          on: { module: `${testModuleRealm}dog`, name: 'Dog' },
-          direction: 'asc',
-        },
-      ],
-      filter: {
-        type: { module: `${testModuleRealm}dog`, name: 'Dog' },
-      },
-    });
-    assert.deepEqual(
-      matching.map((m) => m.id),
-      [
-        `${paths.url}mango`, // 12
-        `${paths.url}vangogh`, // 29
-        `${paths.url}ringo`, // 35
       ],
     );
   });

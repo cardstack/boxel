@@ -108,9 +108,17 @@ module(basename(__filename), function () {
               type: 'card',
               attributes: {
                 title: 'Mango',
+                cardInfo: {},
                 firstName: 'Mango',
                 description: null,
                 thumbnailURL: null,
+              },
+              relationships: {
+                'cardInfo.theme': {
+                  links: {
+                    self: null,
+                  },
+                },
               },
               meta: {
                 adoptsFrom: {
@@ -481,6 +489,7 @@ module(basename(__filename), function () {
             {
               data: {
                 attributes: {
+                  cardInfo: {},
                   title: null,
                   description: null,
                   thumbnailURL: null,
@@ -610,6 +619,7 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Hassan',
+                    cardInfo: {},
                     description: null,
                     thumbnailURL: null,
                   },
@@ -650,6 +660,7 @@ module(basename(__filename), function () {
                     firstName: 'Jade',
                     description: null,
                     thumbnailURL: null,
+                    cardInfo: {},
                   },
                   relationships: {
                     'friends.0': {
@@ -693,6 +704,7 @@ module(basename(__filename), function () {
                     firstName: 'Germaine',
                     description: null,
                     thumbnailURL: null,
+                    cardInfo: {},
                   },
                   meta: {
                     adoptsFrom: {
@@ -724,6 +736,7 @@ module(basename(__filename), function () {
                     firstName: 'Boris',
                     description: null,
                     thumbnailURL: null,
+                    cardInfo: {},
                   },
                   meta: {
                     adoptsFrom: {
@@ -759,6 +772,7 @@ module(basename(__filename), function () {
                 title: 'Hassan',
                 description: null,
                 thumbnailURL: null,
+                cardInfo: {},
               },
               relationships: {
                 friend: {
@@ -768,6 +782,11 @@ module(basename(__filename), function () {
                   data: {
                     type: 'card',
                     id: `${testRealmHref}Friend/local-id-1`,
+                  },
+                },
+                'cardInfo.theme': {
+                  links: {
+                    self: null,
                   },
                 },
               },
@@ -805,6 +824,7 @@ module(basename(__filename), function () {
                     title: 'Jade',
                     description: null,
                     thumbnailURL: null,
+                    cardInfo: {},
                   },
                   relationships: {
                     'friends.0': {
@@ -830,6 +850,11 @@ module(basename(__filename), function () {
                         self: null,
                       },
                     },
+                    'cardInfo.theme': {
+                      links: {
+                        self: null,
+                      },
+                    },
                   },
                   meta: {
                     adoptsFrom: {
@@ -846,9 +871,15 @@ module(basename(__filename), function () {
                     title: 'Germaine',
                     description: null,
                     thumbnailURL: null,
+                    cardInfo: {},
                   },
                   relationships: {
                     friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                    'cardInfo.theme': {
                       links: {
                         self: null,
                       },
@@ -869,9 +900,15 @@ module(basename(__filename), function () {
                     title: 'Boris',
                     description: null,
                     thumbnailURL: null,
+                    cardInfo: {},
                   },
                   relationships: {
                     friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                    'cardInfo.theme': {
                       links: {
                         self: null,
                       },
@@ -911,6 +948,7 @@ module(basename(__filename), function () {
                 title: 'Jade',
                 description: null,
                 thumbnailURL: null,
+                cardInfo: {},
               },
               relationships: {
                 'friends.0': {
@@ -932,6 +970,11 @@ module(basename(__filename), function () {
                   },
                 },
                 friend: {
+                  links: {
+                    self: null,
+                  },
+                },
+                'cardInfo.theme': {
                   links: {
                     self: null,
                   },
@@ -971,9 +1014,15 @@ module(basename(__filename), function () {
                     title: 'Germaine',
                     description: null,
                     thumbnailURL: null,
+                    cardInfo: {},
                   },
                   relationships: {
                     friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                    'cardInfo.theme': {
                       links: {
                         self: null,
                       },
@@ -994,9 +1043,15 @@ module(basename(__filename), function () {
                     title: 'Boris',
                     description: null,
                     thumbnailURL: null,
+                    cardInfo: {},
                   },
                   relationships: {
                     friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                    'cardInfo.theme': {
                       links: {
                         self: null,
                       },
@@ -1037,9 +1092,15 @@ module(basename(__filename), function () {
                   title: 'Germaine',
                   description: null,
                   thumbnailURL: null,
+                  cardInfo: {},
                 },
                 relationships: {
                   friend: {
+                    links: {
+                      self: null,
+                    },
+                  },
+                  'cardInfo.theme': {
                     links: {
                       self: null,
                     },
@@ -1086,9 +1147,15 @@ module(basename(__filename), function () {
                   title: 'Boris',
                   description: null,
                   thumbnailURL: null,
+                  cardInfo: {},
                 },
                 relationships: {
                   friend: {
+                    links: {
+                      self: null,
+                    },
+                  },
+                  'cardInfo.theme': {
                     links: {
                       self: null,
                     },
@@ -1186,6 +1253,7 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Hassan',
+                    cardInfo: {},
                     description: null,
                     thumbnailURL: null,
                   },
@@ -1367,8 +1435,16 @@ module(basename(__filename), function () {
                 type: 'card',
                 attributes: {
                   firstName: 'Van Gogh',
+                  cardInfo: {},
                   description: null,
                   thumbnailURL: null,
+                },
+                relationships: {
+                  'cardInfo.theme': {
+                    links: {
+                      self: null,
+                    },
+                  },
                 },
                 meta: {
                   adoptsFrom: {
@@ -1527,6 +1603,7 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Paper',
+                    cardInfo: {},
                     description: null,
                     thumbnailURL: null,
                   },
@@ -1534,6 +1611,11 @@ module(basename(__filename), function () {
                     friend: {
                       links: {
                         self: './Friend/local-id-1',
+                      },
+                    },
+                    'cardInfo.theme': {
+                      links: {
+                        self: null,
                       },
                     },
                   },
@@ -1565,6 +1647,7 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Jade',
+                    cardInfo: {},
                     description: null,
                     thumbnailURL: null,
                   },
@@ -1608,6 +1691,7 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Germaine',
+                    cardInfo: {},
                     description: null,
                     thumbnailURL: null,
                   },
@@ -1639,6 +1723,7 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Boris',
+                    cardInfo: {},
                     description: null,
                     thumbnailURL: null,
                   },
@@ -1673,6 +1758,7 @@ module(basename(__filename), function () {
               type: 'card',
               attributes: {
                 firstName: 'Paper',
+                cardInfo: {},
                 title: 'Paper',
                 description: null,
                 thumbnailURL: null,
@@ -1685,6 +1771,11 @@ module(basename(__filename), function () {
                   data: {
                     type: 'card',
                     id: `${testRealmHref}Friend/local-id-1`,
+                  },
+                },
+                'cardInfo.theme': {
+                  links: {
+                    self: null,
                   },
                 },
               },
@@ -1720,6 +1811,7 @@ module(basename(__filename), function () {
                   attributes: {
                     firstName: 'Jade',
                     title: 'Jade',
+                    cardInfo: {},
                     description: null,
                     thumbnailURL: null,
                   },
@@ -1747,6 +1839,11 @@ module(basename(__filename), function () {
                         self: null,
                       },
                     },
+                    'cardInfo.theme': {
+                      links: {
+                        self: null,
+                      },
+                    },
                   },
                   meta: {
                     adoptsFrom: {
@@ -1759,6 +1856,7 @@ module(basename(__filename), function () {
                   id: `${testRealmHref}Friend/local-id-2`,
                   type: 'card',
                   attributes: {
+                    cardInfo: {},
                     firstName: 'Germaine',
                     title: 'Germaine',
                     description: null,
@@ -1766,6 +1864,11 @@ module(basename(__filename), function () {
                   },
                   relationships: {
                     friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                    'cardInfo.theme': {
                       links: {
                         self: null,
                       },
@@ -1782,6 +1885,7 @@ module(basename(__filename), function () {
                   id: `${testRealmHref}Friend/local-id-3`,
                   type: 'card',
                   attributes: {
+                    cardInfo: {},
                     firstName: 'Boris',
                     title: 'Boris',
                     description: null,
@@ -1789,6 +1893,11 @@ module(basename(__filename), function () {
                   },
                   relationships: {
                     friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                    'cardInfo.theme': {
                       links: {
                         self: null,
                       },
@@ -1828,6 +1937,7 @@ module(basename(__filename), function () {
                 title: 'Jade',
                 description: null,
                 thumbnailURL: null,
+                cardInfo: {},
               },
               relationships: {
                 'friends.0': {
@@ -1849,6 +1959,11 @@ module(basename(__filename), function () {
                   },
                 },
                 friend: {
+                  links: {
+                    self: null,
+                  },
+                },
+                'cardInfo.theme': {
                   links: {
                     self: null,
                   },
@@ -1888,9 +2003,15 @@ module(basename(__filename), function () {
                     title: 'Germaine',
                     description: null,
                     thumbnailURL: null,
+                    cardInfo: {},
                   },
                   relationships: {
                     friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                    'cardInfo.theme': {
                       links: {
                         self: null,
                       },
@@ -1911,9 +2032,15 @@ module(basename(__filename), function () {
                     title: 'Boris',
                     description: null,
                     thumbnailURL: null,
+                    cardInfo: {},
                   },
                   relationships: {
                     friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                    'cardInfo.theme': {
                       links: {
                         self: null,
                       },
@@ -1954,9 +2081,15 @@ module(basename(__filename), function () {
                   title: 'Germaine',
                   description: null,
                   thumbnailURL: null,
+                  cardInfo: {},
                 },
                 relationships: {
                   friend: {
+                    links: {
+                      self: null,
+                    },
+                  },
+                  'cardInfo.theme': {
                     links: {
                       self: null,
                     },
@@ -2003,9 +2136,15 @@ module(basename(__filename), function () {
                   title: 'Boris',
                   description: null,
                   thumbnailURL: null,
+                  cardInfo: {},
                 },
                 relationships: {
                   friend: {
+                    links: {
+                      self: null,
+                    },
+                  },
+                  'cardInfo.theme': {
                     links: {
                       self: null,
                     },
@@ -2117,6 +2256,7 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Paper',
+                    cardInfo: {},
                     description: null,
                     thumbnailURL: null,
                   },
@@ -2124,6 +2264,11 @@ module(basename(__filename), function () {
                     friend: {
                       links: {
                         self: './FriendWithUsedLink/local-id-1',
+                      },
+                    },
+                    'cardInfo.theme': {
+                      links: {
+                        self: null,
                       },
                     },
                   },
@@ -2157,6 +2302,7 @@ module(basename(__filename), function () {
                     firstName: 'Jade',
                     description: null,
                     thumbnailURL: null,
+                    cardInfo: {},
                   },
                   relationships: {
                     friend: {
@@ -2200,6 +2346,7 @@ module(basename(__filename), function () {
                 title: 'Paper',
                 description: null,
                 thumbnailURL: null,
+                cardInfo: {},
               },
               relationships: {
                 friend: {
@@ -2209,6 +2356,11 @@ module(basename(__filename), function () {
                   data: {
                     type: 'card',
                     id: `${testRealmHref}FriendWithUsedLink/local-id-1`,
+                  },
+                },
+                'cardInfo.theme': {
+                  links: {
+                    self: null,
                   },
                 },
               },
@@ -2246,9 +2398,15 @@ module(basename(__filename), function () {
                     title: 'Jade',
                     description: null,
                     thumbnailURL: null,
+                    cardInfo: {},
                   },
                   relationships: {
                     friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                    'cardInfo.theme': {
                       links: {
                         self: null,
                       },
@@ -2289,9 +2447,15 @@ module(basename(__filename), function () {
                 title: 'Jade',
                 description: null,
                 thumbnailURL: null,
+                cardInfo: {},
               },
               relationships: {
                 friend: {
+                  links: {
+                    self: null,
+                  },
+                },
+                'cardInfo.theme': {
                   links: {
                     self: null,
                   },
@@ -2386,12 +2550,18 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Paper',
+                    cardInfo: {},
                     description: null,
                     thumbnailURL: null,
                   },
                   relationships: {
                     friend: {
                       links: { self: './jade' },
+                    },
+                    'cardInfo.theme': {
+                      links: {
+                        self: null,
+                      },
                     },
                   },
                   meta: {

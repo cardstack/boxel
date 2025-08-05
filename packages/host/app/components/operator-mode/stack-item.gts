@@ -69,8 +69,6 @@ import CardError from './card-error';
 import OperatorModeOverlays from './operator-mode-overlays';
 
 import type CardService from '../../services/card-service';
-import type EnvironmentService from '../../services/environment-service';
-import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
 import type StoreService from '../../services/store';
@@ -120,10 +118,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private declare getCardCollection: getCardCollection;
 
   @service private declare cardService: CardService;
-  @service private declare environmentService: EnvironmentService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
-  @service private declare loaderService: LoaderService;
   @service private declare store: StoreService;
 
   @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);

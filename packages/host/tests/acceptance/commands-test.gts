@@ -1,6 +1,5 @@
 import { on } from '@ember/modifier';
 import { getOwner, setOwner } from '@ember/owner';
-import { service } from '@ember/service';
 import {
   click,
   waitFor,
@@ -43,9 +42,6 @@ import {
   waitForCompletedCommandRequest,
   waitForRealmState,
 } from '@cardstack/host/commands/utils';
-import type LoaderService from '@cardstack/host/services/loader-service';
-
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type { SearchCardsByTypeAndTitleInput } from 'https://cardstack.com/base/command';
 
@@ -156,9 +152,6 @@ module('Acceptance | Commands tests', function (hooks) {
     }
 
     class ScheduleMeetingCommand extends Command<typeof ScheduleMeetingInput> {
-      @service private declare loaderService: LoaderService;
-      @service
-      private declare operatorModeStateService: OperatorModeStateService;
       static displayName = 'ScheduleMeetingCommand';
       static actionVerb = 'Schedule';
 
@@ -316,7 +309,7 @@ module('Acceptance | Commands tests', function (hooks) {
           );
           let { roomId } = await createAIAssistantRoomCommand.execute({
             name: 'AI Assistant Room',
-            defaultSkills: [
+            enabledSkills: [
               (await getService('store').get<Skill>(
                 `${testRealmURL}Skill/useful-commands`,
               )) as Skill,

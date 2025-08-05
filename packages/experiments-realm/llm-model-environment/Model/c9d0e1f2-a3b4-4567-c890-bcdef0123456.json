@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "modelId": "meta-llama/llama-3.3-70b-instruct",
+      "modelName": "Llama 3.3 70B",
+      "displayName": "Llama 3.3 70B - Legal Analysis & Document Review",
+      "forAssistantUse": false
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../model",
+        "name": "Model"
+      }
+    }
+  }
+}

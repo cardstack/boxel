@@ -87,6 +87,7 @@ import { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './paths';
 export * from './cached-fetch';
+export * from './card-def-meta';
 export * from './catalog';
 export * from './commands';
 export * from './constants';
@@ -118,6 +119,7 @@ export {
   cardTypeIcon,
   getFieldIcon,
 } from './helpers/card-type-display-name';
+export { extractCssVariables } from './helpers/extract-css-variables';
 export * from './url';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
