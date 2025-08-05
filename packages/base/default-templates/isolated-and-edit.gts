@@ -16,13 +16,13 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
     format: Format;
   };
 }> {
-  private headerFields: string[] = [
+  private _headerFields: string[] = [
     'title',
     'description',
     'thumbnailURL',
     'theme',
   ];
-  private excludedFields: string[] = ['id', 'cardInfo', ...this.headerFields];
+  private excludedFields: string[] = ['id', 'cardInfo', ...this._headerFields];
 
   private get displayFields(): Fields | undefined {
     let fields = Object.entries(this.args.fields).filter(
@@ -48,6 +48,19 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       prototype = Object.getPrototypeOf(prototype);
     }
     return result;
+  }
+
+  // hiding this field from Theme cards and applying its cssVariables to the current card
+  private get hideTheme() {
+    return Boolean(
+      Object.entries(this.args.fields).find(([key]) => key === 'cssVariables'),
+    );
+  }
+
+  private get headerFields() {
+    return this.hideTheme
+      ? this._headerFields.filter((f) => f !== 'theme')
+      : this._headerFields;
   }
 
   <template>
