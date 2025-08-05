@@ -49,7 +49,6 @@ import {
 } from '@cardstack/postgres';
 import { Server } from 'http';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import { shimExternals } from '../../lib/externals';
 
 import supertest, { SuperTest, Test } from 'supertest';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
@@ -146,7 +145,6 @@ export function createVirtualNetworkAndLoader() {
 
 export function createVirtualNetwork() {
   let virtualNetwork = new VirtualNetwork();
-  shimExternals(virtualNetwork);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
   return virtualNetwork;
 }

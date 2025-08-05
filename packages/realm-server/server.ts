@@ -28,7 +28,6 @@ import { NodeAdapter } from './node-realm';
 import { resolve, join } from 'path';
 import merge from 'lodash/merge';
 
-import './lib/externals';
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
 import * as Sentry from '@sentry/node';
 import {
