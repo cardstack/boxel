@@ -35,7 +35,8 @@ const pianoEventModifier = modifier(
     const handleKeyUp = (event: KeyboardEvent) => onKeyUp(event);
     const handleBeforeUnload = () => onBeforeUnload();
     const handlePageHide = () => onPageHide();
-    const handleMouseLeave = (event: MouseEvent) => onMouseLeave(event);
+    const handleMouseLeave = (event: Event) =>
+      onMouseLeave(event as MouseEvent);
 
     // Global window events
     window.addEventListener('keydown', handleKeyDown);
@@ -69,8 +70,6 @@ export class KeyField extends FieldDef {
 
 class IsolatedPianoTemplate extends Component<typeof Piano> {
   audioContext: AudioContext | null = null;
-  oscillator: OscillatorNode | null = null;
-  activeOscillators: Set<OscillatorNode> = new Set();
 
   // Use non-tracked variables for playback state to avoid rerenders during playback
   private _isPlaying = false;
@@ -191,16 +190,6 @@ class IsolatedPianoTemplate extends Component<typeof Piano> {
     // Clear pressed keys
     this.pressedKeys.clear();
 
-    // Stop all active oscillators
-    this.activeOscillators.forEach((oscillator) => {
-      try {
-        oscillator.stop();
-      } catch (error) {
-        console.log('Oscillator already stopped');
-      }
-    });
-    this.activeOscillators.clear();
-
     // Close audio context if it exists
     if (this.audioContext && this.audioContext.state !== 'closed') {
       this.audioContext
@@ -222,7 +211,7 @@ class IsolatedPianoTemplate extends Component<typeof Piano> {
 
     const mapping = this.keyboardMapping[event.key.toLowerCase()];
     if (mapping) {
-      this.playNoteKeyboard(mapping.note, mapping.octave);
+      this.playNote(mapping.note, mapping.octave);
       this.pressedKeys.add(`${mapping.note}${mapping.octave}`);
       this.setPianoKeyActive(mapping.note, mapping.octave, true);
 
@@ -268,46 +257,12 @@ class IsolatedPianoTemplate extends Component<typeof Piano> {
     }
   }
 
-  playNoteKeyboard(note: string, octave: number, duration = 0.8) {
-    if (!this.audioContext) {
-      this.audioContext = new AudioContext();
-    }
-
-    if (this.audioContext.state === 'suspended') {
-      this.audioContext.resume().catch((error) => {
-        console.error('Failed to resume audio context:', error);
-        return;
-      });
-    }
-
-    const frequency = this.getFrequency(note, octave);
-    const oscillator = this.audioContext.createOscillator();
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(
-      frequency,
-      this.audioContext.currentTime,
-    );
-
-    const gainNode = this.audioContext.createGain();
-    const now = this.audioContext.currentTime;
-    gainNode.gain.setValueAtTime(0.5, now);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
-    oscillator.connect(gainNode);
-    gainNode.connect(this.audioContext.destination);
-    oscillator.start();
-    oscillator.stop(now + duration);
-
-    setTimeout(() => {
-      try {
-        this.activeOscillators.delete(oscillator);
-      } catch (error) {
-        console.log('Oscillator already removed from tracking');
-      }
-    }, duration * 1000);
-  }
-
-  playNoteOnly(note: string, octave: number, duration = 0.8) {
+  playNote(
+    note: string,
+    octave: number,
+    duration = 0.8,
+    isNotationPlayback = false,
+  ) {
     if (!this.audioContext) {
       this.audioContext = new AudioContext();
     }
@@ -338,46 +293,21 @@ class IsolatedPianoTemplate extends Component<typeof Piano> {
     oscillator.stop(now + duration);
 
     // Don't modify tracked properties during notation playback
-    if (!this._isPlaying) {
+    if (!isNotationPlayback && !this._isPlaying) {
       this.pressedKeys.add(`${note}${octave}`);
       setTimeout(() => {
-        try {
-          this.activeOscillators.delete(oscillator);
-        } catch (error) {
-          console.log('Oscillator already removed from tracking');
-        }
         this.pressedKeys.delete(`${note}${octave}`);
-      }, duration * 1000);
-    } else {
-      setTimeout(() => {
-        try {
-          this.activeOscillators.delete(oscillator);
-        } catch (error) {
-          console.log('Oscillator already removed from tracking');
-        }
       }, duration * 1000);
     }
   }
 
-  playNote(note: string, octave: number) {
-    this.playNoteOnly(note, octave, 0.8);
-  }
-
   playSingleNote(note: string, octave: number, duration = 0.8) {
-    this.playNoteOnly(note, octave, duration);
+    this.playNote(note, octave, duration, true);
     // Add visual feedback for notation playback
     this.setPianoKeyActive(note, octave, true, 'notation');
     setTimeout(() => {
       this.setPianoKeyActive(note, octave, false, 'notation');
     }, duration * 1000);
-  }
-
-  stopNote(note: string, octave: number) {
-    this.pressedKeys.delete(`${note}${octave}`);
-  }
-
-  isKeyPressed(note: string, octave: number) {
-    return this.pressedKeys.has(`${note}${octave}`);
   }
 
   getFrequency(note: string, octave: number): number {
@@ -749,16 +679,6 @@ class IsolatedPianoTemplate extends Component<typeof Piano> {
 
     // Clear pressed keys and visual feedback
     this.pressedKeys.clear();
-
-    // Stop all active oscillators
-    this.activeOscillators.forEach((oscillator) => {
-      try {
-        oscillator.stop();
-      } catch (error) {
-        console.log('Oscillator already stopped');
-      }
-    });
-    this.activeOscillators.clear();
 
     // Clear translation display
     this.showNotationTranslation = false;
