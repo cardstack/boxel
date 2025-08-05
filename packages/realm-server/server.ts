@@ -406,7 +406,6 @@ export class RealmServer {
   private async loadRealms() {
     let realms: Realm[] = [];
 
-    // Load regular realms (existing behavior)
     for (let maybeUsername of readdirSync(this.realmsRootPath, {
       withFileTypes: true,
     })) {
