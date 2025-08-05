@@ -217,6 +217,7 @@ module(basename(__filename), function () {
                 firstName: 'Mango',
                 description: null,
                 thumbnailURL: null,
+                cardInfo: {},
               },
               meta: {
                 adoptsFrom: {
