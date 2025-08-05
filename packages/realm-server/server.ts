@@ -92,8 +92,6 @@ export class RealmServer {
     matrixRegistrationSecret,
     getRegistrationSecret,
     enableFileWatcher,
-    hostModeUserSubdomainRoot,
-    hostModeCustomSubdomainRoot,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -110,8 +108,6 @@ export class RealmServer {
     matrixRegistrationSecret?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
     enableFileWatcher?: boolean;
-    hostModeUserSubdomainRoot?: string;
-    hostModeCustomSubdomainRoot?: string;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
