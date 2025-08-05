@@ -27,7 +27,7 @@
           "self": "../Category/personal-finance"
         }
       },
-      "tags.0": {
+      "tags": {
         "links": {
           "self": null
         }
