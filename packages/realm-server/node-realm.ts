@@ -36,6 +36,7 @@ import type {
   UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import { setAttributeSync, getAttributeSync } from 'fs-xattr';
 
 const realmEventsLog = logger('realm:events');
 
@@ -176,16 +177,32 @@ export class NodeAdapter implements RealmAdapter {
     };
   }
 
+  getCreated = (path: string, isNew: boolean): string | null => {
+    let created: string | null;
+    try {
+      if (!isNew) {
+        created = getAttributeSync(path, 'user.created')?.toString();
+      } else {
+        setAttributeSync(path, 'user.created', unixTime(Date.now()).toString());
+        created = getAttributeSync(path, 'user.created')?.toString();
+      }
+    } catch (e) {
+      created = null;
+    }
+    return created;
+  };
+
   async write(path: string, contents: string): Promise<FileWriteResult> {
     let absolutePath = join(this.realmDir, path);
     let exists = await this.exists(path);
     ensureFileSync(absolutePath);
     writeFileSync(absolutePath, contents);
-    let { mtime, birthtime } = statSync(absolutePath);
+    let created = this.getCreated(absolutePath, !exists);
+    let { mtime } = statSync(absolutePath);
     return {
       path: absolutePath,
       lastModified: unixTime(mtime.getTime()),
-      created: unixTime(birthtime.getTime()),
+      created: created ? unixTime(parseInt(created)) : created,
       isNew: !exists,
     };
   }
