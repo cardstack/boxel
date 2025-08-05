@@ -57,16 +57,18 @@ module('Unit | ai-function-generation-test', function (hooks) {
   );
 
   const cardInfoSchema: ObjectSchema = {
-    properties: {},
     additionalProperties: false,
+    properties: {
+      description: { type: 'string' },
+      notes: { type: 'string' },
+      thumbnailURL: { type: 'string' },
+      title: { type: 'string' },
+    },
     type: 'object',
   };
 
   const cardDefAttributesProperties: { [fieldName: string]: AttributesSchema } =
     {
-      thumbnailURL: { type: 'string' },
-      title: { type: 'string' },
-      description: { type: 'string' },
       cardInfo: cardInfoSchema,
     };
 

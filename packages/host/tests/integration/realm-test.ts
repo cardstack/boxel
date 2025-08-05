@@ -25,6 +25,7 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
+  testModuleRealm,
 } from '../helpers';
 import {
   setupBaseRealm,
@@ -65,6 +66,13 @@ module('Integration | realm', function (hooks) {
     return result;
   }
 
+  const cardInfo = {
+    title: null,
+    description: null,
+    thumbnailURL: null,
+    notes: null,
+  };
+
   test('realm can serve GET card requests', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -98,10 +106,10 @@ module('Integration | realm', function (hooks) {
         type: 'card',
         id: `${testRealmURL}dir/empty`,
         attributes: {
-          title: null,
+          cardInfo,
           description: null,
           thumbnailURL: null,
-          cardInfo: {},
+          title: 'Untitled Card',
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
@@ -138,7 +146,9 @@ module('Integration | realm', function (hooks) {
             attributes: {
               firstName: 'Hassan',
               lastName: 'Abdel-Rahman',
-              cardInfo: {},
+              cardInfo,
+              description: null,
+              thumbnailURL: null,
             },
             relationships: {
               'cardInfo.theme': { links: { self: null } },
@@ -155,10 +165,10 @@ module('Integration | realm', function (hooks) {
           data: {
             id: `${testRealmURL}dir/mango`,
             attributes: {
+              firstName: 'Mango',
+              cardInfo,
               description: null,
               thumbnailURL: null,
-              firstName: 'Mango',
-              cardInfo: {},
             },
             relationships: {
               owner: {
@@ -196,9 +206,9 @@ module('Integration | realm', function (hooks) {
         attributes: {
           firstName: 'Mango',
           title: 'Mango',
+          cardInfo,
           description: null,
           thumbnailURL: null,
-          cardInfo: {},
         },
         relationships: {
           owner: {
@@ -243,7 +253,7 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             'cardInfo.theme': { links: { self: null } },
@@ -322,7 +332,7 @@ module('Integration | realm', function (hooks) {
           title: 'Mango',
           description: null,
           thumbnailURL: null,
-          cardInfo: {},
+          cardInfo,
         },
         relationships: {
           owner: {
@@ -367,7 +377,7 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
-            cardInfo: {},
+            cardInfo,
           },
           relationships: { 'cardInfo.theme': { links: { self: null } } },
           meta: {
@@ -684,7 +694,7 @@ module('Integration | realm', function (hooks) {
           title: 'Mango',
           description: null,
           thumbnailURL: null,
-          cardInfo: {},
+          cardInfo,
         },
         relationships: {
           owner: {
@@ -729,7 +739,7 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             'cardInfo.theme': { links: { self: null } },
@@ -765,6 +775,7 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Mango',
+            cardInfo,
           },
           relationships: {
             owner: {
@@ -938,10 +949,9 @@ module('Integration | realm', function (hooks) {
             attributes: {
               email: null,
               posts: null,
-              thumbnailURL: null,
               firstName: 'Van Gogh',
               lastName: 'Abdel-Rahman',
-              cardInfo: {},
+              cardInfo,
             },
             relationships: {
               'cardInfo.theme': { links: { self: null } },
@@ -1083,7 +1093,7 @@ module('Integration | realm', function (hooks) {
           posts: [],
           description: 'Gore Mountain',
           thumbnailURL: null,
-          cardInfo: {},
+          cardInfo,
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
@@ -1126,14 +1136,14 @@ module('Integration | realm', function (hooks) {
             ],
             sponsors: ['Burton'],
             posts: [],
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4202/test/booking',
+              module: `${testModuleRealm}booking`,
               name: 'Booking',
             },
           },
@@ -1246,7 +1256,7 @@ module('Integration | realm', function (hooks) {
           title: 'Jackie Pet Person',
           description: 'A person with pets',
           thumbnailURL: null,
-          cardInfo: {},
+          cardInfo,
         },
         relationships: {
           'pets.0': {
@@ -1267,7 +1277,7 @@ module('Integration | realm', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `http://localhost:4202/test/pet-person`,
+            module: `${testModuleRealm}pet-person`,
             name: 'PetPerson',
           },
           realmInfo: testRealmInfo,
@@ -1294,14 +1304,14 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
+              module: `${testModuleRealm}person`,
               name: 'Person',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -1323,7 +1333,7 @@ module('Integration | realm', function (hooks) {
             title: 'Van Gogh',
             description: null,
             thumbnailURL: null,
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             owner: { links: { self: null } },
@@ -1331,7 +1341,7 @@ module('Integration | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `http://localhost:4202/test/pet`,
+              module: `${testModuleRealm}pet`,
               name: 'Pet',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -1355,7 +1365,7 @@ module('Integration | realm', function (hooks) {
       {
         data: {
           type: 'card',
-          attributes: { firstName: 'Jackie', cardInfo: {} },
+          attributes: { firstName: 'Jackie', cardInfo },
           relationships: {
             'pets.0': { links: { self: `./dir/van-gogh` } },
             friend: { links: { self: `./dir/friend` } },
@@ -1476,7 +1486,7 @@ module('Integration | realm', function (hooks) {
         title: 'Jackie Pet Person',
         description: 'A person with pets',
         thumbnailURL: null,
-        cardInfo: {},
+        cardInfo,
       },
       relationships: {
         'pets.0': {
@@ -1605,7 +1615,7 @@ module('Integration | realm', function (hooks) {
         title: 'Jackie Pet Person',
         description: 'A person with pets',
         thumbnailURL: null,
-        cardInfo: {},
+        cardInfo,
       },
       relationships: {
         'pets.0': {
@@ -1720,7 +1730,7 @@ module('Integration | realm', function (hooks) {
         title: 'Jackie Pet Person',
         description: 'A person with pets',
         thumbnailURL: null,
-        cardInfo: {},
+        cardInfo,
       },
       relationships: {
         pets: { links: { self: null } },
@@ -1844,7 +1854,7 @@ module('Integration | realm', function (hooks) {
         title: 'Jackie Pet Person',
         description: 'A person with pets',
         thumbnailURL: null,
-        cardInfo: {},
+        cardInfo,
       },
       relationships: {
         'pets.0': {
@@ -1992,7 +2002,7 @@ module('Integration | realm', function (hooks) {
         title: 'Jackie Pet Person',
         description: 'A person with pets',
         thumbnailURL: null,
-        cardInfo: {},
+        cardInfo,
       },
       relationships: {
         pets: {
@@ -2101,7 +2111,7 @@ module('Integration | realm', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'http://localhost:4202/test/pet',
+                  module: `${testModuleRealm}pet`,
                   name: 'Pet',
                 },
               },
@@ -2124,7 +2134,7 @@ module('Integration | realm', function (hooks) {
           title: 'Mango',
           description: null,
           thumbnailURL: null,
-          cardInfo: {},
+          cardInfo,
         },
         relationships: {
           owner: {
@@ -2140,7 +2150,7 @@ module('Integration | realm', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'http://localhost:4202/test/pet',
+            module: `${testModuleRealm}pet`,
             name: 'Pet',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -2169,14 +2179,14 @@ module('Integration | realm', function (hooks) {
             email: null,
             posts: null,
             thumbnailURL: null,
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
+              module: `${testModuleRealm}person`,
               name: 'Person',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -2204,10 +2214,8 @@ module('Integration | realm', function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            description: null,
-            thumbnailURL: null,
             firstName: 'Mango',
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             owner: {
@@ -2219,7 +2227,7 @@ module('Integration | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4202/test/pet',
+              module: `${testModuleRealm}pet`,
               name: 'Pet',
             },
           },
@@ -2328,8 +2336,8 @@ module('Integration | realm', function (hooks) {
           },
           description: null,
           thumbnailURL: null,
-          title: null,
-          cardInfo: {},
+          title: 'Untitled Card',
+          cardInfo,
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
@@ -2376,10 +2384,7 @@ module('Integration | realm', function (hooks) {
               model: 'C300',
               year: '2024',
             },
-            description: null,
-            thumbnailURL: null,
-            title: null,
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             'cardInfo.theme': { links: { self: null } },
@@ -2929,7 +2934,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/person',
+                module: `${testModuleRealm}person`,
                 name: 'Person',
               },
             },
@@ -2952,7 +2957,7 @@ module('Integration | realm', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -2967,13 +2972,13 @@ module('Integration | realm', function (hooks) {
             relationships: {
               owner: {
                 links: {
-                  self: `http://localhost:4202/test/hassan`,
+                  self: `${testModuleRealm}hassan`,
                 },
               },
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
+                module: `${testModuleRealm}pet`,
                 name: 'Pet',
               },
             },
@@ -3013,7 +3018,7 @@ module('Integration | realm', function (hooks) {
             firstName: 'Mango',
             title: 'Mango',
             thumbnailURL: null,
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             owner: {
@@ -3057,14 +3062,14 @@ module('Integration | realm', function (hooks) {
             email: null,
             posts: null,
             thumbnailURL: null,
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
+              module: `${testModuleRealm}person`,
               name: 'Person',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -3088,23 +3093,23 @@ module('Integration | realm', function (hooks) {
             firstName: 'Van Gogh',
             title: 'Van Gogh',
             thumbnailURL: null,
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             owner: {
               links: {
-                self: `http://localhost:4202/test/hassan`,
+                self: `${testModuleRealm}hassan`,
               },
               data: {
                 type: 'card',
-                id: `http://localhost:4202/test/hassan`,
+                id: `${testModuleRealm}hassan`,
               },
             },
             'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4202/test/pet',
+              module: `${testModuleRealm}pet`,
               name: 'Pet',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -3124,7 +3129,7 @@ module('Integration | realm', function (hooks) {
       included: [
         {
           type: 'card',
-          id: `http://localhost:4202/test/hassan`,
+          id: `${testModuleRealm}hassan`,
           attributes: {
             description: 'Person',
             email: null,
@@ -3134,7 +3139,7 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             'cardInfo.theme': { links: { self: null } },
@@ -3154,10 +3159,10 @@ module('Integration | realm', function (hooks) {
               visibility: 'public',
               publishable: null,
             },
-            realmURL: 'http://localhost:4202/test/',
+            realmURL: testModuleRealm,
           },
           links: {
-            self: `http://localhost:4202/test/hassan`,
+            self: `${testModuleRealm}hassan`,
           },
         },
       ],

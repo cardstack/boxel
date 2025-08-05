@@ -60,8 +60,10 @@ test.describe('Live Cards', () => {
     let instanceUrl = await postNewCard(page, realmURL, {
       data: {
         attributes: {
-          title: 'test card title',
-          description: 'test card description',
+          cardInfo: {
+            title: 'test card title',
+            description: 'test card description',
+          },
         },
         meta: {
           adoptsFrom: {
@@ -85,8 +87,10 @@ test.describe('Live Cards', () => {
       data: {
         type: 'card',
         attributes: {
-          title: 'updated card title',
-          description: 'updated card description',
+          cardInfo: {
+            title: 'updated card title',
+            description: 'updated card description',
+          },
         },
         meta: {
           adoptsFrom: {

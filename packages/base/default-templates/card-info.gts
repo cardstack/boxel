@@ -19,15 +19,19 @@ export default class CardInfo extends GlimmerComponent<{
         class='image-container thumbnail'
         style={{setBackgroundImage @thumbnailURL}}
         role='presentation'
+        data-test-field='thumbnailURL'
       />
     {{else if @icon}}
       <div class='image-container'>
-        <@icon class='icon' width='50' height='40' />
+        <@icon class='icon' width='50' height='40' data-test-thumbnail-icon />
       </div>
     {{/if}}
     <div class='info'>
-      <h2 class='card-info-title'>{{@title}}</h2>
-      <p class='card-info-description'>{{@description}}</p>
+      <h2 class='card-info-title' data-test-field='title'>{{@title}}</h2>
+      <p
+        class='card-info-description'
+        data-test-field='description'
+      >{{@description}}</p>
     </div>
     <style scoped>
       @layer {

@@ -63,6 +63,13 @@ module('Integration | commands | patch-instance', function (hooks) {
     indexQuery = realm.realmIndexQueryEngine;
   });
 
+  const cardInfo = {
+    title: null,
+    description: null,
+    thumbnailURL: null,
+    notes: null,
+  };
+
   test('can patch a contains field', async function (assert) {
     let patchInstanceCommand = new PatchCardInstanceCommand(
       commandService.commandContext,
@@ -91,8 +98,8 @@ module('Integration | commands | patch-instance', function (hooks) {
           description: null,
           nickNames: [],
           thumbnailURL: null,
-          title: null,
-          cardInfo: {},
+          title: 'Untitled Card',
+          cardInfo,
         },
         'the attributes are correct',
       );
@@ -146,8 +153,8 @@ module('Integration | commands | patch-instance', function (hooks) {
           description: null,
           nickNames: ['Paper'],
           thumbnailURL: null,
-          title: null,
-          cardInfo: {},
+          title: 'Untitled Card',
+          cardInfo,
         },
         'the attributes are correct',
       );
@@ -201,8 +208,8 @@ module('Integration | commands | patch-instance', function (hooks) {
           description: null,
           nickNames: [],
           thumbnailURL: null,
-          title: null,
-          cardInfo: {},
+          title: 'Untitled Card',
+          cardInfo,
         },
         'the attributes are correct',
       );
@@ -257,8 +264,8 @@ module('Integration | commands | patch-instance', function (hooks) {
           description: null,
           nickNames: [],
           thumbnailURL: null,
-          title: null,
-          cardInfo: {},
+          title: 'Untitled Card',
+          cardInfo,
         },
         'the attributes are correct',
       );
@@ -317,8 +324,8 @@ module('Integration | commands | patch-instance', function (hooks) {
           description: null,
           nickNames: ['Air'],
           thumbnailURL: null,
-          title: null,
-          cardInfo: {},
+          title: 'Untitled Card',
+          cardInfo,
         },
         'the attributes are correct',
       );

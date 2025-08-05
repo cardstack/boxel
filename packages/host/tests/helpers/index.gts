@@ -34,6 +34,7 @@ import {
   testRealmInfo,
   testRealmURL,
   testRealmURLToUsername,
+  testModuleRealm,
 } from '@cardstack/runtime-common/helpers/const';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -66,6 +67,7 @@ export {
   testHostModeRealmURL,
   testRealmURL,
   testRealmInfo,
+  testModuleRealm,
   percySnapshot,
 };
 export * from '@cardstack/runtime-common/helpers';

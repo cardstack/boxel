@@ -44,6 +44,7 @@ import {
   setupCardLogs,
   saveCard,
   provideConsumeContext,
+  testModuleRealm,
 } from '../../helpers';
 import {
   Base64ImageField,
@@ -81,7 +82,6 @@ import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 let loader: Loader;
-const testModuleRealm = 'http://localhost:4202/test/';
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
@@ -705,6 +705,7 @@ module('Integration | card-basics', function (hooks) {
             return this.image.base64;
           },
         });
+        @field description = contains(StringField);
       }
 
       let FittedViewDriver = fittedViewDriver();
@@ -1784,10 +1785,11 @@ module('Integration | card-basics', function (hooks) {
         title: 'First Post',
         author: new Person({ firstName: 'Arthur' }),
       });
-
       await renderCard(loader, helloWorld, 'isolated');
       assert.dom('[data-test="first-name"]').containsText('Arthur');
-      assert.dom('[data-test="title"]').containsText('First Post');
+      assert.dom('[data-test-field="title"]').containsText('First Post');
+      assert.dom('[data-test-thumbnail-icon]').exists();
+      assert.dom('[data-test-field="notes"]').hasText('Notes');
     });
 
     test('render default atom view template', async function (assert) {
@@ -2903,7 +2905,7 @@ module('Integration | card-basics', function (hooks) {
       let root = await renderCard(loader, mango, 'isolated');
       assert.strictEqual(
         cleanWhiteSpace(root.textContent!),
-        'First Name Mango Is Cool true Title Mango Description Thumbnail URL',
+        'Mango First Name Mango Is Cool true Notes',
       );
     });
 
@@ -3581,7 +3583,9 @@ module('Integration | card-basics', function (hooks) {
 
       let attendanceRecord = new AttendanceRecord();
       await renderCard(loader, attendanceRecord, 'edit');
-      await click('[data-test-add-new]');
+      await click(
+        '[data-test-contains-many="attandances"] [data-test-add-new]',
+      );
       assert.dom('[data-test-field="name"] input').hasValue('');
       assert
         .dom(

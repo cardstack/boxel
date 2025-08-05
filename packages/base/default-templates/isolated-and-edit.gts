@@ -126,9 +126,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
     <style scoped>
       .default-card-template {
         --hr-color: rgba(0 0 0 / 10%);
-        height: 100%;
         display: grid;
-        grid-template-rows: max-content;
       }
       .card-info-header {
         --boxel-header-min-height: 9.375rem; /* 150px */
@@ -159,6 +157,10 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
         margin-top: var(--boxel-sp-xs);
+      }
+      .default-card-template.edit {
+        height: 100%;
+        grid-template-rows: max-content;
       }
       .default-card-template.edit > .notes-footer {
         background-color: var(--boxel-100);

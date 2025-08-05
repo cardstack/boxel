@@ -23,6 +23,7 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
+  testModuleRealm,
 } from '../helpers';
 import {
   CardDef,
@@ -39,8 +40,6 @@ import {
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
-
-const testModuleRealm = 'http://localhost:4202/test/';
 
 let loader: Loader;
 
@@ -71,6 +70,13 @@ module(`Integration | realm indexing`, function (hooks) {
     return maybeInstance;
   }
 
+  const cardInfo = {
+    title: null,
+    description: null,
+    thumbnailURL: null,
+    notes: null,
+  };
+
   test('full indexing discovers card instances', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -94,10 +100,10 @@ module(`Integration | realm indexing`, function (hooks) {
         id: `${testRealmURL}empty`,
         type: 'card',
         attributes: {
-          title: null,
+          cardInfo,
+          title: 'Untitled Card',
           description: null,
           thumbnailURL: null,
-          cardInfo: {},
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
@@ -308,7 +314,7 @@ module(`Integration | realm indexing`, function (hooks) {
             firstName: 'Mango',
             title: 'Mango',
             thumbnailURL: null,
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             owner: {
@@ -398,7 +404,7 @@ module(`Integration | realm indexing`, function (hooks) {
           firstName: 'Mango',
           title: 'Mango',
           thumbnailURL: null,
-          cardInfo: {},
+          cardInfo,
         },
         relationships: {
           owner: {
@@ -444,7 +450,7 @@ module(`Integration | realm indexing`, function (hooks) {
             firstName: 'Van Gogh',
             title: 'Van Gogh',
             thumbnailURL: null,
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             owner: {
@@ -529,7 +535,7 @@ module(`Integration | realm indexing`, function (hooks) {
           firstName: 'Mango',
           title: 'Mango',
           thumbnailURL: null,
-          cardInfo: {},
+          cardInfo,
         },
         relationships: {
           owner: {
@@ -617,7 +623,7 @@ module(`Integration | realm indexing`, function (hooks) {
           firstName: 'Mango',
           title: 'Mango',
           thumbnailURL: null,
-          cardInfo: {},
+          cardInfo,
         },
         relationships: {
           owner: {
@@ -706,7 +712,7 @@ module(`Integration | realm indexing`, function (hooks) {
             name: 'Person',
           },
           containedExamples: [],
-          cardInfo: {},
+          cardInfo,
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
@@ -825,7 +831,7 @@ module(`Integration | realm indexing`, function (hooks) {
             name: 'Person',
           },
           containedExamples: [],
-          cardInfo: {},
+          cardInfo,
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
@@ -890,8 +896,8 @@ module(`Integration | realm indexing`, function (hooks) {
           description: null,
           instructions: 'How to win friends and influence people',
           thumbnailURL: null,
-          title: null,
-          cardInfo: {},
+          title: 'Untitled Skill',
+          cardInfo,
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
@@ -923,6 +929,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
         ],
         cardInfo: { theme: null },
+        title: 'Untitled Skill',
       });
     } else {
       assert.ok(
@@ -1421,6 +1428,7 @@ module(`Integration | realm indexing`, function (hooks) {
   test(`can generate embedded HTML for instance's card class hierarchy`, async function (assert) {
     class Person extends CardDef {
       static displayName = 'Person';
+      @field description = contains(StringField);
       @field firstName = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -1519,7 +1527,7 @@ module(`Integration | realm indexing`, function (hooks) {
               </div>
             </div>
             <div class="info-section">
-              <h3 class="card-title" data-test-card-title></h3>
+              <h3 class="card-title" data-test-card-title>Untitled Fancy Person</h3>
               <h4 class="card-display-name" data-test-card-display-name>
                 Fancy Person
               </h4>
@@ -1541,6 +1549,7 @@ module(`Integration | realm indexing`, function (hooks) {
     class Person extends CardDef {
       static displayName = 'Person';
       @field firstName = contains(StringField);
+      @field description = contains(StringField);
       static fitted = class Fitted extends Component<typeof this> {
         <template>
           <h1> Person Fitted Card: <@fields.firstName /></h1>
@@ -1636,7 +1645,7 @@ module(`Integration | realm indexing`, function (hooks) {
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-captions card-type-icon" viewBox="0 0 24 24" data-test-card-type-icon><rect width="18" height="14" x="3" y="5" rx="2" ry="2"></rect><path d="M7 15h4m4 0h2M7 11h2m4 0h4"></path></svg>
             </div>
             <div class="info-section">
-              <h3 class="card-title" data-test-card-title></h3>
+              <h3 class="card-title" data-test-card-title>Untitled Fancy Person</h3>
               <h4 class="card-display-name" data-test-card-display-name>
                 Fancy Person
               </h4>
@@ -1677,6 +1686,8 @@ module(`Integration | realm indexing`, function (hooks) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField);
+      @field thumbnailURL = contains(StringField);
     }
 
     let { realm } = await setupIntegrationTestRealm({
@@ -1732,7 +1743,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         description: 'Dog',
         thumbnailURL: `./jackie.jpg`,
-        cardInfo: {},
+        cardInfo,
       });
       assert.deepEqual(card.doc.data.relationships, {
         'appointment.contact.pet': {
@@ -1856,7 +1867,7 @@ module(`Integration | realm indexing`, function (hooks) {
                 },
               },
             ],
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             'paymentMethods.0.payment.chain': {
@@ -1907,7 +1918,7 @@ module(`Integration | realm indexing`, function (hooks) {
               chainId: 1,
               description: `Chain 1`,
               thumbnailURL: `Ethereum Mainnet-icon.png`,
-              cardInfo: {},
+              cardInfo,
             },
             relationships: {
               'cardInfo.theme': { links: { self: null } },
@@ -1939,7 +1950,7 @@ module(`Integration | realm indexing`, function (hooks) {
               chainId: 137,
               description: `Chain 137`,
               thumbnailURL: `Polygon-icon.png`,
-              cardInfo: {},
+              cardInfo,
             },
             relationships: {
               'cardInfo.theme': { links: { self: null } },
@@ -2352,7 +2363,7 @@ module(`Integration | realm indexing`, function (hooks) {
           title: 'Hassan Pet Person',
           description: 'A person with pets',
           thumbnailURL: null,
-          cardInfo: {},
+          cardInfo,
         },
         relationships: {
           friend: {
@@ -2395,7 +2406,7 @@ module(`Integration | realm indexing`, function (hooks) {
             firstName: 'Mango',
             title: 'Mango',
             thumbnailURL: null,
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             owner: { links: { self: null } },
@@ -2422,7 +2433,7 @@ module(`Integration | realm indexing`, function (hooks) {
             firstName: 'Van Gogh',
             title: 'Van Gogh',
             thumbnailURL: null,
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             owner: { links: { self: null } },
@@ -2465,7 +2476,7 @@ module(`Integration | realm indexing`, function (hooks) {
             owner: null,
             title: 'Mango',
             thumbnailURL: null,
-            cardInfo: { theme: null },
+            cardInfo: { theme: null, ...cardInfo },
           },
           {
             id: `${testRealmURL}Pet/vanGogh`,
@@ -2474,7 +2485,7 @@ module(`Integration | realm indexing`, function (hooks) {
             owner: null,
             title: 'Van Gogh',
             thumbnailURL: null,
-            cardInfo: { theme: null },
+            cardInfo: { theme: null, ...cardInfo },
           },
         ],
         friend: null,
@@ -2531,7 +2542,7 @@ module(`Integration | realm indexing`, function (hooks) {
             title: 'Burcu Pet Person',
             description: 'A person with pets',
             thumbnailURL: null,
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             pets: { links: { self: null } },
@@ -2660,7 +2671,7 @@ module(`Integration | realm indexing`, function (hooks) {
           isCard: true,
           isComponent: false,
           isField: false,
-          cardInfo: {},
+          cardInfo,
         },
         relationships: {
           'cardInfo.theme': { links: { self: null } },
@@ -2803,7 +2814,7 @@ module(`Integration | realm indexing`, function (hooks) {
           title: 'Hassan',
           description: 'Friend of dogs',
           thumbnailURL: null,
-          cardInfo: {},
+          cardInfo,
         },
         relationships: {
           friend: {
@@ -2940,7 +2951,7 @@ module(`Integration | realm indexing`, function (hooks) {
             title: 'Hassan',
             description: 'Dog owner',
             thumbnailURL: null,
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             friend: {
@@ -2979,7 +2990,7 @@ module(`Integration | realm indexing`, function (hooks) {
               title: 'Mango',
               description: 'Dog friend',
               thumbnailURL: null,
-              cardInfo: {},
+              cardInfo,
             },
             relationships: {
               friend: {
@@ -3064,7 +3075,7 @@ module(`Integration | realm indexing`, function (hooks) {
             title: 'Mango',
             description: 'Dog friend',
             thumbnailURL: null,
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             friend: {
@@ -3103,7 +3114,7 @@ module(`Integration | realm indexing`, function (hooks) {
               title: 'Hassan',
               description: 'Dog owner',
               thumbnailURL: null,
-              cardInfo: {},
+              cardInfo,
             },
             relationships: {
               friend: {
@@ -3218,7 +3229,7 @@ module(`Integration | realm indexing`, function (hooks) {
             title: 'Hassan',
             description: 'Dog owner',
             thumbnailURL: null,
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             friend: {
@@ -3347,7 +3358,7 @@ module(`Integration | realm indexing`, function (hooks) {
             title: 'Hassan',
             description: null,
             thumbnailURL: null,
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             'friends.0': {
@@ -3385,7 +3396,7 @@ module(`Integration | realm indexing`, function (hooks) {
               title: 'Mango',
               description: null,
               thumbnailURL: null,
-              cardInfo: {},
+              cardInfo,
             },
             relationships: {
               'friends.0': {
@@ -3413,7 +3424,7 @@ module(`Integration | realm indexing`, function (hooks) {
               title: 'Van Gogh',
               description: null,
               thumbnailURL: null,
-              cardInfo: {},
+              cardInfo,
             },
             relationships: {
               'friends.0': {
@@ -3459,7 +3470,7 @@ module(`Integration | realm indexing`, function (hooks) {
               description: null,
               thumbnailURL: null,
               friends: [{ id: hassanID }],
-              cardInfo: { theme: null },
+              cardInfo: { theme: null, ...cardInfo },
             },
             {
               id: vanGoghID,
@@ -3492,7 +3503,7 @@ module(`Integration | realm indexing`, function (hooks) {
             title: 'Mango',
             description: null,
             thumbnailURL: null,
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             'friends.0': {
@@ -3525,7 +3536,7 @@ module(`Integration | realm indexing`, function (hooks) {
               title: 'Hassan',
               description: null,
               thumbnailURL: null,
-              cardInfo: {},
+              cardInfo,
             },
             relationships: {
               'friends.0': {
@@ -3557,7 +3568,7 @@ module(`Integration | realm indexing`, function (hooks) {
               title: 'Van Gogh',
               description: null,
               thumbnailURL: null,
-              cardInfo: {},
+              cardInfo,
             },
             relationships: {
               'friends.0': {
@@ -3640,7 +3651,7 @@ module(`Integration | realm indexing`, function (hooks) {
             title: 'Van Gogh',
             description: null,
             thumbnailURL: null,
-            cardInfo: {},
+            cardInfo,
           },
           relationships: {
             'friends.0': {
@@ -3673,7 +3684,7 @@ module(`Integration | realm indexing`, function (hooks) {
               title: 'Hassan',
               description: null,
               thumbnailURL: null,
-              cardInfo: {},
+              cardInfo,
             },
             relationships: {
               'friends.0': {
@@ -3705,7 +3716,7 @@ module(`Integration | realm indexing`, function (hooks) {
               title: 'Mango',
               description: null,
               thumbnailURL: null,
-              cardInfo: {},
+              cardInfo,
             },
             relationships: {
               'friends.0': {
@@ -3758,11 +3769,11 @@ module(`Integration | realm indexing`, function (hooks) {
                   description: null,
                   thumbnailURL: null,
                   friends: [{ id: hassanID }],
-                  cardInfo: { theme: null },
+                  cardInfo: { theme: null, ...cardInfo },
                 },
                 { id: vanGoghID },
               ],
-              cardInfo: { theme: null },
+              cardInfo: { theme: null, ...cardInfo },
             },
           ],
           cardInfo: { theme: null },
@@ -3802,22 +3813,27 @@ module(`Integration | realm indexing`, function (hooks) {
         .filter((ref) => !ref.includes('glimmer-scoped.css')),
       [
         'http://localhost:4202/test/person',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/align-box-left-middle.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/align-left.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/captions.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/hash.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/letter-case.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/paint-bucket.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/palette.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis.js',
         'https://cardstack.com/base/card-api',
         'https://cardstack.com/base/contains-many-component',
         'https://cardstack.com/base/default-templates/atom',
+        'https://cardstack.com/base/default-templates/card-info',
         'https://cardstack.com/base/default-templates/embedded',
         'https://cardstack.com/base/default-templates/field-edit',
         'https://cardstack.com/base/default-templates/fitted',
         'https://cardstack.com/base/default-templates/isolated-and-edit',
+        'https://cardstack.com/base/default-templates/markdown',
         'https://cardstack.com/base/default-templates/missing-template',
         'https://cardstack.com/base/field-component',
         'https://cardstack.com/base/helpers/sanitized-html',
+        'https://cardstack.com/base/helpers/set-background-image',
         'https://cardstack.com/base/links-to-editor',
         'https://cardstack.com/base/links-to-many-component',
         'https://cardstack.com/base/number',
@@ -3908,6 +3924,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/layers-subtract.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/layout-list.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/letter-case.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/paint-bucket.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/palette.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis.js',
         'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/stack.js',
@@ -3917,13 +3934,16 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/code-ref',
         'https://cardstack.com/base/contains-many-component',
         'https://cardstack.com/base/default-templates/atom',
+        'https://cardstack.com/base/default-templates/card-info',
         'https://cardstack.com/base/default-templates/embedded',
         'https://cardstack.com/base/default-templates/field-edit',
         'https://cardstack.com/base/default-templates/fitted',
         'https://cardstack.com/base/default-templates/isolated-and-edit',
+        'https://cardstack.com/base/default-templates/markdown',
         'https://cardstack.com/base/default-templates/missing-template',
         'https://cardstack.com/base/field-component',
         'https://cardstack.com/base/helpers/sanitized-html',
+        'https://cardstack.com/base/helpers/set-background-image',
         'https://cardstack.com/base/links-to-editor',
         'https://cardstack.com/base/links-to-many-component',
         'https://cardstack.com/base/markdown',

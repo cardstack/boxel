@@ -110,9 +110,6 @@ test.describe('Commands', () => {
                         posts: {
                           type: 'number',
                         },
-                        thumbnailURL: {
-                          type: 'string',
-                        },
                       },
                     },
                   },

@@ -92,7 +92,7 @@ const authorCard = `import { contains, field, CardDef, Component } from "https:/
     }
 }`;
 
-const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
+const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
   import DatetimeField from 'https://cardstack.com/base/datetime';
   import MarkdownField from 'https://cardstack.com/base/markdown';
   import { Author } from './author';
@@ -117,6 +117,7 @@ const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, C
     @field categories = linksToMany(Category);
     @field localCategories = linksToMany(LocalCategoryCard);
     @field body = contains(MarkdownField);
+    @field title = contains(StringField);
 
     static isolated = class Isolated extends Component<typeof this> {
     <template>
@@ -264,7 +265,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'Category/city-design.json': {
             data: {
-              attributes: { title: 'City Design' },
+              attributes: { cardInfo: { title: 'City Design' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}blog-post`,
@@ -275,7 +276,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'Category/future-tech.json': {
             data: {
-              attributes: { title: 'Future Tech' },
+              attributes: { cardInfo: { title: 'Future Tech' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}blog-post`,
@@ -286,7 +287,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'Category/interior-design.json': {
             data: {
-              attributes: { title: 'Interior Design' },
+              attributes: { cardInfo: { title: 'Interior Design' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}blog-post`,
@@ -297,7 +298,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'Category/landscaping.json': {
             data: {
-              attributes: { title: 'Landscaping' },
+              attributes: { cardInfo: { title: 'Landscaping' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}blog-post`,
@@ -308,7 +309,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'Category/home-gym.json': {
             data: {
-              attributes: { title: 'Home Gym' },
+              attributes: { cardInfo: { title: 'Home Gym' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}blog-post`,
@@ -319,7 +320,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           },
           'Person/pet-mango.json': {
             data: {
-              attributes: { title: 'Mango' },
+              attributes: { cardInfo: { title: 'Mango' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}person`,
@@ -954,6 +955,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
               return 'Scheduled';
             },
           });
+          @field title = contains(StringField);
 
           static isolated = class Isolated extends Component<typeof this> {
           <template>
@@ -1507,7 +1509,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           'syntax-error.gts': syntaxError,
           'Person/delilah.json': {
             data: {
-              attributes: { title: 'Delilah' },
+              attributes: { cardInfo: { title: 'Delilah' } },
               meta: {
                 adoptsFrom: {
                   module: `${testRealmURL}person`,
@@ -1761,7 +1763,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         declaration: 'Person',
       });
       await click('[data-test-edit-button]');
-
       assert
         .dom('[data-test-playground-panel] [data-test-field="title"] input')
         .hasValue('Delilah');
@@ -1774,7 +1775,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'Person/delilah.json',
         JSON.stringify({
           data: {
-            attributes: { title: 'Lila' },
+            attributes: { cardInfo: { title: 'Lila' } },
             relationships: {
               pet: {
                 links: {
@@ -1807,7 +1808,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'Person/delilah.json',
         JSON.stringify({
           data: {
-            attributes: { title: 'Lila' },
+            attributes: { cardInfo: { title: 'Lila' } },
             relationships: {
               pet: {
                 links: {
@@ -1858,7 +1859,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'Person/delilah.json',
         JSON.stringify({
           data: {
-            attributes: { title: 'Lila' },
+            attributes: { cardInfo: { title: 'Lila' } },
             meta: {
               adoptsFrom: {
                 module: `${testRealmURL}person`,

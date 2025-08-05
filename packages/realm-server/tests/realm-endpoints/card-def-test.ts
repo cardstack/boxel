@@ -3,11 +3,7 @@ import { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import { Server } from 'http';
 import qs from 'qs';
-import {
-  baseRealm,
-  type Definition,
-  type Realm,
-} from '@cardstack/runtime-common';
+import { baseRealm, type Realm } from '@cardstack/runtime-common';
 import {
   setupCardLogs,
   setupBaseRealmServer,
@@ -17,12 +13,12 @@ import {
   matrixURL,
   testRealmHref,
   createJWT,
-  cardInfoDefinition,
+  cardDefinition,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
-  module('Realm-specific Endpoints | GET _definition', function (hooks) {
+  module('Realm-specific Endpoints | GET _card-def', function (hooks) {
     let testRealm: Realm;
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
@@ -58,19 +54,15 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         onRealmSetup,
       });
 
-      test('read permission GET /_definition', async function (assert) {
+      test('read permission GET /_card-def', async function (assert) {
         let response = await request
           .get(
-            `/_definition?${qs.stringify({ codeRef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
+            `/_card-def?${qs.stringify({ codeRef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
           )
           .set('Accept', 'application/vnd.api+json');
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         let json = response.body;
-        assert.deepEqual(
-          json,
-          expectedDefinition,
-          'definition response is correct',
-        );
+        assert.deepEqual(json, expectedCardDef, 'card-def response is correct');
       });
     });
 
@@ -82,10 +74,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         onRealmSetup,
       });
 
-      test('non read permission GET /_definition', async function (assert) {
+      test('non read permission GET /_card-def', async function (assert) {
         let response = await request
           .get(
-            `/_definition?${qs.stringify({ codeRef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
+            `/_card-def?${qs.stringify({ codeRef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
           )
           .set('Accept', 'application/vnd.api+json')
           .set('Authorization', `Bearer ${createJWT(testRealm, 'not-mary')}`);
@@ -93,10 +85,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         assert.strictEqual(response.status, 403, 'HTTP 403 status');
       });
 
-      test('read permission GET /_definition', async function (assert) {
+      test('read permission GET /_card-def', async function (assert) {
         let response = await request
           .get(
-            `/_definition?${qs.stringify({ codeRef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
+            `/_card-def?${qs.stringify({ codeRef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
           )
           .set('Accept', 'application/vnd.api+json')
           .set(
@@ -106,22 +98,17 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         let json = response.body;
-        assert.deepEqual(
-          json,
-          expectedDefinition,
-          'definition response is correct',
-        );
+        assert.deepEqual(json, expectedCardDef, 'card-def response is correct');
       });
     });
   });
 });
 
-const expectedDefinition = {
+const expectedCardDef = {
   data: {
-    type: 'definition',
+    type: 'card-def',
     id: `${testRealmHref}person/Person`,
     attributes: {
-      type: 'card-def',
       displayName: 'Person',
       codeRef: {
         module: `${testRealmHref}person`,
@@ -137,8 +124,8 @@ const expectedDefinition = {
           },
           isPrimitive: true,
         },
-        ...cardInfoDefinition,
+        ...cardDefinition,
       },
-    } as Definition,
+    },
   },
 };

@@ -2441,7 +2441,7 @@ export class CardDef extends BaseDef {
     computeVia: function (this: CardDef) {
       return this.cardInfo.title?.trim()?.length
         ? this.cardInfo.title
-        : this.constructor.displayName;
+        : `Untitled ${this.constructor.displayName}`;
     },
   });
   @field description = contains(StringField, {
@@ -2522,6 +2522,7 @@ export class CardDef extends BaseDef {
 export class Theme extends CardDef {
   static displayName = 'Theme';
   static icon = ThemeIcon;
+  @field title = contains(StringField);
   @field cssVariables = contains(CSSField);
 }
 

@@ -48,6 +48,7 @@ module('Integration | card-prerender', function (hooks) {
 
     class Pet extends CardDef {
       static displayName = 'Pet';
+      @field title = contains(StringField);
       @field firstName = contains(StringField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
@@ -99,6 +100,7 @@ module('Integration | card-prerender', function (hooks) {
           export class Person extends CardDef {
             static displayName = 'Person';
             @field firstName = contains(StringField);
+            @field title = contains(StringField);
             static isolated = class Isolated extends Component<typeof this> {
               <template>
                 <h1><@fields.firstName/></h1>

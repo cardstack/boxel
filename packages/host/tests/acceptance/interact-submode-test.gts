@@ -1134,7 +1134,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           );
         }
       });
-      await click('[data-test-add-new]');
+      await click('[data-test-add-new="friends"]');
       await click(
         `[data-test-card-catalog-create-new-button="${testRealmURL}"]`,
       );
@@ -1228,7 +1228,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           );
         }
       });
-      await click('[data-test-add-new]');
+      await click('[data-test-add-new="friends"]');
       assert
         .dom(`[data-test-realm="Test Workspace C"] header`)
         .containsText('Test Workspace C No results');

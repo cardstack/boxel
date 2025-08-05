@@ -1,6 +1,7 @@
 import { type RealmInfo } from '../index';
 export const testRealmURL = `http://test-realm/test/`;
 export const testHostModeRealmURL = 'http://test-realm/user/test/';
+export const testModuleRealm = 'http://localhost:4202/test/';
 
 export function testRealmURLToUsername(realmURLString: string) {
   let realmURL = new URL(realmURLString);
