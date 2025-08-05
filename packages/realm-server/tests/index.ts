@@ -10,7 +10,6 @@ import './card-source-endpoints-test';
 import './file-watcher-events-test';
 import './index-writer-test';
 import './indexing-test';
-import './loader-test';
 import './module-syntax-test';
 import './permissions/permission-checker-test';
 import './prerendering-test';

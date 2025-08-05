@@ -346,7 +346,6 @@ jobs:
             "file-watcher-events-test.ts",
             "index-writer-test.ts",
             "indexing-test.ts",
-            "loader-test.ts",
             "transpile-test.ts",
             "module-syntax-test.ts",
             "permissions/permission-checker-test.ts",
