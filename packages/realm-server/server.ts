@@ -71,8 +71,7 @@ export class RealmServer {
     | (() => Promise<string | undefined>)
     | undefined;
   private enableFileWatcher: boolean;
-  private hostModeUserSubdomainRoot: string | undefined;
-  private hostModeCustomSubdomainRoot: string | undefined;
+  private hostModeDomainRoot: string | undefined;
 
   constructor({
     serverURL,
@@ -90,8 +89,7 @@ export class RealmServer {
     matrixRegistrationSecret,
     getRegistrationSecret,
     enableFileWatcher,
-    hostModeUserSubdomainRoot,
-    hostModeCustomSubdomainRoot,
+    hostModeDomainRoot,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -108,8 +106,7 @@ export class RealmServer {
     matrixRegistrationSecret?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
     enableFileWatcher?: boolean;
-    hostModeUserSubdomainRoot?: string;
-    hostModeCustomSubdomainRoot?: string;
+    hostModeDomainRoot?: string;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -133,8 +130,7 @@ export class RealmServer {
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.getRegistrationSecret = getRegistrationSecret;
     this.enableFileWatcher = enableFileWatcher ?? false;
-    this.hostModeUserSubdomainRoot = hostModeUserSubdomainRoot;
-    this.hostModeCustomSubdomainRoot = hostModeCustomSubdomainRoot;
+    this.hostModeDomainRoot = hostModeDomainRoot;
     this.realms = [...realms];
   }
 
@@ -257,8 +253,7 @@ export class RealmServer {
         config = merge({}, config, {
           hostsOwnAssets: false,
           assetsURL: this.assetsURL.href,
-          hostModeUserSubdomainRoot: this.hostModeUserSubdomainRoot,
-          hostModeCustomSubdomainRoot: this.hostModeCustomSubdomainRoot,
+          hostModeDomainRoot: this.hostModeDomainRoot,
           realmServerRoot: this.serverURL.href,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
