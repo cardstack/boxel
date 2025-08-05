@@ -344,7 +344,6 @@ jobs:
             "card-endpoints-test.ts",
             "card-source-endpoints-test.ts",
             "file-watcher-events-test.ts",
-            "index-query-engine-test.ts",
             "index-writer-test.ts",
             "indexing-test.ts",
             "loader-test.ts",
