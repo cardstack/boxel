@@ -403,14 +403,10 @@ export class RealmServer {
   private async loadRealms() {
     let realms: Realm[] = [];
 
-    console.log('realmsRootPath:', this.realmsRootPath);
-
     // Load regular realms (existing behavior)
     for (let maybeUsername of readdirSync(this.realmsRootPath, {
       withFileTypes: true,
     })) {
-      console.log(`Checking directory: ${maybeUsername.name}`);
-
       if (!maybeUsername.isDirectory()) {
         continue;
       }
@@ -547,23 +543,6 @@ export class RealmServer {
 
           let adapter = new NodeAdapter(realmPath, this.enableFileWatcher);
           let username = publishedRealmRow.owner_username;
-
-          console.log('this is a published realm');
-          console.log('realmpath', realmPath);
-          console.log(
-            JSON.stringify(
-              {
-                url: publishedRealmUrl,
-                secretSeed: this.realmSecretSeed,
-                matrix: {
-                  url: this.matrixClient.matrixURL,
-                  username,
-                },
-              },
-              null,
-              2,
-            ),
-          );
 
           let realm = new Realm({
             url: publishedRealmUrl,
