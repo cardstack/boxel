@@ -182,20 +182,25 @@ module(basename(__filename), function () {
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
           let json = response.body;
           assert.ok(json.data.meta.lastModified, 'lastModified exists');
+
           delete json.data.meta.lastModified;
           delete json.data.meta.resourceCreatedAt;
+
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
             'realm url header is correct',
           );
+
           assert.strictEqual(
             response.get('X-boxel-realm-public-readable'),
             'true',
             'realm is public readable',
           );
+
           assert.deepEqual(json, {
             data: {
               id: `${testRealmHref}person-1`,
@@ -211,7 +216,6 @@ module(basename(__filename), function () {
                   module: `./person`,
                   name: 'Person',
                 },
-                // FIXME see elsewhere… global fix?
                 realmInfo: {
                   ...testRealmInfo,
                   realmUserId: '@node-test_realm:localhost',
