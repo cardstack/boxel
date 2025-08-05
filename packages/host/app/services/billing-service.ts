@@ -5,7 +5,10 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import { formatNumber } from '@cardstack/boxel-ui/helpers';
 
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  EXTRA_TOKENS_PRICING,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 
 import MatrixService from './matrix-service';
 import NetworkService from './network';
@@ -39,18 +42,12 @@ export default class BillingService extends Service {
     this.reset.register(this);
   }
 
-  extraTokensPricing: Record<number, number> = {
-    2500: 5,
-    20000: 30,
-    80000: 100,
-  }; // in USD
-
   resetState() {
     this._subscriptionData = null;
   }
 
   get extraCreditsPricingFormatted() {
-    return Object.entries(this.extraTokensPricing).map(([tokens, price]) => ({
+    return Object.entries(EXTRA_TOKENS_PRICING).map(([tokens, price]) => ({
       amount: parseInt(tokens),
       amountFormatted: `${formatNumber(Number(tokens), {
         size: 'short',

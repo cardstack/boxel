@@ -1,5 +1,6 @@
 import Koa from 'koa';
 import {
+  EXTRA_TOKENS_PRICING,
   SupportedMimeType,
   asExpressions,
   param,
@@ -183,17 +184,11 @@ export default function handleCreateStripeSessionRequest({
         return;
       }
 
-      let tokensToPriceMap: Record<number, number> = {
-        2500: 5,
-        20000: 30,
-        80000: 100,
-      };
-
-      let priceInUsd = tokensToPriceMap[parseInt(aiTokenAmount)];
+      let priceInUsd = EXTRA_TOKENS_PRICING[parseInt(aiTokenAmount)];
       if (!priceInUsd) {
         await sendResponseForBadRequest(
           ctxt,
-          `invalid aiTokenAmount. Valid values are: ${Object.keys(tokensToPriceMap).join(', ')}`,
+          `invalid aiTokenAmount. Valid values are: ${Object.keys(EXTRA_TOKENS_PRICING).join(', ')}`,
         );
         return;
       }
