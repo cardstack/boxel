@@ -7,6 +7,9 @@ import * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
+import { skillCardURL } from '../lib/utils';
+
+import UseAiAssistantCommand from './ai-assistant';
 import ListingInstallCommand from './listing-install';
 import SwitchSubmodeCommand from './switch-submode';
 import UpdateCodePathWithSelectionCommand from './update-code-path-with-selection';
@@ -93,7 +96,6 @@ export default class RemixCommand extends HostBaseCommand<
           fieldName: undefined,
         },
       );
-
       await new SwitchSubmodeCommand(this.commandContext).execute({
         submode: 'code',
         codePath: selectedCodeRef.module,
@@ -108,5 +110,22 @@ export default class RemixCommand extends HostBaseCommand<
         });
       }
     }
+
+    let prompt =
+      'Remix done! Please suggest two example prompts on how to edit this card.';
+
+    const skillCardIds = [
+      skillCardURL('boxel-environment'),
+      skillCardURL('boxel-development'),
+      skillCardURL('source-code-editing'),
+      skillCardURL('catalog-listing'),
+    ];
+    await new UseAiAssistantCommand(this.commandContext).execute({
+      roomId: 'new',
+      prompt,
+      openRoom: true,
+      attachedCards: [listing],
+      skillCardIds,
+    });
   }
 }

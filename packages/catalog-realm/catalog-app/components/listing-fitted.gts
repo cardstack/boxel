@@ -23,8 +23,8 @@ import {
   Menu as BoxelMenu,
 } from '@cardstack/boxel-ui/components';
 
-import ListingInitCommand from '@cardstack/boxel-host/commands/listing-action-init';
 import ListingBuildCommand from '@cardstack/boxel-host/commands/listing-action-build';
+import ListingRemixCommand from '@cardstack/boxel-host/commands/listing-remix';
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 
 interface Signature {
@@ -504,10 +504,10 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     if (!commandContext) {
       throw new Error('Missing commandContext');
     }
-    await new ListingInitCommand(commandContext).execute({
+    let listing = this.args.model as Listing;
+    await new ListingRemixCommand(commandContext).execute({
       realm: realmUrl,
-      actionType: 'remix',
-      listing: this.args.model as Listing,
+      listing,
     });
   });
 
