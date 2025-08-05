@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "storeName": "Alpine Trek Co.",
+      "storeDescription": "# Your Adventure Starts Here\n\nPremium outdoor gear for hikers, mountaineers, and adventure seekers. Family-owned since 2018, we specialize in high-performance equipment that won't let you down when the trail gets tough.\n\n## What We Offer\n- Technical climbing & mountaineering gear\n- Ultralight backpacking equipment\n- All-season outdoor apparel\n- Navigation & safety accessories\n- Expert gear consultation\n\n*Trusted by over 8,000 adventurers worldwide*",
+      "websiteUrl": "https://alpinetrekco.com",
+      "brandColor": "#2563eb",
+      "logoUrl": "https://images.unsplash.com/photo-1551632811-561732d1e306?w=200&h=200&fit=crop&crop=center",
+      "contactEmail": "hello@alpinetrekco.com",
+      "storePhysicalAddress": "2847 Mountain View Drive\nBoulder, CO 80301\nUnited States\n\nStore Hours:\nMon-Sat: 9:00 AM - 7:00 PM\nSun: 10:00 AM - 6:00 PM\n\nPhone: (303) 555-0198\nFax: (303) 555-0199",
+      "cardInfo": {},
+      "description": "Premium outdoor gear store specializing in climbing, mountaineering, and ultralight backpacking equipment. Family-owned since 2018.",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../online-store",
+        "name": "OnlineStore"
+      }
+    }
+  }
+}

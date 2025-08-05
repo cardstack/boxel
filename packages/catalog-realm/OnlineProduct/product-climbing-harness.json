@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "productName": "Apex Safety Climbing Harness",
+      "price": 74.99,
+      "salePrice": 59.99,
+      "sku": "ASC-HAR-BLK-M",
+      "category": "Climbing Gear",
+      "shortDescription": "Lightweight sport climbing harness with 4 gear loops and belay loop rated to 23kN. Adjustable leg loops with buckles for perfect fit. Comfortable for multi-pitch routes with breathable mesh panels. UIAA and CE certified for maximum safety standards in technical climbing environments.",
+      "inventory": 28,
+      "inStock": true,
+      "imageUrl": "https://images.unsplash.com/photo-1522163182402-834f871fd851?w=800&h=400&fit=crop&crop=center",
+      "title": "Apex Safety Climbing Harness",
+      "description": "Professional climbing harness combining safety, comfort, and functionality for sport and trad climbing.",
+      "thumbnailURL": "https://images.unsplash.com/photo-1522163182402-834f871fd851?w=200&h=200&fit=crop&crop=center"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://localhost:4201/catalog/online-product",
+        "name": "OnlineProduct"
+      }
+    }
+  }
+}

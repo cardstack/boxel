@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "productName": "Alpine Summit 2P Ultralight Tent",
+      "price": 449.99,
+      "salePrice": 359.99,
+      "sku": "ALT-2P-GRN-2024",
+      "category": "Shelter & Camping",
+      "shortDescription": "Ultra-lightweight 2-person backpacking tent weighing just 2.3 lbs. Features double-wall construction with spacious vestibule and excellent weather protection. Perfect for serious backpackers seeking minimal weight without compromising durability. Includes color-coded clips for easy setup even in challenging conditions.",
+      "inventory": 12,
+      "inStock": true,
+      "imageUrl": "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=800&h=400&fit=crop&crop=center",
+      "title": "Alpine Summit 2P Ultralight Tent",
+      "description": "Professional-grade ultralight shelter for serious mountaineering and backpacking adventures.",
+      "thumbnailURL": "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=200&h=200&fit=crop&crop=center"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://localhost:4201/catalog/online-product",
+        "name": "OnlineProduct"
+      }
+    }
+  }
+}

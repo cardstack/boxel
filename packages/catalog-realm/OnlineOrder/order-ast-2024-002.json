@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "orderNumber": "AST-2024-002",
+      "customerEmail": "marcus.rodriguez@techstartup.io",
+      "orderStatus": "shipped",
+      "orderTotal": 87.45,
+      "orderDate": "2025-01-02T14:22:00.000Z",
+      "shippingAddress": "Marcus Rodriguez\n4521 South Lamar Blvd\nAustin, TX 78745\nUnited States",
+      "paymentMethod": "PayPal",
+      "trackingNumber": "1Z999AA9876543210",
+      "title": "AST-2024-002",
+      "description": "Shipped order for premium yoga mat - expedited delivery to Austin."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../online-order",
+        "name": "OnlineOrder"
+      }
+    }
+  }
+}
