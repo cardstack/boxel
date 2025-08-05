@@ -793,8 +793,8 @@ export function setupPermissionedRealm(
             VALUES
             (
               '${publishedRealmId}',
-              'FIXME does it matter',
-              'FIXME does this matter',
+              '@user:localhost',
+              'http://example.localhost/source',
               '${testRealmHref}'
             )`,
         );
