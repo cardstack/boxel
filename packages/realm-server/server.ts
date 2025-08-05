@@ -466,7 +466,9 @@ export class RealmServer {
     try {
       this.log.info('Loading published realms…');
 
-      let publishedRealms = await getPublishedRealms(this.dbAdapter);
+      let publishedRealms = await getPublishedRealmsFromDatabase(
+        this.dbAdapter,
+      );
 
       this.log.info(
         `Found ${publishedRealms.length} published realms in database`,
@@ -671,7 +673,7 @@ function errorWithStatus(
   return error as Error & { status: number };
 }
 
-async function getPublishedRealms(dbAdapter: DBAdapter) {
+async function getPublishedRealmsFromDatabase(dbAdapter: DBAdapter) {
   return (
     await query(dbAdapter, [
       `SELECT * FROM published_realms ORDER BY published_realm_url`,
