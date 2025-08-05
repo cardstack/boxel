@@ -1,0 +1,90 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "gamerTag": "VoidWalker_Zlata",
+      "email": "zlata.petrov@protonmail.com",
+      "bio": "Horror game connoisseur and puzzle solver. I thrive in atmospheric games that challenge both mind and nerves. Currently speedrunning classic survival horror titles.",
+      "joinDate": "2021-10-31",
+      "isOnline": false,
+      "profileImageUrl": "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=face",
+      "location": "Prague, Czech Republic",
+      "preferredGenres": [
+        "Horror",
+        "Puzzle",
+        "Survival",
+        "Atmospheric"
+      ],
+      "gamingGroups": [
+        "Horror Game Society",
+        "Speedrun Central EU",
+        "Puzzle Masters"
+      ],
+      "streamingPlatforms": [
+        "Twitch"
+      ],
+      "contentCreatorStatus": true,
+      "streamSchedule": "Wednesday/Friday 8PM-12AM CET",
+      "statistics": {
+        "totalGames": 156,
+        "totalHours": 2134,
+        "completionRate": 87,
+        "averageRating": 8.9,
+        "achievementsUnlocked": 1823,
+        "favoriteGenre": "Horror",
+        "currentStreak": 18
+      },
+      "cardInfo": {},
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../gaming-hub",
+        "name": "GamingHub"
+      }
+    },
+    "relationships": {
+      "connectedPlatforms.0": {
+        "links": {
+          "self": "../GamingPlatform/steam-platform"
+        }
+      },
+      "gameProgress.0": {
+        "links": {
+          "self": "../PlayerProgress/alex-cyberpunk"
+        }
+      },
+      "tournaments.0": {
+        "links": {
+          "self": "../Tournament/street-fighter-evo"
+        }
+      },
+      "friends.0": {
+        "links": {
+          "self": "./ravi-cosmicrift"
+        }
+      },
+      "friends.1": {
+        "links": {
+          "self": "./maya-phoenixrise"
+        }
+      },
+      "favoriteGames.0": {
+        "links": {
+          "self": "../Game/hollow-knight"
+        }
+      },
+      "wishlistGames.0": {
+        "links": {
+          "self": "../Game/valorant"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

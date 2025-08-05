@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Steam",
+      "accountId": "shadowblade_alex",
+      "isConnected": true,
+      "lastSynced": "2025-01-05T18:30:00Z",
+      "gamesCount": 127,
+      "logoImageUrl": "https://images.unsplash.com/photo-1606144042614-b2417e99c4e3?w=200&h=200&fit=crop",
+      "connectionToken": ""
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../gaming-platform",
+        "name": "GamingPlatform"
+      }
+    }
+  }
+}

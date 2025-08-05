@@ -1,0 +1,101 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Gaming Hub",
+      "summary": "A comprehensive gaming profile management system for tracking games, statistics, friends, tournaments, and streaming activities across multiple platforms.",
+      "images": [],
+      "cardInfo": {},
+      "description": "Gaming Hub is a full-featured gaming profile management application that allows gamers to track their gaming library, monitor statistics, connect with friends, participate in tournaments, and manage streaming activities. Features include multi-platform integration (Steam, Xbox, PlayStation), detailed gaming statistics, social networking capabilities, tournament tracking, wishlist management, and content creator tools for streamers.",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "specs.0": {
+        "links": {
+          "self": "../Spec/fde748e7-bdd7-46d3-9cec-79b975ffc990"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/e748e7bd-d7e6-439c-ac79-b975ffc99072"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/48e7bdd7-e6d3-4cec-b9b9-75ffc990721e"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/d7e6d39c-ec79-4975-bfc9-90721e59c53f"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/e6d39cec-79b9-45ff-8990-721e59c53fb5"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/a3fde748-e7bd-47e6-939c-ec79b975ffc9"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/d39cec79-b975-4fc9-9072-1e59c53fb56a"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/e7bdd7e6-d39c-4c79-b975-ffc990721e59"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/bdd7e6d3-9cec-49b9-b5ff-c990721e59c5"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/video-games-interactive"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../gaming-hub/GamingHub/zlata-voidwalker"
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "AppListing"
+      }
+    }
+  }
+}

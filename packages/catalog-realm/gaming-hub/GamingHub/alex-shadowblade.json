@@ -1,0 +1,51 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "gamerTag": "ShadowBlade_Alex",
+      "email": "alex.rivera@protonmail.com",
+      "bio": "Competitive FPS player and content creator. 5 years in esports with multiple tournament wins. Streaming variety games on weekends. Always looking for new tactical shooters to master.",
+      "joinDate": "2019-03-15",
+      "isOnline": true,
+      "profileImageUrl": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&h=400&fit=crop&crop=face",
+      "location": "Austin, Texas",
+      "preferredGenres": ["FPS", "Battle Royale", "Tactical Shooter", "Racing"],
+      "gamingGroups": ["Texas Esports Coalition", "Midnight Gaming Crew", "FPS Masters"],
+      "streamingPlatforms": ["Twitch", "YouTube Gaming"],
+      "contentCreatorStatus": true,
+      "streamSchedule": "Friday-Sunday 8PM-12AM CST",
+      "statistics": {
+        "totalGames": 127,
+        "totalHours": 2847,
+        "completionRate": 78,
+        "averageRating": 8.2,
+        "achievementsUnlocked": 1456,
+        "favoriteGenre": "FPS",
+        "currentStreak": 12
+      }
+    },
+    "relationships": {
+      "connectedPlatforms.0": {
+        "links": { "self": "../GamingPlatform/steam-platform" }
+      },
+      "gameProgress.0": {
+        "links": { "self": "../PlayerProgress/alex-cyberpunk" }
+      },
+      "tournaments.0": {
+        "links": { "self": "../Tournament/valorant-championship" }
+      },
+      "favoriteGames.0": {
+        "links": { "self": "../Game/valorant" }
+      },
+      "favoriteGames.1": {
+        "links": { "self": "../Game/cyberpunk-2077" }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../gaming-hub",
+        "name": "GamingHub"
+      }
+    }
+  }
+}
