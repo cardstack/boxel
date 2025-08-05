@@ -31,7 +31,7 @@ import {
   type QueuePublisher,
   type QueueRunner,
   type IndexRunner,
-  type CardDefMeta,
+  type FieldsMeta,
   User,
   Subscription,
   Plan,
@@ -832,7 +832,7 @@ export function createJWT(
   );
 }
 
-export const cardInfoFieldMeta: CardDefMeta['fields'] = {
+export const cardInfoFieldMeta: FieldsMeta['fields'] = {
   cardInfo: {
     type: 'contains',
     isComputed: false,
