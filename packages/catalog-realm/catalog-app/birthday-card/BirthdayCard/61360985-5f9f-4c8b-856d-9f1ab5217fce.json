@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "recipientName": "Sarah Johnson",
+      "birthdayDate": "2024-08-15",
+      "age": 28,
+      "wishes": [
+        {
+          "fromName": "Alex Chen",
+          "message": "Happy birthday, Sarah! 🎉 Hope your special day is as wonderful as you are. Can't wait to celebrate with you tonight!"
+        },
+        {
+          "fromName": "Mom & Dad",
+          "message": "Our dearest daughter, watching you grow into the amazing person you are today fills our hearts with pride. Have the most magical birthday! We love you so much! 💕"
+        },
+        {
+          "fromName": "Jessica",
+          "message": "Girl, you're officially in your late twenties now! 😱 But don't worry, you're still the coolest person I know. Let's party like it's your birthday... because it is! 🍰"
+        },
+        {
+          "fromName": "Mike Rodriguez",
+          "message": "Happy birthday to my favorite coworker! Thanks for always brightening up the office with your smile. Hope you get to relax and enjoy your special day! 🎈"
+        }
+      ],
+      "surpriseMessage": "🌟 Sarah, you bring so much joy and laughter to everyone around you! May this new year of life be filled with amazing adventures, wonderful memories, and all the happiness you deserve! Here's to making your dreams come true! 🌟",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../birthday-card",
+        "name": "BirthdayCard"
+      }
+    }
+  }
+}

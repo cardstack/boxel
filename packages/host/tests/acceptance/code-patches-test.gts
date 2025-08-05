@@ -966,13 +966,20 @@ ${REPLACE_MARKER}
     assert.dom('[data-code-patch-dropdown-button="file2.gts"]').exists();
     assert.dom('[data-code-patch-dropdown-button="hi-1.txt"]').exists();
 
-    await click('[data-code-patch-dropdown-button="file1.gts"]');
     assert
       .dom('[data-test-boxel-menu-item-text="Restore Content"]')
       .doesNotExist(
         'Restore Content menu item should not be shown for new files',
       );
+
+    // Switch to interact mode so that we can test that "Open in Code Mode" works
+    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
+    await click('[data-test-workspace="Test Workspace B"]');
+    await waitFor('[data-test-submode-switcher="interact"]');
+    await click('[data-code-patch-dropdown-button="file1.gts"]');
     await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
+    await waitFor('[data-test-submode-switcher="code"]');
 
     assert.strictEqual(
       getMonacoContent(),

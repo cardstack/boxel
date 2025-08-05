@@ -101,6 +101,10 @@ module('Integration | realm', function (hooks) {
           title: null,
           description: null,
           thumbnailURL: null,
+          cardInfo: {},
+        },
+        relationships: {
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -134,6 +138,10 @@ module('Integration | realm', function (hooks) {
             attributes: {
               firstName: 'Hassan',
               lastName: 'Abdel-Rahman',
+              cardInfo: {},
+            },
+            relationships: {
+              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: {
@@ -150,6 +158,7 @@ module('Integration | realm', function (hooks) {
               description: null,
               thumbnailURL: null,
               firstName: 'Mango',
+              cardInfo: {},
             },
             relationships: {
               owner: {
@@ -157,6 +166,7 @@ module('Integration | realm', function (hooks) {
                   self: `${testRealmURL}dir/owner`,
                 },
               },
+              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: {
@@ -188,6 +198,7 @@ module('Integration | realm', function (hooks) {
           title: 'Mango',
           description: null,
           thumbnailURL: null,
+          cardInfo: {},
         },
         relationships: {
           owner: {
@@ -199,6 +210,7 @@ module('Integration | realm', function (hooks) {
               id: `${testRealmURL}dir/owner`,
             },
           },
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -231,6 +243,10 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
+            cardInfo: {},
+          },
+          relationships: {
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -306,6 +322,7 @@ module('Integration | realm', function (hooks) {
           title: 'Mango',
           description: null,
           thumbnailURL: null,
+          cardInfo: {},
         },
         relationships: {
           owner: {
@@ -317,6 +334,7 @@ module('Integration | realm', function (hooks) {
               id: `http://localhost:4202/test/hassan`,
             },
           },
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -349,7 +367,9 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
+            cardInfo: {},
           },
+          relationships: { 'cardInfo.theme': { links: { self: null } } },
           meta: {
             adoptsFrom: {
               module: './person',
@@ -664,6 +684,7 @@ module('Integration | realm', function (hooks) {
           title: 'Mango',
           description: null,
           thumbnailURL: null,
+          cardInfo: {},
         },
         relationships: {
           owner: {
@@ -675,6 +696,7 @@ module('Integration | realm', function (hooks) {
               id: `${testRealmURL}dir/owner`,
             },
           },
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -707,6 +729,10 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
+            cardInfo: {},
+          },
+          relationships: {
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -756,6 +782,74 @@ module('Integration | realm', function (hooks) {
         },
       },
       'file contents are correct',
+    );
+  });
+
+  test('realm returns 500 error for POST requests that set the value of a polymorphic field to an incompatible type', async function (assert) {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+    }
+    class Car extends FieldDef {
+      @field make = contains(StringField);
+      @field model = contains(StringField);
+      @field year = contains(StringField);
+    }
+    class Driver extends CardDef {
+      @field card = contains(Person);
+    }
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'driver.gts': { Driver },
+        'person.gts': { Person },
+        'car.gts': { Car },
+      },
+    });
+    let response = await handle(
+      realm,
+      new Request(testRealmURL, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              attributes: {
+                card: {
+                  firstName: null,
+                  make: 'Mercedes Benz',
+                  model: 'C300',
+                  year: '2024',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}driver`,
+                  name: 'Driver',
+                },
+                fields: {
+                  card: {
+                    adoptsFrom: {
+                      module: `${testRealmURL}car`,
+                      name: 'Car',
+                    },
+                  },
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      }),
+    );
+    assert.strictEqual(response.status, 500, '500 server error');
+    let json = await response.json();
+    assert.strictEqual(
+      json.errors[0].additionalErrors[0].errorDetail.message,
+      "field validation error: tried set instance of Car as field 'card' but it is not an instance of Person",
     );
   });
 
@@ -847,6 +941,10 @@ module('Integration | realm', function (hooks) {
               thumbnailURL: null,
               firstName: 'Van Gogh',
               lastName: 'Abdel-Rahman',
+              cardInfo: {},
+            },
+            relationships: {
+              'cardInfo.theme': { links: { self: null } },
             },
             meta: {
               adoptsFrom: {
@@ -985,6 +1083,10 @@ module('Integration | realm', function (hooks) {
           posts: [],
           description: 'Gore Mountain',
           thumbnailURL: null,
+          cardInfo: {},
+        },
+        relationships: {
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -1024,6 +1126,10 @@ module('Integration | realm', function (hooks) {
             ],
             sponsors: ['Burton'],
             posts: [],
+            cardInfo: {},
+          },
+          relationships: {
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -1140,6 +1246,7 @@ module('Integration | realm', function (hooks) {
           title: 'Jackie Pet Person',
           description: 'A person with pets',
           thumbnailURL: null,
+          cardInfo: {},
         },
         relationships: {
           'pets.0': {
@@ -1156,6 +1263,7 @@ module('Integration | realm', function (hooks) {
               type: 'card',
             },
           },
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -1186,6 +1294,10 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
+            cardInfo: {},
+          },
+          relationships: {
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -1211,8 +1323,12 @@ module('Integration | realm', function (hooks) {
             title: 'Van Gogh',
             description: null,
             thumbnailURL: null,
+            cardInfo: {},
           },
-          relationships: { owner: { links: { self: null } } },
+          relationships: {
+            owner: { links: { self: null } },
+            'cardInfo.theme': { links: { self: null } },
+          },
           meta: {
             adoptsFrom: {
               module: `http://localhost:4202/test/pet`,
@@ -1239,10 +1355,11 @@ module('Integration | realm', function (hooks) {
       {
         data: {
           type: 'card',
-          attributes: { firstName: 'Jackie' },
+          attributes: { firstName: 'Jackie', cardInfo: {} },
           relationships: {
             'pets.0': { links: { self: `./dir/van-gogh` } },
             friend: { links: { self: `./dir/friend` } },
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -1359,6 +1476,7 @@ module('Integration | realm', function (hooks) {
         title: 'Jackie Pet Person',
         description: 'A person with pets',
         thumbnailURL: null,
+        cardInfo: {},
       },
       relationships: {
         'pets.0': {
@@ -1382,6 +1500,7 @@ module('Integration | realm', function (hooks) {
             type: 'card',
           },
         },
+        'cardInfo.theme': { links: { self: null } },
       },
       meta: {
         adoptsFrom: {
@@ -1486,6 +1605,7 @@ module('Integration | realm', function (hooks) {
         title: 'Jackie Pet Person',
         description: 'A person with pets',
         thumbnailURL: null,
+        cardInfo: {},
       },
       relationships: {
         'pets.0': {
@@ -1497,6 +1617,7 @@ module('Integration | realm', function (hooks) {
           data: { id: `${testRealmURL}dir/van-gogh`, type: 'card' },
         },
         friend: { links: { self: null } },
+        'cardInfo.theme': { links: { self: null } },
       },
       meta: {
         adoptsFrom: {
@@ -1599,10 +1720,12 @@ module('Integration | realm', function (hooks) {
         title: 'Jackie Pet Person',
         description: 'A person with pets',
         thumbnailURL: null,
+        cardInfo: {},
       },
       relationships: {
         pets: { links: { self: null } },
         friend: { links: { self: null } },
+        'cardInfo.theme': { links: { self: null } },
       },
       meta: {
         adoptsFrom: {
@@ -1721,6 +1844,7 @@ module('Integration | realm', function (hooks) {
         title: 'Jackie Pet Person',
         description: 'A person with pets',
         thumbnailURL: null,
+        cardInfo: {},
       },
       relationships: {
         'pets.0': {
@@ -1734,6 +1858,7 @@ module('Integration | realm', function (hooks) {
             type: 'card',
           },
         },
+        'cardInfo.theme': { links: { self: null } },
       },
       meta: {
         adoptsFrom: {
@@ -1867,6 +1992,7 @@ module('Integration | realm', function (hooks) {
         title: 'Jackie Pet Person',
         description: 'A person with pets',
         thumbnailURL: null,
+        cardInfo: {},
       },
       relationships: {
         pets: {
@@ -1879,6 +2005,7 @@ module('Integration | realm', function (hooks) {
             type: 'card',
           },
         },
+        'cardInfo.theme': { links: { self: null } },
       },
       meta: {
         adoptsFrom: {
@@ -1997,6 +2124,7 @@ module('Integration | realm', function (hooks) {
           title: 'Mango',
           description: null,
           thumbnailURL: null,
+          cardInfo: {},
         },
         relationships: {
           owner: {
@@ -2008,6 +2136,7 @@ module('Integration | realm', function (hooks) {
               id: `${testRealmURL}dir/mariko`,
             },
           },
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -2040,6 +2169,10 @@ module('Integration | realm', function (hooks) {
             email: null,
             posts: null,
             thumbnailURL: null,
+            cardInfo: {},
+          },
+          relationships: {
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -2074,6 +2207,7 @@ module('Integration | realm', function (hooks) {
             description: null,
             thumbnailURL: null,
             firstName: 'Mango',
+            cardInfo: {},
           },
           relationships: {
             owner: {
@@ -2081,6 +2215,7 @@ module('Integration | realm', function (hooks) {
                 self: `./mariko`,
               },
             },
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -2194,6 +2329,10 @@ module('Integration | realm', function (hooks) {
           description: null,
           thumbnailURL: null,
           title: null,
+          cardInfo: {},
+        },
+        relationships: {
+          'cardInfo.theme': { links: { self: null } },
         },
         meta: {
           adoptsFrom: {
@@ -2240,6 +2379,10 @@ module('Integration | realm', function (hooks) {
             description: null,
             thumbnailURL: null,
             title: null,
+            cardInfo: {},
+          },
+          relationships: {
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -2341,6 +2484,98 @@ module('Integration | realm', function (hooks) {
         },
       },
       'file contents are correct',
+    );
+  });
+
+  test('realm returns 500 error for PATCH requests that set the value of a polymorphic field to an incompatible type', async function (assert) {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+    }
+    class Car extends FieldDef {
+      @field make = contains(StringField);
+      @field model = contains(StringField);
+      @field year = contains(StringField);
+    }
+    class Driver extends CardDef {
+      @field card = contains(Person);
+    }
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'driver.gts': { Driver },
+        'person.gts': { Person },
+        'car.gts': { Car },
+        'dir/driver.json': {
+          data: {
+            attributes: {
+              card: {
+                firstName: 'Mango',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}driver`,
+                name: 'Driver',
+              },
+              fields: {
+                card: {
+                  adoptsFrom: {
+                    module: `../person`,
+                    name: 'Person',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    let response = await handle(
+      realm,
+      new Request(`${testRealmURL}dir/driver`, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              attributes: {
+                card: {
+                  firstName: null,
+                  make: 'Mercedes Benz',
+                  model: 'C300',
+                  year: '2024',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}driver`,
+                  name: 'Driver',
+                },
+                fields: {
+                  card: {
+                    adoptsFrom: {
+                      module: `${testRealmURL}car`,
+                      name: 'Car',
+                    },
+                  },
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      }),
+    );
+
+    assert.strictEqual(response.status, 500, '500 server error');
+    let json = await response.json();
+    assert.strictEqual(
+      json.errors[0].additionalErrors[0].errorDetail.message,
+      "field validation error: tried set instance of Car as field 'card' but it is not an instance of Person",
     );
   });
 
@@ -2778,6 +3013,7 @@ module('Integration | realm', function (hooks) {
             firstName: 'Mango',
             title: 'Mango',
             thumbnailURL: null,
+            cardInfo: {},
           },
           relationships: {
             owner: {
@@ -2789,6 +3025,7 @@ module('Integration | realm', function (hooks) {
                 id: `${testRealmURL}dir/mariko`,
               },
             },
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -2820,6 +3057,10 @@ module('Integration | realm', function (hooks) {
             email: null,
             posts: null,
             thumbnailURL: null,
+            cardInfo: {},
+          },
+          relationships: {
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -2847,6 +3088,7 @@ module('Integration | realm', function (hooks) {
             firstName: 'Van Gogh',
             title: 'Van Gogh',
             thumbnailURL: null,
+            cardInfo: {},
           },
           relationships: {
             owner: {
@@ -2858,6 +3100,7 @@ module('Integration | realm', function (hooks) {
                 id: `http://localhost:4202/test/hassan`,
               },
             },
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {
@@ -2891,6 +3134,10 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
+            cardInfo: {},
+          },
+          relationships: {
+            'cardInfo.theme': { links: { self: null } },
           },
           meta: {
             adoptsFrom: {

@@ -12,7 +12,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../theme",
-        "name": "Theme"
+        "name": "BrandTheme"
       }
     }
   }
