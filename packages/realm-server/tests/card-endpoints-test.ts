@@ -230,6 +230,13 @@ module(basename(__filename), function () {
                 },
                 realmURL: testRealmHref,
               },
+              relationships: {
+                'cardInfo.theme': {
+                  links: {
+                    self: null,
+                  },
+                },
+              },
               links: {
                 self: `${testRealmHref}person-1`,
               },
