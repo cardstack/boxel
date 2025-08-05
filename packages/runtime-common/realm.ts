@@ -145,7 +145,7 @@ export interface RealmPermissions {
 export interface FileWriteResult {
   path: string;
   lastModified: number;
-  created: number;
+  created: number | null;
   isNew: boolean;
 }
 
