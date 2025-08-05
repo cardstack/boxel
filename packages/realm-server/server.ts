@@ -466,9 +466,16 @@ export class RealmServer {
     try {
       this.log.info('Loading published realms…');
 
-      let publishedRealms = await getPublishedRealmsFromDatabase(
-        this.dbAdapter,
-      );
+      let publishedRealms = (
+        await query(this.dbAdapter, [
+          `SELECT * FROM published_realms ORDER BY published_realm_url`,
+        ])
+      ).map((row) => ({
+        id: row.id as string,
+        owner_username: row.owner_id as string,
+        source_realm_url: row.source_realm_url as string,
+        published_realm_url: row.published_realm_url as string,
+      }));
 
       this.log.info(
         `Found ${publishedRealms.length} published realms in database`,
@@ -671,17 +678,4 @@ function errorWithStatus(
   let error = new Error(message);
   (error as Error & { status: number }).status = status;
   return error as Error & { status: number };
-}
-
-async function getPublishedRealmsFromDatabase(dbAdapter: DBAdapter) {
-  return (
-    await query(dbAdapter, [
-      `SELECT * FROM published_realms ORDER BY published_realm_url`,
-    ])
-  ).map((row) => ({
-    id: row.id as string,
-    owner_username: row.owner_id as string,
-    source_realm_url: row.source_realm_url as string,
-    published_realm_url: row.published_realm_url as string,
-  }));
 }
