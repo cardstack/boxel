@@ -24,7 +24,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://localhost:4201/catalog/online-product",
+        "module": "../online-product",
         "name": "OnlineProduct"
       }
     }

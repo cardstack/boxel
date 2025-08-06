@@ -22,7 +22,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://localhost:4201/catalog/online-customer",
+        "module": "../online-customer",
         "name": "OnlineCustomer"
       }
     }
