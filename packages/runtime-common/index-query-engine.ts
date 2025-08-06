@@ -222,19 +222,19 @@ export class IndexQueryEngine {
     if (result.type === 'error') {
       return { type: 'error', error: result.error_doc! };
     }
-    let cardDefEntry = assertIndexEntryDefinition(result);
+    let definitionEntry = assertIndexEntryDefinition(result);
     let {
       definition,
       last_modified: lastModified,
       resource_created_at: resourceCreatedAt,
-    } = cardDefEntry;
+    } = definitionEntry;
     return {
       type: 'definition',
       definition,
       lastModified: lastModified != null ? parseInt(lastModified) : null,
       resourceCreatedAt: parseInt(resourceCreatedAt),
-      deps: cardDefEntry.deps,
-      types: cardDefEntry.types,
+      deps: definitionEntry.deps,
+      types: definitionEntry.types,
     };
   }
 

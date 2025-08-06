@@ -532,15 +532,16 @@ export class Realm {
     let urls: URL[] = [];
     let lastWriteType: 'module' | 'instance' | undefined;
     let currentWriteType: 'module' | 'instance' | undefined;
+    let invalidations: Set<string> = new Set();
+    let clientRequestId: string | null | undefined;
     let performIndex = async () => {
       await this.#realmIndexUpdater.update(urls, {
         onInvalidation: (invalidatedURLs: URL[]) => {
-          this.broadcastRealmEvent({
-            eventName: 'index',
-            indexType: 'incremental',
-            invalidations: invalidatedURLs.map((u) => u.href),
-            clientRequestId: options?.clientRequestId ?? null,
-          });
+          invalidations = new Set([
+            ...invalidations,
+            ...invalidatedURLs.map((u) => u.href),
+          ]);
+          clientRequestId = clientRequestId ?? options?.clientRequestId;
         },
       });
     };
@@ -589,6 +590,12 @@ export class Realm {
     if (urls.length > 0) {
       await performIndex();
     }
+    this.broadcastRealmEvent({
+      eventName: 'index',
+      indexType: 'incremental',
+      invalidations: [...invalidations],
+      clientRequestId,
+    });
     return results;
   }
 

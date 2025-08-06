@@ -2223,8 +2223,6 @@ module(basename(__filename), function () {
         // we splat because despite having the same shape, the constructors are different
         { ...realm.realmIndexUpdater.stats },
         {
-          //TODO coalesce batches
-
           // this is a little misleading because now that we are batching out the
           // modules and instances to ensure that the definition is generated before
           // we trying file serialization, this will only report the last batch

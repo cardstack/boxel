@@ -83,7 +83,7 @@ export const coerceTypes = Object.freeze({
   embedded_html: 'JSON',
   fitted_html: 'JSON',
   display_names: 'JSON',
-  meta: 'JSON',
+  definition: 'JSON',
   is_deleted: 'BOOLEAN',
   last_modified: 'VARCHAR',
   resource_created_at: 'VARCHAR',
