@@ -24,6 +24,7 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
   testModuleRealm,
+  cardInfo,
 } from '../helpers';
 import {
   CardDef,
@@ -69,13 +70,6 @@ module(`Integration | realm indexing`, function (hooks) {
     }
     return maybeInstance;
   }
-
-  const cardInfo = {
-    title: null,
-    description: null,
-    thumbnailURL: null,
-    notes: null,
-  };
 
   test('full indexing discovers card instances', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({

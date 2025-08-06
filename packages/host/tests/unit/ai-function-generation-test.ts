@@ -56,20 +56,18 @@ module('Unit | ai-function-generation-test', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  const cardInfoSchema: ObjectSchema = {
-    additionalProperties: false,
-    properties: {
-      description: { type: 'string' },
-      notes: { type: 'string' },
-      thumbnailURL: { type: 'string' },
-      title: { type: 'string' },
-    },
-    type: 'object',
-  };
-
   const cardDefAttributesProperties: { [fieldName: string]: AttributesSchema } =
     {
-      cardInfo: cardInfoSchema,
+      cardInfo: {
+        additionalProperties: false,
+        properties: {
+          description: { type: 'string' },
+          notes: { type: 'string' },
+          thumbnailURL: { type: 'string' },
+          title: { type: 'string' },
+        },
+        type: 'object',
+      },
     };
 
   const linkedRelationship: RelationshipSchema = {

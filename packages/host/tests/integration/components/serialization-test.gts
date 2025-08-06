@@ -29,6 +29,7 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
+  cardInfo,
 } from '../../helpers';
 
 import {
@@ -85,13 +86,6 @@ module('Integration | serialization', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-
-  const cardInfo = {
-    title: null,
-    description: null,
-    thumbnailURL: null,
-    notes: null,
-  };
 
   test('can deserialize field', async function (assert) {
     class Post extends CardDef {

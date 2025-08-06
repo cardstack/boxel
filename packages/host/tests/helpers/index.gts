@@ -872,3 +872,10 @@ export async function assertMessages(
     }
   }
 }
+
+export const cardInfo = {
+  title: null,
+  description: null,
+  thumbnailURL: null,
+  notes: null,
+};

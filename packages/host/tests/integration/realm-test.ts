@@ -26,6 +26,7 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
   testModuleRealm,
+  cardInfo,
 } from '../helpers';
 import {
   setupBaseRealm,
@@ -65,13 +66,6 @@ module('Integration | realm', function (hooks) {
     }
     return result;
   }
-
-  const cardInfo = {
-    title: null,
-    description: null,
-    thumbnailURL: null,
-    notes: null,
-  };
 
   test('realm can serve GET card requests', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({

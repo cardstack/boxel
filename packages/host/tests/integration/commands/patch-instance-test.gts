@@ -16,6 +16,7 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  cardInfo,
 } from '../../helpers';
 import {
   CardDef,
@@ -62,13 +63,6 @@ module('Integration | commands | patch-instance', function (hooks) {
     });
     indexQuery = realm.realmIndexQueryEngine;
   });
-
-  const cardInfo = {
-    title: null,
-    description: null,
-    thumbnailURL: null,
-    notes: null,
-  };
 
   test('can patch a contains field', async function (assert) {
     let patchInstanceCommand = new PatchCardInstanceCommand(
