@@ -6,9 +6,13 @@ import { restartableTask } from 'ember-concurrency';
 
 import { Button } from '@cardstack/boxel-ui/components';
 
+import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
+import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
+
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
+import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
 
 interface Signature {
@@ -26,6 +30,7 @@ interface Signature {
 export default class SendErrorToAIAssistant extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare aiAssistantPanelService: AiAssistantPanelService;
+  @service private declare commandService: CommandService;
 
   private get errorMessage() {
     let { error, errorType } = this.args;
@@ -36,19 +41,21 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
     return `${prefix}\n\n${message}${stack}`;
   }
 
+  get commandContext() {
+    return this.commandService.commandContext;
+  }
+
   private sendToAiAssistant = restartableTask(async () => {
-    await this.aiAssistantPanelService.openPanel();
-
-    if (!this.matrixService.currentRoomId) {
-      throw new Error('No room found');
-    }
-
-    await this.matrixService.sendMessage(
-      this.matrixService.currentRoomId,
-      `In the attachment file, I encountered an error that needs fixing:\n\n${this.errorMessage}.`,
-      [],
-      this.args.fileToAttach ? [this.args.fileToAttach] : [],
-    );
+    await new OpenAiAssistantRoomCommand(this.commandContext).execute({
+      roomId: this.matrixService.currentRoomId,
+    });
+    await new SendAiAssistantMessageCommand(this.commandContext).execute({
+      roomId: this.matrixService.currentRoomId,
+      prompt: `In the attachment file, I encountered an error that needs fixing:\n\n${this.errorMessage}.`,
+      attachedFileURLs: this.args.fileToAttach
+        ? [this.args.fileToAttach.sourceUrl]
+        : [],
+    });
   });
 
   <template>
