@@ -32,7 +32,7 @@ import { MenuItem, eq } from '@cardstack/boxel-ui/helpers';
 import AppListingHeader from '../components/app-listing-header';
 import { ListingFittedTemplate } from '../components/listing-fitted';
 
-import ListingInitCommand from '@cardstack/boxel-host/commands/listing-action-init';
+import ListingRemixCommand from '@cardstack/boxel-host/commands/listing-remix';
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 import ListingBuildCommand from '@cardstack/boxel-host/commands/listing-action-build';
 
@@ -96,10 +96,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     if (!commandContext) {
       throw new Error('Missing commandContext');
     }
-    await new ListingInitCommand(commandContext).execute({
+    let listing = this.args.model as Listing;
+    await new ListingRemixCommand(commandContext).execute({
       realm,
-      actionType: 'remix',
-      listing: this.args.model as Listing,
+      listing,
     });
   });
 
@@ -222,12 +222,12 @@ class EmbeddedTemplate extends Component<typeof Listing> {
             {{#if this.isSkillListing}}
               <BoxelButton
                 class='action-button'
-                data-test-catalog-listing-embedded-add-skill-to-room-button
+                data-test-catalog-listing-embedded-add-skills-to-room-button
                 @loading={{this._addSkillsToCurrentRoom.isRunning}}
                 @disabled={{this.addSkillsDisabled}}
                 {{on 'click' this.addSkillsToCurrentRoom}}
               >
-                Add Skills
+                Use Skills
               </BoxelButton>
             {{/if}}
             {{#if this.hasExamples}}
@@ -313,12 +313,14 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           class='license-section'
           data-test-catalog-listing-embedded-license-section
         >
-          <h2>License</h2>
-          {{#if @model.license.name}}
-            {{@model.license.name}}
-          {{else}}
-            <p class='no-data-text'>No License Provided</p>
-          {{/if}}
+          <div class='info-box'>
+            <h2>License</h2>
+            {{#if @model.license.name}}
+              {{@model.license.name}}
+            {{else}}
+              <p class='no-data-text'>No License Provided</p>
+            {{/if}}
+          </div>
         </div>
       </section>
 
@@ -350,8 +352,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         {{#if this.hasExamples}}
           <ul class='examples-list' data-test-catalog-listing-embedded-examples>
             {{#each @fields.examples as |Example|}}
-              <li>
-                <Example />
+              <li class='example-item'>
+                <Example class='example-card' />
               </li>
             {{/each}}
           </ul>
@@ -453,8 +455,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       h2 {
         font-weight: 600;
         margin: 0;
-        margin-bottom: var(--boxel-sp-sm);
+        margin-bottom: var(--boxel-sp);
       }
+
       .no-data-text {
         color: var(--boxel-400);
       }
@@ -462,20 +465,24 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         width: 100%;
         height: auto;
         border-radius: var(--boxel-border-radius);
-        background-color: var(--boxel-light);
+        padding: var(--boxel-sp);
+        background-color: var(--boxel-100);
+      }
+      .info-box :deep(.markdown-content p) {
+        margin-top: 0;
       }
 
       /* container */
       .app-listing-embedded {
         container-name: app-listing-embedded;
         container-type: inline-size;
-        padding: var(--boxel-sp);
+        padding: var(--boxel-sp-lg);
       }
       .app-listing-info {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xl);
-        margin-left: 60px;
+        margin-left: 72px;
         margin-top: var(--boxel-sp-lg);
       }
       .app-listing-price-plan {
@@ -503,10 +510,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       .app-listing-embedded
         :deep(.ember-basic-dropdown-content-wormhole-origin) {
         position: absolute;
-      }
-      .app-listing-summary {
-        padding: var(--boxel-sp);
-        background-color: var(--boxel-100);
       }
 
       .divider {
@@ -551,11 +554,14 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       }
       .examples-list {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(5, 1fr);
         gap: var(--boxel-sp);
         list-style: none;
         margin-block: 0;
         padding-inline-start: 0;
+      }
+      .example-card {
+        min-height: 180px;
       }
 
       .categories-list {

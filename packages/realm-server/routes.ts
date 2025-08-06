@@ -18,13 +18,13 @@ import {
   grafanaAuthorization,
 } from './middleware';
 import Koa from 'koa';
-import handleStripeLinksRequest from './handlers/handle-stripe-links';
 import handleCreateUserRequest from './handlers/handle-create-user';
 import handleQueueStatusRequest from './handlers/handle-queue-status';
 import handleReindex from './handlers/handle-reindex';
 import handleFullReindex from './handlers/handle-full-reindex';
 import handleRemoveJob from './handlers/handle-remove-job';
 import handleAddCredit from './handlers/handle-add-credit';
+import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -68,6 +68,11 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.get('/_catalog-realms', handleFetchCatalogRealmsRequest(args));
   router.get('/_queue-status', handleQueueStatusRequest(args));
   router.post('/_stripe-webhook', handleStripeWebhookRequest(args));
+  router.post(
+    '/_stripe-session',
+    jwtMiddleware(args.realmSecretSeed),
+    handleCreateStripeSessionRequest(args),
+  );
   router.get(
     '/_user',
     jwtMiddleware(args.realmSecretSeed),
@@ -78,7 +83,6 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed),
     handleCreateUserRequest(args),
   );
-  router.get('/_stripe-links', handleStripeLinksRequest());
 
   // it's awkward that these are GET's but we are working around grafana's limitations
   router.get(

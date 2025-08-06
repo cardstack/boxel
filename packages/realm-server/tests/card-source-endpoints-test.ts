@@ -583,6 +583,7 @@ module(basename(__filename), function () {
               title: null,
               description: null,
               thumbnailURL: null,
+              cardInfo: {},
             });
           }
 
@@ -625,6 +626,7 @@ module(basename(__filename), function () {
               title: null,
               description: null,
               thumbnailURL: null,
+              cardInfo: {},
             });
           }
 
@@ -651,6 +653,14 @@ module(basename(__filename), function () {
                     title: null,
                     description: null,
                     thumbnailURL: null,
+                    cardInfo: {},
+                  },
+                  relationships: {
+                    'cardInfo.theme': {
+                      links: {
+                        self: null,
+                      },
+                    },
                   },
                   meta: {
                     adoptsFrom: {
@@ -678,6 +688,7 @@ module(basename(__filename), function () {
               title: null,
               description: null,
               thumbnailURL: null,
+              cardInfo: {},
             });
           }
 
