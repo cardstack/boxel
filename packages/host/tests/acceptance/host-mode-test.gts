@@ -13,6 +13,7 @@ import {
   percySnapshot,
   setupLocalIndexing,
   setupOnSave,
+  testRealmURL,
   testHostModeRealmURL,
   setupAcceptanceTestRealm,
   setupUserSubscription,
@@ -28,18 +29,14 @@ class StubHostModeService extends HostModeService {
     return true;
   }
 
-  get userSubdomain() {
-    return 'user';
+  get hostModeOrigin() {
+    return removeTrailingSlash(testRealmURL);
   }
 }
 
 class StubCustomSubdomainHostModeService extends StubHostModeService {
-  get isCustomSubdomain() {
-    return true;
-  }
-
-  customSubdomainToRealmUrl(_subdomain: string) {
-    return testHostModeRealmURL;
+  get hostModeOrigin() {
+    return removeTrailingSlash(testHostModeRealmURL);
   }
 }
 
@@ -196,9 +193,14 @@ module('Acceptance | host mode tests', function (hooks) {
 
     test('visiting a card in host mode', async function (assert) {
       await visit('/Pet/mango.json');
+
       assert
         .dom(`[data-test-card="${testHostModeRealmURL}Pet/mango"]`)
         .exists();
     });
   });
 });
+
+function removeTrailingSlash(url: string): string {
+  return url.endsWith('/') ? url.slice(0, -1) : url;
+}

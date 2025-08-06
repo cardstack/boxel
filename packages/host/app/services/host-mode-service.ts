@@ -13,63 +13,41 @@ export default class HostModeService extends Service {
         return true;
       }
 
-      return this.isUserSubdomain || this.isCustomSubdomain;
+      return (
+        config.hostsOwnAssets === false && this.isRealmServerDomain === false
+      );
     }
 
     return false;
   }
 
-  get isUserSubdomain() {
+  get isRealmServerDomain() {
     if (this.simulatingHostMode) {
-      return true;
+      return false;
     }
 
-    if (config.hostModeUserSubdomainRoot) {
-      let hostModeUserSubdomainRoot = config.hostModeUserSubdomainRoot;
+    if (config.realmServerDomain) {
+      let realmServerDomain = config.realmServerDomain;
       let currentHost = window.location.hostname;
 
-      return currentHost.endsWith(`.${hostModeUserSubdomainRoot}`);
-    }
-
-    return false;
-  }
-
-  get isCustomSubdomain() {
-    if (this.simulatingHostMode) {
-      return true;
-    }
-
-    if (config.hostModeCustomSubdomainRoot) {
-      let hostModeCustomSubdomainRoot = config.hostModeCustomSubdomainRoot;
-      let currentHost = window.location.hostname;
-
-      return currentHost.endsWith(`.${hostModeCustomSubdomainRoot}`);
+      return currentHost.endsWith(`.${realmServerDomain}`);
     }
 
     return false;
   }
 
   get simulatingHostMode() {
-    return new URLSearchParams(window.location.search).has(
-      'host-mode-subdomain',
-    );
+    return new URLSearchParams(window.location.search).has('host-mode-origin');
   }
 
-  // FIXME not user probably?
-  get userSubdomain() {
+  get hostModeOrigin() {
     if (this.simulatingHostMode) {
-      return (
-        new URLSearchParams(window.location.search).get(
-          'host-mode-subdomain',
-        ) || 'user'
+      return new URLSearchParams(window.location.search).get(
+        'host-mode-origin',
       );
     }
 
-    return window.location.hostname.split('.')[0];
-  }
-
-  customSubdomainToRealmUrl(_subdomain: string) {
-    throw Error('Unimplemented: customSubdomainToRealmURL');
+    return window.location.origin;
   }
 }
 

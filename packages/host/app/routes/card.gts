@@ -36,33 +36,8 @@ export default class Card extends Route<ReturnType<StoreService['get']>> {
   }
 
   async model(params: { path: string }) {
-    let prospectiveRealmUrl;
-    let cardPath;
+    let cardUrl = `${this.hostModeService.hostModeOrigin}/${params.path}`;
 
-    if (this.hostModeService.isCustomSubdomain) {
-      prospectiveRealmUrl = this.hostModeService.customSubdomainToRealmUrl(
-        this.hostModeService.userSubdomain,
-      );
-
-      cardPath = params.path;
-    } else {
-      let segments = params.path.split('/').filter(Boolean); // remove empty
-      let realm = segments[0];
-
-      cardPath = segments.slice(1).join('/');
-
-      prospectiveRealmUrl = `${config.realmServerDomain}${this.hostModeService.userSubdomain}/${realm}/`;
-    }
-
-    await this.realm.ensureRealmMeta(prospectiveRealmUrl);
-
-    let realmUrl = this.realm.url(prospectiveRealmUrl);
-
-    if (!realmUrl) {
-      throw new Error(`Realm not found: ${prospectiveRealmUrl}`);
-    }
-
-    let cardUrl = `${realmUrl}${cardPath}`;
     return this.store.get(cardUrl);
   }
 }
