@@ -23,6 +23,11 @@ import { setupApplicationTest } from '../helpers/setup';
 
 let matrixRoomId: string;
 
+let testHostModeRealmURLWithoutRealm = testHostModeRealmURL.replace(
+  /\/test\/?$/,
+  '',
+);
+
 // Overrides to simulate a request to a host mode domain
 class StubHostModeService extends HostModeService {
   get isActive() {
@@ -30,7 +35,7 @@ class StubHostModeService extends HostModeService {
   }
 
   get hostModeOrigin() {
-    return removeTrailingSlash(testRealmURL);
+    return removeTrailingSlash(testHostModeRealmURLWithoutRealm);
   }
 }
 
