@@ -464,6 +464,7 @@ module(basename(__filename), function () {
           let id = incrementalEventContent.invalidations[0].split('/').pop()!;
 
           assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.ok(response.get('x-created'), 'created header should be set for new card');
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
@@ -1390,6 +1391,7 @@ module(basename(__filename), function () {
             .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.ok(response.get('x-created'), 'created header should be set for updated card');
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
