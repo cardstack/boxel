@@ -16,11 +16,7 @@ interface Signature {
 }
 
 export default class NewSessionSettings extends Component<Signature> {
-  options = [
-    'Add Same Skills',
-    'Copy File History',
-    'Summarize Current Session',
-  ];
+  options = ['Add Same Skills', 'Copy File History'];
 
   @action
   isSelected(option: string) {
