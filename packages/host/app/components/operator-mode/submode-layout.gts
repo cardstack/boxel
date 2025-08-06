@@ -10,9 +10,8 @@ import { tracked } from '@glimmer/tracking';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask, timeout } from 'ember-concurrency';
 
-import window from 'ember-window-mock';
-
 import { modifier } from 'ember-modifier';
+import window from 'ember-window-mock';
 
 import { TrackedObject } from 'tracked-built-ins';
 
@@ -122,6 +121,7 @@ export default class SubmodeLayout extends Component<Signature> {
     }
   }
 
+  // Handles window resize and initializes AI panel width from localStorage
   onWindowResize = (windowWidth: number) => {
     let aiPanelDefaultWidthInPixels = 371;
     if (windowWidth < aiPanelDefaultWidthInPixels) {

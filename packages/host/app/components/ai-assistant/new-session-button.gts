@@ -8,16 +8,15 @@ import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
 import { Button, Tooltip } from '@cardstack/boxel-ui/components';
 
-import { and } from '@cardstack/boxel-ui/helpers';
-
-import config from '@cardstack/host/config/environment';
-
 import NewSessionSettings from './new-session-settings';
 
 interface Signature {
   Args: {
     disabled?: boolean;
-    onCreateNewSession: (addSameSkills?: boolean) => void;
+    onCreateNewSession: (opts?: {
+      addSameSkills: boolean;
+      shouldCopyFileHistory: boolean;
+    }) => void;
   };
 }
 
@@ -53,8 +52,11 @@ export default class NewSessionButton extends Component<Signature> {
   }
 
   @action
-  handleCreateNewSessionFromSettings(addSameSkills: boolean) {
-    this.args.onCreateNewSession(addSameSkills);
+  handleCreateNewSessionFromSettings() {
+    this.args.onCreateNewSession({
+      addSameSkills: this.selectedOptions.has('Add Same Skills'),
+      shouldCopyFileHistory: this.selectedOptions.has('Copy File History'),
+    });
     this.closeMenu();
   }
 
@@ -83,7 +85,7 @@ export default class NewSessionButton extends Component<Signature> {
       </Tooltip>
 
       {{! TODO: remove feature flag once all options are implemented }}
-      {{#if (and this.showMenu config.featureFlags.SHOW_NEW_SESSION_SETTINGS)}}
+      {{#if this.showMenu}}
         <div class='new-session-menu-wrapper' {{onClickOutside this.closeMenu}}>
           <NewSessionSettings
             @selectedOptions={{this.selectedOptions}}

@@ -139,6 +139,27 @@ let autoMigrate = migrateDB || undefined;
   if (process.send) {
     process.send(`ready:${workerId}`);
   }
+
+  // Handle graceful shutdown
+  const shutdown = async () => {
+    log.info(`Shutting down worker ${workerId}...`);
+    try {
+      await queue.destroy();
+      await dbAdapter.close();
+      log.info(`Worker ${workerId} shut down gracefully`);
+      process.exit(0);
+    } catch (err) {
+      log.error(`Error during worker shutdown:`, err);
+      process.exit(1);
+    }
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+  process.on('message', (message) => {
+    if (message === 'stop') {
+      shutdown(); // warning this is async
+    }
+  });
 })().catch((e: any) => {
   Sentry.captureException(e);
   log.error(
