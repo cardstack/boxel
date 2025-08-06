@@ -141,6 +141,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
           dateTimeField: { type: 'string', format: 'date-time' },
           bigIntegerField: { type: 'string', pattern: '^-?[0-9]+$' },
         },
+        additionalProperties: false,
       },
       relationships: cardDefRelationships,
     });
@@ -180,8 +181,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
             properties: {
               innerStringField: { type: 'string' },
             },
+            additionalProperties: false,
           },
         },
+        additionalProperties: false,
       },
       relationships: {
         type: 'object',
@@ -232,8 +235,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
             properties: {
               innerStringField: { type: 'array', items: { type: 'string' } },
             },
+            additionalProperties: false,
           },
         },
+        additionalProperties: false,
       },
       relationships: cardDefRelationships,
     });
@@ -261,6 +266,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
         simpleField: { type: 'string' },
         ...cardDefAttributesProperties,
       },
+      additionalProperties: false,
     };
     let relationships: RelationshipsSchema = {
       type: 'object',
@@ -294,6 +300,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
         simpleField: { type: 'string' },
         ...cardDefAttributesProperties,
       },
+      additionalProperties: false,
     };
 
     let relationships: RelationshipsSchema = {
@@ -346,10 +353,13 @@ module('Unit | ai-function-generation-test', function (hooks) {
               properties: {
                 name: { type: 'string' },
               },
+              additionalProperties: false,
             },
           },
+          additionalProperties: false,
         },
       },
+      additionalProperties: false,
     };
     let relationships: RelationshipsSchema = {
       type: 'object',
@@ -407,10 +417,13 @@ module('Unit | ai-function-generation-test', function (hooks) {
                 properties: {
                   goalTitle: { type: 'string' },
                 },
+                additionalProperties: false,
               },
             },
+            additionalProperties: false,
           },
         },
+        additionalProperties: false,
       },
       relationships: {
         type: 'object',
@@ -468,6 +481,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
           ...cardDefAttributesProperties,
           keepField: { type: 'string' },
         },
+        additionalProperties: false,
       },
       relationships: cardDefRelationships,
     });
@@ -494,6 +508,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
           ...cardDefAttributesProperties,
           keepField: { type: 'string' },
         },
+        additionalProperties: false,
       },
       relationships: cardDefRelationships,
     });
@@ -528,8 +543,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
             properties: {
               keepField: { type: 'array', items: { type: 'string' } },
             },
+            additionalProperties: false,
           },
         },
+        additionalProperties: false,
       },
       relationships: cardDefRelationships,
     });
@@ -560,8 +577,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
             properties: {
               innerStringField: { type: 'string' },
             },
+            additionalProperties: false,
           },
         },
+        additionalProperties: false,
       },
       relationships: cardDefRelationships,
     });
@@ -611,8 +630,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
             properties: {
               innerStringField: { type: 'string', description: 'Desc #2' },
             },
+            additionalProperties: false,
           },
         },
+        additionalProperties: false,
       },
       relationships: {
         type: 'object',
@@ -680,6 +701,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
         simpleField: { type: 'string' },
         ...cardDefAttributesProperties,
       },
+      additionalProperties: false,
     };
     let relationships: RelationshipsSchema = {
       type: 'object',
@@ -741,6 +763,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
         simpleField: { type: 'string' },
         ...cardDefAttributesProperties,
       },
+      additionalProperties: false,
     };
     let relationships: RelationshipsSchema = {
       type: 'object',
@@ -796,9 +819,11 @@ module('Unit | ai-function-generation-test', function (hooks) {
               properties: {
                 innerStringField: { type: 'string' },
               },
+              additionalProperties: false,
             },
           },
         },
+        additionalProperties: false,
       },
       relationships: cardDefRelationships,
     });
