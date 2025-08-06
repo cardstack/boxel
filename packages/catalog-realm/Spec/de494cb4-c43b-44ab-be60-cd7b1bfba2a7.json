@@ -5,7 +5,7 @@
       "readMe": null,
       "ref": {
         "name": "OnlineOrder",
-        "module": "../online-order"
+        "module": "../online-store/online-order"
       },
       "specType": "card",
       "containedExamples": [],
