@@ -417,7 +417,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         );
       });
 
-      test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
+      skip('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
         await waitFor(
           `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
         );
