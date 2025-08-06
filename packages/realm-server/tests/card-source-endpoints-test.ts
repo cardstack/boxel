@@ -3,7 +3,7 @@ import { Test, SuperTest } from 'supertest';
 import { join, resolve, basename } from 'path';
 import { Server } from 'http';
 import { type DirResult } from 'tmp';
-import { existsSync, readFileSync, statSync } from 'fs-extra';
+import { existsSync, readFileSync } from 'fs-extra';
 import {
   cardSrc,
   compiledCard,
@@ -442,6 +442,10 @@ module(basename(__filename), function () {
             .send(`//TEST UPDATE\n${cardSrc}`);
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
+          assert.ok(
+            response.headers['x-created'],
+            'created date should be set for new GTS file',
+          );
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
@@ -460,14 +464,6 @@ module(basename(__filename), function () {
             src,
             `//TEST UPDATE
           ${cardSrc}`,
-          );
-
-          let fileResponse = await request
-            .get('/unused-card.gts')
-            .set('Accept', 'application/vnd.card+source');
-          assert.ok(
-            fileResponse.headers['x-created'],
-            'created date should be set for new GTS file',
           );
         });
 
