@@ -1393,7 +1393,7 @@ export class Realm {
         status: 204,
         headers: {
           'last-modified': formatRFC7231(lastModified * 1000),
-          'x-created': formatRFC7231(created * 1000),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
         },
       },
       requestContext,
@@ -1676,7 +1676,7 @@ export class Realm {
         lid: primaryResource.lid,
       });
     }
-    let [{ lastModified }] = await this.writeMany(files, {
+    let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
     });
 
@@ -1711,6 +1711,7 @@ export class Realm {
         headers: {
           'content-type': SupportedMimeType.CardJson,
           ...lastModifiedHeader(doc),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
         },
       },
       requestContext,
@@ -1871,7 +1872,7 @@ export class Realm {
       let path = this.paths.local(fileURL);
       files.set(path, JSON.stringify(fileSerialization, null, 2));
     }
-    let [{ lastModified }] = await this.writeMany(files, {
+    let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
     });
     let entry = await this.#realmIndexQueryEngine.cardDocument(
@@ -1902,6 +1903,7 @@ export class Realm {
         headers: {
           'content-type': SupportedMimeType.CardJson,
           ...lastModifiedHeader(doc),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
         },
       },
       requestContext,
