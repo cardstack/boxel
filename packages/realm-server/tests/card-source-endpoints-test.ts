@@ -3,7 +3,7 @@ import { Test, SuperTest } from 'supertest';
 import { join, resolve, basename } from 'path';
 import { Server } from 'http';
 import { type DirResult } from 'tmp';
-import { existsSync, readFileSync } from 'fs-extra';
+import { existsSync, readFileSync, statSync } from 'fs-extra';
 import {
   cardSrc,
   compiledCard,
@@ -456,7 +456,7 @@ module(basename(__filename), function () {
             .get('/unused-card.gts')
             .set('Accept', 'application/vnd.card+source');
           assert.ok(
-            fileResponse.headers['created'],
+            fileResponse.headers['x-created'],
             'created date should be set for new GTS file',
           );
         });
@@ -487,6 +487,14 @@ module(basename(__filename), function () {
             .send(`Hello World`);
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
+
+          let fileResponse = await request
+            .get('/hello-world.txt')
+            .set('Accept', 'application/vnd.card+source');
+          assert.ok(
+            fileResponse.headers['x-created'],
+            'created date should be set for new TXT file',
+          );
 
           let txtFile = join(
             dir.name,

@@ -1379,7 +1379,7 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let { lastModified } = await this.write(
+    let { lastModified, created } = await this.write(
       this.paths.local(new URL(request.url)),
       await request.text(),
       {
@@ -1391,7 +1391,10 @@ export class Realm {
       body: null,
       init: {
         status: 204,
-        headers: { 'last-modified': formatRFC7231(lastModified * 1000) },
+        headers: {
+          'last-modified': formatRFC7231(lastModified * 1000),
+          'x-created': formatRFC7231(created * 1000),
+        },
       },
       requestContext,
     });
