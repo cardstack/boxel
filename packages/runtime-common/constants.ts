@@ -59,3 +59,9 @@ export const SEPARATOR_MARKER: string = '╠════════════
 export const REPLACE_MARKER: string = '╚═══ REPLACE ═══╝';
 
 export const MINIMUM_AI_CREDITS_TO_CONTINUE = 10;
+
+export const EXTRA_TOKENS_PRICING: Record<number, number> = {
+  2500: 5,
+  20000: 30,
+  80000: 100, // in USD
+};
