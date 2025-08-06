@@ -49,7 +49,7 @@ export class DefinitionsCache {
     if (!head.ok) {
       let message = await head.text();
       throw new Error(
-        `tried to get card def meta for ${stringify(codeRef)}, but got ${head.status}: ${message} for HEAD ${codeRef.module}`,
+        `tried to get definition for ${stringify(codeRef)}, but got ${head.status}: ${message} for HEAD ${codeRef.module}`,
       );
     }
     let realmURL = head.headers.get('X-Boxel-Realm-Url');
@@ -72,7 +72,7 @@ export class DefinitionsCache {
     if (!response.ok) {
       let message = await response.text();
       throw new Error(
-        `tried to get card def meta for ${stringify(codeRef)}, but got ${response.status}: ${message} for ${url}`,
+        `tried to get definition for ${stringify(codeRef)}, but got ${response.status}: ${message} for ${url}`,
       );
     }
     let json = await response.json();
