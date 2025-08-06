@@ -29,6 +29,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
+import { Submodes } from '../../submode-switcher';
+
 export interface CodeBlockDiffEditorHeaderSignature {
   Args: {
     codeData: Partial<CodeData>;
@@ -213,6 +215,7 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
   }
 
   private openInCodeMode = () => {
+    this.operatorModeStateService.updateSubmode(Submodes.Code);
     this.operatorModeStateService.updateCodePath(new URL(this.fileUrl!));
   };
 

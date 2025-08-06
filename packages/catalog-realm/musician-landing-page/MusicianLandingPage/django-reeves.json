@@ -1,0 +1,66 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "artistName": "Django Reeves",
+      "headline": "Jazz fusion guitarist blending bebop traditions with contemporary soul",
+      "bio": "Django Reeves is a master of the six-string, weaving complex jazz harmonies with infectious groove-based rhythms. Born and raised in New Orleans, he draws from the city's rich musical heritage while pushing the boundaries of modern jazz fusion.\n\nHis latest album 'Crossroads & Crescendos' features collaborations with Grammy-winning artists and has been praised by DownBeat Magazine as 'a masterpiece of contemporary jazz innovation.' Django's live performances are legendary for their spontaneous energy and technical virtuosity, often featuring extended improvisational sessions that leave audiences mesmerized.",
+      "heroImageUrl": "https://images.unsplash.com/photo-1511367461989-f85a21fda167?w=1200&h=600&fit=crop&crop=faces",
+      "primaryColor": "#DC2626",
+      "socialLinks": [
+        {
+          "platform": "Spotify",
+          "url": "https://open.spotify.com/artist/djangoreeves",
+          "displayName": "Django Reeves on Spotify"
+        },
+        {
+          "platform": "YouTube",
+          "url": "https://youtube.com/@djangoreevesmusic",
+          "displayName": "Django Reeves Music"
+        },
+        {
+          "platform": "Instagram",
+          "url": "https://instagram.com/djangoreevesguitar",
+          "displayName": "@djangoreevesguitar"
+        },
+        {
+          "platform": "Bandcamp",
+          "url": "https://djangoreeves.bandcamp.com",
+          "displayName": "Django Reeves on Bandcamp"
+        }
+      ],
+      "upcomingShows": [
+        {
+          "venue": "Preservation Hall",
+          "date": "2025-08-28",
+          "city": "New Orleans, LA",
+          "ticketUrl": "https://preservationhall.com/shows/django-reeves"
+        },
+        {
+          "venue": "Blue Note",
+          "date": "2025-09-12",
+          "city": "New York, NY",
+          "ticketUrl": "https://bluenotejazz.com/events/django-reeves-trio"
+        },
+        {
+          "venue": "Monterey Jazz Festival",
+          "date": "2025-09-26",
+          "city": "Monterey, CA",
+          "ticketUrl": "https://montereyjazzfestival.org/django-reeves"
+        }
+      ],
+      "musicSamples": [
+        "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+        "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3",
+        "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-13.mp3"
+      ],
+      "contactEmail": "management@djangoreeves.com"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../musician-landing-page",
+        "name": "MusicianLandingPage"
+      }
+    }
+  }
+}

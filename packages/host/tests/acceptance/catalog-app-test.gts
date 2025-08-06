@@ -433,7 +433,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           assert,
           `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-remix-button]`,
           'Remix',
-          'I would like to remix this Mortgage Calculator under the following realm: http://test-realm/test/',
+          'Remix done! Please suggest two example prompts on how to edit this card.',
         );
       });
 
@@ -1016,7 +1016,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         assert,
         `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-embedded-remix-button]`,
         'Remix',
-        'I would like to remix this Mortgage Calculator under the following realm: http://test-realm/test/',
+        'Remix done! Please suggest two example prompts on how to edit this card.',
       );
     });
 

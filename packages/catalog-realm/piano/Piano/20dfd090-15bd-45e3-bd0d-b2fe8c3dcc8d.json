@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "notation": "E4 D#4 E4 D#4 E4 B3 D4 C4 A3 --- C3 E3 A3 B3 --- E3 G#3 B3 C4 --- E4 D#4 E4 D#4 E4 B3 D4 C4 A3 --- C3 E3 A3 B3 --- E3 G#3 B3 C4 --- A3 B3 C4 D4 E4 --- F4 E4 D4 C4 B3 --- A3 B3 C4 D4 E4 --- F4 E4 D4 C4 B3 --- A3 B3 C4 D4 E4 --- F4 E4 D4 C4 B3 --- A3 B3 C4 D4 E4 --- F4 E4 D4 C4 B3 --- E4 D#4 E4 D#4 E4 B3 D4 C4 A3 --- C3 E3 A3 B3 --- E3 G#3 B3 C4 --- E4 D#4 E4 D#4 E4 B3 D4 C4 A3 --- C3 E3 A3 B3 --- E3 G#3 B3 C4 --- C4 E4 G4 C5 --- B4 A4 G4 F4 --- E4 D4 C4 B3 --- A3 G3 F3 E3 --- D3 C3 B2 A2 --- G2 F2 E2 D2 --- C2 D2 E2 F2 --- G2 A2 B2 C3 --- D3 E3 F3 G3 --- A3 B3 C4 D4 --- E4 F4 G4 A4 --- B4 C5 D5 E5 --- F5 E5 D5 C5 --- B4 A4 G4 F4 --- E4 D4 C4 B3 --- A3 G3 F3 E3 --- D3 C3 B2 A2 --- G2 F2 E2 D2 --- C2 D2 E2 F2 --- G2 A2 B2 C3 --- D3 E3 F3 G3 --- A3 B3 C4 D4 --- E4 F4 G4 A4 --- B4 C5 D5 E5 --- E4 D#4 E4 D#4 E4 B3 D4 C4 A3 --- C3 E3 A3 B3 --- E3 G#3 B3 C4 --- E4 D#4 E4 D#4 E4 B3 D4 C4 A3 --- C3 E3 A3 B3 --- E3 G#3 B3 C4",
+      "title": "Virtual Piano Studio",
+      "description": "Professional 3-octave piano with keyboard shortcuts, real-time audio playback, and notation support. Perfect for music composition, practice, and learning.",
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../piano",
+        "name": "Piano"
+      }
+    }
+  }
+}
