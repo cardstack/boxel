@@ -2020,9 +2020,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
     await click('[data-test-card-catalog-go-button]');
 
-    assert
-      .dom('[data-test-skill-menu] [data-test-attached-card]')
-      .exists({ count: 2 });
+    await waitUntil(
+      () =>
+        document.querySelectorAll(
+          '[data-test-skill-menu] [data-test-attached-card]',
+        )?.length === 2,
+    );
     assert
       .dom(
         `[data-test-skill-menu] [data-test-attached-card="${testRealmURL}Skill/example"]`,
@@ -2058,9 +2061,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await waitFor('[data-test-skill-menu]');
-    assert
-      .dom('[data-test-skill-menu] [data-test-attached-card]')
-      .exists({ count: 2 });
+    await waitUntil(
+      () =>
+        document.querySelectorAll(
+          '[data-test-skill-menu] [data-test-attached-card]',
+        )?.length === 2,
+    );
     assert
       .dom(
         `[data-test-skill-menu] [data-test-attached-card="${testRealmURL}Skill/example"]`,
