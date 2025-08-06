@@ -8,10 +8,6 @@ import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
 import { Button, Tooltip } from '@cardstack/boxel-ui/components';
 
-import { and } from '@cardstack/boxel-ui/helpers';
-
-import config from '@cardstack/host/config/environment';
-
 import NewSessionSettings from './new-session-settings';
 
 interface Signature {
@@ -89,7 +85,7 @@ export default class NewSessionButton extends Component<Signature> {
       </Tooltip>
 
       {{! TODO: remove feature flag once all options are implemented }}
-      {{#if (and this.showMenu config.featureFlags.SHOW_NEW_SESSION_SETTINGS)}}
+      {{#if this.showMenu}}
         <div class='new-session-menu-wrapper' {{onClickOutside this.closeMenu}}>
           <NewSessionSettings
             @selectedOptions={{this.selectedOptions}}
