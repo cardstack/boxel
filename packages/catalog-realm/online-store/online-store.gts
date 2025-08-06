@@ -1302,149 +1302,122 @@ class FittedTemplate extends Component<typeof OnlineStore> {
               </svg>
             </div>
           {{/if}}
-          <div class='badge-info'>
-            <div class='badge-name'>{{if
-                @model.storeName
-                @model.storeName
-                'Store'
-              }}</div>
-          </div>
+          <div class='badge-title'>{{if
+              @model.storeName
+              @model.storeName
+              'Store'
+            }}</div>
         </div>
       </div>
 
       <div class='strip-format'>
         <div class='strip-content'>
-          <div class='strip-identity'>
-            {{#if @model.logoUrl}}
-              <img
-                src={{@model.logoUrl}}
-                alt='{{@model.storeName}}'
-                class='strip-logo'
-              />
-            {{else}}
-              <div
-                class='strip-logo placeholder'
-                style={{htmlSafe
-                  (if
-                    @model.brandColor
-                    (concat 'background: ' @model.brandColor)
-                    ''
-                  )
-                }}
+          {{#if @model.logoUrl}}
+            <img
+              src={{@model.logoUrl}}
+              alt='{{@model.storeName}}'
+              class='strip-logo'
+            />
+          {{else}}
+            <div
+              class='strip-logo placeholder'
+              style={{htmlSafe
+                (if
+                  @model.brandColor (concat 'background: ' @model.brandColor) ''
+                )
+              }}
+            >
+              <svg
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                stroke-width='2'
               >
-                <svg
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                >
-                  <path d='M3 9h18l-1.5 9H4.5L3 9z' />
-                </svg>
-              </div>
-            {{/if}}
-            <div class='strip-info'>
-              <div class='strip-name'>{{if
-                  @model.storeName
-                  @model.storeName
-                  'Online Store'
-                }}</div>
+                <path d='M3 9h18l-1.5 9H4.5L3 9z' />
+              </svg>
             </div>
-          </div>
+          {{/if}}
+          <div class='strip-title'>{{if
+              @model.storeName
+              @model.storeName
+              'Online Store'
+            }}</div>
         </div>
       </div>
 
       <div class='tile-format'>
         <div class='tile-content'>
-          <div class='tile-header'>
-            {{#if @model.logoUrl}}
-              <img
-                src={{@model.logoUrl}}
-                alt='{{@model.storeName}}'
-                class='tile-logo'
-              />
-            {{else}}
-              <div
-                class='tile-logo placeholder'
-                style={{htmlSafe
-                  (if
-                    @model.brandColor
-                    (concat 'background: ' @model.brandColor)
-                    ''
-                  )
-                }}
+          {{#if @model.logoUrl}}
+            <img
+              src={{@model.logoUrl}}
+              alt='{{@model.storeName}}'
+              class='tile-logo'
+            />
+          {{else}}
+            <div
+              class='tile-logo placeholder'
+              style={{htmlSafe
+                (if
+                  @model.brandColor (concat 'background: ' @model.brandColor) ''
+                )
+              }}
+            >
+              <svg
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                stroke-width='2'
               >
-                <svg
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                >
-                  <path d='M3 9h18l-1.5 9H4.5L3 9z' />
-                </svg>
-              </div>
-            {{/if}}
-            <h4 class='tile-name'>{{if
-                @model.storeName
-                @model.storeName
-                'Online Store'
-              }}</h4>
-          </div>
-
-          {{#if @model.websiteUrl}}
-            <div class='tile-url'>{{@model.websiteUrl}}</div>
+                <path d='M3 9h18l-1.5 9H4.5L3 9z' />
+              </svg>
+            </div>
           {{/if}}
+          <div class='tile-title'>{{if
+              @model.storeName
+              @model.storeName
+              'Online Store'
+            }}</div>
         </div>
       </div>
 
       <div class='card-format'>
         <div class='card-content'>
-          <div class='card-header'>
-            <div class='card-branding'>
-              {{#if @model.logoUrl}}
-                <img
-                  src={{@model.logoUrl}}
-                  alt='{{@model.storeName}}'
-                  class='card-logo'
-                />
-              {{else}}
-                <div
-                  class='card-logo placeholder'
-                  style={{htmlSafe
-                    (if
-                      @model.brandColor
-                      (concat 'background: ' @model.brandColor)
-                      ''
-                    )
-                  }}
-                >
-                  <svg
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    stroke-width='2'
-                  >
-                    <path d='M3 9h18l-1.5 9H4.5L3 9z' />
-                  </svg>
-                </div>
-              {{/if}}
-              <div class='card-info'>
-                <h3 class='card-name'>{{if
-                    @model.storeName
-                    @model.storeName
-                    'Online Store'
-                  }}</h3>
-                {{#if @model.websiteUrl}}
-                  <div class='card-url'>{{@model.websiteUrl}}</div>
-                {{/if}}
-              </div>
+          {{#if @model.logoUrl}}
+            <img
+              src={{@model.logoUrl}}
+              alt='{{@model.storeName}}'
+              class='card-logo'
+            />
+          {{else}}
+            <div
+              class='card-logo placeholder'
+              style={{htmlSafe
+                (if
+                  @model.brandColor (concat 'background: ' @model.brandColor) ''
+                )
+              }}
+            >
+              <svg
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                stroke-width='2'
+              >
+                <path d='M3 9h18l-1.5 9H4.5L3 9z' />
+              </svg>
             </div>
-          </div>
+          {{/if}}
+          <div class='card-title'>{{if
+              @model.storeName
+              @model.storeName
+              'Online Store'
+            }}</div>
         </div>
       </div>
     </div>
 
     <style scoped>
-      /* ³⁸ Fitted format responsive styling */
+      /* Container query system */
       .fitted-container {
         container-type: size;
         width: 100%;
@@ -1501,6 +1474,11 @@ class FittedTemplate extends Component<typeof OnlineStore> {
         align-items: center;
         gap: 0.5rem;
         width: 100%;
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        border-radius: 0.5rem;
+        padding: 0.375rem;
+        border: 1px solid rgba(226, 232, 240, 0.8);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
       }
 
       .badge-logo {
@@ -1524,12 +1502,7 @@ class FittedTemplate extends Component<typeof OnlineStore> {
         height: 0.875rem;
       }
 
-      .badge-info {
-        min-width: 0;
-        flex: 1;
-      }
-
-      .badge-name {
+      .badge-title {
         font-size: 0.75rem;
         font-weight: 600;
         color: #111827;
@@ -1537,23 +1510,21 @@ class FittedTemplate extends Component<typeof OnlineStore> {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        flex: 1;
       }
 
       /* Strip format styling */
       .strip-content {
         display: flex;
-        justify-content: space-between;
         align-items: center;
-        width: 100%;
         gap: 0.75rem;
-      }
-
-      .strip-identity {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        min-width: 0;
-        flex: 1;
+        width: 100%;
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border-radius: 0.625rem;
+        padding: 0.5rem;
+        border: 1px solid rgba(226, 232, 240, 0.8);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        transition: all 0.2s ease;
       }
 
       .strip-logo {
@@ -1577,12 +1548,7 @@ class FittedTemplate extends Component<typeof OnlineStore> {
         height: 1rem;
       }
 
-      .strip-info {
-        min-width: 0;
-        flex: 1;
-      }
-
-      .strip-name {
+      .strip-title {
         font-size: 0.8125rem;
         font-weight: 600;
         color: #111827;
@@ -1590,35 +1556,28 @@ class FittedTemplate extends Component<typeof OnlineStore> {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-      }
-
-      .strip-meta {
-        font-size: 0.6875rem;
-        color: #6b7280;
-        line-height: 1;
-        margin-top: 0.25rem;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        flex: 1;
       }
 
       /* Tile format styling */
       .tile-content {
         display: flex;
         flex-direction: column;
+        align-items: center;
+        justify-content: center;
         height: 100%;
         gap: 0.75rem;
-      }
-
-      .tile-header {
-        display: flex;
-        align-items: center;
-        gap: 0.625rem;
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border-radius: 0.625rem;
+        padding: 0.75rem;
+        border: 1px solid rgba(226, 232, 240, 0.8);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        transition: all 0.3s ease;
       }
 
       .tile-logo {
-        width: 2.5rem;
-        height: 2.5rem;
+        width: 3rem;
+        height: 3rem;
         border-radius: 0.5rem;
         object-fit: cover;
         flex-shrink: 0;
@@ -1633,52 +1592,42 @@ class FittedTemplate extends Component<typeof OnlineStore> {
       }
 
       .tile-logo.placeholder svg {
-        width: 1.25rem;
-        height: 1.25rem;
+        width: 1.5rem;
+        height: 1.5rem;
       }
 
-      .tile-name {
+      .tile-title {
         font-size: 0.875rem;
         font-weight: 600;
         color: #111827;
-        margin: 0;
-        line-height: 1.2;
-      }
-
-      .tile-url {
-        font-size: 0.6875rem;
-        color: #6366f1;
         text-align: center;
+        line-height: 1.2;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        margin-top: auto;
+        width: 100%;
       }
 
       /* Card format styling */
       .card-content {
         display: flex;
         flex-direction: column;
+        align-items: center;
+        justify-content: center;
         height: 100%;
-        gap: 0.75rem;
-      }
-
-      .card-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .card-branding {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
+        gap: 1rem;
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border-radius: 0.875rem;
+        padding: 1rem;
+        border: 1px solid rgba(226, 232, 240, 0.8);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
       }
 
       .card-logo {
-        width: 3rem;
-        height: 3rem;
-        border-radius: 0.5rem;
+        width: 4rem;
+        height: 4rem;
+        border-radius: 0.75rem;
         object-fit: cover;
         flex-shrink: 0;
       }
@@ -1692,21 +1641,28 @@ class FittedTemplate extends Component<typeof OnlineStore> {
       }
 
       .card-logo.placeholder svg {
-        width: 1.5rem;
-        height: 1.5rem;
+        width: 2rem;
+        height: 2rem;
       }
 
-      .card-name {
+      .card-title {
         font-size: 1rem;
         font-weight: 600;
         color: #111827;
-        margin: 0 0 0.25rem 0;
+        text-align: center;
         line-height: 1.2;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        width: 100%;
       }
 
-      .card-url {
-        font-size: 0.75rem;
-        color: #6366f1;
+      /* Hover effects */
+      .strip-content:hover,
+      .tile-content:hover,
+      .card-content:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
       }
     </style>
   </template>
