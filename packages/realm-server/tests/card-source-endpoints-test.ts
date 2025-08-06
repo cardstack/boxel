@@ -451,6 +451,14 @@ module(basename(__filename), function () {
             `//TEST UPDATE
           ${cardSrc}`,
           );
+
+          let fileResponse = await request
+            .get('/unused-card.gts')
+            .set('Accept', 'application/vnd.card+source');
+          assert.ok(
+            fileResponse.headers['created'],
+            'created date should be set for new GTS file',
+          );
         });
 
         test('broadcasts realm events', async function (assert) {
