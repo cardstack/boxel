@@ -59,7 +59,11 @@ export default class MessageCommand {
   }
 
   get description() {
-    return this.arguments?.description;
+    // Sometimes the AI does not provide a description, so we fall back to the
+    // attributes.description if it exists.
+    return (
+      this.arguments?.description || this.arguments?.attributes?.description
+    );
   }
 
   get status() {
