@@ -39,11 +39,6 @@ module.exports = function (environment) {
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
 
     // the fields below may be rewritten by the realm server
-    hostModeUserSubdomainRoot:
-      process.env.HOST_MODE_USER_SUBDOMAIN_DOMAIN_ROOT || 'localhost',
-    hostModeCustomSubdomainRoot:
-      process.env.HOST_MODE_CUSTOM_SUBDOMAIN_DOMAIN_ROOT ||
-      'custom-subdomain.localhost',
     hostsOwnAssets: true,
     realmServerDomain: process.env.REALM_SERVER_DOMAIN || 'localhost',
     resolvedBaseRealmURL:

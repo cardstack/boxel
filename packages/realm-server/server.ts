@@ -73,8 +73,6 @@ export class RealmServer {
     | (() => Promise<string | undefined>)
     | undefined;
   private enableFileWatcher: boolean;
-  private hostModeUserSubdomainRoot: string | undefined;
-  private hostModeCustomSubdomainRoot: string | undefined;
 
   constructor({
     serverURL,
@@ -253,8 +251,6 @@ export class RealmServer {
         config = merge({}, config, {
           hostsOwnAssets: false,
           assetsURL: this.assetsURL.href,
-          hostModeUserSubdomainRoot: this.hostModeUserSubdomainRoot,
-          hostModeCustomSubdomainRoot: this.hostModeCustomSubdomainRoot,
           realmServerDomain: this.serverURL.hostname,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;

@@ -6,8 +6,6 @@ pnpm setup:skills-in-deployment
 NODE_NO_WARNINGS=1 \
   MATRIX_URL=https://matrix-staging.stack.cards \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
-  HOST_MODE_USER_SUBDOMAIN_ROOT=staging.boxel.dev \
-  HOST_MODE_CUSTOM_SUBDOMAIN_ROOT=staging.boxel.build \
   ts-node \
   --transpileOnly main \
   --port=3000 \

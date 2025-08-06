@@ -74,10 +74,6 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 
 const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
 
-const HOST_MODE_USER_SUBDOMAIN_ROOT = process.env.HOST_MODE_USER_SUBDOMAIN_ROOT;
-const HOST_MODE_CUSTOM_SUBDOMAIN_ROOT =
-  process.env.HOST_MODE_CUSTOM_SUBDOMAIN_ROOT;
-
 let {
   port,
   matrixURL,
@@ -283,8 +279,6 @@ let autoMigrate = migrateDB || undefined;
     getRegistrationSecret: useRegistrationSecretFunction
       ? getRegistrationSecret
       : undefined,
-    hostModeUserSubdomainRoot: HOST_MODE_USER_SUBDOMAIN_ROOT,
-    hostModeCustomSubdomainRoot: HOST_MODE_CUSTOM_SUBDOMAIN_ROOT,
   });
 
   let httpServer = server.listen(port);
