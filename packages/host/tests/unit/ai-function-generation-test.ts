@@ -58,6 +58,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
 
   const cardInfoSchema: ObjectSchema = {
     properties: {},
+    additionalProperties: false,
     type: 'object',
   };
 
