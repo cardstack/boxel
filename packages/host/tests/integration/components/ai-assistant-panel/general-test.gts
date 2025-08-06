@@ -1353,16 +1353,13 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
     assert
       .dom('[data-test-new-session-settings-option]')
-      .exists({ count: 3 }, 'All three options are present');
+      .exists({ count: 2 }, 'All three options are present');
     assert
       .dom('[data-test-new-session-settings-label="Add Same Skills"]')
       .exists('First option is present');
     assert
       .dom('[data-test-new-session-settings-label="Copy File History"]')
       .exists('Second option is present');
-    assert
-      .dom('[data-test-new-session-settings-label="Summarize Current Session"]')
-      .exists('Third option is present');
 
     assert
       .dom('[data-test-new-session-settings-option].checked')
