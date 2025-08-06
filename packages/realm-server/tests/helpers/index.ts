@@ -16,9 +16,6 @@ import {
   VirtualNetwork,
   Worker,
   RunnerOptionsManager,
-  Loader,
-  fetcher,
-  maybeHandleScopedCSSRequest,
   insertPermissions,
   IndexWriter,
   asExpressions,
@@ -41,7 +38,6 @@ import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { makeFastBootIndexRunner } from '../../fastboot';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { RealmServer } from '../../server';
 import {
   PgAdapter,
@@ -131,17 +127,6 @@ let fastbootState:
 
 export function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
-}
-
-export function createVirtualNetworkAndLoader() {
-  let virtualNetwork = createVirtualNetwork();
-  let fetch = fetcher(virtualNetwork.fetch, [
-    async (req, next) => {
-      return (await maybeHandleScopedCSSRequest(req)) || next(req);
-    },
-  ]);
-  let loader = new Loader(fetch, virtualNetwork.resolveImport);
-  return { virtualNetwork, loader };
 }
 
 export function createVirtualNetwork() {
@@ -317,17 +302,13 @@ export async function createRealm({
   return { realm, adapter };
 }
 
-export function setupBaseRealmServer(
-  hooks: NestedHooks,
-  virtualNetwork: VirtualNetwork,
-  matrixURL: URL,
-) {
+export function setupBaseRealmServer(hooks: NestedHooks, matrixURL: URL) {
   let baseRealmServer: Server;
   setupDB(hooks, {
     before: async (dbAdapter, publisher, runner) => {
       let dir = dirSync();
       baseRealmServer = await runBaseRealmServer(
-        virtualNetwork,
+        createVirtualNetwork(),
         publisher,
         runner,
         dbAdapter,
@@ -485,16 +466,6 @@ export async function runTestRealmServer({
     testRealmAdapter,
     matrixClient,
   };
-}
-
-export function setupCardLogs(
-  hooks: NestedHooks,
-  apiThunk: () => Promise<typeof CardAPI>,
-) {
-  hooks.afterEach(async function () {
-    let api = await apiThunk();
-    await api.flushLogs();
-  });
 }
 
 export async function insertUser(

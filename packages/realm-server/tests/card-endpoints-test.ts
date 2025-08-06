@@ -6,7 +6,6 @@ import { type DirResult } from 'tmp';
 import { existsSync, readJSONSync } from 'fs-extra';
 import {
   isSingleCardDocument,
-  baseRealm,
   Realm,
   type LooseSingleCardDocument,
   type SingleCardDocument,
@@ -14,11 +13,9 @@ import {
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
 import {
-  setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
   setupMatrixRoom,
-  createVirtualNetworkAndLoader,
   matrixURL,
   closeServer,
   testRealmInfo,
@@ -59,14 +56,7 @@ module(basename(__filename), function () {
       };
     }
 
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.afterEach(async function () {
       await closeServer(testRealmHttpServer);

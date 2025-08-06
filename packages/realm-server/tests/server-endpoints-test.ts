@@ -5,7 +5,6 @@ import { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync, existsSync, ensureDirSync, readJSONSync } from 'fs-extra';
 import {
-  baseRealm,
   Deferred,
   Realm,
   fetchUserPermissions,
@@ -19,7 +18,6 @@ import { stringify } from 'qs';
 import { v4 as uuidv4 } from 'uuid';
 import { Query } from '@cardstack/runtime-common/query';
 import {
-  setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
   runTestRealmServer,
@@ -27,7 +25,6 @@ import {
   realmServerTestMatrix,
   realmSecretSeed,
   createVirtualNetwork,
-  createVirtualNetworkAndLoader,
   matrixURL,
   closeServer,
   testRealmInfo,
@@ -74,8 +71,6 @@ module(basename(__filename), function () {
       let dir: DirResult;
       let dbAdapter: PgAdapter;
 
-      let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
       function onRealmSetup(args: {
         testRealm: Realm;
         request: SuperTest<Test>;
@@ -87,13 +82,7 @@ module(basename(__filename), function () {
         dir = args.dir;
         dbAdapter = args.dbAdapter;
       }
-
-      setupCardLogs(
-        hooks,
-        async () => await loader.import(`${baseRealm.url}card-api`),
-      );
-
-      setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+      setupBaseRealmServer(hooks, matrixURL);
 
       hooks.beforeEach(async function () {
         dir = dirSync();
@@ -109,6 +98,7 @@ module(basename(__filename), function () {
         let runner: QueueRunner;
         let request2: SuperTest<Test>;
         let testRealmDir: string;
+        let virtualNetwork = createVirtualNetwork();
 
         setupPermissionedRealm(hooks, {
           permissions: {
@@ -2686,19 +2676,10 @@ module(basename(__filename), function () {
   );
   module('Realm server authentication', function (hooks) {
     let testRealmServer: Server;
-
     let request: SuperTest<Test>;
-
     let dir: DirResult;
 
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.beforeEach(async function () {
       dir = dirSync();

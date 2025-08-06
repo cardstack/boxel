@@ -3,17 +3,11 @@ import { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import { Server } from 'http';
 import qs from 'qs';
+import { type FieldsMeta, type Realm } from '@cardstack/runtime-common';
 import {
-  baseRealm,
-  type FieldsMeta,
-  type Realm,
-} from '@cardstack/runtime-common';
-import {
-  setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
   closeServer,
-  createVirtualNetworkAndLoader,
   matrixURL,
   testRealmHref,
   createJWT,
@@ -36,15 +30,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       testRealmHttpServer = args.testRealmHttpServer;
       request = args.request;
     }
-
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.afterEach(async function () {
       await closeServer(testRealmHttpServer);

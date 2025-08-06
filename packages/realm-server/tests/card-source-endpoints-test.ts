@@ -9,17 +9,14 @@ import {
   compiledCard,
 } from '@cardstack/runtime-common/etc/test-fixtures';
 import {
-  baseRealm,
   RealmPaths,
   Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import {
-  setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
   setupMatrixRoom,
-  createVirtualNetworkAndLoader,
   matrixURL,
   testRealmHref,
   testRealmURL,
@@ -59,14 +56,7 @@ module(basename(__filename), function () {
         dir,
       };
     }
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     module('card source GET request', function (_hooks) {
       module('public readable realm', function (hooks) {
