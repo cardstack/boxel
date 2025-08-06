@@ -99,6 +99,7 @@ import {
   AtomicPayloadValidationError,
   filterAtomicOperations,
 } from './atomic-document';
+import { DefinitionsCache } from './definitions-cache';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -244,6 +245,7 @@ export class Realm {
   #disableModuleCaching = false;
   #fullIndexOnStartup = false;
   #realmServerMatrixUserId: string;
+  #definitionsCache: DefinitionsCache;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -339,6 +341,7 @@ export class Realm {
         new RealmAuthDataSource(this.#realmServerMatrixClient, () => _fetch),
       ),
     ]);
+    this.#definitionsCache = new DefinitionsCache(_fetch);
 
     this.__fetchForTesting = _fetch;
 
@@ -351,6 +354,7 @@ export class Realm {
       realm: this,
       dbAdapter,
       fetch: _fetch,
+      definitionsCache: this.#definitionsCache,
     });
 
     this.#router = new Router(new URL(url))
@@ -537,6 +541,9 @@ export class Realm {
     let performIndex = async () => {
       await this.#realmIndexUpdater.update(urls, {
         onInvalidation: (invalidatedURLs: URL[]) => {
+          if (invalidatedURLs.find((url) => hasExecutableExtension(url.href))) {
+            this.#definitionsCache.invalidate();
+          }
           invalidations = new Set([
             ...invalidations,
             ...invalidatedURLs.map((u) => u.href),
@@ -857,6 +864,9 @@ export class Realm {
     await this.#realmIndexUpdater.update([url], {
       delete: true,
       onInvalidation: (invalidatedURLs: URL[]) => {
+        if (invalidatedURLs.find((url) => hasExecutableExtension(url.href))) {
+          this.#definitionsCache.invalidate();
+        }
         this.broadcastRealmEvent({
           eventName: 'index',
           indexType: 'incremental',
@@ -876,6 +886,7 @@ export class Realm {
 
   async reindex() {
     await this.#realmIndexUpdater.fullIndex();
+    this.#definitionsCache.invalidate();
     this.broadcastRealmEvent({
       eventName: 'index',
       indexType: 'full',
@@ -2614,7 +2625,7 @@ export class Realm {
       relativeTo,
     ) as ResolvedCodeRef;
     let definition =
-      await this.realmIndexQueryEngine.getDefinition(absoluteCodeRef);
+      await this.#definitionsCache.getDefinition(absoluteCodeRef);
     if (!definition) {
       throw new Error(
         `Could not find card definition for: ${JSON.stringify(absoluteCodeRef)}`,
@@ -2657,7 +2668,7 @@ export class Realm {
               relativeTo,
             ) as ResolvedCodeRef;
             let fieldDefinition =
-              await this.realmIndexQueryEngine.getDefinition(absoluteCodeRef);
+              await this.#definitionsCache.getDefinition(absoluteCodeRef);
             if (fieldDefinition) {
               for (const [subFieldName, subFieldDefinition] of Object.entries(
                 fieldDefinition.fields,
@@ -2682,7 +2693,7 @@ export class Realm {
           relativeTo,
         ) as ResolvedCodeRef;
         let fieldDefinition =
-          await this.realmIndexQueryEngine.getDefinition(absoluteCodeRef);
+          await this.#definitionsCache.getDefinition(absoluteCodeRef);
         if (fieldDefinition) {
           for (const [subFieldName, subFieldDefinition] of Object.entries(
             fieldDefinition.fields,
@@ -2736,6 +2747,9 @@ export class Realm {
       this.sendIndexInitiationEvent(url.href);
       await this.#realmIndexUpdater.update([url], {
         onInvalidation: (invalidatedURLs: URL[]) => {
+          if (invalidatedURLs.find((url) => hasExecutableExtension(url.href))) {
+            this.#definitionsCache.invalidate();
+          }
           this.broadcastRealmEvent({
             eventName: 'index',
             indexType: 'incremental',

@@ -1,6 +1,5 @@
 import * as JSONTypes from 'json-typescript';
 import flatten from 'lodash/flatten';
-import qs from 'qs';
 import stringify from 'safe-stable-stringify';
 import {
   type CardResource,
@@ -10,7 +9,6 @@ import {
   isResolvedCodeRef,
   ResolvedCodeRef,
   trimExecutableExtension,
-  SupportedMimeType,
   baseRealm,
   getSerializer,
 } from './index';
@@ -60,6 +58,7 @@ import {
   type Definition,
   type FieldDefinition,
 } from './index-structure';
+import { DefinitionsCache } from './definitions-cache';
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
 interface IndexedModule {
@@ -176,10 +175,11 @@ export function isValidPrerenderedHtmlFormat(
 
 export class IndexQueryEngine {
   #dbAdapter: DBAdapter;
-  #fetch: typeof globalThis.fetch;
-  constructor(dbAdapter: DBAdapter, fetch: typeof globalThis.fetch) {
+  #definitionsCache: DefinitionsCache;
+
+  constructor(dbAdapter: DBAdapter, definitionsCache: DefinitionsCache) {
     this.#dbAdapter = dbAdapter;
-    this.#fetch = fetch;
+    this.#definitionsCache = definitionsCache;
   }
 
   async #query(expression: Expression) {
@@ -382,72 +382,13 @@ export class IndexQueryEngine {
     };
   }
 
-  // the code ref we are looking for might not reside on this server so we need
-  // to use the public Realm API to retrieve it
-  public async getDefinition(
-    codeRef: CodeRef,
-    opts?: WIPOptions,
-  ): Promise<Definition> {
+  private async getDefinition(codeRef: CodeRef): Promise<Definition> {
     if (!isResolvedCodeRef(codeRef)) {
       throw new Error(
         `Your filter refers to a nonexistent type: ${stringify(codeRef)}`,
       );
     }
-    let head: Response;
-    try {
-      head = await this.#fetch(codeRef.module, {
-        method: 'HEAD',
-        ...(opts?.useWorkInProgressIndex
-          ? {
-              headers: {
-                'X-Boxel-Building-Index': 'true',
-              },
-            }
-          : {}),
-      });
-    } catch (e) {
-      throw new Error(
-        `Your filter refers to a nonexistent type: import { ${codeRef.name} } from "${codeRef.module}"`,
-      );
-    }
-    if (!head.ok) {
-      let message = await head.text();
-      throw new Error(
-        `tried to get definition for ${stringify(codeRef)}, but got ${head.status}: ${message} for HEAD ${codeRef.module}`,
-      );
-    }
-    let realmURL = head.headers.get('X-Boxel-Realm-Url');
-    if (!realmURL) {
-      throw new Error(
-        `could not determine realm URL for ${codeRef.module} when getting definition for ${stringify(codeRef)}`,
-      );
-    }
-    let url = `${realmURL}_definition?${qs.stringify({ codeRef })}`;
-    let response: Response;
-    try {
-      response = await this.#fetch(url, {
-        headers: {
-          accept: SupportedMimeType.JSONAPI,
-          ...(opts?.useWorkInProgressIndex
-            ? {
-                'X-Boxel-Building-Index': 'true',
-              }
-            : {}),
-        },
-      });
-    } catch (e) {
-      throw new Error(
-        `Your filter refers to a nonexistent type: import { ${codeRef.name} } from "${codeRef.module}"`,
-      );
-    }
-    if (!response.ok) {
-      let message = await response.text();
-      throw new Error(
-        `tried to get definition for ${stringify(codeRef)}, but got ${response.status}: ${message} for ${url}`,
-      );
-    }
-    let json = await response.json();
-    return json.data.attributes as Definition;
+    return await this.#definitionsCache.getDefinition(codeRef);
   }
 
   // we pass the loader in so there is no ambiguity which loader to use as this

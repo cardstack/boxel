@@ -94,6 +94,7 @@ import type {
   CommandResultWithOutputContent,
   RealmEventContent,
   Tool,
+  CommandResultStatus,
 } from 'https://cardstack.com/base/matrix-event';
 
 import type * as SkillModule from 'https://cardstack.com/base/skill';
@@ -729,37 +730,39 @@ export default class MatrixService extends Service {
     );
   }
 
-  async sendCommandResultEvent(
-    roomId: string,
-    invokedToolFromEventId: string,
-    toolCallId: string,
-    resultCard?: CardDef,
-    attachedCards: CardDef[] = [],
-    attachedFiles: FileDef[] = [],
-    context?: BoxelContext,
-  ) {
+  async sendCommandResultEvent(params: {
+    roomId: string;
+    invokedToolFromEventId: string;
+    toolCallId: string;
+    status: CommandResultStatus;
+    resultCard?: CardDef;
+    failureReason?: string;
+    attachedCards?: CardDef[];
+    attachedFiles?: FileDef[];
+    context?: BoxelContext;
+  }) {
     let resultCardFileDef: FileDef | undefined;
-    if (resultCard) {
-      [resultCardFileDef] = await this.client.uploadCards([resultCard]);
+    if (params.resultCard) {
+      [resultCardFileDef] = await this.client.uploadCards([params.resultCard]);
     }
     let contentData = await this.withContextAndAttachments(
-      context,
-      attachedCards,
-      attachedFiles,
+      params.context,
+      params.attachedCards || [],
+      params.attachedFiles || [],
     );
-    if ((resultCard as FileForAttachmentCard)?.fileForAttachment) {
+    if ((params.resultCard as FileForAttachmentCard)?.fileForAttachment) {
       contentData.attachedFiles.push(
         (
-          (resultCard as FileForAttachmentCard)!
+          (params.resultCard as FileForAttachmentCard)!
             .fileForAttachment as unknown as FileDef
         ).serialize(),
       );
       resultCardFileDef = undefined; // don't send the card as a result if the file is attached
     }
-    if ((resultCard as CardForAttachmentCard)?.cardForAttachment) {
+    if ((params.resultCard as CardForAttachmentCard)?.cardForAttachment) {
       contentData.attachedCards.push(
         (
-          (resultCard as CardForAttachmentCard)!
+          (params.resultCard as CardForAttachmentCard)!
             .cardForAttachment as unknown as FileDef
         ).serialize(),
       );
@@ -771,10 +774,11 @@ export default class MatrixService extends Service {
     if (resultCardFileDef === undefined) {
       content = {
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-        commandRequestId: toolCallId,
+        commandRequestId: params.toolCallId,
+        failureReason: params.failureReason,
         'm.relates_to': {
-          event_id: invokedToolFromEventId,
-          key: 'applied',
+          event_id: params.invokedToolFromEventId,
+          key: params.status,
           rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
         },
         data: contentData,
@@ -783,11 +787,12 @@ export default class MatrixService extends Service {
       content = {
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
         'm.relates_to': {
-          event_id: invokedToolFromEventId,
-          key: 'applied',
+          event_id: params.invokedToolFromEventId,
+          key: params.status,
           rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
         },
-        commandRequestId: toolCallId,
+        commandRequestId: params.toolCallId,
+        failureReason: params.failureReason,
         data: {
           ...contentData,
           card: resultCardFileDef.serialize(),
@@ -796,7 +801,7 @@ export default class MatrixService extends Service {
     }
     try {
       return await this.sendEvent(
-        roomId,
+        params.roomId,
         APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
         content,
       );

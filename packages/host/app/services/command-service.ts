@@ -1,7 +1,10 @@
 import { getOwner, setOwner } from '@ember/owner';
+
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
+
+import Ajv from 'ajv';
 
 import { task, timeout, all } from 'ember-concurrency';
 
@@ -18,6 +21,8 @@ import {
   identifyCard,
   type PatchData,
 } from '@cardstack/runtime-common';
+
+import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 
@@ -165,10 +170,18 @@ export default class CommandService extends Service {
         if (this.executedCommandRequestIds.has(messageCommand.id!)) {
           continue;
         }
-        if (messageCommand.status === 'applied') {
+        if (
+          messageCommand.status === 'applied' ||
+          messageCommand.status === 'invalid'
+        ) {
           continue;
         }
         if (!messageCommand.name) {
+          continue;
+        }
+
+        let isValid = await this.validate(messageCommand);
+        if (!isValid) {
           continue;
         }
 
@@ -333,15 +346,14 @@ export default class CommandService extends Service {
       let userContextForAiBot =
         await this.operatorModeStateService.getSummaryForAIBot();
 
-      await this.matrixService.sendCommandResultEvent(
-        command.message.roomId,
-        eventId,
-        commandRequestId!,
+      await this.matrixService.sendCommandResultEvent({
+        roomId: command.message.roomId,
+        invokedToolFromEventId: eventId,
+        toolCallId: commandRequestId!,
+        status: 'applied',
         resultCard,
-        [],
-        [],
-        userContextForAiBot,
-      );
+        context: userContextForAiBot,
+      });
     } catch (e) {
       let error =
         typeof e === 'string'
@@ -356,6 +368,73 @@ export default class CommandService extends Service {
       this.currentlyExecutingCommandRequestIds.delete(commandRequestId!);
     }
   });
+
+  async validate(command: MessageCommand): Promise<boolean> {
+    let error: string | undefined;
+    if (!command.name) {
+      console.warn(
+        `Command with id ${command.id} has no name, skipping validation`,
+      );
+      return false;
+    }
+
+    if (command.name === 'patchCardInstance') {
+      // special case for patchCardInstance command
+      return true;
+    }
+
+    let commandCodeRef = command.codeRef;
+    if (!commandCodeRef) {
+      error = `No command for the name "${command.name}" was found`;
+    } else {
+      let CommandConstructor = (await getClass(
+        commandCodeRef,
+        this.loaderService.loader,
+      )) as { new (context: CommandContext): Command<any, any> };
+      if (!CommandConstructor) {
+        error = `No command for the name "${command.name}" was found`;
+      }
+      let commandInstance = new CommandConstructor(this.commandContext);
+      let loader = (
+        getOwner(this.commandContext)!.lookup(
+          'service:loader-service',
+        ) as LoaderService
+      ).loader;
+      let mappings = await basicMappings(loader);
+      let jsonSchema = {
+        type: 'object',
+        properties: {
+          description: {
+            type: 'string',
+          },
+          ...(await commandInstance.getInputJsonSchema(
+            this.matrixService.cardAPI,
+            mappings,
+          )),
+        },
+        required: ['attributes', 'description'],
+        additionalProperties: false,
+      };
+      const ajv = new Ajv();
+      const valid = ajv.validate(jsonSchema, command.arguments);
+      if (!valid) {
+        error = `Command "${command.name}" validation failed: ${ajv.errorsText()}`;
+      }
+    }
+    if (error) {
+      await this.matrixService.sendCommandResultEvent({
+        roomId: command.message.roomId,
+        invokedToolFromEventId: command.eventId,
+        toolCallId: command.commandRequest.id!,
+        status: 'invalid',
+        failureReason: error,
+        context: await this.operatorModeStateService.getSummaryForAIBot(),
+      });
+      return false;
+    }
+
+    return true;
+  }
 
   // Construct a new instance of the input type with the
   // The input is undefined if the command has no input type

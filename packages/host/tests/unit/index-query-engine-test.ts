@@ -15,6 +15,7 @@ import {
   type ResolvedCodeRef,
   type Definition,
 } from '@cardstack/runtime-common';
+import { DefinitionsCache } from '@cardstack/runtime-common/definitions-cache';
 
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 // eslint-disable-next-line ember/no-test-import-export
@@ -45,6 +46,7 @@ module('Unit | query', function (hooks) {
   let indexQueryEngine: IndexQueryEngine;
   let loader: Loader;
   let testCards: { [name: string]: CardDef } = {};
+  let definitionsCache: DefinitionsCache;
 
   hooks.before(async function () {
     dbAdapter = await getDbAdapter();
@@ -238,13 +240,15 @@ module('Unit | query', function (hooks) {
     });
 
     await dbAdapter.reset();
-    indexQueryEngine = new IndexQueryEngine(dbAdapter, virtualNetwork.fetch);
+    definitionsCache = new DefinitionsCache(virtualNetwork.fetch);
+    indexQueryEngine = new IndexQueryEngine(dbAdapter, definitionsCache);
   });
 
   test('can get all cards with empty filter', async function (assert) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -253,6 +257,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -261,6 +266,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -269,6 +275,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -277,6 +284,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -285,6 +293,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -293,6 +302,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -301,6 +311,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -309,6 +320,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -317,6 +329,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -325,6 +338,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -333,6 +347,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -341,6 +356,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -349,6 +365,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -357,6 +374,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -365,6 +383,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -373,6 +392,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -381,6 +401,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -389,6 +410,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -397,6 +419,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -405,6 +428,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -413,6 +437,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -421,6 +446,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -429,6 +455,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -437,6 +464,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -445,6 +473,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -453,6 +482,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -461,6 +491,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -469,6 +500,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -477,6 +509,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -485,6 +518,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -493,6 +527,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -501,6 +536,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -509,6 +545,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -517,6 +554,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -525,6 +563,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -533,6 +572,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -541,6 +581,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -549,6 +590,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -557,6 +599,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -565,6 +608,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -573,6 +617,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -581,6 +626,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -589,6 +635,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });
@@ -597,6 +644,7 @@ module('Unit | query', function (hooks) {
     await runSharedTest(indexQueryEngineTests, assert, {
       indexQueryEngine,
       dbAdapter,
+      definitionsCache,
       testCards,
     });
   });

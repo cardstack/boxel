@@ -37,17 +37,18 @@ export const DEFAULT_LLM_ID_TO_NAME: Record<string, string> = {
   'anthropic/claude-3.7-sonnet:thinking':
     'Anthropic: Claude 3.7 Sonnet (thinking)',
   'anthropic/claude-sonnet-4': 'Anthropic: Claude Sonnet 4',
-  'anthropic/claude-opus-4': 'Anthropic: Claude Opus 4',
+  'anthropic/claude-opus-4.1': 'Anthropic: Claude Opus 4.1',
   'deepseek/deepseek-chat-v3-0324': 'DeepSeek: DeepSeek V3 0324',
-  'google/gemini-2.0-flash-001': 'Google: Gemini 2.0 Flash',
-  'google/gemini-2.0-flash-lite-001': 'Google: Gemini 2.0 Flash Lite',
   'google/gemini-2.5-pro-preview': 'Google: Gemini 2.5 Pro Preview 06-05',
+  'google/gemini-2.5-flash-lite': 'Google: Gemini 2.5 Flash Lite',
+  'google/gemini-2.5-flash': 'Google: Gemini 2.5 Flash',
   'meta-llama/llama-3.2-3b-instruct': 'Meta: Llama 3.2 3B Instruct',
   'openai/gpt-4.1-nano': 'OpenAI: GPT-4.1 Nano',
   'openai/gpt-4.1-mini': 'OpenAI: GPT-4.1 Mini',
   'openai/gpt-4.1': 'OpenAI: GPT-4.1',
   'openai/gpt-4o': 'OpenAI: GPT-4o',
   'openai/gpt-4o-mini': 'OpenAI: GPT-4o-mini',
+  'openai/gpt-oss-20b': 'OpenAI: GPT OSS 20B',
 };
 
 export const DEFAULT_LLM_LIST = Object.keys(DEFAULT_LLM_ID_TO_NAME);
