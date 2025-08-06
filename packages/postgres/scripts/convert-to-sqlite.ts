@@ -119,7 +119,6 @@ function createColumns(
             column.push('DEFAULT', String(constraint.expr.expr.text));
             break;
           } else {
-            debugger;
             throw new Error(
               `Don't know how to serialize default value constraint for expression type '${constraint.expr.type}'`,
             );
