@@ -58,7 +58,7 @@ export class DefinitionsCache {
         `could not determine realm URL for ${codeRef.module} when getting card def meta for ${stringify(codeRef)}`,
       );
     }
-    let url = `${realmURL}_card-def?${qs.stringify({ codeRef })}`;
+    let url = `${realmURL}_definition?${qs.stringify({ codeRef })}`;
     let response: Response;
     try {
       response = await this.#fetch(url, {
