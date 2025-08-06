@@ -55,8 +55,8 @@ import {
   RealmMetaTable,
   type BoxelIndexTable,
   type CardTypeSummary,
-  type CardDefMeta,
-  type CardDefFieldMeta,
+  type Definition,
+  type FieldDefinition,
 } from './index-structure';
 import { DefinitionsCache } from './definitions-cache';
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
@@ -71,9 +71,9 @@ interface IndexedModule {
   deps: string[] | null;
 }
 
-interface IndexedCardDef {
-  type: 'card-def';
-  meta: CardDefMeta;
+interface IndexedDefinition {
+  type: 'definition';
+  definition: Definition;
   types: string[] | null;
   lastModified: number | null;
   resourceCreatedAt: number;
@@ -128,7 +128,7 @@ interface InstanceError
 
 export type InstanceOrError = IndexedInstance | InstanceError;
 export type IndexedModuleOrError = IndexedModule | IndexedError;
-export type IndexedCardDefOrError = IndexedCardDef | IndexedError;
+export type IndexedDefinitionOrError = IndexedDefinition | IndexedError;
 
 type GetEntryOptions = WIPOptions;
 export type QueryOptions = WIPOptions & PrerenderedCardOptions;
@@ -190,10 +190,10 @@ export class IndexQueryEngine {
     return this.#query(await this.makeExpression(query));
   }
 
-  async getOwnCardDef(
+  async getOwnDefinition(
     codeRef: ResolvedCodeRef,
     opts?: GetEntryOptions,
-  ): Promise<IndexedCardDefOrError | undefined> {
+  ): Promise<IndexedDefinitionOrError | undefined> {
     let cleansedCodeRef = { ...codeRef };
     cleansedCodeRef.module = trimExecutableExtension(
       new URL(cleansedCodeRef.module),
@@ -206,7 +206,7 @@ export class IndexQueryEngine {
       ...every([
         any([[`i.url =`, param(key)]]),
         any([
-          ['i.type =', param('card-def')],
+          ['i.type =', param('definition')],
           ['i.type =', param('error')],
         ]),
       ]),
@@ -222,19 +222,19 @@ export class IndexQueryEngine {
     if (result.type === 'error') {
       return { type: 'error', error: result.error_doc! };
     }
-    let cardDefEntry = assertIndexEntryMeta(result);
+    let definitionEntry = assertIndexEntryDefinition(result);
     let {
-      meta,
+      definition,
       last_modified: lastModified,
       resource_created_at: resourceCreatedAt,
-    } = cardDefEntry;
+    } = definitionEntry;
     return {
-      type: 'card-def',
-      meta,
+      type: 'definition',
+      definition,
       lastModified: lastModified != null ? parseInt(lastModified) : null,
       resourceCreatedAt: parseInt(resourceCreatedAt),
-      deps: cardDefEntry.deps,
-      types: cardDefEntry.types,
+      deps: definitionEntry.deps,
+      types: definitionEntry.types,
     };
   }
 
@@ -382,7 +382,7 @@ export class IndexQueryEngine {
     };
   }
 
-  private async getCardDefMeta(codeRef: CodeRef): Promise<CardDefMeta> {
+  private async getDefinition(codeRef: CodeRef): Promise<Definition> {
     if (!isResolvedCodeRef(codeRef)) {
       throw new Error(
         `Your filter refers to a nonexistent type: ${stringify(codeRef)}`,
@@ -923,13 +923,13 @@ export class IndexQueryEngine {
 
   private async handleFieldArity(fieldArity: FieldArity): Promise<Expression> {
     let { path, value, type, pluralValue, usePluralContainer } = fieldArity;
-    let meta = await this.getCardDefMeta(type);
+    let definition = await this.getDefinition(type);
     let exp: CardExpression = await this.walkFilterFieldPath(
-      meta,
+      definition,
       path,
       value,
       // Leaf field handler
-      async (_meta, expression, pathTraveled) => {
+      async (_definition, expression, pathTraveled) => {
         if (traveledThruPlural(pathTraveled)) {
           return [
             ...every([
@@ -960,19 +960,19 @@ export class IndexQueryEngine {
 
   private async handleFieldQuery(fieldQuery: FieldQuery): Promise<Expression> {
     let { path, type, useJsonBValue } = fieldQuery;
-    let meta = await this.getCardDefMeta(type);
+    let definition = await this.getDefinition(type);
     // The rootPluralPath should line up with the tableValuedTree that was
     // used in the handleFieldArity (the multiple tableValuedTree expressions will
     // collapse into a single function)
     let rootPluralPath: string | undefined;
 
     let exp = await this.walkFilterFieldPath(
-      meta,
+      definition,
       path,
       [],
       // Leaf field handler
-      async (meta, expression, pathTraveled) => {
-        let field = getField(meta, pathTraveled);
+      async (definition, expression, pathTraveled) => {
+        let field = getField(definition, pathTraveled);
         if (isFieldPlural(field)) {
           rootPluralPath = trimPathAtFirstPluralField(pathTraveled);
           return [
@@ -991,10 +991,10 @@ export class IndexQueryEngine {
       },
       // interior field handler
       {
-        enter: async (meta, expression, pathTraveled) => {
+        enter: async (definition, expression, pathTraveled) => {
           // we work forwards determining if any interior fields are plural
           // since that requires a different style predicate
-          let field = getField(meta, pathTraveled);
+          let field = getField(definition, pathTraveled);
           if (isFieldPlural(field)) {
             rootPluralPath = trimPathAtFirstPluralField(pathTraveled);
             return [
@@ -1003,11 +1003,11 @@ export class IndexQueryEngine {
           }
           return expression;
         },
-        exit: async (meta, expression, pathTraveled) => {
+        exit: async (definition, expression, pathTraveled) => {
           // we populate the singular fields backwards as we can only do that
           // after we are assured that we are not leveraging the plural style
           // predicate
-          let field = getField(meta, pathTraveled);
+          let field = getField(definition, pathTraveled);
           if (!isFieldPlural(field) && !rootPluralPath) {
             let fieldName = currentField(pathTraveled);
             return ['->', param(fieldName), ...expression];
@@ -1024,18 +1024,18 @@ export class IndexQueryEngine {
 
   private async handleFieldValue(fieldValue: FieldValue): Promise<Expression> {
     let { path, value, type } = fieldValue;
-    let meta = await this.getCardDefMeta(type);
+    let definition = await this.getDefinition(type);
     let exp = await this.makeExpression(value);
 
     return await this.walkFilterFieldPath(
-      meta,
+      definition,
       path,
       exp,
       // Leaf field handler
-      async (meta, expression, pathTraveled) => {
+      async (definition, expression, pathTraveled) => {
         let queryValue: any;
         let [value] = expression;
-        let field = getField(meta, pathTraveled);
+        let field = getField(definition, pathTraveled);
         let serializer = field.serializerName
           ? getSerializer(field.serializerName)
           : undefined;
@@ -1054,7 +1054,7 @@ export class IndexQueryEngine {
   }
 
   private async walkFilterFieldPath(
-    meta: CardDefMeta,
+    definition: Definition,
     path: string,
     expression: Expression,
     handleLeafField: FilterFieldHandler<Expression>,
@@ -1062,7 +1062,7 @@ export class IndexQueryEngine {
     pathTraveled?: string[],
   ): Promise<Expression>;
   private async walkFilterFieldPath(
-    meta: CardDefMeta,
+    definition: Definition,
     path: string,
     expression: CardExpression,
     handleLeafField: FilterFieldHandler<CardExpression>,
@@ -1070,7 +1070,7 @@ export class IndexQueryEngine {
     pathTraveled?: string[],
   ): Promise<CardExpression>;
   private async walkFilterFieldPath(
-    meta: CardDefMeta,
+    definition: Definition,
     path: string,
     expression: Expression,
     handleLeafField: FilterFieldHandler<any[]>,
@@ -1083,7 +1083,7 @@ export class IndexQueryEngine {
     let currentPath = removeBrackets(
       [...pathTraveled, currentSegment].join('.'),
     );
-    let field = getField(meta, currentPath);
+    let field = getField(definition, currentPath);
     // we use '[]' to denote plural fields as that has important ramifications
     // to how we compose our queries in the various handlers and ultimately in
     // SQL construction
@@ -1092,10 +1092,12 @@ export class IndexQueryEngine {
       `${currentSegment}${isFieldPlural(field) ? '[]' : ''}`,
     ].join('.');
     if (isLeaf) {
-      expression = await handleLeafField(meta, expression, traveled);
+      expression = await handleLeafField(definition, expression, traveled);
     } else {
-      let passThru: FilterFieldHandler<any[]> = async (_meta, e: Expression) =>
-        e;
+      let passThru: FilterFieldHandler<any[]> = async (
+        _definition,
+        e: Expression,
+      ) => e;
       // when dealing with an interior field that is not a leaf path segment,
       // the entrance and exit hooks allow you to decorate the expression for
       // the interior field before the interior's antecedant segment's
@@ -1110,14 +1112,14 @@ export class IndexQueryEngine {
         : passThru;
 
       let interiorExpression = await this.walkFilterFieldPath(
-        meta,
+        definition,
         pathSegments.join('.'),
-        await entranceHandler(meta, expression, traveled),
+        await entranceHandler(definition, expression, traveled),
         handleLeafField,
         handleInteriorField,
         traveled.split('.'),
       );
-      expression = await exitHandler(meta, interiorExpression, traveled);
+      expression = await exitHandler(definition, interiorExpression, traveled);
     }
     return expression;
   }
@@ -1143,13 +1145,16 @@ function removeBrackets(pathTraveled: string) {
   return pathTraveled.replace(/\[\]/g, '');
 }
 
-function isFieldPlural(field: CardDefFieldMeta): boolean {
+function isFieldPlural(field: FieldDefinition): boolean {
   return field.type === 'containsMany' || field.type === 'linksToMany';
 }
 
-function getField(meta: CardDefMeta, pathTraveled: string): CardDefFieldMeta {
+function getField(
+  definition: Definition,
+  pathTraveled: string,
+): FieldDefinition {
   let cleansedPath = removeBrackets(pathTraveled);
-  let field = meta.fields[cleansedPath];
+  let field = definition.fields[cleansedPath];
   if (!field) {
     if (currentField(pathTraveled) === '_cardType') {
       // this is a little awkward--we have the need to treat '_cardType' as a
@@ -1164,11 +1169,11 @@ function getField(meta: CardDefMeta, pathTraveled: string): CardDefFieldMeta {
           module: `${baseRealm.url}card-api`,
           name: 'StringField',
         },
-      } as CardDefFieldMeta;
+      } as FieldDefinition;
     }
     throw new Error(
       `Your filter refers to a nonexistent field "${cleansedPath}" on type ${stringify(
-        meta.codeRef,
+        definition.codeRef,
       )}`,
     );
   }
@@ -1212,19 +1217,21 @@ function assertIndexEntrySource<T>(obj: T): Omit<
   };
 }
 
-function assertIndexEntryMeta<T>(obj: T): Omit<
+function assertIndexEntryDefinition<T>(obj: T): Omit<
   T,
-  'meta' | 'last_modified' | 'resource_created_at'
+  'definition' | 'last_modified' | 'resource_created_at'
 > & {
-  meta: CardDefMeta;
+  definition: Definition;
   last_modified: string | null;
   resource_created_at: string;
 } {
   if (!obj || typeof obj !== 'object') {
     throw new Error(`expected index entry is null or not an object`);
   }
-  if (!('meta' in obj) || typeof obj.meta !== 'object') {
-    throw new Error(`expected index entry to have "meta" string property`);
+  if (!('definition' in obj) || typeof obj.definition !== 'object') {
+    throw new Error(
+      `expected index entry to have "definition" string property`,
+    );
   }
   if (!('last_modified' in obj)) {
     throw new Error(`expected index entry to have "last_modified" property`);
@@ -1237,8 +1244,11 @@ function assertIndexEntryMeta<T>(obj: T): Omit<
       `expected index entry to have "resource_created_at" property`,
     );
   }
-  return obj as Omit<T, 'meta' | 'last_modified' | 'resource_created_at'> & {
-    meta: CardDefMeta;
+  return obj as Omit<
+    T,
+    'definition' | 'last_modified' | 'resource_created_at'
+  > & {
+    definition: Definition;
     last_modified: string;
     resource_created_at: string;
   };
@@ -1253,7 +1263,7 @@ function assertNever(value: never) {
 }
 
 type FilterFieldHandler<T> = (
-  meta: CardDefMeta,
+  definition: Definition,
   expression: T,
   pathTraveled: string,
 ) => Promise<T>;

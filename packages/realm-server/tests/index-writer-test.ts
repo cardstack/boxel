@@ -43,7 +43,7 @@ module(basename(__filename), function () {
       });
     });
 
-    test('card def entries can be invalidated', async function (assert) {
+    test('definition entries can be invalidated', async function (assert) {
       await runSharedTest(indexWriterTests, assert, {
         indexWriter,
         indexQueryEngine,
@@ -163,7 +163,7 @@ module(basename(__filename), function () {
       });
     });
 
-    test('can get a card-def entry', async function (assert) {
+    test('can get a definition entry', async function (assert) {
       await runSharedTest(indexWriterTests, assert, {
         indexWriter,
         indexQueryEngine,
@@ -171,7 +171,7 @@ module(basename(__filename), function () {
       });
     });
 
-    test('can get a card-def entry from the working index', async function (assert) {
+    test('can get a definition entry from the working index', async function (assert) {
       await runSharedTest(indexWriterTests, assert, {
         indexWriter,
         indexQueryEngine,

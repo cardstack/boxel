@@ -1,6 +1,6 @@
 import {
   type ResolvedCodeRef,
-  type CardDefMeta,
+  type Definition,
   SupportedMimeType,
   internalKeyFor,
 } from './index';
@@ -9,7 +9,7 @@ import qs from 'qs';
 
 export class DefinitionsCache {
   #fetch: typeof globalThis.fetch;
-  #cache = new Map<string, CardDefMeta>();
+  #cache = new Map<string, Definition>();
 
   constructor(fetch: typeof globalThis.fetch) {
     this.#fetch = fetch;
@@ -24,7 +24,7 @@ export class DefinitionsCache {
     return [...this.#cache.keys()];
   }
 
-  async getDefinition(codeRef: ResolvedCodeRef): Promise<CardDefMeta> {
+  async getDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
     let key = internalKeyFor(codeRef, undefined);
     let cached = this.#cache.get(key);
     if (cached) {
@@ -35,9 +35,7 @@ export class DefinitionsCache {
     return definition;
   }
 
-  private async fetchDefinition(
-    codeRef: ResolvedCodeRef,
-  ): Promise<CardDefMeta> {
+  private async fetchDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
     let head: Response;
     try {
       head = await this.#fetch(codeRef.module, {
@@ -51,7 +49,7 @@ export class DefinitionsCache {
     if (!head.ok) {
       let message = await head.text();
       throw new Error(
-        `tried to get card def meta for ${stringify(codeRef)}, but got ${head.status}: ${message} for HEAD ${codeRef.module}`,
+        `tried to get definition for ${stringify(codeRef)}, but got ${head.status}: ${message} for HEAD ${codeRef.module}`,
       );
     }
     let realmURL = head.headers.get('X-Boxel-Realm-Url');
@@ -60,7 +58,7 @@ export class DefinitionsCache {
         `could not determine realm URL for ${codeRef.module} when getting card def meta for ${stringify(codeRef)}`,
       );
     }
-    let url = `${realmURL}_card-def?${qs.stringify({ codeRef })}`;
+    let url = `${realmURL}_definition?${qs.stringify({ codeRef })}`;
     let response: Response;
     try {
       response = await this.#fetch(url, {
@@ -74,10 +72,10 @@ export class DefinitionsCache {
     if (!response.ok) {
       let message = await response.text();
       throw new Error(
-        `tried to get card def meta for ${stringify(codeRef)}, but got ${response.status}: ${message} for ${url}`,
+        `tried to get definition for ${stringify(codeRef)}, but got ${response.status}: ${message} for ${url}`,
       );
     }
     let json = await response.json();
-    return json.data.attributes as CardDefMeta;
+    return json.data.attributes as Definition;
   }
 }
