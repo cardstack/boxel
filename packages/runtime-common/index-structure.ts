@@ -12,7 +12,7 @@ export interface BoxelIndexTable {
   file_alias: string;
   realm_version: number;
   realm_url: string;
-  type: 'instance' | 'meta' | 'module' | 'error';
+  type: 'instance' | 'definition' | 'module' | 'error';
   // TODO in followup PR update this to be a document not a resource
   pristine_doc: CardResource | null;
   error_doc: SerializedError | null;
@@ -22,7 +22,7 @@ export interface BoxelIndexTable {
   deps: string[] | null;
   // `types` is the adoption chain for card where each code ref is serialized
   // using `internalKeyFor()`
-  meta: FieldsMeta | null;
+  definition: Definition | null;
   types: string[] | null;
   display_names: string[] | null;
   transpiled_code: string | null;
@@ -57,7 +57,7 @@ export interface RealmMetaTable {
   indexed_at: string | null;
 }
 
-export interface FieldMeta {
+export interface FieldDefinition {
   type: FieldType;
   isPrimitive: boolean;
   isComputed: boolean;
@@ -65,12 +65,12 @@ export interface FieldMeta {
   serializerName?: SerializerName;
 }
 
-export interface FieldsMeta {
+export interface Definition {
   type: 'card-def' | 'field-def';
   codeRef: ResolvedCodeRef;
   displayName: string | null;
   fields: {
-    [fieldName: string]: FieldMeta;
+    [fieldName: string]: FieldDefinition;
   };
 }
 

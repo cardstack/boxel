@@ -205,7 +205,7 @@ const tests = Object.freeze({
     ]);
   },
 
-  'meta entries can be invalidated': async (
+  'definition entries can be invalidated': async (
     assert,
     { indexQueryEngine, indexWriter, adapter },
   ) => {
@@ -230,7 +230,7 @@ const tests = Object.freeze({
         {
           url: `${testRealmURL}person/Person`,
           file_alias: `${testRealmURL}person`,
-          type: 'meta',
+          type: 'definition',
           realm_version: 1,
           realm_url: testRealmURL,
           deps: [`${testRealmURL}person`],
@@ -250,7 +250,7 @@ const tests = Object.freeze({
         {
           url: `${testRealmURL}employee/Employee`,
           file_alias: `${testRealmURL}employee`,
-          type: 'meta',
+          type: 'definition',
           realm_version: 1,
           realm_url: testRealmURL,
           deps: [`${testRealmURL}employee`, `${testRealmURL}person`],
@@ -294,8 +294,8 @@ const tests = Object.freeze({
     await batch.invalidate([new URL(`${testRealmURL}person.gts`)]);
     let invalidations = batch.invalidations;
 
-    // the meta id's are notional, they are not file resources that can be
-    // visited, so instead we return the module that contains the meta
+    // the definition id's are notional, they are not file resources that can be
+    // visited, so instead we return the module that contains the definition
     assert.deepEqual(invalidations.sort(), [
       `${testRealmURL}1.json`,
       `${testRealmURL}2.json`,
@@ -303,16 +303,16 @@ const tests = Object.freeze({
       `${testRealmURL}person.gts`,
     ]);
 
-    let personMeta = await indexQueryEngine.getOwnMeta({
+    let personDefinition = await indexQueryEngine.getOwnDefinition({
       module: `${testRealmURL}person`,
       name: 'Person',
     });
     assert.strictEqual(
-      personMeta?.type,
-      'meta',
-      'meta exists in production index',
+      personDefinition?.type,
+      'definition',
+      'definition exists in production index',
     );
-    personMeta = await indexQueryEngine.getOwnMeta(
+    personDefinition = await indexQueryEngine.getOwnDefinition(
       {
         module: `${testRealmURL}person`,
         name: 'Person',
@@ -320,20 +320,20 @@ const tests = Object.freeze({
       { useWorkInProgressIndex: true },
     );
     assert.strictEqual(
-      personMeta,
+      personDefinition,
       undefined,
-      'meta entry has been marked for deletion in working index',
+      'definition entry has been marked for deletion in working index',
     );
-    let employeeMeta = await indexQueryEngine.getOwnMeta({
+    let employeeDefinition = await indexQueryEngine.getOwnDefinition({
       module: `${testRealmURL}employee`,
       name: 'Employee',
     });
     assert.strictEqual(
-      employeeMeta?.type,
-      'meta',
-      'meta exists in production index',
+      employeeDefinition?.type,
+      'definition',
+      'definition exists in production index',
     );
-    employeeMeta = await indexQueryEngine.getOwnMeta(
+    employeeDefinition = await indexQueryEngine.getOwnDefinition(
       {
         module: `${testRealmURL}employee`,
         name: 'Employee',
@@ -341,9 +341,9 @@ const tests = Object.freeze({
       { useWorkInProgressIndex: true },
     );
     assert.strictEqual(
-      employeeMeta,
+      employeeDefinition,
       undefined,
-      'meta entry has been marked for deletion in working index',
+      'definition entry has been marked for deletion in working index',
     );
   },
 
@@ -663,7 +663,7 @@ const tests = Object.freeze({
           url: `${testRealmURL}person/Person`,
           realm_version: 1,
           realm_url: testRealmURL,
-          type: 'meta',
+          type: 'definition',
           source: null,
           transpiled_code: null,
           pristine_doc: null,
@@ -681,7 +681,7 @@ const tests = Object.freeze({
           isolated_html: null,
           atom_html: null,
           icon_html: null,
-          meta: {
+          definition: {
             type: 'card-def',
             displayName: 'Person',
             codeRef: { module: `${testRealmURL}person`, name: 'Person' },
@@ -714,13 +714,13 @@ const tests = Object.freeze({
       'correct number of items were copied',
     );
 
-    let [copiedInstance, copiedModule, copiedMeta] = results;
+    let [copiedInstance, copiedModule, copiedDefinition] = results;
     assert.ok(copiedInstance.indexed_at, 'indexed_at was set');
     assert.ok(copiedModule.indexed_at, 'indexed_at was set');
 
     delete (copiedInstance as Partial<BoxelIndexTable>).indexed_at;
     delete (copiedModule as Partial<BoxelIndexTable>).indexed_at;
-    delete (copiedMeta as Partial<BoxelIndexTable>).indexed_at;
+    delete (copiedDefinition as Partial<BoxelIndexTable>).indexed_at;
 
     assert.deepEqual(
       copiedInstance as Omit<BoxelIndexTable, 'indexed_at'>,
@@ -777,7 +777,7 @@ const tests = Object.freeze({
         atom_html: `<span class="atom">Atom HTML</span>`,
         icon_html: '<svg>test icon</svg>',
         is_deleted: null,
-        meta: null,
+        definition: null,
       },
       'the copied instance is correct',
     );
@@ -805,19 +805,19 @@ const tests = Object.freeze({
         atom_html: null,
         icon_html: null,
         is_deleted: null,
-        meta: null,
+        definition: null,
       },
       'the copied module is correct',
     );
 
     assert.deepEqual(
-      copiedMeta as Omit<BoxelIndexTable, 'indexed_at'>,
+      copiedDefinition as Omit<BoxelIndexTable, 'indexed_at'>,
       {
         url: `${testRealmURL2}person/Person`,
         file_alias: `${testRealmURL2}person`,
         realm_version: 2,
         realm_url: testRealmURL2,
-        type: 'meta',
+        type: 'definition',
         source: null,
         transpiled_code: null,
         error_doc: null,
@@ -837,7 +837,7 @@ const tests = Object.freeze({
         atom_html: null,
         icon_html: null,
         is_deleted: null,
-        meta: {
+        definition: {
           type: 'card-def',
           displayName: 'Person',
           codeRef: { module: `${testRealmURL2}person`, name: 'Person' },
@@ -854,7 +854,7 @@ const tests = Object.freeze({
           },
         },
       },
-      'the copied meta is correct',
+      'the copied definition is correct',
     );
   },
 
@@ -991,7 +991,7 @@ const tests = Object.freeze({
         resource_created_at: String(modified),
         is_deleted: null,
         icon_html: '<svg>test icon</svg>',
-        meta: null,
+        definition: null,
       },
       'the error entry includes last known good state of instance',
     );
@@ -1047,7 +1047,7 @@ const tests = Object.freeze({
           resource_created_at: null,
           is_deleted: false,
           icon_html: null,
-          meta: null,
+          definition: null,
         },
         'the error entry does not include last known good state of instance',
       );
@@ -1481,7 +1481,7 @@ const tests = Object.freeze({
     );
   },
 
-  'can get a meta entry': async (
+  'can get a definition entry': async (
     assert,
     { indexWriter, indexQueryEngine, adapter },
   ) => {
@@ -1492,13 +1492,13 @@ const tests = Object.freeze({
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person/Person`), {
-      type: 'meta',
+      type: 'definition',
       fileAlias: `${testRealmURL}person`,
       types,
       lastModified: now,
       resourceCreatedAt: now,
       deps: new Set(types),
-      meta: {
+      definition: {
         type: 'card-def',
         displayName: 'Person',
         codeRef: {
@@ -1520,15 +1520,15 @@ const tests = Object.freeze({
     });
     await batch.done();
 
-    let result = await indexQueryEngine.getOwnMeta({
+    let result = await indexQueryEngine.getOwnDefinition({
       module: `${testRealmURL}person`,
       name: 'Person',
     });
 
-    if (result?.type === 'meta') {
+    if (result?.type === 'definition') {
       assert.deepEqual(result.deps, types, 'the deps are correct');
       assert.deepEqual(
-        result.meta,
+        result.definition,
         {
           displayName: 'Person',
           codeRef: {
@@ -1548,14 +1548,14 @@ const tests = Object.freeze({
             },
           },
         },
-        'the meta is correct',
+        'the definition is correct',
       );
     } else {
-      assert.ok(false, `expected meta entry not to be an error document`);
+      assert.ok(false, `expected definition entry not to be an error document`);
     }
   },
 
-  'can get a meta entry from the working index': async (
+  'can get a definition entry from the working index': async (
     assert,
     { indexWriter, indexQueryEngine, adapter },
   ) => {
@@ -1566,13 +1566,13 @@ const tests = Object.freeze({
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
     let now = Date.now();
     await batch.updateEntry(new URL(`${testRealmURL}person/Person`), {
-      type: 'meta',
+      type: 'definition',
       fileAlias: `${testRealmURL}person`,
       types,
       lastModified: now,
       resourceCreatedAt: now,
       deps: new Set(types),
-      meta: {
+      definition: {
         type: 'card-def',
         displayName: 'Person',
         codeRef: {
@@ -1593,7 +1593,7 @@ const tests = Object.freeze({
       },
     });
 
-    let result = await indexQueryEngine.getOwnMeta(
+    let result = await indexQueryEngine.getOwnDefinition(
       {
         module: `${testRealmURL}person`,
         name: 'Person',
@@ -1601,10 +1601,10 @@ const tests = Object.freeze({
       { useWorkInProgressIndex: true },
     );
 
-    if (result?.type === 'meta') {
+    if (result?.type === 'definition') {
       assert.deepEqual(result.deps, types, 'the deps are correct');
       assert.deepEqual(
-        result.meta,
+        result.definition,
         {
           displayName: 'Person',
           codeRef: {
@@ -1624,20 +1624,20 @@ const tests = Object.freeze({
             },
           },
         },
-        'the meta is correct',
+        'the definition is correct',
       );
     } else {
-      assert.ok(false, `expected meta entry not to be an error document`);
+      assert.ok(false, `expected definition entry not to be an error document`);
     }
 
-    let noResult = await indexQueryEngine.getOwnMeta({
+    let noResult = await indexQueryEngine.getOwnDefinition({
       module: `${testRealmURL}person`,
       name: 'Person',
     });
     assert.strictEqual(
       noResult,
       undefined,
-      'meta entry does not exist in production index',
+      'definition entry does not exist in production index',
     );
   },
 

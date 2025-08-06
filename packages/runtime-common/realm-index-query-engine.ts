@@ -9,10 +9,10 @@ import {
   type DBAdapter,
   type QueryOptions,
   type IndexedModuleOrError,
-  type IndexedMetaOrError,
+  type IndexedDefinitionOrError,
   type InstanceOrError,
   type ResolvedCodeRef,
-  type FieldsMeta,
+  type Definition,
 } from '.';
 import { Realm } from './realm';
 import { RealmPaths } from './paths';
@@ -192,18 +192,18 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.getModule(url, opts);
   }
 
-  async getOwnMeta(
+  async getOwnDefinition(
     codeRef: ResolvedCodeRef,
     opts?: Options,
-  ): Promise<IndexedMetaOrError | undefined> {
-    return await this.#indexQueryEngine.getOwnMeta(codeRef, opts);
+  ): Promise<IndexedDefinitionOrError | undefined> {
+    return await this.#indexQueryEngine.getOwnDefinition(codeRef, opts);
   }
 
-  async getMeta(
+  async getDefinition(
     codeRef: ResolvedCodeRef,
     opts?: Options,
-  ): Promise<FieldsMeta | undefined> {
-    return await this.#indexQueryEngine.getMeta(codeRef, opts);
+  ): Promise<Definition | undefined> {
+    return await this.#indexQueryEngine.getDefinition(codeRef, opts);
   }
 
   async instance(

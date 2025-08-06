@@ -22,7 +22,7 @@ import {
   closeServer,
   cleanWhiteSpace,
   testRealmServerMatrixUserId,
-  cardInfoFieldMeta,
+  cardInfoDefinition,
 } from './helpers';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { Server } from 'http';
@@ -635,12 +635,12 @@ module(basename(__filename), function () {
       }
     });
 
-    test('can make a meta entry in the index', async function (assert) {
-      let entry = await realm.realmIndexQueryEngine.getOwnMeta({
+    test('can make a definition entry in the index', async function (assert) {
+      let entry = await realm.realmIndexQueryEngine.getOwnDefinition({
         module: `${testRealm}post.gts`,
         name: 'Post',
       });
-      if (entry?.type === 'meta') {
+      if (entry?.type === 'definition') {
         assert.ok(entry.lastModified, 'last modified date is set');
         assert.ok(entry.resourceCreatedAt, 'created date is set');
         assert.deepEqual(
@@ -652,7 +652,7 @@ module(basename(__filename), function () {
           'types are correct',
         );
         assert.deepEqual(
-          entry.meta.codeRef,
+          entry.definition.codeRef,
           {
             name: 'Post',
             module: `${testRealm}post`,
@@ -660,15 +660,15 @@ module(basename(__filename), function () {
           'code ref is correct',
         );
         assert.strictEqual(
-          entry.meta.displayName,
+          entry.definition.displayName,
           'Post',
           'display name is correct',
         );
 
         assert.deepEqual(
-          entry.meta.fields,
+          entry.definition.fields,
           {
-            ...cardInfoFieldMeta,
+            ...cardInfoDefinition,
             id: {
               type: 'contains',
               isComputed: false,
@@ -1059,7 +1059,7 @@ module(basename(__filename), function () {
                 isPrimitive: false,
               },
           },
-          'card-def meta is correct',
+          'definition is correct',
         );
 
         // this is a crazy long list that includes encoded CSS, so we'll just
@@ -1114,8 +1114,8 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          metaErrors: 0,
-          metasIndexed: 0,
+          definitionErrors: 0,
+          definitionsIndexed: 0,
           totalIndexEntries: 26,
         },
         'indexed correct number of files',
@@ -1144,18 +1144,19 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          metaErrors: 0,
-          metasIndexed: 0,
+          definitionErrors: 0,
+          definitionsIndexed: 0,
           totalIndexEntries: 20,
         },
         'indexed correct number of files',
       );
-      let petCardDefEntry = await realm.realmIndexQueryEngine.getOwnMeta({
-        module: `${testRealm}pet`,
-        name: 'Pet',
-      });
+      let petDefinitionEntry =
+        await realm.realmIndexQueryEngine.getOwnDefinition({
+          module: `${testRealm}pet`,
+          name: 'Pet',
+        });
       assert.strictEqual(
-        petCardDefEntry,
+        petDefinitionEntry,
         undefined,
         'Pet card def does not exist',
       );
@@ -1174,8 +1175,8 @@ module(basename(__filename), function () {
           instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
           moduleErrors: 3, // post, fancy person, person
           modulesIndexed: 0,
-          metaErrors: 0,
-          metasIndexed: 0,
+          definitionErrors: 0,
+          definitionsIndexed: 0,
           totalIndexEntries: 11,
         },
         'indexed correct number of files',
@@ -1190,22 +1191,23 @@ module(basename(__filename), function () {
         [],
         'the broken type results in no instance results',
       );
-      let personCardDefEntry = await realm.realmIndexQueryEngine.getOwnMeta({
-        module: `${testRealm}person`,
-        name: 'Person',
-      });
+      let personDefinitionEntry =
+        await realm.realmIndexQueryEngine.getOwnDefinition({
+          module: `${testRealm}person`,
+          name: 'Person',
+        });
       assert.strictEqual(
-        personCardDefEntry,
+        personDefinitionEntry,
         undefined,
         'Person card def does not exist',
       );
-      let fancyPersonCardDefEntry =
-        await realm.realmIndexQueryEngine.getOwnMeta({
+      let fancyPersonDefinitionEntry =
+        await realm.realmIndexQueryEngine.getOwnDefinition({
           module: `${testRealm}fancy-person`,
           name: 'FancyPerson',
         });
       assert.strictEqual(
-        fancyPersonCardDefEntry,
+        fancyPersonDefinitionEntry,
         undefined,
         'FancyPerson card def does not exist',
       );
@@ -1228,8 +1230,8 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          metaErrors: 0,
-          metasIndexed: 3, // Person card, Post card, FancyPerson card
+          definitionErrors: 0,
+          definitionsIndexed: 3, // Person card, Post card, FancyPerson card
           totalIndexEntries: 20,
         },
         'indexed correct number of files',
@@ -1246,22 +1248,24 @@ module(basename(__filename), function () {
         2,
         'correct number of instances returned',
       );
-      personCardDefEntry = await realm.realmIndexQueryEngine.getOwnMeta({
-        module: `${testRealm}person`,
-        name: 'Person',
-      });
+      personDefinitionEntry =
+        await realm.realmIndexQueryEngine.getOwnDefinition({
+          module: `${testRealm}person`,
+          name: 'Person',
+        });
       assert.strictEqual(
-        personCardDefEntry?.type,
-        'meta',
+        personDefinitionEntry?.type,
+        'definition',
         'Person card def has recovered',
       );
-      fancyPersonCardDefEntry = await realm.realmIndexQueryEngine.getOwnMeta({
-        module: `${testRealm}fancy-person`,
-        name: 'FancyPerson',
-      });
+      fancyPersonDefinitionEntry =
+        await realm.realmIndexQueryEngine.getOwnDefinition({
+          module: `${testRealm}fancy-person`,
+          name: 'FancyPerson',
+        });
       assert.strictEqual(
-        fancyPersonCardDefEntry?.type,
-        'meta',
+        fancyPersonDefinitionEntry?.type,
+        'definition',
         'FancyPerson card def has recovered',
       );
     });
@@ -1286,18 +1290,19 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 2,
           modulesIndexed: 0,
-          metaErrors: 0,
-          metasIndexed: 0,
+          definitionErrors: 0,
+          definitionsIndexed: 0,
           totalIndexEntries: 20,
         },
         'indexed correct number of files',
       );
-      let petCardDefEntry = await realm.realmIndexQueryEngine.getOwnMeta({
-        module: `${testRealm}pet`,
-        name: 'Pet',
-      });
+      let petDefinitionEntry =
+        await realm.realmIndexQueryEngine.getOwnDefinition({
+          module: `${testRealm}pet`,
+          name: 'Pet',
+        });
       assert.strictEqual(
-        petCardDefEntry,
+        petDefinitionEntry,
         undefined,
         'Pet card def does not exist',
       );
@@ -1323,13 +1328,13 @@ module(basename(__filename), function () {
         'module',
         'Name module is successfully indexed',
       );
-      petCardDefEntry = await realm.realmIndexQueryEngine.getOwnMeta({
+      petDefinitionEntry = await realm.realmIndexQueryEngine.getOwnDefinition({
         module: `${testRealm}pet`,
         name: 'Pet',
       });
       assert.strictEqual(
-        petCardDefEntry?.type,
-        'meta',
+        petDefinitionEntry?.type,
+        'definition',
         'Pet card def has recovered',
       );
 
@@ -1341,8 +1346,8 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          metaErrors: 0,
-          metasIndexed: 3,
+          definitionErrors: 0,
+          definitionsIndexed: 3,
           totalIndexEntries: 27,
         },
         'indexed correct number of files',
@@ -1382,8 +1387,8 @@ module(basename(__filename), function () {
           moduleErrors: 2,
           modulesIndexed: 0,
 
-          metaErrors: 0,
-          metasIndexed: 0,
+          definitionErrors: 0,
+          definitionsIndexed: 0,
           totalIndexEntries: 20,
         },
         'instance and module are in error state before dependency is available',
@@ -1462,8 +1467,8 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          metaErrors: 0,
-          metasIndexed: 0,
+          definitionErrors: 0,
+          definitionsIndexed: 0,
           totalIndexEntries: 25,
         },
         'index did not touch any files',
@@ -1505,8 +1510,8 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 1,
-          metaErrors: 0,
-          metasIndexed: 1,
+          definitionErrors: 0,
+          definitionsIndexed: 1,
           totalIndexEntries: 26,
         },
         'indexed correct number of files',
@@ -1549,8 +1554,8 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
-          metaErrors: 0,
-          metasIndexed: 3,
+          definitionErrors: 0,
+          definitionsIndexed: 3,
           totalIndexEntries: 26,
         },
         'indexed correct number of files',
@@ -1602,8 +1607,8 @@ module(basename(__filename), function () {
           instanceErrors: 2,
           moduleErrors: 0,
           modulesIndexed: 0,
-          metaErrors: 0,
-          metasIndexed: 0,
+          definitionErrors: 0,
+          definitionsIndexed: 0,
           totalIndexEntries: 23,
         },
         'indexed correct number of files',
@@ -1645,8 +1650,8 @@ module(basename(__filename), function () {
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 1,
-          metaErrors: 0,
-          metasIndexed: 1,
+          definitionErrors: 0,
+          definitionsIndexed: 1,
           totalIndexEntries: 26,
         },
         'indexed correct number of files',
@@ -1733,8 +1738,8 @@ module(basename(__filename), function () {
           instanceErrors: 6,
           modulesIndexed: 10,
           instancesIndexed: 6,
-          metaErrors: 0,
-          metasIndexed: 10,
+          definitionErrors: 0,
+          definitionsIndexed: 10,
           totalIndexEntries: 26,
         },
         'indexed correct number of files',
@@ -2165,8 +2170,8 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 2,
-          metaErrors: 0,
-          metasIndexed: 2,
+          definitionErrors: 0,
+          definitionsIndexed: 2,
           totalIndexEntries: 30,
         },
         'indexed correct number of files',
@@ -2218,8 +2223,10 @@ module(basename(__filename), function () {
         // we splat because despite having the same shape, the constructors are different
         { ...realm.realmIndexUpdater.stats },
         {
+          //TODO coalesce batches
+
           // this is a little misleading because now that we are batching out the
-          // modules and instances to ensure that the meta is generated before
+          // modules and instances to ensure that the definition is generated before
           // we trying file serialization, this will only report the last batch
           // of indexing when in fact there where actually 2 batches of indexing
           // generated by this writeMany()
@@ -2227,8 +2234,8 @@ module(basename(__filename), function () {
           instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 0,
-          metaErrors: 0,
-          metasIndexed: 0,
+          definitionErrors: 0,
+          definitionsIndexed: 0,
           totalIndexEntries: 29,
         },
         'indexed correct number of files',
@@ -2411,8 +2418,8 @@ module(basename(__filename), function () {
             instanceErrors: 0,
             moduleErrors: 0,
             modulesIndexed: 1,
-            metaErrors: 0,
-            metasIndexed: 1,
+            definitionErrors: 0,
+            definitionsIndexed: 1,
             totalIndexEntries: 3,
           },
           'has no module errors',
@@ -2441,8 +2448,8 @@ module(basename(__filename), function () {
             instancesIndexed: 0,
             moduleErrors: 1,
             modulesIndexed: 0,
-            metaErrors: 0,
-            metasIndexed: 0,
+            definitionErrors: 0,
+            definitionsIndexed: 0,
             totalIndexEntries: 0,
           },
           'has a module error',

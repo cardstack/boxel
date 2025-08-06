@@ -1,8 +1,8 @@
 import {
   type LooseSingleCardDocument,
   type CardResource,
-  FieldsMeta,
-  FieldMeta,
+  Definition,
+  FieldDefinition,
   isUrlLike,
   maybeRelativeURL,
   isCodeRef,
@@ -12,16 +12,16 @@ import { serialize as serializeCodeRef } from './serializers/code-ref';
 
 export default function serialize({
   doc,
-  meta,
+  definition,
   realm,
   relativeTo,
-  customFieldMetas,
+  customFieldDefinitions,
 }: {
   doc: LooseSingleCardDocument;
-  meta: FieldsMeta;
+  definition: Definition;
   realm: string;
   relativeTo: URL;
-  customFieldMetas?: Record<string, FieldMeta>;
+  customFieldDefinitions?: Record<string, FieldDefinition>;
 }): LooseSingleCardDocument {
   const realmURL = new URL(realm);
   const codeRefOpts = {
@@ -59,22 +59,22 @@ export default function serialize({
   if (doc.data.attributes) {
     result.data.attributes = processAttributes({
       attributes: doc.data.attributes,
-      meta,
+      definition,
       doc,
       relativeTo,
       realmURL,
       codeRefOpts,
-      customFieldMetas,
+      customFieldDefinitions,
     });
   }
 
   if (doc.data.relationships) {
     const processedRelationships = processRelationships({
       relationships: doc.data.relationships,
-      meta,
+      definition,
       relativeTo,
       realmURL,
-      customFieldMetas,
+      customFieldDefinitions,
     });
     if (processedRelationships) {
       result.data.relationships = processedRelationships;
@@ -104,36 +104,43 @@ export default function serialize({
 
 function processAttributes({
   attributes,
-  meta,
+  definition,
   basePath = '',
   doc,
   relativeTo,
   realmURL,
   codeRefOpts,
-  customFieldMetas,
+  customFieldDefinitions,
 }: {
   attributes: Record<string, any>;
-  meta: FieldsMeta;
+  definition: Definition;
   basePath?: string;
   doc: LooseSingleCardDocument;
   relativeTo: URL;
   realmURL: URL;
   codeRefOpts: { maybeRelativeURL: (url: string) => string };
-  customFieldMetas?: Record<string, FieldMeta>;
+  customFieldDefinitions?: Record<string, FieldDefinition>;
 }): Record<string, any> {
   const result: Record<string, any> = {};
 
   for (const [fieldName, fieldValue] of Object.entries(attributes)) {
     const fieldPath = basePath ? `${basePath}.${fieldName}` : fieldName;
-    const fieldMeta = getFieldMeta(fieldPath, meta, customFieldMetas);
+    const fieldDefinition = getFieldDefinition(
+      fieldPath,
+      definition,
+      customFieldDefinitions,
+    );
 
-    if (!fieldMeta || fieldMeta.isComputed) {
+    if (!fieldDefinition || fieldDefinition.isComputed) {
       continue;
     }
 
     // if we have new primitives that are serialized with URL's besides
     // code-refs, then we need to handle them here...
-    if (fieldMeta.serializerName === 'code-ref' && isCodeRef(fieldValue)) {
+    if (
+      fieldDefinition.serializerName === 'code-ref' &&
+      isCodeRef(fieldValue)
+    ) {
       result[fieldName] = serializeCodeRef(
         fieldValue,
         doc,
@@ -143,40 +150,40 @@ function processAttributes({
       continue;
     }
 
-    if (fieldMeta.type === 'containsMany') {
+    if (fieldDefinition.type === 'containsMany') {
       if (!Array.isArray(fieldValue)) {
         throw new Error(
           `Field '${fieldPath}' is containsMany but value is not an array`,
         );
       }
-      if (fieldMeta.isPrimitive) {
+      if (fieldDefinition.isPrimitive) {
         result[fieldName] = fieldValue;
       } else {
         result[fieldName] = fieldValue.map((item) => {
           return processAttributes({
             attributes: item,
-            meta,
+            definition,
             basePath: fieldPath,
             doc,
             relativeTo,
             realmURL,
             codeRefOpts,
-            customFieldMetas,
+            customFieldDefinitions,
           });
         });
       }
-    } else if (fieldMeta.isPrimitive) {
+    } else if (fieldDefinition.isPrimitive) {
       result[fieldName] = fieldValue;
     } else {
       result[fieldName] = processAttributes({
         attributes: fieldValue,
-        meta,
+        definition,
         basePath: fieldPath,
         doc,
         relativeTo,
         realmURL,
         codeRefOpts,
-        customFieldMetas,
+        customFieldDefinitions,
       });
     }
   }
@@ -186,24 +193,28 @@ function processAttributes({
 
 function processRelationships({
   relationships,
-  meta,
+  definition,
   relativeTo,
   realmURL,
-  customFieldMetas,
+  customFieldDefinitions,
 }: {
   relationships: NonNullable<CardResource['relationships']>;
-  meta: FieldsMeta;
+  definition: Definition;
   relativeTo: URL;
   realmURL: URL;
-  customFieldMetas?: Record<string, FieldMeta>;
+  customFieldDefinitions?: Record<string, FieldDefinition>;
 }): NonNullable<CardResource['relationships']> | undefined {
   const result: NonNullable<CardResource['relationships']> = {};
 
   for (const [relationshipKey, value] of Object.entries(relationships)) {
     const { baseFieldPath } = parseRelationshipKey(relationshipKey);
-    const fieldMeta = getFieldMeta(baseFieldPath, meta, customFieldMetas);
+    const fieldDefinition = getFieldDefinition(
+      baseFieldPath,
+      definition,
+      customFieldDefinitions,
+    );
 
-    if (!fieldMeta || fieldMeta.isComputed) {
+    if (!fieldDefinition || fieldDefinition.isComputed) {
       continue;
     }
 
@@ -246,7 +257,7 @@ function processRelationships({
     delete processedValue.data;
 
     if (
-      fieldMeta.type === 'linksToMany' &&
+      fieldDefinition.type === 'linksToMany' &&
       value.data &&
       Array.isArray(value.data)
     ) {
@@ -264,12 +275,12 @@ function processRelationships({
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-function getFieldMeta(
+function getFieldDefinition(
   fieldPath: string,
-  meta: FieldsMeta,
-  customFieldMetas?: Record<string, FieldMeta>,
-): FieldMeta | undefined {
-  return customFieldMetas?.[fieldPath] ?? meta.fields[fieldPath];
+  definition: Definition,
+  customFieldDefinitions?: Record<string, FieldDefinition>,
+): FieldDefinition | undefined {
+  return customFieldDefinitions?.[fieldPath] ?? definition.fields[fieldPath];
 }
 
 function parseRelationshipKey(key: string): {

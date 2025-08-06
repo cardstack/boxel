@@ -28,10 +28,10 @@ import { lintFix } from './lint';
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
   modulesIndexed: number;
-  metasIndexed: number;
+  definitionsIndexed: number;
   instanceErrors: number;
   moduleErrors: number;
-  metaErrors: number;
+  definitionErrors: number;
   totalIndexEntries: number;
 }
 

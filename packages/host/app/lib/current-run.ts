@@ -22,9 +22,9 @@ import {
   IndexWriter,
   unixTime,
   jobIdentity,
-  getFieldMeta,
+  getFieldDefinitions,
   type ResolvedCodeRef,
-  type FieldsMeta,
+  type Definition,
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
@@ -105,10 +105,10 @@ export class CurrentRun {
   readonly stats: Stats = {
     instancesIndexed: 0,
     modulesIndexed: 0,
-    metasIndexed: 0,
+    definitionsIndexed: 0,
     instanceErrors: 0,
     moduleErrors: 0,
-    metaErrors: 0,
+    definitionErrors: 0,
     totalIndexEntries: 0,
   };
   @service declare private loaderService: LoaderService;
@@ -487,7 +487,7 @@ export class CurrentRun {
       // however the deps will only be the shimmed file
       for (let [name, maybeBaseDef] of Object.entries(module)) {
         if (isBaseDef(maybeBaseDef)) {
-          await this.indexMeta({
+          await this.indexDefinition({
             name,
             url: trimExecutableExtension(url),
             cardOrFieldDef: maybeBaseDef,
@@ -515,7 +515,7 @@ export class CurrentRun {
 
     for (let [name, maybeBaseDef] of Object.entries(module)) {
       if (isBaseDef(maybeBaseDef)) {
-        await this.indexMeta({
+        await this.indexDefinition({
           name,
           url: trimExecutableExtension(url),
           cardOrFieldDef: maybeBaseDef,
@@ -527,7 +527,7 @@ export class CurrentRun {
     }
   }
 
-  private async indexMeta({
+  private async indexDefinition({
     url,
     name,
     cardOrFieldDef,
@@ -549,9 +549,9 @@ export class CurrentRun {
       let api = await this.loaderService.loader.import<typeof CardAPI>(
         `${baseRealm.url}card-api`,
       );
-      let fields = getFieldMeta(api, cardOrFieldDef);
+      let fields = getFieldDefinitions(api, cardOrFieldDef);
       let codeRef = identifyCard(cardOrFieldDef) as ResolvedCodeRef;
-      let meta: FieldsMeta = {
+      let definition: Definition = {
         codeRef,
         fields,
         type: isCardDef(cardOrFieldDef) ? 'card-def' : 'field-def',
@@ -563,9 +563,9 @@ export class CurrentRun {
         ? await this.getTypes(cardOrFieldDef)
         : { type: 'types' as const, types: [] };
       if (typesMaybeError.type === 'error') {
-        this.stats.metaErrors++;
+        this.stats.definitionErrors++;
         log.warn(
-          `${jobIdentity(this.#jobInfo)} encountered error indexing Meta "${url.href}/${name}": ${typesMaybeError.error.message}`,
+          `${jobIdentity(this.#jobInfo)} encountered error indexing definition  "${url.href}/${name}": ${typesMaybeError.error.message}`,
         );
         let error = {
           type: 'error',
@@ -575,25 +575,25 @@ export class CurrentRun {
         return;
       }
       await this.batch.updateEntry(codeRefURL, {
-        type: 'meta',
+        type: 'definition',
         fileAlias: url.href,
-        meta,
+        definition,
         lastModified,
         resourceCreatedAt,
         deps: new Set(deps),
         types: typesMaybeError.types.map(({ refURL }) => refURL),
       });
-      this.stats.metasIndexed++;
+      this.stats.definitionsIndexed++;
     } catch (err: any) {
-      this.stats.metaErrors++;
+      this.stats.definitionErrors++;
       log.warn(
-        `${jobIdentity(this.#jobInfo)} encountered error indexing Meta "${url.href}/${name}": ${err.message}`,
+        `${jobIdentity(this.#jobInfo)} encountered error indexing definition "${url.href}/${name}": ${err.message}`,
       );
       await this.batch.updateEntry(codeRefURL, {
         type: 'error',
         error: {
           status: err.status ?? 500,
-          message: `encountered error indexing Meta "${url.href}/${name}": ${err.message}`,
+          message: `encountered error indexing definition "${url.href}/${name}": ${err.message}`,
           additionalErrors: null,
           deps,
         },

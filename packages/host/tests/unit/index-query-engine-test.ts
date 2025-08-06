@@ -11,9 +11,9 @@ import {
   internalKeyFor,
   identifyCard,
   SupportedMimeType,
-  getFieldMeta,
+  getFieldDefinitions,
   type ResolvedCodeRef,
-  type FieldsMeta,
+  type Definition,
 } from '@cardstack/runtime-common';
 
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
@@ -196,40 +196,40 @@ module('Unit | query', function (hooks) {
 
     let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
 
-    async function serveFieldsMeta(cardDef: typeof CardDef) {
-      let doc: JSONAPISingleResourceDocument = { data: { type: 'meta' } };
+    async function serveDefinition(cardDef: typeof CardDef) {
+      let doc: JSONAPISingleResourceDocument = { data: { type: 'definition' } };
       doc.data.attributes = {
         codeRef: identifyCard(cardDef),
         displayName: cardDef.displayName,
-        fields: getFieldMeta(api, cardDef),
-      } as FieldsMeta;
+        fields: getFieldDefinitions(api, cardDef),
+      } as Definition;
       return new Response(JSON.stringify(doc), {
         headers: { 'content-type': SupportedMimeType.JSONAPI },
       });
     }
 
-    // mock the realm server serving the card def meta
+    // mock the realm server serving definitions
     virtualNetwork.mount(async (req) => {
       if (req.method === 'HEAD') {
         return new Response(null, {
           headers: { 'X-Boxel-Realm-Url': testRealmURL },
         });
       }
-      if (req.url.includes('/_meta?')) {
+      if (req.url.includes('/_definition?')) {
         let query = new URL(req.url).search.slice(1);
         let { codeRef } = parseQuery(query) as { codeRef: ResolvedCodeRef };
         let key = internalKeyFor(codeRef, undefined);
         switch (key) {
           case `${testRealmURL}person/Person`:
-            return await serveFieldsMeta(Person);
+            return await serveDefinition(Person);
           case `${testRealmURL}fancy-person/FancyPerson`:
-            return await serveFieldsMeta(FancyPerson);
+            return await serveDefinition(FancyPerson);
           case `${testRealmURL}cat/Cat`:
-            return await serveFieldsMeta(Cat);
+            return await serveDefinition(Cat);
           case `${testRealmURL}spec/SimpleSpec`:
-            return await serveFieldsMeta(SimpleSpec);
+            return await serveDefinition(SimpleSpec);
           case `${testRealmURL}event/Event`:
-            return await serveFieldsMeta(Event);
+            return await serveDefinition(Event);
           default:
             return null;
         }

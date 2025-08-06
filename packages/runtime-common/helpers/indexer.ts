@@ -20,8 +20,8 @@ import {
   trimExecutableExtension,
   DBAdapter,
   query,
-  isMetaId,
-  trimExportNameFromMetaId,
+  isDefinitionId,
+  trimExportNameFromDefinitionId,
 } from '../index';
 
 import { coerceTypes } from '../index-structure';
@@ -254,8 +254,8 @@ async function indexedCardsExpressions({
             ? `${row.url}.json`
             : row.url
           : row.url;
-      row.file_alias = isMetaId(row.url)
-        ? trimExportNameFromMetaId(row.url)
+      row.file_alias = isDefinitionId(row.url)
+        ? trimExportNameFromDefinitionId(row.url)
         : trimExecutableExtension(new URL(row.url)).href.replace(/\.json$/, '');
       row.type = row.type ?? 'instance';
       row.last_modified = String(row.last_modified ?? now);
