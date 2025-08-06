@@ -103,15 +103,9 @@ export default class SubmodeLayout extends Component<Signature> {
   @tracked private profileSummaryOpened = false;
 
   private aiPanelWidths: PanelWidths = new TrackedObject({
-    defaultWidth: 35,
+    defaultWidth: 30,
     minWidth: 25,
   });
-
-  constructor(owner: unknown, args: Signature['Args']) {
-    super(owner, args);
-    this.loadPersistedAiPanelWidth();
-  }
-
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service private declare store: StoreService;
@@ -120,11 +114,6 @@ export default class SubmodeLayout extends Component<Signature> {
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
   private declare doSearch: (term: string) => void;
-
-  private loadPersistedAiPanelWidth() {
-    const persistedWidth = window.localStorage.getItem(AiAssistantPanelWidth);
-    this.aiPanelWidths.defaultWidth = Number(persistedWidth) ?? 30;
-  }
 
   @action
   private onLayoutChange(layout: number[]) {
@@ -139,15 +128,14 @@ export default class SubmodeLayout extends Component<Signature> {
       aiPanelDefaultWidthInPixels = windowWidth;
     }
     let aiPanelDefaultWidth = (aiPanelDefaultWidthInPixels / windowWidth) * 100;
-    const persistedWidth = window.localStorage.getItem(AiAssistantPanelWidth);
+    const persistedWidth = window.localStorage.getItem(AiAssistantPanelWidth)
+      ? Number(window.localStorage.getItem(AiAssistantPanelWidth))
+      : undefined;
 
-    if (!persistedWidth || Number(persistedWidth) < aiPanelDefaultWidth) {
+    if (!persistedWidth || persistedWidth < aiPanelDefaultWidth) {
       this.aiPanelWidths.defaultWidth = aiPanelDefaultWidth;
-
-      window.localStorage.setItem(
-        AiAssistantPanelWidth,
-        String(this.aiPanelWidths.defaultWidth),
-      );
+    } else {
+      this.aiPanelWidths.defaultWidth = persistedWidth;
     }
 
     this.aiPanelWidths.minWidth = aiPanelDefaultWidth;
