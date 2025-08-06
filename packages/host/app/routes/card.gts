@@ -3,8 +3,6 @@ import type RouterService from '@ember/routing/router-service';
 import Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
 
-import config from '@cardstack/host/config/environment';
-
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
