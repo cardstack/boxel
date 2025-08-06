@@ -23,6 +23,7 @@ import {
   insert,
   param,
   unixTime,
+  uuidv4,
   RealmPaths,
   type MatrixConfig,
   type QueuePublisher,
@@ -38,7 +39,7 @@ import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { makeFastBootIndexRunner } from '../../fastboot';
-import { RealmServer } from '../../server';
+import { PUBLISHED_DIRECTORY_NAME, RealmServer } from '../../server';
 import {
   PgAdapter,
   PgQueuePublisher,
@@ -714,6 +715,7 @@ export function setupPermissionedRealm(
     onRealmSetup,
     subscribeToRealmEvents = false,
     mode = 'beforeEach',
+    published = false,
   }: {
     permissions: RealmPermissions;
     fileSystem?: Record<string, string | LooseSingleCardDocument>;
@@ -728,6 +730,7 @@ export function setupPermissionedRealm(
     }) => void;
     subscribeToRealmEvents?: boolean;
     mode?: 'beforeEach' | 'before';
+    published?: boolean;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -741,7 +744,34 @@ export function setupPermissionedRealm(
       runner: QueueRunner,
     ) => {
       let dir = dirSync();
-      let testRealmDir = join(dir.name, 'realm_server_1', 'test');
+
+      let testRealmDir;
+
+      if (published) {
+        let publishedRealmId = uuidv4();
+
+        testRealmDir = join(
+          dir.name,
+          'realm_server_1',
+          PUBLISHED_DIRECTORY_NAME,
+          publishedRealmId,
+        );
+
+        dbAdapter.execute(
+          `INSERT INTO
+            published_realms
+            (id, owner_username, source_realm_url, published_realm_url)
+            VALUES
+            (
+              '${publishedRealmId}',
+              '@user:localhost',
+              'http://example.localhost/source',
+              '${testRealmHref}'
+            )`,
+        );
+      } else {
+        testRealmDir = join(dir.name, 'realm_server_1', 'test');
+      }
 
       ensureDirSync(testRealmDir);
 

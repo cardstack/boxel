@@ -884,6 +884,12 @@ module('Acceptance | code submode tests', function (_hooks) {
           ],
         },
       ]);
+      let roomId = getService('matrix-service').currentRoomId;
+      let lastEvent = mockMatrixUtils.getRoomEvents(roomId!).pop();
+      assert.ok(
+        JSON.parse(lastEvent!.content.data).context.agentId,
+        'message has agentId context so that AI assistant knows not to respond to it',
+      );
       assert.dom('[data-test-send-error-to-ai-assistant]').exists();
 
       let originalWriteText = navigator.clipboard.writeText;

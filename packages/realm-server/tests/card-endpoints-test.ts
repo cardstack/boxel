@@ -165,6 +165,76 @@ module(basename(__filename), function () {
         });
       });
 
+      module('published realm', function (hooks) {
+        setupPermissionedRealm(hooks, {
+          permissions: {
+            '*': ['read'],
+          },
+          onRealmSetup,
+          published: true,
+        });
+
+        test('serves the request', async function (assert) {
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+          let json = response.body;
+
+          delete json.data.meta.lastModified;
+          delete json.data.meta.resourceCreatedAt;
+
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'realm url header is correct',
+          );
+
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'realm is public readable',
+          );
+
+          assert.deepEqual(json, {
+            data: {
+              id: `${testRealmHref}person-1`,
+              type: 'card',
+              attributes: {
+                title: 'Mango',
+                firstName: 'Mango',
+                description: null,
+                thumbnailURL: null,
+                cardInfo: {},
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `./person`,
+                  name: 'Person',
+                },
+                realmInfo: {
+                  ...testRealmInfo,
+                  realmUserId: '@node-test_realm:localhost',
+                },
+                realmURL: testRealmHref,
+              },
+              relationships: {
+                'cardInfo.theme': {
+                  links: {
+                    self: null,
+                  },
+                },
+              },
+              links: {
+                self: `${testRealmHref}person-1`,
+              },
+            },
+          });
+        });
+      });
+
       // using public writable realm to make it easy for test setup for the error tests
       module('public writable realm', function (hooks) {
         setupPermissionedRealm(hooks, {
