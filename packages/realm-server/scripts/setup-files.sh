@@ -40,8 +40,9 @@ mkdir -p "$DEST"
 
 # Use rsync without extended attributes first
 # -r: recursive
+# --inplace: update destination files in-place (preserves destination attributes like ownership, permissions, timestamps)
 # --size-only: only copy if sizes differ (for efficiency)
-rsync -r --size-only $DELETE_FLAG "$SOURCE/." "$DEST/"
+rsync -r --inplace --size-only $DELETE_FLAG "$SOURCE/." "$DEST/"
 
 # Set created attribute on new files that don't have it using TypeScript
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
