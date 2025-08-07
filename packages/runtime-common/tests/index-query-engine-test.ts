@@ -9,6 +9,7 @@ import {
   type ResolvedCodeRef,
   DBAdapter,
 } from '../index';
+import { DefinitionsCache } from '../definitions-cache';
 import { serializeCard } from '../helpers/indexer';
 import { testRealmURL } from '../helpers/const';
 import { type SharedTests } from '../helpers';
@@ -133,7 +134,7 @@ const tests = Object.freeze({
 
   "can filter using 'eq'": async (
     assert,
-    { indexQueryEngine, dbAdapter, testCards },
+    { indexQueryEngine, dbAdapter, testCards, definitionsCache },
   ) => {
     let { mango, vangogh, paper } = testCards;
     await setupIndex(dbAdapter, [
@@ -157,6 +158,11 @@ const tests = Object.freeze({
 
     assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
     assert.deepEqual(getIds(results), [mango.id], 'results are correct');
+
+    assert.ok(
+      definitionsCache.cachedKeys.includes(internalKeyFor(type, undefined)),
+      'definition was cached',
+    );
   },
 
   "can filter using 'eq' thru nested fields": async (
@@ -2728,6 +2734,7 @@ const tests = Object.freeze({
   indexQueryEngine: IndexQueryEngine;
   dbAdapter: DBAdapter;
   testCards: TestCards;
+  definitionsCache: DefinitionsCache;
 }>);
 
 export default tests;

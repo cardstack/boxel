@@ -1946,5 +1946,59 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       assert.dom('[data-test-active-module-inspector-view="preview"]').exists();
     });
+
+    test('Open in Interact and Edit Template buttons work correctly', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `${testRealmURL}Person/fadhlan.json`,
+      });
+
+      await waitFor('[data-test-card-resource-loaded]');
+
+      // Verify the buttons are rendered
+      assert
+        .dom('[data-test-edit-template-button]')
+        .exists('Edit Template button is rendered');
+      assert
+        .dom('[data-test-open-in-interact-button]')
+        .exists('Open in Interact button is rendered');
+      assert
+        .dom('.preview-text')
+        .hasText('Preview', 'Preview text is displayed');
+
+      // Test Open in Interact button
+      await click('[data-test-open-in-interact-button]');
+
+      // Verify that we're now in interact mode with the card
+      await waitFor('[data-test-interact-submode]');
+      assert
+        .dom('[data-test-interact-submode]')
+        .exists('Switched to interact mode');
+
+      // Verify the card is displayed in interact mode
+      assert.dom('[data-test-person]').includesText('Fadhlan');
+
+      // Back to code mode
+      await click('[data-test-submode-switcher] button');
+      await click('[data-test-boxel-menu-item-text="Code"]');
+      await waitFor('[data-test-code-submode]');
+
+      // Test Edit Template button
+      await click('[data-test-edit-template-button]');
+
+      // Verify that the code path was updated to the template file
+      await waitFor('[data-test-card-url-bar-input]');
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(`${testRealmURL}person.gts`);
+    });
   });
 });

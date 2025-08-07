@@ -1,5 +1,6 @@
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -7,11 +8,20 @@ import { task } from 'ember-concurrency';
 
 import Modifier from 'ember-modifier';
 
-import { CardHeader } from '@cardstack/boxel-ui/components';
+import {
+  CardHeader,
+  BoxelButton,
+  CardContainer,
+} from '@cardstack/boxel-ui/components';
 import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
-import { IconLink, Eye } from '@cardstack/boxel-ui/icons';
+import { IconLink, Eye, IconCode } from '@cardstack/boxel-ui/icons';
 
-import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
+import {
+  cardTypeDisplayName,
+  cardTypeIcon,
+  identifyCard,
+  isResolvedCodeRef,
+} from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
@@ -62,6 +72,18 @@ export default class CardRendererPanel extends Component<Signature> {
     this.operatorModeStateService.openCardInInteractMode(this.args.card.id);
   };
 
+  private editTemplate = () => {
+    // Get the card definition using identifyCard
+    const type = identifyCard(this.args.card.constructor as any);
+    if (type && isResolvedCodeRef(type)) {
+      // Construct the GTS file URL
+      const gtsFileUrl = type.module.endsWith('.gts')
+        ? type.module
+        : `${type.module}.gts`;
+      this.operatorModeStateService.updateCodePath(new URL(gtsFileUrl));
+    }
+  };
+
   private get realmInfo() {
     let url = this.args.card ? urlForRealmLookup(this.args.card) : undefined;
     if (!url) {
@@ -91,19 +113,30 @@ export default class CardRendererPanel extends Component<Signature> {
   }
 
   <template>
-    <CardHeader
-      class='card-renderer-header'
-      @cardTypeDisplayName={{cardTypeDisplayName @card}}
-      @cardTypeIcon={{cardTypeIcon @card}}
-      @cardTitle={{@card.title}}
-      @realmInfo={{this.realmInfo}}
-      @onEdit={{if this.canEditCard (fn @setFormat 'edit')}}
-      @onFinishEditing={{if (eq this.format 'edit') (fn @setFormat 'isolated')}}
-      @isTopCard={{true}}
-      @moreOptionsMenuItems={{this.contextMenuItems}}
-      data-test-code-mode-card-renderer-header={{@card.id}}
-      ...attributes
-    />
+    <div class='preview-buttons'>
+      <BoxelButton
+        @kind='secondary-light'
+        @size='small'
+        {{on 'click' this.editTemplate}}
+        data-test-edit-template-button
+      >
+        <IconCode class='button-icon' />
+        Edit Template
+      </BoxelButton>
+
+      <span class='preview-text'>Preview</span>
+
+      <BoxelButton
+        @kind='secondary-light'
+        @size='small'
+        {{on 'click' this.openInInteractMode}}
+        data-test-open-in-interact-button
+      >
+        <Eye class='button-icon' />
+        Open in Interact
+      </BoxelButton>
+    </div>
+
     <div
       class='card-renderer-body'
       data-test-code-mode-card-renderer-body
@@ -113,13 +146,36 @@ export default class CardRendererPanel extends Component<Signature> {
       }}
     >
       <div class='card-renderer-content'>
-        {{#if (eq this.format 'fitted')}}
-          <FittedFormatGallery @card={{@card}} />
-        {{else}}
-          <CardRenderer @card={{@card}} @format={{this.format}} />
-        {{/if}}
+        <CardContainer>
+          <CardHeader
+            class='card-renderer-header'
+            @cardTypeDisplayName={{cardTypeDisplayName @card}}
+            @cardTypeIcon={{cardTypeIcon @card}}
+            @cardTitle={{@card.title}}
+            @realmInfo={{this.realmInfo}}
+            @onEdit={{if this.canEditCard (fn @setFormat 'edit')}}
+            @onFinishEditing={{if
+              (eq this.format 'edit')
+              (fn @setFormat 'isolated')
+            }}
+            @isTopCard={{true}}
+            @moreOptionsMenuItems={{this.contextMenuItems}}
+            data-test-code-mode-card-renderer-header={{@card.id}}
+            ...attributes
+          />
+          {{#if (eq this.format 'fitted')}}
+            <FittedFormatGallery @card={{@card}} />
+          {{else}}
+            <CardRenderer
+              class='preview'
+              @card={{@card}}
+              @format={{this.format}}
+            />
+          {{/if}}
+        </CardContainer>
       </div>
     </div>
+
     <div class='card-renderer-format-chooser'>
       <FormatChooser @format={{this.format}} @setFormat={{@setFormat}} />
     </div>
@@ -131,6 +187,33 @@ export default class CardRendererPanel extends Component<Signature> {
       .card-renderer-header:not(.is-editing) {
         background-color: var(--boxel-100);
       }
+      .preview-buttons {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--boxel-sp-xs) 0;
+        background-color: #75707e;
+      }
+      .preview-text {
+        color: var(--boxel-light);
+        font: 600 var(--boxel-font-sm);
+        letter-spacing: 0.13px;
+      }
+      .button-icon {
+        width: 16px;
+        height: 16px;
+        margin-right: var(--boxel-sp-xxs);
+        --icon-color: var(--boxel-teal);
+      }
+      .preview-buttons :deep(.boxel-button) {
+        color: var(--boxel-light);
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: 0.17px;
+        border: none;
+        min-height: 19px;
+        min-width: fit-content;
+        padding: 0 var(--boxel-sp-xs);
+      }
       .card-renderer-body {
         flex-grow: 1;
         overflow-y: auto;
@@ -138,18 +221,25 @@ export default class CardRendererPanel extends Component<Signature> {
       }
       .card-renderer-content {
         height: auto;
-        margin: var(--boxel-sp-sm);
       }
       .card-renderer-content > :deep(.boxel-card-container.boundaries) {
         overflow: hidden;
       }
       .card-renderer-format-chooser {
         background-color: var(--boxel-dark);
-        position: sticky;
+        right: 50%;
+        transform: translateX(50%);
+        position: absolute;
         bottom: var(--boxel-sp-sm);
         width: 380px;
-        margin: 0 auto;
         border-radius: var(--boxel-border-radius);
+      }
+      :deep(.fitted-format-gallery) {
+        padding: var(--boxel-sp-sm);
+      }
+      .preview {
+        box-shadow: none;
+        border-radius: 0;
       }
       :deep(.format-chooser) {
         --boxel-format-chooser-border-color: var(--boxel-400);

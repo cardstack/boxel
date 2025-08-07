@@ -1,5 +1,3 @@
-import { service } from '@ember/service';
-
 import Component from '@glimmer/component';
 
 import { provide, consume } from 'ember-provide-consume-context';
@@ -17,15 +15,12 @@ import {
   type getCardCollection,
 } from '@cardstack/runtime-common';
 
-import type StoreService from '@cardstack/host/services/store';
-
 import type {
   BaseDef,
   Format,
   Field,
+  CardContext,
 } from 'https://cardstack.com/base/card-api';
-
-import PrerenderedCardSearch from './prerendered-card-search';
 
 interface Signature {
   Element: any;
@@ -34,7 +29,6 @@ interface Signature {
     format?: Format;
     field?: Field;
     codeRef?: ResolvedCodeRef;
-    cardContext?: Record<string, any>;
     displayContainer?: boolean;
   };
 }
@@ -44,7 +38,7 @@ export default class CardRenderer extends Component<Signature> {
   @consume(GetCardsContextName) private declare getCards: getCards;
   @consume(GetCardCollectionContextName)
   private declare getCardCollection: getCardCollection;
-  @service private declare store: StoreService;
+  @consume(CardContextName) private declare cardContext: CardContext;
 
   @provide(DefaultFormatsContextName)
   // @ts-ignore "defaultFormat is declared but not used"
@@ -52,19 +46,6 @@ export default class CardRenderer extends Component<Signature> {
     let { format } = this.args;
     format = format ?? 'isolated';
     return { cardDef: format, fieldDef: format };
-  }
-
-  @provide(CardContextName)
-  // @ts-ignore "context is declared but not used"
-  private get context() {
-    return {
-      prerenderedCardSearchComponent: PrerenderedCardSearch,
-      getCard: this.getCard,
-      getCards: this.getCards,
-      getCardCollection: this.getCardCollection,
-      store: this.store,
-      ...this.args.cardContext,
-    };
   }
 
   @provide(CardURLContextName)

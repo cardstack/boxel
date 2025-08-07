@@ -12,7 +12,7 @@ export interface BoxelIndexTable {
   file_alias: string;
   realm_version: number;
   realm_url: string;
-  type: 'instance' | 'card-def' | 'module' | 'error';
+  type: 'instance' | 'definition' | 'module' | 'error';
   // TODO in followup PR update this to be a document not a resource
   pristine_doc: CardResource | null;
   error_doc: SerializedError | null;
@@ -22,7 +22,7 @@ export interface BoxelIndexTable {
   deps: string[] | null;
   // `types` is the adoption chain for card where each code ref is serialized
   // using `internalKeyFor()`
-  meta: CardDefMeta | null;
+  definition: Definition | null;
   types: string[] | null;
   display_names: string[] | null;
   transpiled_code: string | null;
@@ -57,7 +57,7 @@ export interface RealmMetaTable {
   indexed_at: string | null;
 }
 
-export interface CardDefFieldMeta {
+export interface FieldDefinition {
   type: FieldType;
   isPrimitive: boolean;
   isComputed: boolean;
@@ -65,11 +65,12 @@ export interface CardDefFieldMeta {
   serializerName?: SerializerName;
 }
 
-export interface CardDefMeta {
+export interface Definition {
+  type: 'card-def' | 'field-def';
   codeRef: ResolvedCodeRef;
-  displayName: string;
+  displayName: string | null;
   fields: {
-    [fieldName: string]: CardDefFieldMeta;
+    [fieldName: string]: FieldDefinition;
   };
 }
 
@@ -82,7 +83,7 @@ export const coerceTypes = Object.freeze({
   embedded_html: 'JSON',
   fitted_html: 'JSON',
   display_names: 'JSON',
-  meta: 'JSON',
+  definition: 'JSON',
   is_deleted: 'BOOLEAN',
   last_modified: 'VARCHAR',
   resource_created_at: 'VARCHAR',

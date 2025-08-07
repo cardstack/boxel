@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "productName": "Essential Oil Starter Collection",
+      "price": 75.50,
+      "salePrice": 59.99,
+      "sku": "EO-START-6",
+      "category": "Aromatherapy", 
+      "shortDescription": "Curated set of 6 pure essential oils (10ml each): Lavender, Eucalyptus, Peppermint, Tea Tree, Lemon, and Frankincense. Includes bamboo storage box, dropper caps, and comprehensive usage guide. Perfect for beginners or as a thoughtful gift.",
+      "inventory": 0,
+      "inStock": false,
+      "imageUrl": "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=400&h=400&fit=crop&crop=center",
+      "title": "Essential Oil Starter Collection",
+      "description": "Complete starter set of 6 pure essential oils with bamboo storage box and usage guide for aromatherapy beginners.",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../online-product",
+        "name": "OnlineProduct"
+      }
+    }
+  }
+}
