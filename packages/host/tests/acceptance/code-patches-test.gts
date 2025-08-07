@@ -36,6 +36,7 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
 let matrixRoomId = '';
+let mockedFileContent = 'Hello, world!';
 
 module('Acceptance | Code patches tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -53,6 +54,10 @@ module('Acceptance | Code patches tests', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
+    getService('matrix-service').fetchMatrixHostedFile = async (_url) => {
+      return new Response(mockedFileContent);
+    };
+
     matrixRoomId = await createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
@@ -157,15 +162,11 @@ ${REPLACE_MARKER}\n\`\`\``;
     await click('[data-test-apply-code-button]');
     await waitUntil(() => getMonacoContent() === 'Hi, world!');
 
-    let mockedFileContent = 'Hello, world!';
-    getService('matrix-service').fetchMatrixHostedFile = async (_url) => {
-      return new Response(mockedFileContent);
-    };
-
     // We test the value of the attribute because navigator.clipboard is not available in test environment
     // (we can't test if the content is copied to the clipboard but we can assert the value of the attribute)
     await this.pauseTest();
     await click('[data-test-attached-file-dropdown-button="hello.txt"]');
+
     await waitUntil(
       () =>
         document
@@ -962,8 +963,6 @@ ${REPLACE_MARKER}
       .dom('[data-test-file="hi-1.txt"]')
       .exists('File hi-1.txt exists in file tree');
 
-    await this.pauseTest();
-
     assert
       .dom('[data-test-attached-file-dropdown-button]')
       .exists({ count: 3 });
@@ -1068,7 +1067,7 @@ ${REPLACE_MARKER}
 
     await click('[data-test-attached-file-dropdown-button="hello.txt"]');
     assert
-      .dom('[data-test-boxel-menu-item-text="Restore Content"]')
+      .dom('[data-test-boxel-menu-item-text="Restore Generated Content"]')
       .exists(
         'Restore Content menu item should be shown when patch has been applied',
       );
