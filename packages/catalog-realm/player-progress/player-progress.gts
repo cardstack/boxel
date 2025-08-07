@@ -21,8 +21,8 @@ import { htmlSafe } from '@ember/template';
 
 import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
 
-import { Game } from './game';
-import { GamingHub } from './gaming-hub';
+import { Game } from '../game/game';
+import { GamingHub } from '../gaming-hub/gaming-hub';
 
 // Player Progress Card - Link between player and game
 export class PlayerProgress extends CardDef {

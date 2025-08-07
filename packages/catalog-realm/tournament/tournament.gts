@@ -16,7 +16,7 @@ import { formatDateTime, formatCurrency } from '@cardstack/boxel-ui/helpers';
 
 import TrophyIcon from '@cardstack/boxel-icons/trophy';
 
-import { Game } from './game';
+import { Game } from '../game/game';
 
 // Tournament Card - Independent tournament management
 export class Tournament extends CardDef {

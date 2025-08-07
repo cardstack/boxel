@@ -20,12 +20,12 @@
     "relationships": {
       "player": {
         "links": {
-          "self": "../GamingHub/alex-shadowblade"
+          "self": "../../gaming-hub/GamingHub/alex-shadowblade"
         }
       },
       "game": {
         "links": {
-          "self": "../Game/cyberpunk-2077"
+          "self": "../../game/Game/cyberpunk-2077"
         }
       }
     },
