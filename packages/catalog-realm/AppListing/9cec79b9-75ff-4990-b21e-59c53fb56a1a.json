@@ -4,10 +4,14 @@
     "attributes": {
       "name": "Gaming Hub",
       "summary": "A comprehensive gaming profile management system for tracking games, statistics, friends, tournaments, and streaming activities across multiple platforms.",
-      "images": [],
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/gaming-hub-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/gaming-hub-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/gaming-hub-listing/screenshot_03.png"
+      ],
       "cardInfo": {},
       "description": "Gaming Hub is a full-featured gaming profile management application that allows gamers to track their gaming library, monitor statistics, connect with friends, participate in tournaments, and manage streaming activities. Features include multi-platform integration (Steam, Xbox, PlayStation), detailed gaming statistics, social networking capabilities, tournament tracking, wishlist management, and content creator tools for streamers.",
-      "thumbnailURL": null
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/gaming-hub-listing/thumbnail.png"
     },
     "relationships": {
       "specs.0": {
@@ -78,6 +82,81 @@
       "examples.0": {
         "links": {
           "self": "../gaming-hub/GamingHub/zlata-voidwalker"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../gaming-hub/GamingHub/alex-shadowblade"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../gaming-hub/GamingHub/diego-stratmaxx"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../gaming-hub/GamingHub/kai-thunderstrike"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../gaming-hub/GamingHub/maya-phoenixrise"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../gaming-hub/GamingHub/ravi-cosmicrift"
+        }
+      },
+      "examples.6": {
+        "links": {
+          "self": "../gaming-hub/GamingPlatform/steam-platform"
+        }
+      },
+      "examples.7": {
+        "links": {
+          "self": "../gaming-hub/GamingPlatform/steam-platform"
+        }
+      },
+      "examples.8": {
+        "links": {
+          "self": "../gaming-hub/GamingPlatform/xbox-live"
+        }
+      },
+      "examples.9": {
+        "links": {
+          "self": "../gaming-hub/PlayerProgress/alex-cyberpunk"
+        }
+      },
+      "examples.10": {
+        "links": {
+          "self": "../gaming-hub/PlayerProgress/maya-hollow-knight"
+        }
+      },
+      "examples.11": {
+        "links": {
+          "self": "../gaming-hub/Tournament/street-fighter-evo"
+        }
+      },
+      "examples.12": {
+        "links": {
+          "self": "../gaming-hub/Tournament/valorant-championship"
+        }
+      },
+      "examples.13": {
+        "links": {
+          "self": "../gaming-hub/Game/cyberpunk-2077"
+        }
+      },
+      "examples.14": {
+        "links": {
+          "self": "../gaming-hub/Game/hollow-knight"
+        }
+      },
+      "examples.15": {
+        "links": {
+          "self": "../gaming-hub/Game/valorant"
         }
       },
       "skills": {
