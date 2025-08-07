@@ -2,7 +2,12 @@ import {
   type BaseDefConstructor,
   type BaseInstanceType,
 } from 'https://cardstack.com/base/card-api';
-import { type ResolvedCodeRef, isUrlLike, isResolvedCodeRef } from '../index';
+import {
+  type ResolvedCodeRef,
+  isUrlLike,
+  isResolvedCodeRef,
+  executableExtensions,
+} from '../index';
 
 export function queryableValue(
   codeRef: ResolvedCodeRef | {} | undefined,
@@ -19,7 +24,13 @@ export function serialize(
 ): ResolvedCodeRef | {} {
   return {
     ...codeRef,
-    ...codeRefAdjustments(codeRef, doc.data.id, opts),
+    ...codeRefAdjustments(
+      codeRef,
+      (doc.data.id ?? (opts?.relativeTo && opts.relativeTo instanceof URL))
+        ? opts.relativeTo
+        : undefined,
+      opts,
+    ),
   };
 }
 
@@ -42,13 +53,13 @@ export async function deserializeAbsolute<T extends BaseDefConstructor>(
 ): Promise<BaseInstanceType<T>> {
   return {
     ...codeRef,
-    ...codeRefAdjustments(codeRef, relativeTo?.toString(), {
+    ...codeRefAdjustments(codeRef, relativeTo, {
       useAbsoluteURL: true,
     }),
   } as BaseInstanceType<T>;
 }
 
-function codeRefAdjustments(codeRef: any, relativeTo?: string, opts?: any) {
+function codeRefAdjustments(codeRef: any, relativeTo?: URL, opts?: any) {
   if (!codeRef) {
     return {};
   }
@@ -64,7 +75,20 @@ function codeRefAdjustments(codeRef: any, relativeTo?: string, opts?: any) {
   if (!opts?.maybeRelativeURL) {
     return {};
   }
-  return { module: opts.maybeRelativeURL(codeRef.module) };
+  if (!codeRef.module.startsWith('http') && opts.maybeRelativeURL) {
+    // it's already relative
+    return {
+      module: opts?.trimExecutableExtension
+        ? trimExecutableExtension(codeRef.module)
+        : codeRef.module,
+    };
+  }
+  let module = opts.maybeRelativeURL(codeRef.module);
+  return {
+    module: opts?.trimExecutableExtension
+      ? trimExecutableExtension(module)
+      : module,
+  };
 }
 
 function maybeSerializeCodeRef(
@@ -84,4 +108,15 @@ function maybeSerializeCodeRef(
     }
   }
   return undefined;
+}
+
+// this has been modified from runtime-common/trimExecutableExtension to work
+// for non URL's too...
+export function trimExecutableExtension(path: string): string {
+  for (let extension of executableExtensions) {
+    if (path.endsWith(extension)) {
+      return path.replace(new RegExp(`\\${extension}$`), '');
+    }
+  }
+  return path;
 }

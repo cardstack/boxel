@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "productName": "TrailMaster Pro Hiking Boots",
+      "price": 189.99,
+      "salePrice": null,
+      "sku": "TMP-HB-BRN-43",
+      "category": "Footwear",
+      "shortDescription": "Premium waterproof hiking boots with Vibram sole and ankle support. Built for all-terrain adventures with breathable membrane technology. Features reinforced toe cap and heel for rocky terrain protection. Available in multiple sizes with excellent arch support for long-distance hiking comfort.",
+      "inventory": 3,
+      "inStock": true,
+      "imageUrl": "https://images.pexels.com/photos/1598505/pexels-photo-1598505.jpeg?auto=compress&cs=tinysrgb&w=800&h=400&fit=crop",
+      "cardInfo": {},
+      "description": "Durable waterproof hiking boots designed for serious outdoor enthusiasts and day hikers.",
+      "thumbnailURL": "https://images.pexels.com/photos/1598505/pexels-photo-1598505.jpeg?auto=compress&cs=tinysrgb&w=200&h=200&fit=crop"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../online-product",
+        "name": "OnlineProduct"
+      }
+    }
+  }
+}

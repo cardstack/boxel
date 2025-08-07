@@ -18,12 +18,13 @@ import {
   loadCardDef,
   identifyCard,
   isCardDef,
+  isBaseDef,
   IndexWriter,
   unixTime,
   jobIdentity,
-  getFieldMeta,
+  getFieldDefinitions,
   type ResolvedCodeRef,
-  type CardDefMeta,
+  type Definition,
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
@@ -53,7 +54,7 @@ import { type Reader, type Stats } from '@cardstack/runtime-common/worker';
 
 import ENV from '@cardstack/host/config/environment';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import {
@@ -88,7 +89,7 @@ type TypesWithErrors =
     };
 
 export class CurrentRun {
-  #typesCache = new WeakMap<typeof CardDef, Promise<TypesWithErrors>>();
+  #typesCache = new WeakMap<typeof BaseDef, Promise<TypesWithErrors>>();
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
   #indexWriter: IndexWriter;
@@ -104,10 +105,10 @@ export class CurrentRun {
   readonly stats: Stats = {
     instancesIndexed: 0,
     modulesIndexed: 0,
-    cardDefsIndexed: 0,
+    definitionsIndexed: 0,
     instanceErrors: 0,
     moduleErrors: 0,
-    cardDefErrors: 0,
+    definitionErrors: 0,
     totalIndexEntries: 0,
   };
   @service declare private loaderService: LoaderService;
@@ -482,14 +483,14 @@ export class CurrentRun {
         `${jobIdentity(this.#jobInfo)} skipping indexing of shimmed module ${url.href}`,
       );
 
-      // for testing purposes we'll still generate card def meta for shimmed cards,
+      // for testing purposes we'll still generate meta for shimmed cards,
       // however the deps will only be the shimmed file
-      for (let [name, maybeCardDef] of Object.entries(module)) {
-        if (isCardDef(maybeCardDef)) {
-          await this.indexCardDef({
+      for (let [name, maybeBaseDef] of Object.entries(module)) {
+        if (isBaseDef(maybeBaseDef)) {
+          await this.indexDefinition({
             name,
             url: trimExecutableExtension(url),
-            cardDef: maybeCardDef,
+            cardOrFieldDef: maybeBaseDef,
             lastModified: 0,
             resourceCreatedAt: 0,
             deps: [trimExecutableExtension(url).href],
@@ -512,12 +513,12 @@ export class CurrentRun {
     });
     this.stats.modulesIndexed++;
 
-    for (let [name, maybeCardDef] of Object.entries(module)) {
-      if (isCardDef(maybeCardDef)) {
-        await this.indexCardDef({
+    for (let [name, maybeBaseDef] of Object.entries(module)) {
+      if (isBaseDef(maybeBaseDef)) {
+        await this.indexDefinition({
           name,
           url: trimExecutableExtension(url),
-          cardDef: maybeCardDef,
+          cardOrFieldDef: maybeBaseDef,
           lastModified: ref.lastModified,
           resourceCreatedAt: ref.created,
           deps: [...deps, trimExecutableExtension(url).href],
@@ -526,17 +527,17 @@ export class CurrentRun {
     }
   }
 
-  private async indexCardDef({
+  private async indexDefinition({
     url,
     name,
-    cardDef,
+    cardOrFieldDef,
     lastModified,
     resourceCreatedAt,
     deps,
   }: {
     url: URL;
     name: string;
-    cardDef: typeof CardDef;
+    cardOrFieldDef: typeof BaseDef;
     lastModified: number;
     resourceCreatedAt: number;
     deps: string[];
@@ -548,18 +549,23 @@ export class CurrentRun {
       let api = await this.loaderService.loader.import<typeof CardAPI>(
         `${baseRealm.url}card-api`,
       );
-      let fields = getFieldMeta(api, cardDef);
-      let codeRef = identifyCard(cardDef) as ResolvedCodeRef;
-      let meta: CardDefMeta = {
+      let fields = getFieldDefinitions(api, cardOrFieldDef);
+      let codeRef = identifyCard(cardOrFieldDef) as ResolvedCodeRef;
+      let definition: Definition = {
         codeRef,
         fields,
-        displayName: cardDef.displayName,
+        type: isCardDef(cardOrFieldDef) ? 'card-def' : 'field-def',
+        displayName: isCardDef(cardOrFieldDef)
+          ? cardOrFieldDef.displayName
+          : null,
       };
-      let typesMaybeError = await this.getTypes(cardDef);
+      let typesMaybeError = isCardDef(cardOrFieldDef)
+        ? await this.getTypes(cardOrFieldDef)
+        : { type: 'types' as const, types: [] };
       if (typesMaybeError.type === 'error') {
-        this.stats.cardDefErrors++;
+        this.stats.definitionErrors++;
         log.warn(
-          `${jobIdentity(this.#jobInfo)} encountered error indexing CardDef "${url.href}/${name}": ${typesMaybeError.error.message}`,
+          `${jobIdentity(this.#jobInfo)} encountered error indexing definition  "${url.href}/${name}": ${typesMaybeError.error.message}`,
         );
         let error = {
           type: 'error',
@@ -569,25 +575,25 @@ export class CurrentRun {
         return;
       }
       await this.batch.updateEntry(codeRefURL, {
-        type: 'card-def',
+        type: 'definition',
         fileAlias: url.href,
-        meta,
+        definition,
         lastModified,
         resourceCreatedAt,
         deps: new Set(deps),
         types: typesMaybeError.types.map(({ refURL }) => refURL),
       });
-      this.stats.cardDefsIndexed++;
+      this.stats.definitionsIndexed++;
     } catch (err: any) {
-      this.stats.cardDefErrors++;
+      this.stats.definitionErrors++;
       log.warn(
-        `${jobIdentity(this.#jobInfo)} encountered error indexing CardDef "${url.href}/${name}": ${err.message}`,
+        `${jobIdentity(this.#jobInfo)} encountered error indexing definition "${url.href}/${name}": ${err.message}`,
       );
       await this.batch.updateEntry(codeRefURL, {
         type: 'error',
         error: {
           status: err.status ?? 500,
-          message: `encountered error indexing CardDef "${url.href}/${name}": ${err.message}`,
+          message: `encountered error indexing definition "${url.href}/${name}": ${err.message}`,
           additionalErrors: null,
           deps,
         },

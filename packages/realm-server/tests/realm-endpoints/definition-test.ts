@@ -5,7 +5,7 @@ import { Server } from 'http';
 import qs from 'qs';
 import {
   baseRealm,
-  type CardDefMeta,
+  type Definition,
   type Realm,
 } from '@cardstack/runtime-common';
 import {
@@ -17,12 +17,12 @@ import {
   matrixURL,
   testRealmHref,
   createJWT,
-  cardInfoFieldMeta,
+  cardInfoDefinition,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
-  module('Realm-specific Endpoints | GET _card-def', function (hooks) {
+  module('Realm-specific Endpoints | GET _definition', function (hooks) {
     let testRealm: Realm;
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
@@ -58,15 +58,19 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         onRealmSetup,
       });
 
-      test('read permission GET /_card-def', async function (assert) {
+      test('read permission GET /_definition', async function (assert) {
         let response = await request
           .get(
-            `/_card-def?${qs.stringify({ codeRef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
+            `/_definition?${qs.stringify({ codeRef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
           )
           .set('Accept', 'application/vnd.api+json');
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         let json = response.body;
-        assert.deepEqual(json, expectedCardDef, 'card-def response is correct');
+        assert.deepEqual(
+          json,
+          expectedDefinition,
+          'definition response is correct',
+        );
       });
     });
 
@@ -78,10 +82,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         onRealmSetup,
       });
 
-      test('non read permission GET /_card-def', async function (assert) {
+      test('non read permission GET /_definition', async function (assert) {
         let response = await request
           .get(
-            `/_card-def?${qs.stringify({ codeRef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
+            `/_definition?${qs.stringify({ codeRef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
           )
           .set('Accept', 'application/vnd.api+json')
           .set('Authorization', `Bearer ${createJWT(testRealm, 'not-mary')}`);
@@ -89,10 +93,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         assert.strictEqual(response.status, 403, 'HTTP 403 status');
       });
 
-      test('read permission GET /_card-def', async function (assert) {
+      test('read permission GET /_definition', async function (assert) {
         let response = await request
           .get(
-            `/_card-def?${qs.stringify({ codeRef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
+            `/_definition?${qs.stringify({ codeRef: { module: `${testRealmHref}person`, name: 'Person' } })}`,
           )
           .set('Accept', 'application/vnd.api+json')
           .set(
@@ -102,17 +106,22 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         let json = response.body;
-        assert.deepEqual(json, expectedCardDef, 'card-def response is correct');
+        assert.deepEqual(
+          json,
+          expectedDefinition,
+          'definition response is correct',
+        );
       });
     });
   });
 });
 
-const expectedCardDef = {
+const expectedDefinition = {
   data: {
-    type: 'card-def',
+    type: 'definition',
     id: `${testRealmHref}person/Person`,
     attributes: {
+      type: 'card-def',
       displayName: 'Person',
       codeRef: {
         module: `${testRealmHref}person`,
@@ -164,8 +173,8 @@ const expectedCardDef = {
           },
           isPrimitive: true,
         },
-        ...cardInfoFieldMeta,
+        ...cardInfoDefinition,
       },
-    } as CardDefMeta,
+    } as Definition,
   },
 };

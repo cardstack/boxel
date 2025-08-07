@@ -4,7 +4,7 @@ import {
   primitive,
   fieldSerializer,
   type ResolvedCodeRef,
-  type CardDefMeta,
+  type Definition,
   type SerializerName,
 } from './index';
 
@@ -16,10 +16,10 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 // we do not capture this: Person -> bestFriend (Person) -> bestFriend (Person) -> bestFriend (Person) -> bestFriend (Person)
 const RECURSING_DEPTH = 3;
 
-export function getFieldMeta(
+export function getFieldDefinitions(
   api: typeof CardAPI,
   cardDef: typeof BaseDef,
-  results: CardDefMeta['fields'] = {},
+  results: Definition['fields'] = {},
   prefix = '',
   visited: string[] = [],
 ) {
@@ -45,7 +45,7 @@ export function getFieldMeta(
       if (visited.filter((v) => v === cardKey).length > RECURSING_DEPTH) {
         return results;
       }
-      getFieldMeta(api, field.card, results, fullFieldName, [
+      getFieldDefinitions(api, field.card, results, fullFieldName, [
         ...visited,
         cardKey,
       ]);

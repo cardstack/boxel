@@ -10,6 +10,7 @@ export default async function visitOperatorMode({
   codePath,
   fileView,
   openDirs,
+  aiAssistantOpen,
   moduleInspector,
   workspaceChooserOpened,
 }: Partial<SerializedState>) {
@@ -19,6 +20,7 @@ export default async function visitOperatorMode({
     workspaceChooserOpened: workspaceChooserOpened
       ? workspaceChooserOpened
       : false,
+    aiAssistantOpen: aiAssistantOpen ?? false,
     ...(codePath ? { codePath } : {}),
     ...(fileView ? { fileView } : {}),
     ...(openDirs ? { openDirs } : {}),

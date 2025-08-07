@@ -1250,8 +1250,8 @@ module(basename(__filename), function () {
               instanceErrors: 0,
               modulesIndexed: 0,
               instancesIndexed: 1,
-              cardDefErrors: 0,
-              cardDefsIndexed: 0,
+              definitionErrors: 0,
+              definitionsIndexed: 0,
               totalIndexEntries: 1,
             });
           }
