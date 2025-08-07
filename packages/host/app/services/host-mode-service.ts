@@ -53,7 +53,10 @@ export default class HostModeService extends Service {
   }
 
   get originIsNotTest() {
-    return this.hostModeOrigin !== 'http://localhost:4205';
+    return (
+      this.hostModeOrigin !== 'http://localhost:4202' &&
+      this.hostModeOrigin !== 'http://localhost:4205'
+    );
   }
 }
 
