@@ -452,7 +452,6 @@ export class RealmServer {
       }
     }
 
-    console.log('About to find published realms');
     let publishedRealms = await this.findPublishedRealms();
     return [...realms, ...publishedRealms];
   }
