@@ -29,7 +29,7 @@
       },
       "tags.0": {
         "links": {
-          "self": null
+          "self": "../Tag/stub"
         }
       },
       "license": {
