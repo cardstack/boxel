@@ -116,6 +116,9 @@ export default class SubmodeLayout extends Component<Signature> {
 
   @action
   private onLayoutChange(layout: number[]) {
+    // layout is an array of two numbers,
+    // the first number is the width of the main panel,
+    // the second number is the width of the ai panel.
     if (layout.length === 2) {
       window.localStorage.setItem(AiAssistantPanelWidth, String(layout[1]));
     }
