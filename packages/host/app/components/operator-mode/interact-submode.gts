@@ -303,13 +303,6 @@ export default class InteractSubmode extends Component {
         }
         await changeSizeCallback();
       },
-      changeSubmode: async (
-        url: URL,
-        submode: Submode = 'code',
-      ): Promise<void> => {
-        await here.operatorModeStateService.updateCodePath(url);
-        here.operatorModeStateService.updateSubmode(submode);
-      },
     };
     let catalogActions: CatalogActions = {
       allRealmsInfo: () => {

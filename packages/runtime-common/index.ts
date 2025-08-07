@@ -457,10 +457,6 @@ export interface CardActions {
     card: CardDef,
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
-  changeSubmode: (
-    url: URL,
-    submode: 'code' | 'interact',
-  ) => Promise<void> | void;
 }
 
 export interface CopyCardsWithCodeRef {
