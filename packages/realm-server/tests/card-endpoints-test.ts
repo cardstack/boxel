@@ -500,7 +500,7 @@ module(basename(__filename), function () {
             card,
             {
               data: {
-                attributes: { cardInfo },
+                attributes: {},
                 type: 'card',
                 meta: {
                   adoptsFrom: {
@@ -626,7 +626,6 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Hassan',
-                    cardInfo,
                   },
                   relationships: {
                     friend: {
@@ -663,7 +662,6 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Jade',
-                    cardInfo,
                   },
                   relationships: {
                     'friends.0': {
@@ -705,7 +703,6 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Germaine',
-                    cardInfo,
                   },
                   meta: {
                     adoptsFrom: {
@@ -735,7 +732,6 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Boris',
-                    cardInfo,
                   },
                   meta: {
                     adoptsFrom: {
@@ -1252,7 +1248,6 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Hassan',
-                    cardInfo,
                   },
                   relationships: {
                     friend: {
@@ -1640,7 +1635,6 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Jade',
-                    cardInfo,
                   },
                   relationships: {
                     'friends.0': {
@@ -1682,7 +1676,6 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Germaine',
-                    cardInfo,
                   },
                   meta: {
                     adoptsFrom: {
@@ -1712,7 +1705,6 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Boris',
-                    cardInfo,
                   },
                   meta: {
                     adoptsFrom: {
@@ -2285,14 +2277,6 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Jade',
-                    cardInfo,
-                  },
-                  relationships: {
-                    friend: {
-                      links: {
-                        self: null,
-                      },
-                    },
                   },
                   meta: {
                     adoptsFrom: {

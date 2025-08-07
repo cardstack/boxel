@@ -17,7 +17,7 @@ import {
   matrixURL,
   testRealmHref,
   createJWT,
-  cardInfoDefinition,
+  cardDefinition,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -137,7 +137,7 @@ const expectedDefinition = {
           },
           isPrimitive: true,
         },
-        ...cardInfoDefinition,
+        ...cardDefinition,
       },
     } as Definition,
   },
