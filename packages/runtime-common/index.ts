@@ -406,13 +406,6 @@ export interface SearchQuery {
   isLoading: boolean;
 }
 
-export interface Actions {
-  changeSubmode: (
-    url: URL,
-    submode: 'code' | 'interact',
-  ) => Promise<void> | void;
-}
-
 export interface CopyCardsWithCodeRef {
   sourceCard: CardDef;
   codeRef?: ResolvedCodeRef; // if provided the card will point to a new code ref
