@@ -11,6 +11,7 @@ import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask, timeout } from 'ember-concurrency';
 
 import { modifier } from 'ember-modifier';
+import window from 'ember-window-mock';
 
 import { TrackedObject } from 'tracked-built-ins';
 
@@ -36,6 +37,7 @@ import config from '@cardstack/host/config/environment';
 import type IndexController from '@cardstack/host/controllers';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
+import { AiAssistantPanelWidth } from '@cardstack/host/utils/local-storage-keys';
 
 import SearchSheet, {
   SearchSheetMode,
@@ -112,14 +114,33 @@ export default class SubmodeLayout extends Component<Signature> {
   private suppressSearchClose = false;
   private declare doSearch: (term: string) => void;
 
+  @action
+  private onLayoutChange(layout: number[]) {
+    // layout is an array of two numbers,
+    // the first number is the width of the main panel,
+    // the second number is the width of the ai panel.
+    if (layout.length === 2) {
+      window.localStorage.setItem(AiAssistantPanelWidth, String(layout[1]));
+    }
+  }
+
+  // Handles window resize and initializes AI panel width from localStorage
   onWindowResize = (windowWidth: number) => {
     let aiPanelDefaultWidthInPixels = 371;
     if (windowWidth < aiPanelDefaultWidthInPixels) {
       aiPanelDefaultWidthInPixels = windowWidth;
     }
     let aiPanelDefaultWidth = (aiPanelDefaultWidthInPixels / windowWidth) * 100;
+    const persistedWidth = window.localStorage.getItem(AiAssistantPanelWidth)
+      ? Number(window.localStorage.getItem(AiAssistantPanelWidth))
+      : undefined;
 
-    this.aiPanelWidths.defaultWidth = aiPanelDefaultWidth;
+    if (!persistedWidth || persistedWidth < aiPanelDefaultWidth) {
+      this.aiPanelWidths.defaultWidth = aiPanelDefaultWidth;
+    } else {
+      this.aiPanelWidths.defaultWidth = persistedWidth;
+    }
+
     this.aiPanelWidths.minWidth = aiPanelDefaultWidth;
   };
 
@@ -280,9 +301,11 @@ export default class SubmodeLayout extends Component<Signature> {
     <div
       {{handleWindowResizeModifier this.onWindowResize}}
       class='submode-layout {{this.aiAssistantVisibilityClass}}'
+      data-test-submode-layout
       ...attributes
     >
       <ResizablePanelGroup
+        @onLayoutChange={{this.onLayoutChange}}
         @orientation='horizontal'
         class='columns'
         as |ResizablePanel ResizeHandle|
