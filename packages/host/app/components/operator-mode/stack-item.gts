@@ -57,6 +57,8 @@ import {
 import { type StackItem } from '@cardstack/host/lib/stack-item';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
+import { copyCardURLToClipboard } from '@cardstack/host/utils/clipboard';
+
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
 import consumeContext from '../../helpers/consume-context';
@@ -322,9 +324,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     let menuItems: MenuItem[] = [
       new MenuItem('Copy Card URL', 'action', {
         action: () =>
-          this.card
-            ? this.args.publicAPI.copyURLToClipboard(this.card)
-            : undefined,
+          this.card ? copyCardURLToClipboard(this.card) : undefined,
         icon: IconLink,
         disabled: !this.url,
       }),
