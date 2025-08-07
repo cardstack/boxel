@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "productName": "Authentic Himalayan Salt Lamp - Medium",
+      "price": 49.95,
+      "salePrice": 39.95,
+      "sku": "HSL-MED-102",
+      "category": "Home & Decor",
+      "shortDescription": "Hand-carved from pure Himalayan pink salt crystal. Creates a warm, ambient glow while releasing negative ions to purify the air. Perfect for meditation spaces, bedrooms, or any room needing calming energy. Includes wooden base and dimmer cord.",
+      "inventory": 23,
+      "inStock": true,
+      "imageUrl": "https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=400&h=400&fit=crop&crop=center",
+      "title": "Authentic Himalayan Salt Lamp - Medium",
+      "description": "Hand-carved salt crystal lamp with wooden base and dimmer cord for creating ambient lighting and air purification.",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../online-product",
+        "name": "OnlineProduct"
+      }
+    }
+  }
+}

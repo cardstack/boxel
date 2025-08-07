@@ -764,10 +764,7 @@ module('Integration | realm', function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            description: null,
-            thumbnailURL: null,
             firstName: 'Mango',
-            cardInfo: {},
           },
           relationships: {
             owner: {
@@ -788,7 +785,7 @@ module('Integration | realm', function (hooks) {
     );
   });
 
-  test('realm returns 400 error for POST requests that set the value of a polymorphic field to an incompatible type', async function (assert) {
+  test('realm returns 500 error for POST requests that set the value of a polymorphic field to an incompatible type', async function (assert) {
     class Person extends FieldDef {
       @field firstName = contains(StringField);
     }
@@ -848,7 +845,12 @@ module('Integration | realm', function (hooks) {
         ),
       }),
     );
-    assert.strictEqual(response.status, 400, '400 server error');
+    assert.strictEqual(response.status, 500, '500 server error');
+    let json = await response.json();
+    assert.strictEqual(
+      json.errors[0].additionalErrors[0].errorDetail.message,
+      "field validation error: tried set instance of Car as field 'card' but it is not an instance of Person",
+    );
   });
 
   test('realm can serve patch card requests', async function (assert) {
@@ -1120,8 +1122,6 @@ module('Integration | realm', function (hooks) {
               {
                 firstName: 'Hassan',
                 lastName: null,
-                email: null,
-                posts: null,
               },
             ],
             sponsors: ['Burton'],
@@ -2392,7 +2392,7 @@ module('Integration | realm', function (hooks) {
             fields: {
               card: {
                 adoptsFrom: {
-                  module: `${testRealmURL}car`,
+                  module: `../car`,
                   name: 'Car',
                 },
               },
@@ -2487,7 +2487,7 @@ module('Integration | realm', function (hooks) {
     );
   });
 
-  test('realm returns 400 error for PATCH requests that set the value of a polymorphic field to an incompatible type', async function (assert) {
+  test('realm returns 500 error for PATCH requests that set the value of a polymorphic field to an incompatible type', async function (assert) {
     class Person extends FieldDef {
       @field firstName = contains(StringField);
     }
@@ -2499,7 +2499,7 @@ module('Integration | realm', function (hooks) {
     class Driver extends CardDef {
       @field card = contains(Person);
     }
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
         'driver.gts': { Driver },
@@ -2571,37 +2571,11 @@ module('Integration | realm', function (hooks) {
       }),
     );
 
-    assert.strictEqual(response.status, 400, '400 server error');
-    let fileRef = await adapter.openFile('dir/driver.json');
-    if (!fileRef) {
-      throw new Error('file not found');
-    }
-    assert.deepEqual(
-      JSON.parse(fileRef.content as string),
-      {
-        data: {
-          attributes: {
-            card: {
-              firstName: 'Mango',
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}driver`,
-              name: 'Driver',
-            },
-            fields: {
-              card: {
-                adoptsFrom: {
-                  module: `../person`,
-                  name: 'Person',
-                },
-              },
-            },
-          },
-        },
-      },
-      'file contents are correct',
+    assert.strictEqual(response.status, 500, '500 server error');
+    let json = await response.json();
+    assert.strictEqual(
+      json.errors[0].additionalErrors[0].errorDetail.message,
+      "field validation error: tried set instance of Car as field 'card' but it is not an instance of Person",
     );
   });
 

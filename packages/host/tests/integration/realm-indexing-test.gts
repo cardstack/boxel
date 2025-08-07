@@ -164,8 +164,8 @@ module(`Integration | realm indexing`, function (hooks) {
         instancesIndexed: 2,
         moduleErrors: 0,
         modulesIndexed: 1,
-        cardDefErrors: 0,
-        cardDefsIndexed: 1,
+        definitionErrors: 0,
+        definitionsIndexed: 1,
         totalIndexEntries: 4,
       },
       'indexer stats are correct',
@@ -191,11 +191,15 @@ module(`Integration | realm indexing`, function (hooks) {
       } as LooseSingleCardDocument),
     );
 
-    let metaEntry = await realm.realmIndexQueryEngine.cardDef({
+    let definitionEntry = await realm.realmIndexQueryEngine.getOwnDefinition({
       module: `${testRealmURL}pet`,
       name: 'Pet',
     });
-    assert.strictEqual(metaEntry?.type, 'card-def', 'meta entry exists');
+    assert.strictEqual(
+      definitionEntry?.type,
+      'definition',
+      'definition entry exists',
+    );
 
     await realm.fullIndex();
 
@@ -206,8 +210,8 @@ module(`Integration | realm indexing`, function (hooks) {
         instancesIndexed: 1,
         moduleErrors: 0,
         modulesIndexed: 0,
-        cardDefErrors: 0,
-        cardDefsIndexed: 0,
+        definitionErrors: 0,
+        definitionsIndexed: 0,
         totalIndexEntries: 4,
       },
       'indexer stats are correct',
@@ -215,11 +219,15 @@ module(`Integration | realm indexing`, function (hooks) {
 
     // meta entries are notional so we want to make sure they didn't
     // get tombstoned because the file wasn't found
-    metaEntry = await realm.realmIndexQueryEngine.cardDef({
+    definitionEntry = await realm.realmIndexQueryEngine.getOwnDefinition({
       module: `${testRealmURL}pet`,
       name: 'Pet',
     });
-    assert.strictEqual(metaEntry?.type, 'card-def', 'meta entry exists');
+    assert.strictEqual(
+      definitionEntry?.type,
+      'definition',
+      'definition entry exists',
+    );
   });
 
   test('can recover from indexing a card with a broken link', async function (assert) {
@@ -3317,8 +3325,8 @@ module(`Integration | realm indexing`, function (hooks) {
         instancesIndexed: 3,
         moduleErrors: 0,
         modulesIndexed: 0,
-        cardDefErrors: 0,
-        cardDefsIndexed: 0,
+        definitionErrors: 0,
+        definitionsIndexed: 0,
         totalIndexEntries: 3,
       },
       'instances are indexed without error',
