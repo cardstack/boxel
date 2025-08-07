@@ -1,11 +1,4 @@
-import {
-  writeFileSync,
-  writeJSONSync,
-  readdirSync,
-  statSync,
-  ensureDirSync,
-  copySync,
-} from 'fs-extra';
+import { readdirSync, statSync, ensureDirSync } from 'fs-extra';
 import { NodeAdapter } from '../../node-realm';
 import { resolve, join } from 'path';
 import {
@@ -235,6 +228,7 @@ export async function createRealm({
   matrixConfig = testMatrix,
   withWorker,
   enableFileWatcher = false,
+  sourceFileDirectoryToCopy = join(__dirname, '..', 'cards'),
 }: {
   dir: string;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
@@ -253,15 +247,23 @@ export async function createRealm({
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
-  for (let [filename, contents] of Object.entries(fileSystem)) {
-    if (typeof contents === 'string') {
-      writeFileSync(join(dir, filename), contents);
-    } else {
-      writeJSONSync(join(dir, filename), contents);
-    }
-  }
-
   let adapter = new NodeAdapter(dir, enableFileWatcher);
+
+  // If a fileSystem is provided, use it to populate the realm, otherwise copy the default cards
+  if (Object.keys(fileSystem).length > 0) {
+    for (let [filename, contents] of Object.entries(fileSystem)) {
+      if (typeof contents === 'string') {
+        adapter.write(join(dir, filename), contents);
+      } else {
+        adapter.write(join(dir, filename), JSON.stringify(contents, null, 2));
+      }
+    }
+  } else if (dir !== basePath) {
+    // Initialize adapter with default test cards (skip for basePath since it uses real files)
+    await (adapter as NodeAdapter).initializeFromDirectory(
+      sourceFileDirectoryToCopy,
+    );
+  }
   let worker: Worker | undefined;
   if (withWorker) {
     if (!runner) {
@@ -775,11 +777,6 @@ export function setupPermissionedRealm(
       }
 
       ensureDirSync(testRealmDir);
-
-      // If a fileSystem is provided, use it to populate the test realm, otherwise copy the default cards
-      if (!fileSystem) {
-        copySync(join(__dirname, '..', 'cards'), testRealmDir);
-      }
 
       let virtualNetwork = createVirtualNetwork();
 
