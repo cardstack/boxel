@@ -11,16 +11,12 @@ interface Signature {
     selectedOptions: Set<string>;
     onOptionChange: (option: string, checked: boolean) => void;
     onClose: () => void;
-    onCreateSession: (addSameSkills: boolean) => void;
+    onCreateSession: () => void;
   };
 }
 
 export default class NewSessionSettings extends Component<Signature> {
-  options = [
-    'Add Same Skills',
-    'Copy File History',
-    'Summarize Current Session',
-  ];
+  options = ['Add Same Skills', 'Copy File History'];
 
   @action
   isSelected(option: string) {
@@ -37,8 +33,7 @@ export default class NewSessionSettings extends Component<Signature> {
 
   @action
   handleCreateSession() {
-    const addSameSkills = this.args.selectedOptions.has('Add Same Skills');
-    this.args.onCreateSession(addSameSkills);
+    this.args.onCreateSession();
   }
 
   <template>

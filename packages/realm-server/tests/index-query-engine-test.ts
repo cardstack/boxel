@@ -8,6 +8,7 @@ import {
   fetcher,
   maybeHandleScopedCSSRequest,
 } from '@cardstack/runtime-common';
+import { DefinitionsCache } from '@cardstack/runtime-common/definitions-cache';
 import { runSharedTest, p } from '@cardstack/runtime-common/helpers';
 import { testRealmURL } from '@cardstack/runtime-common/helpers/const';
 import { PgAdapter } from '@cardstack/postgres';
@@ -105,6 +106,7 @@ module(basename(__filename), function () {
     let dbAdapter: PgAdapter;
     let indexQueryEngine: IndexQueryEngine;
     let loader: Loader;
+    let definitionsCache: DefinitionsCache;
 
     hooks.beforeEach(async function () {
       prepareTestDB();
@@ -122,7 +124,8 @@ module(basename(__filename), function () {
       loader = new Loader(fetch, virtualNetwork.resolveImport);
 
       dbAdapter = new PgAdapter({ autoMigrate: true });
-      indexQueryEngine = new IndexQueryEngine(dbAdapter, virtualNetwork.fetch);
+      definitionsCache = new DefinitionsCache(virtualNetwork.fetch);
+      indexQueryEngine = new IndexQueryEngine(dbAdapter, definitionsCache);
     });
 
     hooks.afterEach(async function () {
@@ -133,6 +136,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -141,6 +145,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -149,6 +154,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -157,6 +163,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -165,6 +172,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -173,6 +181,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -181,6 +190,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -189,6 +199,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -197,6 +208,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -205,6 +217,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -213,6 +226,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -221,6 +235,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -229,6 +244,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -237,6 +253,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -245,6 +262,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -253,6 +271,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -261,6 +280,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -269,6 +289,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -277,6 +298,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -285,6 +307,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -293,6 +316,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -301,6 +325,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -309,6 +334,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -317,6 +343,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -325,6 +352,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -333,6 +361,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -341,6 +370,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -349,6 +379,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -357,6 +388,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -365,6 +397,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -373,6 +406,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -381,6 +415,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -389,6 +424,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -397,6 +433,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -405,6 +442,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -413,6 +451,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -421,6 +460,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -429,6 +469,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -437,6 +478,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -445,6 +487,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -453,6 +496,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -461,6 +505,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -469,6 +514,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -477,6 +523,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });
@@ -485,6 +532,7 @@ module(basename(__filename), function () {
       await runSharedTest(indexQueryEngineTests, assert, {
         indexQueryEngine,
         dbAdapter,
+        definitionsCache,
         testCards: await makeTestCards(loader),
       });
     });

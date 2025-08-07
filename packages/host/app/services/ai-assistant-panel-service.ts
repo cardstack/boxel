@@ -11,7 +11,9 @@ import window from 'ember-window-mock';
 
 import { isCardInstance } from '@cardstack/runtime-common';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import * as CommandModule from 'https://cardstack.com/base/command';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import type { Skill as SkillCard } from 'https://cardstack.com/base/skill';
 
@@ -116,14 +118,22 @@ export default class AiAssistantPanelService extends Service {
   }
 
   @action
-  async createNewSession(addSameSkills: boolean = false) {
+  async createNewSession(
+    opts: {
+      addSameSkills: boolean;
+      shouldCopyFileHistory: boolean;
+    } = {
+      addSameSkills: false,
+      shouldCopyFileHistory: false,
+    },
+  ) {
     this.displayRoomError = false;
     if (this.newSessionId) {
       this.enterRoom(this.newSessionId);
       return;
     }
 
-    await this.doCreateRoom.perform('New AI Assistant Chat', addSameSkills);
+    await this.doCreateRoom.perform('New AI Assistant Chat', opts);
   }
 
   private get newSessionId() {
@@ -193,11 +203,64 @@ export default class AiAssistantPanelService extends Service {
     return { enabledSkills, disabledSkills };
   }
 
+  private collectFileHistoryFromCurrentRoom(): {
+    attachedFiles: FileDef[];
+    attachedCards: CardDef[];
+  } {
+    const currentRoomId = this.matrixService.currentRoomId;
+    if (!currentRoomId) {
+      return { attachedFiles: [], attachedCards: [] };
+    }
+
+    const roomResource = this.matrixService.roomResources.get(currentRoomId);
+    if (!roomResource) {
+      return { attachedFiles: [], attachedCards: [] };
+    }
+
+    const seenFileUrls = new Set<string>();
+    const seenCardUrls = new Set<string>();
+    const attachedFiles: FileDef[] = [];
+    const attachedCards: CardDef[] = [];
+
+    // Iterate through all messages in the current room
+    for (const message of roomResource.messages) {
+      // Collect attached files
+      if (message.attachedFiles) {
+        for (const file of message.attachedFiles) {
+          if (file.sourceUrl && !seenFileUrls.has(file.sourceUrl)) {
+            seenFileUrls.add(file.sourceUrl);
+            attachedFiles.push(file);
+          }
+        }
+      }
+
+      // Collect attached cards (using sourceUrl from the message's attachedCardIds)
+      if (message.attachedCardIds) {
+        for (const cardId of message.attachedCardIds) {
+          if (cardId && !seenCardUrls.has(cardId)) {
+            seenCardUrls.add(cardId);
+            // We need to get the actual card from the store
+            const card = this.store.peek<CardDef>(cardId);
+            if (card && isCardInstance(card)) {
+              attachedCards.push(card);
+            }
+          }
+        }
+      }
+    }
+
+    return { attachedFiles, attachedCards };
+  }
+
   private doCreateRoom = restartableTask(
     async (
       name: string = 'New AI Assistant Chat',
-      addSameSkills: boolean = false,
+      opts: {
+        addSameSkills: boolean;
+        shouldCopyFileHistory: boolean;
+      },
     ) => {
+      let { addSameSkills, shouldCopyFileHistory } = opts;
       try {
         let createRoomCommand = new CreateAiAssistantRoomCommand(
           this.commandService.commandContext,
@@ -226,6 +289,22 @@ export default class AiAssistantPanelService extends Service {
         let { roomId } = await createRoomCommand.execute(input);
 
         window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);
+
+        // If file history should be copied, send an initial message with the files and cards
+        if (shouldCopyFileHistory) {
+          const { attachedFiles, attachedCards } =
+            this.collectFileHistoryFromCurrentRoom();
+
+          if (attachedFiles.length > 0 || attachedCards.length > 0) {
+            await this.matrixService.sendMessage(
+              roomId,
+              'This session includes files and cards from the previous conversation for context.',
+              attachedCards,
+              attachedFiles,
+            );
+          }
+        }
+
         this.enterRoom(roomId);
       } catch (e) {
         console.log(e);
