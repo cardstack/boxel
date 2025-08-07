@@ -452,10 +452,6 @@ export interface CardActions {
   copyURLToClipboard: (card: CardDef | URL | string) => Promise<void>;
   editCard: (card: CardDef) => void;
   saveCard: (id: string) => void;
-  doWithStableScroll: (
-    card: CardDef,
-    changeSizeCallback: () => Promise<void>,
-  ) => Promise<void>;
   changeSubmode: (
     url: URL,
     submode: 'code' | 'interact',

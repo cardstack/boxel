@@ -248,24 +248,6 @@ export default class InteractSubmode extends Component {
       saveCard: (id: string): void => {
         here.store.save(id);
       },
-      doWithStableScroll: async (
-        card: CardDef,
-        changeSizeCallback: () => Promise<void>,
-      ): Promise<void> => {
-        let stackItem: StackItem | undefined;
-        for (let stack of here.stacks) {
-          stackItem = stack.find((item: StackItem) => item.id === card.id);
-          if (stackItem) {
-            let doWithStableScroll =
-              stackItemComponentAPI.get(stackItem)?.doWithStableScroll;
-            if (doWithStableScroll) {
-              doWithStableScroll(changeSizeCallback); // this is perform()ed in the component
-              return;
-            }
-          }
-        }
-        await changeSizeCallback();
-      },
       changeSubmode: async (
         url: URL,
         submode: Submode = 'code',
