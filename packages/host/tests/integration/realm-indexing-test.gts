@@ -890,7 +890,7 @@ module(`Integration | realm indexing`, function (hooks) {
           description: null,
           instructions: 'How to win friends and influence people',
           thumbnailURL: null,
-          title: 'Untitled Skill',
+          title: null,
           cardInfo,
         },
         relationships: {
@@ -923,7 +923,6 @@ module(`Integration | realm indexing`, function (hooks) {
           },
         ],
         cardInfo: { theme: null },
-        title: 'Untitled Skill',
       });
     } else {
       assert.ok(

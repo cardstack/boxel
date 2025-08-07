@@ -769,7 +769,6 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Mango',
-            cardInfo,
           },
           relationships: {
             owner: {
