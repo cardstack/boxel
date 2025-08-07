@@ -4,7 +4,7 @@ import Component from '@glimmer/component';
 
 import { pageTitle } from 'ember-page-title';
 
-import { consume } from 'ember-provide-consume-context';
+import { consume, provide } from 'ember-provide-consume-context';
 import RouteTemplate from 'ember-route-template';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
@@ -18,6 +18,7 @@ import {
   GetCardsContextName,
   GetCardCollectionContextName,
   isCardErrorJSONAPI,
+  CardContextName,
 } from '@cardstack/runtime-common';
 import { meta } from '@cardstack/runtime-common/constants';
 
@@ -68,7 +69,9 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
     return false;
   }
 
-  private get cardContext(): HostModeCardContext {
+  @provide(CardContextName)
+  // @ts-ignore "context" is declared but not used
+  private get context(): HostModeCardContext {
     return {
       getCard: this.getCard,
       getCards: this.getCards,
@@ -95,7 +98,6 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
             class='stack-item-preview'
             @card={{this.card}}
             @format='isolated'
-            @cardContext={{this.cardContext}}
           />
 
         </CardContainer>

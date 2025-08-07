@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "orderNumber": "AST-2024-003",
+      "customerEmail": "james.wright.fitness@gmail.com",
+      "orderStatus": "processing",
+      "orderTotal": 324.78,
+      "orderDate": "2025-01-04T11:45:00.000Z",
+      "shippingAddress": "J. Wright\n2847 Mountain View Drive\nDenver, CO 80205\nUnited States",
+      "paymentMethod": "Apple Pay",
+      "trackingNumber": null,
+      "title": "AST-2024-003",
+      "description": "Large order being processed - includes multiple wellness products and salt lamp for home gym setup."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../online-order",
+        "name": "OnlineOrder"
+      }
+    }
+  }
+}

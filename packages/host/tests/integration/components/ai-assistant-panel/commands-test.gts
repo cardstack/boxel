@@ -672,8 +672,8 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           id: 'search1',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: JSON.stringify({
+            description: 'Searching for card',
             attributes: {
-              description: 'Searching for card',
               type: {
                 module: `${testRealmURL}pet`,
                 name: 'Pet',
@@ -761,8 +761,8 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           id: '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: JSON.stringify({
+            description: 'Searching for card',
             attributes: {
-              description: 'Searching for card',
               type: {
                 module: `${testRealmURL}person`,
                 name: 'Person',

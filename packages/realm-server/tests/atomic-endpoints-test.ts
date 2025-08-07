@@ -26,7 +26,6 @@ module(basename(__filename), function () {
     'Realm-specific Endpoints: can make request to post /_atomic',
     function (hooks) {
       let testRealm: Realm;
-      let testRealmAdapter: RealmAdapter;
       let request: SuperTest<Test>;
 
       function onRealmSetup(args: {
@@ -38,7 +37,6 @@ module(basename(__filename), function () {
       }) {
         testRealm = args.testRealm;
         request = args.request;
-        testRealmAdapter = args.testRealmAdapter;
       }
 
       let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
@@ -632,92 +630,6 @@ module(basename(__filename), function () {
             'the card source is correct',
           );
         });
-        test('writes will get file directly from disk enabling writes that rely on file system but not index', async function (assert) {
-          let source = `
-            import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
-            export class Place extends CardDef {
-              static displayName = 'Place';
-              @field name = contains(StringField);
-            }
-            `.trim();
-
-          let doc = {
-            'atomic:operations': [
-              {
-                op: 'add',
-                href: '/place-modules/place.gts',
-                data: {
-                  type: 'source',
-                  attributes: {
-                    content: source,
-                  },
-                  meta: {},
-                },
-              },
-            ],
-          };
-          let response = await request
-            .post('/_atomic')
-            .set('Accept', SupportedMimeType.JSONAPI)
-            .set(
-              'Authorization',
-              `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
-            )
-            .send(JSON.stringify(doc));
-          assert.strictEqual(response.status, 201);
-          //place module is indexed but it will be overwritten by a file write
-          let unIndexedSource = `
-          import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
-          export class Place extends CardDef {
-            static displayName = 'Place';
-            @field newName = contains(StringField);
-          }
-          `;
-          await testRealmAdapter.write(
-            '/place-modules/place.gts',
-            unIndexedSource,
-          );
-          // this instance should adoptsFrom the file unIndexedSource
-          let newDoc = {
-            'atomic:operations': [
-              {
-                op: 'add',
-                href: '/place.json',
-                data: {
-                  type: 'card',
-                  attributes: {
-                    newName: 'Kuala Lumpur',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: '/place-modules/place',
-                      name: 'Place',
-                    },
-                  },
-                },
-              },
-            ],
-          };
-
-          response = await request
-            .post('/_atomic')
-            .set('Accept', SupportedMimeType.JSONAPI)
-            .set(
-              'Authorization',
-              `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
-            )
-            .send(JSON.stringify(newDoc));
-          assert.strictEqual(response.status, 201);
-
-          let cardResponse = await request
-            .get('/place')
-            .set('Accept', SupportedMimeType.CardJson);
-          let json = cardResponse.body as LooseSingleCardDocument;
-          assert.strictEqual(json.data.attributes?.name, undefined);
-          assert.strictEqual(json.data.attributes?.newName, 'Kuala Lumpur');
-        });
       });
       module('error handling', function (hooks) {
         setupPermissionedRealm(hooks, {
@@ -801,9 +713,11 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 500);
           assert.strictEqual(response.body.errors.length, 1);
           assert.strictEqual(response.body.errors[0].title, 'Write Error');
-          assert.strictEqual(
-            response.body.errors[0].detail,
-            `Error: ${testRealmHref}place-modules/place not found`,
+          assert.ok(
+            response.body.errors[0].detail.includes(
+              `Error: tried to get definition for {"module":"${testRealmHref}place-modules/place","name":"Place"}, but got 404`,
+            ),
+            'error message is correct',
           );
         });
       });

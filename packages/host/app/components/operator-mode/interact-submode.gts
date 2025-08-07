@@ -128,6 +128,7 @@ export default class InteractSubmode extends Component {
   @consume(GetCardsContextName) private declare getCards: getCards;
   @consume(GetCardCollectionContextName)
   private declare getCardCollection: getCardCollection;
+  @consume(CardContextName) private declare cardContext: CardContext;
 
   @service private declare cardService: CardService;
   @service private declare commandService: CommandService;
@@ -629,7 +630,7 @@ export default class InteractSubmode extends Component {
   }
 
   private getRecentCardCollection = () => {
-    this.recentCardCollection = this.cardContext?.getCardCollection(
+    this.recentCardCollection = this.context?.getCardCollection(
       this,
       () => this.recentCardsService.recentCardIds,
     );
@@ -729,35 +730,28 @@ export default class InteractSubmode extends Component {
       throw new Error(`"${specId}" is not a card instance.`);
     }
 
-    await this.cardContext.actions?.createCard?.(spec.ref, new URL(specId), {
+    await this.context.actions?.createCard?.(spec.ref, new URL(specId), {
       realmURL: this.operatorModeStateService.getWritableRealmURL(),
     });
   });
 
   private createNewFromRecentType = restartableTask(
     async (codeRef: ResolvedCodeRef) => {
-      this.cardContext.actions?.createCard(codeRef, undefined, {
+      this.context.actions?.createCard(codeRef, undefined, {
         realmURL: this.operatorModeStateService.getWritableRealmURL(),
       });
     },
   );
 
+  // TODO: after actions is removed, this is not needed
   @provide(CardContextName)
-  private get cardContext(): Omit<
-    CardContext,
-    'prerenderedCardSearchComponent'
-  > {
+  private get context(): CardContext {
     // assumption: take actions in the right-most stack
     let stackCount = this.operatorModeStateService.numberOfStacks();
     let rightMostStackIndex = stackCount > 0 ? stackCount - 1 : 0;
     return {
-      actions: this.publicAPI(this, rightMostStackIndex),
-      getCard: this.getCard,
-      getCards: this.getCards,
-      getCardCollection: this.getCardCollection,
-      store: this.store,
-      // TODO: should we include this here??
-      commandContext: this.commandService.commandContext,
+      ...this.cardContext,
+      actions: this.publicAPI(this, rightMostStackIndex), //TODO: This is to be removed
     };
   }
 

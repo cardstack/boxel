@@ -249,6 +249,7 @@ export default class MessageBuilder {
             APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
               ? event.content.data.card
               : undefined;
+          messageCommand.failureReason = event.content.failureReason;
         }
       }
     }
@@ -334,6 +335,7 @@ export default class MessageBuilder {
         ? commandResultEvent.content.data.card
         : undefined,
       getOwner(this)!,
+      commandResultEvent?.content.failureReason,
     );
     return messageCommand;
   }

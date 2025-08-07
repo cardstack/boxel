@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "customerName": "Elena Martinez",
+      "email": "elena.martinez@trailrunner.net",
+      "phone": "+1-720-555-2189",
+      "totalOrders": 4,
+      "totalSpent": 267.89,
+      "customerSince": "2024-09-14T08:30:00.000Z",
+      "loyaltyTier": "Bronze",
+      "title": "Elena Martinez",
+      "description": "Beginner trail runner and hiking enthusiast from Denver. New customer who recently discovered outdoor sports. Bronze tier member focused on building essential gear collection for Colorado adventures.",
+      "thumbnailURL": "https://randomuser.me/api/portraits/women/31.jpg"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../online-customer",
+        "name": "OnlineCustomer"
+      }
+    }
+  }
+}

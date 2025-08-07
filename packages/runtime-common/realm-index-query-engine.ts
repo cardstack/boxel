@@ -9,7 +9,7 @@ import {
   type DBAdapter,
   type QueryOptions,
   type IndexedModuleOrError,
-  type IndexedCardDefOrError,
+  type IndexedDefinitionOrError,
   type InstanceOrError,
   type ResolvedCodeRef,
 } from '.';
@@ -23,6 +23,7 @@ import {
   type CardCollectionDocument,
 } from './document-types';
 import { type CardResource, type Saved } from './resource-types';
+import { type DefinitionsCache } from './definitions-cache';
 
 type Options = {
   loadLinks?: true;
@@ -52,17 +53,19 @@ export class RealmIndexQueryEngine {
     realm,
     dbAdapter,
     fetch,
+    definitionsCache,
   }: {
     realm: Realm;
     dbAdapter: DBAdapter;
     fetch: typeof globalThis.fetch;
+    definitionsCache: DefinitionsCache;
   }) {
     if (!dbAdapter) {
       throw new Error(
         `DB Adapter was not provided to SearchIndex constructor--this is required when using a db based index`,
       );
     }
-    this.#indexQueryEngine = new IndexQueryEngine(dbAdapter, fetch);
+    this.#indexQueryEngine = new IndexQueryEngine(dbAdapter, definitionsCache);
     this.#realm = realm;
     this.#fetch = fetch;
   }
@@ -191,11 +194,11 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.getModule(url, opts);
   }
 
-  async cardDef(
+  async getOwnDefinition(
     codeRef: ResolvedCodeRef,
     opts?: Options,
-  ): Promise<IndexedCardDefOrError | undefined> {
-    return await this.#indexQueryEngine.getOwnCardDef(codeRef, opts);
+  ): Promise<IndexedDefinitionOrError | undefined> {
+    return await this.#indexQueryEngine.getOwnDefinition(codeRef, opts);
   }
 
   async instance(
