@@ -36,6 +36,7 @@ const Attachments: TemplateOnlyComponent<Signature> = <template>
             @file={{item}}
             @borderType='solid'
             @onDownload={{onDownload item @downloadFile}}
+            @fileActionsEnabled={{true}}
           />
         </li>
       {{/if}}
