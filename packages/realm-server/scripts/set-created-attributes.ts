@@ -1,15 +1,15 @@
 #!/usr/bin/env ts-node
 
-import { readdirSync, statSync } from 'fs-extra';
+import { readdirSync } from 'fs-extra';
 import { join } from 'path';
 import { getAttributeSync, setAttributeSync } from 'fs-xattr';
 
 function setCreatedAttributesRecursive(dir: string): void {
   const entries = readdirSync(dir, { withFileTypes: true });
-  
+
   for (const entry of entries) {
     const fullPath = join(dir, entry.name);
-    
+
     if (entry.isDirectory()) {
       setCreatedAttributesRecursive(fullPath);
     } else if (entry.isFile()) {
@@ -24,7 +24,10 @@ function setCreatedAttributesRecursive(dir: string): void {
           setAttributeSync(fullPath, 'user.created', currentTime.toString());
           console.log(`Set created attribute on: ${fullPath}`);
         } catch (err) {
-          console.warn(`Warning: Could not set extended attribute on ${fullPath}:`, err);
+          console.warn(
+            `Warning: Could not set extended attribute on ${fullPath}:`,
+            err,
+          );
         }
       }
     }
@@ -35,7 +38,9 @@ function setCreatedAttributesRecursive(dir: string): void {
 const destDir = process.argv[2];
 
 if (!destDir) {
-  console.error('Usage: ts-node set-created-attributes.ts <destination-directory>');
+  console.error(
+    'Usage: ts-node set-created-attributes.ts <destination-directory>',
+  );
   process.exit(1);
 }
 
