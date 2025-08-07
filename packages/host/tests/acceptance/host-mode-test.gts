@@ -13,7 +13,6 @@ import {
   percySnapshot,
   setupLocalIndexing,
   setupOnSave,
-  testRealmURL,
   testHostModeRealmURL,
   setupAcceptanceTestRealm,
   setupUserSubscription,
