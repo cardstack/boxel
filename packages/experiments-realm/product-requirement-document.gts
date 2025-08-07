@@ -21,6 +21,7 @@ import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-
 import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import WriteTextFileCommand from '@cardstack/boxel-host/commands/write-text-file';
+import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
 
 import GenerateCodeCommand from './AiAppGenerator/generate-code-command';
 import { restartableTask } from 'ember-concurrency';
@@ -346,15 +347,11 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
       this.errorMessage = 'Module url is not available';
       return;
     }
-    if (!this.args.context?.actions?.changeSubmode) {
-      this.errorMessage =
-        'Unable to view module. Context action "changeSubmode" is not available';
-      return;
-    }
-    await this.args.context.actions.changeSubmode(
-      new URL(this.args.model.moduleURL),
-      'code',
-    );
+    let commandContext = this.args.context?.commandContext;
+    await new SwitchSubmodeCommand(commandContext!).execute({
+      codePath: this.args.model.moduleURL,
+      submode: 'code',
+    });
   };
 
   reset = () => {
