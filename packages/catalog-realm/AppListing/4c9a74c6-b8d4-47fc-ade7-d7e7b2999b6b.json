@@ -1,0 +1,90 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Online Store",
+      "summary": "A comprehensive e-commerce management system that provides everything needed to run an online store. Features include real-time dashboard metrics, product catalog management with inventory tracking, order processing and status management, customer relationship management with loyalty tiers, and customizable branding options. \n\nThe interface offers tabbed navigation between Products, Orders, and Customers sections, with responsive design that adapts from compact views to full dashboard layouts. \n\nPerfect for small to medium businesses looking to manage their online retail operations efficiently.",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/online-store-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/online-store-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/online-store-listing/screenshot_01.png"
+      ],
+      "cardInfo": {},
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/online-store-listing/thumbnail.png"
+    },
+    "relationships": {
+      "specs.0": {
+        "links": {
+          "self": "../Spec/d9a1b093-132a-4020-9823-15a7329d38dc"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/3b54abbe-60cd-4b1b-bba2-a7894de85ff4"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/de494cb4-c43b-44ab-be60-cd7b1bfba2a7"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/b4c43b54-abbe-40cd-bb1b-fba2a7894de8"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/shopping-consumer"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/product-catalogs"
+        }
+      },
+      "categories.2": {
+        "links": {
+          "self": "../Category/business-development"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../online-store/OnlineStore/alpine-trek-co"
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "AppListing"
+      }
+    }
+  }
+}
