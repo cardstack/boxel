@@ -244,6 +244,7 @@ export async function createRealm({
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
+  sourceFileDirectoryToCopy?: string;
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
