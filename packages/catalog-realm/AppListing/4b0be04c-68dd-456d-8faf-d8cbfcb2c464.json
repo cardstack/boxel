@@ -1,0 +1,111 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AppListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Gaming Hub",
+      "images": [],
+      "summary": "Comprehensive gaming profile and dashboard for tracking your complete gaming journey across platforms",
+      "cardInfo": {},
+      "description": "Gaming Hub Profile is the ultimate solution for serious gamers who want to centralize and showcase their gaming identity. This comprehensive platform brings together every aspect of your gaming life into one beautifully designed, interactive dashboard.\n\n**Core Features:**\n- **Complete Gaming Identity:** Unified gamer profile with customizable avatar, bio, online status, and location\n- **Multi-Platform Integration:** Connect Steam, Xbox, PlayStation, and other gaming platforms to sync your library\n- **Game Progress Tracking:** Monitor your progress across all games with completion rates, playtime, and achievements\n- **Tournament Participation:** Track your competitive gaming history and tournament results\n- **Gaming Social Network:** Connect with fellow gamers, build your friends list, and join gaming communities\n- **Comprehensive Statistics:** Detailed analytics including total games, hours played, completion rates, and gaming streaks\n- **Wishlist Management:** Curate your dream game collection and track upcoming releases\n- **Content Creator Tools:** Streaming platform integration and schedule management for creators\n- **Interactive Search:** Live search through your game library with real-time filtering\n- **Responsive Design:** Beautiful, futuristic interface that works perfectly on all devices\n\n**Perfect for:**\n- Dedicated gamers who want to track their gaming journey\n- Content creators and streamers managing their gaming brand\n- Competitive players participating in tournaments and esports\n- Gaming communities organizing events and connecting members\n- Anyone looking to discover new games and connect with like-minded players\n\nThe Gaming Hub Profile features a stunning cyberpunk-inspired design with smooth animations, real-time status updates, and comprehensive data visualization that makes managing your gaming life both functional and visually engaging.",
+      "thumbnailURL": ""
+    },
+    "relationships": {
+      "tags.0": {
+        "links": {
+          "self": "../Tag/stub"
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/9bbf6b90-7688-42e7-904b-0be04c68dd25"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/bf6b9076-8812-4710-8b0b-e04c68dd256d"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/768812e7-104b-4be0-8c68-dd256dcfafd8"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/8812e710-4b0b-404c-a8dd-256dcfafd8cb"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/90768812-e710-4b0b-a04c-68dd256dcfaf"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/6b907688-12e7-404b-8be0-4c68dd256dcf"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/12e7104b-0be0-4c68-9d25-6dcfafd8cbfc"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/e7104b0b-e04c-48dd-a56d-cfafd8cbfcb2"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/104b0be0-4c68-4d25-adcf-afd8cbfcb2c4"
+        }
+      },
+      "skills.0": {
+        "links": {
+          "self": null
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../gaming-hub/GamingHub/zlata-voidwalker"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/video-games-interactive"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/social-networking"
+        }
+      },
+      "categories.2": {
+        "links": {
+          "self": "../Category/content-creation"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

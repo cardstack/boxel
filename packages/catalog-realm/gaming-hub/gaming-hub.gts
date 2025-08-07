@@ -38,10 +38,10 @@ import GamepadIcon from '@cardstack/boxel-icons/gamepad-2';
 import TrophyIcon from '@cardstack/boxel-icons/trophy';
 import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
 
-import { Game } from './game';
-import { GamingPlatform } from './gaming-platform';
-import { Tournament } from './tournament';
-import { PlayerProgress } from './player-progress';
+import { Game } from '../game/game';
+import { GamingPlatform } from '../gaming-platform/gaming-platform';
+import { Tournament } from '../tournament/tournament';
+import { PlayerProgress } from '../player-progress/player-progress';
 
 export class GamingPlatformField extends FieldDef {
   static displayName = 'Gaming Platform';
