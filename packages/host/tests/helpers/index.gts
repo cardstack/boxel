@@ -437,6 +437,11 @@ async function setupTestRealm({
     }),
   });
 
+  // we use this to run cards that were added to the test filesystem
+  adapter.setLoader(
+    new Loader(realm.__fetchForTesting, virtualNetwork.resolveImport),
+  );
+
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);
   await mockMatrixUtils.start();

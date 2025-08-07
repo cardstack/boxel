@@ -16,7 +16,7 @@ import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 
 import { Message } from './message';
 
-type CommandStatus = 'applied' | 'ready' | 'applying';
+type CommandStatus = 'applied' | 'ready' | 'applying' | 'invalid';
 
 export default class MessageCommand {
   @tracked commandRequest: Partial<CommandRequest>;
@@ -33,6 +33,7 @@ export default class MessageCommand {
     commandStatus: CommandStatus,
     commandResultFileDef: SerializedFile | undefined,
     owner: Owner,
+    public failureReason?: string | undefined,
   ) {
     setOwner(this, owner);
 
@@ -58,7 +59,11 @@ export default class MessageCommand {
   }
 
   get description() {
-    return this.arguments?.description;
+    // Sometimes the AI does not provide a description, so we fall back to the
+    // attributes.description if it exists.
+    return (
+      this.arguments?.description || this.arguments?.attributes?.description
+    );
   }
 
   get status() {

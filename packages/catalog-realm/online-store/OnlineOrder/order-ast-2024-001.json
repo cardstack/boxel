@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "orderNumber": "AST-2024-001",
+      "customerEmail": "sophia.nakamura@university.edu",
+      "orderStatus": "completed",
+      "orderTotal": 156.90,
+      "orderDate": "2024-12-28T09:15:00.000Z",
+      "shippingAddress": "Dr. Sophia Nakamura\n1847 Pine Street, Apt 204\nSeattle, WA 98101\nUnited States",
+      "paymentMethod": "Credit Card (**** 4567)",
+      "trackingNumber": "1Z999AA1234567890",
+      "title": "AST-2024-001",
+      "description": "Completed order for wellness research supplies including sage bundle and essential oils."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../online-order",
+        "name": "OnlineOrder"
+      }
+    }
+  }
+}

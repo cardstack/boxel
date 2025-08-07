@@ -696,6 +696,58 @@ module('Acceptance | Commands tests', function (hooks) {
     );
   });
 
+  test('rendering a command request without a description fallsback to attributes.description', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    // open assistant
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+    // open skill menu
+    await click('[data-test-skill-menu][data-test-pill-menu-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    // add useful-commands skill, which includes the switch-submode command
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/useful-commands"]',
+    );
+    await click('[data-test-card-catalog-go-button]');
+    // simulate message
+    let roomId = getRoomIds().pop()!;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: '',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '29e8addb-197b-4d6d-b0a9-547959bf7c96',
+          name: buildCommandFunctionName({
+            module: `${testRealmURL}search-and-open-card-command`,
+            name: 'default',
+          }),
+          arguments: JSON.stringify({
+            attributes: {
+              description: 'Finding and opening Hassan card',
+              title: 'Hassan',
+            },
+          }),
+        },
+      ],
+    });
+    // Click on the apply button
+    await waitFor('[data-test-message-idx="0"]');
+    assert
+      .dom('[data-test-message-idx="0"] .command-description')
+      .containsText('Finding and opening Hassan card');
+  });
+
   test('ShowCard command added from a skill, can be automatically executed when agentId matches', async function (assert) {
     await visitOperatorMode({
       stacks: [
@@ -931,7 +983,10 @@ module('Acceptance | Commands tests', function (hooks) {
         {
           id: commandId,
           name: 'switch-submode_dd88',
-          arguments: JSON.stringify({ attributes: { submode: 'code' } }),
+          arguments: JSON.stringify({
+            description: 'switch to code mode',
+            attributes: { submode: 'code' },
+          }),
         },
       ],
       data: {
@@ -967,7 +1022,10 @@ module('Acceptance | Commands tests', function (hooks) {
         {
           id: commandId2,
           name: 'switch-submode_dd88',
-          arguments: JSON.stringify({ attributes: { submode: 'interact' } }),
+          arguments: JSON.stringify({
+            description: 'switch to interact mode',
+            attributes: { submode: 'interact' },
+          }),
         },
       ],
       data: {
@@ -1001,7 +1059,10 @@ module('Acceptance | Commands tests', function (hooks) {
         {
           id: commandId3,
           name: 'switch-submode_dd88',
-          arguments: JSON.stringify({ attributes: { submode: 'code' } }),
+          arguments: JSON.stringify({
+            description: 'switch to code mode',
+            attributes: { submode: 'code' },
+          }),
         },
       ],
       data: {
@@ -1046,7 +1107,10 @@ module('Acceptance | Commands tests', function (hooks) {
         {
           id: commandId4,
           name: 'switch-submode_dd88',
-          arguments: JSON.stringify({ attributes: { submode: 'interact' } }),
+          arguments: JSON.stringify({
+            description: 'switch to interact mode',
+            attributes: { submode: 'interact' },
+          }),
         },
       ],
       data: {
@@ -1063,6 +1127,168 @@ module('Acceptance | Commands tests', function (hooks) {
     assert
       .dom('[data-test-message-idx="3"] [data-test-apply-state="applied"]')
       .exists('New command sent after act mode is auto-applied');
+  });
+
+  test('command request with invalid name gets an "invalid" result', async function (assert) {
+    await visitOperatorMode({
+      aiAssistantOpen: true,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await waitFor('[data-test-message-field]');
+    await fillIn(
+      '[data-test-message-field]',
+      'Test message to enable new session button',
+    );
+    await click('[data-test-send-message-btn]');
+    await click('[data-test-create-room-btn]');
+
+    // simulate message
+    let roomId = getRoomIds().pop()!;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Show the card',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '1554f297-e9f2-43fe-8b95-55b29251444d',
+          name: 'no-such-command',
+          arguments: JSON.stringify({
+            description:
+              'Displaying the card with the Latin word for milkweed in the title.',
+            attributes: {
+              cardId: 'http://test-realm/test/Person/hassan',
+              title: 'Asclepias',
+            },
+          }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+    await waitFor('[data-test-message-idx="0"]');
+
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-apply-state="invalid"]',
+    );
+    assert
+      .dom('[data-test-boxel-alert="warning"]')
+      .containsText('No command for the name "no-such-command" was found');
+
+    assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
+
+    // verify that command result event was created correctly
+    let message = getRoomEvents(roomId).pop()!;
+    assert.strictEqual(
+      message.content.msgtype,
+      APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+    );
+    assert.strictEqual(
+      message.content['m.relates_to']?.rel_type,
+      APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+    );
+    assert.strictEqual(message.content['m.relates_to']?.key, 'invalid');
+    assert.strictEqual(
+      message.content.failureReason,
+      'No command for the name "no-such-command" was found',
+    );
+    assert.strictEqual(
+      message.content.commandRequestId,
+      '1554f297-e9f2-43fe-8b95-55b29251444d',
+    );
+  });
+
+  test('command request with arguments that do not match the json schema gets an "invalid" result', async function (assert) {
+    await visitOperatorMode({
+      aiAssistantOpen: true,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await waitFor('[data-test-message-field]');
+    await fillIn(
+      '[data-test-message-field]',
+      'Test message to enable new session button',
+    );
+    await click('[data-test-send-message-btn]');
+    await click('[data-test-create-room-btn]');
+
+    // simulate message
+    let roomId = getRoomIds().pop()!;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Show the card',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '1554f297-e9f2-43fe-8b95-55b29251444d',
+          name: 'show-card_566f',
+          arguments: JSON.stringify({
+            description:
+              'Displaying the card with the Latin word for milkweed in the title.',
+            attributes: {
+              unsupportedAttribute: 'http://test-realm/test/Person/hassan',
+              title: 'Asclepias',
+            },
+          }),
+        },
+      ],
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+    await waitFor('[data-test-message-idx="0"]');
+
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-apply-state="invalid"]',
+    );
+    assert
+      .dom('[data-test-boxel-alert="warning"]')
+      .containsText(
+        'Command "show-card_566f" validation failed: data/attributes must NOT have additional properties',
+      );
+
+    assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
+
+    // verify that command result event was created correctly
+    let message = getRoomEvents(roomId).pop()!;
+    assert.strictEqual(
+      message.content.msgtype,
+      APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+    );
+    assert.strictEqual(
+      message.content['m.relates_to']?.rel_type,
+      APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+    );
+    assert.strictEqual(message.content['m.relates_to']?.key, 'invalid');
+    assert.strictEqual(
+      message.content.failureReason,
+      'Command "show-card_566f" validation failed: data/attributes must NOT have additional properties',
+    );
+    assert.strictEqual(
+      message.content.commandRequestId,
+      '1554f297-e9f2-43fe-8b95-55b29251444d',
+    );
   });
 
   module('suspending global error hook', (hooks) => {
@@ -1095,7 +1321,10 @@ module('Acceptance | Commands tests', function (hooks) {
           {
             id: '2dd27b90-b473-403c-a5ae-399a29af7d62',
             name: 'maybe-boom-command_4b30',
-            arguments: JSON.stringify({}),
+            arguments: JSON.stringify({
+              description: 'Maybe it will boom',
+              attributes: {},
+            }),
           },
         ],
         data: {
