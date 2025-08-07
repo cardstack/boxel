@@ -13,6 +13,7 @@ import MatrixService from '@cardstack/host/services/matrix-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import { type FileDef } from 'https://cardstack.com/base/file-api';
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import AttachedFileDropdownMenu from '../attached-file-dropdown-menu';
@@ -105,9 +106,7 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
         justify-content: space-between;
         gap: var(--boxel-sp-xxxs);
         position: relative;
-
         --icon-color: #ffffff;
-        min-width: 176px;
       }
 
       .dropdown-container {
@@ -176,11 +175,11 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
       return relevantAttachedFile;
     }
 
-    return this.matrixService.fileAPI.createFileDef({
+    return {
       sourceUrl: this.sourceUrl ?? '',
       url: this.fileUrl ?? '',
       name: this.fileName,
-    });
+    } as FileDef;
   }
 
   private get fileName() {

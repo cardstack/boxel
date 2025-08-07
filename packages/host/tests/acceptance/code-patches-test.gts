@@ -164,7 +164,7 @@ ${REPLACE_MARKER}\n\`\`\``;
 
     // We test the value of the attribute because navigator.clipboard is not available in test environment
     // (we can't test if the content is copied to the clipboard but we can assert the value of the attribute)
-    await this.pauseTest();
+
     await click('[data-test-attached-file-dropdown-button="hello.txt"]');
 
     await waitUntil(
@@ -235,6 +235,41 @@ ${REPLACE_MARKER}\n\`\`\``;
       'http://test-realm/test/hello.txt',
       'updated file should be attached 2',
     );
+
+    assert.dom('[data-test-boxel-menu-item-text="Open in Code Mode"]').exists();
+    assert
+      .dom('[data-test-boxel-menu-item-text="Copy Submitted Content"]')
+      .exists();
+    assert
+      .dom('[data-test-boxel-menu-item-text="Restore Submitted Content"]')
+      .exists();
+
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-copy-file-content]')
+          ?.getAttribute('data-test-copy-file-content') === 'Hello, world!',
+    );
+
+    // Switch to interact mode so we can test the open in code mode action
+    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
+    await click('[data-test-workspace="Test Workspace B"]');
+    await waitFor('[data-test-submode-switcher="interact"]');
+    await click('[data-test-attached-file-dropdown-button="hello.txt"]');
+    await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
+    await waitFor('[data-test-submode-switcher="code"]');
+
+    // Test restoring generated content
+    mockedFileContent = 'Restored content!';
+    await click('[data-test-attached-file-dropdown-button="hello.txt"]');
+    await click('[data-test-boxel-menu-item-text="Restore Submitted Content"]');
+
+    await click('[data-test-confirm-restore-button]');
+
+    await waitUntil(() => getMonacoContent() === 'Restored content!', {
+      timeout: 5000,
+    });
   });
 
   test('can patch code and execute command using "Accept All" button', async function (assert) {
@@ -936,6 +971,20 @@ ${REPLACE_MARKER}
 
     assert.dom('.code-block-diff').exists({ count: 3 });
     await click('[data-test-file-browser-toggle]'); // open file tree
+
+    // Before applying the patch to create a new file, all the file actions should be disabled
+    await click('[data-test-attached-file-dropdown-button="file1.gts"]');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Open in Code Mode"]')
+      .hasAttribute('disabled');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Copy Generated Content"]')
+      .hasAttribute('disabled');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Restore Generated Content"]')
+      .hasAttribute('disabled');
+    await click('[data-test-attached-file-dropdown-button="file1.gts"]');
+
     await waitFor('[data-test-ai-assistant-action-bar] [data-test-accept-all]');
 
     // file1.gts and file2.gts should not exist yet because we haven't applied the patches yet
