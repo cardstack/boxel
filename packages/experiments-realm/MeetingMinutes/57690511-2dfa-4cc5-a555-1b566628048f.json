@@ -18,8 +18,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/card-api",
-        "name": "CardDef"
+        "module": "../meeting-minutes",
+        "name": "MeetingMinutes"
       }
     }
   }
