@@ -8,14 +8,7 @@ import { consume } from 'ember-provide-consume-context';
 
 import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
 
-import {
-  type getCard,
-  type getCards,
-  type getCardCollection,
-  GetCardContextName,
-  GetCardsContextName,
-  GetCardCollectionContextName,
-} from '@cardstack/runtime-common';
+import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 import { meta } from '@cardstack/runtime-common/constants';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
@@ -24,11 +17,9 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import SubmodeLayout from './submode-layout';
-
-type HostModeCardContext = Omit<CardContext, 'prerenderedCardSearchComponent'>;
 
 interface HostSubmodeSignature {
   Element: HTMLElement;
@@ -37,9 +28,6 @@ interface HostSubmodeSignature {
 
 export default class HostSubmode extends Component<HostSubmodeSignature> {
   @consume(GetCardContextName) private declare getCard: getCard;
-  @consume(GetCardsContextName) private declare getCards: getCards;
-  @consume(GetCardCollectionContextName)
-  private declare getCardCollection: getCardCollection;
 
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare store: StoreService;
@@ -97,15 +85,6 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     return 'container';
   }
 
-  private get cardContext(): HostModeCardContext {
-    return {
-      getCard: this.getCard,
-      getCards: this.getCards,
-      getCardCollection: this.getCardCollection,
-      store: this.store,
-    };
-  }
-
   <template>
     <SubmodeLayout
       class='host-submode-layout'
@@ -127,7 +106,6 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
                     class='card-preview'
                     @card={{this.currentCard}}
                     @format='isolated'
-                    @cardContext={{this.cardContext}}
                     data-test-host-submode-card={{this.currentCard.id}}
                   />
                 </CardContainer>
