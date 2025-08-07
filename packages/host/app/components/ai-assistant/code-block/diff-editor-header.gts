@@ -179,6 +179,7 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
     return this.matrixService.fileAPI.createFileDef({
       sourceUrl: this.sourceUrl ?? '',
       url: this.fileUrl ?? '',
+      name: this.fileName,
     });
   }
 

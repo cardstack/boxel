@@ -153,6 +153,8 @@ export default class AttachedFileDropdownMenu extends Component<{
     <BoxelDropdown>
       <:trigger as |bindings|>
         <IconButton
+          data-test-attached-file-dropdown-button={{this.args.file.name}}
+          data-test-copy-file-content={{this.fileContent}}
           class='context-menu-button'
           @icon={{ThreeDotsHorizontal}}
           @height='12'

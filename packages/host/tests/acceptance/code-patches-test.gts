@@ -164,13 +164,13 @@ ${REPLACE_MARKER}\n\`\`\``;
 
     // We test the value of the attribute because navigator.clipboard is not available in test environment
     // (we can't test if the content is copied to the clipboard but we can assert the value of the attribute)
-    await click('[data-code-patch-dropdown-button="hello.txt"]');
+    await this.pauseTest();
+    await click('[data-test-attached-file-dropdown-button="hello.txt"]');
     await waitUntil(
       () =>
         document
-          .querySelector('[data-test-copy-submitted-content]')
-          ?.getAttribute('data-test-copy-submitted-content') ===
-        mockedFileContent,
+          .querySelector('[data-test-copy-file-content]')
+          ?.getAttribute('data-test-copy-file-content') === mockedFileContent,
     );
 
     let codePatchResultEvents = getRoomEvents(roomId).filter(
@@ -954,6 +954,7 @@ ${REPLACE_MARKER}
 
     // assert that file2 got created, but for hi.txt, it got a suffix because there already exists a file with the same name
     assert.dom('[data-test-file="file2.gts"]').exists();
+
     assert.dom('[data-test-file="hi.txt"]').exists();
 
     // hi-1.txt (file with suffix) got created because hi.txt already exists
@@ -961,10 +962,18 @@ ${REPLACE_MARKER}
       .dom('[data-test-file="hi-1.txt"]')
       .exists('File hi-1.txt exists in file tree');
 
-    assert.dom('[data-code-patch-dropdown-button]').exists({ count: 3 });
-    assert.dom('[data-code-patch-dropdown-button="file1.gts"]').exists();
-    assert.dom('[data-code-patch-dropdown-button="file2.gts"]').exists();
-    assert.dom('[data-code-patch-dropdown-button="hi-1.txt"]').exists();
+    await this.pauseTest();
+
+    assert
+      .dom('[data-test-attached-file-dropdown-button]')
+      .exists({ count: 3 });
+    assert
+      .dom('[data-test-attached-file-dropdown-button="file1.gts"]')
+      .exists();
+    assert
+      .dom('[data-test-attached-file-dropdown-button="file2.gts"]')
+      .exists();
+    assert.dom('[data-test-attached-file-dropdown-button="hi-1.txt"]').exists();
 
     assert
       .dom('[data-test-boxel-menu-item-text="Restore Content"]')
@@ -977,7 +986,7 @@ ${REPLACE_MARKER}
     await click('[data-test-boxel-menu-item-text="Interact"]');
     await click('[data-test-workspace="Test Workspace B"]');
     await waitFor('[data-test-submode-switcher="interact"]');
-    await click('[data-code-patch-dropdown-button="file1.gts"]');
+    await click('[data-test-attached-file-dropdown-button="file1.gts"]');
     await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
     await waitFor('[data-test-submode-switcher="code"]');
 
@@ -987,7 +996,7 @@ ${REPLACE_MARKER}
       'file1.gts should be opened in code mode and the content should be the new file content',
     );
 
-    await click('[data-code-patch-dropdown-button="file2.gts"]');
+    await click('[data-test-attached-file-dropdown-button="file2.gts"]');
     assert
       .dom('[data-test-boxel-menu-item-text="Restore Content"]')
       .doesNotExist(
@@ -1000,7 +1009,7 @@ ${REPLACE_MARKER}
       'file2.gts should be opened in code mode and the content should be the new file content',
     );
 
-    await click('[data-code-patch-dropdown-button="hi-1.txt"]');
+    await click('[data-test-attached-file-dropdown-button="hi-1.txt"]');
     assert
       .dom('[data-test-boxel-menu-item-text="Restore Content"]')
       .doesNotExist(
@@ -1039,10 +1048,10 @@ ${REPLACE_MARKER}
       isStreamingFinished: true,
     });
 
-    await waitFor('[data-code-patch-dropdown-button="hello.txt"]', {
+    await waitFor('[data-test-attached-file-dropdown-button="hello.txt"]', {
       timeout: 4000,
     });
-    await click('[data-code-patch-dropdown-button="hello.txt"]');
+    await click('[data-test-attached-file-dropdown-button="hello.txt"]');
     assert
       .dom('[data-test-boxel-menu-item-text="Restore Content"]')
       .doesNotExist(
@@ -1057,7 +1066,7 @@ ${REPLACE_MARKER}
     assert.dom('[data-test-code-diff-editor]').doesNotExist();
     assert.dom('[data-test-editor]').exists();
 
-    await click('[data-code-patch-dropdown-button="hello.txt"]');
+    await click('[data-test-attached-file-dropdown-button="hello.txt"]');
     assert
       .dom('[data-test-boxel-menu-item-text="Restore Content"]')
       .exists(
@@ -1168,7 +1177,7 @@ ${REPLACE_MARKER}
     await click('[data-test-apply-code-button]');
     await waitFor('[data-test-apply-state="applied"]');
 
-    await click('[data-code-patch-dropdown-button="hello.txt"]');
+    await click('[data-test-attached-file-dropdown-button="hello.txt"]');
     assert
       .dom('[data-test-boxel-menu-item-text="Restore Content"]')
       .exists(
