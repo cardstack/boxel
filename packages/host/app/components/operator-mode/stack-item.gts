@@ -89,6 +89,7 @@ interface Signature {
     stackItems: StackItem[];
     index: number;
     publicAPI: Actions;
+    requestDeleteCard?: (card: CardDef | URL | string) => Promise<void>;
     commandContext: CommandContext;
     close: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => Promise<void>;
@@ -305,7 +306,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
       new MenuItem('Delete Card', 'action', {
         action: () =>
           this.cardIdentifier &&
-          this.args.publicAPI.delete(this.cardIdentifier),
+          this.args.requestDeleteCard &&
+          this.args.requestDeleteCard(this.cardIdentifier),
         icon: IconTrash,
         dangerous: true,
       }),
@@ -351,7 +353,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         }),
         new MenuItem('Delete', 'action', {
           action: () =>
-            this.card ? this.args.publicAPI.delete(this.card) : undefined,
+            this.card ? this.args.requestDeleteCard!(this.card) : undefined,
           icon: IconTrash,
           dangerous: true,
           disabled: !this.url,
@@ -696,6 +698,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
               @publicAPI={{@publicAPI}}
+              @requestDeleteCard={{@requestDeleteCard}}
               @toggleSelect={{this.toggleSelect}}
               @selectedCards={{this.selectedCards}}
             />

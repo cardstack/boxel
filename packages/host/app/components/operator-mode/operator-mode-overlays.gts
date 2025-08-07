@@ -436,9 +436,6 @@ export default class OperatorModeOverlays extends Overlays {
 
   @action
   private deleteCard(cardDefOrId: CardDefOrId) {
-    if (this.args.publicAPI?.delete) {
-      return this.args.publicAPI.delete(cardDefOrId);
-    }
-    return;
+    return this.args.requestDeleteCard?.(cardDefOrId);
   }
 }
