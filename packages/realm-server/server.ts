@@ -460,7 +460,7 @@ export class RealmServer {
   private async findPublishedRealms() {
     let realms = [];
     try {
-      console.log('Loading published realms…');
+      this.log.info('Loading published realms…');
 
       let publishedRealms = (
         await query(this.dbAdapter, [
@@ -473,7 +473,7 @@ export class RealmServer {
         published_realm_url: row.published_realm_url as string,
       }));
 
-      console.log(
+      this.log.info(
         `Found ${publishedRealms.length} published realms in database`,
       );
 
@@ -490,13 +490,13 @@ export class RealmServer {
           );
         }
 
-        console.log(
+        this.log.info(
           `No ${PUBLISHED_DIRECTORY_NAME} directory found, skipping published realms`,
         );
         return [];
       }
 
-      console.log(
+      this.log.info(
         `Scanning ${PUBLISHED_DIRECTORY_NAME} directory: ${publishedDir}`,
       );
 
@@ -505,7 +505,7 @@ export class RealmServer {
         withFileTypes: true,
       });
 
-      console.log(
+      this.log.info(
         `Found ${publishedDirContents.length} items in ${PUBLISHED_DIRECTORY_NAME} directory`,
       );
 
@@ -571,7 +571,7 @@ export class RealmServer {
           this.virtualNetwork.mount(realm.handle);
           realms.push(realm);
 
-          console.log(
+          this.log.info(
             `Loaded published realm: ${publishedRealmUrl} from ${realmPath}`,
           );
         } catch (dirError) {
@@ -589,7 +589,7 @@ export class RealmServer {
         }
       }
 
-      console.log(
+      this.log.info(
         `Finished loading published realms. Loaded ${realms.filter((r) => r.url.includes(PUBLISHED_DIRECTORY_NAME) || foundDirectories.has(r.url)).length} published realms.`,
       );
     } catch (error) {
