@@ -24,7 +24,7 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardContext } from 'https://cardstack.com/base/card-api';
+import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
 import SubmodeLayout from './submode-layout';
 
@@ -86,7 +86,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     }
 
     // Check if the card prefers wide format
-    if (this.currentCard.constructor.prefersWideFormat) {
+    if ((this.currentCard.constructor as typeof CardDef).prefersWideFormat) {
       return 'host-mode-content is-wide';
     }
 
