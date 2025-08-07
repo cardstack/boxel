@@ -16,7 +16,7 @@ export default class HostModeService extends Service {
       return (
         config.hostsOwnAssets === false &&
         this.isRealmServerDomain === false &&
-        this.originIsNotTest
+        this.originIsNotMatrixTests
       );
     }
 
@@ -52,7 +52,7 @@ export default class HostModeService extends Service {
     return window.location.origin;
   }
 
-  get originIsNotTest() {
+  get originIsNotMatrixTests() {
     return (
       this.hostModeOrigin !== 'http://localhost:4202' &&
       this.hostModeOrigin !== 'http://localhost:4205'
