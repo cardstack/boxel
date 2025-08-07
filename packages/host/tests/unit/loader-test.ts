@@ -15,7 +15,7 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
-module('loader', function (hooks) {
+module('Unit | loader', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks);
@@ -62,6 +62,11 @@ module('loader', function (hooks) {
             return b() + g();
           }
         `,
+        'g.js': `
+          export function g() {
+            return 'g';
+          }
+        `,
         'cycle-one.js': `
           import { two } from './cycle-two';
           export function one() {
@@ -104,6 +109,10 @@ module('loader', function (hooks) {
           export class Person extends CardDef {
             static displayName = 'Person';
             @field firstName = contains(StringField);
+          }
+          export let counter = 0;
+          export function increment() {
+            counter++;
           }
         `,
         'foo.js': `
@@ -211,7 +220,7 @@ module('loader', function (hooks) {
       checkImportMeta: () => string;
       myLoader: () => Loader;
     }>(`${testRealmURL}foo`);
-    assert.strictEqual(checkImportMeta(), testRealmURL);
+    assert.strictEqual(checkImportMeta(), `${testRealmURL}foo.js`);
     assert.strictEqual(myLoader(), loader, 'the loader instance is correct');
   });
 });
