@@ -253,9 +253,9 @@ export async function createRealm({
   if (Object.keys(fileSystem).length > 0) {
     for (let [filename, contents] of Object.entries(fileSystem)) {
       if (typeof contents === 'string') {
-        adapter.write(join(dir, filename), contents);
+        adapter.write(filename, contents);
       } else {
-        adapter.write(join(dir, filename), JSON.stringify(contents, null, 2));
+        adapter.write(filename, JSON.stringify(contents, null, 2));
       }
     }
   } else if (dir !== basePath) {
