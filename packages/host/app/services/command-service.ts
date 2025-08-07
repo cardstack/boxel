@@ -56,6 +56,7 @@ export default class CommandService extends Service {
   @service declare private store: StoreService;
   currentlyExecutingCommandRequestIds = new TrackedSet<string>();
   executedCommandRequestIds = new TrackedSet<string>();
+  acceptingAllRoomIds = new TrackedSet<string>();
   private commandProcessingEventQueue: string[] = [];
   private codePatchProcessingEventQueue: string[] = [];
   private flushCommandProcessingQueue: Promise<void> | undefined;
@@ -163,6 +164,9 @@ export default class CommandService extends Service {
         // This command was sent by another agent, so we will not auto-execute it
         continue;
       }
+
+      // Collect all ready commands for this message
+      let readyCommands: any[] = [];
       for (let messageCommand of message.commands) {
         if (this.currentlyExecutingCommandRequestIds.has(messageCommand.id!)) {
           continue;
@@ -202,7 +206,20 @@ export default class CommandService extends Service {
         }
 
         if (shouldAutoExecute) {
-          this.run.perform(messageCommand);
+          readyCommands.push(messageCommand);
+        }
+      }
+
+      // Execute ready commands, tracking accept-all state if multiple commands
+      if (readyCommands.length > 0) {
+        // This is an "accept all" operation - multiple commands ready for execution
+        this.acceptingAllRoomIds.add(roomId!);
+        try {
+          for (let command of readyCommands) {
+            this.run.perform(command);
+          }
+        } finally {
+          this.acceptingAllRoomIds.delete(roomId!);
         }
       }
     }
@@ -270,7 +287,20 @@ export default class CommandService extends Service {
 
       // Auto-apply all ready code patches from this message
       if (message.htmlParts) {
-        await this.executeReadyCodePatches(roomId!, message.htmlParts);
+        let readyCodePatches = this.getReadyCodePatches(message.htmlParts);
+        let uniqueFiles = new Set(
+          readyCodePatches.map((patch) => patch.fileUrl),
+        );
+
+        if (readyCodePatches.length > 0 || uniqueFiles.size > 0) {
+          // This is an "accept all" operation - multiple patches OR patches across multiple files
+          this.acceptingAllRoomIds.add(roomId!);
+          try {
+            await this.executeReadyCodePatches(roomId!, message.htmlParts);
+          } finally {
+            this.acceptingAllRoomIds.delete(roomId!);
+          }
+        }
       }
     }
     finishedProcessingCodePatches!();
@@ -633,6 +663,10 @@ export default class CommandService extends Service {
       (c) => c.index === codeData.codeBlockIndex,
     );
   };
+
+  isPerformingAcceptAllForRoom(roomId: string): boolean {
+    return this.acceptingAllRoomIds.has(roomId);
+  }
 }
 
 type PatchPayload = { attributes: { cardId: string; patch: PatchData } };
