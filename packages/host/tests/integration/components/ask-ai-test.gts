@@ -56,9 +56,10 @@ module('Integration | ask-ai', function (hooks) {
   hooks.beforeEach(async function () {
     operatorModeStateService = getService('operator-mode-state-service');
 
-    const petCard = `import { CardDef, Component } from "https://cardstack.com/base/card-api";
+    const petCard = `import { CardDef, Component, contains, field, StringField } from "https://cardstack.com/base/card-api";
       export class Pet extends CardDef {
         static displayName = 'Pet';
+        @field title = contains(StringField);
         static isolated = class Isolated extends Component<typeof this> {
         <template>
           <h2><@fields.title /></h2>

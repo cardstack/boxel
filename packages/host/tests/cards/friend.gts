@@ -14,4 +14,6 @@ export class Friend extends CardDef {
       return this.firstName;
     },
   });
+  @field description = contains(StringField);
+  @field thumbnailURL = contains(StringField);
 }

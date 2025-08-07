@@ -14,6 +14,8 @@ import { PersonField } from './person';
 import { Publication } from './publication';
 
 export class Post extends CardDef {
+  @field title = contains(StringField);
+  @field description = contains(StringField);
   @field author = contains(PersonField);
   @field views = contains(NumberField);
   @field createdAt = contains(DatetimeField);

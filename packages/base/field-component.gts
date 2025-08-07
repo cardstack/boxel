@@ -8,6 +8,7 @@ import {
   type CardDef,
   type BaseDefComponent,
   type BaseDefConstructor,
+  type Theme,
   CardContext,
   isCard,
   isCompoundField,
@@ -207,10 +208,14 @@ export function getBoxComponent(
     };
   }
 
-  function getThemeStyles(css?: string) {
+  function getThemeStyles(cardDef?: CardDef) {
     if (!extractCssVariables) {
       return;
     }
+    let css =
+      cardDef && 'cssVariables' in cardDef
+        ? (cardDef as Theme).cssVariables
+        : cardDef?.cardInfo?.theme?.cssVariables;
     return sanitizedHtml(extractCssVariables(css));
   }
 
@@ -255,9 +260,7 @@ export function getBoxComponent(
                         fieldType=field.fieldType
                         fieldName=field.name
                       }}
-                      style={{getThemeStyles
-                        model.value.cardInfo.theme.cssVariables
-                      }}
+                      style={{getThemeStyles model.value}}
                       data-test-card={{card.id}}
                       data-test-card-format={{effectiveFormats.cardDef}}
                       data-test-field-component-card
@@ -332,6 +335,10 @@ export function getBoxComponent(
     <style scoped>
       .field-component-card.isolated-format {
         height: 100%;
+      }
+
+      .field-component-card.edit-format:has(.default-card-template.edit) {
+        background-color: var(--muted, var(--boxel-100));
       }
 
       .field-component-card.fitted-format {

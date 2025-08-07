@@ -79,6 +79,7 @@ let queryableValue: (typeof CardAPIModule)['queryableValue'];
 let getFieldDescription: (typeof CardAPIModule)['getFieldDescription'];
 let ReadOnlyField: (typeof CardAPIModule)['ReadOnlyField'];
 let instanceOf: (typeof CardAPIModule)['instanceOf'];
+let CardInfoField: (typeof CardAPIModule)['CardInfoField'];
 
 async function initialize() {
   let loader = getService('loader-service').loader;
@@ -166,6 +167,7 @@ async function initialize() {
     getFieldDescription,
     ReadOnlyField,
     instanceOf,
+    CardInfoField,
   } = cardAPI);
 }
 
@@ -210,4 +212,5 @@ export {
   ReadOnlyField,
   Skill,
   instanceOf,
+  CardInfoField,
 };

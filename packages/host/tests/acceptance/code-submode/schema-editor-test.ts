@@ -435,7 +435,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       .dom(
         `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-field-types]`,
       )
-      .hasText('Overridden');
+      .hasText('Overridden, Computed');
 
     assert
       .dom(
