@@ -186,7 +186,6 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         flex: 1;
         overflow-y: auto;
         overflow-x: hidden;
-        padding: var(--boxel-sp);
       }
 
       .host-mode-content.is-wide .container {
