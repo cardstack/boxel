@@ -28,10 +28,9 @@ export default class CardInfo extends GlimmerComponent<{
     {{/if}}
     <div class='info'>
       <h2 class='card-info-title' data-test-field='title'>{{@title}}</h2>
-      <p
-        class='card-info-description'
-        data-test-field='description'
-      >{{@description}}</p>
+      <p class='card-info-description' data-test-field='description'>
+        {{@description}}
+      </p>
     </div>
     <style scoped>
       @layer {

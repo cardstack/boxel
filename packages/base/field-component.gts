@@ -337,6 +337,10 @@ export function getBoxComponent(
         height: 100%;
       }
 
+      .field-component-card.edit-format:has(.default-card-template.edit) {
+        background-color: var(--muted, var(--boxel-100));
+      }
+
       .field-component-card.fitted-format {
         /*
           The cards themselves need to be in charge of the styles within the card boundary

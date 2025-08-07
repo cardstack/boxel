@@ -134,6 +134,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         --boxel-header-gap: var(--boxel-sp-lg);
         --boxel--header-border-color: var(--hr-color);
         align-items: flex-start;
+        background-color: var(--muted, var(--boxel-100));
       }
       .card-info-edit-header {
         display: grid;
@@ -141,10 +142,23 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       .card-info-header :deep(.info) {
         align-self: center;
       }
+      .card-info-header :deep(.add-button--full-width) {
+        border: 1px solid var(--border, var(--boxel-form-control-border-color));
+        grid-column: -1 / 1;
+      }
+      .card-info-header :deep(.add-button--full-width:hover),
+      .card-info-header :deep(.add-button--full-width:active) {
+        border-color: transparent;
+        transition:
+          border-color var(--boxel-transition),
+          background-color var(--boxel-transition),
+          box-shadow var(--boxel-transition);
+      }
       .own-display-fields {
         display: grid;
         gap: var(--boxel-sp-lg);
         padding: var(--boxel-sp-xl);
+        background-color: var(--background, var(--boxel-light));
       }
       .own-display-fields + .notes-footer {
         border-top: 1px solid var(--hr-color);
@@ -158,12 +172,8 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         gap: var(--boxel-sp-xs);
         margin-top: var(--boxel-sp-xs);
       }
-      .default-card-template.edit {
-        height: 100%;
-        grid-template-rows: max-content;
-      }
       .default-card-template.edit > .notes-footer {
-        background-color: var(--boxel-100);
+        background-color: var(--muted, var(--boxel-100));
       }
       /* this aligns edit fields with containsMany, linksTo, and linksToMany fields */
       .default-card-template.edit
