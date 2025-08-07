@@ -38,7 +38,7 @@ import {
   type FileMeta,
   type DirectoryMeta,
   type ResolvedCodeRef,
-  type FieldMeta,
+  type FieldDefinition,
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
   userInitiatedPriority,
@@ -99,6 +99,7 @@ import {
   AtomicPayloadValidationError,
   filterAtomicOperations,
 } from './atomic-document';
+import { DefinitionsCache } from './definitions-cache';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -244,6 +245,7 @@ export class Realm {
   #disableModuleCaching = false;
   #fullIndexOnStartup = false;
   #realmServerMatrixUserId: string;
+  #definitionsCache: DefinitionsCache;
 
   #publicEndpoints: RouteTable<true> = new Map([
     [
@@ -339,6 +341,7 @@ export class Realm {
         new RealmAuthDataSource(this.#realmServerMatrixClient, () => _fetch),
       ),
     ]);
+    this.#definitionsCache = new DefinitionsCache(_fetch);
 
     this.__fetchForTesting = _fetch;
 
@@ -351,6 +354,7 @@ export class Realm {
       realm: this,
       dbAdapter,
       fetch: _fetch,
+      definitionsCache: this.#definitionsCache,
     });
 
     this.#router = new Router(new URL(url))
@@ -394,7 +398,11 @@ export class Realm {
         SupportedMimeType.Permissions,
         this.patchRealmPermissions.bind(this),
       )
-      .get('/_meta', SupportedMimeType.JSONAPI, this.getMeta.bind(this))
+      .get(
+        '/_definition',
+        SupportedMimeType.JSONAPI,
+        this.getDefinition.bind(this),
+      )
       .get(
         '/_readiness-check',
         SupportedMimeType.RealmInfo,
@@ -528,15 +536,19 @@ export class Realm {
     let urls: URL[] = [];
     let lastWriteType: 'module' | 'instance' | undefined;
     let currentWriteType: 'module' | 'instance' | undefined;
+    let invalidations: Set<string> = new Set();
+    let clientRequestId: string | null | undefined;
     let performIndex = async () => {
       await this.#realmIndexUpdater.update(urls, {
         onInvalidation: (invalidatedURLs: URL[]) => {
-          this.broadcastRealmEvent({
-            eventName: 'index',
-            indexType: 'incremental',
-            invalidations: invalidatedURLs.map((u) => u.href),
-            clientRequestId: options?.clientRequestId ?? null,
-          });
+          if (invalidatedURLs.find((url) => hasExecutableExtension(url.href))) {
+            this.#definitionsCache.invalidate();
+          }
+          invalidations = new Set([
+            ...invalidations,
+            ...invalidatedURLs.map((u) => u.href),
+          ]);
+          clientRequestId = clientRequestId ?? options?.clientRequestId;
         },
       });
     };
@@ -548,7 +560,7 @@ export class Realm {
           ? 'instance'
           : undefined;
       if (lastWriteType === 'module' && currentWriteType === 'instance') {
-        // we need to generate/update possible card-def meta in order for
+        // we need to generate/update possible definition in order for
         // instance file serialization that may depend on the included module to
         // work. TODO: we could be more precise here and keep track of what
         // modules the instances depend on and only flush the modules to index
@@ -585,6 +597,12 @@ export class Realm {
     if (urls.length > 0) {
       await performIndex();
     }
+    this.broadcastRealmEvent({
+      eventName: 'index',
+      indexType: 'incremental',
+      invalidations: [...invalidations],
+      clientRequestId,
+    });
     return results;
   }
 
@@ -846,6 +864,9 @@ export class Realm {
     await this.#realmIndexUpdater.update([url], {
       delete: true,
       onInvalidation: (invalidatedURLs: URL[]) => {
+        if (invalidatedURLs.find((url) => hasExecutableExtension(url.href))) {
+          this.#definitionsCache.invalidate();
+        }
         this.broadcastRealmEvent({
           eventName: 'index',
           indexType: 'incremental',
@@ -865,6 +886,7 @@ export class Realm {
 
   async reindex() {
     await this.#realmIndexUpdater.fullIndex();
+    this.#definitionsCache.invalidate();
     this.broadcastRealmEvent({
       eventName: 'index',
       indexType: 'full',
@@ -2297,7 +2319,7 @@ export class Realm {
     });
   }
 
-  private async getMeta(
+  private async getDefinition(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
@@ -2319,9 +2341,12 @@ export class Realm {
     let useWorkInProgressIndex = Boolean(
       request.headers.get('X-Boxel-Building-Index'),
     );
-    let maybeError = await this.#realmIndexQueryEngine.getOwnMeta(codeRef, {
-      useWorkInProgressIndex,
-    });
+    let maybeError = await this.#realmIndexQueryEngine.getOwnDefinition(
+      codeRef,
+      {
+        useWorkInProgressIndex,
+      },
+    );
     if (!maybeError) {
       return notFound(request, requestContext);
     }
@@ -2329,7 +2354,7 @@ export class Realm {
     if (maybeError.type === 'error') {
       return systemError({
         requestContext,
-        message: `cannot get meta, ${request.url}, from index: ${maybeError.error.message}`,
+        message: `cannot get definition, ${request.url}, from index: ${maybeError.error.message}`,
         id,
         additionalError: CardError.fromSerializableError(maybeError.error),
         // This is based on https://jsonapi.org/format/#errors
@@ -2347,13 +2372,13 @@ export class Realm {
         },
       });
     }
-    let { meta } = maybeError;
+    let { definition } = maybeError;
     let doc: CardAPI.JSONAPISingleResourceDocument = {
       data: {
         id,
-        type: 'meta',
+        type: 'definition',
         attributes: {
-          ...meta,
+          ...definition,
         },
       },
     };
@@ -2599,36 +2624,37 @@ export class Realm {
       doc.data.meta.adoptsFrom,
       relativeTo,
     ) as ResolvedCodeRef;
-    let meta = await this.realmIndexQueryEngine.getMeta(absoluteCodeRef);
-    if (!meta) {
+    let definition =
+      await this.#definitionsCache.getDefinition(absoluteCodeRef);
+    if (!definition) {
       throw new Error(
         `Could not find card definition for: ${JSON.stringify(absoluteCodeRef)}`,
       );
     }
 
-    let customFieldMetas: Record<string, FieldMeta> = {};
+    let customFieldDefinitions: Record<string, FieldDefinition> = {};
     if (doc.data.meta?.fields) {
-      await this.buildCustomFieldMetas(
+      await this.buildCustomFieldDefinitions(
         doc.data.meta.fields,
         '',
-        customFieldMetas,
+        customFieldDefinitions,
         relativeTo,
       );
     }
 
     return serialize({
       doc,
-      meta,
+      definition,
       realm: this.url,
       relativeTo,
-      customFieldMetas,
+      customFieldDefinitions,
     });
   }
 
-  private async buildCustomFieldMetas(
+  private async buildCustomFieldDefinitions(
     fields: CardFields,
     basePath: string,
-    customFieldMetas: Record<string, FieldMeta>,
+    customFieldDefinitions: Record<string, FieldDefinition>,
     relativeTo: URL,
   ): Promise<void> {
     for (const [fieldName, fieldValue] of Object.entries(fields)) {
@@ -2641,22 +2667,22 @@ export class Realm {
               item.adoptsFrom,
               relativeTo,
             ) as ResolvedCodeRef;
-            let fieldMeta =
-              await this.realmIndexQueryEngine.getMeta(absoluteCodeRef);
-            if (fieldMeta) {
-              for (const [subFieldName, subFieldMeta] of Object.entries(
-                fieldMeta.fields,
+            let fieldDefinition =
+              await this.#definitionsCache.getDefinition(absoluteCodeRef);
+            if (fieldDefinition) {
+              for (const [subFieldName, subFieldDefinition] of Object.entries(
+                fieldDefinition.fields,
               )) {
                 const prefixedFieldPath = `${fieldPath}.${subFieldName}`;
-                customFieldMetas[prefixedFieldPath] = subFieldMeta;
+                customFieldDefinitions[prefixedFieldPath] = subFieldDefinition;
               }
             }
           }
           if (item.fields) {
-            await this.buildCustomFieldMetas(
+            await this.buildCustomFieldDefinitions(
               item.fields,
               fieldPath,
-              customFieldMetas,
+              customFieldDefinitions,
               relativeTo,
             );
           }
@@ -2666,21 +2692,21 @@ export class Realm {
           fieldValue.adoptsFrom,
           relativeTo,
         ) as ResolvedCodeRef;
-        let fieldMeta =
-          await this.realmIndexQueryEngine.getMeta(absoluteCodeRef);
-        if (fieldMeta) {
-          for (const [subFieldName, subFieldMeta] of Object.entries(
-            fieldMeta.fields,
+        let fieldDefinition =
+          await this.#definitionsCache.getDefinition(absoluteCodeRef);
+        if (fieldDefinition) {
+          for (const [subFieldName, subFieldDefinition] of Object.entries(
+            fieldDefinition.fields,
           )) {
             const prefixedFieldPath = `${fieldPath}.${subFieldName}`;
-            customFieldMetas[prefixedFieldPath] = subFieldMeta;
+            customFieldDefinitions[prefixedFieldPath] = subFieldDefinition;
           }
         }
         if (fieldValue.fields) {
-          await this.buildCustomFieldMetas(
+          await this.buildCustomFieldDefinitions(
             fieldValue.fields,
             fieldPath,
-            customFieldMetas,
+            customFieldDefinitions,
             relativeTo,
           );
         }
@@ -2721,6 +2747,9 @@ export class Realm {
       this.sendIndexInitiationEvent(url.href);
       await this.#realmIndexUpdater.update([url], {
         onInvalidation: (invalidatedURLs: URL[]) => {
+          if (invalidatedURLs.find((url) => hasExecutableExtension(url.href))) {
+            this.#definitionsCache.invalidate();
+          }
           this.broadcastRealmEvent({
             eventName: 'index',
             indexType: 'incremental',

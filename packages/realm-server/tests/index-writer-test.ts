@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 import { prepareTestDB } from './helpers';
 import { IndexWriter, IndexQueryEngine } from '@cardstack/runtime-common';
+import { DefinitionsCache } from '@cardstack/runtime-common/definitions-cache';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 import { PgAdapter } from '@cardstack/postgres';
 import indexWriterTests from '@cardstack/runtime-common/tests/index-writer-test';
@@ -16,7 +17,10 @@ module(basename(__filename), function () {
       prepareTestDB();
       adapter = new PgAdapter({ autoMigrate: true });
       indexWriter = new IndexWriter(adapter);
-      indexQueryEngine = new IndexQueryEngine(adapter, fetch);
+      indexQueryEngine = new IndexQueryEngine(
+        adapter,
+        new DefinitionsCache(fetch),
+      );
     });
 
     hooks.afterEach(async function () {
@@ -39,7 +43,7 @@ module(basename(__filename), function () {
       });
     });
 
-    test('meta entries can be invalidated', async function (assert) {
+    test('definition entries can be invalidated', async function (assert) {
       await runSharedTest(indexWriterTests, assert, {
         indexWriter,
         indexQueryEngine,
@@ -159,7 +163,7 @@ module(basename(__filename), function () {
       });
     });
 
-    test('can get a meta entry', async function (assert) {
+    test('can get a definition entry', async function (assert) {
       await runSharedTest(indexWriterTests, assert, {
         indexWriter,
         indexQueryEngine,
@@ -167,7 +171,7 @@ module(basename(__filename), function () {
       });
     });
 
-    test('can get a meta entry from the working index', async function (assert) {
+    test('can get a definition entry from the working index', async function (assert) {
       await runSharedTest(indexWriterTests, assert, {
         indexWriter,
         indexQueryEngine,

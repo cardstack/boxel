@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 
 import { IndexWriter, IndexQueryEngine } from '@cardstack/runtime-common';
+import { DefinitionsCache } from '@cardstack/runtime-common/definitions-cache';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
 // eslint-disable-next-line ember/no-test-import-export
 import indexWriterTests from '@cardstack/runtime-common/tests/index-writer-test';
@@ -21,7 +22,10 @@ module('Unit | index-writer', function (hooks) {
   hooks.beforeEach(async function () {
     await adapter.reset();
     indexWriter = new IndexWriter(adapter);
-    indexQueryEngine = new IndexQueryEngine(adapter, fetch);
+    indexQueryEngine = new IndexQueryEngine(
+      adapter,
+      new DefinitionsCache(fetch),
+    );
   });
 
   test('can perform invalidations for a instance entry', async function (assert) {
@@ -40,7 +44,7 @@ module('Unit | index-writer', function (hooks) {
     });
   });
 
-  test('meta entries can be invalidated', async function (assert) {
+  test('definition entries can be invalidated', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
       indexQueryEngine,
@@ -160,7 +164,7 @@ module('Unit | index-writer', function (hooks) {
     });
   });
 
-  test('can get a meta entry', async function (assert) {
+  test('can get a definition entry', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
       indexQueryEngine,
@@ -168,7 +172,7 @@ module('Unit | index-writer', function (hooks) {
     });
   });
 
-  test('can get a meta entry from the working index', async function (assert) {
+  test('can get a definition entry from the working index', async function (assert) {
     await runSharedTest(indexWriterTests, assert, {
       indexWriter,
       indexQueryEngine,

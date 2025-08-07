@@ -705,7 +705,7 @@ module(basename(__filename), function () {
           assert.strictEqual(response.body.errors[0].title, 'Write Error');
           assert.ok(
             response.body.errors[0].detail.includes(
-              `Error: tried to get card def meta for {"module":"${testRealmHref}place-modules/place","name":"Place"}, but got 404`,
+              `Error: tried to get definition for {"module":"${testRealmHref}place-modules/place","name":"Place"}, but got 404`,
             ),
             'error message is correct',
           );
