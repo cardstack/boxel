@@ -9,7 +9,7 @@ import NumberField from 'https://cardstack.com/base/number';
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import EmailField from 'https://cardstack.com/base/email';
 
-import { Pill, Avatar } from '@cardstack/boxel-ui/components';
+import { Pill } from '@cardstack/boxel-ui/components';
 import {
   eq,
   formatCurrency,
@@ -922,7 +922,7 @@ class FittedTemplate extends Component<typeof OnlineOrder> {
             <div class='tall-tile-price'>{{formatCurrency
                 @model.orderTotal
                 currency='USD'
-                size='large'
+                size='medium'
                 fallback='$0.00'
               }}</div>
           </div>
@@ -959,6 +959,8 @@ class FittedTemplate extends Component<typeof OnlineOrder> {
       </div>
     </div>
 
+    {{! template-lint-disable no-whitespace-for-layout  }}
+    {{! ignore the above error because ember-template-lint complains about the whitespace in the multi-line comment below }}
     <style scoped>
       /* Container setup with size detection */
       .fitted-container {
@@ -1002,7 +1004,7 @@ class FittedTemplate extends Component<typeof OnlineOrder> {
         }
       }
 
-      /* =============  SMALL TILE FORMAT ============= */
+      /* ============= SMALL TILE FORMAT ============= */
       .small-tile-content {
         display: flex;
         flex-direction: column;

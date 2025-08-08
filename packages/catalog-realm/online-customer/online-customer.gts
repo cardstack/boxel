@@ -26,7 +26,7 @@ class LoyaltyTierFieldEdit extends Component<typeof LoyaltyTierField> {
     return this.args.model.name || 'Bronze';
   }
 
-  @tracked selectedTier = {
+  @tracked selectedTier: { name: string } | null = {
     name: this.initialTierName,
   };
   @tracked tierOptions = [
@@ -82,7 +82,7 @@ class IsolatedTemplate extends Component<typeof OnlineCustomer> {
 
   get customerTier() {
     try {
-      return this.args.model?.loyaltyTier.name ?? 'Bronze';
+      return this.args.model?.loyaltyTier?.name ?? 'Bronze';
     } catch (e) {
       return 'Bronze';
     }
@@ -395,7 +395,7 @@ class EmbeddedTemplate extends Component<typeof OnlineCustomer> {
 
   get customerTier() {
     try {
-      return this.args.model?.loyaltyTier.name ?? 'Bronze';
+      return this.args.model?.loyaltyTier?.name ?? 'Bronze';
     } catch (e) {
       return 'Bronze';
     }
@@ -795,7 +795,7 @@ class FittedTemplate extends Component<typeof OnlineCustomer> {
 
   <template>
     <div class='fitted-container'>
-      <!-- Badge Format: Ultra compact with icon + primary + secondary -->
+      {{! Badge Format: Ultra compact with icon + primary + secondary }}
       <div class='badge-format'>
         <div class='badge-content'>
           <div class='badge-icon'>
@@ -823,7 +823,7 @@ class FittedTemplate extends Component<typeof OnlineCustomer> {
         </div>
       </div>
 
-      <!-- Strip Format: Avatar left, text left-aligned -->
+      {{! Strip Format: Avatar left, text left-aligned }}
       <div class='strip-format'>
         <div class='strip-content'>
           <div class='strip-avatar'>{{this.initials}}</div>
@@ -844,7 +844,7 @@ class FittedTemplate extends Component<typeof OnlineCustomer> {
         </div>
       </div>
 
-      <!-- Tile Format: Icon on top, everything centered -->
+      {{! Tile Format: Icon on top, everything centered }}
       <div class='tile-format'>
         <div class='tile-content'>
           <div class='tile-header'>
@@ -872,7 +872,7 @@ class FittedTemplate extends Component<typeof OnlineCustomer> {
         </div>
       </div>
 
-      <!-- Card Format: Avatar left, comprehensive layout -->
+      {{! Card Format: Avatar left, comprehensive layout }}
       <div class='card-format'>
         <div class='card-content'>
           <div class='card-header'>

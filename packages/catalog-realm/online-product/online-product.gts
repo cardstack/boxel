@@ -745,7 +745,7 @@ class FittedTemplate extends Component<typeof OnlineProduct> {
 
   <template>
     <div class='fitted-container'>
-      <!-- Badge Format: 150px width max, 40-105px height -->
+      {{! Badge Format: 150px width max, 40-105px height }}
       <div class='badge-format'>
         <div class='badge-content'>
           {{#if @model.imageUrl}}
@@ -786,7 +786,7 @@ class FittedTemplate extends Component<typeof OnlineProduct> {
         </div>
       </div>
 
-      <!-- Strip Format: 151px+ width, max 169px height -->
+      {{! Strip Format: 151px+ width, max 169px height }}
       <div class='strip-format'>
         <div class='strip-content'>
           {{#if @model.imageUrl}}
@@ -828,7 +828,7 @@ class FittedTemplate extends Component<typeof OnlineProduct> {
         </div>
       </div>
 
-      <!-- Tile Format: max 399px width, 170px+ height -->
+      {{! Tile Format: max 399px width, 170px+ height }}
       <div class='tile-format'>
         <div class='tile-content'>
           {{#if @model.imageUrl}}
@@ -871,7 +871,7 @@ class FittedTemplate extends Component<typeof OnlineProduct> {
         </div>
       </div>
 
-      <!-- Card Format: 400px+ width, 170px+ height -->
+      {{! Card Format: 400px+ width, 170px+ height }}
       <div class='card-format'>
         <div class='card-content'>
           <div class='card-left'>
@@ -937,6 +937,8 @@ class FittedTemplate extends Component<typeof OnlineProduct> {
       </div>
     </div>
 
+    {{! template-lint-disable no-whitespace-for-layout  }}
+    {{! ignore the above error because ember-template-lint complains about the whitespace in the multi-line comment below }}
     <style scoped>
       /* Container setup with size detection */
       .fitted-container {
