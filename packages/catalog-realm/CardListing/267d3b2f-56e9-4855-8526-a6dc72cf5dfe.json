@@ -9,11 +9,11 @@
     "type": "card",
     "attributes": {
       "name": "Online Order Listing",
-       "images": [
+      "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/online-order-listing/screenshot_01.png",
         "https://boxel-images.boxel.ai/app-assets/catalog/online-order-listing/screenshot_02.png"
       ],
-      "summary": null,
+      "summary": "A comprehensive solution for businesses needing to display, track, and manage online orders within the Boxel card system.",
       "cardInfo": {
         "notes": null,
         "title": null,
@@ -47,14 +47,24 @@
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
-      "categories.0": {
-        "links": {
-          "self": "../Category/e-commerce-online-sales"
-        }
-      },
       "examples.0": {
         "links": {
           "self": "../online-order/OnlineOrder/order-ast-2024-001"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../online-order/OnlineOrder/order-ast-2024-002"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../online-order/OnlineOrder/order-ast-2024-003"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/e-commerce-online-sales"
         }
       },
       "cardInfo.theme": {

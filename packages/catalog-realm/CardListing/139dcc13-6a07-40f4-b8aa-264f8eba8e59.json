@@ -13,17 +13,20 @@
         "https://boxel-images.boxel.ai/app-assets/catalog/online-customer-listing/screenshot_01.png"
       ],
       "summary": "Displaying the updated Online Customer Management System listing",
-      "cardInfo": {},
-      "description": null,
-      "thumbnailURL": null
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
     },
     "relationships": {
-      "skills": {
+      "tags": {
         "links": {
           "self": null
         }
       },
-      "tags": {
+      "skills": {
         "links": {
           "self": null
         }
@@ -51,6 +54,16 @@
       "examples.0": {
         "links": {
           "self": "../online-customer/OnlineCustomer/elena-vasquez"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../online-customer/OnlineCustomer/james-mitchell-brown"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../online-customer/OnlineCustomer/zara-ahmed"
         }
       },
       "categories.0": {

@@ -13,9 +13,12 @@
         "https://boxel-images.boxel.ai/app-assets/catalog/online-product-listing/screenshot_01.png"
       ],
       "summary": "Complete e-commerce product card template with pricing, inventory, images, and responsive layouts for online stores",
-      "cardInfo": {},
-      "description": null,
-      "thumbnailURL": null
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
     },
     "relationships": {
       "tags": {
@@ -45,22 +48,42 @@
       },
       "examples.0": {
         "links": {
-          "self": "../OnlineProduct/bluetooth-speaker-mini"
+          "self": "../online-product/OnlineProduct/bluetooth-speaker-mini"
         }
       },
       "examples.1": {
         "links": {
-          "self": "../OnlineProduct/usb-c-hub-premium"
+          "self": "../online-product/OnlineProduct/canvas-backpack-travel"
         }
       },
       "examples.2": {
         "links": {
-          "self": "../OnlineProduct/wireless-mouse-pro"
+          "self": "../online-product/OnlineProduct/ceramic-coffee-mug-set"
         }
       },
       "examples.3": {
         "links": {
-          "self": "../OnlineProduct/professional-laptop-stand"
+          "self": "../online-product/OnlineProduct/eco-water-bottle"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../online-product/OnlineProduct/gaming-keyboard"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../online-product/OnlineProduct/organic-cotton-tshirt"
+        }
+      },
+      "examples.6": {
+        "links": {
+          "self": "../online-product/OnlineProduct/professional-laptop-stand"
+        }
+      },
+      "examples.7": {
+        "links": {
+          "self": "../online-product/OnlineProduct/smart-fitness-tracker"
         }
       },
       "categories.0": {
