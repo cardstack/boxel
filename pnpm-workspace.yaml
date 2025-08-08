@@ -143,6 +143,7 @@ catalog:
   flat: ^5.0.2
   focus-trap: ^7.4.3
   fs-extra: ^11.3.0
+  fs-xattr: ^0.4.0
   glimmer-scoped-css: ^0.8.1
   glob: ^11.0.1
   http-server: ^14.1.1

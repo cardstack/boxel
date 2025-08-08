@@ -145,7 +145,7 @@ export interface RealmPermissions {
 export interface FileWriteResult {
   path: string;
   lastModified: number;
-  created: number;
+  created: number | null;
   isNew: boolean;
 }
 
@@ -1379,7 +1379,7 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let { lastModified } = await this.write(
+    let { lastModified, created } = await this.write(
       this.paths.local(new URL(request.url)),
       await request.text(),
       {
@@ -1391,7 +1391,10 @@ export class Realm {
       body: null,
       init: {
         status: 204,
-        headers: { 'last-modified': formatRFC7231(lastModified * 1000) },
+        headers: {
+          'last-modified': formatRFC7231(lastModified * 1000),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
+        },
       },
       requestContext,
     });
@@ -1673,7 +1676,7 @@ export class Realm {
         lid: primaryResource.lid,
       });
     }
-    let [{ lastModified }] = await this.writeMany(files, {
+    let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
     });
 
@@ -1708,6 +1711,7 @@ export class Realm {
         headers: {
           'content-type': SupportedMimeType.CardJson,
           ...lastModifiedHeader(doc),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
         },
       },
       requestContext,
@@ -1868,7 +1872,7 @@ export class Realm {
       let path = this.paths.local(fileURL);
       files.set(path, JSON.stringify(fileSerialization, null, 2));
     }
-    let [{ lastModified }] = await this.writeMany(files, {
+    let [{ lastModified, created }] = await this.writeMany(files, {
       clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
     });
     let entry = await this.#realmIndexQueryEngine.cardDocument(
@@ -1899,6 +1903,7 @@ export class Realm {
         headers: {
           'content-type': SupportedMimeType.CardJson,
           ...lastModifiedHeader(doc),
+          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
         },
       },
       requestContext,
