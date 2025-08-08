@@ -1,7 +1,6 @@
 import { module, test } from 'qunit';
 import { dirSync } from 'tmp';
 import {
-  baseRealm,
   DBAdapter,
   LooseSingleCardDocument,
   Realm,
@@ -12,12 +11,10 @@ import {
 import {
   createRealm,
   testRealm,
-  setupCardLogs,
   setupBaseRealmServer,
   setupDB,
   runTestRealmServer,
   createVirtualNetwork,
-  createVirtualNetworkAndLoader,
   matrixURL,
   closeServer,
   cleanWhiteSpace,
@@ -45,9 +42,6 @@ let testDbAdapter: DBAdapter;
 
 module(basename(__filename), function () {
   module('indexing', function (hooks) {
-    let { virtualNetwork: baseRealmServerVirtualNetwork, loader } =
-      createVirtualNetworkAndLoader();
-
     async function getInstance(
       realm: Realm,
       url: URL,
@@ -58,16 +52,12 @@ module(basename(__filename), function () {
       }
       return maybeInstance;
     }
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
 
     let dir: string;
     let realm: Realm;
     let adapter: RealmAdapter;
 
-    setupBaseRealmServer(hooks, baseRealmServerVirtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     setupDB(hooks, {
       beforeEach: async (dbAdapter, publisher, runner) => {
@@ -2441,15 +2431,7 @@ module(basename(__filename), function () {
   });
 
   module('permissioned realm', function (hooks) {
-    let { virtualNetwork: baseRealmServerVirtualNetwork, loader } =
-      createVirtualNetworkAndLoader();
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, baseRealmServerVirtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     // We want 2 different realm users to test authorization between them - these
     // names are selected because they are already available in the test

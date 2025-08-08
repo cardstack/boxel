@@ -4,17 +4,14 @@ import { basename } from 'path';
 import { Server } from 'http';
 import { type DirResult } from 'tmp';
 import {
-  baseRealm,
   Realm,
   type LooseSingleCardDocument,
   SupportedMimeType,
   RealmAdapter,
 } from '@cardstack/runtime-common';
 import {
-  setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
-  createVirtualNetworkAndLoader,
   matrixURL,
   testRealmHref,
   createJWT,
@@ -39,14 +36,7 @@ module(basename(__filename), function () {
         request = args.request;
       }
 
-      let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
-      setupCardLogs(
-        hooks,
-        async () => await loader.import(`${baseRealm.url}card-api`),
-      );
-
-      setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+      setupBaseRealmServer(hooks, matrixURL);
 
       module('writes', function (hooks) {
         setupPermissionedRealm(hooks, {

@@ -1,12 +1,10 @@
 import { module, test } from 'qunit';
 import { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import { baseRealm, Realm } from '@cardstack/runtime-common';
+import { Realm } from '@cardstack/runtime-common';
 import {
-  setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
-  createVirtualNetworkAndLoader,
   matrixURL,
   mtimes,
   testRealmHref,
@@ -21,8 +19,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     let testRealmPath: string;
     let request: SuperTest<Test>;
 
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
     function onRealmSetup(args: {
       testRealm: Realm;
       testRealmPath: string;
@@ -32,13 +28,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       testRealmPath = args.testRealmPath;
       request = args.request;
     }
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealm(hooks, {
       permissions: {

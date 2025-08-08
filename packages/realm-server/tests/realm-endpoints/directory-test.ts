@@ -3,12 +3,10 @@ import { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync } from 'fs-extra';
-import { baseRealm, Realm } from '@cardstack/runtime-common';
+import { Realm } from '@cardstack/runtime-common';
 import {
-  setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
-  createVirtualNetworkAndLoader,
   matrixURL,
   testRealmHref,
   createJWT,
@@ -21,14 +19,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     let request: SuperTest<Test>;
     let dir: DirResult;
 
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.beforeEach(async function () {
       dir = dirSync();

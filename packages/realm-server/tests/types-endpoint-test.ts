@@ -5,19 +5,17 @@ import { Server } from 'http';
 import { type DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 import {
-  baseRealm,
   Realm,
   type QueuePublisher,
   type QueueRunner,
 } from '@cardstack/runtime-common';
 import {
-  setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
   runTestRealmServer,
   setupDB,
   setupMatrixRoom,
-  createVirtualNetworkAndLoader,
+  createVirtualNetwork,
   matrixURL,
   closeServer,
 } from './helpers';
@@ -60,14 +58,7 @@ module(basename(__filename), function () {
         dir,
       };
     }
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.afterEach(async function () {
       await closeServer(testRealmHttpServer);
@@ -82,6 +73,7 @@ module(basename(__filename), function () {
     });
 
     setupMatrixRoom(hooks, getRealmSetup);
+    let virtualNetwork = createVirtualNetwork();
 
     async function startRealmServer(
       dbAdapter: PgAdapter,

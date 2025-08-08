@@ -4,14 +4,12 @@ import { join, basename } from 'path';
 import { Server } from 'http';
 import { type DirResult } from 'tmp';
 import { removeSync, writeJSONSync } from 'fs-extra';
-import { baseRealm, Realm } from '@cardstack/runtime-common';
+import { Realm } from '@cardstack/runtime-common';
 import {
   findRealmEvent,
-  setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
   setupMatrixRoom,
-  createVirtualNetworkAndLoader,
   matrixURL,
   waitForRealmEvent,
 } from './helpers';
@@ -45,14 +43,7 @@ module(basename(__filename), function () {
         dir,
       };
     }
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealm(hooks, {
       permissions: {

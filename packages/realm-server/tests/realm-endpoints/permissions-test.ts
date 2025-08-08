@@ -3,16 +3,10 @@ import { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync } from 'fs-extra';
+import { Realm, fetchUserPermissions } from '@cardstack/runtime-common';
 import {
-  baseRealm,
-  Realm,
-  fetchUserPermissions,
-} from '@cardstack/runtime-common';
-import {
-  setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
-  createVirtualNetworkAndLoader,
   matrixURL,
   testRealmHref,
   testRealmURL,
@@ -28,8 +22,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     let dir: DirResult;
     let dbAdapter: PgAdapter;
 
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
     function onRealmSetup(args: {
       testRealm: Realm;
       request: SuperTest<Test>;
@@ -42,12 +34,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       dir = args.dir;
     }
 
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.beforeEach(async function () {
       dir = dirSync();
