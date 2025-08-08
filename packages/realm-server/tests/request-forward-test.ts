@@ -80,8 +80,8 @@ module.only('Request Forward Endpoint', function () {
       calculateStub.restore();
     });
 
-    test('should mock OpenRouter API calls with sinon', async function (assert) {
-      // Mock the global fetch function
+    test('should calculate credits for OpenRouter API calls', async function (assert) {
+      // Set up test environment
       const originalFetch = global.fetch;
       const mockFetch = sinon.stub(global, 'fetch');
 
@@ -89,14 +89,14 @@ module.only('Request Forward Endpoint', function () {
       const originalApiKey = process.env.OPENROUTER_API_KEY;
       process.env.OPENROUTER_API_KEY = 'test-api-key';
 
-      // Mock successful OpenRouter response
+      // Test OpenRouter response
       const mockOpenRouterResponse = {
         id: 'gen-test-123',
-        choices: [{ text: 'Mock response from OpenRouter' }],
+        choices: [{ text: 'Test response from OpenRouter' }],
         usage: { total_tokens: 150 },
       };
 
-      // Mock generation cost API response
+      // Test generation cost API response
       const mockCostResponse = {
         data: {
           id: 'gen-test-123',
@@ -126,7 +126,7 @@ module.only('Request Forward Endpoint', function () {
       );
 
       try {
-        // Test the credit calculation with mocked API
+        // Test the credit calculation
         const generationId = extractGenerationIdFromResponse(
           mockOpenRouterResponse,
         );
@@ -169,7 +169,7 @@ module.only('Request Forward Endpoint', function () {
     });
 
     test('should handle OpenRouter API errors gracefully', async function (assert) {
-      // Mock the global fetch function
+      // Set up test environment
       const originalFetch = global.fetch;
       const mockFetch = sinon.stub(global, 'fetch');
 
@@ -177,7 +177,7 @@ module.only('Request Forward Endpoint', function () {
       const originalApiKey = process.env.OPENROUTER_API_KEY;
       process.env.OPENROUTER_API_KEY = 'test-api-key';
 
-      // Mock API error response
+      // Test API error response
       const mockErrorResponse = {
         error: {
           message: 'Rate limit exceeded',
@@ -235,7 +235,7 @@ module.only('Request Forward Endpoint', function () {
         'Should return undefined for missing generation ID',
       );
 
-      // Mock fetch to not be called when no generation ID
+      // Set up test environment for no generation ID scenario
       const originalFetch = global.fetch;
       const mockFetch = sinon.stub(global, 'fetch');
 
@@ -257,8 +257,8 @@ module.only('Request Forward Endpoint', function () {
       }
     });
 
-    test('should mock complete request-forward flow', async function (assert) {
-      // Mock the global fetch function for the entire flow
+    test('should handle complete request-forward flow', async function (assert) {
+      // Set up test environment for external API calls
       const originalFetch = global.fetch;
       const mockFetch = sinon.stub(global, 'fetch');
 
@@ -266,14 +266,14 @@ module.only('Request Forward Endpoint', function () {
       const originalApiKey = process.env.OPENROUTER_API_KEY;
       process.env.OPENROUTER_API_KEY = 'test-api-key';
 
-      // Mock OpenRouter chat completion response
+      // Test OpenRouter chat completion response
       const mockChatResponse = {
         id: 'gen-flow-123',
-        choices: [{ text: 'Mock response from OpenRouter' }],
+        choices: [{ text: 'Test response from OpenRouter' }],
         usage: { total_tokens: 200 },
       };
 
-      // Mock generation cost API response
+      // Test generation cost API response
       const mockCostResponse = {
         data: {
           id: 'gen-flow-123',
@@ -314,7 +314,7 @@ module.only('Request Forward Endpoint', function () {
           messages: [{ role: 'user', content: 'Hello' }],
         };
 
-        // Simulate the external API call
+        // Test the external API call
         const externalResponse = await fetch(
           'https://openrouter.ai/api/v1/chat/completions',
           {
@@ -540,7 +540,7 @@ module.only('Request Forward Endpoint', function () {
       );
     });
 
-    test('should handle environment variable mocking', async function (assert) {
+    test('should handle environment variable configuration', async function (assert) {
       // Save original environment variable
       const originalApiKey = process.env.OPENROUTER_API_KEY;
 
