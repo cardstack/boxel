@@ -13,6 +13,7 @@ export default async function visitOperatorMode({
   aiAssistantOpen,
   moduleInspector,
   workspaceChooserOpened,
+  trail,
 }: Partial<SerializedState>) {
   let operatorModeState = {
     stacks: stacks || [],
@@ -25,6 +26,7 @@ export default async function visitOperatorMode({
     ...(fileView ? { fileView } : {}),
     ...(openDirs ? { openDirs } : {}),
     ...(moduleInspector ? { moduleInspector } : {}),
+    ...(trail ? { trail } : {}),
   };
 
   let operatorModeStateParam = stringify(operatorModeState)!;

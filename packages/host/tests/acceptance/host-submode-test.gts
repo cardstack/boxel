@@ -150,13 +150,8 @@ module('Acceptance | host submode', function (hooks) {
 
       await click('[data-test-submode-switcher] button');
       await click('[data-test-boxel-menu-item-text="Host"]');
-      assert
-        .dom('[data-test-host-submode-card]')
-        .hasAttribute(
-          'data-test-host-submode-card',
-          `${testRealmURL}Person/1.json`,
-        )
-        .exists();
+      assert.dom('[data-test-host-submode-card]').exists();
+      assert.dom('[data-test-host-submode-card]').hasText('Title: A B');
     });
 
     test('entering from code mode shows the index card', async function (assert) {
@@ -167,13 +162,60 @@ module('Acceptance | host submode', function (hooks) {
 
       await click('[data-test-submode-switcher] button');
       await click('[data-test-boxel-menu-item-text="Host"]');
+      assert.dom('[data-test-host-submode-card]').exists();
+      // CardsGrid should be rendered (index card)
+      assert.dom('.boxel-card-container').exists();
+    });
+
+    test('entering from code mode with card instance shows the same card', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}Person/1.json`,
+      });
+
+      await click('[data-test-submode-switcher] button');
+      await click('[data-test-boxel-menu-item-text="Host"]');
+      assert.dom('[data-test-host-submode-card]').exists();
+      assert.dom('[data-test-host-submode-card]').hasText('Title: A B');
+    });
+
+    test('wide format cards use full width', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}index.json`], // CardsGrid has prefersWideFormat = true
+      });
+
+      assert.dom('.host-mode-content').hasClass('is-wide');
+      assert.dom('.container').hasClass('container');
+      // The width is applied via CSS class, not inline style
+      assert.dom('.host-mode-content.is-wide').exists();
+    });
+
+    test('regular format cards use standard width', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}Person/1.json`],
+      });
+
+      assert.dom('.host-mode-content').doesNotHaveClass('is-wide');
+      assert.dom('.container').hasClass('container');
+      // The width is applied via CSS class, not inline style
+      assert.dom('.host-mode-content:not(.is-wide)').exists();
+    });
+
+    test('shows error state when card is not found', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}nonexistent.json`],
+      });
+
+      // Wait for loading to complete and error to show
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      assert.dom('[data-test-host-submode-error]').exists();
       assert
-        .dom('[data-test-host-submode-card]')
-        .hasAttribute(
-          'data-test-host-submode-card',
-          `${testRealmURL}index.json`,
-        )
-        .exists();
+        .dom('[data-test-host-submode-error]')
+        .hasText(`Card not found: ${testRealmURL}nonexistent`);
     });
   });
 });

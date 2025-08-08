@@ -388,10 +388,33 @@ export default class OperatorModeStateService extends Service {
 
   get currentTrailItem() {
     if (this._state.trail.length === 0) {
-      return new URL('./index.json', this.realmURL).href;
+      // Try to get realm from last stack item, fallback to default readable realm
+      let realmPath =
+        this.getRealmFromLastStackItem() ||
+        this.realm.defaultReadableRealm.path;
+      return new URL('./index.json', realmPath).href;
     }
 
     return this._state.trail[this._state.trail.length - 1];
+  }
+
+  private getRealmFromLastStackItem(): string | null {
+    // Get the last stack item from the rightmost stack
+    let rightMostStack = this.rightMostStack();
+    if (rightMostStack && rightMostStack.length > 0) {
+      let lastStackItem = rightMostStack[rightMostStack.length - 1];
+      if (lastStackItem?.id) {
+        try {
+          let realm = this.realm.url(lastStackItem.id);
+          if (realm) {
+            return realm;
+          }
+        } catch (error) {
+          // If we can't determine the realm from the stack item, continue to fallback
+        }
+      }
+    }
+    return null;
   }
 
   private getRealmURLFromItemId(itemId: string): string {
@@ -912,6 +935,20 @@ export default class OperatorModeStateService extends Service {
           if (realm) {
             return new URL(realm);
           }
+        }
+      }
+    }
+
+    // For host mode, determine realm from trail using availableRealmIndexCardIds
+    if (submode === Submodes.Host) {
+      // Check if current trail item is an available realm index card
+      let currentTrailItem = this.currentTrailItem;
+      // If trail item is not an index card, try to find the realm from the card's realm
+      if (currentTrailItem) {
+        let cardId = currentTrailItem.replace('.json', '');
+        let realm = this.realm.url(cardId);
+        if (realm) {
+          return new URL(realm);
         }
       }
     }
