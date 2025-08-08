@@ -236,6 +236,7 @@ export class SkillsProvider
         this.skillLists = [
           new SkillList('Base', 'https://app.boxel.ai/base/', true),
           new SkillList('Catalog', 'https://app.boxel.ai/catalog/', true),
+          new SkillList('Skills', 'https://app.boxel.ai/skills/', true),
         ];
         this.skillLists.push(
           ...realmUrls.map((url) => new SkillList(url, url)),
