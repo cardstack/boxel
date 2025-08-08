@@ -27,17 +27,17 @@ import type { Query } from '@cardstack/runtime-common';
 import { realmURL } from '@cardstack/runtime-common';
 
 const productSource = {
-  module: new URL('./online-product', import.meta.url).href,
+  module: new URL('../online-product/online-product', import.meta.url).href,
   name: 'OnlineProduct',
 };
 
 const orderSource = {
-  module: new URL('./online-order', import.meta.url).href,
+  module: new URL('../online-order/online-order', import.meta.url).href,
   name: 'OnlineOrder',
 };
 
 const customerSource = {
-  module: new URL('./online-customer', import.meta.url).href,
+  module: new URL('../online-custmomer/online-customer', import.meta.url).href,
   name: 'OnlineCustomer',
 };
 
@@ -49,7 +49,8 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
     return {
       filter: {
         type: {
-          module: new URL('./online-product', import.meta.url).href,
+          module: new URL('../online-product/online-product', import.meta.url)
+            .href,
           name: 'OnlineProduct',
         },
       },
@@ -60,7 +61,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
     return {
       filter: {
         type: {
-          module: new URL('./online-order', import.meta.url).href,
+          module: new URL('../online-order/online-order', import.meta.url).href,
           name: 'OnlineOrder',
         },
       },
@@ -71,7 +72,8 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
     return {
       filter: {
         type: {
-          module: new URL('./online-customer', import.meta.url).href,
+          module: new URL('../online-customer/online-customer', import.meta.url)
+            .href,
           name: 'OnlineCustomer',
         },
       },
@@ -474,7 +476,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
               }}
                 <PrerenderedCardSearch
                   @query={{this.productsQuery}}
-                  @format='fitted'
+                  @format='embedded'
                   @realms={{this.realms}}
                   @isLive={{true}}
                 >
@@ -501,7 +503,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                                 fieldType=undefined
                                 fieldName=undefined
                               }}
-                              @displayBoundaries={{true}}
+                              @displayBoundaries={{false}}
                               class='product-card-container'
                             >
                               <card.component />
@@ -561,7 +563,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
               }}
                 <PrerenderedCardSearch
                   @query={{this.ordersQuery}}
-                  @format='fitted'
+                  @format='embedded'
                   @realms={{this.realms}}
                   @isLive={{true}}
                 >
@@ -588,7 +590,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                                 fieldType=undefined
                                 fieldName=undefined
                               }}
-                              @displayBoundaries={{true}}
+                              @displayBoundaries={{false}}
                               class='order-card-container'
                             >
                               <card.component />
@@ -650,7 +652,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
               }}
                 <PrerenderedCardSearch
                   @query={{this.customersQuery}}
-                  @format='fitted'
+                  @format='embedded'
                   @realms={{this.realms}}
                   @isLive={{true}}
                 >
@@ -677,7 +679,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                                 fieldType=undefined
                                 fieldName=undefined
                               }}
-                              @displayBoundaries={{true}}
+                              @displayBoundaries={{false}}
                               class='customer-card-container'
                             >
                               <card.component />
@@ -1058,12 +1060,12 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
 
       .dynamic-products-grid {
         grid-auto-rows: minmax(300px, auto);
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
       }
 
       .dynamic-customers-grid {
         grid-auto-rows: minmax(250px, auto);
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
       }
 
       .product-card-container,
@@ -1272,402 +1274,6 @@ class EmbeddedTemplate extends Component<typeof OnlineStore> {
   </template>
 }
 
-class FittedTemplate extends Component<typeof OnlineStore> {
-  <template>
-    <div class='fitted-container'>
-      <div class='badge-format'>
-        <div class='badge-content'>
-          {{#if @model.logoUrl}}
-            <img
-              src={{@model.logoUrl}}
-              alt='{{@model.storeName}}'
-              class='badge-logo'
-            />
-          {{else}}
-            <div
-              class='badge-logo placeholder'
-              style={{htmlSafe
-                (if
-                  @model.brandColor (concat 'background: ' @model.brandColor) ''
-                )
-              }}
-            >
-              <svg
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <path d='M3 9h18l-1.5 9H4.5L3 9z' />
-              </svg>
-            </div>
-          {{/if}}
-          <div class='badge-title'>{{if
-              @model.storeName
-              @model.storeName
-              'Store'
-            }}</div>
-        </div>
-      </div>
-
-      <div class='strip-format'>
-        <div class='strip-content'>
-          {{#if @model.logoUrl}}
-            <img
-              src={{@model.logoUrl}}
-              alt='{{@model.storeName}}'
-              class='strip-logo'
-            />
-          {{else}}
-            <div
-              class='strip-logo placeholder'
-              style={{htmlSafe
-                (if
-                  @model.brandColor (concat 'background: ' @model.brandColor) ''
-                )
-              }}
-            >
-              <svg
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <path d='M3 9h18l-1.5 9H4.5L3 9z' />
-              </svg>
-            </div>
-          {{/if}}
-          <div class='strip-title'>{{if
-              @model.storeName
-              @model.storeName
-              'Online Store'
-            }}</div>
-        </div>
-      </div>
-
-      <div class='tile-format'>
-        <div class='tile-content'>
-          {{#if @model.logoUrl}}
-            <img
-              src={{@model.logoUrl}}
-              alt='{{@model.storeName}}'
-              class='tile-logo'
-            />
-          {{else}}
-            <div
-              class='tile-logo placeholder'
-              style={{htmlSafe
-                (if
-                  @model.brandColor (concat 'background: ' @model.brandColor) ''
-                )
-              }}
-            >
-              <svg
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <path d='M3 9h18l-1.5 9H4.5L3 9z' />
-              </svg>
-            </div>
-          {{/if}}
-          <div class='tile-title'>{{if
-              @model.storeName
-              @model.storeName
-              'Online Store'
-            }}</div>
-        </div>
-      </div>
-
-      <div class='card-format'>
-        <div class='card-content'>
-          {{#if @model.logoUrl}}
-            <img
-              src={{@model.logoUrl}}
-              alt='{{@model.storeName}}'
-              class='card-logo'
-            />
-          {{else}}
-            <div
-              class='card-logo placeholder'
-              style={{htmlSafe
-                (if
-                  @model.brandColor (concat 'background: ' @model.brandColor) ''
-                )
-              }}
-            >
-              <svg
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <path d='M3 9h18l-1.5 9H4.5L3 9z' />
-              </svg>
-            </div>
-          {{/if}}
-          <div class='card-title'>{{if
-              @model.storeName
-              @model.storeName
-              'Online Store'
-            }}</div>
-        </div>
-      </div>
-    </div>
-
-    <style scoped>
-      /* Container query system */
-      .fitted-container {
-        container-type: size;
-        width: 100%;
-        height: 100%;
-      }
-
-      /* Hide all formats by default */
-      .badge-format,
-      .strip-format,
-      .tile-format,
-      .card-format {
-        display: none;
-        width: 100%;
-        height: 100%;
-        padding: clamp(0.1875rem, 2%, 0.625rem);
-        box-sizing: border-box;
-      }
-
-      /* Badge format: up to 150px width, up to 169px height */
-      @container (max-width: 150px) and (max-height: 169px) {
-        .badge-format {
-          display: flex;
-          align-items: center;
-        }
-      }
-
-      /* Strip format: 151px+ width, up to 169px height */
-      @container (min-width: 151px) and (max-height: 169px) {
-        .strip-format {
-          display: flex;
-          align-items: center;
-        }
-      }
-
-      /* Tile format: up to 399px width, 170px+ height */
-      @container (max-width: 399px) and (min-height: 170px) {
-        .tile-format {
-          display: flex;
-          flex-direction: column;
-        }
-      }
-
-      /* Card format: 400px+ width, 170px+ height */
-      @container (min-width: 400px) and (min-height: 170px) {
-        .card-format {
-          display: flex;
-          flex-direction: column;
-        }
-      }
-
-      /* Badge format styling */
-      .badge-content {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        width: 100%;
-        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-        border-radius: 0.5rem;
-        padding: 0.375rem;
-        border: 1px solid rgba(226, 232, 240, 0.8);
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-      }
-
-      .badge-logo {
-        width: 1.5rem;
-        height: 1.5rem;
-        border-radius: 0.25rem;
-        object-fit: cover;
-        flex-shrink: 0;
-      }
-
-      .badge-logo.placeholder {
-        background: #e5e7eb;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-      }
-
-      .badge-logo.placeholder svg {
-        width: 0.875rem;
-        height: 0.875rem;
-      }
-
-      .badge-title {
-        font-size: 0.75rem;
-        font-weight: 600;
-        color: #111827;
-        line-height: 1.2;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        flex: 1;
-      }
-
-      /* Strip format styling */
-      .strip-content {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        width: 100%;
-        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-        border-radius: 0.625rem;
-        padding: 0.5rem;
-        border: 1px solid rgba(226, 232, 240, 0.8);
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-        transition: all 0.2s ease;
-      }
-
-      .strip-logo {
-        width: 2rem;
-        height: 2rem;
-        border-radius: 0.375rem;
-        object-fit: cover;
-        flex-shrink: 0;
-      }
-
-      .strip-logo.placeholder {
-        background: #e5e7eb;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-      }
-
-      .strip-logo.placeholder svg {
-        width: 1rem;
-        height: 1rem;
-      }
-
-      .strip-title {
-        font-size: 0.8125rem;
-        font-weight: 600;
-        color: #111827;
-        line-height: 1.2;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        flex: 1;
-      }
-
-      /* Tile format styling */
-      .tile-content {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        gap: 0.75rem;
-        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-        border-radius: 0.625rem;
-        padding: 0.75rem;
-        border: 1px solid rgba(226, 232, 240, 0.8);
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-        transition: all 0.3s ease;
-      }
-
-      .tile-logo {
-        width: 3rem;
-        height: 3rem;
-        border-radius: 0.5rem;
-        object-fit: cover;
-        flex-shrink: 0;
-      }
-
-      .tile-logo.placeholder {
-        background: #e5e7eb;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-      }
-
-      .tile-logo.placeholder svg {
-        width: 1.5rem;
-        height: 1.5rem;
-      }
-
-      .tile-title {
-        font-size: 0.875rem;
-        font-weight: 600;
-        color: #111827;
-        text-align: center;
-        line-height: 1.2;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        width: 100%;
-      }
-
-      /* Card format styling */
-      .card-content {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        gap: 1rem;
-        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-        border-radius: 0.875rem;
-        padding: 1rem;
-        border: 1px solid rgba(226, 232, 240, 0.8);
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
-        transition: all 0.3s ease;
-      }
-
-      .card-logo {
-        width: 4rem;
-        height: 4rem;
-        border-radius: 0.75rem;
-        object-fit: cover;
-        flex-shrink: 0;
-      }
-
-      .card-logo.placeholder {
-        background: #e5e7eb;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-      }
-
-      .card-logo.placeholder svg {
-        width: 2rem;
-        height: 2rem;
-      }
-
-      .card-title {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #111827;
-        text-align: center;
-        line-height: 1.2;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        width: 100%;
-      }
-
-      /* Hover effects */
-      .strip-content:hover,
-      .tile-content:hover,
-      .card-content:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
-      }
-    </style>
-  </template>
-}
-
 export class OnlineStore extends CardDef {
   static displayName = 'Online Store';
   static icon = StoreIcon;
@@ -1695,5 +1301,4 @@ export class OnlineStore extends CardDef {
 
   static isolated = IsolatedTemplate;
   static embedded = EmbeddedTemplate;
-  static fitted = FittedTemplate;
 }
