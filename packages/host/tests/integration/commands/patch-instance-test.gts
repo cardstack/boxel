@@ -16,6 +16,7 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  cardInfo,
 } from '../../helpers';
 import {
   CardDef,
@@ -91,8 +92,8 @@ module('Integration | commands | patch-instance', function (hooks) {
           description: null,
           nickNames: [],
           thumbnailURL: null,
-          title: null,
-          cardInfo: {},
+          title: 'Untitled Card',
+          cardInfo,
         },
         'the attributes are correct',
       );
@@ -146,8 +147,8 @@ module('Integration | commands | patch-instance', function (hooks) {
           description: null,
           nickNames: ['Paper'],
           thumbnailURL: null,
-          title: null,
-          cardInfo: {},
+          title: 'Untitled Card',
+          cardInfo,
         },
         'the attributes are correct',
       );
@@ -201,8 +202,8 @@ module('Integration | commands | patch-instance', function (hooks) {
           description: null,
           nickNames: [],
           thumbnailURL: null,
-          title: null,
-          cardInfo: {},
+          title: 'Untitled Card',
+          cardInfo,
         },
         'the attributes are correct',
       );
@@ -257,8 +258,8 @@ module('Integration | commands | patch-instance', function (hooks) {
           description: null,
           nickNames: [],
           thumbnailURL: null,
-          title: null,
-          cardInfo: {},
+          title: 'Untitled Card',
+          cardInfo,
         },
         'the attributes are correct',
       );
@@ -317,8 +318,8 @@ module('Integration | commands | patch-instance', function (hooks) {
           description: null,
           nickNames: ['Air'],
           thumbnailURL: null,
-          title: null,
-          cardInfo: {},
+          title: 'Untitled Card',
+          cardInfo,
         },
         'the attributes are correct',
       );

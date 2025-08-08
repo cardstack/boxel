@@ -44,6 +44,7 @@ import {
   setupCardLogs,
   saveCard,
   provideConsumeContext,
+  testModuleRealm,
 } from '../../helpers';
 import {
   Base64ImageField,
@@ -75,13 +76,13 @@ import {
   unsubscribeFromChanges,
   ReadOnlyField,
   instanceOf,
+  CardInfoField,
 } from '../../helpers/base-realm';
 import { mango } from '../../helpers/image-fixture';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 let loader: Loader;
-const testModuleRealm = 'http://localhost:4202/test/';
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
@@ -705,6 +706,7 @@ module('Integration | card-basics', function (hooks) {
             return this.image.base64;
           },
         });
+        @field description = contains(StringField);
       }
 
       let FittedViewDriver = fittedViewDriver();
@@ -1761,6 +1763,93 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test="number"]').containsText('10');
     });
 
+    test('render card-def instance with no additional fields', async function (assert) {
+      class MeetingMinutes extends CardDef {}
+      loader.shimModule(`${testRealmURL}test-cards`, { MeetingMinutes });
+
+      const title = 'Minutes of Meeting - Project Alpha';
+      const description =
+        'Concise documentation of the decisions, tasks, and discussions from the Project Alpha Meeting on January 15, 2024.';
+
+      let instance = new MeetingMinutes({
+        cardInfo: new CardInfoField({
+          title,
+          description,
+          thumbnailURL: null,
+          notes:
+            '## Meeting Notes\n\nDate: January 15, 2024<br>\nParticipants: John Doe, Jane Smith, Alice Johnson\n\n### Key Points Discussed\n<ul>\n<li>Project timeline was reviewed and adjusted for Q2</li>\n<li> Budget allocation confirmed</li>\n<li> Risk assessment introduced, with mitigation strategies \n   identified</li>\n</ul>\n\n### Actions Items\n<ol>\n<li> <strong>John Doe:</strong> Update project timeline by January 20</li>\n<li> <strong>Jane Smith:</strong> Finalize budget report by January 22</li>\n<li> <strong>Alice Johnson:</strong> Conduct a follow-up meeting with  \n    stakeholders by January 30</li>\n</ol>',
+        }),
+      });
+      await renderCard(loader, instance, 'isolated');
+      assert.dom('[data-test-thumbnail-icon]').exists();
+      assert.dom('[data-test-field="title"]').hasText(title);
+      assert.dom('[data-test-field="description"]').hasText(description);
+      assert.dom('[data-test-field="notes"]').containsText('Meeting Notes');
+
+      await renderCard(loader, instance, 'edit');
+      assert.dom('[data-test-field="title"] input').hasValue(title);
+      assert.dom('[data-test-field="description"] input').hasValue(description);
+      assert.dom('[data-test-field="thumbnailURL"] input').hasValue('');
+      assert.dom('[data-test-links-to-editor="theme"]').exists();
+      assert.dom('[data-test-field="notes"] textarea').exists();
+    });
+
+    test('render card-def instance with own fields', async function (assert) {
+      class Puppy extends CardDef {
+        static displayName = 'Puppy';
+        @field name = contains(StringField); // own field
+        @field picture = contains(Base64ImageField); // own field
+        @field title = contains(StringField); // overrides cardDef's title field
+        @field thumbnailURL = contains(MaybeBase64Field, {
+          // overrides cardDef's thumbnailURL field via computed
+          computeVia: function (this: Puppy) {
+            return this.picture.base64;
+          },
+        });
+      }
+
+      let mang = new Puppy({
+        name: 'Mango',
+        title: 'Mango the Pup',
+        cardInfo: new CardInfoField({
+          description: 'Mango as a puppy',
+        }),
+        picture: new Base64ImageField({
+          altText: 'Picture of Mango',
+          size: 'contain',
+          width: null,
+          height: 200,
+          base64: `data:image/png;base64,${mango}`,
+        }),
+      });
+      await renderCard(loader, mang, 'isolated');
+      assert.dom('[data-test-field="thumbnailURL"]').exists();
+      assert.dom('[data-test-field="title"]').hasText('Mango the Pup');
+      assert.dom('[data-test-field="description"]').hasText('Mango as a puppy');
+      assert.dom('[data-test-field="name"]').hasText('Name Mango');
+      assert
+        .dom('[data-test-field="picture"] [data-test-contain-cover-img]')
+        .exists();
+      assert.dom('[data-test-field="notes"]').exists();
+
+      await renderCard(loader, mang, 'edit');
+      assert.dom('[data-test-field="title"] input').hasValue('Mango the Pup');
+      assert
+        .dom('[data-test-field="description"] input')
+        .hasValue('Mango as a puppy');
+      assert
+        .dom('[data-test-field="thumbnailURL"] input')
+        .hasValue(`data:image/png;base64,${mango}`);
+      assert.dom('[data-test-field="thumbnailURL"] input').isDisabled();
+      assert.dom('[data-test-boxel-input][disabled]').exists({ count: 1 });
+      assert.dom('[data-test-links-to-editor="theme"]').exists();
+      assert.dom('[data-test-field="name"] input').hasValue('Mango');
+      assert
+        .dom('[data-test-field="picture"] [data-test-field="altText"] input')
+        .hasValue('Picture of Mango');
+      assert.dom('[data-test-field="notes"] textarea').exists();
+    });
+
     test('render default isolated template', async function (assert) {
       let firstName = await testString('first-name');
       class Person extends FieldDef {
@@ -1784,10 +1873,11 @@ module('Integration | card-basics', function (hooks) {
         title: 'First Post',
         author: new Person({ firstName: 'Arthur' }),
       });
-
       await renderCard(loader, helloWorld, 'isolated');
       assert.dom('[data-test="first-name"]').containsText('Arthur');
-      assert.dom('[data-test="title"]').containsText('First Post');
+      assert.dom('[data-test-field="title"]').containsText('First Post');
+      assert.dom('[data-test-thumbnail-icon]').exists();
+      assert.dom('[data-test-field="notes"]').hasText('Notes');
     });
 
     test('render default atom view template', async function (assert) {
@@ -2903,7 +2993,7 @@ module('Integration | card-basics', function (hooks) {
       let root = await renderCard(loader, mango, 'isolated');
       assert.strictEqual(
         cleanWhiteSpace(root.textContent!),
-        'First Name Mango Is Cool true Title Mango Description Thumbnail URL',
+        'Mango First Name Mango Is Cool true Notes',
       );
     });
 
@@ -3581,7 +3671,9 @@ module('Integration | card-basics', function (hooks) {
 
       let attendanceRecord = new AttendanceRecord();
       await renderCard(loader, attendanceRecord, 'edit');
-      await click('[data-test-add-new]');
+      await click(
+        '[data-test-contains-many="attandances"] [data-test-add-new]',
+      );
       assert.dom('[data-test-field="name"] input').hasValue('');
       assert
         .dom(

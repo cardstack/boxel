@@ -493,7 +493,12 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           title: 'MangoXXX',
           description: null,
           thumbnailURL: null,
-          cardInfo: {},
+          cardInfo: {
+            title: null,
+            description: null,
+            thumbnailURL: null,
+            notes: null,
+          },
         },
         relationships: {
           'cardInfo.theme': {

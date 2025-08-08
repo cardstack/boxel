@@ -24,6 +24,8 @@ import {
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
 
+import { copyCardURLToClipboard } from '@cardstack/host/utils/clipboard';
+
 import { type Format } from 'https://cardstack.com/base/card-api';
 
 import { removeFileExtension } from '../search-sheet/utils';
@@ -428,17 +430,11 @@ export default class OperatorModeOverlays extends Overlays {
 
   @action
   private copyCardUrl(cardDefOrId: CardDefOrId) {
-    if (this.args.publicAPI?.copyURLToClipboard) {
-      return this.args.publicAPI.copyURLToClipboard(cardDefOrId);
-    }
-    return;
+    return copyCardURLToClipboard(cardDefOrId);
   }
 
   @action
   private deleteCard(cardDefOrId: CardDefOrId) {
-    if (this.args.publicAPI?.delete) {
-      return this.args.publicAPI.delete(cardDefOrId);
-    }
-    return;
+    return this.args.requestDeleteCard?.(cardDefOrId);
   }
 }

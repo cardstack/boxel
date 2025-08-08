@@ -1402,4 +1402,115 @@ ${REPLACE_MARKER}
         'Code patch sent before act mode is still not auto-applied',
       );
   });
+
+  test('automatic Accept All spinner appears in Act mode for multiple patches', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    // Switch to Act mode first
+    await click('[data-test-llm-mode-option="act"]');
+    assert
+      .dom('[data-test-llm-mode-option="act"]')
+      .hasClass('selected', 'LLM mode is set to act');
+
+    // Send multiple code patches that should auto-apply in Act mode
+    // This will trigger an "accept all" operation and should show the spinner
+    let codeBlock = `\`\`\`
+http://test-realm/test/hello.txt
+${SEARCH_MARKER}
+Hello, world!
+${SEPARATOR_MARKER}
+Hi, Act mode!
+${REPLACE_MARKER}
+\`\`\`
+
+I will also update the second file.
+
+\`\`\`
+http://test-realm/test/hi.txt
+${SEARCH_MARKER}
+Hi, world!
+${SEPARATOR_MARKER}
+Greetings from Act mode!
+${REPLACE_MARKER}
+\`\`\`
+
+\`\`\`
+http://test-realm/test/hi.txt
+${SEARCH_MARKER}
+How are you?
+${SEPARATOR_MARKER}
+We are awesome in Act mode!
+${REPLACE_MARKER}
+\`\`\``;
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      data: {
+        context: {
+          agentId: getService('matrix-service').agentId,
+        },
+      },
+    });
+
+    // Wait for the patches to be processed - the spinner should appear during automatic execution
+    // This test should FAIL until we implement the CommandService state tracking
+    await waitFor(
+      '[data-test-ai-assistant-action-bar] [data-test-loading-indicator]',
+      {
+        timeout: 2000,
+      },
+    );
+
+    // Assert that the spinner is visible during automatic accept-all execution
+    assert
+      .dom('[data-test-ai-assistant-action-bar] [data-test-loading-indicator]')
+      .exists(
+        'Loading indicator appears during automatic accept-all in Act mode',
+      );
+
+    // Assert that the action bar shows the correct text
+    assert
+      .dom('[data-test-ai-assistant-action-bar]')
+      .containsText(
+        'Apply Diff',
+        'Action bar shows applying text during automatic execution',
+      );
+
+    // Wait for all patches to be applied
+    await waitUntil(
+      () => findAll('[data-test-apply-state="applied"]').length === 3,
+      { timeout: 5000 },
+    );
+
+    // Assert that the spinner disappears after automatic execution completes
+    assert
+      .dom('[data-test-loading-indicator]')
+      .doesNotExist(
+        'Loading indicator disappears after automatic execution completes',
+      );
+
+    // Verify that the files were actually patched
+    assert.strictEqual(
+      getMonacoContent(),
+      'Hi, Act mode!',
+      'hello.txt should be patched by automatic execution',
+    );
+
+    await click('[data-test-file-browser-toggle]');
+    await click('[data-test-file="hi.txt"]');
+    await waitUntil(
+      () =>
+        getMonacoContent() ===
+        'Greetings from Act mode!\nWe are awesome in Act mode!',
+      { timeout: 2000 },
+    );
+  });
 });

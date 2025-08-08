@@ -15,12 +15,12 @@ import {
   setupLocalIndexing,
   type CardDocFiles,
   setupIntegrationTestRealm,
+  testModuleRealm,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 const paths = new RealmPaths(new URL(testRealmURL));
-const testModuleRealm = 'http://localhost:4202/test/';
 
 let loader: Loader;
 
