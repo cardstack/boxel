@@ -18,7 +18,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { fn, concat } from '@ember/helper';
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, timeout } from 'ember-concurrency';
 import { htmlSafe } from '@ember/template';
 
 import StoreIcon from '@cardstack/boxel-icons/store';
@@ -301,10 +301,15 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
     this._createNewCustomer.perform();
   }
 
+  private _debounceSearch = restartableTask(async (searchValue: string) => {
+    await timeout(300); // 300ms debounce delay
+    this.searchTerm = searchValue;
+  });
+
   @action
   updateSearchTerm(event: Event) {
     const target = event.target as HTMLInputElement;
-    this.searchTerm = target.value;
+    this._debounceSearch.perform(target.value);
   }
 
   @action
@@ -1264,7 +1269,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
 
       .search-input {
         width: 100%;
-        padding: 0.75rem 0.75rem 0.75rem 2.75rem;
+        padding: 0.75rem 0.5rem;
         border: 1px solid #d1d5db;
         border-radius: 0.5rem;
         font-size: 0.875rem;
