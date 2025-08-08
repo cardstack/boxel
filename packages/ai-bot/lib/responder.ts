@@ -94,10 +94,15 @@ export class Responder {
       chunk.choices?.[0]?.delta as { reasoning?: string }
     )?.reasoning;
 
+
+    let toolCalls = snapshot.choices?.[0]?.message?.tool_calls?.filter((call) =>
+      Boolean(call),
+    );
+
     const responseStateChanged = this.responseState.update(
       newReasoningContent,
       snapshot.choices?.[0]?.message?.content,
-      snapshot.choices?.[0]?.message?.tool_calls,
+      toolCalls,
       chunk.choices?.[0]?.finish_reason === 'stop',
     );
     log.debug('onChunk', {
