@@ -94,6 +94,8 @@ export class Skill extends CardDef {
   static icon = RobotIcon;
   [isSkillCard] = true;
 
+  @field title = contains(StringField);
+  @field description = contains(StringField);
   @field instructions = contains(MarkdownField);
   @field commands = containsMany(CommandField);
 

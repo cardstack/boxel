@@ -74,11 +74,13 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     }
 
     const BookGtsImpl = `
-    import { Component, field, contains, linksTo, CardDef } from 'https://cardstack.com/base/card-api';
+    import { Component, field, contains, linksTo, CardDef, StringField } from 'https://cardstack.com/base/card-api';
     import { PersonField } from './person';
     import { Publisher } from './publisher';
     export class Book extends CardDef {
       static displayName = 'Book';
+      @field title = contains(StringField);
+      @field description = contains(StringField);
       @field author = contains(PersonField);
       @field publisher = linksTo(Publisher);
       static fitted = class Fitted extends Component<typeof this> {

@@ -11,7 +11,7 @@ import {
   matrixURL,
   testRealmHref,
   createJWT,
-  cardInfoDefinition,
+  cardDefinition,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -114,42 +114,6 @@ const expectedDefinition = {
         name: 'Person',
       },
       fields: {
-        id: {
-          type: 'contains',
-          isComputed: false,
-          fieldOrCard: {
-            name: 'ReadOnlyField',
-            module: 'https://cardstack.com/base/card-api',
-          },
-          isPrimitive: true,
-        },
-        title: {
-          type: 'contains',
-          isComputed: true,
-          fieldOrCard: {
-            name: 'StringField',
-            module: 'https://cardstack.com/base/card-api',
-          },
-          isPrimitive: true,
-        },
-        description: {
-          type: 'contains',
-          isComputed: false,
-          fieldOrCard: {
-            name: 'StringField',
-            module: 'https://cardstack.com/base/card-api',
-          },
-          isPrimitive: true,
-        },
-        thumbnailURL: {
-          type: 'contains',
-          isComputed: false,
-          fieldOrCard: {
-            name: 'MaybeBase64Field',
-            module: 'https://cardstack.com/base/card-api',
-          },
-          isPrimitive: true,
-        },
         firstName: {
           type: 'contains',
           isComputed: false,
@@ -159,7 +123,7 @@ const expectedDefinition = {
           },
           isPrimitive: true,
         },
-        ...cardInfoDefinition,
+        ...cardDefinition,
       },
     } as Definition,
   },

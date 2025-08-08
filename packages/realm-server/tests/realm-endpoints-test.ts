@@ -33,6 +33,7 @@ import {
   testRealmHref,
   testRealmURL,
   createJWT,
+  cardInfo,
 } from './helpers';
 import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -293,7 +294,7 @@ module(basename(__filename), function () {
               firstName: 'Mango',
               description: null,
               thumbnailURL: null,
-              cardInfo: {},
+              cardInfo,
             },
             meta: {
               adoptsFrom: {

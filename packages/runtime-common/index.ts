@@ -449,10 +449,8 @@ export interface CardActions {
       fieldName?: string;
     },
   ) => void;
-  copyURLToClipboard: (card: CardDef | URL | string) => Promise<void>;
   editCard: (card: CardDef) => void;
   saveCard: (id: string) => void;
-  delete: (item: CardDef | URL | string) => void;
   doWithStableScroll: (
     card: CardDef,
     changeSizeCallback: () => Promise<void>,
