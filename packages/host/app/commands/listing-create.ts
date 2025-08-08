@@ -69,7 +69,9 @@ export default class ListingCreateCommand extends HostBaseCommand<
   }
 
   get catalogRealm() {
-    return this.realmServer.catalogRealmURLs[0];
+    return this.realmServer.catalogRealmURLs.find((realm) =>
+      realm.endsWith('/catalog/'),
+    );
   }
 
   async getInputType() {
