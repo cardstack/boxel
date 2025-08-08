@@ -4,11 +4,8 @@ import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
-import { consume } from 'ember-provide-consume-context';
-
 import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
 
-import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 import { meta } from '@cardstack/runtime-common/constants';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
@@ -20,6 +17,7 @@ import type StoreService from '@cardstack/host/services/store';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import SubmodeLayout from './submode-layout';
+import { getCard } from '@cardstack/host/resources/card-resource';
 
 interface HostSubmodeSignature {
   Element: HTMLElement;
@@ -27,8 +25,6 @@ interface HostSubmodeSignature {
 }
 
 export default class HostSubmode extends Component<HostSubmodeSignature> {
-  @consume(GetCardContextName) private declare getCard: getCard;
-
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare store: StoreService;
 
@@ -40,7 +36,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     if (!this.currentCardId) {
       return undefined;
     }
-    return this.getCard(this, () => this.currentCardId);
+    return getCard(this, () => this.currentCardId);
   }
 
   get currentCard() {
