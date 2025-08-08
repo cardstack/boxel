@@ -18,7 +18,7 @@ interface Signature {
 
 let component: TemplateOnlyComponent<Signature> = <template>
   <Modal
-    data-test-restore-patched-file-modal-container
+    data-test-restore-file-modal-container
     @layer='urgent'
     @size='x-small'
     @isOpen={{true}}
@@ -27,8 +27,7 @@ let component: TemplateOnlyComponent<Signature> = <template>
   >
     <section class='restore'>
       <p class='content'>
-        Are you sure you want to restore file contents prior to this code
-        change?
+        Are you sure you want to restore file contents?
       </p>
       <p class='content disclaimer'>This action is not reversible.</p>
       <footer class='buttons'>
