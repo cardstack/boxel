@@ -66,6 +66,14 @@ if (!REALM_SERVER_MATRIX_USERNAME) {
 const MATRIX_REGISTRATION_SHARED_SECRET =
   process.env.MATRIX_REGISTRATION_SHARED_SECRET;
 
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+if (!OPENROUTER_API_KEY) {
+  console.error(
+    `The OPENROUTER_API_KEY environment variable is not set. Please make sure this env var has a value`,
+  );
+  process.exit(-1);
+}
+
 if (process.env.DISABLE_MODULE_CACHING === 'true') {
   console.warn(
     `module caching has been disabled, module executables will be served directly from the filesystem`,

@@ -25,6 +25,7 @@ import handleFullReindex from './handlers/handle-full-reindex';
 import handleRemoveJob from './handlers/handle-remove-job';
 import handleAddCredit from './handlers/handle-add-credit';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session';
+import handleRequestForward from './handlers/handle-request-forward';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -82,6 +83,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_user',
     jwtMiddleware(args.realmSecretSeed),
     handleCreateUserRequest(args),
+  );
+  router.post(
+    '/_request-forward',
+    jwtMiddleware(args.realmSecretSeed),
+    handleRequestForward(args),
   );
 
   // it's awkward that these are GET's but we are working around grafana's limitations
