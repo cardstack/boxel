@@ -18,11 +18,6 @@
       "thumbnailURL": null
     },
     "relationships": {
-      "tags.0": {
-        "links": {
-          "self": "../Tag/stub"
-        }
-      },
       "specs": {
         "links": {
           "self": null
@@ -31,6 +26,11 @@
       "skills": {
         "links": {
           "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/stub"
         }
       },
       "license": {
