@@ -20,11 +20,6 @@ import {
   type LooseCardResource,
 } from '@cardstack/runtime-common';
 import { DefinitionsCache } from '@cardstack/runtime-common/definitions-cache';
-import {
-  setupIndex,
-  getTypes,
-  serializeCard,
-} from '@cardstack/runtime-common/helpers/indexer';
 
 import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
@@ -36,7 +31,14 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
-import { testRealmURL, p, getDbAdapter } from '../helpers';
+import {
+  testRealmURL,
+  p,
+  getDbAdapter,
+  setupIndex,
+  getTypes,
+  serializeCard,
+} from '../helpers';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');

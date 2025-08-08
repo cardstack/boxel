@@ -90,8 +90,6 @@ export async function waitUntil<T>(
   );
 }
 
-export * from '@cardstack/runtime-common/helpers/indexer';
-
 export const testRealm = 'http://test-realm/';
 export const localBaseRealm = 'http://localhost:4441/';
 export const matrixURL = new URL('http://localhost:8008');

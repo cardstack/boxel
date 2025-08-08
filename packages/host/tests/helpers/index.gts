@@ -69,7 +69,7 @@ export {
   percySnapshot,
 };
 export * from '@cardstack/runtime-common/helpers';
-export * from '@cardstack/runtime-common/helpers/indexer';
+export * from './indexer';
 
 const { sqlSchema } = ENV;
 
