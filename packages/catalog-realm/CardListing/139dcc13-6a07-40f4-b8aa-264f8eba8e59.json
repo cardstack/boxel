@@ -1,0 +1,68 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Online Customer",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/online-customer-listing/screenshot_01.png"
+      ],
+      "summary": "Displaying the updated Online Customer Management System listing",
+      "cardInfo": {},
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/online-customer-listing/thumbnail.png"
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/stub"
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/7a139dcc-136a-4780-b4b8-aa264f8eba8e"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/3a7a139d-cc13-4a07-80f4-b8aa264f8eba"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../online-customer/OnlineCustomer/elena-vasquez"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/e-commerce-online-sales"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
