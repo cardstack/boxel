@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "productName": "USB-C Hub Premium 7-in-1",
+      "price": 89.99,
+      "salePrice": 67.49,
+      "sku": "UCH-2024-023",
+      "category": "Computer Accessories",
+      "shortDescription": "Premium aluminum USB-C hub with 7 ports: 4K HDMI, USB 3.0, USB-C PD, SD/microSD slots, and Gigabit Ethernet. Compatible with MacBook Pro, Dell XPS, and other USB-C devices. Plug-and-play design.",
+      "inventory": 0,
+      "inStock": false,
+      "imageUrl": "https://images.unsplash.com/photo-1616578781650-cd818fa41e57?q=80&w=764&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+      "title": "USB-C Hub Premium 7-in-1",
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://localhost:4201/catalog/online-product/online-product",
+        "name": "OnlineProduct"
+      },
+      "realmURL": "http://localhost:4201/catalog/"
+    }
+  }
+}

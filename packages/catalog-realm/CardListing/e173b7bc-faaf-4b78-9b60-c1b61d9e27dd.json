@@ -8,22 +8,22 @@
     },
     "type": "card",
     "attributes": {
-      "name": "Online Customer Listing",
+      "name": "Online Product Listing",
       "images": [
-        "https://boxel-images.boxel.ai/app-assets/catalog/online-customer-listing/screenshot_01.png"
+        "https://boxel-images.boxel.ai/app-assets/catalog/online-product-listing/screenshot_01.png"
       ],
-      "summary": "Displaying the updated Online Customer Management System listing",
+      "summary": "Complete e-commerce product card template with pricing, inventory, images, and responsive layouts for online stores",
       "cardInfo": {},
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
-      "skills": {
+      "tags": {
         "links": {
           "self": null
         }
       },
-      "tags": {
+      "skills": {
         "links": {
           "self": null
         }
@@ -35,12 +35,7 @@
       },
       "specs.0": {
         "links": {
-          "self": "../Spec/7a139dcc-136a-4780-b4b8-aa264f8eba8e"
-        }
-      },
-      "specs.1": {
-        "links": {
-          "self": "../Spec/3a7a139d-cc13-4a07-80f4-b8aa264f8eba"
+          "self": "../Spec/0fe173b7-bcfa-4f9b-b8db-60c1b61d9e27"
         }
       },
       "publisher": {
@@ -50,7 +45,22 @@
       },
       "examples.0": {
         "links": {
-          "self": "../online-customer/OnlineCustomer/elena-vasquez"
+          "self": "../OnlineProduct/bluetooth-speaker-mini"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../OnlineProduct/usb-c-hub-premium"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../OnlineProduct/wireless-mouse-pro"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../OnlineProduct/professional-laptop-stand"
         }
       },
       "categories.0": {
