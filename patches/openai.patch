@@ -1,0 +1,62 @@
+diff --git a/lib/parser.js b/lib/parser.js
+index 3d517b7ca20bae3d933d12166e35a23c65d89384..3938fa6c8dd132bc7c189576695598d4ad3dd83a 100644
+--- a/lib/parser.js
++++ b/lib/parser.js
+@@ -73,6 +73,7 @@ function maybeParseChatCompletion(completion, params) {
+         return {
+             ...completion,
+             choices: completion.choices.map((choice) => {
++                choice.message.tool_calls = choice.message.tool_calls?.filter((toolCall) => Boolean(toolCall)) ?? [];
+                 assertToolCallsAreChatCompletionFunctionToolCalls(choice.message.tool_calls);
+                 return {
+                     ...choice,
+@@ -99,6 +100,7 @@ function parseChatCompletion(completion, params) {
+         if (choice.finish_reason === 'content_filter') {
+             throw new error_1.ContentFilterFinishReasonError();
+         }
++        choice.message.tool_calls = choice.message.tool_calls?.filter((toolCall) => Boolean(toolCall)) ?? [];
+         assertToolCallsAreChatCompletionFunctionToolCalls(choice.message.tool_calls);
+         return {
+             ...choice,
+diff --git a/lib/parser.mjs b/lib/parser.mjs
+index 34f698f9babab3b26070c1a7e0847621d0caea06..628cf76109c8793df0eb7e37f2cf0c8c49fcabe4 100644
+--- a/lib/parser.mjs
++++ b/lib/parser.mjs
+@@ -59,6 +59,7 @@ export function maybeParseChatCompletion(completion, params) {
+         return {
+             ...completion,
+             choices: completion.choices.map((choice) => {
++                choice.message.tool_calls = choice.message.tool_calls?.filter((toolCall) => Boolean(toolCall)) ?? [];
+                 assertToolCallsAreChatCompletionFunctionToolCalls(choice.message.tool_calls);
+                 return {
+                     ...choice,
+@@ -85,6 +86,7 @@ export function parseChatCompletion(completion, params) {
+         if (choice.finish_reason === 'content_filter') {
+             throw new ContentFilterFinishReasonError();
+         }
++        choice.message.tool_calls = choice.message.tool_calls?.filter((toolCall) => Boolean(toolCall)) ?? [];
+         assertToolCallsAreChatCompletionFunctionToolCalls(choice.message.tool_calls);
+         return {
+             ...choice,
+diff --git a/src/lib/parser.ts b/src/lib/parser.ts
+index 78e1160731a3846239689836cf59a90e8e1088b4..3b1d6bba4a49eee848a428907a8bfde2c06fe3f1 100644
+--- a/src/lib/parser.ts
++++ b/src/lib/parser.ts
+@@ -154,6 +154,8 @@ export function maybeParseChatCompletion<
+     return {
+       ...completion,
+       choices: completion.choices.map((choice) => {
++        choice.message.tool_calls = choice.message.tool_calls?.filter((toolCall) => Boolean(toolCall)) ?? [];
++
+         assertToolCallsAreChatCompletionFunctionToolCalls(choice.message.tool_calls);
+ 
+         return {
+@@ -188,6 +190,8 @@ export function parseChatCompletion<
+       throw new ContentFilterFinishReasonError();
+     }
+ 
++    choice.message.tool_calls = choice.message.tool_calls?.filter((toolCall) => Boolean(toolCall)) ?? [];
++
+     assertToolCallsAreChatCompletionFunctionToolCalls(choice.message.tool_calls);
+ 
+     return {

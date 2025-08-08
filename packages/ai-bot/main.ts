@@ -128,12 +128,12 @@ class Assistant {
       prompt.tools?.length === 0 ||
       (prompt.model && !this.toolCallCapableModels.has(prompt.model))
     ) {
-      return this.openai.beta.chat.completions.stream({
+      return this.openai.chat.completions.stream({
         model: prompt.model ?? DEFAULT_LLM,
         messages: prompt.messages as ChatCompletionMessageParam[],
       });
     } else {
-      return this.openai.beta.chat.completions.stream({
+      return this.openai.chat.completions.stream({
         model: prompt.model ?? DEFAULT_LLM,
         messages: prompt.messages as ChatCompletionMessageParam[],
         tools: prompt.tools,
