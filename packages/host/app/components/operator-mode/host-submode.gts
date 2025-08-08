@@ -10,6 +10,7 @@ import { meta } from '@cardstack/runtime-common/constants';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
+import { getCard } from '@cardstack/host/resources/card-resource';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type StoreService from '@cardstack/host/services/store';
@@ -17,7 +18,6 @@ import type StoreService from '@cardstack/host/services/store';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import SubmodeLayout from './submode-layout';
-import { getCard } from '@cardstack/host/resources/card-resource';
 
 interface HostSubmodeSignature {
   Element: HTMLElement;
