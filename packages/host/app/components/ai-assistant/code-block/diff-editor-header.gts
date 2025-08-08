@@ -17,6 +17,7 @@ import { type FileDef } from 'https://cardstack.com/base/file-api';
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import AttachedFileDropdownMenu from '../attached-file-dropdown-menu';
+
 export interface CodeBlockDiffEditorHeaderSignature {
   Args: {
     codeData: Partial<CodeData>;
@@ -25,7 +26,7 @@ export interface CodeBlockDiffEditorHeaderSignature {
       linesAdded: number;
     } | null;
     finalFileUrlAfterCodePatching?: string | null;
-    originalUploadedFileUrl?: string | null; // TODO: do we need this?
+    originalUploadedFileUrl?: string | null;
     codePatchStatus: CodePatchStatus | 'applying' | 'ready';
     userMessageThisMessageIsRespondingTo?: MatrixMessage;
   };
