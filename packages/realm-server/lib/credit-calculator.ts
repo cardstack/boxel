@@ -22,6 +22,7 @@ export async function calculateCreditsForOpenRouter(
 
   try {
     // Fetch cost from OpenRouter API using the same logic as AI bot
+    console.log('About to call fetchGenerationCost with:', actualGenerationId); // Debug log
     const costInUsd = await fetchGenerationCost(actualGenerationId);
 
     if (costInUsd === null) {
@@ -30,6 +31,7 @@ export async function calculateCreditsForOpenRouter(
     }
 
     const creditsConsumed = Math.round(costInUsd * CREDITS_PER_USD);
+    console.log('Calculated credits:', creditsConsumed, 'for cost:', costInUsd); // Debug log
     log.info(
       `Calculated ${creditsConsumed} credits for generation ${actualGenerationId} (cost: $${costInUsd})`,
     );
@@ -53,6 +55,12 @@ async function fetchGenerationCost(
     throw new Error('OPENROUTER_API_KEY environment variable is not set');
   }
 
+  console.log('fetchGenerationCost called with generationId:', generationId); // Debug log
+  console.log(
+    'Making fetch call to:',
+    `https://openrouter.ai/api/v1/generation?id=${generationId}`,
+  ); // Debug log
+
   const response = await fetch(
     `https://openrouter.ai/api/v1/generation?id=${generationId}`,
     {
@@ -63,6 +71,7 @@ async function fetchGenerationCost(
   );
 
   const data = await response.json();
+  console.log('fetchGenerationCost received data:', data); // Debug log
 
   if (data.error && data.error.message.includes('not found')) {
     return null;
