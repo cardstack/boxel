@@ -19,7 +19,8 @@ The `/_request-forward` endpoint allows users to proxy requests to external APIs
   "requestBody": "{\"model\":\"openai/gpt-3.5-turbo\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}]}",
   "headers": {
     "Custom-Header": "value"
-  }
+  },
+  "isStreaming": false
 }
 ```
 
@@ -29,10 +30,33 @@ The `/_request-forward` endpoint allows users to proxy requests to external APIs
 - `method` (required): HTTP method (GET, POST, PUT, DELETE, etc.)
 - `requestBody` (required): JSON string containing the request body
 - `headers` (optional): Additional headers to include in the request
+- `isStreaming` (optional): Set to `true` to enable streaming responses (Server-Sent Events)
 
 ### Response
 
+#### Non-Streaming Response
+
 The endpoint returns the response from the external API with the same status code and headers.
+
+#### Streaming Response
+
+When `isStreaming: true` is set, the endpoint returns a Server-Sent Events (SSE) stream with the following characteristics:
+
+- **Content-Type**: `text/event-stream`
+- **Headers**: Includes CORS headers for browser compatibility
+- **Format**: Each event is prefixed with `data: ` and followed by `\n\n`
+- **Completion**: Stream ends with `data: [DONE]\n\n`
+- **Error Handling**: Errors are sent as JSON events in the stream
+
+Example streaming response:
+
+```
+data: {"id":"gen-123","choices":[{"delta":{"content":"Hello"}}]}
+
+data: {"id":"gen-123","choices":[{"delta":{"content":" world"}}]}
+
+data: [DONE]
+```
 
 ## Supported External Endpoints
 
@@ -41,6 +65,7 @@ The endpoint returns the response from the external API with the same status cod
 - **URL**: `https://openrouter.ai/api/v1`
 - **Credit Strategy**: AI Credit Strategy (same as AI bot)
 - **API Key**: Automatically managed by the server
+- **Streaming**: ✅ Supported (Server-Sent Events)
 
 ### Adding New Endpoints
 
@@ -64,6 +89,7 @@ To add a new external endpoint, update `packages/realm-server/lib/external-endpo
     return response.usage?.tokens * 0.001 || 0;
   }),
   whitelisted: true,
+  supportsStreaming: true, // Enable streaming support
 },
 ```
 
@@ -91,7 +117,9 @@ To add a new external endpoint, update `packages/realm-server/lib/external-endpo
 - JWT authentication required for all requests
 - Rate limiting may be implemented in the future
 
-## Example
+## Examples
+
+### Non-Streaming Request
 
 ```bash
 curl -X POST http://localhost:4201/_request-forward \
@@ -103,3 +131,19 @@ curl -X POST http://localhost:4201/_request-forward \
     "requestBody": "{\"model\":\"openai/gpt-3.5-turbo\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}]}"
   }'
 ```
+
+### Streaming Request
+
+```bash
+curl -X POST http://localhost:4201/_request-forward \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://openrouter.ai/api/v1/chat/completions",
+    "method": "POST",
+    "requestBody": "{\"model\":\"openai/gpt-3.5-turbo\",\"messages\":[{\"role\":\"user\",\"content\":\"Write a story\"}],\"stream\":true}",
+    "isStreaming": true
+  }'
+```
+
+**Note**: For streaming requests, the `stream: true` parameter must be included in the `requestBody` for OpenRouter API calls.

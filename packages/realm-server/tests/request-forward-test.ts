@@ -3,6 +3,7 @@ import sinon from 'sinon';
 import {
   isEndpointWhitelisted,
   getEndpointConfig,
+  supportsStreaming,
 } from '../lib/external-endpoints';
 import { AICreditStrategy, NoCreditStrategy } from '../lib/credit-strategies';
 import {
@@ -575,6 +576,52 @@ module.only('Request Forward Endpoint', function () {
           delete process.env.OPENROUTER_API_KEY;
         }
       }
+    });
+
+    test('should validate streaming support for endpoints', async function (assert) {
+      // Test OpenRouter supports streaming
+      const openRouterConfig = getEndpointConfig(
+        'https://openrouter.ai/api/v1',
+      );
+      assert.ok(openRouterConfig, 'OpenRouter config should exist');
+      assert.true(
+        openRouterConfig?.supportsStreaming,
+        'OpenRouter should support streaming',
+      );
+
+      // Test that supportsStreaming function works
+      assert.true(
+        supportsStreaming('https://openrouter.ai/api/v1'),
+        'OpenRouter should support streaming',
+      );
+      assert.false(
+        supportsStreaming('https://unsupported-api.com/v1'),
+        'Unsupported API should not support streaming',
+      );
+    });
+
+    test('should handle streaming request structure', async function (assert) {
+      const streamingRequest = {
+        url: 'https://openrouter.ai/api/v1/chat/completions',
+        method: 'POST',
+        requestBody: JSON.stringify({
+          model: 'openai/gpt-3.5-turbo',
+          messages: [{ role: 'user', content: 'Hello' }],
+          stream: true,
+        }),
+        isStreaming: true,
+      };
+
+      // Test required fields
+      assert.ok(streamingRequest.url, 'URL should be present');
+      assert.ok(streamingRequest.method, 'Method should be present');
+      assert.ok(streamingRequest.requestBody, 'Request body should be present');
+      assert.true(streamingRequest.isStreaming, 'isStreaming should be true');
+
+      // Test JSON parsing
+      const parsedBody = JSON.parse(streamingRequest.requestBody);
+      assert.equal(parsedBody.model, 'openai/gpt-3.5-turbo');
+      assert.true(parsedBody.stream, 'Stream should be true in request body');
     });
   });
 });

@@ -5,6 +5,7 @@ export interface ExternalEndpointConfig {
   apiKey: string;
   creditStrategy: CreditStrategy;
   whitelisted: boolean;
+  supportsStreaming?: boolean;
 }
 
 export const EXTERNAL_ENDPOINTS: Record<string, ExternalEndpointConfig> = {
@@ -13,6 +14,7 @@ export const EXTERNAL_ENDPOINTS: Record<string, ExternalEndpointConfig> = {
     apiKey: process.env.OPENROUTER_API_KEY!,
     creditStrategy: new AICreditStrategy(),
     whitelisted: true,
+    supportsStreaming: true,
   },
 };
 
@@ -28,4 +30,8 @@ export function getAllowedEndpoints(): string[] {
   return Object.keys(EXTERNAL_ENDPOINTS).filter(
     (url) => EXTERNAL_ENDPOINTS[url].whitelisted,
   );
+}
+
+export function supportsStreaming(url: string): boolean {
+  return EXTERNAL_ENDPOINTS[url]?.supportsStreaming ?? false;
 }
