@@ -246,9 +246,7 @@ module(basename(__filename), function () {
               .send({
                 data: {
                   type: 'card',
-                  attributes: {
-                    title: 'Test Card',
-                  },
+                  attributes: { cardInfo: { title: 'Test Card' } },
                   meta: {
                     adoptsFrom: {
                       module: 'https://cardstack.com/base/card-api',
@@ -443,9 +441,7 @@ module(basename(__filename), function () {
               .send({
                 data: {
                   type: 'card',
-                  attributes: {
-                    title: 'Test Card',
-                  },
+                  attributes: { cardInfo: { title: 'Test Card' } },
                   meta: {
                     adoptsFrom: {
                       module: 'https://cardstack.com/base/card-api',

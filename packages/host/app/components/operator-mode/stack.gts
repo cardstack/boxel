@@ -7,6 +7,8 @@ import type { Actions, CommandContext } from '@cardstack/runtime-common';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
 import OperatorModeStackItem, {
   type StackItemComponentAPI,
   CardDefOrId,
@@ -25,6 +27,7 @@ interface Signature {
       selectedCards: CardDefOrId[],
       stackItem: StackItem,
     ) => void;
+    requestDeleteCard?: (card: CardDef | URL | string) => Promise<void>;
     setupStackItem: (
       model: StackItem,
       componentAPI: StackItemComponentAPI,
@@ -83,6 +86,7 @@ export default class OperatorModeStack extends Component<Signature> {
             @index={{i}}
             @stackItems={{@stackItems}}
             @publicAPI={{@publicAPI}}
+            @requestDeleteCard={{@requestDeleteCard}}
             @commandContext={{@commandContext}}
             @dismissStackedCardsAbove={{perform this.dismissStackedCardsAbove}}
             @close={{@close}}

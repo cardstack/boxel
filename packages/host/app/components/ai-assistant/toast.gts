@@ -171,22 +171,11 @@ export default class AiAssistantToast extends Component<Signature> {
       value: null,
       isResetStateValueBlocked: false,
     });
+
+    // Only cancel and recreate poll if we don't already have one running
     if (this._pollToken) {
-      cancelPoll(this, this._pollToken);
+      // Don't cancel here - let the existing poll continue
     }
-    const resetStateValue = (timeout = 3000) => {
-      runTask(
-        this,
-        () => {
-          if (state.isResetStateValueBlocked) {
-            resetStateValue(1000);
-            return;
-          }
-          state.value = null;
-        },
-        timeout,
-      );
-    };
 
     let lastMessages: Map<string, Message> = new Map();
     for (let resource of this.matrixService.roomResources.values()) {
@@ -218,10 +207,36 @@ export default class AiAssistantToast extends Component<Signature> {
         roomId: lastMessage[0],
         message: lastMessage[1],
       };
-      // eslint-disable-next-line ember/no-side-effects
-      this._pollToken = pollTask(this, resetStateValue);
-    }
 
+      // Only create a new poll task if we don't have one
+      if (!this._pollToken) {
+        // eslint-disable-next-line ember/no-side-effects
+        this._pollToken = pollTask(this, (next: () => void) => {
+          const resetStateValue = (timeout = 3000) => {
+            runTask(
+              this,
+              () => {
+                if (state.isResetStateValueBlocked) {
+                  resetStateValue(1000);
+                  return;
+                }
+                state.value = null;
+                next(); // Continue polling for new messages
+              },
+              timeout,
+            );
+          };
+          resetStateValue();
+        });
+      }
+    } else {
+      // If no messages and we have a poll running, cancel it
+      if (this._pollToken) {
+        cancelPoll(this, this._pollToken);
+        // eslint-disable-next-line ember/no-side-effects
+        this._pollToken = null;
+      }
+    }
     return state;
   }
 

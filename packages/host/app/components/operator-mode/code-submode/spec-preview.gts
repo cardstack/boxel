@@ -5,7 +5,7 @@ import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
 
-import { consume } from 'ember-provide-consume-context';
+import { consume, provide } from 'ember-provide-consume-context';
 
 import {
   BoxelButton,
@@ -26,6 +26,7 @@ import {
   realmURL as realmURLSymbol,
   localId,
   isLocalId,
+  CardContextName,
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
@@ -104,6 +105,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @consume(GetCardsContextName) private declare getCards: getCards;
   @consume(GetCardCollectionContextName)
   private declare getCardCollection: getCardCollection;
+  @consume(CardContextName) private declare cardContext: CardContext;
   @service private declare realm: RealmService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare specPanelService: SpecPanelService;
@@ -115,12 +117,11 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     return this.args.allSpecs.length === 1;
   }
 
-  private get cardContext(): SpecPreviewCardContext {
+  @provide(CardContextName)
+  // @ts-ignore "context" is declared but not used
+  private get context(): SpecPreviewCardContext {
     return {
-      getCard: this.getCard,
-      getCards: this.getCards,
-      getCardCollection: this.getCardCollection,
-      store: this.store,
+      ...this.cardContext,
       cardComponentModifier: this.cardTracker.trackElement,
     };
   }
@@ -238,17 +239,9 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
               @onSelectCard={{@viewSpecInPlayground}}
             />
             {{#if this.displayIsolated}}
-              <CardRenderer
-                @card={{@activeSpec}}
-                @format='isolated'
-                @cardContext={{this.cardContext}}
-              />
+              <CardRenderer @card={{@activeSpec}} @format='isolated' />
             {{else}}
-              <CardRenderer
-                @card={{@activeSpec}}
-                @format='edit'
-                @cardContext={{this.cardContext}}
-              />
+              <CardRenderer @card={{@activeSpec}} @format='edit' />
             {{/if}}
           </div>
         {{/if}}

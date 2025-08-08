@@ -376,7 +376,7 @@ module('Integration | computeds', function (hooks) {
     let firstPost = new Post({ title: 'First Post', author });
 
     await renderCard(loader, firstPost, 'isolated');
-    assert.dom('[data-test-field="title"]').hasText('Title First Post');
+    assert.dom('[data-test-field="title"]').hasText('First Post');
     assert
       .dom('[data-test-field="author"] [data-test="firstName"]')
       .hasText('Mango');
@@ -438,7 +438,7 @@ module('Integration | computeds', function (hooks) {
     });
 
     await renderCard(loader, firstPost, 'isolated');
-    assert.dom('[data-test-field="title"]').hasText('Title First Post');
+    assert.dom('[data-test-field="title"]').hasText('First Post');
     assert
       .dom('[data-test-field="author"] [data-test="firstName"]')
       .hasText('Van Gogh');

@@ -71,6 +71,8 @@ export {
 export * from '@cardstack/runtime-common/helpers';
 export * from '@cardstack/runtime-common/helpers/indexer';
 
+export const testModuleRealm = 'http://localhost:4202/test/';
+
 const { sqlSchema } = ENV;
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
@@ -870,3 +872,10 @@ export async function assertMessages(
     }
   }
 }
+
+export const cardInfo = {
+  title: null,
+  description: null,
+  thumbnailURL: null,
+  notes: null,
+};

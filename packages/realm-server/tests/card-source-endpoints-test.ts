@@ -24,6 +24,7 @@ import {
   testRealmHref,
   testRealmURL,
   createJWT,
+  cardInfo,
 } from './helpers';
 import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -580,10 +581,10 @@ module(basename(__filename), function () {
             assert.deepEqual(json.data.attributes, {
               field1: 'a',
               field2a: null,
-              title: null,
+              title: 'Untitled Card',
               description: null,
               thumbnailURL: null,
-              cardInfo: {},
+              cardInfo,
             });
           }
 
@@ -623,10 +624,10 @@ module(basename(__filename), function () {
             assert.deepEqual(json.data.attributes, {
               field1: 'a',
               field2a: 'c',
-              title: null,
+              title: 'Untitled Card',
               description: null,
               thumbnailURL: null,
-              cardInfo: {},
+              cardInfo,
             });
           }
 
@@ -650,10 +651,7 @@ module(basename(__filename), function () {
                   attributes: {
                     field1: 'a',
                     field2a: 'c',
-                    title: null,
-                    description: null,
-                    thumbnailURL: null,
-                    cardInfo: {},
+                    cardInfo,
                   },
                   relationships: {
                     'cardInfo.theme': {
@@ -685,10 +683,10 @@ module(basename(__filename), function () {
             assert.deepEqual(json.data.attributes, {
               field1: 'a',
               field2a: 'c',
-              title: null,
+              title: 'Untitled Card',
               description: null,
               thumbnailURL: null,
-              cardInfo: {},
+              cardInfo,
             });
           }
 

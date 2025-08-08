@@ -70,7 +70,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
   get catalogRealm() {
     return this.realmServer.catalogRealmURLs.find((realm) =>
-      realm.includes('catalog'),
+      realm.endsWith('/catalog/'),
     );
   }
 

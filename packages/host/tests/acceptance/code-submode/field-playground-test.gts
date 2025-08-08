@@ -152,6 +152,7 @@ const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, 
 
   export class BlogPost extends CardDef {
     static displayName = 'Blog Post';
+    @field title = contains(StringField)
     @field publishDate = contains(DatetimeField);
     @field author = linksTo(Author);
     @field comments = containsMany(Comment);

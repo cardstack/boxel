@@ -156,7 +156,7 @@ export default class Room extends Component<Signature> {
               <AiAssistantActionBar
                 @acceptAll={{perform this.executeAllReadyActionsTask}}
                 @cancel={{this.cancelActionBar}}
-                @acceptingAll={{this.executeAllReadyActionsTask.isRunning}}
+                @acceptingAll={{this.isAcceptingAll}}
                 @acceptingAllLabel={{this.acceptingAllLabel}}
                 @generatingResults={{this.generatingResults}}
                 @stop={{perform this.stopGeneratingTask}}
@@ -625,6 +625,13 @@ export default class Room extends Component<Signature> {
     );
   }
 
+  private get isAcceptingAll() {
+    return (
+      this.executeAllReadyActionsTask.isRunning ||
+      this.commandService.isPerformingAcceptAllForRoom(this.args.roomId)
+    );
+  }
+
   private get unreadMessageText() {
     return `${this.numberOfUnreadMessages} New ${pluralize(
       'Message',
@@ -1048,7 +1055,7 @@ export default class Room extends Component<Signature> {
       this.generatingResults ||
       this.readyCommands.length > 0 ||
       this.readyCodePatches.length > 0 ||
-      this.executeAllReadyActionsTask.isRunning
+      this.isAcceptingAll
     );
   }
 

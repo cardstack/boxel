@@ -51,10 +51,13 @@ import {
   CommandContext,
   realmURL,
   identifyCard,
+  CardContextName,
 } from '@cardstack/runtime-common';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
+
+import { copyCardURLToClipboard } from '@cardstack/host/utils/clipboard';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -88,6 +91,7 @@ interface Signature {
     stackItems: StackItem[];
     index: number;
     publicAPI: Actions;
+    requestDeleteCard?: (card: CardDef | URL | string) => Promise<void>;
     commandContext: CommandContext;
     close: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => Promise<void>;
@@ -109,13 +113,12 @@ export interface StackItemRenderedCardForOverlayActions
   stackItem: StackItem;
 }
 
-type StackItemCardContext = Omit<CardContext, 'prerenderedCardSearchComponent'>;
-
 export default class OperatorModeStackItem extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;
   @consume(GetCardCollectionContextName)
   private declare getCardCollection: getCardCollection;
+  @consume(CardContextName) private declare cardContext: CardContext;
 
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -246,15 +249,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.url === `${this.realmURL.href}index`;
   }
 
-  private get cardContext(): StackItemCardContext {
+  @provide(CardContextName)
+  // @ts-ignore "context" is declared but not used
+  private get context(): StackItemCardContext {
     return {
+      ...this.cardContext,
       cardComponentModifier: this.cardTracker.trackElement,
-      actions: this.args.publicAPI,
-      commandContext: this.args.commandContext,
-      getCard: this.getCard,
-      getCards: this.getCards,
-      getCardCollection: this.getCardCollection,
-      store: this.store,
+      actions: this.args.publicAPI, //we put this last to overwrite card context so stackIndex is correct
     };
   }
 
@@ -307,7 +308,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
       new MenuItem('Delete Card', 'action', {
         action: () =>
           this.cardIdentifier &&
-          this.args.publicAPI.delete(this.cardIdentifier),
+          this.args.requestDeleteCard &&
+          this.args.requestDeleteCard(this.cardIdentifier),
         icon: IconTrash,
         dangerous: true,
       }),
@@ -322,9 +324,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     let menuItems: MenuItem[] = [
       new MenuItem('Copy Card URL', 'action', {
         action: () =>
-          this.card
-            ? this.args.publicAPI.copyURLToClipboard(this.card)
-            : undefined,
+          this.card ? copyCardURLToClipboard(this.card) : undefined,
         icon: IconLink,
         disabled: !this.url,
       }),
@@ -353,7 +353,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         }),
         new MenuItem('Delete', 'action', {
           action: () =>
-            this.card ? this.args.publicAPI.delete(this.card) : undefined,
+            this.card ? this.args.requestDeleteCard!(this.card) : undefined,
           icon: IconTrash,
           dangerous: true,
           disabled: !this.url,
@@ -694,11 +694,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
               class='stack-item-preview'
               @card={{this.card}}
               @format={{@item.format}}
-              @cardContext={{this.cardContext}}
             />
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
               @publicAPI={{@publicAPI}}
+              @requestDeleteCard={{@requestDeleteCard}}
               @toggleSelect={{this.toggleSelect}}
               @selectedCards={{this.selectedCards}}
             />

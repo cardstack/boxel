@@ -314,4 +314,5 @@ export class SearchCardsResult extends CardDef {
       return 'Search Results';
     },
   });
+  @field description = contains(StringField);
 }
