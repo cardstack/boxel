@@ -81,7 +81,6 @@ import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
-import PaintBucket from '@cardstack/boxel-icons/paint-bucket';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 
 interface CardOrFieldTypeIconSignature {
@@ -2325,13 +2324,7 @@ export class CSSField extends TextAreaField {
   static displayName = 'CSS Field';
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <pre class='css-field'>
-        {{if
-          @model
-          @model
-          '/* No CSS defined */'
-        }}
-      </pre>
+      <pre class='css-field'>{{if @model @model '/* No CSS defined */'}}</pre>
       <style scoped>
         .css-field {
           margin-block: 0;
