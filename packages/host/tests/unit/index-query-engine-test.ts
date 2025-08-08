@@ -2749,7 +2749,7 @@ module('Unit | query', function (hooks) {
       prerenderedCards[1].html,
       '<div>Jimmy (FancyPerson embedded template)</div>',
     );
-    assert.false(prerenderedCards[1].isError, 'card is not in an error state');
+    assert.notOk(prerenderedCards[1].isError, 'card is not in an error state');
   });
 });
 
