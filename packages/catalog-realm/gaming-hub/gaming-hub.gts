@@ -896,7 +896,8 @@ class Isolated extends Component<typeof GamingHub> {
     return {
       filter: {
         on: {
-          module: new URL('./player-progress', import.meta.url).href,
+          module: new URL('../player-progress/player-progress', import.meta.url)
+            .href,
           name: 'PlayerProgress',
         },
         every: [
@@ -912,7 +913,10 @@ class Isolated extends Component<typeof GamingHub> {
         {
           by: 'lastPlayedDate',
           on: {
-            module: new URL('./player-progress', import.meta.url).href,
+            module: new URL(
+              '../player-progress/player-progress',
+              import.meta.url,
+            ).href,
             name: 'PlayerProgress',
           },
           direction: 'desc',

@@ -11,14 +11,17 @@
       "name": "Gaming Hub",
       "images": [],
       "summary": "Comprehensive gaming profile and dashboard for tracking your complete gaming journey across platforms",
-      "cardInfo": {},
-      "description": "Gaming Hub Profile is the ultimate solution for serious gamers who want to centralize and showcase their gaming identity. This comprehensive platform brings together every aspect of your gaming life into one beautifully designed, interactive dashboard.\n\n**Core Features:**\n- **Complete Gaming Identity:** Unified gamer profile with customizable avatar, bio, online status, and location\n- **Multi-Platform Integration:** Connect Steam, Xbox, PlayStation, and other gaming platforms to sync your library\n- **Game Progress Tracking:** Monitor your progress across all games with completion rates, playtime, and achievements\n- **Tournament Participation:** Track your competitive gaming history and tournament results\n- **Gaming Social Network:** Connect with fellow gamers, build your friends list, and join gaming communities\n- **Comprehensive Statistics:** Detailed analytics including total games, hours played, completion rates, and gaming streaks\n- **Wishlist Management:** Curate your dream game collection and track upcoming releases\n- **Content Creator Tools:** Streaming platform integration and schedule management for creators\n- **Interactive Search:** Live search through your game library with real-time filtering\n- **Responsive Design:** Beautiful, futuristic interface that works perfectly on all devices\n\n**Perfect for:**\n- Dedicated gamers who want to track their gaming journey\n- Content creators and streamers managing their gaming brand\n- Competitive players participating in tournaments and esports\n- Gaming communities organizing events and connecting members\n- Anyone looking to discover new games and connect with like-minded players\n\nThe Gaming Hub Profile features a stunning cyberpunk-inspired design with smooth animations, real-time status updates, and comprehensive data visualization that makes managing your gaming life both functional and visually engaging.",
-      "thumbnailURL": ""
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
     },
     "relationships": {
-      "tags.0": {
+      "tags": {
         "links": {
-          "self": "../Tag/stub"
+          "self": null
         }
       },
       "license": {
@@ -71,7 +74,7 @@
           "self": "../Spec/104b0be0-4c68-4d25-adcf-afd8cbfcb2c4"
         }
       },
-      "skills.0": {
+      "skills": {
         "links": {
           "self": null
         }
@@ -84,6 +87,81 @@
       "examples.0": {
         "links": {
           "self": "../gaming-hub/GamingHub/zlata-voidwalker"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../gaming-hub/GamingHub/alex-shadowblade"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../gaming-hub/GamingHub/diego-stratmaxx"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../gaming-hub/GamingHub/kai-thunderstrike"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../gaming-hub/GamingHub/maya-phoenixrise"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../gaming-hub/GamingHub/ravi-cosmicrift"
+        }
+      },
+      "examples.6": {
+        "links": {
+          "self": "../gaming-platform/GamingPlatform/steam-platform"
+        }
+      },
+      "examples.7": {
+        "links": {
+          "self": "../gaming-platform/GamingPlatform/steam-platform"
+        }
+      },
+      "examples.8": {
+        "links": {
+          "self": "../gaming-platform/GamingPlatform/xbox-live"
+        }
+      },
+      "examples.9": {
+        "links": {
+          "self": "../player-progress/PlayerProgress/alex-cyberpunk"
+        }
+      },
+      "examples.10": {
+        "links": {
+          "self": "../player-progress/PlayerProgress/maya-hollow-knight"
+        }
+      },
+      "examples.11": {
+        "links": {
+          "self": "../tournament/Tournament/street-fighter-evo"
+        }
+      },
+      "examples.12": {
+        "links": {
+          "self": "../tournament/Tournament/valorant-championship"
+        }
+      },
+      "examples.13": {
+        "links": {
+          "self": "../game/Game/cyberpunk-2077"
+        }
+      },
+      "examples.14": {
+        "links": {
+          "self": "../game/Game/hollow-knight"
+        }
+      },
+      "examples.15": {
+        "links": {
+          "self": "../game/Game/valorant"
         }
       },
       "categories.0": {
