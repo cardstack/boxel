@@ -341,11 +341,6 @@ class IsolatedTemplate extends Component<typeof OnlineCustomer> {
         transition: all 0.2s ease;
       }
 
-      .stat-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-      }
-
       .stat-card.orders {
         background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
         border: 1px solid rgba(99, 102, 241, 0.2);
@@ -650,11 +645,6 @@ class EmbeddedTemplate extends Component<typeof OnlineCustomer> {
         border: 1px solid rgba(226, 232, 240, 0.8);
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
         transition: all 0.2s ease;
-      }
-
-      .stat-card:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
       }
 
       .stat-card.orders {

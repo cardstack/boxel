@@ -574,16 +574,9 @@ class EmbeddedTemplate extends Component<typeof OnlineOrder> {
       .order-card {
         container-type: inline-size;
         padding: 1rem;
-        border: 1px solid #e5e7eb;
-        border-radius: 0.75rem;
         background: white;
         font-size: 0.8125rem;
         transition: all 0.2s ease;
-      }
-
-      .order-card:hover {
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        border-color: #d1d5db;
       }
 
       .order-header {

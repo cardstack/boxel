@@ -320,10 +320,11 @@ class IsolatedTemplate extends Component<typeof OnlineProduct> {
 
       .product-image-section {
         position: relative;
-        aspect-ratio: 2;
+        aspect-ratio: 1;
         border-radius: 1rem;
         overflow: hidden;
         background: #f9fafb;
+        flex-shrink: 0;
       }
 
       .product-image {
@@ -596,18 +597,8 @@ class EmbeddedTemplate extends Component<typeof OnlineProduct> {
     <style scoped>
       .product-card {
         background: white;
-        border: 1px solid #e5e7eb;
-        border-radius: 0.75rem;
         overflow: hidden;
-        transition:
-          transform 0.2s ease,
-          box-shadow 0.2s ease;
         font-size: 0.8125rem;
-      }
-
-      .product-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
       }
 
       .product-card-image {

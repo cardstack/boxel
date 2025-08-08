@@ -1,9 +1,9 @@
 {
   "data": {
-    "meta": {
+   "meta": {
       "adoptsFrom": {
         "name": "OnlineProduct",
-        "module": "../online-product/online-product"
+        "module": "../online-product"
       }
     },
     "type": "card",

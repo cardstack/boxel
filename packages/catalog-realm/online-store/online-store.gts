@@ -44,6 +44,7 @@ const customerSource = {
 class IsolatedTemplate extends Component<typeof OnlineStore> {
   @tracked activeTab = 'products';
   @tracked showAddProduct = false;
+  @tracked searchTerm = '';
 
   get productsQuery(): Query {
     return {
@@ -53,6 +54,56 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
             .href,
           name: 'OnlineProduct',
         },
+      },
+    };
+  }
+
+  get searchedProductsQuery(): Query {
+    const baseFilter = {
+      type: {
+        module: new URL('../online-product/online-product', import.meta.url)
+          .href,
+        name: 'OnlineProduct',
+      },
+    };
+
+    // If no search term, return all products
+    if (!this.searchTerm || this.searchTerm.trim() === '') {
+      return { filter: baseFilter };
+    }
+
+    // Create search filters for multiple fields
+    const searchTerm = this.searchTerm.trim().toLowerCase();
+    const productModule = new URL(
+      '../online-product/online-product',
+      import.meta.url,
+    ).href;
+
+    return {
+      filter: {
+        every: [
+          baseFilter,
+          {
+            any: [
+              {
+                on: { module: productModule, name: 'OnlineProduct' },
+                contains: { productName: searchTerm },
+              },
+              {
+                on: { module: productModule, name: 'OnlineProduct' },
+                contains: { category: searchTerm },
+              },
+              {
+                on: { module: productModule, name: 'OnlineProduct' },
+                contains: { shortDescription: searchTerm },
+              },
+              {
+                on: { module: productModule, name: 'OnlineProduct' },
+                contains: { sku: searchTerm },
+              },
+            ],
+          },
+        ],
       },
     };
   }
@@ -250,6 +301,17 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
     this._createNewCustomer.perform();
   }
 
+  @action
+  updateSearchTerm(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.searchTerm = target.value;
+  }
+
+  @action
+  clearSearch() {
+    this.searchTerm = '';
+  }
+
   <template>
     <div class='stage'>
       <div class='store-mat'>
@@ -312,15 +374,6 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                 <div class='metric-content'>
                   <div class='metric-value loading-text'>Loading</div>
                   <div class='metric-label'>Overview</div>
-                </div>
-              </div>
-              <div class='overview-metric loading-metric'>
-                <div class='metric-icon loading-icon'>
-                  <div class='loading-spinner-small'></div>
-                </div>
-                <div class='metric-content'>
-                  <div class='metric-value loading-text'>...</div>
-                  <div class='metric-label'>Please wait</div>
                 </div>
               </div>
             </div>
@@ -470,12 +523,57 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                 </Button>
               </div>
 
+              <div class='search-bar'>
+                <div class='search-input-container'>
+                  <svg
+                    class='search-icon'
+                    viewBox='0 0 24 24'
+                    fill='none'
+                    stroke='currentColor'
+                    stroke-width='2'
+                  >
+                    <circle cx='11' cy='11' r='8' />
+                    <path d='m21 21-4.35-4.35' />
+                  </svg>
+                  <input
+                    type='text'
+                    class='search-input'
+                    placeholder='Search products by name, category, description, or SKU...'
+                    value={{this.searchTerm}}
+                    {{on 'input' this.updateSearchTerm}}
+                  />
+                  {{#if this.searchTerm}}
+                    <button
+                      class='clear-search-button'
+                      {{on 'click' this.clearSearch}}
+                      type='button'
+                    >
+                      <svg
+                        viewBox='0 0 24 24'
+                        fill='none'
+                        stroke='currentColor'
+                        stroke-width='2'
+                      >
+                        <line x1='18' y1='6' x2='6' y2='18' />
+                        <line x1='6' y1='6' x2='18' y2='18' />
+                      </svg>
+                    </button>
+                  {{/if}}
+                </div>
+                {{#if this.searchTerm}}
+                  <div class='search-status'>
+                    Searching for:
+                    <strong>"{{this.searchTerm}}"</strong>
+                  </div>
+                {{/if}}
+              </div>
+
               {{#let
                 (component @context.prerenderedCardSearchComponent)
                 as |PrerenderedCardSearch|
               }}
                 <PrerenderedCardSearch
-                  @query={{this.productsQuery}}
+                  @query={{this.searchedProductsQuery}}
                   @format='embedded'
                   @realms={{this.realms}}
                   @isLive={{true}}
@@ -503,7 +601,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                                 fieldType=undefined
                                 fieldName=undefined
                               }}
-                              @displayBoundaries={{false}}
+                              @displayBoundaries={{true}}
                               class='product-card-container'
                             >
                               <card.component />
@@ -590,7 +688,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                                 fieldType=undefined
                                 fieldName=undefined
                               }}
-                              @displayBoundaries={{false}}
+                              @displayBoundaries={{true}}
                               class='order-card-container'
                             >
                               <card.component />
@@ -679,7 +777,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                                 fieldType=undefined
                                 fieldName=undefined
                               }}
-                              @displayBoundaries={{false}}
+                              @displayBoundaries={{true}}
                               class='customer-card-container'
                             >
                               <card.component />
@@ -1071,18 +1169,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
       .product-card-container,
       .order-card-container,
       .customer-card-container {
-        border-radius: 0.5rem;
         overflow: hidden;
-        transition:
-          transform 0.2s ease,
-          box-shadow 0.2s ease;
-      }
-
-      .product-card-container:hover,
-      .order-card-container:hover,
-      .customer-card-container:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
       }
 
       .products-loading,
@@ -1156,6 +1243,86 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
       .empty-state p {
         color: #6b7280;
         margin: 0 0 1.5rem 0;
+      }
+
+      /* Search bar styling */
+      .search-bar {
+        margin-bottom: 1.5rem;
+        padding: 1rem;
+        background: #f9fafb;
+        border-radius: 0.75rem;
+        border: 1px solid #e5e7eb;
+      }
+
+      .search-input-container {
+        position: relative;
+        display: flex;
+        align-items: center;
+      }
+
+      .search-icon {
+        position: absolute;
+        left: 0.75rem;
+        width: 1.25rem;
+        height: 1.25rem;
+        color: #9ca3af;
+        pointer-events: none;
+        z-index: 1;
+      }
+
+      .search-input {
+        width: 100%;
+        padding: 0.75rem 0.75rem 0.75rem 2.75rem;
+        border: 1px solid #d1d5db;
+        border-radius: 0.5rem;
+        font-size: 0.875rem;
+        background: white;
+        transition: all 0.2s ease;
+      }
+
+      .search-input:focus {
+        outline: none;
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+      }
+
+      .search-input::placeholder {
+        color: #9ca3af;
+      }
+
+      .clear-search-button {
+        position: absolute;
+        right: 0.5rem;
+        background: none;
+        border: none;
+        padding: 0.375rem;
+        cursor: pointer;
+        border-radius: 0.25rem;
+        color: #6b7280;
+        transition: all 0.2s ease;
+      }
+
+      .clear-search-button:hover {
+        color: #374151;
+        background: #f3f4f6;
+      }
+
+      .clear-search-button svg {
+        width: 1rem;
+        height: 1rem;
+      }
+
+      .search-status {
+        margin-top: 0.75rem;
+        font-size: 0.875rem;
+        color: #6b7280;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .search-status strong {
+        color: #374151;
       }
     </style>
   </template>
