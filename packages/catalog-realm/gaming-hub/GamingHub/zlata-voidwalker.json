@@ -9,20 +9,13 @@
       "isOnline": true,
       "profileImageUrl": "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=face",
       "location": "Prague, Czech Republic",
-      "preferredGenres": [
-        "Horror",
-        "Puzzle",
-        "Survival",
-        "Atmospheric"
-      ],
+      "preferredGenres": ["Horror", "Puzzle", "Survival", "Atmospheric"],
       "gamingGroups": [
         "Horror Game Society",
         "Speedrun Central EU",
         "Puzzle Masters"
       ],
-      "streamingPlatforms": [
-        "Twitch"
-      ],
+      "streamingPlatforms": ["Twitch"],
       "contentCreatorStatus": true,
       "streamSchedule": "Wednesday/Friday 8PM-12AM CET",
       "statistics": {
@@ -47,17 +40,17 @@
     "relationships": {
       "connectedPlatforms.0": {
         "links": {
-          "self": "../GamingPlatform/steam-platform"
+          "self": "../../gaming-platform/GamingPlatform/steam-platform"
         }
       },
       "gameProgress.0": {
         "links": {
-          "self": "../PlayerProgress/alex-cyberpunk"
+          "self": "../../player-progress/PlayerProgress/alex-cyberpunk"
         }
       },
       "tournaments.0": {
         "links": {
-          "self": "../Tournament/street-fighter-evo"
+          "self": "../../tournament/Tournament/street-fighter-evo"
         }
       },
       "friends.0": {
@@ -72,12 +65,12 @@
       },
       "favoriteGames.0": {
         "links": {
-          "self": "../Game/hollow-knight"
+          "self": "../../game/Game/hollow-knight"
         }
       },
       "wishlistGames.0": {
         "links": {
-          "self": "../Game/valorant"
+          "self": "../../game/Game/valorant"
         }
       },
       "cardInfo.theme": {

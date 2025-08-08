@@ -26,16 +26,16 @@
     },
     "relationships": {
       "connectedPlatforms.0": {
-        "links": { "self": "../GamingPlatform/xbox-live" }
+        "links": { "self": "../../gaming-platform/GamingPlatform/xbox-live" }
       },
       "tournaments.0": {
-        "links": { "self": "../Tournament/street-fighter-evo" }
+        "links": { "self": "../../tournament/Tournament/street-fighter-evo" }
       },
       "friends.0": {
-        "links": { "self": "../GamingHub/alex-shadowblade" }
+        "links": { "self": "../../gaming-hub/GamingHub/alex-shadowblade" }
       },
       "friends.1": {
-        "links": { "self": "../GamingHub/maya-phoenixrise" }
+        "links": { "self": "../../gaming-hub/GamingHub/maya-phoenixrise" }
       }
     },
     "meta": {

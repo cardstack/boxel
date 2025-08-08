@@ -9,20 +9,13 @@
       "isOnline": false,
       "profileImageUrl": "",
       "location": "Vancouver, BC",
-      "preferredGenres": [
-        "RPG",
-        "Indie",
-        "Simulation",
-        "Adventure"
-      ],
+      "preferredGenres": ["RPG", "Indie", "Simulation", "Adventure"],
       "gamingGroups": [
         "Indie Game Spotlight",
         "RPG Storytellers",
         "Cozy Gaming Society"
       ],
-      "streamingPlatforms": [
-        "Twitch"
-      ],
+      "streamingPlatforms": ["Twitch"],
       "contentCreatorStatus": false,
       "streamSchedule": "",
       "statistics": {
@@ -52,7 +45,7 @@
       },
       "gameProgress.0": {
         "links": {
-          "self": "../PlayerProgress/maya-hollow-knight"
+          "self": "../../player-progress/PlayerProgress/maya-hollow-knight"
         }
       },
       "tournaments": {
@@ -62,17 +55,17 @@
       },
       "friends.0": {
         "links": {
-          "self": "./alex-shadowblade"
+          "self": "../../gaming-hub/GamingHub/alex-shadowblade"
         }
       },
       "favoriteGames.0": {
         "links": {
-          "self": "../Game/hollow-knight"
+          "self": "../../game/Game/hollow-knight"
         }
       },
       "wishlistGames.0": {
         "links": {
-          "self": "../Game/cyberpunk-2077"
+          "self": "../../game/Game/cyberpunk-2077"
         }
       },
       "cardInfo.theme": {

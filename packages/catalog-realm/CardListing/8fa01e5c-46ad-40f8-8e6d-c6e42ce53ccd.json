@@ -1,0 +1,61 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Game Card",
+      "images": [],
+      "summary": "A comprehensive game card template featuring detailed game information, ratings, system requirements, and achievements with cyberpunk-themed styling.",
+      "cardInfo": {},
+      "description": "A comprehensive game card template for Cyberpunk 2077 featuring detailed game information, ratings, system requirements, and achievements. Perfect for gaming catalogs, review sites, or personal game collections. Includes immersive cyberpunk-themed styling with gradient backgrounds and interactive elements. The card displays cover art, pricing, platform information, genre, release date, Metacritic scores, user ratings, playtime estimates, multiplayer support, game descriptions, system requirements, and achievement counts in both detailed and compact formats.",
+      "thumbnailURL": ""
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/158fa01e-5c46-4d10-b88e-6dc6e42ce53c"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../game/Game/cyberpunk-2077"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/video-games-interactive"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

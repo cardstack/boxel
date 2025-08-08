@@ -26,19 +26,19 @@
     },
     "relationships": {
       "connectedPlatforms.0": {
-        "links": { "self": "../GamingPlatform/steam-platform" }
+        "links": { "self": "../../gaming-platform/GamingPlatform/steam-platform" }
       },
       "gameProgress.0": {
-        "links": { "self": "../PlayerProgress/alex-cyberpunk" }
+        "links": { "self": "../../player-progress/PlayerProgress/alex-cyberpunk" }
       },
       "tournaments.0": {
-        "links": { "self": "../Tournament/valorant-championship" }
+        "links": { "self": "../../tournament/Tournament/valorant-championship" }
       },
       "favoriteGames.0": {
-        "links": { "self": "../Game/valorant" }
+        "links": { "self": "../../game/Game/valorant" }
       },
       "favoriteGames.1": {
-        "links": { "self": "../Game/cyberpunk-2077" }
+        "links": { "self": "../../game/Game/cyberpunk-2077" }
       }
     },
     "meta": {

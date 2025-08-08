@@ -32,15 +32,16 @@ import {
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { tracked } from '@glimmer/tracking';
+import { realmURL, type Query } from '@cardstack/runtime-common';
 
 import GamepadIcon from '@cardstack/boxel-icons/gamepad-2';
 import TrophyIcon from '@cardstack/boxel-icons/trophy';
 import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
 
-import { Game } from './game';
-import { GamingPlatform } from './gaming-platform';
-import { Tournament } from './tournament';
-import { PlayerProgress } from './player-progress';
+import { Game } from '../game/game';
+import { GamingPlatform } from '../gaming-platform/gaming-platform';
+import { Tournament } from '../tournament/tournament';
+import { PlayerProgress } from '../player-progress/player-progress';
 
 export class GamingPlatformField extends FieldDef {
   static displayName = 'Gaming Platform';
@@ -889,6 +890,48 @@ export class GamingStatsField extends FieldDef {
 class Isolated extends Component<typeof GamingHub> {
   @tracked activeTab = 'overview';
   @tracked showStreamingTools = false;
+  @tracked gameSearchQuery = '';
+
+  get gameProgressQuery(): Query {
+    return {
+      filter: {
+        on: {
+          module: new URL('../player-progress/player-progress', import.meta.url)
+            .href,
+          name: 'PlayerProgress',
+        },
+        every: [
+          {
+            contains: { 'game.title': this.gameSearchQuery ?? null },
+          },
+          {
+            eq: { 'player.id': this.args.model.id ?? '' },
+          },
+        ],
+      },
+      sort: [
+        {
+          by: 'lastPlayedDate',
+          on: {
+            module: new URL(
+              '../player-progress/player-progress',
+              import.meta.url,
+            ).href,
+            name: 'PlayerProgress',
+          },
+          direction: 'desc',
+        },
+      ],
+    };
+  }
+
+  get realms() {
+    return this.args.model[realmURL] ? [this.args.model[realmURL].href] : [];
+  }
+
+  get realmURL(): URL {
+    return this.args.model[realmURL]!;
+  }
 
   get safeTitle() {
     try {
@@ -939,6 +982,15 @@ class Isolated extends Component<typeof GamingHub> {
 
   toggleStreamingTools = () => {
     this.showStreamingTools = !this.showStreamingTools;
+  };
+
+  updateGameSearch = (event: Event) => {
+    const target = event.target as HTMLInputElement;
+    this.gameSearchQuery = target.value;
+  };
+
+  clearGameSearch = () => {
+    this.gameSearchQuery = '';
   };
 
   <template>
@@ -1130,17 +1182,119 @@ class Isolated extends Component<typeof GamingHub> {
                 </div>
               </div>
 
-              {{#if (gt @model.gameProgress.length 0)}}
-                <div class='game-library-container'>
-                  <@fields.gameProgress @format='embedded' />
+              <div class='search-section'>
+                <div class='search-input-container'>
+                  <svg
+                    class='search-icon'
+                    viewBox='0 0 24 24'
+                    fill='none'
+                    stroke='currentColor'
+                    stroke-width='2'
+                  >
+                    <circle cx='11' cy='11' r='8' />
+                    <path d='m21 21-4.35-4.35' />
+                  </svg>
+                  <label>
+                    <input
+                      type='text'
+                      class='search-input'
+                      placeholder='Search by game title'
+                      value={{this.gameSearchQuery}}
+                      {{on 'input' this.updateGameSearch}}
+                    />
+                  </label>
+                  {{#if this.gameSearchQuery}}
+                    <Button
+                      class='clear-search-btn'
+                      {{on 'click' this.clearGameSearch}}
+                      title='Clear search'
+                    >
+                      <svg
+                        viewBox='0 0 24 24'
+                        fill='none'
+                        stroke='currentColor'
+                        stroke-width='2'
+                      >
+                        <line x1='18' y1='6' x2='6' y2='18' />
+                        <line x1='6' y1='6' x2='18' y2='18' />
+                      </svg>
+                    </Button>
+                  {{/if}}
                 </div>
-              {{else}}
-                <div class='empty-state'>
-                  <h3>No Games in Library</h3>
-                  <p>Connect your gaming platforms to automatically import your
-                    game library, or manually add games to track your progress.</p>
-                </div>
-              {{/if}}
+              </div>
+
+              {{! Game Library Search Results }}
+              {{#let
+                (component @context.prerenderedCardSearchComponent)
+                as |PrerenderedCardSearch|
+              }}
+                <PrerenderedCardSearch
+                  @query={{this.gameProgressQuery}}
+                  @format='embedded'
+                  @realms={{this.realms}}
+                  @isLive={{true}}
+                >
+                  <:loading>
+                    <div class='search-loading'>
+                      <div class='loading-spinner'></div>
+                      <span>Searching your game library...</span>
+                    </div>
+                  </:loading>
+
+                  <:response as |games|>
+                    {{#if (gt games.length 0)}}
+                      <div class='game-library-container'>
+                        {{#if this.gameSearchQuery}}
+                          <div class='search-results-header'>
+                            <span class='results-count'>{{games.length}}
+                              games found</span>
+                            <span class='search-query'>for "{{this.gameSearchQuery}}"</span>
+                          </div>
+                        {{/if}}
+                        {{#each games key='url' as |game|}}
+                          {{#unless game.isError}}
+                            <div class='game-progress-wrapper'>
+                              <game.component />
+                            </div>
+                          {{/unless}}
+                        {{/each}}
+                      </div>
+                    {{else}}
+                      {{#if this.gameSearchQuery}}
+                        <div class='no-search-results'>
+                          <div class='no-results-icon'>
+                            <svg
+                              viewBox='0 0 24 24'
+                              fill='none'
+                              stroke='currentColor'
+                              stroke-width='2'
+                            >
+                              <circle cx='11' cy='11' r='8' />
+                              <path d='m21 21-4.35-4.35' />
+                              <line x1='11' y1='8' x2='11' y2='14' />
+                              <line x1='8' y1='11' x2='14' y2='11' />
+                            </svg>
+                          </div>
+                          <h3>No Games Found</h3>
+                          <p>No games match your search for "{{this.gameSearchQuery}}".
+                          </p>
+                          <Button
+                            class='clear-search-suggestion'
+                            {{on 'click' this.clearGameSearch}}
+                          >
+                            Clear Search
+                          </Button>
+                        </div>
+                      {{else}}
+                        <div class='empty-state'>
+                          <h3>No Games in Library</h3>
+                          <p>Add games to track your progress.</p>
+                        </div>
+                      {{/if}}
+                    {{/if}}
+                  </:response>
+                </PrerenderedCardSearch>
+              {{/let}}
 
               <div class='wishlist-section'>
                 <div class='wishlist-header'>
@@ -1148,6 +1302,8 @@ class Isolated extends Component<typeof GamingHub> {
                   <div class='wishlist-count-badge'>{{@model.wishlistCount}}
                     items</div>
                 </div>
+
+                {{! Default wishlist display - no search here }}
                 {{#if (gt @model.wishlistGames.length 0)}}
                   <div class='wishlist-grid'>
                     <@fields.wishlistGames @format='embedded' />
@@ -2002,9 +2158,7 @@ class Isolated extends Component<typeof GamingHub> {
       }
 
       @media (max-width: 480px) {
-        .wishlist-container > .containsMany-field,
-        .tournaments-container > .containsMany-field,
-        .friends-container > .containsMany-field {
+        .tournaments-container > .containsMany-field {
           gap: 0.75rem;
         }
       }
@@ -2253,15 +2407,13 @@ class Isolated extends Component<typeof GamingHub> {
         font-size: 0.875rem;
       }
 
-      .platforms-list,
-      .groups-list {
+      .platforms-list {
         display: flex;
         gap: 0.5rem;
         flex-wrap: wrap;
       }
 
-      .platform-pill,
-      .group-pill {
+      .platform-pill {
         padding: 0.5rem 1rem;
         background: rgba(99, 102, 241, 0.2);
         color: #a5b4fc;
@@ -2272,11 +2424,478 @@ class Isolated extends Component<typeof GamingHub> {
         transition: all 0.3s ease;
       }
 
-      .platform-pill:hover,
-      .group-pill:hover {
+      .platform-pill:hover {
         background: rgba(99, 102, 241, 0.3);
         transform: translateY(-1px);
         box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+      }
+
+      /* ⁷⁵ Enhanced Search section styling */
+      .search-section {
+        margin-bottom: 2rem;
+        padding: 1.5rem;
+        background: linear-gradient(
+          135deg,
+          rgba(30, 41, 59, 0.6) 0%,
+          rgba(99, 102, 241, 0.1) 100%
+        );
+        border-radius: 16px;
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        backdrop-filter: blur(15px);
+        box-shadow:
+          0 8px 32px rgba(0, 0, 0, 0.1),
+          inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .search-section::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, #6366f1, transparent);
+        opacity: 0.6;
+      }
+
+      .search-header {
+        margin-bottom: 1rem;
+        text-align: center;
+      }
+
+      .search-title {
+        font-size: 1.125rem;
+        font-weight: 700;
+        margin: 0 0 0.5rem 0;
+        color: #e2e8f0;
+        font-family: 'Orbitron', monospace;
+        background: linear-gradient(135deg, #6366f1, #a855f7);
+        background-clip: text;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+      }
+
+      .search-title-icon {
+        width: 20px;
+        height: 20px;
+        color: #6366f1;
+        filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.4));
+      }
+
+      .search-scope-info {
+        font-size: 0.8125rem;
+        color: #94a3b8;
+        font-weight: 500;
+        padding: 0.375rem 0.75rem;
+        background: rgba(99, 102, 241, 0.1);
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        border-radius: 12px;
+        display: inline-block;
+        backdrop-filter: blur(10px);
+      }
+
+      .search-input-container {
+        position: relative;
+        display: flex;
+        align-items: center;
+      }
+
+      .search-input-container label {
+        width: 100%;
+      }
+
+      .search-icon {
+        position: absolute;
+        left: 1rem;
+        width: 18px;
+        height: 18px;
+        color: #94a3b8;
+        z-index: 1;
+      }
+
+      .search-input {
+        width: 100%;
+        padding: 0.875rem 1rem 0.875rem 2.75rem;
+        background: rgba(30, 41, 59, 0.8);
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        border-radius: 12px;
+        color: #e2e8f0;
+        font-size: 0.875rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        backdrop-filter: blur(10px);
+        font-family: 'Inter', sans-serif;
+      }
+
+      .search-input::placeholder {
+        color: #94a3b8;
+      }
+
+      .search-input:focus {
+        outline: none;
+        border-color: #6366f1;
+        box-shadow:
+          0 0 0 3px rgba(99, 102, 241, 0.1),
+          0 0 20px rgba(99, 102, 241, 0.2);
+        background: rgba(30, 41, 59, 0.95);
+      }
+
+      .clear-search-btn {
+        position: absolute;
+        right: 0.5rem;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        background: rgba(99, 102, 241, 0.2);
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        border-radius: 8px;
+        color: #a5b4fc;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2;
+      }
+
+      .clear-search-btn:hover {
+        background: rgba(99, 102, 241, 0.3);
+        border-color: #6366f1;
+        color: #e2e8f0;
+        transform: scale(1.05);
+      }
+
+      .clear-search-btn svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      .active-search-indicator {
+        padding: 0.875rem;
+        background: rgba(99, 102, 241, 0.1);
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        border-radius: 12px;
+        backdrop-filter: blur(10px);
+        margin-top: 0.75rem;
+      }
+
+      .search-status {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        margin-bottom: 0.375rem;
+      }
+
+      .search-active-icon {
+        width: 16px;
+        height: 16px;
+        color: #6366f1;
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+
+      .search-label {
+        color: #94a3b8;
+        font-weight: 500;
+      }
+
+      .search-term {
+        color: #a855f7;
+        font-weight: 600;
+        background: rgba(168, 85, 247, 0.1);
+        padding: 0.125rem 0.375rem;
+        border-radius: 6px;
+        border: 1px solid rgba(168, 85, 247, 0.2);
+      }
+
+      .search-help {
+        font-size: 0.75rem;
+        color: #64748b;
+        font-style: italic;
+      }
+
+      .search-tips {
+        padding: 0.875rem;
+        background: rgba(6, 182, 212, 0.05);
+        border: 1px solid rgba(6, 182, 212, 0.1);
+        border-radius: 12px;
+        margin-top: 0.75rem;
+      }
+
+      .tip-header {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: #06b6d4;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+      }
+
+      .tips-list {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+
+      .tip {
+        font-size: 0.75rem;
+        color: #0891b2;
+        background: rgba(6, 182, 212, 0.1);
+        padding: 0.25rem 0.5rem;
+        border-radius: 8px;
+        border: 1px solid rgba(6, 182, 212, 0.2);
+        font-weight: 500;
+      }
+
+      /* ⁷⁶ No search results styling */
+      .no-search-results {
+        text-align: center;
+        padding: 3rem 2rem;
+        background: rgba(30, 41, 59, 0.4);
+        border-radius: 16px;
+        border: 2px dashed rgba(99, 102, 241, 0.3);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .no-search-results.wishlist-no-results {
+        border-color: rgba(168, 85, 247, 0.3);
+        background: rgba(168, 85, 247, 0.05);
+      }
+
+      .no-search-results::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 200px;
+        height: 200px;
+        background: radial-gradient(
+          circle,
+          rgba(99, 102, 241, 0.05) 0%,
+          transparent 70%
+        );
+        pointer-events: none;
+      }
+
+      .wishlist-no-results::before {
+        background: radial-gradient(
+          circle,
+          rgba(168, 85, 247, 0.05) 0%,
+          transparent 70%
+        );
+      }
+
+      .no-results-icon {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 1rem;
+        padding: 1rem;
+        background: rgba(99, 102, 241, 0.1);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(99, 102, 241, 0.3);
+      }
+
+      .wishlist-no-results .no-results-icon {
+        background: rgba(168, 85, 247, 0.1);
+        border-color: rgba(168, 85, 247, 0.3);
+      }
+
+      .no-results-icon svg {
+        width: 32px;
+        height: 32px;
+        color: #6366f1;
+        filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.4));
+      }
+
+      .wishlist-no-results .no-results-icon svg {
+        color: #a855f7;
+        filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.4));
+      }
+
+      .no-search-results h3,
+      .no-search-results h4 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin: 0 0 0.75rem 0;
+        color: #e2e8f0;
+        font-family: 'Orbitron', monospace;
+        background: linear-gradient(135deg, #6366f1, #a855f7);
+        background-clip: text;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      .wishlist-no-results h4 {
+        background: linear-gradient(135deg, #a855f7, #ec4899);
+        background-clip: text;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      .no-search-results p {
+        margin: 0 0 1.5rem 0;
+        line-height: 1.6;
+        font-size: 0.875rem;
+        color: #94a3b8;
+      }
+
+      .clear-search-suggestion {
+        padding: 0.625rem 1.25rem;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+      }
+
+      .clear-search-suggestion:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+      }
+
+      /* ⁷⁷ Search loading and results styling */
+      .search-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        padding: 2rem;
+        background: rgba(30, 41, 59, 0.4);
+        border-radius: 12px;
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        color: #94a3b8;
+        font-size: 0.875rem;
+        font-weight: 500;
+      }
+
+      .loading-spinner {
+        width: 20px;
+        height: 20px;
+        border: 2px solid rgba(99, 102, 241, 0.2);
+        border-top: 2px solid #6366f1;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .search-results-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        padding: 0.75rem 1rem;
+        background: rgba(99, 102, 241, 0.1);
+        border-radius: 8px;
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        font-size: 0.8125rem;
+      }
+
+      .search-results-header .results-count {
+        color: #6366f1;
+        font-weight: 600;
+      }
+
+      .search-results-header .search-query {
+        color: #a855f7;
+        font-weight: 600;
+      }
+
+      .error-card {
+        padding: 1rem;
+        background: rgba(248, 113, 113, 0.1);
+        border: 1px solid rgba(248, 113, 113, 0.3);
+        border-radius: 8px;
+        color: #f87171;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        margin-bottom: 0.75rem;
+      }
+
+      /* ⁷⁸ Search wrapper spacing adjustments */
+      .game-progress-wrapper {
+        margin-bottom: 0.75rem;
+      }
+
+      .game-progress-wrapper:last-child {
+        margin-bottom: 0;
+      }
+
+      /* Mobile search optimizations */
+      @media (max-width: 768px) {
+        .search-section {
+          padding: 1rem;
+          margin-bottom: 1.5rem;
+        }
+
+        .search-input {
+          padding: 0.75rem 1rem 0.75rem 2.5rem;
+          font-size: 0.8125rem;
+        }
+
+        .search-icon {
+          left: 0.75rem;
+          width: 16px;
+          height: 16px;
+        }
+
+        .clear-search-btn {
+          width: 28px;
+          height: 28px;
+        }
+
+        .clear-search-btn svg {
+          width: 12px;
+          height: 12px;
+        }
+
+        .no-search-results {
+          padding: 2rem 1rem;
+        }
+
+        .no-results-icon {
+          width: 48px;
+          height: 48px;
+          padding: 0.75rem;
+        }
+
+        .no-results-icon svg {
+          width: 24px;
+          height: 24px;
+        }
       }
 
       /* Enhanced Gaming Network Section */
@@ -2541,13 +3160,6 @@ class Isolated extends Component<typeof GamingHub> {
           text-align: center;
         }
 
-        .status-info {
-          justify-content: center;
-          flex-direction: column;
-          align-items: center;
-          gap: 0.5rem;
-        }
-
         .quick-stats {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
@@ -2576,12 +3188,6 @@ class Isolated extends Component<typeof GamingHub> {
           grid-template-columns: 1fr;
           text-align: center;
           gap: 1.5rem;
-        }
-
-        .profile-section {
-          justify-content: center;
-          align-items: center;
-          text-align: center;
         }
 
         .quick-stats {
@@ -2614,12 +3220,6 @@ class Isolated extends Component<typeof GamingHub> {
           grid-template-columns: 1fr auto;
           gap: 2rem;
           padding: 1.5rem;
-        }
-
-        .profile-section {
-          flex-direction: row;
-          text-align: left;
-          align-items: flex-start;
         }
 
         .quick-stats {

@@ -19,12 +19,12 @@
     "relationships": {
       "player": {
         "links": {
-          "self": "../GamingHub/maya-phoenixrise"
+          "self": "../../gaming-hub/GamingHub/maya-phoenixrise"
         }
       },
       "game": {
         "links": {
-          "self": "../Game/hollow-knight"
+          "self": "../../game/Game/hollow-knight"
         }
       }
     },

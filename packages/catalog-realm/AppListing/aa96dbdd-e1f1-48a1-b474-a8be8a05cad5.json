@@ -1,0 +1,106 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AppListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Player Progress Tracker",
+      "images": [],
+      "summary": "Track your gaming progress, achievements, and game completion across multiple titles",
+      "cardInfo": {},
+      "description": "A comprehensive gaming progress tracking system that allows you to monitor your gameplay statistics, achievements unlocked, completion percentages, ratings, and notes for multiple games. Perfect for gamers who want to keep detailed records of their gaming journey.",
+      "thumbnailURL": "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=400&h=300&fit=crop"
+    },
+    "relationships": {
+      "skills.0": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/stub"
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/f73caa96-dbdd-41f1-a8a1-3474a8be8a05"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/3cb2eecd-ca34-473c-aa96-dbdde1f1a8a1"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/473cb2ee-cdca-44f7-bcaa-96dbdde1f1a8"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/3caa96db-dde1-41a8-a134-74a8be8a05ca"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/34f73caa-96db-4de1-b1a8-a13474a8be8a"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/b2eecdca-34f7-4caa-96db-dde1f1a8a134"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/eecdca34-f73c-4a96-9bdd-e1f1a8a13474"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/cdca34f7-3caa-46db-9de1-f1a8a13474a8"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/ca34f73c-aa96-4bdd-a1f1-a8a13474a8be"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../player-progress/PlayerProgress/alex-cyberpunk"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/video-games-interactive"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/entertainment-media"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

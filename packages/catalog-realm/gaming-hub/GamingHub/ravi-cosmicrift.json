@@ -10,7 +10,11 @@
       "profileImageUrl": "https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=400&h=400&fit=crop&crop=face",
       "location": "Mumbai, India",
       "preferredGenres": ["VR", "Simulation", "Space", "Sci-Fi"],
-      "gamingGroups": ["VR Innovators", "Space Sim Society", "Future Gaming Collective"],
+      "gamingGroups": [
+        "VR Innovators",
+        "Space Sim Society",
+        "Future Gaming Collective"
+      ],
       "streamingPlatforms": ["Twitch", "YouTube Gaming"],
       "contentCreatorStatus": true,
       "streamSchedule": "Monday/Wednesday/Saturday 2PM-6PM IST",
@@ -26,16 +30,16 @@
     },
     "relationships": {
       "favoriteGames.0": {
-        "links": { "self": "../Game/cyberpunk-2077" }
+        "links": { "self": "../../game/Game/cyberpunk-2077" }
       },
       "wishlistGames.0": {
-        "links": { "self": "../Game/hollow-knight" }
+        "links": { "self": "../../game/Game/hollow-knight" }
       },
       "friends.0": {
-        "links": { "self": "../GamingHub/diego-stratmaxx" }
+        "links": { "self": "../../gaming-hub/GamingHub/diego-stratmaxx" }
       },
       "friends.1": {
-        "links": { "self": "../GamingHub/zlata-voidwalker" }
+        "links": { "self": "../../gaming-hub/GamingHub/zlata-voidwalker" }
       }
     },
     "meta": {

@@ -1,0 +1,76 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AppListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Tournament Card",
+      "images": [],
+      "summary": "Create and display esports tournaments with prize pools, schedules, participant tracking, and game integration",
+      "cardInfo": {},
+      "description": "A comprehensive tournament management system designed for organizing competitive gaming events and esports tournaments. Features include:\n\n**Core Features:**\n- Tournament registration and participant management\n- Prize pool tracking with currency formatting\n- Date and schedule management (start, end, registration deadlines)\n- Tournament status tracking (registration, live, completed)\n- Game integration and tournament format specification\n- Live streaming URL integration\n- Tournament bracket visualization\n- Rule and regulation management with markdown support\n\n**Perfect for:**\n- Esports organizers and tournament directors\n- Gaming communities hosting competitive events\n- Professional gaming leagues\n- Educational institutions running gaming competitions\n- Corporate gaming events and team building\n\nThe system provides beautiful, responsive UI components with both detailed and compact views, making it easy to manage tournaments of any size from small community events to major championships.",
+      "thumbnailURL": "https://images.unsplash.com/photo-1579952363873-27d3bfad9c0d?w=400&h=300&fit=crop"
+    },
+    "relationships": {
+      "tags.0": {
+        "links": {
+          "self": "../Tag/stub"
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/ea5403bd-fba0-4530-b811-9a129fd88073"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/5403bdfb-a0f5-40b8-919a-129fd8807302"
+        }
+      },
+      "skills.0": {
+        "links": {
+          "self": null
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../tournament/Tournament/valorant-championship"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/video-games-interactive"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/events-celebrations"
+        }
+      },
+      "categories.2": {
+        "links": {
+          "self": "../Category/project-management"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
