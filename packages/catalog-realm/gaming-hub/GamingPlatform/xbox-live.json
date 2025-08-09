@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Xbox Live",
+      "accountId": "ThunderStrikeKai",
+      "isConnected": true,
+      "lastSynced": "2025-01-05T15:45:00Z",
+      "gamesCount": 89,
+      "logoImageUrl": "https://images.unsplash.com/photo-1606690255817-8fb3de3c9ad1?w=200&h=200&fit=crop",
+      "connectionToken": ""
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../gaming-platform",
+        "name": "GamingPlatform"
+      }
+    }
+  }
+}

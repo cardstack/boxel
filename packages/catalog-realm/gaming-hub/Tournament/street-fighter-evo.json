@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "EVO 2025 - Street Fighter 6",
+      "startDate": "2025-08-06T09:00:00Z",
+      "endDate": "2025-08-08T23:00:00Z",
+      "participants": 2048,
+      "prizePool": 100000,
+      "status": "upcoming",
+      "registrationDeadline": "2025-07-15T23:59:59Z",
+      "format": "Double Elimination",
+      "organizer": "EVO Championship Series",
+      "rules": "## EVO 2025 Street Fighter 6 Rules\n\n### Tournament Format\n- **Pools:** Best of 3 (BO3)\n- **Top 8:** Best of 5 (BO5)\n- **Grand Finals:** Extended set if needed\n\n### Character Selection\n- All characters are legal\n- Winner must keep same character\n- Loser may switch character\n\n### Stage Selection\n- All tournament legal stages available\n- Random stage selection for game 1\n- Loser picks stage for subsequent games\n\n### Equipment\n- Tournament provided controllers available\n- Personal controllers must be inspected\n- Wireless controllers prohibited",
+      "streamUrl": "https://www.twitch.tv/evo",
+      "bracketImageUrl": "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=800&h=600&fit=crop"
+    },
+    "relationships": {
+      "game": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../tournament",
+        "name": "Tournament"
+      }
+    }
+  }
+}
