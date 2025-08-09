@@ -3,8 +3,6 @@ import type RouterService from '@ember/routing/router-service';
 import Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
 
-import config from '@cardstack/host/config/environment';
-
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -36,21 +34,8 @@ export default class Card extends Route<ReturnType<StoreService['get']>> {
   }
 
   async model(params: { path: string }) {
-    let segments = params.path.split('/').filter(Boolean); // remove empty
-    let realm = segments[0];
-    let remainingPath = segments.slice(1).join('/');
+    let cardUrl = `${this.hostModeService.hostModeOrigin}/${params.path}`;
 
-    let realmUrlString = `${config.realmServerRoot}${this.hostModeService.userSubdomain}/${realm}/`;
-
-    await this.realm.ensureRealmMeta(realmUrlString);
-
-    let realmUrl = this.realm.url(realmUrlString);
-
-    if (!realmUrl) {
-      throw new Error(`Realm not found: ${realmUrlString}`);
-    }
-
-    let cardUrl = `${realmUrl}${remainingPath}`;
     return this.store.get(cardUrl);
   }
 }

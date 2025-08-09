@@ -8,38 +8,55 @@ export default class HostModeService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
 
   get isActive() {
-    if (!this.fastboot.isFastBoot && config.hostModeDomainRoot) {
-      let hostModeDomainRoot = config.hostModeDomainRoot;
-      let currentHost = window.location.hostname;
-
-      if (currentHost.endsWith(`.${hostModeDomainRoot}`)) {
-        return true;
-      }
-
+    if (!this.fastboot.isFastBoot) {
       if (this.simulatingHostMode) {
         return true;
       }
+
+      return (
+        config.hostsOwnAssets === false &&
+        this.isRealmServerDomain === false &&
+        this.originIsNotMatrixTests
+      );
+    }
+
+    return false;
+  }
+
+  get isRealmServerDomain() {
+    if (this.simulatingHostMode) {
+      return false;
+    }
+
+    if (config.realmServerDomain) {
+      let realmServerDomain = config.realmServerDomain;
+      let currentHost = window.location.hostname;
+
+      return currentHost.endsWith(`.${realmServerDomain}`);
     }
 
     return false;
   }
 
   get simulatingHostMode() {
-    return new URLSearchParams(window.location.search).has(
-      'host-mode-subdomain',
-    );
+    return new URLSearchParams(window.location.search).has('host-mode-origin');
   }
 
-  get userSubdomain() {
+  get hostModeOrigin() {
     if (this.simulatingHostMode) {
-      return (
-        new URLSearchParams(window.location.search).get(
-          'host-mode-subdomain',
-        ) || 'user'
+      return new URLSearchParams(window.location.search).get(
+        'host-mode-origin',
       );
     }
 
-    return window.location.hostname.split('.')[0];
+    return window.location.origin;
+  }
+
+  get originIsNotMatrixTests() {
+    return (
+      this.hostModeOrigin !== 'http://localhost:4202' &&
+      this.hostModeOrigin !== 'http://localhost:4205'
+    );
   }
 }
 

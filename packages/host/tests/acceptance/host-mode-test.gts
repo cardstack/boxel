@@ -22,14 +22,25 @@ import { setupApplicationTest } from '../helpers/setup';
 
 let matrixRoomId: string;
 
+let testHostModeRealmURLWithoutRealm = testHostModeRealmURL.replace(
+  /\/test\/?$/,
+  '',
+);
+
 // Overrides to simulate a request to a host mode domain
 class StubHostModeService extends HostModeService {
   get isActive() {
     return true;
   }
 
-  get userSubdomain() {
-    return 'user';
+  get hostModeOrigin() {
+    return removeTrailingSlash(testHostModeRealmURLWithoutRealm);
+  }
+}
+
+class StubCustomSubdomainHostModeService extends StubHostModeService {
+  get hostModeOrigin() {
+    return removeTrailingSlash(testHostModeRealmURL);
   }
 }
 
@@ -175,4 +186,25 @@ module('Acceptance | host mode tests', function (hooks) {
       `Card not found: ${testHostModeRealmURL}Pet/non-existent`,
     );
   });
+
+  module('with a custom subdomain', function (hooks) {
+    hooks.beforeEach(function (this) {
+      getOwner(this)!.register(
+        'service:host-mode-service',
+        StubCustomSubdomainHostModeService,
+      );
+    });
+
+    test('visiting a card in host mode', async function (assert) {
+      await visit('/Pet/mango.json');
+
+      assert
+        .dom(`[data-test-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists();
+    });
+  });
 });
+
+function removeTrailingSlash(url: string): string {
+  return url.endsWith('/') ? url.slice(0, -1) : url;
+}
