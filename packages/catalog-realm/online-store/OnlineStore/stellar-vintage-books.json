@@ -1,0 +1,36 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "storeName": "Stellar Vintage Books",
+      "storeDescription": "# Rare & Collectible Books Since 1987\n\nA curated collection of first editions, rare manuscripts, and vintage literature. From Victorian novels to mid-century science fiction, we specialize in books that tell stories beyond their pages.\n\n## Our Collection Highlights\n- **First edition literature** from renowned authors\n- **Vintage science fiction** and fantasy classics\n- **Antiquarian maps** and historical documents\n- **Limited edition art books** and photography collections\n\n## Services We Offer\n- Professional book authentication and appraisal\n- Custom book binding and restoration\n- Estate library consultations\n- Worldwide shipping with insurance\n\n*Every book has a story. Let us help you find yours.*",
+      "websiteUrl": "https://stellarvintagebooks.com",
+      "brandColor": "#2F4858",
+      "logoUrl": "https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=400",
+      "contactEmail": "curator@stellarvintagebooks.com",
+      "storePhysicalAddress": "Stellar Vintage Books\n156 Literary Lane\nBeacon Hill\nBoston, MA 02108\nUnited States\n\nBookshop Hours:\nMon-Wed: 11:00 AM - 7:00 PM\nThu-Sat: 10:00 AM - 8:00 PM\nSun: 12:00 PM - 6:00 PM\n\nBy appointment for rare collections",
+      "title": "Stellar Vintage Books",
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../online-store",
+        "name": "OnlineStore"
+      }
+    }
+  }
+}

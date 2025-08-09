@@ -4,23 +4,18 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "OnlineProduct",
-        "module": "../online-store/online-product"
+        "module": "../fields/contact-link",
+        "name": "ContactLinkField"
       },
-      "specType": "card",
+      "specType": "field",
       "containedExamples": [],
-      "title": "OnlineProduct",
-      "description": "Spec of OnlineProduct",
+      "title": "ContactLinkField",
+      "description": null,
       "cardInfo": {},
       "thumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {
-        "links": {
-          "self": null
-        }
-      },
-      "cardInfo.theme": {
         "links": {
           "self": null
         }

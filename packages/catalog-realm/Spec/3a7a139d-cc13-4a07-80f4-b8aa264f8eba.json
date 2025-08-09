@@ -4,23 +4,18 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "OnlineOrder",
-        "module": "../online-store/online-order"
+        "module": "../online-customer/online-customer",
+        "name": "OnlineCustomer"
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "OnlineOrder",
-      "description": "Spec of OnlineOrder",
+      "title": "OnlineCustomer",
+      "description": "Spec of OnlineCustomer",
       "cardInfo": {},
       "thumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {
-        "links": {
-          "self": null
-        }
-      },
-      "cardInfo.theme": {
         "links": {
           "self": null
         }

@@ -4,23 +4,22 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "OnlineCustomer",
-        "module": "../online-store/online-customer"
+        "module": "../online-order/online-order",
+        "name": "OnlineOrder"
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "OnlineCustomer",
-      "description": "Spec of OnlineCustomer",
-      "cardInfo": {},
-      "thumbnailURL": null
+      "title": "OnlineOrder",
+      "description": "Spec of OnlineOrder",
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
     },
     "relationships": {
       "linkedExamples": {
-        "links": {
-          "self": null
-        }
-      },
-      "cardInfo.theme": {
         "links": {
           "self": null
         }

@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "productName": "Smart Fitness Tracker Pro",
+      "price": 129.99,
+      "salePrice": null,
+      "sku": "SFT-PRO-2024",
+      "category": "Wearable Technology",
+      "shortDescription": "Advanced fitness tracker with heart rate monitoring, GPS tracking, sleep analysis, and 7-day battery life. Features include 50+ workout modes, smartphone notifications, and water resistance up to 50m. Compatible with iOS and Android apps.",
+      "inventory": 24,
+      "inStock": true,
+      "imageUrl": "https://images.pexels.com/photos/437037/pexels-photo-437037.jpeg",
+      "title": "Smart Fitness Tracker Pro",
+      "cardInfo": {
+        "title": "Smart Fitness Tracker Pro",
+        "description": "Advanced fitness tracker with heart rate monitoring, GPS tracking, and 7-day battery life. Category: Wearable Technology. SKU: SFT-PRO-2024",
+        "thumbnailURL": "https://images.pexels.com/photos/437037/pexels-photo-437037.jpeg",
+        "notes": null
+      },
+      "description": "Advanced fitness tracker with heart rate monitoring, GPS tracking, and 7-day battery life. Category: Wearable Technology. SKU: SFT-PRO-2024",
+      "thumbnailURL": "https://images.pexels.com/photos/437037/pexels-photo-437037.jpeg"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../online-product",
+        "name": "OnlineProduct"
+      },
+      "realmURL": "http://localhost:4201/catalog/"
+    }
+  }
+}

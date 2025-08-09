@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "productName": "RGB Mechanical Gaming Keyboard",
+      "price": 149.99,
+      "salePrice": null,
+      "sku": "GMK-RGB87",
+      "category": "Electronics",
+      "shortDescription": "Premium mechanical gaming keyboard with Cherry MX Blue switches, customizable RGB backlighting, and programmable macro keys. Tenkeyless design for competitive gaming.",
+      "inventory": 18,
+      "inStock": true,
+      "imageUrl": "https://images.unsplash.com/photo-1541140532154-b024d705b90a?auto=format&fit=crop&w=800&q=80",
+      "title": "RGB Mechanical Gaming Keyboard",
+      "cardInfo": {
+        "title": "RGB Mechanical Gaming Keyboard",
+        "description": "Premium mechanical gaming keyboard with Cherry MX Blue switches and customizable RGB backlighting. Category: Electronics. SKU: GMK-RGB87",
+        "thumbnailURL": "https://images.unsplash.com/photo-1541140532154-b024d705b90a?auto=format&fit=crop&w=400&q=80",
+        "notes": null
+      },
+      "description": "Premium mechanical gaming keyboard with Cherry MX Blue switches and customizable RGB backlighting. Category: Electronics. SKU: GMK-RGB87",
+      "thumbnailURL": "https://images.unsplash.com/photo-1541140532154-b024d705b90a?auto=format&fit=crop&w=400&q=80"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../online-product",
+        "name": "OnlineProduct"
+      },
+      "realmURL": "http://localhost:4201/catalog/"
+    }
+  }
+}

@@ -18,7 +18,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { fn, concat } from '@ember/helper';
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, timeout } from 'ember-concurrency';
 import { htmlSafe } from '@ember/template';
 
 import StoreIcon from '@cardstack/boxel-icons/store';
@@ -27,31 +27,83 @@ import type { Query } from '@cardstack/runtime-common';
 import { realmURL } from '@cardstack/runtime-common';
 
 const productSource = {
-  module: new URL('./online-product', import.meta.url).href,
+  module: new URL('../online-product/online-product', import.meta.url).href,
   name: 'OnlineProduct',
 };
 
 const orderSource = {
-  module: new URL('./online-order', import.meta.url).href,
+  module: new URL('../online-order/online-order', import.meta.url).href,
   name: 'OnlineOrder',
 };
 
 const customerSource = {
-  module: new URL('./online-customer', import.meta.url).href,
+  module: new URL('../online-custmomer/online-customer', import.meta.url).href,
   name: 'OnlineCustomer',
 };
 
 class IsolatedTemplate extends Component<typeof OnlineStore> {
   @tracked activeTab = 'products';
   @tracked showAddProduct = false;
+  @tracked searchTerm = '';
 
   get productsQuery(): Query {
     return {
       filter: {
         type: {
-          module: new URL('./online-product', import.meta.url).href,
+          module: new URL('../online-product/online-product', import.meta.url)
+            .href,
           name: 'OnlineProduct',
         },
+      },
+    };
+  }
+
+  get searchedProductsQuery(): Query {
+    const baseFilter = {
+      type: {
+        module: new URL('../online-product/online-product', import.meta.url)
+          .href,
+        name: 'OnlineProduct',
+      },
+    };
+
+    // If no search term, return all products
+    if (!this.searchTerm || this.searchTerm.trim() === '') {
+      return { filter: baseFilter };
+    }
+
+    // Create search filters for multiple fields
+    const searchTerm = this.searchTerm.trim().toLowerCase();
+    const productModule = new URL(
+      '../online-product/online-product',
+      import.meta.url,
+    ).href;
+
+    return {
+      filter: {
+        every: [
+          baseFilter,
+          {
+            any: [
+              {
+                on: { module: productModule, name: 'OnlineProduct' },
+                contains: { productName: searchTerm },
+              },
+              {
+                on: { module: productModule, name: 'OnlineProduct' },
+                contains: { category: searchTerm },
+              },
+              {
+                on: { module: productModule, name: 'OnlineProduct' },
+                contains: { shortDescription: searchTerm },
+              },
+              {
+                on: { module: productModule, name: 'OnlineProduct' },
+                contains: { sku: searchTerm },
+              },
+            ],
+          },
+        ],
       },
     };
   }
@@ -60,7 +112,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
     return {
       filter: {
         type: {
-          module: new URL('./online-order', import.meta.url).href,
+          module: new URL('../online-order/online-order', import.meta.url).href,
           name: 'OnlineOrder',
         },
       },
@@ -71,7 +123,8 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
     return {
       filter: {
         type: {
-          module: new URL('./online-customer', import.meta.url).href,
+          module: new URL('../online-customer/online-customer', import.meta.url)
+            .href,
           name: 'OnlineCustomer',
         },
       },
@@ -248,6 +301,22 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
     this._createNewCustomer.perform();
   }
 
+  private _debounceSearch = restartableTask(async (searchValue: string) => {
+    await timeout(300); // 300ms debounce delay
+    this.searchTerm = searchValue;
+  });
+
+  @action
+  updateSearchTerm(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this._debounceSearch.perform(target.value);
+  }
+
+  @action
+  clearSearch() {
+    this.searchTerm = '';
+  }
+
   <template>
     <div class='stage'>
       <div class='store-mat'>
@@ -310,15 +379,6 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                 <div class='metric-content'>
                   <div class='metric-value loading-text'>Loading</div>
                   <div class='metric-label'>Overview</div>
-                </div>
-              </div>
-              <div class='overview-metric loading-metric'>
-                <div class='metric-icon loading-icon'>
-                  <div class='loading-spinner-small'></div>
-                </div>
-                <div class='metric-content'>
-                  <div class='metric-value loading-text'>...</div>
-                  <div class='metric-label'>Please wait</div>
                 </div>
               </div>
             </div>
@@ -468,13 +528,50 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                 </Button>
               </div>
 
+              <div class='search-bar'>
+                <div class='search-input-container'>
+                  <label for='product-search' class='sr-only'>Search products</label>
+                  <input
+                    type='text'
+                    id='product-search'
+                    class='search-input'
+                    placeholder='Search products by name, category, description, or SKU...'
+                    value={{this.searchTerm}}
+                    {{on 'input' this.updateSearchTerm}}
+                  />
+                  {{#if this.searchTerm}}
+                    <button
+                      class='clear-search-button'
+                      {{on 'click' this.clearSearch}}
+                      type='button'
+                    >
+                      <svg
+                        viewBox='0 0 24 24'
+                        fill='none'
+                        stroke='currentColor'
+                        stroke-width='2'
+                      >
+                        <line x1='18' y1='6' x2='6' y2='18' />
+                        <line x1='6' y1='6' x2='18' y2='18' />
+                      </svg>
+                    </button>
+                  {{/if}}
+                </div>
+                {{#if this.searchTerm}}
+                  <div class='search-status'>
+                    Searching for:
+                    <strong>"{{this.searchTerm}}"</strong>
+                  </div>
+                {{/if}}
+              </div>
+
               {{#let
                 (component @context.prerenderedCardSearchComponent)
                 as |PrerenderedCardSearch|
               }}
                 <PrerenderedCardSearch
-                  @query={{this.productsQuery}}
-                  @format='fitted'
+                  @query={{this.searchedProductsQuery}}
+                  @format='embedded'
                   @realms={{this.realms}}
                   @isLive={{true}}
                 >
@@ -561,7 +658,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
               }}
                 <PrerenderedCardSearch
                   @query={{this.ordersQuery}}
-                  @format='fitted'
+                  @format='embedded'
                   @realms={{this.realms}}
                   @isLive={{true}}
                 >
@@ -650,7 +747,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
               }}
                 <PrerenderedCardSearch
                   @query={{this.customersQuery}}
-                  @format='fitted'
+                  @format='embedded'
                   @realms={{this.realms}}
                   @isLive={{true}}
                 >
@@ -1058,29 +1155,18 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
 
       .dynamic-products-grid {
         grid-auto-rows: minmax(300px, auto);
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
       }
 
       .dynamic-customers-grid {
         grid-auto-rows: minmax(250px, auto);
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
       }
 
       .product-card-container,
       .order-card-container,
       .customer-card-container {
-        border-radius: 0.5rem;
         overflow: hidden;
-        transition:
-          transform 0.2s ease,
-          box-shadow 0.2s ease;
-      }
-
-      .product-card-container:hover,
-      .order-card-container:hover,
-      .customer-card-container:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
       }
 
       .products-loading,
@@ -1154,6 +1240,86 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
       .empty-state p {
         color: #6b7280;
         margin: 0 0 1.5rem 0;
+      }
+
+      /* Search bar styling */
+      .search-bar {
+        margin-bottom: 1.5rem;
+        padding: 1rem;
+        background: #f9fafb;
+        border-radius: 0.75rem;
+        border: 1px solid #e5e7eb;
+      }
+
+      .search-input-container {
+        position: relative;
+        display: flex;
+        align-items: center;
+      }
+
+      .search-icon {
+        position: absolute;
+        left: 0.75rem;
+        width: 1.25rem;
+        height: 1.25rem;
+        color: #9ca3af;
+        pointer-events: none;
+        z-index: 1;
+      }
+
+      .search-input {
+        width: 100%;
+        padding: 0.75rem 0.5rem;
+        border: 1px solid #d1d5db;
+        border-radius: 0.5rem;
+        font-size: 0.875rem;
+        background: white;
+        transition: all 0.2s ease;
+      }
+
+      .search-input:focus {
+        outline: none;
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+      }
+
+      .search-input::placeholder {
+        color: #9ca3af;
+      }
+
+      .clear-search-button {
+        position: absolute;
+        right: 0.5rem;
+        background: none;
+        border: none;
+        padding: 0.375rem;
+        cursor: pointer;
+        border-radius: 0.25rem;
+        color: #6b7280;
+        transition: all 0.2s ease;
+      }
+
+      .clear-search-button:hover {
+        color: #374151;
+        background: #f3f4f6;
+      }
+
+      .clear-search-button svg {
+        width: 1rem;
+        height: 1rem;
+      }
+
+      .search-status {
+        margin-top: 0.75rem;
+        font-size: 0.875rem;
+        color: #6b7280;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .search-status strong {
+        color: #374151;
       }
     </style>
   </template>
@@ -1272,402 +1438,6 @@ class EmbeddedTemplate extends Component<typeof OnlineStore> {
   </template>
 }
 
-class FittedTemplate extends Component<typeof OnlineStore> {
-  <template>
-    <div class='fitted-container'>
-      <div class='badge-format'>
-        <div class='badge-content'>
-          {{#if @model.logoUrl}}
-            <img
-              src={{@model.logoUrl}}
-              alt='{{@model.storeName}}'
-              class='badge-logo'
-            />
-          {{else}}
-            <div
-              class='badge-logo placeholder'
-              style={{htmlSafe
-                (if
-                  @model.brandColor (concat 'background: ' @model.brandColor) ''
-                )
-              }}
-            >
-              <svg
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <path d='M3 9h18l-1.5 9H4.5L3 9z' />
-              </svg>
-            </div>
-          {{/if}}
-          <div class='badge-title'>{{if
-              @model.storeName
-              @model.storeName
-              'Store'
-            }}</div>
-        </div>
-      </div>
-
-      <div class='strip-format'>
-        <div class='strip-content'>
-          {{#if @model.logoUrl}}
-            <img
-              src={{@model.logoUrl}}
-              alt='{{@model.storeName}}'
-              class='strip-logo'
-            />
-          {{else}}
-            <div
-              class='strip-logo placeholder'
-              style={{htmlSafe
-                (if
-                  @model.brandColor (concat 'background: ' @model.brandColor) ''
-                )
-              }}
-            >
-              <svg
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <path d='M3 9h18l-1.5 9H4.5L3 9z' />
-              </svg>
-            </div>
-          {{/if}}
-          <div class='strip-title'>{{if
-              @model.storeName
-              @model.storeName
-              'Online Store'
-            }}</div>
-        </div>
-      </div>
-
-      <div class='tile-format'>
-        <div class='tile-content'>
-          {{#if @model.logoUrl}}
-            <img
-              src={{@model.logoUrl}}
-              alt='{{@model.storeName}}'
-              class='tile-logo'
-            />
-          {{else}}
-            <div
-              class='tile-logo placeholder'
-              style={{htmlSafe
-                (if
-                  @model.brandColor (concat 'background: ' @model.brandColor) ''
-                )
-              }}
-            >
-              <svg
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <path d='M3 9h18l-1.5 9H4.5L3 9z' />
-              </svg>
-            </div>
-          {{/if}}
-          <div class='tile-title'>{{if
-              @model.storeName
-              @model.storeName
-              'Online Store'
-            }}</div>
-        </div>
-      </div>
-
-      <div class='card-format'>
-        <div class='card-content'>
-          {{#if @model.logoUrl}}
-            <img
-              src={{@model.logoUrl}}
-              alt='{{@model.storeName}}'
-              class='card-logo'
-            />
-          {{else}}
-            <div
-              class='card-logo placeholder'
-              style={{htmlSafe
-                (if
-                  @model.brandColor (concat 'background: ' @model.brandColor) ''
-                )
-              }}
-            >
-              <svg
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <path d='M3 9h18l-1.5 9H4.5L3 9z' />
-              </svg>
-            </div>
-          {{/if}}
-          <div class='card-title'>{{if
-              @model.storeName
-              @model.storeName
-              'Online Store'
-            }}</div>
-        </div>
-      </div>
-    </div>
-
-    <style scoped>
-      /* Container query system */
-      .fitted-container {
-        container-type: size;
-        width: 100%;
-        height: 100%;
-      }
-
-      /* Hide all formats by default */
-      .badge-format,
-      .strip-format,
-      .tile-format,
-      .card-format {
-        display: none;
-        width: 100%;
-        height: 100%;
-        padding: clamp(0.1875rem, 2%, 0.625rem);
-        box-sizing: border-box;
-      }
-
-      /* Badge format: up to 150px width, up to 169px height */
-      @container (max-width: 150px) and (max-height: 169px) {
-        .badge-format {
-          display: flex;
-          align-items: center;
-        }
-      }
-
-      /* Strip format: 151px+ width, up to 169px height */
-      @container (min-width: 151px) and (max-height: 169px) {
-        .strip-format {
-          display: flex;
-          align-items: center;
-        }
-      }
-
-      /* Tile format: up to 399px width, 170px+ height */
-      @container (max-width: 399px) and (min-height: 170px) {
-        .tile-format {
-          display: flex;
-          flex-direction: column;
-        }
-      }
-
-      /* Card format: 400px+ width, 170px+ height */
-      @container (min-width: 400px) and (min-height: 170px) {
-        .card-format {
-          display: flex;
-          flex-direction: column;
-        }
-      }
-
-      /* Badge format styling */
-      .badge-content {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        width: 100%;
-        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-        border-radius: 0.5rem;
-        padding: 0.375rem;
-        border: 1px solid rgba(226, 232, 240, 0.8);
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-      }
-
-      .badge-logo {
-        width: 1.5rem;
-        height: 1.5rem;
-        border-radius: 0.25rem;
-        object-fit: cover;
-        flex-shrink: 0;
-      }
-
-      .badge-logo.placeholder {
-        background: #e5e7eb;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-      }
-
-      .badge-logo.placeholder svg {
-        width: 0.875rem;
-        height: 0.875rem;
-      }
-
-      .badge-title {
-        font-size: 0.75rem;
-        font-weight: 600;
-        color: #111827;
-        line-height: 1.2;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        flex: 1;
-      }
-
-      /* Strip format styling */
-      .strip-content {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        width: 100%;
-        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-        border-radius: 0.625rem;
-        padding: 0.5rem;
-        border: 1px solid rgba(226, 232, 240, 0.8);
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-        transition: all 0.2s ease;
-      }
-
-      .strip-logo {
-        width: 2rem;
-        height: 2rem;
-        border-radius: 0.375rem;
-        object-fit: cover;
-        flex-shrink: 0;
-      }
-
-      .strip-logo.placeholder {
-        background: #e5e7eb;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-      }
-
-      .strip-logo.placeholder svg {
-        width: 1rem;
-        height: 1rem;
-      }
-
-      .strip-title {
-        font-size: 0.8125rem;
-        font-weight: 600;
-        color: #111827;
-        line-height: 1.2;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        flex: 1;
-      }
-
-      /* Tile format styling */
-      .tile-content {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        gap: 0.75rem;
-        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-        border-radius: 0.625rem;
-        padding: 0.75rem;
-        border: 1px solid rgba(226, 232, 240, 0.8);
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-        transition: all 0.3s ease;
-      }
-
-      .tile-logo {
-        width: 3rem;
-        height: 3rem;
-        border-radius: 0.5rem;
-        object-fit: cover;
-        flex-shrink: 0;
-      }
-
-      .tile-logo.placeholder {
-        background: #e5e7eb;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-      }
-
-      .tile-logo.placeholder svg {
-        width: 1.5rem;
-        height: 1.5rem;
-      }
-
-      .tile-title {
-        font-size: 0.875rem;
-        font-weight: 600;
-        color: #111827;
-        text-align: center;
-        line-height: 1.2;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        width: 100%;
-      }
-
-      /* Card format styling */
-      .card-content {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        gap: 1rem;
-        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-        border-radius: 0.875rem;
-        padding: 1rem;
-        border: 1px solid rgba(226, 232, 240, 0.8);
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
-        transition: all 0.3s ease;
-      }
-
-      .card-logo {
-        width: 4rem;
-        height: 4rem;
-        border-radius: 0.75rem;
-        object-fit: cover;
-        flex-shrink: 0;
-      }
-
-      .card-logo.placeholder {
-        background: #e5e7eb;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-      }
-
-      .card-logo.placeholder svg {
-        width: 2rem;
-        height: 2rem;
-      }
-
-      .card-title {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #111827;
-        text-align: center;
-        line-height: 1.2;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        width: 100%;
-      }
-
-      /* Hover effects */
-      .strip-content:hover,
-      .tile-content:hover,
-      .card-content:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
-      }
-    </style>
-  </template>
-}
-
 export class OnlineStore extends CardDef {
   static displayName = 'Online Store';
   static icon = StoreIcon;
@@ -1695,5 +1465,4 @@ export class OnlineStore extends CardDef {
 
   static isolated = IsolatedTemplate;
   static embedded = EmbeddedTemplate;
-  static fitted = FittedTemplate;
 }
