@@ -156,9 +156,11 @@ export default class MatrixResponsePublisher {
         contentAndReasoning.content,
         this.currentResponseEventId,
         extraData,
-        responseStateSnapshot.toolCalls.map((toolCall) =>
-          toCommandRequest(toolCall as ChatCompletionMessageToolCall),
-        ),
+        responseStateSnapshot.toolCalls
+          .filter(Boolean) // Elide empty tool calls, which can be produced by gpt-5 at the time of this writing
+          .map((toolCall) =>
+            toCommandRequest(toolCall as ChatCompletionMessageToolCall),
+          ),
         contentAndReasoning.reasoning,
       );
       if (!this.currentResponseEvent.eventId) {
