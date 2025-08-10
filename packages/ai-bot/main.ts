@@ -48,7 +48,7 @@ import { getAvailableCredits, saveUsageCost } from './lib/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { OpenAIError } from 'openai/error';
-import { ChatCompletionStream } from 'openai/lib/ChatCompletionStream.mjs';
+import { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
 import { acquireLock, releaseLock } from './lib/queries';
 import { logger as matrixLogger } from 'matrix-js-sdk/lib/logger';
 import { setupSignalHandlers } from './lib/signal-handlers';

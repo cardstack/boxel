@@ -5,7 +5,7 @@ import * as Sentry from '@sentry/node';
 import { OpenAIError } from 'openai/error';
 import throttle from 'lodash/throttle';
 import { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
-import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
+import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import type OpenAI from 'openai';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
@@ -94,7 +94,6 @@ export class Responder {
       chunk.choices?.[0]?.delta as { reasoning?: string }
     )?.reasoning;
 
-
     let toolCalls = snapshot.choices?.[0]?.message?.tool_calls?.filter((call) =>
       Boolean(call),
     );
@@ -128,7 +127,7 @@ export class Responder {
   }
 
   deserializeToolCall(
-    toolCall: ChatCompletionMessageToolCall,
+    toolCall: ChatCompletionMessageFunctionToolCall,
   ): FunctionToolCall {
     let { id, function: f } = toolCall;
     return {
