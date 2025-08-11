@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../gaming-hub/gaming-platform",
-        "name": "GamingPlatform"
+        "module": "../gaming-hub/gaming-hub",
+        "name": "GameEntryField"
       },
-      "specType": "card",
+      "specType": "field",
       "containedExamples": [],
-      "title": "GamingPlatform",
+      "title": "GameEntryField",
       "description": null,
       "cardInfo": {},
       "thumbnailURL": null

@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../gaming-hub/player-progress",
-        "name": "PlayerProgress"
+        "module": "../gaming-hub/gaming-hub",
+        "name": "GamingStatsField"
       },
-      "specType": "card",
+      "specType": "field",
       "containedExamples": [],
-      "title": "PlayerProgress",
+      "title": "GamingStatsField",
       "description": null,
       "cardInfo": {},
       "thumbnailURL": null

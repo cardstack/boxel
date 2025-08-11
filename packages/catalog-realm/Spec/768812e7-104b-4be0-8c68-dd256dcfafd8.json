@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../gaming-hub/tournament",
-        "name": "Tournament"
+        "module": "../gaming-hub/gaming-hub",
+        "name": "GamingHub"
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Tournament",
+      "title": "GamingHub",
       "description": null,
       "cardInfo": {},
       "thumbnailURL": null

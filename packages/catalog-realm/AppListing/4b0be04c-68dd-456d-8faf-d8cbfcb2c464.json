@@ -1,80 +1,89 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AppListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Gaming Hub",
-      "summary": "A comprehensive gaming profile management system for tracking games, statistics, friends, tournaments, and streaming activities across multiple platforms.",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/gaming-hub-listing/screenshot_01.png",
         "https://boxel-images.boxel.ai/app-assets/catalog/gaming-hub-listing/screenshot_02.png",
         "https://boxel-images.boxel.ai/app-assets/catalog/gaming-hub-listing/screenshot_03.png"
       ],
-      "cardInfo": {},
-      "description": "Gaming Hub is a full-featured gaming profile management application that allows gamers to track their gaming library, monitor statistics, connect with friends, participate in tournaments, and manage streaming activities. Features include multi-platform integration (Steam, Xbox, PlayStation), detailed gaming statistics, social networking capabilities, tournament tracking, wishlist management, and content creator tools for streamers.",
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/gaming-hub-listing/thumbnail.png"
+      "summary": "Comprehensive gaming profile and dashboard for tracking your complete gaming journey across platforms",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/gaming-hub-listing/thumbnail.png"
+      }
     },
     "relationships": {
-      "specs.0": {
-        "links": {
-          "self": "../Spec/fde748e7-bdd7-46d3-9cec-79b975ffc990"
-        }
-      },
-      "specs.1": {
-        "links": {
-          "self": "../Spec/e748e7bd-d7e6-439c-ac79-b975ffc99072"
-        }
-      },
-      "specs.2": {
-        "links": {
-          "self": "../Spec/48e7bdd7-e6d3-4cec-b9b9-75ffc990721e"
-        }
-      },
-      "specs.3": {
-        "links": {
-          "self": "../Spec/d7e6d39c-ec79-4975-bfc9-90721e59c53f"
-        }
-      },
-      "specs.4": {
-        "links": {
-          "self": "../Spec/e6d39cec-79b9-45ff-8990-721e59c53fb5"
-        }
-      },
-      "specs.5": {
-        "links": {
-          "self": "../Spec/a3fde748-e7bd-47e6-939c-ec79b975ffc9"
-        }
-      },
-      "specs.6": {
-        "links": {
-          "self": "../Spec/d39cec79-b975-4fc9-9072-1e59c53fb56a"
-        }
-      },
-      "specs.7": {
-        "links": {
-          "self": "../Spec/e7bdd7e6-d39c-4c79-b975-ffc990721e59"
-        }
-      },
-      "specs.8": {
-        "links": {
-          "self": "../Spec/bdd7e6d3-9cec-49b9-b5ff-c990721e59c5"
-        }
-      },
-      "publisher": {
-        "links": {
-          "self": null
-        }
-      },
-      "categories.0": {
-        "links": {
-          "self": "../Category/video-games-interactive"
-        }
-      },
       "tags": {
         "links": {
           "self": null
         }
       },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
       "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/9bbf6b90-7688-42e7-904b-0be04c68dd25"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/bf6b9076-8812-4710-8b0b-e04c68dd256d"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/768812e7-104b-4be0-8c68-dd256dcfafd8"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/8812e710-4b0b-404c-a8dd-256dcfafd8cb"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/90768812-e710-4b0b-a04c-68dd256dcfaf"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/6b907688-12e7-404b-8be0-4c68dd256dcf"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/12e7104b-0be0-4c68-9d25-6dcfafd8cbfc"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/e7104b0b-e04c-48dd-a56d-cfafd8cbfcb2"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/104b0be0-4c68-4d25-adcf-afd8cbfcb2c4"
+        }
+      },
+      "publisher": {
         "links": {
           "self": null
         }
@@ -111,69 +120,73 @@
       },
       "examples.6": {
         "links": {
-          "self": "../gaming-hub/GamingPlatform/steam-platform"
+          "self": "../gaming-platform/GamingPlatform/steam-platform"
         }
       },
       "examples.7": {
         "links": {
-          "self": "../gaming-hub/GamingPlatform/steam-platform"
+          "self": "../gaming-platform/GamingPlatform/steam-platform"
         }
       },
       "examples.8": {
         "links": {
-          "self": "../gaming-hub/GamingPlatform/xbox-live"
+          "self": "../gaming-platform/GamingPlatform/xbox-live"
         }
       },
       "examples.9": {
         "links": {
-          "self": "../gaming-hub/PlayerProgress/alex-cyberpunk"
+          "self": "../player-progress/PlayerProgress/alex-cyberpunk"
         }
       },
       "examples.10": {
         "links": {
-          "self": "../gaming-hub/PlayerProgress/maya-hollow-knight"
+          "self": "../player-progress/PlayerProgress/maya-hollow-knight"
         }
       },
       "examples.11": {
         "links": {
-          "self": "../gaming-hub/Tournament/street-fighter-evo"
+          "self": "../tournament/Tournament/street-fighter-evo"
         }
       },
       "examples.12": {
         "links": {
-          "self": "../gaming-hub/Tournament/valorant-championship"
+          "self": "../tournament/Tournament/valorant-championship"
         }
       },
       "examples.13": {
         "links": {
-          "self": "../gaming-hub/Game/cyberpunk-2077"
+          "self": "../game/Game/cyberpunk-2077"
         }
       },
       "examples.14": {
         "links": {
-          "self": "../gaming-hub/Game/hollow-knight"
+          "self": "../game/Game/hollow-knight"
         }
       },
       "examples.15": {
         "links": {
-          "self": "../gaming-hub/Game/valorant"
+          "self": "../game/Game/valorant"
         }
       },
-      "skills": {
+      "categories.0": {
         "links": {
-          "self": null
+          "self": "../Category/video-games-interactive"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/social-networking"
+        }
+      },
+      "categories.2": {
+        "links": {
+          "self": "../Category/content-creation"
         }
       },
       "cardInfo.theme": {
         "links": {
           "self": null
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "AppListing"
       }
     }
   }
