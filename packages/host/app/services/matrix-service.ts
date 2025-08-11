@@ -248,7 +248,7 @@ export default class MatrixService extends Service {
     if (this.inIframe) {
       try {
         const handle = await document.requestStorageAccess();
-        this.storage = handle.localStorage;
+        this.storage = handle?.localStorage ?? window.localStorage;
       } catch (error) {
         console.warn('Storage access request failed:', error);
       }
