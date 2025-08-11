@@ -1,5 +1,6 @@
 import { CardResource, Meta } from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
+import type { CommandInvocation } from './commands';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
@@ -334,8 +335,8 @@ export type getCommandData = <
   executeArgs: CardInputType extends CardDef
     ? Partial<CardInputType>
     : undefined,
-) => // This is a duck type of getCommandData
-CommandInvocation<CardResultType> | undefined;
+) => // This is a duck type of getCommandData (returns a maybe resource)
+{ current: CommandInvocation<CardResultType> | undefined };
 
 export interface CreateOptions {
   realm?: string;

@@ -448,15 +448,15 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     undefined,
   );
 
-  get writableRealms() {
+  get writableRealms(): { name: string; url: string; iconURL?: string }[] {
     const commandResource = this.allRealmsInfoResource?.current;
     if (commandResource?.isSuccess && commandResource.result?.results) {
       return commandResource.result.results
-        .filter(({ canWrite }: any) => canWrite)
-        .map(({ info }: any) => ({
-          name: info.name,
-          url: info.url,
-          iconURL: info.iconURL,
+        .filter((result) => result.canWrite)
+        .map((result) => ({
+          name: result.info.name,
+          url: result.info.url,
+          iconURL: result.info.iconURL,
         }));
     }
     return [];
@@ -486,7 +486,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
   get displayButton() {
     return (
       this.writableRealms.length > 0 &&
-      !this.allRealmsInfoResource?.current?.isLoading
+      this.allRealmsInfoResource?.current?.status == 'success'
     );
   }
 

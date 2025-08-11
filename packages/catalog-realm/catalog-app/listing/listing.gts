@@ -16,10 +16,8 @@ import { Skill } from 'https://cardstack.com/base/skill';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { tracked, cached } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
-import { resource, use } from 'ember-resources';
-import { consume } from 'ember-provide-consume-context';
 
 import {
   Accordion,
@@ -46,8 +44,6 @@ import { Tag } from './tag';
 
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
-  @tracked writableRealms: { name: string; url: string; iconURL?: string }[] =
-    [];
 
   allRealmsInfoResource = this.args.context?.getCommandData?.(
     this,
@@ -55,15 +51,15 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     undefined,
   );
 
-  get writableRealmsFromCommand() {
+  get writableRealms(): { name: string; url: string; iconURL?: string }[] {
     const commandResource = this.allRealmsInfoResource?.current;
     if (commandResource?.isSuccess && commandResource.result?.results) {
       return commandResource.result.results
-        .filter(({ canWrite }: any) => canWrite)
-        .map(({ info }: any) => ({
-          name: info.name,
-          url: info.url,
-          iconURL: info.iconURL,
+        .filter((result) => result.canWrite)
+        .map((result) => ({
+          name: result.info.name,
+          url: result.info.url,
+          iconURL: result.info.iconURL,
         }));
     }
     return [];
@@ -74,7 +70,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   }
 
   private getRealmOptions(actionCallback: (realmUrl: string) => void) {
-    const realms = this.writableRealmsFromCommand;
+    const realms = this.writableRealms;
     return realms
       .filter((realm) => realm.url !== this.args.model[realmURL]?.href)
       .map((realm) => {
@@ -231,7 +227,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   get displayButton() {
     return (
       this.writableRealms.length > 0 &&
-      !this.allRealmsInfoResource?.current?.isLoading
+      this.allRealmsInfoResource?.current?.status == 'success'
     );
   }
 
