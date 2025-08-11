@@ -42,7 +42,9 @@ mkdir -p "$DEST"
 # -r: recursive
 # --inplace: update destination files in-place (preserves destination attributes like ownership, permissions, timestamps)
 # --size-only: only copy if sizes differ (for efficiency)
-rsync -r --inplace --size-only $DELETE_FLAG "$SOURCE/." "$DEST/"
+# --dry-run: show what would be copied without actually copying
+# --itemize-changes: show detailed list of changes
+rsync -r --inplace --size-only --dry-run --itemize-changes $DELETE_FLAG "$SOURCE/." "$DEST/"
 
 # Set created attribute on new files that don't have it using TypeScript
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
