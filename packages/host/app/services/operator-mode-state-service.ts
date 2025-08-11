@@ -1057,6 +1057,10 @@ export default class OperatorModeStateService extends Service {
   }
 
   openWorkspace = async (realmUrl: string) => {
+    // Ensure realmUrl has a trailing slash
+    if (!realmUrl.endsWith('/')) {
+      realmUrl = realmUrl + '/';
+    }
     let id = `${realmUrl}index`;
     let stackItem = new StackItem({
       id,
