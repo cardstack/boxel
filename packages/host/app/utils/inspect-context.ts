@@ -1,5 +1,6 @@
 import { getOwner } from '@ember/owner';
 
+// Copies code of `getProvider` from @ember-provide-consume-context
 // Inspects the context at the class property level
 export function inspectContext(owner: any, contextKey: string) {
   const appOwner = getOwner(owner);
