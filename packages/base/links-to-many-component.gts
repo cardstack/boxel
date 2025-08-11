@@ -258,23 +258,28 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         grid-template-columns: var(--boxel-icon-lg) 1fr var(--boxel-icon-lg);
       }
       .remove {
-        --icon-color: var(--boxel-light);
-        --icon-border: var(--boxel-dark);
-        --icon-bg: var(--boxel-dark);
+        --icon-color: var(--secondary-foreground, var(--boxel-light));
+        --icon-border: var(--secondary, var(--boxel-dark));
+        --icon-bg: var(--secondary, var(--boxel-dark));
         align-self: auto;
         outline: 0;
         order: 1;
       }
       .remove:focus,
       .remove:hover {
-        --icon-bg: var(--boxel-highlight);
-        --icon-border: var(--boxel-highlight);
+        --icon-color: var(--primary-foreground, var(--boxel-light));
+        --icon-bg: var(--primary, var(--boxel-highlight));
+        --icon-border: var(--primary, var(--boxel-highlight));
       }
-      .remove:focus + :deep(.boxel-card-container.fitted-format),
-      .remove:hover + :deep(.boxel-card-container.fitted-format) {
+      .remove:focus + :deep(.boxel-card-container),
+      .remove:hover + :deep(.boxel-card-container) {
+        box-shadow: var(--shadow-lg, var(--boxel-box-shadow-hover));
+      }
+      .remove:focus + :deep(.boxel-card-container.boundaries),
+      .remove:hover + :deep(.boxel-card-container.boundaries) {
         box-shadow:
-          0 0 0 1px var(--boxel-light-500),
-          var(--boxel-box-shadow-hover);
+          0 0 0 1px var(--border, var(--boxel-border-color)),
+          var(--shadow-lg, var(--boxel-box-shadow-hover));
       }
       .add-new {
         width: calc(100% - var(--boxel-icon-xxl));
@@ -354,14 +359,16 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
     <style scoped>
       .boxel-pills {
         --boxel-add-button-pill-font: var(--boxel-font-sm);
-        --pill-border-radius: var(--boxel-border-radius-sm);
+        --pill-border-radius: var(--radius, var(--boxel-border-radius-sm));
         display: flex;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-form-control-border-color);
-        border-radius: var(--boxel-form-control-border-radius);
+        background-color: var(--muted, var(--boxel-light));
+        border: 1px solid var(--border, var(--boxel-form-control-border-color));
+        border-radius: var(--radius, var(--boxel-form-control-border-radius));
+        color: var(--foreground);
+        font-family: inherit;
       }
       .remove-item-button {
         width: 18px;

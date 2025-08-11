@@ -244,18 +244,26 @@ export default class BoxelInput extends Component<Signature> {
         width: 100%;
         min-height: var(--boxel-input-height);
         padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
-        border: 1px solid var(--boxel-form-control-border-color);
-        border-radius: var(--boxel-form-control-border-radius);
+        background-color: inherit;
+        color: inherit;
+        border: 1px solid var(--border, var(--boxel-form-control-border-color));
+        border-radius: var(--radius, var(--boxel-form-control-border-radius));
+        box-shadow: var(--shadow-sm);
         font: var(--boxel-font-sm);
+        font-family: inherit;
         font-weight: 400;
         letter-spacing: var(--boxel-lsp-xs);
         transition: border-color var(--boxel-transition);
+      }
+      .boxel-input:focus:focus-visible {
+        outline-color: var(--ring);
       }
 
       .boxel-input--large {
         --boxel-form-control-height: 4.375rem;
 
         font: var(--boxel-font);
+        font-family: inherit;
         letter-spacing: var(--boxel-lsp-xs);
       }
 
@@ -271,7 +279,7 @@ export default class BoxelInput extends Component<Signature> {
       }
 
       .boxel-input:hover:not(:disabled) {
-        border-color: var(--boxel-dark);
+        border-color: var(--border, var(--boxel-dark));
       }
 
       .invalid {

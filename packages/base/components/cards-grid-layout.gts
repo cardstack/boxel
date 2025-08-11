@@ -172,11 +172,28 @@ export default class CardsGridLayout extends Component<Signature> {
         overflow-y: auto;
       }
       .sidebar {
+        --background: var(--sidebar, var(--boxel-light));
+        --foreground: var(--sidebar-foreground, var(--boxel-dark));
+        --primary: var(--sidebar-primary, var(--boxel-dark));
+        --primary-foreground: var(
+          --sidebar-primary-foreground,
+          var(--boxel-light)
+        );
+        --accent: var(--sidebar-accent, var(--boxel-200));
+        --accent-foreground: var(
+          --sidebar-accent-foreground,
+          var(--boxel-dark)
+        );
+        --border: var(--sidebar-border, var(--boxel-border-color));
+        --ring: var(--sidebar-ring, var(--boxel-highlight));
+
         position: relative;
         max-width: 100%;
         width: var(--sidebar-max-width);
         min-width: var(--sidebar-min-width);
         padding: var(--boxel-cards-grid-layout-sidebar-padding, var(--padding));
+        background-color: var(--sidebar, var(--boxel-light));
+        color: var(--sidebar-foreground, var(--boxel-dark));
       }
       .content {
         position: relative;
@@ -199,6 +216,7 @@ export default class CardsGridLayout extends Component<Signature> {
         flex-grow: 1;
         margin-block: 0;
         font: 600 var(--boxel-font-lg);
+        font-family: inherit;
         letter-spacing: var(--boxel-lsp-xxs);
       }
     </style>

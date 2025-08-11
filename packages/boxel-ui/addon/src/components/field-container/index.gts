@@ -90,11 +90,12 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
 
     .content {
       max-width: 100%;
-      overflow: hidden;
-      padding: var(
-        --boxel-field-content-padding,
-        var(--boxel-outline-width)
-      ); /* necessary for our various overlays utilizing box-shadow */
+      overflow: clip;
+      overflow-clip-margin: var(
+        --boxel-field-content-overflow-clip-margin,
+        var(--boxel-sp)
+      );
+      padding: var(--boxel-field-content-padding);
     }
 
     .horizontal {

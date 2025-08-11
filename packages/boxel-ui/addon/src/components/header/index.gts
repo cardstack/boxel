@@ -72,7 +72,10 @@ const Header: TemplateOnlyComponent<Signature> = <template>
         display: flex;
         align-items: center;
         min-height: var(--boxel-header-min-height, 1.875rem); /* 30px */
-        color: var(--boxel-header-text-color, var(--boxel-dark));
+        color: var(
+          --boxel-header-text-color,
+          var(--foreground, var(--boxel-dark))
+        );
         border-top-right-radius: calc(
           var(--boxel-header-border-radius, var(--boxel-border-radius)) - 1px
         );
@@ -81,6 +84,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
         );
         font: var(--boxel-header-font-weight, 600)
           var(--boxel-header-text-font, var(--boxel-font-sm));
+        font-family: inherit;
         letter-spacing: var(--boxel-header-letter-spacing, normal);
         text-transform: var(--boxel-header-text-transform);
         transition:
@@ -108,15 +112,16 @@ const Header: TemplateOnlyComponent<Signature> = <template>
         padding: var(--boxel-header-padding, var(--boxel-sp-xl));
         font: var(--boxel-header-font-weight, 600)
           var(--boxel-header-text-font, var(--boxel-font-lg));
+        font-family: inherit;
       }
       .hasBottomBorder {
         border-bottom: 1px solid
-          var(--boxel--header-border-color, var(--boxel-200));
+          var(--boxel-header-border-color, var(--border, var(--boxel-200)));
       }
       .has-background {
         background-color: var(
           --boxel-header-background-color,
-          var(--boxel-100)
+          var(--muted, var(--boxel-100))
         );
       }
       .content {

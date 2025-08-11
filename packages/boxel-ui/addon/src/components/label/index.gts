@@ -24,6 +24,7 @@ const Label: TemplateOnlyComponent<Signature> = <template>
     .boxel-label {
       color: var(--boxel-label-color);
       font: var(--boxel-label-font, 600 var(--boxel-font-sm));
+      font-family: inherit;
       letter-spacing: var(--boxel-label-letter-spacing, var(--boxel-lsp-sm));
     }
     .ellipsize {

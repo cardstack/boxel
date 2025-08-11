@@ -69,11 +69,6 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
             - Empty -
           {{/if}}
         {{else}}
-          <DefaultFormatsProvider
-            @value={{hash cardDef='fitted' fieldDef='embedded'}}
-          >
-            <this.linkedCard />
-          </DefaultFormatsProvider>
           {{#if permissions.canWrite}}
             <IconButton
               @variant='primary'
@@ -87,6 +82,11 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
               data-test-remove-card
             />
           {{/if}}
+          <DefaultFormatsProvider
+            @value={{hash cardDef='fitted' fieldDef='embedded'}}
+          >
+            <this.linkedCard />
+          </DefaultFormatsProvider>
         {{/if}}
       </div>
     </PermissionsConsumer>
@@ -98,26 +98,31 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       .links-to-editor.can-write {
         grid-template-columns: 1fr var(--boxel-icon-lg);
       }
-      .links-to-editor > :deep(.boxel-card-container.embedded-format) {
+      .links-to-editor > :deep(.boxel-card-container) {
         order: -1;
       }
       .remove {
-        --icon-color: var(--boxel-light);
-        --icon-border: var(--boxel-dark);
-        --icon-bg: var(--boxel-dark);
+        --icon-color: var(--secondary-foreground, var(--boxel-light));
+        --icon-border: var(--secondary, var(--boxel-dark));
+        --icon-bg: var(--secondary, var(--boxel-dark));
         align-self: center;
         outline: 0;
       }
       .remove:focus,
       .remove:hover {
-        --icon-bg: var(--boxel-highlight);
-        --icon-border: var(--boxel-highlight);
+        --icon-color: var(--primary-foreground, var(--boxel-light));
+        --icon-bg: var(--primary, var(--boxel-highlight));
+        --icon-border: var(--primary, var(--boxel-highlight));
       }
-      .remove:focus + :deep(.boxel-card-container.embedded-format),
-      .remove:hover + :deep(.boxel-card-container.embedded-format) {
+      .remove:focus + :deep(.boxel-card-container),
+      .remove:hover + :deep(.boxel-card-container) {
+        box-shadow: var(--shadow-lg, var(--boxel-box-shadow-hover));
+      }
+      .remove:focus + :deep(.boxel-card-container.boundaries),
+      .remove:hover + :deep(.boxel-card-container.boundaries) {
         box-shadow:
-          0 0 0 1px var(--boxel-light-500),
-          var(--boxel-box-shadow-hover);
+          0 0 0 1px var(--border, var(--boxel-border-color)),
+          var(--shadow-lg, var(--boxel-box-shadow-hover));
       }
     </style>
   </template>
