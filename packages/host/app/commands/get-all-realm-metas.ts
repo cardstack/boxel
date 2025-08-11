@@ -16,22 +16,21 @@ export default class GetAllRealmMetasCommand extends HostBaseCommand<
   static description = 'Get information about all available realms';
 
   async getInputType() {
-    let commandModule = await this.loadCommandModule();
-    const { ShowCardInput } = commandModule;
-    return ShowCardInput;
+    return undefined;
   }
 
-  protected async run(): Promise<Record<string, any>> {
+  protected async run(): Promise<BaseCommandModule.GetAllRealmMetasResult> {
     let realmMetas = this.realm.allRealmsInfo;
     let commandModule = await this.loadCommandModule();
     const { GetAllRealmMetasResult, RealmInfoField, RealmMetaField } =
       commandModule;
 
     return new GetAllRealmMetasResult({
-      results: Object.entries(realmMetas).map(([_, realmMeta]) => {
+      results: Object.entries(realmMetas).map(([url, realmMeta]) => {
         return new RealmMetaField({
           info: new RealmInfoField({ ...realmMeta.info }),
           canWrite: realmMeta.canWrite,
+          url: url,
         });
       }),
     });

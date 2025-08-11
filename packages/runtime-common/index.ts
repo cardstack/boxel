@@ -1,6 +1,11 @@
 import { CardResource, Meta } from './resource-types';
 import type { ResolvedCodeRef } from './code-ref';
-import type { CommandInvocation } from './commands';
+import type {
+  CardInstance,
+  CommandContext,
+  CommandInvocation,
+  FieldsOf,
+} from './commands';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
@@ -186,6 +191,7 @@ export type { JWTPayload } from './realm-auth-client';
 export { sanitizeHtml } from './dompurify-runtime';
 export { markedSync, markdownToHtml } from './marked-sync';
 export { getPlural } from './pluralize-runtime';
+import { Command } from './commands';
 
 import type {
   CardDef,
@@ -327,13 +333,15 @@ export type getCards<T extends CardDef = CardDef> = (
   isLoading: boolean;
 };
 export type getCommandData = <
-  CardInputType extends CardDef | undefined,
-  CardResultType extends CardDef | undefined,
+  CardInputType extends CardAPI.CardDefConstructor | undefined,
+  CardResultType extends CardAPI.CardDefConstructor,
 >(
   parent: object,
-  commandClass: any,
-  executeArgs: CardInputType extends CardDef
-    ? Partial<CardInputType>
+  commandClass: new (
+    context: CommandContext,
+  ) => Command<CardInputType, CardResultType>,
+  executeArgs: CardInputType extends CardAPI.CardDefConstructor
+    ? Partial<FieldsOf<CardInstance<CardInputType>>>
     : undefined,
 ) => // This is a duck type of getCommandData (returns a maybe resource)
 { current: CommandInvocation<CardResultType> | undefined };

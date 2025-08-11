@@ -12,6 +12,10 @@ import {
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 import { Skill } from 'https://cardstack.com/base/skill';
+import type {
+  GetAllRealmMetasResult,
+  RealmMetaField,
+} from 'https://cardstack.com/base/command';
 
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
@@ -53,14 +57,17 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
   get writableRealms(): { name: string; url: string; iconURL?: string }[] {
     const commandResource = this.allRealmsInfoResource?.current;
-    if (commandResource?.isSuccess && commandResource.result?.results) {
-      return commandResource.result.results
-        .filter((result) => result.canWrite)
-        .map((result) => ({
-          name: result.info.name,
-          url: result.info.url,
-          iconURL: result.info.iconURL,
-        }));
+    if (commandResource?.isSuccess && commandResource.value) {
+      const result = commandResource.value as GetAllRealmMetasResult;
+      if (result.results) {
+        return result.results
+          .filter((realmMeta: RealmMetaField) => realmMeta.canWrite)
+          .map((realmMeta: RealmMetaField) => ({
+            name: realmMeta.info.name,
+            url: realmMeta.url,
+            iconURL: realmMeta.info.iconURL,
+          }));
+      }
     }
     return [];
   }
@@ -227,7 +234,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   get displayButton() {
     return (
       this.writableRealms.length > 0 &&
-      this.allRealmsInfoResource?.current?.status == 'success'
+      this.allRealmsInfoResource?.current?.status === 'success'
     );
   }
 

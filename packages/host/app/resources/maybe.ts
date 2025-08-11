@@ -5,8 +5,8 @@ import { getOwner, setOwner } from '@ember/owner';
 import { resource } from 'ember-resources';
 
 /**
- * This resource is meant for consumers to instantiate resources when some asynchronous 
- * conditions are met (e.g. if argument already exists, context exists). Otherwise, 
+ * This resource is meant for consumers to instantiate resources when some asynchronous
+ * conditions are met (e.g. if argument already exists, context exists). Otherwise,
  * it will still exist as a resource that returns undefined.
  *
  * @param parent - The parent object that owns this resource (must have an owner)

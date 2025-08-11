@@ -24,15 +24,16 @@ export interface CommandContext {
   [CommandContextStamp]: boolean;
 }
 
-export interface CommandInvocation<CardResultType = unknown> {
-  value: CardResultType | null;
+export interface CommandInvocation<CardResultType extends CardDefConstructor> {
+  value: CardInstance<CardResultType> | null;
   error: Error | null;
   status: 'pending' | 'success' | 'error';
+  readonly isSuccess: boolean;
 }
 
-type FieldsOf<T> = { [K in keyof Omit<T, 'constructor'>]: T[K] };
+export type FieldsOf<T> = { [K in keyof Omit<T, 'constructor'>]: T[K] };
 
-type CardInstance<T extends CardDefConstructor | undefined> =
+export type CardInstance<T extends CardDefConstructor | undefined> =
   T extends CardDefConstructor ? InstanceType<T> : undefined;
 
 export abstract class Command<

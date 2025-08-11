@@ -4,8 +4,12 @@ import { tracked } from '@glimmer/tracking';
 import {
   CommandContextName,
   type CommandInvocation,
-  Command,
+  type Command,
+  type FieldsOf,
+  type CardInstance,
 } from '@cardstack/runtime-common';
+
+import { CommandContext } from '@cardstack/runtime-common';
 
 import { CardDefConstructor } from 'https://cardstack.com/base/card-api';
 
@@ -13,27 +17,15 @@ import { inspectContext } from '../utils/inspect-context';
 
 import { maybe } from './maybe';
 
-export class CommandExecutionState<T = unknown>
-  implements CommandInvocation<T>
+export class CommandExecutionState<CardResultType extends CardDefConstructor>
+  implements CommandInvocation<CardResultType>
 {
   @tracked status: 'pending' | 'success' | 'error' = 'pending';
-  @tracked value: T | null = null;
+  @tracked value: CardInstance<CardResultType> | null = null;
   @tracked error: Error | null = null;
-
-  get isLoading() {
-    return this.status === 'pending';
-  }
 
   get isSuccess() {
     return this.status === 'success';
-  }
-
-  get isError() {
-    return this.status === 'error';
-  }
-
-  get result() {
-    return this.value;
   }
 
   setLoading() {
@@ -42,7 +34,7 @@ export class CommandExecutionState<T = unknown>
     this.error = null;
   }
 
-  setSuccess(result: T) {
+  setSuccess(result: CardInstance<CardResultType>) {
     this.status = 'success';
     this.value = result;
     this.error = null;
@@ -68,12 +60,14 @@ export class CommandExecutionState<T = unknown>
  */
 export function commandData<
   CardInputType extends CardDefConstructor | undefined,
-  CardResultType extends CardDefConstructor | undefined,
+  CardResultType extends CardDefConstructor,
 >(
   parent: object,
-  commandClass: new (context: any) => Command<CardInputType, CardResultType>,
+  commandClass: new (
+    context: CommandContext,
+  ) => Command<CardInputType, CardResultType>,
   executeArgs: CardInputType extends CardDefConstructor
-    ? Partial<InstanceType<CardInputType>>
+    ? Partial<FieldsOf<CardInstance<CardInputType>>>
     : undefined,
 ) {
   return maybe(parent, (_) => {
@@ -82,20 +76,20 @@ export function commandData<
 
     const command = new commandClass(commandContext.value);
     const state = new CommandExecutionState<
-      CardResultType extends CardDefConstructor
-        ? InstanceType<CardResultType>
-        : undefined
+      CardResultType extends CardDefConstructor ? CardResultType : never
     >();
     waitForPromise(
-      command
-        .execute(executeArgs)
-        .then((result) => {
-          state.setSuccess(result);
-        })
-        .catch((error) => {
-          state.setError(error);
-        }),
-    );
+      executeArgs === undefined
+        ? command.execute()
+        : command.execute(executeArgs as any),
+      // TODO: Fix type. Just scope to any. execute is expecting a "never"
+    )
+      .then((result) => {
+        state.setSuccess(result);
+      })
+      .catch((error) => {
+        state.setError(error);
+      });
     return state;
   });
 }

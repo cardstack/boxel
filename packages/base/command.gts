@@ -304,6 +304,7 @@ export class RealmInfoField extends FieldDef {
 export class RealmMetaField extends FieldDef {
   @field info = contains(RealmInfoField);
   @field canWrite = contains(BooleanField);
+  @field url = contains(StringField);
 }
 
 export class GetAllRealmMetasResult extends CardDef {
