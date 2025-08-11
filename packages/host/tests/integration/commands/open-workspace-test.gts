@@ -56,5 +56,17 @@ module('Integration | commands | open-workspace', function (hooks) {
       operatorModeStateService.state?.stacks[0][0].format,
       'isolated',
     );
+
+    // We logged a case where the realm URL given by the AI assistant was missing a trailing slash.
+    // This test ensures that we handle that case correctly.
+    let realmUrlWithTrailingSlash = testRealmURL;
+    let realmUrlWithoutTrailingSlash = testRealmURL.replace(/\/$/, '');
+    await openWorkspaceCommand.execute({
+      realmUrl: realmUrlWithoutTrailingSlash,
+    });
+    assert.strictEqual(
+      operatorModeStateService.state?.stacks[0][0].id,
+      `${realmUrlWithTrailingSlash}index`,
+    );
   });
 });
