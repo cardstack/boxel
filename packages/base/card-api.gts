@@ -2048,9 +2048,7 @@ export class BaseDef {
     return instance.constructor.icon;
   }
 
-  static get [emptyValue](): any {
-    return undefined;
-  }
+  static [emptyValue]: object | string | number | null | boolean | undefined;
 
   static [serialize](
     value: any,
