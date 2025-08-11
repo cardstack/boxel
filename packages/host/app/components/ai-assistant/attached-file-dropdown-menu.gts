@@ -57,10 +57,6 @@ export default class AttachedFileDropdownMenu extends Component<{
     );
   }
 
-  copySubmittedContent = async () => {
-    this.copySubmittedContentTask.perform();
-  };
-
   copySubmittedContentTask = dropTask(async () => {
     if (this.loadFileContent.isRunning) {
       await this.loadFileContent.perform(); // Should be dropped if loading is already running
@@ -83,7 +79,7 @@ export default class AttachedFileDropdownMenu extends Component<{
         disabled: !this.args.file?.sourceUrl,
       }),
       new MenuItem(`Copy ${submittedOrGenerated} Content`, 'action', {
-        action: this.copySubmittedContent,
+        action: this.copySubmittedContentTask.perform,
         icon: Copy,
         disabled: !this.args.file?.sourceUrl || this.args.isNewFile,
       }),
