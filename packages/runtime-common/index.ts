@@ -87,7 +87,7 @@ import { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './paths';
 export * from './cached-fetch';
-export * from './card-def-meta';
+export * from './definitions';
 export * from './catalog';
 export * from './commands';
 export * from './constants';
@@ -449,14 +449,8 @@ export interface CardActions {
       fieldName?: string;
     },
   ) => void;
-  copyURLToClipboard: (card: CardDef | URL | string) => Promise<void>;
   editCard: (card: CardDef) => void;
   saveCard: (id: string) => void;
-  delete: (item: CardDef | URL | string) => void;
-  doWithStableScroll: (
-    card: CardDef,
-    changeSizeCallback: () => Promise<void>,
-  ) => Promise<void>;
   changeSubmode: (
     url: URL,
     submode: 'code' | 'interact',

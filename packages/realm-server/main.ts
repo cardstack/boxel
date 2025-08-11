@@ -12,7 +12,6 @@ import yargs from 'yargs';
 import { RealmServer } from './server';
 import { resolve } from 'path';
 import { makeFastBootIndexRunner } from './fastboot';
-import { shimExternals } from './lib/externals';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -180,9 +179,6 @@ if (!useRegistrationSecretFunction && !MATRIX_REGISTRATION_SHARED_SECRET) {
 }
 
 let virtualNetwork = new VirtualNetwork();
-
-shimExternals(virtualNetwork);
-
 let urlMappings = fromUrls.map((fromUrl, i) => [
   new URL(String(fromUrl)),
   new URL(String(toUrls[i])),

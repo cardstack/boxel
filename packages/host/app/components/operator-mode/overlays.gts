@@ -15,7 +15,7 @@ import { type Actions } from '@cardstack/runtime-common';
 import type CardService from '@cardstack/host/services/card-service';
 import RealmService from '@cardstack/host/services/realm';
 
-import type { Format } from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import { CardDefOrId } from './stack-item';
 
@@ -26,6 +26,7 @@ interface OverlaySignature {
   Args: {
     renderedCardsForOverlayActions: RenderedCardForOverlayActions[];
     publicAPI?: Actions;
+    requestDeleteCard?: (card: CardDef | URL | string) => Promise<void>;
     onSelectCard?: (cardDefOrId: CardDefOrId) => void;
     toggleSelect?: (cardDefOrId: CardDefOrId) => void;
     selectedCards?: TrackedArray<CardDefOrId>;

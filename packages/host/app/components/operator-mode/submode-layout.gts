@@ -55,6 +55,7 @@ import WorkspaceChooser from './workspace-chooser';
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
 
 interface Signature {
@@ -109,6 +110,7 @@ export default class SubmodeLayout extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare store: StoreService;
   @service private declare aiAssistantPanelService: AiAssistantPanelService;
+  @service private declare recentCardsService: RecentCardsService;
 
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
@@ -187,7 +189,39 @@ export default class SubmodeLayout extends Component<Signature> {
         let currentSubmode = this.operatorModeStateService.state.submode;
 
         if (currentSubmode === Submodes.Code) {
-          this.operatorModeStateService.updateTrail([]);
+          // Check if current code path is a card instance ID
+          let codePathString = this.operatorModeStateService.codePathString;
+          if (codePathString) {
+            let cardId = codePathString.replace(/\.json$/, '');
+            let card = this.store.peek(cardId);
+
+            if (card && this.isCardInstance(card)) {
+              // Current code path is a card instance, use it directly
+              this.operatorModeStateService.updateTrail([codePathString]);
+            } else {
+              // Current code path is a card definition, try to get card ID from playground panel
+              let playgroundSelection =
+                this.operatorModeStateService.playgroundPanelSelection;
+              if (playgroundSelection?.cardId) {
+                this.operatorModeStateService.updateTrail([
+                  playgroundSelection.cardId + '.json',
+                ]);
+              } else {
+                // Try to find any card instance related to this definition
+                let relatedCardId =
+                  await this.findRelatedCardInstance(codePathString);
+                if (relatedCardId) {
+                  this.operatorModeStateService.updateTrail([
+                    relatedCardId + '.json',
+                  ]);
+                } else {
+                  this.operatorModeStateService.updateTrail([]);
+                }
+              }
+            }
+          } else {
+            this.operatorModeStateService.updateTrail([]);
+          }
         } else if (currentSubmode === Submodes.Interact) {
           this.operatorModeStateService.updateTrail(
             this.lastCardIdInRightMostStack
@@ -203,6 +237,45 @@ export default class SubmodeLayout extends Component<Signature> {
     }
 
     this.operatorModeStateService.updateSubmode(submode);
+  }
+
+  private isCardInstance(card: any): boolean {
+    return card && typeof card === 'object' && 'id' in card && card.id;
+  }
+
+  private async findRelatedCardInstance(
+    definitionPath: string,
+  ): Promise<string | null> {
+    try {
+      // Try to find any card instance that adopts from this definition
+      // This is a simplified approach - in a real implementation you might want to
+      // search through recent cards or use a more sophisticated lookup
+      let recentCards = this.recentCardsService.recentCards;
+
+      for (let recentCard of recentCards) {
+        let card = this.store.peek(recentCard.cardId);
+        if (card && this.isCardInstance(card)) {
+          // Check if this card adopts from the definition we're looking at
+          // This is a simplified check - you might need more sophisticated logic
+          let definitionName = definitionPath
+            .split('/')
+            .pop()
+            ?.replace('.json', '');
+          if (
+            definitionName &&
+            card.constructor.name === definitionName &&
+            card.id
+          ) {
+            return card.id;
+          }
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.warn('Error finding related card instance:', error);
+      return null;
+    }
   }
 
   @action private closeSearchSheet() {

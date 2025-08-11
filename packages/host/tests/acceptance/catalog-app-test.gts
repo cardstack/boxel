@@ -566,7 +566,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .dom(
             `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
           )
-          .hasText('Mortgage Calculator');
+          .hasText('Mortgage Calculator - Untitled Mortgage Calculator');
       });
 
       test('after clicking "Use Skills" button, the skills is attached to the skill menu', async function (assert) {
@@ -620,7 +620,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .dom(
             `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
           )
-          .hasText('Mortgage Calculator');
+          .hasText('Mortgage Calculator - Untitled Mortgage Calculator');
       });
 
       test('after clicking "Details" button, the listing details card opens up onto the stack', async function (assert) {
@@ -1069,7 +1069,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         .dom(
           `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
         )
-        .hasText('Mortgage Calculator');
+        .hasText('Mortgage Calculator - Untitled Mortgage Calculator');
     });
 
     skip('display of sections when viewing listing details', async function (assert) {

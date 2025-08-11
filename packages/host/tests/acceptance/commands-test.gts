@@ -787,7 +787,7 @@ module('Acceptance | Commands tests', function (hooks) {
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
               cardId: 'http://test-realm/test/Person/hassan',
-              title: 'Asclepias',
+              cardInfo: { title: 'Asclepias' },
             },
           }),
         },

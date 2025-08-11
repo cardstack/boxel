@@ -48,6 +48,9 @@ export const DEFAULT_LLM_ID_TO_NAME: Record<string, string> = {
   'openai/gpt-4.1': 'OpenAI: GPT-4.1',
   'openai/gpt-4o': 'OpenAI: GPT-4o',
   'openai/gpt-4o-mini': 'OpenAI: GPT-4o-mini',
+  'openai/gpt-5-nano': 'OpenAI: GPT-5 Nano',
+  'openai/gpt-5-mini': 'OpenAI: GPT-5 Mini',
+  'openai/gpt-5': 'OpenAI: GPT-5',
   'openai/gpt-oss-20b': 'OpenAI: GPT OSS 20B',
 };
 

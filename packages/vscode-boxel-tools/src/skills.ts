@@ -96,6 +96,12 @@ export class SkillsProvider
     console.log('Cursor rules path: ', this.cursorRulesPath);
 
     try {
+      // Ensure the directory exists before writing the file
+      const cursorRulesDir = path.dirname(this.cursorRulesPath);
+      if (!fs.existsSync(cursorRulesDir)) {
+        fs.mkdirSync(cursorRulesDir, { recursive: true });
+      }
+
       fs.writeFileSync(this.cursorRulesPath, combinedText);
       console.log('.cursorrules file updated successfully');
     } catch (error) {
@@ -236,6 +242,7 @@ export class SkillsProvider
         this.skillLists = [
           new SkillList('Base', 'https://app.boxel.ai/base/', true),
           new SkillList('Catalog', 'https://app.boxel.ai/catalog/', true),
+          new SkillList('Skills', 'https://app.boxel.ai/skills/', true),
         ];
         this.skillLists.push(
           ...realmUrls.map((url) => new SkillList(url, url)),
@@ -254,7 +261,17 @@ export class SkillsProvider
           }),
         );
 
-        await Promise.all(loadingPromises);
+        const results = await Promise.allSettled(loadingPromises);
+
+        // Log any failed realm loads
+        results.forEach((result, index) => {
+          if (result.status === 'rejected') {
+            console.error(
+              `Failed to load ${this.skillLists[index].label}:`,
+              result.reason,
+            );
+          }
+        });
 
         // After loading, restore enabled/disabled state from storage
         this.restoreSkillsState();

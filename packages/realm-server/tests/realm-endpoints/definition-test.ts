@@ -3,21 +3,15 @@ import { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import { Server } from 'http';
 import qs from 'qs';
+import { type Definition, type Realm } from '@cardstack/runtime-common';
 import {
-  baseRealm,
-  type Definition,
-  type Realm,
-} from '@cardstack/runtime-common';
-import {
-  setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
   closeServer,
-  createVirtualNetworkAndLoader,
   matrixURL,
   testRealmHref,
   createJWT,
-  cardInfoDefinition,
+  cardDefinition,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -36,15 +30,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       testRealmHttpServer = args.testRealmHttpServer;
       request = args.request;
     }
-
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.afterEach(async function () {
       await closeServer(testRealmHttpServer);
@@ -128,42 +114,6 @@ const expectedDefinition = {
         name: 'Person',
       },
       fields: {
-        id: {
-          type: 'contains',
-          isComputed: false,
-          fieldOrCard: {
-            name: 'ReadOnlyField',
-            module: 'https://cardstack.com/base/card-api',
-          },
-          isPrimitive: true,
-        },
-        title: {
-          type: 'contains',
-          isComputed: true,
-          fieldOrCard: {
-            name: 'StringField',
-            module: 'https://cardstack.com/base/card-api',
-          },
-          isPrimitive: true,
-        },
-        description: {
-          type: 'contains',
-          isComputed: false,
-          fieldOrCard: {
-            name: 'StringField',
-            module: 'https://cardstack.com/base/card-api',
-          },
-          isPrimitive: true,
-        },
-        thumbnailURL: {
-          type: 'contains',
-          isComputed: false,
-          fieldOrCard: {
-            name: 'MaybeBase64Field',
-            module: 'https://cardstack.com/base/card-api',
-          },
-          isPrimitive: true,
-        },
         firstName: {
           type: 'contains',
           isComputed: false,
@@ -173,7 +123,7 @@ const expectedDefinition = {
           },
           isPrimitive: true,
         },
-        ...cardInfoDefinition,
+        ...cardDefinition,
       },
     } as Definition,
   },

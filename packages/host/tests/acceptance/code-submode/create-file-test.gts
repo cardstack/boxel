@@ -415,8 +415,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         }
         assert.strictEqual(
           json.data.attributes?.title,
-          null,
-          'title field is empty',
+          'Untitled Card',
+          'title field defaults to fallback',
         );
         assert.strictEqual(
           json.data.meta.realmURL,
@@ -477,8 +477,8 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         }
         assert.strictEqual(
           json.data.attributes?.title,
-          null,
-          'title field is empty',
+          'Untitled Card',
+          'title field defaults to fallback',
         );
         assert.strictEqual(
           json.data.meta.realmURL,

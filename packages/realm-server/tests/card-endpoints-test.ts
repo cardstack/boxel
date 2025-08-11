@@ -6,7 +6,6 @@ import { type DirResult } from 'tmp';
 import { existsSync, readJSONSync } from 'fs-extra';
 import {
   isSingleCardDocument,
-  baseRealm,
   Realm,
   type LooseSingleCardDocument,
   type SingleCardDocument,
@@ -14,11 +13,9 @@ import {
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
 import {
-  setupCardLogs,
   setupBaseRealmServer,
   setupPermissionedRealm,
   setupMatrixRoom,
-  createVirtualNetworkAndLoader,
   matrixURL,
   closeServer,
   testRealmInfo,
@@ -26,6 +23,7 @@ import {
   testRealmHref,
   createJWT,
   testRealmServerMatrixUserId,
+  cardInfo,
 } from './helpers';
 import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -59,14 +57,7 @@ module(basename(__filename), function () {
       };
     }
 
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     hooks.afterEach(async function () {
       await closeServer(testRealmHttpServer);
@@ -108,7 +99,7 @@ module(basename(__filename), function () {
               type: 'card',
               attributes: {
                 title: 'Mango',
-                cardInfo: {},
+                cardInfo,
                 firstName: 'Mango',
                 description: null,
                 thumbnailURL: null,
@@ -217,7 +208,7 @@ module(basename(__filename), function () {
                 firstName: 'Mango',
                 description: null,
                 thumbnailURL: null,
-                cardInfo: {},
+                cardInfo,
               },
               meta: {
                 adoptsFrom: {
@@ -766,7 +757,7 @@ module(basename(__filename), function () {
                 title: 'Hassan',
                 description: null,
                 thumbnailURL: null,
-                cardInfo: {},
+                cardInfo,
               },
               relationships: {
                 friend: {
@@ -818,7 +809,7 @@ module(basename(__filename), function () {
                     title: 'Jade',
                     description: null,
                     thumbnailURL: null,
-                    cardInfo: {},
+                    cardInfo,
                   },
                   relationships: {
                     'friends.0': {
@@ -865,7 +856,7 @@ module(basename(__filename), function () {
                     title: 'Germaine',
                     description: null,
                     thumbnailURL: null,
-                    cardInfo: {},
+                    cardInfo,
                   },
                   relationships: {
                     friend: {
@@ -894,7 +885,7 @@ module(basename(__filename), function () {
                     title: 'Boris',
                     description: null,
                     thumbnailURL: null,
-                    cardInfo: {},
+                    cardInfo,
                   },
                   relationships: {
                     friend: {
@@ -942,7 +933,7 @@ module(basename(__filename), function () {
                 title: 'Jade',
                 description: null,
                 thumbnailURL: null,
-                cardInfo: {},
+                cardInfo,
               },
               relationships: {
                 'friends.0': {
@@ -1008,7 +999,7 @@ module(basename(__filename), function () {
                     title: 'Germaine',
                     description: null,
                     thumbnailURL: null,
-                    cardInfo: {},
+                    cardInfo,
                   },
                   relationships: {
                     friend: {
@@ -1037,7 +1028,7 @@ module(basename(__filename), function () {
                     title: 'Boris',
                     description: null,
                     thumbnailURL: null,
-                    cardInfo: {},
+                    cardInfo,
                   },
                   relationships: {
                     friend: {
@@ -1086,7 +1077,7 @@ module(basename(__filename), function () {
                   title: 'Germaine',
                   description: null,
                   thumbnailURL: null,
-                  cardInfo: {},
+                  cardInfo,
                 },
                 relationships: {
                   friend: {
@@ -1141,7 +1132,7 @@ module(basename(__filename), function () {
                   title: 'Boris',
                   description: null,
                   thumbnailURL: null,
-                  cardInfo: {},
+                  cardInfo,
                 },
                 relationships: {
                   friend: {
@@ -1426,9 +1417,7 @@ module(basename(__filename), function () {
                 type: 'card',
                 attributes: {
                   firstName: 'Van Gogh',
-                  cardInfo: {},
-                  description: null,
-                  thumbnailURL: null,
+                  cardInfo,
                 },
                 relationships: {
                   'cardInfo.theme': {
@@ -1594,9 +1583,7 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Paper',
-                    cardInfo: {},
-                    description: null,
-                    thumbnailURL: null,
+                    cardInfo,
                   },
                   relationships: {
                     friend: {
@@ -1740,7 +1727,7 @@ module(basename(__filename), function () {
               type: 'card',
               attributes: {
                 firstName: 'Paper',
-                cardInfo: {},
+                cardInfo,
                 title: 'Paper',
                 description: null,
                 thumbnailURL: null,
@@ -1793,7 +1780,7 @@ module(basename(__filename), function () {
                   attributes: {
                     firstName: 'Jade',
                     title: 'Jade',
-                    cardInfo: {},
+                    cardInfo,
                     description: null,
                     thumbnailURL: null,
                   },
@@ -1838,7 +1825,7 @@ module(basename(__filename), function () {
                   id: `${testRealmHref}Friend/local-id-2`,
                   type: 'card',
                   attributes: {
-                    cardInfo: {},
+                    cardInfo,
                     firstName: 'Germaine',
                     title: 'Germaine',
                     description: null,
@@ -1867,7 +1854,7 @@ module(basename(__filename), function () {
                   id: `${testRealmHref}Friend/local-id-3`,
                   type: 'card',
                   attributes: {
-                    cardInfo: {},
+                    cardInfo,
                     firstName: 'Boris',
                     title: 'Boris',
                     description: null,
@@ -1919,7 +1906,7 @@ module(basename(__filename), function () {
                 title: 'Jade',
                 description: null,
                 thumbnailURL: null,
-                cardInfo: {},
+                cardInfo,
               },
               relationships: {
                 'friends.0': {
@@ -1985,7 +1972,7 @@ module(basename(__filename), function () {
                     title: 'Germaine',
                     description: null,
                     thumbnailURL: null,
-                    cardInfo: {},
+                    cardInfo,
                   },
                   relationships: {
                     friend: {
@@ -2014,7 +2001,7 @@ module(basename(__filename), function () {
                     title: 'Boris',
                     description: null,
                     thumbnailURL: null,
-                    cardInfo: {},
+                    cardInfo,
                   },
                   relationships: {
                     friend: {
@@ -2063,7 +2050,7 @@ module(basename(__filename), function () {
                   title: 'Germaine',
                   description: null,
                   thumbnailURL: null,
-                  cardInfo: {},
+                  cardInfo,
                 },
                 relationships: {
                   friend: {
@@ -2118,7 +2105,7 @@ module(basename(__filename), function () {
                   title: 'Boris',
                   description: null,
                   thumbnailURL: null,
-                  cardInfo: {},
+                  cardInfo,
                 },
                 relationships: {
                   friend: {
@@ -2238,9 +2225,7 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Paper',
-                    cardInfo: {},
-                    description: null,
-                    thumbnailURL: null,
+                    cardInfo,
                   },
                   relationships: {
                     friend: {
@@ -2318,7 +2303,7 @@ module(basename(__filename), function () {
                 title: 'Paper',
                 description: null,
                 thumbnailURL: null,
-                cardInfo: {},
+                cardInfo,
               },
               relationships: {
                 friend: {
@@ -2370,7 +2355,7 @@ module(basename(__filename), function () {
                     title: 'Jade',
                     description: null,
                     thumbnailURL: null,
-                    cardInfo: {},
+                    cardInfo,
                   },
                   relationships: {
                     friend: {
@@ -2419,7 +2404,7 @@ module(basename(__filename), function () {
                 title: 'Jade',
                 description: null,
                 thumbnailURL: null,
-                cardInfo: {},
+                cardInfo,
               },
               relationships: {
                 friend: {
@@ -2522,9 +2507,7 @@ module(basename(__filename), function () {
                   type: 'card',
                   attributes: {
                     firstName: 'Paper',
-                    cardInfo: {},
-                    description: null,
-                    thumbnailURL: null,
+                    cardInfo,
                   },
                   relationships: {
                     friend: {

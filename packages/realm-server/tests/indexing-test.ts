@@ -1,7 +1,6 @@
 import { module, test } from 'qunit';
 import { dirSync } from 'tmp';
 import {
-  baseRealm,
   DBAdapter,
   LooseSingleCardDocument,
   Realm,
@@ -12,17 +11,16 @@ import {
 import {
   createRealm,
   testRealm,
-  setupCardLogs,
   setupBaseRealmServer,
   setupDB,
   runTestRealmServer,
   createVirtualNetwork,
-  createVirtualNetworkAndLoader,
   matrixURL,
   closeServer,
   cleanWhiteSpace,
   testRealmServerMatrixUserId,
-  cardInfoDefinition,
+  cardDefinition,
+  cardInfo,
 } from './helpers';
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { Server } from 'http';
@@ -44,9 +42,6 @@ let testDbAdapter: DBAdapter;
 
 module(basename(__filename), function () {
   module('indexing', function (hooks) {
-    let { virtualNetwork: baseRealmServerVirtualNetwork, loader } =
-      createVirtualNetworkAndLoader();
-
     async function getInstance(
       realm: Realm,
       url: URL,
@@ -57,16 +52,12 @@ module(basename(__filename), function () {
       }
       return maybeInstance;
     }
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
 
     let dir: string;
     let realm: Realm;
     let adapter: RealmAdapter;
 
-    setupBaseRealmServer(hooks, baseRealmServerVirtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     setupDB(hooks, {
       beforeEach: async (dbAdapter, publisher, runner) => {
@@ -668,43 +659,7 @@ module(basename(__filename), function () {
         assert.deepEqual(
           entry.definition.fields,
           {
-            ...cardInfoDefinition,
-            id: {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'ReadOnlyField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            title: {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            description: {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'StringField',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
-            thumbnailURL: {
-              type: 'contains',
-              isComputed: false,
-              fieldOrCard: {
-                name: 'MaybeBase64Field',
-                module: 'https://cardstack.com/base/card-api',
-              },
-              isPrimitive: true,
-            },
+            ...cardDefinition,
             message: {
               type: 'contains',
               isComputed: false,
@@ -734,7 +689,7 @@ module(basename(__filename), function () {
             },
             'author.title': {
               type: 'contains',
-              isComputed: false,
+              isComputed: true,
               fieldOrCard: {
                 name: 'StringField',
                 module: 'https://cardstack.com/base/card-api',
@@ -762,7 +717,7 @@ module(basename(__filename), function () {
             },
             'author.description': {
               type: 'contains',
-              isComputed: false,
+              isComputed: true,
               fieldOrCard: {
                 name: 'StringField',
                 module: 'https://cardstack.com/base/card-api',
@@ -771,7 +726,7 @@ module(basename(__filename), function () {
             },
             'author.thumbnailURL': {
               type: 'contains',
-              isComputed: false,
+              isComputed: true,
               fieldOrCard: {
                 name: 'MaybeBase64Field',
                 module: 'https://cardstack.com/base/card-api',
@@ -786,6 +741,42 @@ module(basename(__filename), function () {
                 module: 'https://cardstack.com/base/card-api',
               },
               isPrimitive: false,
+            },
+            'author.cardInfo.title': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.description': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.thumbnailURL': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'MaybeBase64Field',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.notes': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'MarkdownField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
             },
             'author.cardInfo.theme': {
               type: 'linksTo',
@@ -816,7 +807,7 @@ module(basename(__filename), function () {
             },
             'author.cardInfo.theme.description': {
               type: 'contains',
-              isComputed: false,
+              isComputed: true,
               fieldOrCard: {
                 name: 'StringField',
                 module: 'https://cardstack.com/base/card-api',
@@ -825,7 +816,7 @@ module(basename(__filename), function () {
             },
             'author.cardInfo.theme.thumbnailURL': {
               type: 'contains',
-              isComputed: false,
+              isComputed: true,
               fieldOrCard: {
                 name: 'MaybeBase64Field',
                 module: 'https://cardstack.com/base/card-api',
@@ -840,6 +831,42 @@ module(basename(__filename), function () {
                 module: 'https://cardstack.com/base/card-api',
               },
               isPrimitive: false,
+            },
+            'author.cardInfo.theme.cardInfo.title': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.description': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.thumbnailURL': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'MaybeBase64Field',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.notes': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'MarkdownField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
             },
             'author.cardInfo.theme.cssVariables': {
               type: 'contains',
@@ -886,9 +913,45 @@ module(basename(__filename), function () {
               },
               isPrimitive: false,
             },
-            'author.cardInfo.theme.cardInfo.theme.description': {
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.title': {
               type: 'contains',
               isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.description': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'StringField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'MaybeBase64Field',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.notes': {
+              type: 'contains',
+              isComputed: false,
+              fieldOrCard: {
+                name: 'MarkdownField',
+                module: 'https://cardstack.com/base/card-api',
+              },
+              isPrimitive: true,
+            },
+            'author.cardInfo.theme.cardInfo.theme.description': {
+              type: 'contains',
+              isComputed: true,
               fieldOrCard: {
                 name: 'StringField',
                 module: 'https://cardstack.com/base/card-api',
@@ -906,7 +969,7 @@ module(basename(__filename), function () {
             },
             'author.cardInfo.theme.cardInfo.theme.thumbnailURL': {
               type: 'contains',
-              isComputed: false,
+              isComputed: true,
               fieldOrCard: {
                 name: 'MaybeBase64Field',
                 module: 'https://cardstack.com/base/card-api',
@@ -949,9 +1012,49 @@ module(basename(__filename), function () {
               },
               isPrimitive: false,
             },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.title':
+              {
+                type: 'contains',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'StringField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.description':
+              {
+                type: 'contains',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'StringField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL':
+              {
+                type: 'contains',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'MaybeBase64Field',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.notes':
+              {
+                type: 'contains',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'MarkdownField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
             'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.description': {
               type: 'contains',
-              isComputed: false,
+              isComputed: true,
               fieldOrCard: {
                 name: 'StringField',
                 module: 'https://cardstack.com/base/card-api',
@@ -971,7 +1074,7 @@ module(basename(__filename), function () {
             'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL':
               {
                 type: 'contains',
-                isComputed: false,
+                isComputed: true,
                 fieldOrCard: {
                   name: 'MaybeBase64Field',
                   module: 'https://cardstack.com/base/card-api',
@@ -1018,10 +1121,40 @@ module(basename(__filename), function () {
                 },
                 isPrimitive: false,
               },
-            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.description':
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.title':
               {
                 type: 'contains',
                 isComputed: false,
+                fieldOrCard: {
+                  name: 'StringField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.description':
+              {
+                type: 'contains',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'StringField',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.thumbnailURL':
+              {
+                type: 'contains',
+                isComputed: false,
+                fieldOrCard: {
+                  name: 'MaybeBase64Field',
+                  module: 'https://cardstack.com/base/card-api',
+                },
+                isPrimitive: true,
+              },
+            'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.description':
+              {
+                type: 'contains',
+                isComputed: true,
                 fieldOrCard: {
                   name: 'StringField',
                   module: 'https://cardstack.com/base/card-api',
@@ -1041,7 +1174,7 @@ module(basename(__filename), function () {
             'author.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.thumbnailURL':
               {
                 type: 'contains',
-                isComputed: false,
+                isComputed: true,
                 fieldOrCard: {
                   name: 'MaybeBase64Field',
                   module: 'https://cardstack.com/base/card-api',
@@ -1669,12 +1802,12 @@ module(basename(__filename), function () {
         assert.deepEqual(
           hassan.doc.data.attributes,
           {
-            title: null,
+            title: 'Untitled Card',
             nickName: "Ringo's buddy",
             firstName: 'Hassan',
             description: null,
             thumbnailURL: null,
-            cardInfo: {},
+            cardInfo,
           },
           'doc attributes are correct',
         );
@@ -1709,17 +1842,19 @@ module(basename(__filename), function () {
             id: hassanId,
             pet: {
               id: `${testRealm}ringo`,
-              title: null,
+              title: 'Untitled Card',
               firstName: 'Ringo',
               description: null,
               thumbnailURL: null,
               cardInfo: {
+                ...cardInfo,
                 theme: null,
               },
             },
             nickName: "Ringo's buddy",
             _cardType: 'PetPerson',
             firstName: 'Hassan',
+            title: 'Untitled Card',
             cardInfo: {
               theme: null,
             },
@@ -2296,15 +2431,7 @@ module(basename(__filename), function () {
   });
 
   module('permissioned realm', function (hooks) {
-    let { virtualNetwork: baseRealmServerVirtualNetwork, loader } =
-      createVirtualNetworkAndLoader();
-
-    setupCardLogs(
-      hooks,
-      async () => await loader.import(`${baseRealm.url}card-api`),
-    );
-
-    setupBaseRealmServer(hooks, baseRealmServerVirtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     // We want 2 different realm users to test authorization between them - these
     // names are selected because they are already available in the test

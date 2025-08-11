@@ -57,7 +57,6 @@ import {
 
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
 
-import config from '@cardstack/host/config/environment';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
@@ -216,25 +215,6 @@ export default class InteractSubmode extends Component {
         here.addToStack(newItem);
         here.operatorModeStateService.closeWorkspaceChooser();
       },
-      copyURLToClipboard: async (
-        card: CardDef | URL | string,
-      ): Promise<void> => {
-        let copyableUrl;
-        if (typeof card === 'string') {
-          copyableUrl = card;
-        } else if (card instanceof URL) {
-          copyableUrl = card.href;
-        } else {
-          copyableUrl = card.id;
-        }
-        if (!copyableUrl) {
-          return;
-        }
-        if (config.environment === 'test') {
-          return; // navigator.clipboard is not available in test environment
-        }
-        await navigator.clipboard.writeText(copyableUrl);
-      },
       editCard(card: CardDef): void {
         let item = here.findCardInStack(card, stackIndex);
         here.operatorModeStateService.replaceItemInStack(
@@ -247,61 +227,6 @@ export default class InteractSubmode extends Component {
       },
       saveCard: (id: string): void => {
         here.store.save(id);
-      },
-      delete: async (card: CardDef | URL | string): Promise<void> => {
-        let cardToDelete: CardToDelete | undefined;
-
-        if (typeof card === 'object' && 'id' in card) {
-          let loadedCard = card as CardDef;
-          cardToDelete = {
-            id: loadedCard.id,
-            title: loadedCard.title,
-          };
-        } else {
-          let cardUrl = card instanceof URL ? card : new URL(card as string);
-          let loadedCard = await here.store.get(cardUrl.href);
-          if (isCardInstance(loadedCard)) {
-            cardToDelete = {
-              id: loadedCard.id,
-              title: loadedCard.title,
-            };
-          } else {
-            let error = loadedCard;
-            if (error.meta != null) {
-              let cardTitle = error.meta.cardTitle;
-              if (!cardTitle) {
-                throw new Error(
-                  `Could not get card title for ${card} - the server returned a 500 but perhaps for other reason than the card being in error state`,
-                );
-              }
-              cardToDelete = {
-                id: cardUrl.href,
-                title: cardTitle,
-              };
-            } else {
-              throw new CardError(error.message, error);
-            }
-          }
-        }
-        here.cardToDelete = cardToDelete;
-      },
-      doWithStableScroll: async (
-        card: CardDef,
-        changeSizeCallback: () => Promise<void>,
-      ): Promise<void> => {
-        let stackItem: StackItem | undefined;
-        for (let stack of here.stacks) {
-          stackItem = stack.find((item: StackItem) => item.id === card.id);
-          if (stackItem) {
-            let doWithStableScroll =
-              stackItemComponentAPI.get(stackItem)?.doWithStableScroll;
-            if (doWithStableScroll) {
-              doWithStableScroll(changeSizeCallback); // this is perform()ed in the component
-              return;
-            }
-          }
-        }
-        await changeSizeCallback();
       },
       changeSubmode: async (
         url: URL,
@@ -474,6 +399,44 @@ export default class InteractSubmode extends Component {
   @action
   private onSelectedCards(selectedCards: CardDefOrId[], stackItem: StackItem) {
     this.selectCards.perform(selectedCards, stackItem);
+  }
+
+  @action
+  private async requestDeleteCard(card: CardDef | URL | string): Promise<void> {
+    let cardToDelete: CardToDelete | undefined;
+    if (typeof card === 'object' && 'id' in card) {
+      let loadedCard = card as CardDef;
+      cardToDelete = {
+        id: loadedCard.id,
+        title: loadedCard.title,
+      };
+    } else {
+      let cardUrl = card instanceof URL ? card : new URL(card as string);
+      let loadedCard = await this.store.get(cardUrl.href);
+      if (isCardInstance(loadedCard)) {
+        cardToDelete = {
+          id: loadedCard.id,
+          title: loadedCard.title,
+        };
+      } else {
+        let error = loadedCard;
+        if (error.meta != null) {
+          let cardTitle = error.meta.cardTitle;
+          if (!cardTitle) {
+            throw new Error(
+              `Could not get card title for ${card} - the server returned a 500 but perhaps for other reason than the card being in error state`,
+            );
+          }
+          cardToDelete = {
+            id: cardUrl.href,
+            title: cardTitle,
+          };
+        } else {
+          throw new CardError(error.message, error);
+        }
+      }
+    }
+    this.cardToDelete = cardToDelete;
   }
 
   private selectCards = restartableTask(
@@ -806,6 +769,7 @@ export default class InteractSubmode extends Component {
                 @stackItems={{stack}}
                 @stackIndex={{stackIndex}}
                 @publicAPI={{this.publicAPI this stackIndex}}
+                @requestDeleteCard={{this.requestDeleteCard}}
                 @commandContext={{this.commandService.commandContext}}
                 @close={{this.close}}
                 @onSelectedCards={{this.onSelectedCards}}

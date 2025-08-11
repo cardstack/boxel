@@ -1,0 +1,38 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "OnlineCustomer",
+        "module": "../online-customer"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "email": {
+        "label": "Email",
+        "value": "zara.ahmed@healthtechstartup.com"
+      },
+      "phone": {
+        "label": "Phone",
+        "value": "+1-647-555-1286"
+      },
+      "cardInfo": {},
+      "totalSpent": 2847.33,
+      "description": null,
+      "loyaltyTier": {
+        "name": "Bronze"
+      },
+      "totalOrders": 12,
+      "customerName": "Zara Ahmed",
+      "thumbnailURL": null,
+      "customerSince": "2024-02-28T13:10:00.000Z"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

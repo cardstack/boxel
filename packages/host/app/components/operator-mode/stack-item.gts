@@ -2,7 +2,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import { schedule, scheduleOnce } from '@ember/runloop';
+import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe, SafeString } from '@ember/template';
 
@@ -13,12 +13,7 @@ import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
 import Captions from '@cardstack/boxel-icons/captions';
-import {
-  restartableTask,
-  timeout,
-  waitForProperty,
-  dropTask,
-} from 'ember-concurrency';
+import { restartableTask, timeout, dropTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { provide, consume } from 'ember-provide-consume-context';
 
@@ -46,7 +41,6 @@ import {
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
-  Deferred,
   cardTypeIcon,
   CommandContext,
   realmURL,
@@ -56,6 +50,8 @@ import {
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
+
+import { copyCardURLToClipboard } from '@cardstack/host/utils/clipboard';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -76,9 +72,6 @@ import type StoreService from '../../services/store';
 
 export interface StackItemComponentAPI {
   clearSelections: () => void;
-  doWithStableScroll: (
-    changeSizeCallback: () => Promise<void>,
-  ) => Promise<void>;
   scrollIntoView: (selector: string) => Promise<void>;
   startAnimation: (type: 'closing' | 'movingForward') => Promise<void>;
 }
@@ -89,6 +82,7 @@ interface Signature {
     stackItems: StackItem[];
     index: number;
     publicAPI: Actions;
+    requestDeleteCard?: (card: CardDef | URL | string) => Promise<void>;
     commandContext: CommandContext;
     close: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => Promise<void>;
@@ -154,8 +148,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     super(owner, args);
     this.args.setupStackItem(this.args.item, {
       clearSelections: this.clearSelections,
-      doWithStableScroll: this.doWithStableScroll.perform,
-      scrollIntoView: this.scrollIntoView.perform,
+      scrollIntoView: this.scrollIntoViewTask.perform,
       startAnimation: this.startAnimation.perform,
     });
   }
@@ -305,7 +298,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
       new MenuItem('Delete Card', 'action', {
         action: () =>
           this.cardIdentifier &&
-          this.args.publicAPI.delete(this.cardIdentifier),
+          this.args.requestDeleteCard &&
+          this.args.requestDeleteCard(this.cardIdentifier),
         icon: IconTrash,
         dangerous: true,
       }),
@@ -320,9 +314,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     let menuItems: MenuItem[] = [
       new MenuItem('Copy Card URL', 'action', {
         action: () =>
-          this.card
-            ? this.args.publicAPI.copyURLToClipboard(this.card)
-            : undefined,
+          this.card ? copyCardURLToClipboard(this.card) : undefined,
         icon: IconLink,
         disabled: !this.url,
       }),
@@ -351,7 +343,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         }),
         new MenuItem('Delete', 'action', {
           action: () =>
-            this.card ? this.args.publicAPI.delete(this.card) : undefined,
+            this.card ? this.args.requestDeleteCard!(this.card) : undefined,
           icon: IconTrash,
           dangerous: true,
           disabled: !this.url,
@@ -421,31 +413,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
     );
   };
 
-  private doWithStableScroll = restartableTask(
-    async (changeSizeCallback: () => Promise<void>) => {
-      if (!this.contentEl) {
-        return;
-      }
-      let deferred = new Deferred<void>();
-      let el = this.contentEl;
-      let currentScrollTop = this.contentEl.scrollTop;
-      await changeSizeCallback();
-      await this.cardService.cardsSettled();
-      schedule('afterRender', () => {
-        el.scrollTop = currentScrollTop;
-        deferred.fulfill();
-      });
-      await deferred.promise;
-    },
-  );
-
-  private scrollIntoView = restartableTask(async (selector: string) => {
+  private scrollIntoViewTask = restartableTask(async (selector: string) => {
     if (!this.contentEl || !this.containerEl) {
       return;
     }
-    // this has the effect of waiting for a search to complete
-    // in the scenario the stack item is a cards-grid
-    await waitForProperty(this.doWithStableScroll, 'isIdle', true);
     await timeout(500); // need to wait for DOM to update with new card(s)
 
     let item = document.querySelector(selector);
@@ -696,6 +667,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
               @publicAPI={{@publicAPI}}
+              @requestDeleteCard={{@requestDeleteCard}}
               @toggleSelect={{this.toggleSelect}}
               @selectedCards={{this.selectedCards}}
             />

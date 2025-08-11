@@ -554,7 +554,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       }
       .examples-list {
         display: grid;
-        grid-template-columns: repeat(5, 1fr);
+        grid-template-columns: repeat(auto-fill, 150px);
         gap: var(--boxel-sp);
         list-style: none;
         margin-block: 0;
@@ -593,9 +593,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         .license-statistic,
         .stats-container,
         .pricing-plans,
-        .examples-list {
-          grid-template-columns: 1fr;
-        }
         .images-list {
           grid-template-columns: repeat(2, 1fr);
         }
@@ -604,6 +601,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       @container app-listing-embedded (inline-size <= 360px) {
         .images-list {
           grid-template-columns: repeat(1, 1fr);
+        }
+        .examples-list {
+          grid-template-columns: 1fr;
         }
       }
     </style>

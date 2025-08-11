@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "module": "../online-customer/online-customer",
+        "name": "OnlineCustomer"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "OnlineCustomer",
+      "description": "Spec of OnlineCustomer",
+      "cardInfo": {},
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
