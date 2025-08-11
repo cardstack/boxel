@@ -15,7 +15,6 @@ import { add, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 
 import { type Listing } from '../listing/listing';
-import { setupAllRealmsInfo } from '../helper';
 
 import {
   BoxelDropdown,
@@ -26,6 +25,7 @@ import {
 import ListingBuildCommand from '@cardstack/boxel-host/commands/listing-action-build';
 import ListingRemixCommand from '@cardstack/boxel-host/commands/listing-remix';
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
+import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
 
 interface Signature {
   Element: HTMLElement;
@@ -442,36 +442,52 @@ class CarouselComponent extends GlimmerComponent<Signature> {
 }
 
 export class ListingFittedTemplate extends Component<typeof Listing> {
-  @tracked writableRealms: { name: string; url: string; iconURL?: string }[] =
-    [];
+  allRealmsInfoResource = this.args.context?.getCommandData?.(
+    this,
+    GetAllRealmMetasCommand,
+    undefined,
+  );
 
-  constructor(owner: any, args: any) {
-    super(owner, args);
-    this.writableRealms = setupAllRealmsInfo(this.args);
+  get writableRealms() {
+    const commandResource = this.allRealmsInfoResource?.current;
+    if (commandResource?.isSuccess && commandResource.result?.results) {
+      return commandResource.result.results
+        .filter(({ canWrite }: any) => canWrite)
+        .map(({ info }: any) => ({
+          name: info.name,
+          url: info.url,
+          iconURL: info.iconURL,
+        }));
+    }
+    return [];
   }
 
-  get remixRealmOptions() {
+  private getRealmOptions(actionCallback: (realmUrl: string) => void) {
     return this.writableRealms
       .filter((realm) => realm.url !== this.args.model[realmURL]?.href)
       .map((realm) => {
         return new MenuItem(realm.name, 'action', {
           action: () => {
-            this.remix(realm.url);
+            actionCallback(realm.url);
           },
           iconURL: realm.iconURL ?? '/default-realm-icon.png',
         });
       });
   }
 
+  get remixRealmOptions() {
+    return this.getRealmOptions((realmUrl) => this.remix(realmUrl));
+  }
+
   get buildRealmOptions() {
-    return this.writableRealms.map((realm) => {
-      return new MenuItem(realm.name, 'action', {
-        action: () => {
-          this.build(realm.url);
-        },
-        iconURL: realm.iconURL ?? '/default-realm-icon.png',
-      });
-    });
+    return this.getRealmOptions((realmUrl) => this.build(realmUrl));
+  }
+
+  get displayButton() {
+    return (
+      this.writableRealms.length > 0 &&
+      !this.allRealmsInfoResource?.current?.isLoading
+    );
   }
 
   get firstImage() {
@@ -590,54 +606,56 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           {{#if this.hasTags}}
             <span class='card-tags'># {{this.firstTagName}}</span>
           {{/if}}
-          {{#if this.isStub}}
-            <BoxelDropdown @autoClose={{true}}>
-              <:trigger as |bindings|>
-                <BoxelButton
-                  class='card-build-button'
-                  data-test-catalog-listing-fitted-build-button
-                  @kind='primary'
-                  @loading={{this._build.isRunning}}
-                  {{on 'click' this._stopPropagation}}
-                  {{bindings}}
-                >
-                  Build
-                </BoxelButton>
-              </:trigger>
-              <:content as |dd|>
-                <BoxelMenu
-                  class='realm-dropdown-menu'
-                  @closeMenu={{dd.close}}
-                  @items={{this.buildRealmOptions}}
-                  data-test-catalog-listing-fitted-build-dropdown
-                />
-              </:content>
-            </BoxelDropdown>
-          {{else}}
-            <BoxelDropdown @autoClose={{true}}>
-              <:trigger as |bindings|>
-                <BoxelButton
-                  data-test-catalog-listing-fitted-remix-button
-                  @kind='primary'
-                  @size='extra-small'
-                  class='card-remix-button'
-                  @loading={{this._remix.isRunning}}
-                  {{on 'click' this._stopPropagation}}
-                  {{bindings}}
-                  aria-label='Remix listing'
-                >
-                  Remix
-                </BoxelButton>
-              </:trigger>
-              <:content as |dd|>
-                <BoxelMenu
-                  class='realm-dropdown-menu'
-                  @closeMenu={{dd.close}}
-                  @items={{this.remixRealmOptions}}
-                  data-test-catalog-listing-fitted-remix-dropdown
-                />
-              </:content>
-            </BoxelDropdown>
+          {{#if this.displayButton}}
+            {{#if this.isStub}}
+              <BoxelDropdown @autoClose={{true}}>
+                <:trigger as |bindings|>
+                  <BoxelButton
+                    class='card-build-button'
+                    data-test-catalog-listing-fitted-build-button
+                    @kind='primary'
+                    @loading={{this._build.isRunning}}
+                    {{on 'click' this._stopPropagation}}
+                    {{bindings}}
+                  >
+                    Build
+                  </BoxelButton>
+                </:trigger>
+                <:content as |dd|>
+                  <BoxelMenu
+                    class='realm-dropdown-menu'
+                    @closeMenu={{dd.close}}
+                    @items={{this.buildRealmOptions}}
+                    data-test-catalog-listing-fitted-build-dropdown
+                  />
+                </:content>
+              </BoxelDropdown>
+            {{else}}
+              <BoxelDropdown @autoClose={{true}}>
+                <:trigger as |bindings|>
+                  <BoxelButton
+                    data-test-catalog-listing-fitted-remix-button
+                    @kind='primary'
+                    @size='extra-small'
+                    class='card-remix-button'
+                    @loading={{this._remix.isRunning}}
+                    {{on 'click' this._stopPropagation}}
+                    {{bindings}}
+                    aria-label='Remix listing'
+                  >
+                    Remix
+                  </BoxelButton>
+                </:trigger>
+                <:content as |dd|>
+                  <BoxelMenu
+                    class='realm-dropdown-menu'
+                    @closeMenu={{dd.close}}
+                    @items={{this.remixRealmOptions}}
+                    data-test-catalog-listing-fitted-remix-dropdown
+                  />
+                </:content>
+              </BoxelDropdown>
+            {{/if}}
           {{/if}}
         </div>
       </div>

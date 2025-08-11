@@ -20,6 +20,8 @@ import {
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
+  GetCommandDataContextName,
+  CommandContextName,
 } from '@cardstack/runtime-common';
 
 import Auth from '@cardstack/host/components/matrix/auth';
@@ -29,6 +31,7 @@ import HostSubmode from '@cardstack/host/components/operator-mode/host-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
+import { commandData } from '@cardstack/host/resources/command-data';
 import { getSearch } from '@cardstack/host/resources/search';
 
 import MessageService from '@cardstack/host/services/message-service';
@@ -90,6 +93,17 @@ export default class OperatorModeContainer extends Component<Signature> {
     return getCardCollection;
   }
 
+  @provide(GetCommandDataContextName)
+  // @ts-ignore "getCommandData" is declared but not used
+  private get getCommandData() {
+    return commandData;
+  }
+
+  @provide(CommandContextName)
+  private get commandContext() {
+    return this.commandService.commandContext;
+  }
+
   @provide(CardContextName)
   // @ts-ignore "context" is declared but not used
   private get context(): CardContext {
@@ -97,8 +111,9 @@ export default class OperatorModeContainer extends Component<Signature> {
       getCard: this.getCard,
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
+      getCommandData: this.getCommandData,
       store: this.store,
-      commandContext: this.commandService.commandContext,
+      commandContext: this.commandContext,
       prerenderedCardSearchComponent: PrerenderedCardSearch,
     };
   }

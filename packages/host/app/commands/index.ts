@@ -7,6 +7,7 @@ import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-bl
 import * as CopyCardCommandModule from './copy-card';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
+import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
 import * as GetCardCommandModule from './get-card';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
 import * as ListingBuildCommandModule from './listing-action-build';
@@ -175,5 +176,9 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-card',
     GetCardCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/get-all-realm-metas',
+    GetAllRealmMetasCommandModule,
   );
 }

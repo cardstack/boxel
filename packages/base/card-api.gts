@@ -67,6 +67,7 @@ import {
   type getCard,
   type getCards,
   type getCardCollection,
+  type getCommandData,
   type Store,
   type PrerenderedCardComponentSignature,
   getSerializer,
@@ -183,6 +184,7 @@ export interface CardContext<T extends CardDef = CardDef> {
   getCards: getCards;
   getCardCollection: getCardCollection;
   store: Store;
+  getCommandData?: getCommandData;
 }
 
 export interface FieldConstructor<T> {

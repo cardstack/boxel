@@ -16,8 +16,10 @@ import { Skill } from 'https://cardstack.com/base/skill';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
+import { resource, use } from 'ember-resources';
+import { consume } from 'ember-provide-consume-context';
 
 import {
   Accordion,
@@ -35,45 +37,62 @@ import { ListingFittedTemplate } from '../components/listing-fitted';
 import ListingRemixCommand from '@cardstack/boxel-host/commands/listing-remix';
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 import ListingBuildCommand from '@cardstack/boxel-host/commands/listing-action-build';
+import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
 
 import { Publisher } from './publisher';
 import { Category } from './category';
 import { License } from './license';
 import { Tag } from './tag';
-import { setupAllRealmsInfo } from '../helper';
 
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
   @tracked writableRealms: { name: string; url: string; iconURL?: string }[] =
     [];
 
-  constructor(owner: any, args: any) {
-    super(owner, args);
-    this.writableRealms = setupAllRealmsInfo(this.args);
+  allRealmsInfoResource = this.args.context?.getCommandData?.(
+    this,
+    GetAllRealmMetasCommand,
+    undefined,
+  );
+
+  get writableRealmsFromCommand() {
+    const commandResource = this.allRealmsInfoResource?.current;
+    if (commandResource?.isSuccess && commandResource.result?.results) {
+      return commandResource.result.results
+        .filter(({ canWrite }: any) => canWrite)
+        .map(({ info }: any) => ({
+          name: info.name,
+          url: info.url,
+          iconURL: info.iconURL,
+        }));
+    }
+    return [];
   }
 
-  get remixRealmOptions() {
-    return this.writableRealms
+  constructor(owner: any, args: any) {
+    super(owner, args);
+  }
+
+  private getRealmOptions(actionCallback: (realmUrl: string) => void) {
+    const realms = this.writableRealmsFromCommand;
+    return realms
       .filter((realm) => realm.url !== this.args.model[realmURL]?.href)
       .map((realm) => {
         return new MenuItem(realm.name, 'action', {
           action: () => {
-            this.remix(realm.url);
+            actionCallback(realm.url);
           },
           iconURL: realm.iconURL ?? '/default-realm-icon.png',
         });
       });
   }
 
+  get remixRealmOptions() {
+    return this.getRealmOptions((realmUrl) => this.remix(realmUrl));
+  }
+
   get buildRealmOptions() {
-    return this.writableRealms.map((realm) => {
-      return new MenuItem(realm.name, 'action', {
-        action: () => {
-          this.build(realm.url);
-        },
-        iconURL: realm.iconURL ?? '/default-realm-icon.png',
-      });
-    });
+    return this.getRealmOptions((realmUrl) => this.build(realmUrl));
   }
 
   _build = task(async (realm: string) => {
@@ -209,6 +228,13 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return Boolean(this.args.model.examples?.length);
   }
 
+  get displayButton() {
+    return (
+      this.writableRealms.length > 0 &&
+      !this.allRealmsInfoResource?.current?.isLoading
+    );
+  }
+
   <template>
     <div class='app-listing-embedded'>
       <AppListingHeader
@@ -239,51 +265,53 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 Preview
               </BoxelButton>
             {{/if}}
-            {{#if this.isStub}}
-              <BoxelDropdown @autoClose={{true}}>
-                <:trigger as |bindings|>
-                  <BoxelButton
-                    class='action-button'
-                    data-test-catalog-listing-embedded-build-button
-                    @kind='primary'
-                    @loading={{this._build.isRunning}}
-                    {{bindings}}
-                  >
-                    Build
-                  </BoxelButton>
-                </:trigger>
-                <:content as |dd|>
-                  <BoxelMenu
-                    class='realm-dropdown-menu'
-                    @closeMenu={{dd.close}}
-                    @items={{this.buildRealmOptions}}
-                    data-test-catalog-listing-embedded-build-dropdown
-                  />
-                </:content>
-              </BoxelDropdown>
-            {{else}}
-              <BoxelDropdown @autoClose={{true}}>
-                <:trigger as |bindings|>
-                  <BoxelButton
-                    class='action-button'
-                    data-test-catalog-listing-embedded-remix-button
-                    @kind='primary'
-                    @loading={{this._remix.isRunning}}
-                    @disabled={{this.remixDisabled}}
-                    {{bindings}}
-                  >
-                    Remix
-                  </BoxelButton>
-                </:trigger>
-                <:content as |dd|>
-                  <BoxelMenu
-                    class='realm-dropdown-menu'
-                    @closeMenu={{dd.close}}
-                    @items={{this.remixRealmOptions}}
-                    data-test-catalog-listing-embedded-remix-dropdown
-                  />
-                </:content>
-              </BoxelDropdown>
+            {{#if this.displayButton}}
+              {{#if this.isStub}}
+                <BoxelDropdown @autoClose={{true}}>
+                  <:trigger as |bindings|>
+                    <BoxelButton
+                      class='action-button'
+                      data-test-catalog-listing-embedded-build-button
+                      @kind='primary'
+                      @loading={{this._build.isRunning}}
+                      {{bindings}}
+                    >
+                      Build
+                    </BoxelButton>
+                  </:trigger>
+                  <:content as |dd|>
+                    <BoxelMenu
+                      class='realm-dropdown-menu'
+                      @closeMenu={{dd.close}}
+                      @items={{this.buildRealmOptions}}
+                      data-test-catalog-listing-embedded-build-dropdown
+                    />
+                  </:content>
+                </BoxelDropdown>
+              {{else}}
+                <BoxelDropdown @autoClose={{true}}>
+                  <:trigger as |bindings|>
+                    <BoxelButton
+                      class='action-button'
+                      data-test-catalog-listing-embedded-remix-button
+                      @kind='primary'
+                      @loading={{this._remix.isRunning}}
+                      @disabled={{this.remixDisabled}}
+                      {{bindings}}
+                    >
+                      Remix
+                    </BoxelButton>
+                  </:trigger>
+                  <:content as |dd|>
+                    <BoxelMenu
+                      class='realm-dropdown-menu'
+                      @closeMenu={{dd.close}}
+                      @items={{this.remixRealmOptions}}
+                      data-test-catalog-listing-embedded-remix-dropdown
+                    />
+                  </:content>
+                </BoxelDropdown>
+              {{/if}}
             {{/if}}
           </div>
         </:action>
