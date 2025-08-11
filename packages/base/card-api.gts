@@ -3,11 +3,7 @@ import GlimmerComponent from '@glimmer/component';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
-import {
-  BoxelInput,
-  ColorPicker,
-  ColorPalette,
-} from '@cardstack/boxel-ui/components';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
@@ -85,7 +81,6 @@ import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
 import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import TextAreaIcon from '@cardstack/boxel-icons/align-left';
-import PaintBucket from '@cardstack/boxel-icons/paint-bucket';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 
 interface CardOrFieldTypeIconSignature {
@@ -2329,13 +2324,7 @@ export class CSSField extends TextAreaField {
   static displayName = 'CSS Field';
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <pre class='css-field'>
-        {{if
-          @model
-          @model
-          '/* No CSS defined */'
-        }}
-      </pre>
+      <pre class='css-field'>{{if @model @model '/* No CSS defined */'}}</pre>
       <style scoped>
         .css-field {
           margin-block: 0;
@@ -2382,26 +2371,6 @@ export class MarkdownField extends StringField {
         @onInput={{@set}}
         @disabled={{not @canEdit}}
       />
-    </template>
-  };
-}
-
-class ColorViewTemplate extends Component<typeof ColorField> {
-  <template>
-    <ColorPicker @color={{@model}} @disabled={{true}} @showHexString={{true}} />
-  </template>
-}
-
-export class ColorField extends StringField {
-  static displayName = 'Color';
-  static icon = PaintBucket;
-
-  static embedded = ColorViewTemplate;
-  static atom = ColorViewTemplate;
-  static fitted = ColorViewTemplate;
-  static edit = class ColorEditTemplate extends Component<typeof this> {
-    <template>
-      <ColorPalette @color={{@model}} @onChange={{@set}} />
     </template>
   };
 }
