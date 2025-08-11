@@ -451,10 +451,6 @@ export interface CardActions {
   ) => void;
   editCard: (card: CardDef) => void;
   saveCard: (id: string) => void;
-  doWithStableScroll: (
-    card: CardDef,
-    changeSizeCallback: () => Promise<void>,
-  ) => Promise<void>;
   changeSubmode: (
     url: URL,
     submode: 'code' | 'interact',
