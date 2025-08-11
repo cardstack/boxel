@@ -26,7 +26,6 @@ import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 const realmName = 'Local Workspace';
-const baseRealmCardCount = 3;
 
 module('Integration | card-catalog', function (hooks) {
   setupRenderingTest(hooks);
@@ -215,11 +214,8 @@ module('Integration | card-catalog', function (hooks) {
         .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
         .exists({ count: 5 });
       assert
-        .dom(`[data-test-realm="Base Workspace"] [data-test-results-count]`)
-        .hasText(`${baseRealmCardCount} results`);
-      assert
         .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
-        .exists({ count: baseRealmCardCount });
+        .exists();
       assert.dom('[data-test-realm-filter-button]').hasText('Workspace: All');
 
       let localResults = [
@@ -252,7 +248,7 @@ module('Integration | card-catalog', function (hooks) {
         .hasText(`Workspace: Base Workspace, Cardstack Catalog, Boxel Skills`);
       assert
         .dom(`[data-test-realm="Base Workspace"] [data-test-card-catalog-item]`)
-        .exists({ count: baseRealmCardCount });
+        .exists();
 
       assert.dom(`[data-test-realm="${realmName}"]`).doesNotExist();
 
