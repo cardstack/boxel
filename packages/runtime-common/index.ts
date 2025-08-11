@@ -325,6 +325,17 @@ export type getCards<T extends CardDef = CardDef> = (
   instancesByRealm: { realm: string; cards: T[] }[];
   isLoading: boolean;
 };
+export type getCommandData = <
+  CardInputType extends CardDef | undefined,
+  CardResultType extends CardDef | undefined,
+>(
+  parent: object,
+  commandClass: any,
+  executeArgs: CardInputType extends CardDef
+    ? Partial<CardInputType>
+    : undefined,
+) => // This is a duck type of getCommandData
+CommandInvocation<CardResultType> | undefined;
 
 export interface CreateOptions {
   realm?: string;
