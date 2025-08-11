@@ -18,7 +18,7 @@ export function setActiveGenerations(generations: Map<string, any>) {
 }
 
 export async function waitForActiveGenerations(): Promise<void> {
-  let minutes = 5;
+  let minutes = 10;
   const maxWaitTime = minutes * 60 * 1000;
   let waitTime = 0;
 
