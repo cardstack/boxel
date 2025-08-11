@@ -10,6 +10,7 @@ import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test, skip } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
+import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import ShowCardCommand from '@cardstack/host/commands/show-card';
@@ -17,6 +18,8 @@ import { StackItem } from '@cardstack/host/lib/stack-item';
 
 import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
+
+import * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import {
   setupCardLogs,
@@ -532,6 +535,30 @@ module('Integration | Command | show-card', function (hooks) {
       assert.ok(inputType, 'Input type is defined');
       // We can't easily test the exact type without mocking the command module loading
       // but we can verify that getInputType doesn't throw an error
+    });
+
+    test('getInputJsonSchema', async function (assert) {
+      let loader = getService('loader-service').loader;
+      let mappings = await basicMappings(loader);
+      let cardAPI = await loader.import<typeof CardAPI>(
+        `${baseRealm.url}card-api`,
+      );
+      const inputSchema = await command.getInputJsonSchema(cardAPI, mappings);
+      assert.ok(inputSchema, 'Input JSON schema is defined');
+      assert.deepEqual(
+        inputSchema,
+        {
+          attributes: {
+            properties: {
+              cardId: { type: 'string' },
+              format: { type: 'string' },
+            },
+            required: ['cardId'],
+            type: 'object',
+          },
+        },
+        'Input schema excludes cardInfo, requires cardId',
+      );
     });
   });
 });

@@ -33,6 +33,8 @@ export default class ShowCardCommand extends HostBaseCommand<
     return ShowCardInput;
   }
 
+  requireInputFields = ['cardId'];
+
   protected async run(
     input: BaseCommandModule.ShowCardInput,
   ): Promise<undefined> {
