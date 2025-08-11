@@ -16,9 +16,6 @@ import {
   VirtualNetwork,
   Worker,
   RunnerOptionsManager,
-  Loader,
-  fetcher,
-  maybeHandleScopedCSSRequest,
   insertPermissions,
   IndexWriter,
   asExpressions,
@@ -42,7 +39,6 @@ import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { makeFastBootIndexRunner } from '../../fastboot';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { PUBLISHED_DIRECTORY_NAME, RealmServer } from '../../server';
 import {
   PgAdapter,
@@ -51,7 +47,6 @@ import {
 } from '@cardstack/postgres';
 import { Server } from 'http';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import { shimExternals } from '../../lib/externals';
 
 import supertest, { SuperTest, Test } from 'supertest';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
@@ -95,8 +90,6 @@ export async function waitUntil<T>(
   );
 }
 
-export * from '@cardstack/runtime-common/helpers/indexer';
-
 export const testRealm = 'http://test-realm/';
 export const localBaseRealm = 'http://localhost:4441/';
 export const matrixURL = new URL('http://localhost:8008');
@@ -135,20 +128,8 @@ export function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
 }
 
-export function createVirtualNetworkAndLoader() {
-  let virtualNetwork = createVirtualNetwork();
-  let fetch = fetcher(virtualNetwork.fetch, [
-    async (req, next) => {
-      return (await maybeHandleScopedCSSRequest(req)) || next(req);
-    },
-  ]);
-  let loader = new Loader(fetch, virtualNetwork.resolveImport);
-  return { virtualNetwork, loader };
-}
-
 export function createVirtualNetwork() {
   let virtualNetwork = new VirtualNetwork();
-  shimExternals(virtualNetwork);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
   return virtualNetwork;
 }
@@ -320,17 +301,13 @@ export async function createRealm({
   return { realm, adapter };
 }
 
-export function setupBaseRealmServer(
-  hooks: NestedHooks,
-  virtualNetwork: VirtualNetwork,
-  matrixURL: URL,
-) {
+export function setupBaseRealmServer(hooks: NestedHooks, matrixURL: URL) {
   let baseRealmServer: Server;
   setupDB(hooks, {
     before: async (dbAdapter, publisher, runner) => {
       let dir = dirSync();
       baseRealmServer = await runBaseRealmServer(
-        virtualNetwork,
+        createVirtualNetwork(),
         publisher,
         runner,
         dbAdapter,
@@ -488,16 +465,6 @@ export async function runTestRealmServer({
     testRealmAdapter,
     matrixClient,
   };
-}
-
-export function setupCardLogs(
-  hooks: NestedHooks,
-  apiThunk: () => Promise<typeof CardAPI>,
-) {
-  hooks.afterEach(async function () {
-    let api = await apiThunk();
-    await api.flushLogs();
-  });
 }
 
 export async function insertUser(
