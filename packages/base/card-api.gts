@@ -708,13 +708,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
                 opts,
               );
             }
-            return this.card[deserialize](
-              entry,
-              relativeTo,
-              doc,
-              identityContext,
-              opts,
-            );
+            return entry;
           } else {
             let meta = metas[index];
             let resource: LooseCardResource = {
@@ -957,13 +951,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
           opts,
         );
       }
-      return this.card[deserialize](
-        value,
-        relativeTo,
-        doc,
-        identityContext,
-        opts,
-      );
+      return value;
     }
     if (fieldMeta && Array.isArray(fieldMeta)) {
       throw new Error(
@@ -2150,7 +2138,6 @@ export class BaseDef {
     opts?: DeserializeOpts,
   ): Promise<BaseInstanceType<T>> {
     if (primitive in this) {
-      // primitive cards can override this as need be
       return data;
     }
     return _createFromSerialized(
