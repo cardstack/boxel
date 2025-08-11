@@ -1,50 +1,98 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "GamingHub",
+        "module": "../gaming-hub"
+      }
+    },
     "type": "card",
     "attributes": {
-      "gamerTag": "ShadowBlade_Alex",
-      "email": "alex.rivera@protonmail.com",
       "bio": "Competitive FPS player and content creator. 5 years in esports with multiple tournament wins. Streaming variety games on weekends. Always looking for new tactical shooters to master.",
-      "joinDate": "2019-03-15",
+      "email": "alex.rivera@protonmail.com",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "gamerTag": "ShadowBlade_Alex",
       "isOnline": true,
-      "profileImageUrl": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&h=400&fit=crop&crop=face",
+      "joinDate": "2019-03-15",
       "location": "Austin, Texas",
-      "preferredGenres": ["FPS", "Battle Royale", "Tactical Shooter", "Racing"],
-      "gamingGroups": ["Texas Esports Coalition", "Midnight Gaming Crew", "FPS Masters"],
-      "streamingPlatforms": ["Twitch", "YouTube Gaming"],
-      "contentCreatorStatus": true,
-      "streamSchedule": "Friday-Sunday 8PM-12AM CST",
       "statistics": {
         "totalGames": 127,
         "totalHours": 2847,
-        "completionRate": 78,
         "averageRating": 8.2,
-        "achievementsUnlocked": 1456,
+        "currentStreak": 12,
         "favoriteGenre": "FPS",
-        "currentStreak": 12
-      }
+        "completionRate": 78,
+        "achievementsUnlocked": 1456
+      },
+      "gamingGroups": [
+        "Texas Esports Coalition",
+        "Midnight Gaming Crew",
+        "FPS Masters"
+      ],
+      "streamSchedule": "Friday-Sunday 8PM-12AM CST",
+      "preferredGenres": [
+        "FPS",
+        "Battle Royale",
+        "Tactical Shooter",
+        "Racing"
+      ],
+      "profileImageUrl": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&h=400&fit=crop&crop=face",
+      "streamingPlatforms": [
+        "Twitch",
+        "YouTube Gaming"
+      ],
+      "contentCreatorStatus": true
     },
     "relationships": {
-      "connectedPlatforms.0": {
-        "links": { "self": "../../gaming-platform/GamingPlatform/steam-platform" }
+      "friends.0": {
+        "links": {
+          "self": "./maya-phoenixrise"
+        }
       },
-      "gameProgress.0": {
-        "links": { "self": "../../player-progress/PlayerProgress/alex-cyberpunk" }
+      "friends.1": {
+        "links": {
+          "self": "./zlata-voidwalker"
+        }
       },
       "tournaments.0": {
-        "links": { "self": "../../tournament/Tournament/valorant-championship" }
+        "links": {
+          "self": "../../tournament/Tournament/valorant-championship"
+        }
+      },
+      "wishlistGames": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "gameProgress.0": {
+        "links": {
+          "self": "../../player-progress/PlayerProgress/alex-cyberpunk"
+        }
       },
       "favoriteGames.0": {
-        "links": { "self": "../../game/Game/valorant" }
+        "links": {
+          "self": "../../game/Game/valorant"
+        }
       },
       "favoriteGames.1": {
-        "links": { "self": "../../game/Game/cyberpunk-2077" }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../gaming-hub",
-        "name": "GamingHub"
+        "links": {
+          "self": "../../game/Game/cyberpunk-2077"
+        }
+      },
+      "connectedPlatforms.0": {
+        "links": {
+          "self": "../../gaming-platform/GamingPlatform/steam-platform"
+        }
       }
     }
   }

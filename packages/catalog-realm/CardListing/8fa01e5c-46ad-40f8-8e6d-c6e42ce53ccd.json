@@ -9,11 +9,16 @@
     "type": "card",
     "attributes": {
       "name": "Game Card",
-      "images": [],
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/game-listing/screenshot-01.png"
+      ],
       "summary": "A comprehensive game card template featuring detailed game information, ratings, system requirements, and achievements with cyberpunk-themed styling.",
-      "cardInfo": {},
-      "description": "A comprehensive game card template for Cyberpunk 2077 featuring detailed game information, ratings, system requirements, and achievements. Perfect for gaming catalogs, review sites, or personal game collections. Includes immersive cyberpunk-themed styling with gradient backgrounds and interactive elements. The card displays cover art, pricing, platform information, genre, release date, Metacritic scores, user ratings, playtime estimates, multiplayer support, game descriptions, system requirements, and achievement counts in both detailed and compact formats.",
-      "thumbnailURL": ""
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/game-listing/thumbnail.png"
+      }
     },
     "relationships": {
       "tags": {

@@ -8,22 +8,27 @@
     },
     "type": "card",
     "attributes": {
-      "name": "Player Progress Tracker",
-      "images": [],
+      "name": "Player Progres",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/player-progress-listing/screenshot-01.png"
+      ],
       "summary": "Track your gaming progress, achievements, and game completion across multiple titles",
-      "cardInfo": {},
-      "description": "A comprehensive gaming progress tracking system that allows you to monitor your gameplay statistics, achievements unlocked, completion percentages, ratings, and notes for multiple games. Perfect for gamers who want to keep detailed records of their gaming journey.",
-      "thumbnailURL": "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=400&h=300&fit=crop"
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/player-progress-listing/thumbnail.png"
+      }
     },
     "relationships": {
-      "skills.0": {
+      "tags": {
         "links": {
           "self": null
         }
       },
-      "tags.0": {
+      "skills": {
         "links": {
-          "self": "../Tag/stub"
+          "self": null
         }
       },
       "license": {

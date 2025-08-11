@@ -9,17 +9,26 @@
     "type": "card",
     "attributes": {
       "name": "Gaming Hub",
-      "images": [],
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/gaming-hub-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/gaming-hub-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/gaming-hub-listing/screenshot_03.png"
+      ],
       "summary": "Comprehensive gaming profile and dashboard for tracking your complete gaming journey across platforms",
       "cardInfo": {
         "notes": null,
         "title": null,
         "description": null,
-        "thumbnailURL": null
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/gaming-hub-listing/thumbnail.png"
       }
     },
     "relationships": {
       "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
         "links": {
           "self": null
         }
@@ -72,11 +81,6 @@
       "specs.8": {
         "links": {
           "self": "../Spec/104b0be0-4c68-4d25-adcf-afd8cbfcb2c4"
-        }
-      },
-      "skills": {
-        "links": {
-          "self": null
         }
       },
       "publisher": {
