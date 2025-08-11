@@ -69,6 +69,8 @@ export class SearchCardsByQueryCommand extends HostBaseCommand<
     return SearchCardsByQueryInput;
   }
 
+  requireInputFields = ['query'];
+
   protected async run(
     input: BaseCommandModule.SearchCardsByQueryInput,
   ): Promise<BaseCommandModule.SearchCardsResult> {

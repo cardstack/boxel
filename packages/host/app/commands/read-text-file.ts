@@ -20,6 +20,8 @@ export default class ReadTextFileCommand extends HostBaseCommand<
     return ReadTextFileInput;
   }
 
+  requireInputFields = ['path'];
+
   protected async run(
     input: BaseCommandModule.ReadTextFileInput,
   ): Promise<BaseCommandModule.FileContents> {

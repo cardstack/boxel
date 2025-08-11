@@ -21,6 +21,8 @@ export default class OpenWorkspaceCommand extends HostBaseCommand<
     return RealmUrlCard;
   }
 
+  requireInputFields = ['realmUrl'];
+
   protected async run(
     input: BaseCommandModule.RealmUrlCard,
   ): Promise<undefined> {

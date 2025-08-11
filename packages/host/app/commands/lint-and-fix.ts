@@ -22,6 +22,8 @@ export default class LintAndFixCommand extends HostBaseCommand<
     return LintAndFixInput;
   }
 
+  requireInputFields = ['fileContent', 'realm'];
+
   protected async run(
     input: BaseCommandModule.LintAndFixInput,
   ): Promise<BaseCommandModule.LintAndFixResult> {

@@ -34,6 +34,8 @@ export default class ListingUseCommand extends HostBaseCommand<
     return ListingInstallInput;
   }
 
+  requireInputFields = ['realm', 'listing'];
+
   protected async run(
     input: BaseCommandModule.ListingInstallInput,
   ): Promise<undefined> {
