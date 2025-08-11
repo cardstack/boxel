@@ -153,6 +153,8 @@ export default class MatrixService extends Service {
   @tracked private timelineLoadingState: Map<string, boolean> =
     new TrackedMap();
 
+  @tracked private storage: Storage | undefined;
+
   profile = getMatrixProfile(this, () => this.userId);
 
   private roomDataMap: TrackedMap<string, Room> = new TrackedMap();
@@ -235,7 +237,37 @@ export default class MatrixService extends Service {
 
   private loadState = task(async () => {
     await this.loadSDK();
+    await this.requestStorageAccess();
   });
+
+  private get inIframe() {
+    return window.top !== window.self;
+  }
+
+  private async requestStorageAccess() {
+    if (this.inIframe) {
+      try {
+        const handle = await document.requestStorageAccess();
+        this.storage = handle.localStorage;
+      } catch (error) {
+        console.warn('Storage access request failed:', error);
+      }
+    } else {
+      this.storage = window.localStorage;
+    }
+  }
+
+  private saveAuth(auth: LoginResponse) {
+    this.storage?.setItem('auth', JSON.stringify(auth));
+  }
+
+  private getAuth(): LoginResponse | undefined {
+    let auth = this.storage?.getItem('auth');
+    if (!auth) {
+      return;
+    }
+    return JSON.parse(auth) as LoginResponse;
+  }
 
   private async loadSDK() {
     await this.cardAPIModule.loaded;
@@ -452,7 +484,7 @@ export default class MatrixService extends Service {
   ) {
     let { auth, refreshRoutes } = opts;
     if (!auth) {
-      auth = getAuth();
+      auth = this.getAuth();
       if (!auth) {
         return;
       }
@@ -499,7 +531,7 @@ export default class MatrixService extends Service {
     });
     if (this.client.isLoggedIn()) {
       this.realmServer.setClient(this.client);
-      saveAuth(auth);
+      this.saveAuth(auth);
       this.bindEventListeners();
 
       try {
@@ -1066,7 +1098,7 @@ export default class MatrixService extends Service {
     // Reset it here rather than in the reset function of each service
     // because it is possible that
     // there are some services that are not initialized yet
-    clearLocalStorage();
+    clearLocalStorage(this.storage);
   }
 
   private bindEventListeners() {
@@ -1634,7 +1666,7 @@ export default class MatrixService extends Service {
   }
 
   private clearAuth() {
-    window.localStorage.removeItem('auth');
+    this.storage?.removeItem('auth');
     this.localPersistenceService.setCurrentRoomId(undefined);
   }
 
@@ -1742,18 +1774,6 @@ export default class MatrixService extends Service {
       [0, newEndRange],
     ]);
   }
-}
-
-function saveAuth(auth: LoginResponse) {
-  window.localStorage.setItem('auth', JSON.stringify(auth));
-}
-
-function getAuth(): LoginResponse | undefined {
-  let auth = window.localStorage.getItem('auth');
-  if (!auth) {
-    return;
-  }
-  return JSON.parse(auth) as LoginResponse;
 }
 
 declare module '@ember/service' {

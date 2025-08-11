@@ -13,15 +13,15 @@ export const RecentCards = 'recent-cards';
 export const RecentFiles = 'recent-files';
 export const ScrollPositions = 'scroll-positions';
 
-export function clearLocalStorage() {
-  window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
-  window.localStorage.removeItem(NewSessionIdPersistenceKey);
-  window.localStorage.removeItem(AiAssistantPanelWidth);
-  window.localStorage.removeItem(CodeModePanelWidths);
-  window.localStorage.removeItem(CodeModePanelHeights);
-  window.localStorage.removeItem(ModuleInspectorSelections);
-  window.localStorage.removeItem(PlaygroundSelections);
-  window.localStorage.removeItem(RecentCards);
-  window.localStorage.removeItem(RecentFiles);
-  window.localStorage.removeItem(ScrollPositions);
+export function clearLocalStorage(storage: Storage = window.localStorage) {
+  storage.removeItem(CurrentRoomIdPersistenceKey);
+  storage.removeItem(NewSessionIdPersistenceKey);
+  storage.removeItem(AiAssistantPanelWidth);
+  storage.removeItem(CodeModePanelWidths);
+  storage.removeItem(CodeModePanelHeights);
+  storage.removeItem(ModuleInspectorSelections);
+  storage.removeItem(PlaygroundSelections);
+  storage.removeItem(RecentCards);
+  storage.removeItem(RecentFiles);
+  storage.removeItem(ScrollPositions);
 }
