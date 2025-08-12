@@ -41,6 +41,8 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
     return SendAiAssistantMessageInput;
   }
 
+  requireInputFields = ['roomId'];
+
   async loadCardAPI() {
     if (!this.#cardAPI) {
       this.#cardAPI = await this.loaderService.loader.import<typeof CardAPI>(

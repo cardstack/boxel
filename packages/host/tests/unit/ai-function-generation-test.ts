@@ -59,7 +59,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
   const cardDefAttributesProperties: { [fieldName: string]: AttributesSchema } =
     {
       cardInfo: {
-        additionalProperties: false,
         properties: {
           description: { type: 'string' },
           notes: { type: 'string' },
@@ -104,12 +103,9 @@ module('Unit | ai-function-generation-test', function (hooks) {
     'cardInfo.theme': linkedRelationship,
   };
 
-  const cardDefRelationshipsRequired = ['cardInfo.theme'];
-
   const cardDefRelationships: RelationshipsSchema = {
     type: 'object',
     properties: cardDefRelationshipsProperties,
-    required: cardDefRelationshipsRequired,
   };
 
   test(`generates a simple compliant schema for basic types`, async function (assert) {
@@ -142,7 +138,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
           dateTimeField: { type: 'string', format: 'date-time' },
           bigIntegerField: { type: 'string', pattern: '^-?[0-9]+$' },
         },
-        additionalProperties: false,
       },
       relationships: cardDefRelationships,
     });
@@ -182,10 +177,8 @@ module('Unit | ai-function-generation-test', function (hooks) {
             properties: {
               innerStringField: { type: 'string' },
             },
-            additionalProperties: false,
           },
         },
-        additionalProperties: false,
       },
       relationships: {
         type: 'object',
@@ -205,11 +198,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
           },
           ...cardDefRelationshipsProperties,
         },
-        required: [
-          'containerField.linkedCard',
-          'containerField.linkedCards',
-          ...cardDefRelationshipsRequired,
-        ],
       },
     });
   });
@@ -236,10 +224,8 @@ module('Unit | ai-function-generation-test', function (hooks) {
             properties: {
               innerStringField: { type: 'array', items: { type: 'string' } },
             },
-            additionalProperties: false,
           },
         },
-        additionalProperties: false,
       },
       relationships: cardDefRelationships,
     });
@@ -267,7 +253,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
         simpleField: { type: 'string' },
         ...cardDefAttributesProperties,
       },
-      additionalProperties: false,
     };
     let relationships: RelationshipsSchema = {
       type: 'object',
@@ -276,7 +261,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
         linkedCard2: linkedRelationship,
         ...cardDefRelationshipsProperties,
       },
-      required: ['linkedCard', 'linkedCard2', ...cardDefRelationshipsRequired],
     };
     assert.deepEqual(schema, { attributes, relationships });
   });
@@ -301,7 +285,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
         simpleField: { type: 'string' },
         ...cardDefAttributesProperties,
       },
-      additionalProperties: false,
     };
 
     let relationships: RelationshipsSchema = {
@@ -313,7 +296,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
         },
         ...cardDefRelationshipsProperties,
       },
-      required: ['linkedCards', ...cardDefRelationshipsRequired],
     };
     assert.deepEqual(schema, { attributes, relationships });
   });
@@ -354,13 +336,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
               properties: {
                 name: { type: 'string' },
               },
-              additionalProperties: false,
             },
           },
-          additionalProperties: false,
         },
       },
-      additionalProperties: false,
     };
     let relationships: RelationshipsSchema = {
       type: 'object',
@@ -368,7 +347,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
         'child.friend.pet': linkedRelationship,
         ...cardDefRelationshipsProperties,
       },
-      required: ['child.friend.pet', ...cardDefRelationshipsRequired],
     };
     assert.deepEqual(schema, {
       attributes,
@@ -418,13 +396,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
                 properties: {
                   goalTitle: { type: 'string' },
                 },
-                additionalProperties: false,
               },
             },
-            additionalProperties: false,
           },
         },
-        additionalProperties: false,
       },
       relationships: {
         type: 'object',
@@ -449,12 +424,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
             required: ['links'],
           },
         },
-        required: [
-          'traveler.countryOfOrigin',
-          'traveler.countriesVisited',
-          'traveler.nextTravelGoal.country',
-          ...cardDefRelationshipsRequired,
-        ],
       },
     });
   });
@@ -482,7 +451,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
           ...cardDefAttributesProperties,
           keepField: { type: 'string' },
         },
-        additionalProperties: false,
       },
       relationships: cardDefRelationships,
     });
@@ -509,7 +477,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
           ...cardDefAttributesProperties,
           keepField: { type: 'string' },
         },
-        additionalProperties: false,
       },
       relationships: cardDefRelationships,
     });
@@ -544,10 +511,8 @@ module('Unit | ai-function-generation-test', function (hooks) {
             properties: {
               keepField: { type: 'array', items: { type: 'string' } },
             },
-            additionalProperties: false,
           },
         },
-        additionalProperties: false,
       },
       relationships: cardDefRelationships,
     });
@@ -578,10 +543,8 @@ module('Unit | ai-function-generation-test', function (hooks) {
             properties: {
               innerStringField: { type: 'string' },
             },
-            additionalProperties: false,
           },
         },
-        additionalProperties: false,
       },
       relationships: cardDefRelationships,
     });
@@ -631,10 +594,8 @@ module('Unit | ai-function-generation-test', function (hooks) {
             properties: {
               innerStringField: { type: 'string', description: 'Desc #2' },
             },
-            additionalProperties: false,
           },
         },
-        additionalProperties: false,
       },
       relationships: {
         type: 'object',
@@ -669,13 +630,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
           },
           ...cardDefRelationshipsProperties,
         },
-        required: [
-          'containerField.linkedCard',
-          'containerField.linkedCard2',
-          'containerField.linkedCards',
-          'containerField.linkedCards2',
-          ...cardDefRelationshipsRequired,
-        ],
       },
     });
   });
@@ -702,7 +656,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
         simpleField: { type: 'string' },
         ...cardDefAttributesProperties,
       },
-      additionalProperties: false,
     };
     let relationships: RelationshipsSchema = {
       type: 'object',
@@ -736,7 +689,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
         },
         ...cardDefRelationshipsProperties,
       },
-      required: ['linkedCard', 'linkedCard2', ...cardDefRelationshipsRequired],
     };
     assert.deepEqual(schema, { attributes, relationships });
   });
@@ -764,7 +716,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
         simpleField: { type: 'string' },
         ...cardDefAttributesProperties,
       },
-      additionalProperties: false,
     };
     let relationships: RelationshipsSchema = {
       type: 'object',
@@ -788,7 +739,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
         },
         ...cardDefRelationshipsProperties,
       },
-      required: ['linkedCards', ...cardDefRelationshipsRequired],
     };
     assert.deepEqual(schema, { attributes, relationships });
   });
@@ -820,11 +770,9 @@ module('Unit | ai-function-generation-test', function (hooks) {
               properties: {
                 innerStringField: { type: 'string' },
               },
-              additionalProperties: false,
             },
           },
         },
-        additionalProperties: false,
       },
       relationships: cardDefRelationships,
     });

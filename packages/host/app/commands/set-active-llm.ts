@@ -20,6 +20,8 @@ export default class SetActiveLLMCommand extends HostBaseCommand<
     return SetActiveLLMInput;
   }
 
+  requireInputFields = ['roomId'];
+
   protected async run(
     input: BaseCommandModule.SetActiveLLMInput,
   ): Promise<undefined> {

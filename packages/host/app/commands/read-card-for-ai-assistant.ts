@@ -26,6 +26,8 @@ export default class ReadCardForAssistantCommand extends HostBaseCommand<
     return CardIdCard;
   }
 
+  requireInputFields = ['cardId'];
+
   protected async run(
     input: BaseCommandModule.CardIdCard,
   ): Promise<BaseCommandModule.CardForAttachmentCard> {

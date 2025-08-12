@@ -20,6 +20,8 @@ export default class CopySourceCommand extends HostBaseCommand<
     return CopySourceInput;
   }
 
+  requireInputFields = ['fromRealmUrl', 'toRealmUrl'];
+
   protected async run(
     input: BaseCommandModule.CopySourceInput,
   ): Promise<BaseCommandModule.CopySourceResult> {

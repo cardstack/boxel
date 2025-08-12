@@ -27,3 +27,4 @@ import './server-endpoints-test';
 import './transpile-test';
 import './types-endpoint-test';
 import './virtual-network-test';
+import './request-forward-test';

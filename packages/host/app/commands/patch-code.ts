@@ -34,6 +34,8 @@ export default class PatchCodeCommand extends HostBaseCommand<
     return PatchCodeInput;
   }
 
+  requireInputFields = ['fileUrl', 'codeBlocks'];
+
   protected async run(
     input: BaseCommandModule.PatchCodeInput,
   ): Promise<BaseCommandModule.PatchCodeCommandResult> {

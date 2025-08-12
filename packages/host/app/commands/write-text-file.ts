@@ -19,6 +19,8 @@ export default class WriteTextFileCommand extends HostBaseCommand<
     return WriteTextFileInput;
   }
 
+  requireInputFields = ['path', 'content'];
+
   protected async run(
     input: BaseCommandModule.WriteTextFileInput,
   ): Promise<undefined> {
