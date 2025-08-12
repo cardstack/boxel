@@ -1145,14 +1145,18 @@ export default class OperatorModeStateService extends Service {
         name: this.realm.info(url).name,
         type: 'catalog-workspace' as const,
       }));
-      return {
+      let result: BoxelContext = {
         agentId: this.matrixService.agentId,
         submode: 'workspace-chooser',
         debug: this.operatorModeController.debug,
         openCardIds: [],
         workspaces: [...userWorkspaces, ...catalogWorkspaces],
-        errorsDisplayed: this.errorDisplay.getDisplayedErrors(),
       };
+      let errorsDisplayed = this.errorDisplay.getDisplayedErrors();
+      if (errorsDisplayed.length) {
+        result.errorsDisplayed = errorsDisplayed;
+      }
+      return result;
     }
     if (this._state.submode === Submodes.Code) {
       codeMode = {
@@ -1205,16 +1209,20 @@ export default class OperatorModeStateService extends Service {
       canWrite: this.realm.canWrite(realmUrl),
     };
 
-    return {
+    let result: BoxelContext = {
       agentId: this.matrixService.agentId,
       submode: this._state.submode,
       debug: this.operatorModeController.debug,
-      errorsDisplayed: this.errorDisplay.getDisplayedErrors(),
       openCardIds,
       realmUrl,
       realmPermissions,
       codeMode,
     };
+    let errorsDisplayed = this.errorDisplay.getDisplayedErrors();
+    if (errorsDisplayed.length) {
+      result.errorsDisplayed = errorsDisplayed;
+    }
+    return result;
   }
 
   private makeRemoteIdsList(ids: (string | undefined)[]) {

@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -17,13 +18,13 @@ import {
 import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
 import type CommandService from '@cardstack/host/services/command-service';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
-import SendErrorToAIAssistant from './send-error-to-ai-assistant';
 import type ErrorDisplayService from '@cardstack/host/services/error-display';
 import type { DisplayedErrorProvider } from '@cardstack/host/services/error-display';
-import { registerDestructor } from '@ember/destroyable';
-import { BoxelErrorForContext } from 'https://cardstack.com/base/matrix-event.gts';
+
+import type { FileDef } from 'https://cardstack.com/base/file-api';
+import { BoxelErrorForContext } from 'https://cardstack.com/base/matrix-event';
+
+import SendErrorToAIAssistant from './send-error-to-ai-assistant';
 
 interface Signature {
   Element: HTMLElement;
