@@ -228,13 +228,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return Boolean(this.args.model.examples?.length);
   }
 
-  get displayButton() {
-    return (
-      this.writableRealms.length > 0 &&
-      this.allRealmsInfoResource?.current?.status === 'success'
-    );
-  }
-
   <template>
     <div class='app-listing-embedded'>
       <AppListingHeader
@@ -265,53 +258,52 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 Preview
               </BoxelButton>
             {{/if}}
-            {{#if this.displayButton}}
-              {{#if this.isStub}}
-                <BoxelDropdown @autoClose={{true}}>
-                  <:trigger as |bindings|>
-                    <BoxelButton
-                      class='action-button'
-                      data-test-catalog-listing-embedded-build-button
-                      @kind='primary'
-                      @loading={{this._build.isRunning}}
-                      {{bindings}}
-                    >
-                      Build
-                    </BoxelButton>
-                  </:trigger>
-                  <:content as |dd|>
-                    <BoxelMenu
-                      class='realm-dropdown-menu'
-                      @closeMenu={{dd.close}}
-                      @items={{this.buildRealmOptions}}
-                      data-test-catalog-listing-embedded-build-dropdown
-                    />
-                  </:content>
-                </BoxelDropdown>
-              {{else}}
-                <BoxelDropdown @autoClose={{true}}>
-                  <:trigger as |bindings|>
-                    <BoxelButton
-                      class='action-button'
-                      data-test-catalog-listing-embedded-remix-button
-                      @kind='primary'
-                      @loading={{this._remix.isRunning}}
-                      @disabled={{this.remixDisabled}}
-                      {{bindings}}
-                    >
-                      Remix
-                    </BoxelButton>
-                  </:trigger>
-                  <:content as |dd|>
-                    <BoxelMenu
-                      class='realm-dropdown-menu'
-                      @closeMenu={{dd.close}}
-                      @items={{this.remixRealmOptions}}
-                      data-test-catalog-listing-embedded-remix-dropdown
-                    />
-                  </:content>
-                </BoxelDropdown>
-              {{/if}}
+            {{#if this.isStub}}
+              <BoxelDropdown @autoClose={{true}}>
+                <:trigger as |bindings|>
+                  <BoxelButton
+                    class='action-button'
+                    data-test-catalog-listing-embedded-build-button
+                    @kind='primary'
+                    @loading={{this._build.isRunning}}
+                    {{bindings}}
+                  >
+                    Build
+                  </BoxelButton>
+                </:trigger>
+                <:content as |dd|>
+                  <BoxelMenu
+                    class='realm-dropdown-menu'
+                    @closeMenu={{dd.close}}
+                    @items={{this.buildRealmOptions}}
+                    data-test-catalog-listing-embedded-build-dropdown
+                  />
+                </:content>
+              </BoxelDropdown>
+            {{else}}
+              <BoxelDropdown @autoClose={{true}}>
+                <:trigger as |bindings|>
+                  <BoxelButton
+                    class='action-button'
+                    data-test-catalog-listing-embedded-remix-button
+                    @kind='primary'
+                    @loading={{this._remix.isRunning}}
+                    @disabled={{this.remixDisabled}}
+                    {{bindings}}
+                  >
+                    Remix
+                  </BoxelButton>
+                </:trigger>
+                <:content as |dd|>
+                  <BoxelMenu
+                    class='realm-dropdown-menu'
+                    @closeMenu={{dd.close}}
+                    @items={{this.remixRealmOptions}}
+                    @loading={{this.allRealmsInfoResource.current.isLoading}}
+                    data-test-catalog-listing-embedded-remix-dropdown
+                  />
+                </:content>
+              </BoxelDropdown>
             {{/if}}
           </div>
         </:action>

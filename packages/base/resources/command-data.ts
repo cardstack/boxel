@@ -82,6 +82,7 @@ export function commandData<
     const state = new CommandExecutionState<
       CardResultType extends CardDefConstructor ? CardResultType : never
     >();
+    state.setLoading();
     waitForPromise(
       executeArgs === undefined
         ? command.execute()

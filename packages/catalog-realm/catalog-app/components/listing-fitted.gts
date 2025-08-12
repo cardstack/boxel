@@ -6,7 +6,10 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { commandData } from 'https://cardstack.com/base/resources/command-data';
 import type { Skill } from 'https://cardstack.com/base/skill';
-import type { GetAllRealmMetasResult, RealmMetaField } from 'https://cardstack.com/base/command';
+import type {
+  GetAllRealmMetasResult,
+  RealmMetaField,
+} from 'https://cardstack.com/base/command';
 import GlimmerComponent from '@glimmer/component';
 
 import { action } from '@ember/object';
@@ -444,11 +447,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
 }
 
 export class ListingFittedTemplate extends Component<typeof Listing> {
-  allRealmsInfoResource = commandData(
-    this,
-    GetAllRealmMetasCommand,
-    undefined,
-  );
+  allRealmsInfoResource = commandData(this, GetAllRealmMetasCommand, undefined);
 
   get writableRealms(): { name: string; url: string; iconURL?: string }[] {
     const commandResource = this.allRealmsInfoResource?.current;
@@ -486,13 +485,6 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
 
   get buildRealmOptions() {
     return this.getRealmOptions((realmUrl) => this.build(realmUrl));
-  }
-
-  get displayButton() {
-    return (
-      this.writableRealms.length > 0 &&
-      this.allRealmsInfoResource?.current?.status === 'success'
-    );
   }
 
   get firstImage() {
@@ -611,56 +603,55 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           {{#if this.hasTags}}
             <span class='card-tags'># {{this.firstTagName}}</span>
           {{/if}}
-          {{#if this.displayButton}}
-            {{#if this.isStub}}
-              <BoxelDropdown @autoClose={{true}}>
-                <:trigger as |bindings|>
-                  <BoxelButton
-                    class='card-build-button'
-                    data-test-catalog-listing-fitted-build-button
-                    @kind='primary'
-                    @loading={{this._build.isRunning}}
-                    {{on 'click' this._stopPropagation}}
-                    {{bindings}}
-                  >
-                    Build
-                  </BoxelButton>
-                </:trigger>
-                <:content as |dd|>
-                  <BoxelMenu
-                    class='realm-dropdown-menu'
-                    @closeMenu={{dd.close}}
-                    @items={{this.buildRealmOptions}}
-                    data-test-catalog-listing-fitted-build-dropdown
-                  />
-                </:content>
-              </BoxelDropdown>
-            {{else}}
-              <BoxelDropdown @autoClose={{true}}>
-                <:trigger as |bindings|>
-                  <BoxelButton
-                    data-test-catalog-listing-fitted-remix-button
-                    @kind='primary'
-                    @size='extra-small'
-                    class='card-remix-button'
-                    @loading={{this._remix.isRunning}}
-                    {{on 'click' this._stopPropagation}}
-                    {{bindings}}
-                    aria-label='Remix listing'
-                  >
-                    Remix
-                  </BoxelButton>
-                </:trigger>
-                <:content as |dd|>
-                  <BoxelMenu
-                    class='realm-dropdown-menu'
-                    @closeMenu={{dd.close}}
-                    @items={{this.remixRealmOptions}}
-                    data-test-catalog-listing-fitted-remix-dropdown
-                  />
-                </:content>
-              </BoxelDropdown>
-            {{/if}}
+          {{#if this.isStub}}
+            <BoxelDropdown @autoClose={{true}}>
+              <:trigger as |bindings|>
+                <BoxelButton
+                  class='card-build-button'
+                  data-test-catalog-listing-fitted-build-button
+                  @kind='primary'
+                  @loading={{this._build.isRunning}}
+                  {{on 'click' this._stopPropagation}}
+                  {{bindings}}
+                >
+                  Build
+                </BoxelButton>
+              </:trigger>
+              <:content as |dd|>
+                <BoxelMenu
+                  class='realm-dropdown-menu'
+                  @closeMenu={{dd.close}}
+                  @items={{this.buildRealmOptions}}
+                  data-test-catalog-listing-fitted-build-dropdown
+                />
+              </:content>
+            </BoxelDropdown>
+          {{else}}
+            <BoxelDropdown @autoClose={{true}}>
+              <:trigger as |bindings|>
+                <BoxelButton
+                  data-test-catalog-listing-fitted-remix-button
+                  @kind='primary'
+                  @size='extra-small'
+                  class='card-remix-button'
+                  @loading={{this._remix.isRunning}}
+                  {{on 'click' this._stopPropagation}}
+                  {{bindings}}
+                  aria-label='Remix listing'
+                >
+                  Remix
+                </BoxelButton>
+              </:trigger>
+              <:content as |dd|>
+                <BoxelMenu
+                  class='realm-dropdown-menu'
+                  @closeMenu={{dd.close}}
+                  @items={{this.remixRealmOptions}}
+                  @loading={{this.allRealmsInfoResource.current.isLoading}}
+                  data-test-catalog-listing-fitted-remix-dropdown
+                />
+              </:content>
+            </BoxelDropdown>
           {{/if}}
         </div>
       </div>
