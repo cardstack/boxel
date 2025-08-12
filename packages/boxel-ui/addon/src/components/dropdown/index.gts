@@ -105,6 +105,7 @@ class BoxelDropdown extends Component<Signature> {
             )
             onDeactivate=dd.actions.close
             allowOutsideClick=true
+            fallbackFocus=(concat '#ember-basic-dropdown-content-' dd.uniqueId)
           )
         }}
       >

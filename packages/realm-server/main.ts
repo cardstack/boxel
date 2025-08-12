@@ -12,7 +12,6 @@ import yargs from 'yargs';
 import { RealmServer } from './server';
 import { resolve } from 'path';
 import { makeFastBootIndexRunner } from './fastboot';
-import { shimExternals } from './lib/externals';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -75,8 +74,6 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 }
 
 const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
-
-const HOST_MODE_DOMAIN_ROOT = process.env.HOST_MODE_DOMAIN_ROOT;
 
 let {
   port,
@@ -153,10 +150,6 @@ let {
         'The port the worker manager is running on. used to wait for the workers to be ready',
       type: 'number',
     },
-    hostModeDomainRoot: {
-      description: 'The domain root for host mode',
-      type: 'string',
-    },
   })
   .parseSync();
 
@@ -188,9 +181,6 @@ if (!useRegistrationSecretFunction && !MATRIX_REGISTRATION_SHARED_SECRET) {
 }
 
 let virtualNetwork = new VirtualNetwork();
-
-shimExternals(virtualNetwork);
-
 let urlMappings = fromUrls.map((fromUrl, i) => [
   new URL(String(fromUrl)),
   new URL(String(toUrls[i])),
@@ -288,7 +278,6 @@ let autoMigrate = migrateDB || undefined;
     getRegistrationSecret: useRegistrationSecretFunction
       ? getRegistrationSecret
       : undefined,
-    hostModeDomainRoot: HOST_MODE_DOMAIN_ROOT,
   });
 
   let httpServer = server.listen(port);

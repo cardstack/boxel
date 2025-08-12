@@ -49,7 +49,7 @@ import { saveUsageCost } from './lib/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { OpenAIError } from 'openai/error';
-import { ChatCompletionStream } from 'openai/lib/ChatCompletionStream.mjs';
+import { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
 import { acquireLock, releaseLock } from './lib/queries';
 import { logger as matrixLogger } from 'matrix-js-sdk/lib/logger';
 import { setupSignalHandlers } from './lib/signal-handlers';
@@ -129,12 +129,12 @@ class Assistant {
       prompt.tools?.length === 0 ||
       (prompt.model && !this.toolCallCapableModels.has(prompt.model))
     ) {
-      return this.openai.beta.chat.completions.stream({
+      return this.openai.chat.completions.stream({
         model: prompt.model ?? DEFAULT_LLM,
         messages: prompt.messages as ChatCompletionMessageParam[],
       });
     } else {
-      return this.openai.beta.chat.completions.stream({
+      return this.openai.chat.completions.stream({
         model: prompt.model ?? DEFAULT_LLM,
         messages: prompt.messages as ChatCompletionMessageParam[],
         tools: prompt.tools,

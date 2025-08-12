@@ -1,6 +1,7 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import FileCode from '@cardstack/boxel-icons/file-code';
@@ -11,11 +12,16 @@ import { IconX, Download } from '@cardstack/boxel-ui/icons';
 
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
+import OperatorModeStateService from '../services/operator-mode-state-service';
+
+import AttachedFileDropdownMenu from './ai-assistant/attached-file-dropdown-menu';
+
 interface FilePillSignature {
   Element: HTMLDivElement | HTMLButtonElement;
   Args: {
     file: FileDef;
     borderType?: 'dashed' | 'solid';
+    fileActionsEnabled?: boolean;
     onClick?: () => void;
     onRemove?: () => void;
     onDownload?: () => void;
@@ -23,6 +29,8 @@ interface FilePillSignature {
 }
 
 export default class FilePill extends Component<FilePillSignature> {
+  @service declare operatorModeStateService: OperatorModeStateService;
+
   get component() {
     return this.args.file.constructor.getComponent(this.args.file);
   }
@@ -64,18 +72,10 @@ export default class FilePill extends Component<FilePillSignature> {
     return `border-${this.borderStyle}`;
   }
 
-  private get hideIconRight() {
-    return !this.args.onRemove && !this.args.onDownload;
-  }
-
   <template>
     <Pill
       @kind={{this.pillKind}}
-      class={{cn
-        'file-pill'
-        this.borderClass
-        hide-icon-right=this.hideIconRight
-      }}
+      class={{cn 'file-pill' this.borderClass}}
       data-test-attached-file={{@file.sourceUrl}}
       {{on 'click' this.handleFileClick}}
       ...attributes
@@ -109,6 +109,10 @@ export default class FilePill extends Component<FilePillSignature> {
             data-test-download-file-btn
           />
         {{/if}}
+
+        {{#if @fileActionsEnabled}}
+          <AttachedFileDropdownMenu @file={{@file}} @isNewFile={{false}} />
+        {{/if}}
       </:iconRight>
     </Pill>
     <style scoped>
@@ -125,9 +129,6 @@ export default class FilePill extends Component<FilePillSignature> {
       }
       .border-solid {
         border-style: solid;
-      }
-      .hide-icon-right :deep(figure.icon):last-child {
-        display: none;
       }
 
       .file-content {

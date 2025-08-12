@@ -34,7 +34,6 @@ import { NodeAdapter } from './node-realm';
 import { resolve, join } from 'path';
 import merge from 'lodash/merge';
 
-import './lib/externals';
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
 import * as Sentry from '@sentry/node';
 import {
@@ -74,7 +73,6 @@ export class RealmServer {
     | (() => Promise<string | undefined>)
     | undefined;
   private enableFileWatcher: boolean;
-  private hostModeDomainRoot: string | undefined;
 
   constructor({
     serverURL,
@@ -93,7 +91,6 @@ export class RealmServer {
     matrixRegistrationSecret,
     getRegistrationSecret,
     enableFileWatcher,
-    hostModeDomainRoot,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -111,7 +108,6 @@ export class RealmServer {
     matrixRegistrationSecret?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
     enableFileWatcher?: boolean;
-    hostModeDomainRoot?: string;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -136,7 +132,6 @@ export class RealmServer {
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.getRegistrationSecret = getRegistrationSecret;
     this.enableFileWatcher = enableFileWatcher ?? false;
-    this.hostModeDomainRoot = hostModeDomainRoot;
     this.realms = [...realms];
   }
 
@@ -261,8 +256,7 @@ export class RealmServer {
         config = merge({}, config, {
           hostsOwnAssets: false,
           assetsURL: this.assetsURL.href,
-          hostModeDomainRoot: this.hostModeDomainRoot,
-          realmServerRoot: this.serverURL.href,
+          realmServerDomain: this.serverURL.hostname,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
       },

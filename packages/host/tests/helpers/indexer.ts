@@ -22,13 +22,12 @@ import {
   query,
   isDefinitionId,
   trimExportNameFromDefinitionId,
-} from '../index';
-
-import { coerceTypes } from '../index-structure';
+  coerceTypes,
+} from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { testRealmURL } from './const';
+import { testRealmURL } from './index';
 
 const defaultIndexEntry = {
   realm_version: 1,
