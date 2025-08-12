@@ -6,7 +6,6 @@ import { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 import {
-  setupCardLogs,
   setupBaseRealmServer,
   setupDB,
   runTestRealmServer,
@@ -15,7 +14,7 @@ import {
   insertUser,
   insertPlan,
   realmSecretSeed,
-  createVirtualNetworkAndLoader,
+  createVirtualNetwork,
 } from './helpers';
 import { createJWT as createRealmServerJWT } from '../utils/jwt';
 import {
@@ -34,23 +33,15 @@ module(basename(__filename), function () {
     let request: SuperTest<Test>;
     let testRealmDir: string;
     let dir: DirResult;
-    let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
+
+    let virtualNetwork = createVirtualNetwork();
 
     hooks.beforeEach(async function () {
       dir = dirSync();
       copySync(join(__dirname, 'cards'), dir.name);
     });
 
-    setupCardLogs(
-      hooks,
-      async () => await loader.import('https://cardstack.com/base/card-api'),
-    );
-
-    setupBaseRealmServer(
-      hooks,
-      virtualNetwork,
-      new URL('http://localhost:8008'),
-    );
+    setupBaseRealmServer(hooks, new URL('http://localhost:8008'));
 
     async function startRealmServer(
       dbAdapter: any,
