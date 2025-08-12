@@ -11,7 +11,7 @@ import {
 
 import { CommandContext } from '@cardstack/runtime-common';
 
-import { CardDefConstructor } from 'https://cardstack.com/base/card-api';
+import { CardDefConstructor } from '../card-api';
 
 import { inspectContext } from '../utils/inspect-context';
 

@@ -9,6 +9,7 @@ import {
   Component,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
+import { commandData } from 'https://cardstack.com/base/resources/command-data';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 import { Skill } from 'https://cardstack.com/base/skill';
@@ -49,11 +50,7 @@ import { Tag } from './tag';
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
 
-  allRealmsInfoResource = this.args.context?.getCommandData?.(
-    this,
-    GetAllRealmMetasCommand,
-    undefined,
-  );
+  allRealmsInfoResource = commandData(this, GetAllRealmMetasCommand, undefined);
 
   get writableRealms(): { name: string; url: string; iconURL?: string }[] {
     const commandResource = this.allRealmsInfoResource?.current;

@@ -46,7 +46,6 @@ import {
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
-  GetCommandDataContextName,
   Deferred,
   cardTypeIcon,
   CommandContext,
@@ -119,7 +118,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @consume(GetCardsContextName) private declare getCards: getCards;
   @consume(GetCardCollectionContextName)
   private declare getCardCollection: getCardCollection;
-  @consume(GetCommandDataContextName) private declare getCommandData: any;
   @consume(CardContextName) private declare cardContext: CardContext;
 
   @service private declare cardService: CardService;
@@ -257,7 +255,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return {
       ...this.cardContext,
       cardComponentModifier: this.cardTracker.trackElement,
-      getCommandData: this.getCommandData,
       actions: this.args.publicAPI, //we put this last to overwrite card context so stackIndex is correct
     };
   }

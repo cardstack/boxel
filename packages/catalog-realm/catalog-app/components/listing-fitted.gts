@@ -4,6 +4,7 @@ import {
   CardContext,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
+import { commandData } from 'https://cardstack.com/base/resources/command-data';
 import type { Skill } from 'https://cardstack.com/base/skill';
 import type { GetAllRealmMetasResult, RealmMetaField } from 'https://cardstack.com/base/command';
 import GlimmerComponent from '@glimmer/component';
@@ -443,7 +444,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
 }
 
 export class ListingFittedTemplate extends Component<typeof Listing> {
-  allRealmsInfoResource = this.args.context?.getCommandData?.(
+  allRealmsInfoResource = commandData(
     this,
     GetAllRealmMetasCommand,
     undefined,
