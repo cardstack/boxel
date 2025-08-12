@@ -12,7 +12,7 @@ export default class GetAllRealmMetasCommand extends HostBaseCommand<
 > {
   @service declare private realm: Realm;
 
-  static actionVerb = 'Get All Realms Info';
+  static actionVerb = 'Fetch Realms';
   static description = 'Get information about all available realms';
 
   async getInputType() {
