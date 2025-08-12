@@ -2,11 +2,11 @@ import {
   type DBAdapter,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
 } from '@cardstack/runtime-common';
-import { validateAICredits } from '@cardstack/billing/ai-credit-validation';
 import {
-  calculateCreditsForOpenRouter,
+  validateAICredits,
   extractGenerationIdFromResponse,
-} from './credit-calculator';
+  saveUsageCost as saveUsageCostFromBilling,
+} from '@cardstack/billing/ai-billing';
 
 export interface CreditStrategy {
   name: string;
@@ -18,7 +18,11 @@ export interface CreditStrategy {
     availableCredits: number;
     errorMessage?: string;
   }>;
-  calculateCredits(response: any): Promise<number>;
+  saveUsageCost(
+    dbAdapter: DBAdapter,
+    matrixUserId: string,
+    response: any,
+  ): Promise<void>;
 }
 
 // Default AI Bot Credit Strategy (reused from AI bot)
@@ -43,13 +47,20 @@ export class OpenRouterCreditStrategy implements CreditStrategy {
     return result;
   }
 
-  async calculateCredits(response: any): Promise<number> {
+  async saveUsageCost(
+    dbAdapter: DBAdapter,
+    matrixUserId: string,
+    response: any,
+  ): Promise<void> {
     const generationId = extractGenerationIdFromResponse(response);
-    return await calculateCreditsForOpenRouter(
-      response,
-      this.openRouterApiKey,
-      generationId,
-    );
+    if (generationId) {
+      await saveUsageCostFromBilling(
+        dbAdapter,
+        matrixUserId,
+        generationId,
+        this.openRouterApiKey,
+      );
+    }
   }
 }
 
@@ -64,8 +75,12 @@ export class NoCreditStrategy implements CreditStrategy {
     };
   }
 
-  async calculateCredits(_response: any): Promise<number> {
-    return 0;
+  async saveUsageCost(
+    _dbAdapter: DBAdapter,
+    _matrixUserId: string,
+    _response: any,
+  ): Promise<void> {
+    // No-op for no-credit strategy
   }
 }
 

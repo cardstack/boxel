@@ -11,10 +11,6 @@ import {
   setContextResponse,
   fetchRequestFromContext,
 } from '../middleware';
-import {
-  spendCredits,
-  getUserByMatrixUserId,
-} from '@cardstack/billing/billing-queries';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations';
 import * as Sentry from '@sentry/node';
 
@@ -55,7 +51,6 @@ async function handleStreamingRequest(
     const reader = externalResponse.body?.getReader();
     if (!reader) throw new Error('No readable stream available');
 
-    let totalTokens = 0;
     let generationId: string | undefined;
     let lastPing = Date.now();
 
@@ -65,21 +60,13 @@ async function handleStreamingRequest(
         // Handle end of stream
         if (data === '[DONE]') {
           if (generationId) {
-            const creditsToDeduct =
-              await endpointConfig.creditStrategy.calculateCredits({
-                id: generationId,
-                usage: { total_tokens: totalTokens },
-              });
-
-            if (creditsToDeduct > 0) {
-              const user = await getUserByMatrixUserId(dbAdapter, matrixUserId);
-              if (user) {
-                await spendCredits(dbAdapter, user.id, creditsToDeduct);
-                log.info(
-                  `Deducted ${creditsToDeduct} credits from user ${matrixUserId} for streaming request to ${url}`,
-                );
-              }
-            }
+            // Create a mock response object with the generation ID for the credit strategy
+            const mockResponse = { id: generationId };
+            await endpointConfig.creditStrategy.saveUsageCost(
+              dbAdapter,
+              matrixUserId,
+              mockResponse,
+            );
           }
           ctxt.res.write(`data: [DONE]\n\n`);
           return 'stop';
@@ -91,10 +78,6 @@ async function handleStreamingRequest(
 
           if (!generationId && dataObj.id) {
             generationId = dataObj.id;
-          }
-
-          if (dataObj.usage?.total_tokens) {
-            totalTokens = dataObj.usage.total_tokens;
           }
         } catch {
           log.warn('Invalid JSON in streaming response:', data);
@@ -238,10 +221,9 @@ export default function handleRequestForward({
       );
 
       if (!destinationConfig) {
-        const allowedDestinations = destinationsConfig.getAllowedDestinations();
         await sendResponseForBadRequest(
           ctxt,
-          `Endpoint ${json.url} is not whitelisted. Allowed endpoints: ${allowedDestinations.join(', ')}`,
+          `Endpoint ${json.url} is not whitelisted.`,
         );
         return;
       }
@@ -309,20 +291,11 @@ export default function handleRequestForward({
       const responseData = await externalResponse.json();
 
       // 6. Calculate and deduct credits using credit strategy
-      const creditsToDeduct =
-        await destinationConfig.creditStrategy.calculateCredits(responseData);
-
-      if (creditsToDeduct > 0) {
-        // Get user for credit deduction
-        const user = await getUserByMatrixUserId(dbAdapter, matrixUserId);
-        if (user) {
-          await spendCredits(dbAdapter, user.id, creditsToDeduct);
-
-          log.info(
-            `Deducted ${creditsToDeduct} credits from user ${matrixUserId} for request to ${json.url}`,
-          );
-        }
-      }
+      await destinationConfig.creditStrategy.saveUsageCost(
+        dbAdapter,
+        matrixUserId,
+        responseData,
+      );
 
       // 7. Return response
       const response = new Response(JSON.stringify(responseData), {

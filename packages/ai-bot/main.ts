@@ -16,7 +16,7 @@ import {
   uuidv4,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
 } from '@cardstack/runtime-common';
-import { validateAICredits } from '@cardstack/billing/ai-credit-validation';
+import { validateAICredits } from '@cardstack/billing/ai-billing';
 import {
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
   SLIDING_SYNC_LIST_TIMELINE_LIMIT,
@@ -45,7 +45,7 @@ import {
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
-import { saveUsageCost } from './lib/ai-billing';
+import { saveUsageCost } from '@cardstack/billing/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { OpenAIError } from 'openai/error';

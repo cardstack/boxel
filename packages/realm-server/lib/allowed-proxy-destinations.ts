@@ -56,10 +56,6 @@ export class AllowedProxyDestinations {
     return config?.supportsStreaming ?? false;
   }
 
-  getAllowedDestinations(): string[] {
-    return Object.keys(this.destinations);
-  }
-
   static getInstance(configJson: string) {
     if (!AllowedProxyDestinations.instance) {
       AllowedProxyDestinations.instance = new AllowedProxyDestinations(
