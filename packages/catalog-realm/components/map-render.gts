@@ -15,10 +15,7 @@ interface MapRenderSignature {
 // Type declaration for Leaflet - this tells TypeScript about the global L object
 // This is needed because Leaflet is loaded dynamically and creates a global 'L' variable
 declare global {
-  interface Window {
-    L: any; // Leaflet library
-  }
-  var L: any; // For compatibility with older code
+  var L: any;
 }
 
 export class MapRender extends GlimmerComponent<MapRenderSignature> {
@@ -37,9 +34,9 @@ export class MapRender extends GlimmerComponent<MapRenderSignature> {
   <template>
     <figure
       {{LeafletModifier
-        lat=this.args.lat
-        lon=this.args.lon
-        tileserverUrl=this.args.tileserverUrl
+        lat=@lat
+        lon=@lon
+        tileserverUrl=@tileserverUrl
         setMap=this.setMap
         onMapClick=this.handleMapClick
       }}
