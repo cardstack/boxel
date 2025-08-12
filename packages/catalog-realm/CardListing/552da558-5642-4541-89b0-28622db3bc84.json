@@ -38,23 +38,13 @@
           "self": null
         }
       },
-      "examples.0": {
+      "examples": {
         "links": {
-          "self": "../leaflet-map/LeafletMap/new-york-city-leaflet-map"
-        }
-      },
-      "examples.1": {
-        "links": {
-          "self": "../leaflet-map/LeafletMap/singapore-leaflet-map"
-        }
-      },
-      "examples.2": {
-        "links": {
-          "self": "../leaflet-map/LeafletMap/winnipeg"
+          "self": null
         }
       }
     },
-    "meta": {
+    "meta": {   
       "adoptsFrom": {
         "module": "../catalog-app/listing/listing",
         "name": "CardListing"

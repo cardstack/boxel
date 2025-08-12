@@ -1,0 +1,31 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "LeafletMap",
+        "module": "../leaflet-map/leaflet-map"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": "",
+        "title": "San Francisco Downtown",
+        "description": "",
+        "thumbnailURL": null
+      },
+      "geoPoint": {
+        "lat": 37.7749,
+        "lon": -122.4194
+      },
+      "tileserverUrl": "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
