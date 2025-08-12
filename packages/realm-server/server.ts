@@ -182,7 +182,7 @@ export class RealmServer {
           realmServerSecretSeed: this.realmServerSecretSeed,
           realmSecretSeed: this.realmSecretSeed,
           grafanaSecret: this.grafanaSecret,
-          externalEndpointsConfig: this.allowedProxyDestinations,
+          allowedProxyDestinations: this.allowedProxyDestinations,
           virtualNetwork: this.virtualNetwork,
           createRealm: this.createRealm,
           serveIndex: this.serveIndex,

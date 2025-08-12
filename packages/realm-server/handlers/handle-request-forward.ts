@@ -189,10 +189,10 @@ interface RequestForwardBody {
 
 export default function handleRequestForward({
   dbAdapter,
-  externalEndpointsConfig,
+  allowedProxyDestinations,
 }: {
   dbAdapter: DBAdapter;
-  externalEndpointsConfig: string;
+  allowedProxyDestinations: string;
 }) {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     try {
@@ -231,7 +231,7 @@ export default function handleRequestForward({
 
       // 3. Validate proxy destination is allowed and get config
       const destinationsConfig = AllowedProxyDestinations.getInstance(
-        externalEndpointsConfig,
+        allowedProxyDestinations,
       );
       const destinationConfig = destinationsConfig.getDestinationConfig(
         json.url,
