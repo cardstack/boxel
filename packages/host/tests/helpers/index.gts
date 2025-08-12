@@ -69,7 +69,7 @@ export {
   percySnapshot,
 };
 export * from '@cardstack/runtime-common/helpers';
-export * from '@cardstack/runtime-common/helpers/indexer';
+export * from './indexer';
 
 export const testModuleRealm = 'http://localhost:4202/test/';
 

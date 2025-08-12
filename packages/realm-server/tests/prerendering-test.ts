@@ -6,21 +6,19 @@ import { execSync } from 'child_process';
 import {
   setupBaseRealmServer,
   setupPermissionedRealm,
-  createVirtualNetworkAndLoader,
   matrixURL,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(basename(__filename), function () {
   module('prerender', function (hooks) {
-    let { virtualNetwork } = createVirtualNetworkAndLoader();
     let realmURL: string;
 
     hooks.before(() => {
       execSync('pnpm puppeteer browsers install chrome');
     });
 
-    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+    setupBaseRealmServer(hooks, matrixURL);
 
     setupPermissionedRealm(hooks, {
       mode: 'before',

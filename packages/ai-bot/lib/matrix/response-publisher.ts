@@ -1,4 +1,4 @@
-import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
+import { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import { CommandRequest } from '@cardstack/runtime-common/commands';
 import { MatrixClient, sendErrorEvent, sendMessageEvent } from './util';
 import { thinkingMessage } from '../../constants';
@@ -14,7 +14,7 @@ import { logger } from '@cardstack/runtime-common';
 let log = logger('ai-bot');
 
 function toCommandRequest(
-  toolCall: ChatCompletionMessageToolCall,
+  toolCall: ChatCompletionMessageFunctionToolCall,
 ): Partial<CommandRequest> {
   let { id, function: f } = toolCall;
   let result = {} as Partial<CommandRequest>;
@@ -116,7 +116,7 @@ export default class MatrixResponsePublisher {
           this.currentResponseEventId,
           extraData,
           responseStateSnapshot.toolCalls.map((toolCall) =>
-            toCommandRequest(toolCall as ChatCompletionMessageToolCall),
+            toCommandRequest(toolCall as ChatCompletionMessageFunctionToolCall),
           ),
           reasoningAndContent.reasoning,
         );
@@ -156,9 +156,11 @@ export default class MatrixResponsePublisher {
         contentAndReasoning.content,
         this.currentResponseEventId,
         extraData,
-        responseStateSnapshot.toolCalls.map((toolCall) =>
-          toCommandRequest(toolCall as ChatCompletionMessageToolCall),
-        ),
+        responseStateSnapshot.toolCalls
+          .filter(Boolean) // Elide empty tool calls, which can be produced by gpt-5 at the time of this writing
+          .map((toolCall) =>
+            toCommandRequest(toolCall as ChatCompletionMessageFunctionToolCall),
+          ),
         contentAndReasoning.reasoning,
       );
       if (!this.currentResponseEvent.eventId) {

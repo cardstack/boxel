@@ -10,7 +10,6 @@ import {
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import { makeFastBootIndexRunner } from './fastboot';
-import { shimExternals } from './lib/externals';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueueRunner } from '@cardstack/postgres';
 
@@ -93,9 +92,6 @@ if (fromUrls.length !== toUrls.length) {
 }
 
 let virtualNetwork = new VirtualNetwork();
-
-shimExternals(virtualNetwork);
-
 let urlMappings = fromUrls.map((fromUrl, i) => [
   new URL(String(fromUrl)),
   new URL(String(toUrls[i])),
