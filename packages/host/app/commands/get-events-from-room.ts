@@ -25,6 +25,8 @@ export default class GetEventsFromRoomCommand extends HostBaseCommand<
     return GetEventsFromRoomInput;
   }
 
+  requireInputFields = ['roomId'];
+
   protected async run(
     input: BaseCommandModule.GetEventsFromRoomInput,
   ): Promise<BaseCommandModule.GetEventsFromRoomResult> {

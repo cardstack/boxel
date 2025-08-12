@@ -1245,7 +1245,6 @@ module('Acceptance | Commands tests', function (hooks) {
             description:
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
-              unsupportedAttribute: 'http://test-realm/test/Person/hassan',
               title: 'Asclepias',
             },
           }),
@@ -1265,7 +1264,7 @@ module('Acceptance | Commands tests', function (hooks) {
     assert
       .dom('[data-test-boxel-alert="warning"]')
       .containsText(
-        'Command "show-card_566f" validation failed: data/attributes must NOT have additional properties',
+        'Command "show-card_566f" validation failed: data/attributes must have required property \'cardId\'',
       );
 
     assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
@@ -1283,7 +1282,7 @@ module('Acceptance | Commands tests', function (hooks) {
     assert.strictEqual(message.content['m.relates_to']?.key, 'invalid');
     assert.strictEqual(
       message.content.failureReason,
-      'Command "show-card_566f" validation failed: data/attributes must NOT have additional properties',
+      'Command "show-card_566f" validation failed: data/attributes must have required property \'cardId\'',
     );
     assert.strictEqual(
       message.content.commandRequestId,

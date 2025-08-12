@@ -14,13 +14,15 @@ export default class GetCardCommand extends HostBaseCommand<
   @service declare private store: StoreService;
 
   static actionVerb = 'Get Card';
-  static description = 'Get a card from the store by its ID';
+  description = 'Get a card from the store by its ID';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
     const { CardIdCard } = commandModule;
     return CardIdCard;
   }
+
+  requireInputFields = ['cardId'];
 
   protected async run(input: BaseCommandModule.CardIdCard): Promise<CardDef> {
     let card = await this.store.get(input.cardId);
