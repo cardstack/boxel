@@ -65,7 +65,31 @@ function parseCSSGroups(
   return groups;
 }
 
-const styleConversions = `/* spacing */
+export function extractCssVariables(cssString?: string | null) {
+  try {
+    if (!cssString?.trim()?.length) {
+      return;
+    }
+    const groups = parseCSSGroups(cssString);
+    const rootRules = groups?.get(':root'); // only considering :root for now
+    // TODO: handle dark mode and other theme selectors (for branding etc)
+    if (!rootRules?.size) {
+      return;
+    }
+    const inlineDeclarations: string[] = [];
+    for (const [property, value] of rootRules) {
+      if (property.startsWith('--')) {
+        inlineDeclarations.push(`${property}: ${value}`);
+      }
+    }
+    return inlineDeclarations.join('; ');
+  } catch (e) {
+    console.error('Error extracting CSS variables:', e);
+    return;
+  }
+}
+
+export const styleConversions = `/* spacing */
 --boxel-spacing: calc(var(--spacing, var(--_boxel-sp-unit)) * 4);
 --boxel-sp-6xs: calc(var(--boxel-sp-5xs) / var(--boxel-ratio));
 --boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--boxel-ratio));
@@ -88,27 +112,3 @@ const styleConversions = `/* spacing */
 --boxel-border-radius-xl: calc(var(--boxel-border-radius-lg) + 3px);
 --boxel-border-radius-xxl: calc(var(--boxel-border-radius-xl) + 5px);
 --boxel-form-control-border-radius: var(--radius, var(--_boxel-radius));`;
-
-export function extractCssVariables(cssString?: string | null) {
-  try {
-    if (!cssString?.trim()?.length) {
-      return;
-    }
-    const groups = parseCSSGroups(cssString);
-    const rootRules = groups?.get(':root'); // only considering :root for now
-    // TODO: handle dark mode and other theme selectors (for branding etc)
-    if (!rootRules?.size) {
-      return;
-    }
-    const inlineDeclarations: string[] = [];
-    for (const [property, value] of rootRules) {
-      if (property.startsWith('--')) {
-        inlineDeclarations.push(`${property}: ${value}`);
-      }
-    }
-    return styleConversions + inlineDeclarations.join('; ');
-  } catch (e) {
-    console.error('Error extracting CSS variables:', e);
-    return;
-  }
-}
