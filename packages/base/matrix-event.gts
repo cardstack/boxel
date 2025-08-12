@@ -185,7 +185,7 @@ export interface BoxelContext {
     canRead: boolean;
     canWrite: boolean;
   };
-  errorsDisplayed: BoxelErrorForContext[];
+  errorsDisplayed?: BoxelErrorForContext[];
   tools?: Tool[];
   toolChoice?: ToolChoice;
   submode?: string;
