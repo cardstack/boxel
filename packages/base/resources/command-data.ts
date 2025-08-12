@@ -78,9 +78,14 @@ export function commandData<
     const commandContext = inspectContext(parent, CommandContextName);
     if (!commandContext?.value) return;
 
-    const args =
-      typeof executeArgs === 'function' ? executeArgs() : executeArgs;
-    if (args === undefined) return;
+    let args;
+    if (executeArgs === undefined) {
+      args = executeArgs; // undefined, continue execution without args
+    } else {
+      // executeArgs is a thunk, evaluate it
+      args = typeof executeArgs === 'function' ? executeArgs() : executeArgs;
+      if (args === undefined) return; // thunk returned undefined, don't continue execution
+    }
 
     const command = new commandClass(commandContext.value);
     const state = new CommandExecutionState<
@@ -88,7 +93,7 @@ export function commandData<
     >();
     state.setLoading();
     waitForPromise(
-      command.execute(args as any),
+      args === undefined ? command.execute() : command.execute(args as any),
       // TODO: Fix type. Just scope to any. execute is expecting a "never"
     )
       .then((result) => {
