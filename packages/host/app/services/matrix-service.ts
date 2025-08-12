@@ -236,8 +236,8 @@ export default class MatrixService extends Service {
   );
 
   private loadState = task(async () => {
-    await this.loadSDK();
     await this.requestStorageAccess();
+    await this.loadSDK();
   });
 
   private get inIframe() {
@@ -246,13 +246,34 @@ export default class MatrixService extends Service {
 
   private async requestStorageAccess() {
     if (this.inIframe) {
-      try {
-        const handle = await document.requestStorageAccess({
-          localStorage: true,
-        });
-        this.storage = handle?.localStorage ?? window.localStorage;
-      } catch (error) {
-        console.warn('Storage access request failed:', error);
+      if (await document.hasStorageAccess()) {
+        // Chrome
+        if (document['requestStorageAccessFor']) {
+          this.storage = (
+            await document.requestStorageAccess({
+              localStorage: true,
+            })
+          ).localStorage;
+        } else {
+          this.storage = window.localStorage;
+        }
+      } else {
+        try {
+          console.log(
+            'does requestStorageAccessFor exist?',
+            document['requestStorageAccessFor'],
+          );
+          const handle = document['requestStorageAccessFor']
+            ? await document.requestStorageAccess({
+                localStorage: true,
+              })
+            : await document.requestStorageAccess();
+          console.log('requestStorageAccess handle:', handle);
+          this.storage = handle?.localStorage ?? window.localStorage;
+        } catch (error) {
+          console.warn('Storage access request failed:', error);
+          console.log(error?.stack);
+        }
       }
     } else {
       this.storage = window.localStorage;

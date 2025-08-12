@@ -55,6 +55,9 @@ class ConnectComponent extends Component<ConnectComponentSignature> {
       {{/if}}
     {{else}}
       <p>FIXME what to do?</p>
+      <button class='connect' {{on 'click' this.requestPermission}}>
+        Request storage permission
+      </button>
     {{/if}}
   </template>
 }
