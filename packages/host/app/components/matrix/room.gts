@@ -884,18 +884,32 @@ export default class Room extends Component<Signature> {
       let context =
         await this.operatorModeStateService.getSummaryForAIBot(openCardIds);
       try {
-        let cards: CardDef[] | undefined;
+        let cards: CardDef[] | undefined = [];
         if (typeof cardsOrIds?.[0] === 'string') {
           // we use detached instances since these are just
           // serialized and send to matrix--these don't appear
           // elsewhere in our app.
-          cards = (
-            await Promise.all(
-              (cardsOrIds as string[]).map((id) => this.store.get(id)),
-            )
-          )
-            .filter(Boolean)
-            .filter(isCardInstance) as CardDef[];
+          let cardsOrErrors = await Promise.all(
+            (cardsOrIds as string[]).map((id) => this.store.get(id)),
+          );
+          cardsOrErrors = cardsOrErrors.filter(Boolean);
+          for (let cardOrError of cardsOrErrors) {
+            if (isCardInstance(cardOrError)) {
+              cards?.push(cardOrError as CardDef);
+            } else {
+              // error, let's attach it as a file instead if possible
+              if (cardOrError.id) {
+                let cardFileDef = this.matrixService.fileAPI.createFileDef({
+                  sourceUrl: cardOrError.id + '.json',
+                  name: cardOrError.id.split('/').pop(),
+                });
+                if (!files) {
+                  files = [];
+                }
+                files.push(cardFileDef);
+              }
+            }
+          }
         } else {
           cards = cardsOrIds as CardDef[] | undefined;
         }

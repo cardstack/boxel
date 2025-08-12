@@ -969,6 +969,40 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-send-error-to-ai-assistant]').exists();
     });
 
+    test('erroring cards attached as files instead', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}broken-country.gts`,
+        aiAssistantOpen: true,
+        moduleInspector: 'preview',
+      });
+
+      assert.dom('[data-test-ai-assistant-panel]').exists();
+      let roomId = mockMatrixUtils.getRoomIds().pop()!;
+      await fillIn(
+        '[data-test-message-field]',
+        `Please try to fix the problem`,
+      );
+      await click('[data-test-send-message-btn]');
+
+      assertMessages(assert, [
+        {
+          from: 'testuser',
+          message: `Please try to fix the problem`,
+          files: [
+            {
+              name: 'broken-country.gts',
+              sourceUrl: `${testRealmURL}broken-country.gts`,
+            },
+            {
+              name: 'broken-country',
+              sourceUrl: `${testRealmURL}BrokenCountry/broken-country.json`,
+            },
+          ],
+        },
+      ]);
+    });
+
     test('it shows card preview errors and fix it button in module inspector', async function (assert) {
       await visitOperatorMode({
         submode: 'code',

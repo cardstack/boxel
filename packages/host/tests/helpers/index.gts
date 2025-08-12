@@ -825,7 +825,7 @@ export async function assertMessages(
       assert
         .dom(`[data-test-message-idx="${index}"] [data-test-attached-card]`)
         .exists({ count: cards.length });
-      cards.map(async (card) => {
+      cards.map((card) => {
         if (card.title) {
           if (message != null && card.title.includes(message)) {
             throw new Error(
@@ -856,7 +856,7 @@ export async function assertMessages(
       assert
         .dom(`[data-test-message-idx="${index}"] [data-test-attached-file]`)
         .exists({ count: files.length });
-      files.map(async (file) => {
+      files.map((file) => {
         assert
           .dom(
             `[data-test-message-idx="${index}"] [data-test-attached-file="${file.sourceUrl}"]`,
