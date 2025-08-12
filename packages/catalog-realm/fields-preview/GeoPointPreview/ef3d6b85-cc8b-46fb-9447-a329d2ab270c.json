@@ -3,7 +3,7 @@
     "meta": {
       "adoptsFrom": {
         "name": "GeoPointPreview",
-        "module": "../fields-preview/geo-point"
+        "module": "../geo-point"
       }
     },
     "type": "card",
