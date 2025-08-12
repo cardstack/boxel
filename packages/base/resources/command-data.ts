@@ -71,12 +71,16 @@ export function commandData<
     context: CommandContext,
   ) => Command<CardInputType, CardResultType>,
   executeArgs: CardInputType extends CardDefConstructor
-    ? Partial<FieldsOf<CardInstance<CardInputType>>>
+    ? () => Partial<FieldsOf<CardInstance<CardInputType>>> | undefined
     : undefined,
 ) {
   return maybe(parent, (_) => {
     const commandContext = inspectContext(parent, CommandContextName);
     if (!commandContext?.value) return;
+
+    const args =
+      typeof executeArgs === 'function' ? executeArgs() : executeArgs;
+    if (args === undefined) return;
 
     const command = new commandClass(commandContext.value);
     const state = new CommandExecutionState<
@@ -84,9 +88,7 @@ export function commandData<
     >();
     state.setLoading();
     waitForPromise(
-      executeArgs === undefined
-        ? command.execute()
-        : command.execute(executeArgs as any),
+      command.execute(args as any),
       // TODO: Fix type. Just scope to any. execute is expecting a "never"
     )
       .then((result) => {
