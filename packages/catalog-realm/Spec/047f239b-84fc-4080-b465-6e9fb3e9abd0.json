@@ -1,10 +1,6 @@
 {
   "data": {
     "meta": {
-      "adoptsFrom": {
-        "name": "Spec",
-        "module": "https://cardstack.com/base/spec"
-      },
       "fields": {
         "containedExamples": [
           {
@@ -14,6 +10,10 @@
             }
           }
         ]
+      },
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
       }
     },
     "type": "card",
@@ -31,11 +31,11 @@
         "thumbnailURL": null
       },
       "specType": "field",
-      "description": null,
+      "description": "Spec of GeoPointField",
       "containedExamples": [
         {
-          "lat": null,
-          "lon": null
+          "lat": 37.77464866657673,
+          "lon": -122.40676796664357
         }
       ]
     },

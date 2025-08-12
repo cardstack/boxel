@@ -6,7 +6,7 @@ interface MapRenderSignature {
   Args: {
     lat: number | undefined;
     lon: number | undefined;
-    tileserverUrl: string | undefined;
+    tileserverUrl?: string | undefined;
     onCoordinatesUpdate?: (lat: number, lon: number) => void;
   };
   Element: HTMLElement;
@@ -49,6 +49,7 @@ export class MapRender extends GlimmerComponent<MapRenderSignature> {
         margin: 0;
         width: 100%;
         height: 100%;
+        min-height: 300px;
         position: relative;
         display: flex;
         align-items: center;

@@ -29,31 +29,14 @@ export class GeoPointPreview extends CardDef {
           <FieldContainer @vertical={{true}} @label='Embedded'>
             <@fields.geoPoint @format='embedded' />
           </FieldContainer>
-          <FieldContainer @vertical={{true}} @label='Map Preview'>
-            <div class='map-container'>
-              <MapRender
-                @lat={{@model.geoPoint.lat}}
-                @lon={{@model.geoPoint.lon}}
-                @tileserverUrl={{undefined}}
-                @onCoordinatesUpdate={{this.updateCoordinates}}
-              />
-            </div>
-          </FieldContainer>
         </FieldContainer>
       </section>
+
       <style scoped>
         .fields {
           display: grid;
           gap: var(--boxel-sp-lg);
           padding: var(--boxel-sp-xl);
-        }
-
-        .map-container {
-          width: 100%;
-          height: 300px;
-          border: 1px solid var(--boxel-border-color);
-          border-radius: var(--boxel-border-radius);
-          overflow: hidden;
         }
       </style>
     </template>
