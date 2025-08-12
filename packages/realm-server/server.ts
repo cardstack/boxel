@@ -61,6 +61,7 @@ export class RealmServer {
   private realmServerSecretSeed: string;
   private realmSecretSeed: string;
   private grafanaSecret: string;
+  private allowedProxyDestinations?: string;
   private realmsRootPath: string;
   private dbAdapter: DBAdapter;
   private queue: QueuePublisher;
@@ -83,6 +84,7 @@ export class RealmServer {
     realmServerSecretSeed,
     realmSecretSeed,
     grafanaSecret,
+    allowedProxyDestinations,
     realmsRootPath,
     dbAdapter,
     queue,
@@ -100,6 +102,7 @@ export class RealmServer {
     realmServerSecretSeed: string;
     realmSecretSeed: string;
     grafanaSecret: string;
+    allowedProxyDestinations?: string;
     realmsRootPath: string;
     dbAdapter: DBAdapter;
     queue: QueuePublisher;
@@ -124,6 +127,7 @@ export class RealmServer {
     this.realmSecretSeed = realmSecretSeed;
     this.realmServerSecretSeed = realmServerSecretSeed;
     this.grafanaSecret = grafanaSecret;
+    this.allowedProxyDestinations = allowedProxyDestinations;
     this.realmsRootPath = realmsRootPath;
     this.dbAdapter = dbAdapter;
     this.queue = queue;
@@ -178,6 +182,7 @@ export class RealmServer {
           realmServerSecretSeed: this.realmServerSecretSeed,
           realmSecretSeed: this.realmSecretSeed,
           grafanaSecret: this.grafanaSecret,
+          externalEndpointsConfig: this.allowedProxyDestinations,
           virtualNetwork: this.virtualNetwork,
           createRealm: this.createRealm,
           serveIndex: this.serveIndex,
