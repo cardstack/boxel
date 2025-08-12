@@ -67,10 +67,11 @@ export default class Menu extends Component<Signature> {
   <template>
     <ul role='menu' class={{cn 'boxel-menu' @class}} ...attributes>
       {{#if @loading}}
-        <li class='boxel-menu__loading-item' data-test-boxel-menu-loading>
-          <div class='boxel-menu__loading-content'>
-            <LoadingIndicator />
-            <span>Loading...</span>
+        <li role='none' class='boxel-menu__item' data-test-boxel-menu-loading>
+          <div class='boxel-menu__item__content'>
+            <span class='menu-item'>
+              <LoadingIndicator />
+            </span>
           </div>
         </li>
       {{else if @items}}
@@ -266,20 +267,6 @@ export default class Menu extends Component<Signature> {
         }
         .checkmark {
           flex-shrink: 0;
-        }
-
-        .boxel-menu__loading-item {
-          font: var(--boxel-menu-font);
-          letter-spacing: var(--boxel-lsp-sm);
-        }
-
-        .boxel-menu__loading-content {
-          width: 100%;
-          padding: var(--boxel-menu-item-content-padding);
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-          color: var(--boxel-600);
         }
       }
     </style>

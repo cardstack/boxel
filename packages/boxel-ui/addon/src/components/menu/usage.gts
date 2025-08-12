@@ -1,8 +1,8 @@
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import menuDivider from '../../helpers/menu-divider.ts';
