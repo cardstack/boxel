@@ -71,6 +71,7 @@ export default class Menu extends Component<Signature> {
           <div class='boxel-menu__item__content'>
             <span class='menu-item'>
               <LoadingIndicator />
+              Loading...
             </span>
           </div>
         </li>
