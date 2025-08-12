@@ -28,6 +28,10 @@ export class CommandExecutionState<CardResultType extends CardDefConstructor>
     return this.status === 'success';
   }
 
+  get isLoading() {
+    return this.status === 'pending';
+  }
+
   setLoading() {
     this.status = 'pending';
     this.value = null;
