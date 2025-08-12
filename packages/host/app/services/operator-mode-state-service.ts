@@ -30,6 +30,7 @@ import {
   isReady,
   type FileResource,
 } from '@cardstack/host/resources/file';
+import { maybe } from '@cardstack/host/resources/maybe';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
@@ -43,7 +44,6 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 import { Format } from 'https://cardstack.com/base/card-api';
 
 import { BoxelContext } from 'https://cardstack.com/base/matrix-event';
-import { maybe } from 'https://cardstack.com/base/resources/maybe';
 
 import { type Stack } from '../components/operator-mode/interact-submode';
 
