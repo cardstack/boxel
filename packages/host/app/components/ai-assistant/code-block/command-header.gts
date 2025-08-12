@@ -44,7 +44,7 @@ const CodeBlockCommandHeader: TemplateOnlyComponent<CodeBlockCommandHeaderSignat
     <style scoped>
       .code-block-header {
         display: grid;
-        grid-template-columns: 1fr auto;
+        grid-template-columns: minmax(0, 1fr) max-content;
         gap: var(--boxel-sp-xxxs);
         align-items: center;
         min-height: 3.125rem; /* 50px */
@@ -61,6 +61,7 @@ const CodeBlockCommandHeader: TemplateOnlyComponent<CodeBlockCommandHeaderSignat
         letter-spacing: var(--boxel-lsp-xs);
         line-height: 1.5em;
         text-wrap: pretty;
+        overflow-wrap: break-word;
       }
       .actions {
         margin-left: auto;
