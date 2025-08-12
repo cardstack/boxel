@@ -112,7 +112,12 @@ class Assistant {
     }
     trackAiUsageCostPromises.set(
       matrixUserId,
-      saveUsageCost(this.pgAdapter, matrixUserId, generationId).finally(() => {
+      saveUsageCost(
+        this.pgAdapter,
+        matrixUserId,
+        generationId,
+        process.env.OPENROUTER_API_KEY!,
+      ).finally(() => {
         trackAiUsageCostPromises.delete(matrixUserId);
       }),
     );

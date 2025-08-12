@@ -2,7 +2,7 @@ import {
   getUserByMatrixUserId,
   spendCredits,
   sumUpCreditsLedger,
-} from '@cardstack/billing/billing-queries';
+} from './billing-queries';
 import {
   type DBAdapter,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
@@ -77,7 +77,6 @@ export async function saveUsageCost(
     );
 
     if (costInUsd === null) {
-      log.warn(`Could not fetch cost for generation ${generationId}`);
       return;
     }
 
@@ -92,10 +91,6 @@ export async function saveUsageCost(
     }
 
     await spendCredits(dbAdapter, user.id, creditsConsumed);
-
-    log.info(
-      `Deducted ${creditsConsumed} credits from user ${matrixUserId} for generation ${generationId} (cost: $${costInUsd})`,
-    );
 
     // TODO: send a signal to the host app to update credits balance displayed in the UI
   } catch (err) {

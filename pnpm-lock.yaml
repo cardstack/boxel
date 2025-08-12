@@ -873,6 +873,9 @@ importers:
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
+      '@sentry/node':
+        specifier: 'catalog:'
+        version: 8.31.0
       stripe:
         specifier: 'catalog:'
         version: 17.2.1
