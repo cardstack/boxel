@@ -1,0 +1,77 @@
+import { GeoPointField } from '../fields/geo-point';
+import { MapRender } from '../components/map-render';
+
+import {
+  CardDef,
+  field,
+  contains,
+  type BaseDefConstructor,
+  type Field,
+} from 'https://cardstack.com/base/card-api';
+import { Component } from 'https://cardstack.com/base/card-api';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { getField } from '@cardstack/runtime-common';
+
+export class GeoPointPreview extends CardDef {
+  @field geoPoint = contains(GeoPointField);
+
+  static displayName = 'Geo Point Preview';
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <section class='fields'>
+        <FieldContainer
+          @label='Geo Point'
+          @icon={{this.getFieldIcon 'geoPoint'}}
+        >
+          <FieldContainer @vertical={{true}} @label='Atom'>
+            <@fields.geoPoint @format='atom' />
+          </FieldContainer>
+          <FieldContainer @vertical={{true}} @label='Embedded'>
+            <@fields.geoPoint @format='embedded' />
+          </FieldContainer>
+          <FieldContainer @vertical={{true}} @label='Map Preview'>
+            <div class='map-container'>
+              <MapRender
+                @lat={{@model.geoPoint.lat}}
+                @lon={{@model.geoPoint.lon}}
+                @tileserverUrl={{undefined}}
+                @onCoordinatesUpdate={{this.updateCoordinates}}
+              />
+            </div>
+          </FieldContainer>
+        </FieldContainer>
+      </section>
+      <style scoped>
+        .fields {
+          display: grid;
+          gap: var(--boxel-sp-lg);
+          padding: var(--boxel-sp-xl);
+        }
+
+        .map-container {
+          width: 100%;
+          height: 300px;
+          border: 1px solid var(--boxel-border-color);
+          border-radius: var(--boxel-border-radius);
+          overflow: hidden;
+        }
+      </style>
+    </template>
+
+    getFieldIcon = (key: string) => {
+      const field: Field<BaseDefConstructor> | undefined = getField(
+        this.args.model.constructor!,
+        key,
+      );
+      let fieldInstance = field?.card;
+      return fieldInstance?.icon;
+    };
+
+    updateCoordinates = (lat: number, lon: number) => {
+      if (this.args.model?.geoPoint) {
+        this.args.model.geoPoint.lat = lat;
+        this.args.model.geoPoint.lon = lon;
+      }
+    };
+  };
+}

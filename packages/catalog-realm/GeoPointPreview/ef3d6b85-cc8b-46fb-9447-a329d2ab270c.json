@@ -1,0 +1,30 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "GeoPointPreview",
+        "module": "../fields-preview/geo-point"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "geoPoint": {
+        "lat": 14.288424422903603,
+        "lon": 0.9585737767564285
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
