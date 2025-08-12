@@ -332,6 +332,7 @@ function generateJsonSchemaForContainsFields(
   options?: {
     require?: string[];
     ignore?: string[];
+    strict?: boolean;
   },
 ): AttributesSchema | undefined {
   let ignoreFields = options?.ignore || [];
@@ -372,6 +373,11 @@ function generateJsonSchemaForContainsFields(
     ) as AttributesSchema | undefined;
     // This happens when we have no known schema for the field type
     if (fieldSchemaForSingleItem == undefined) {
+      if (options?.strict) {
+        throw new Error(
+          `No schema found for field '${fieldName}'. Ensure the field type is defined in the mappings.`,
+        );
+      }
       continue;
     }
 
@@ -513,6 +519,10 @@ function generateRelationshipFieldsInfo(
  * @param def - The card to generate the patch call specification for.
  * @param cardApi - The card API to use to generate the patch call specification
  * @param mappings - A map of field definitions to JSON schema
+ * @param options - Options to control the generation of the schema:
+ *   - ignore: An array of field names to ignore during schema generation
+ *   - require: An array of field names that will be marked as required in the schema
+ *   - strict: If true, the schema generation will throw errors for missing mappings
  * @returns The generated patch call specification as JSON schema
  */
 export function generateJsonSchemaForCardType(
@@ -522,6 +532,7 @@ export function generateJsonSchemaForCardType(
   options?: {
     require?: string[];
     ignore?: string[];
+    strict?: boolean;
   },
 ): CardSchema {
   let schema = generateJsonSchemaForContainsFields(
