@@ -392,6 +392,7 @@ export async function runTestRealmServer({
   matrixURL,
   permissions = { '*': ['read'] },
   enableFileWatcher = false,
+  allowedProxyDestinations,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -405,6 +406,7 @@ export async function runTestRealmServer({
   matrixURL: URL;
   matrixConfig?: MatrixConfig;
   enableFileWatcher?: boolean;
+  allowedProxyDestinations?: string;
 }) {
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
   let worker = new Worker({
@@ -454,6 +456,7 @@ export async function runTestRealmServer({
     grafanaSecret,
     serverURL: new URL(realmURL.origin),
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
+    allowedProxyDestinations,
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   await testRealmServer.start();

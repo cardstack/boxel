@@ -128,7 +128,7 @@ export function jwtMiddleware(
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     let authorization = ctxt.req.headers['authorization'];
     if (!authorization) {
-      await sendResponseForForbiddenRequest(
+      await sendResponseForUnauthorizedRequest(
         ctxt,
         AuthenticationErrorMessages.MissingAuthHeader,
       );
@@ -146,7 +146,7 @@ export function jwtMiddleware(
       ctxt.state.token = retrieveTokenClaim(authorization, secretSeed);
     } catch (e) {
       if (e instanceof AuthenticationError) {
-        await sendResponseForForbiddenRequest(ctxt, e.message);
+        await sendResponseForUnauthorizedRequest(ctxt, e.message);
         return;
       }
       throw e;
@@ -162,7 +162,7 @@ export function grafanaAuthorization(
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     let authorization = ctxt.req.headers['authorization'];
     if (!authorization || authorization !== grafanaSecret) {
-      await sendResponseForForbiddenRequest(
+      await sendResponseForUnauthorizedRequest(
         ctxt,
         AuthenticationErrorMessages.MissingAuthHeader,
       );
@@ -190,7 +190,14 @@ export async function sendResponseForForbiddenRequest(
   ctxt: Koa.Context,
   message: string,
 ) {
-  await sendResponseForError(ctxt, 401, 'Forbidden Request', message);
+  await sendResponseForError(ctxt, 403, 'Forbidden Request', message);
+}
+
+export async function sendResponseForUnauthorizedRequest(
+  ctxt: Koa.Context,
+  message: string,
+) {
+  await sendResponseForError(ctxt, 401, 'Unauthorized Request', message);
 }
 
 export async function sendResponseForSystemError(
