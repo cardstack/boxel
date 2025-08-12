@@ -471,15 +471,15 @@ export async function runTestRealmServer({
     matrixClient,
     realmServerSecretSeed,
     realmSecretSeed,
-    grafanaSecret,
-    allowedProxyDestinations,
+    matrixRegistrationSecret,
     realmsRootPath,
     dbAdapter,
     queue: publisher,
     getIndexHTML,
+    grafanaSecret,
     serverURL: new URL(realmURL.origin),
-    matrixRegistrationSecret,
     assetsURL: new URL(`http://example.com/notional-assets-host/`),
+    allowedProxyDestinations,
   });
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   await testRealmServer.start();

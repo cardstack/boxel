@@ -15,6 +15,7 @@ import {
   insertUser,
   insertPlan,
   realmSecretSeed,
+  createVirtualNetworkAndLoader,
 } from './helpers';
 import { createJWT as createRealmServerJWT } from '../utils/jwt';
 import {
@@ -22,7 +23,6 @@ import {
   getUserByMatrixUserId,
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
-import { createVirtualNetworkAndLoader } from './helpers';
 
 module(basename(__filename), function (hooks) {
   let dir: DirResult;
