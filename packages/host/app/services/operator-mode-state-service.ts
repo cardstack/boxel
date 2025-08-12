@@ -59,6 +59,7 @@ import NetworkService from './network';
 
 import type CardService from './card-service';
 import type CodeSemanticsService from './code-semantics-service';
+import type ErrorDisplayService from './error-display';
 import type { RecentFile } from './recent-files-service';
 import type ResetService from './reset';
 import type SpecPanelService from './spec-panel-service';
@@ -140,6 +141,7 @@ export default class OperatorModeStateService extends Service {
 
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
+  @service declare private errorDisplay: ErrorDisplayService;
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private monacoService: MonacoService;
@@ -1149,6 +1151,7 @@ export default class OperatorModeStateService extends Service {
         debug: this.operatorModeController.debug,
         openCardIds: [],
         workspaces: [...userWorkspaces, ...catalogWorkspaces],
+        errorsDisplayed: this.errorDisplay.getDisplayedErrors(),
       };
     }
     if (this._state.submode === Submodes.Code) {
@@ -1206,6 +1209,7 @@ export default class OperatorModeStateService extends Service {
       agentId: this.matrixService.agentId,
       submode: this._state.submode,
       debug: this.operatorModeController.debug,
+      errorsDisplayed: this.errorDisplay.getDisplayedErrors(),
       openCardIds,
       realmUrl,
       realmPermissions,

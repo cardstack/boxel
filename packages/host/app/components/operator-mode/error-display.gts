@@ -15,10 +15,15 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
+import type CommandService from '@cardstack/host/services/command-service';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import SendErrorToAIAssistant from './send-error-to-ai-assistant';
+import type ErrorDisplayService from '@cardstack/host/services/error-display';
+import type { DisplayedErrorProvider } from '@cardstack/host/services/error-display';
+import { registerDestructor } from '@ember/destroyable';
+import { BoxelErrorForContext } from 'https://cardstack.com/base/matrix-event.gts';
 
 interface Signature {
   Element: HTMLElement;
@@ -34,10 +39,20 @@ interface Signature {
   };
 }
 
-export default class ErrorDisplay extends Component<Signature> {
+export default class ErrorDisplay
+  extends Component<Signature>
+  implements DisplayedErrorProvider
+{
   @tracked private showDetails = this.args.openDetails ?? false;
 
-  @service private declare commandService: any;
+  @service private declare commandService: CommandService;
+  @service private declare errorDisplay: ErrorDisplayService;
+
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    this.errorDisplay.register(this);
+    registerDestructor(this, () => this.errorDisplay.unregister(this));
+  }
 
   private viewInCodeMode = dropTask(async () => {
     let switchSubmodeCommand = new SwitchSubmodeCommand(
@@ -60,6 +75,13 @@ export default class ErrorDisplay extends Component<Signature> {
 
   private get errorText() {
     return JSON.stringify(this.errorObject);
+  }
+
+  getError(): BoxelErrorForContext {
+    return {
+      ...this.errorObject,
+      sourceUrl: this.args.fileToAttach?.sourceUrl,
+    };
   }
 
   private get headerText() {
