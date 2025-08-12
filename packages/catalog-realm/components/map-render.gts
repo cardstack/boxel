@@ -52,11 +52,6 @@ export class MapRender extends GlimmerComponent<MapRenderSignature> {
         font-size: 14px;
         text-align: center;
       }
-
-      figure.map small {
-        color: #999;
-        font-size: 12px;
-      }
     </style>
     <link
       href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css'
