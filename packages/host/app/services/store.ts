@@ -594,6 +594,10 @@ export default class StoreService extends Service implements StoreInterface {
 
         if (reloadFile) {
           this.reloadTask.perform(instance);
+        } else {
+          realmEventsLogger.debug(
+            `ignoring invalidation ${invalidation} for request id ${clientRequestId}`,
+          );
         }
       } else {
         // load the card using just the ID because we don't have a running card on hand
