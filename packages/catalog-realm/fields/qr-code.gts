@@ -10,7 +10,7 @@ import QRCodeIcon from '@cardstack/boxel-icons/qr-code';
 //@ts-ignore
 import QRCode from 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm';
 import ColorField from 'https://cardstack.com/base/color';
-import NumberField from '../../base/number';
+import NumberField from 'https://cardstack.com/base/number';
 
 class QRConfigField extends FieldDef {
   @field foreground = contains(ColorField);

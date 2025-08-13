@@ -26,7 +26,7 @@
     "relationships": {
       "linkedCard": {
         "links": {
-          "self": "../../flight/Flight/f91fcacb-824c-4ea3-9407-4e718d4224ac"
+          "self": null
         }
       },
       "cardInfo.theme": {

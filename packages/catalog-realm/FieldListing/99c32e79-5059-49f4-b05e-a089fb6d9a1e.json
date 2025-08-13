@@ -41,9 +41,9 @@
           "self": "../Spec/1dde6ecb-e779-4fb7-89de-597399bb1530"
         }
       },
-      "examples": {
+      "examples.0": {
         "links": {
-          "self": null
+          "self": "../fields-preview/QRCodePreview/789e97cd-bdf2-46ba-aa31-dcdc069c4551"
         }
       },
       "publisher": {
