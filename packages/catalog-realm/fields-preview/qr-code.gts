@@ -26,13 +26,8 @@ export class QRCodePreview extends CardDef {
         {{/if}}
 
         <@fields.qrCode @format='edit' />
-        <FieldContainer @label='QR Code' @icon={{this.getFieldIcon 'qrCode'}}>
-          <FieldContainer @vertical={{true}} @label='Atom'>
-            <@fields.qrCode @format='atom' />
-          </FieldContainer>
-          <FieldContainer @vertical={{true}} @label='Embedded'>
-            <@fields.qrCode @format='embedded' />
-          </FieldContainer>
+        <FieldContainer @label='Embedded' @icon={{this.getFieldIcon 'qrCode'}}>
+          <@fields.qrCode @format='embedded' />
         </FieldContainer>
       </section>
       <style scoped>

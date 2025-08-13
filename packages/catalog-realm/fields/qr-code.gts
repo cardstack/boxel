@@ -19,8 +19,8 @@ export class QRField extends FieldDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <div class='qr-container'>
-        <canvas data-test-qr-canvas {{QRModifier data=@model.data}}>
-        </canvas>
+        <div data-test-qr-svg {{QRModifier data=@model.data}}>
+        </div>
       </div>
 
       <style scoped>
@@ -30,9 +30,8 @@ export class QRField extends FieldDef {
           align-items: center;
           width: 100%;
           height: 100%;
-          padding: 1rem;
         }
-        .qr-container canvas {
+        .qr-container svg {
           max-width: 100%;
           max-height: 100%;
         }
@@ -43,8 +42,8 @@ export class QRField extends FieldDef {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <div class='qr-embedded'>
-        <canvas data-test-qr-canvas {{QRModifier data=@model.data}}>
-        </canvas>
+        <div data-test-qr-svg {{QRModifier data=@model.data}}>
+        </div>
       </div>
 
       <style scoped>
@@ -54,9 +53,8 @@ export class QRField extends FieldDef {
           align-items: center;
           width: 100%;
           height: 100%;
-          padding: 0.5rem;
         }
-        .qr-embedded canvas {
+        .qr-embedded svg {
           width: 100%;
           height: 100%;
         }
@@ -70,7 +68,6 @@ interface QRModifierSignature {
     Positional: [];
     Named: {
       data: string | undefined;
-      setCanvas?: (canvas: HTMLCanvasElement) => void;
     };
   };
 }
@@ -83,19 +80,25 @@ class QRModifier extends Modifier<QRModifierSignature> {
       element.textContent = 'No data provided for QR code';
       return;
     }
-    QRCode.toCanvas(
-      element,
+    QRCode.toString(
       data,
       {
-        scale: 15,
+        type: 'svg',
         color: {
           dark: '#000000',
           light: '#FFFFFF',
         },
       },
-      (error: any) => {
+      (error: any, svgString: string) => {
         if (error) {
           element.textContent = 'Error generating QR code';
+        } else {
+          // Remove width and height attributes to allow CSS sizing
+          const modifiedSvg = svgString
+            .replace(/width="[^"]*"/g, '')
+            .replace(/height="[^"]*"/g, '')
+            .replace('<svg', '<svg width="100%" height="100%"');
+          element.innerHTML = modifiedSvg;
         }
       },
     );
