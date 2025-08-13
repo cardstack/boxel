@@ -9,13 +9,15 @@
     "type": "card",
     "attributes": {
       "name": "QR Code Field",
-      "images": [],
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/qr-code-listing/screenshot_01.png"
+      ],
       "summary": "A field for generating and displaying QR codes in Boxel cards. Perfect for creating scannable codes that link to card data, IDs, or URLs.",
       "cardInfo": {
         "notes": null,
         "title": "QR Code Field Listing",
         "description": "",
-        "thumbnailURL": null
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/qr-code-listing/thumbnail.png"
       }
     },
     "relationships": {
