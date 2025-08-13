@@ -496,9 +496,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             `[data-test-card="${listingId}"] [data-test-card-title="Author"]`,
           )
           .containsText('Author', '"Author" button exist in listing');
-        await waitFor(
-          `[data-test-card="${listingId}"] [data-test-catalog-listing-fitted-remix-button]`,
-        );
         await click(
           `[data-test-card="${listingId}"] [data-test-catalog-listing-fitted-remix-button]`,
         );
@@ -527,9 +524,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             ],
           ],
         });
-        await waitFor(
-          `[data-test-card="${listingId}"] [data-test-catalog-listing-embedded-remix-button]`,
-        );
         await click(
           `[data-test-card="${listingId}"] [data-test-catalog-listing-embedded-remix-button]`,
         );
@@ -560,9 +554,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             'Mortgage Calculator',
             '"Mortgage Calculator" button exist in listing',
           );
-        await waitFor(
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
-        );
         await click(
           `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
         );
@@ -591,9 +582,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             '"Talk Like a Pirate" button exist in listing',
           );
 
-        await waitFor(
-          `[data-test-card="${talkLikeAPirateCardId}"] [data-test-catalog-listing-fitted-add-skills-to-room-button]`,
-        );
         await click(
           `[data-test-card="${talkLikeAPirateCardId}"] [data-test-catalog-listing-fitted-add-skills-to-room-button]`,
         );
@@ -620,9 +608,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             'Mortgage Calculator',
             '"Mortgage Calculator" button exist in listing',
           );
-        await waitFor(
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
-        );
         await click(
           `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
         );
@@ -639,9 +624,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
 
       test('after clicking "Details" button, the listing details card opens up onto the stack', async function (assert) {
-        await waitFor(
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-details-button]`,
-        );
         await click(
           `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-details-button]`,
         );
@@ -1051,9 +1033,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         ],
       });
 
-      await waitFor(
-        '[data-test-catalog-listing-embedded-add-skills-to-room-button]',
-      );
       await click(
         '[data-test-catalog-listing-embedded-add-skills-to-room-button]',
       );
@@ -1078,9 +1057,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
 
     test('after clicking "Preview" button, the first example card opens up onto the stack', async function (assert) {
-      await waitFor(
-        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-embedded-preview-button]`,
-      );
       await click(
         `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-embedded-preview-button]`,
       );
