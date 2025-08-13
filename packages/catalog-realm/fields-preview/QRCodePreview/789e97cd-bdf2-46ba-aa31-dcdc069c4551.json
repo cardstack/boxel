@@ -1,0 +1,39 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "QRCodePreview",
+        "module": "../qr-code"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "qrCode": {
+        "data": "https://app.boxel.ai",
+        "config": {
+          "margin": 2,
+          "background": "#00ebe5",
+          "foreground": "#000000"
+        }
+      },
+      "cardInfo": {
+        "notes": null,
+        "title": "QR Code Preview",
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedCard": {
+        "links": {
+          "self": "../../flight/Flight/f91fcacb-824c-4ea3-9407-4e718d4224ac"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
