@@ -1242,7 +1242,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   ): Promise<BaseInstanceType<CardT> | undefined> {
     let deserialized = getDataBucket(instance as BaseDef);
     let store = stores.get(instance as BaseDef) ?? new FallbackCardStore();
-    // taking advantage of the cardStore regardless of whether loadFields is set
     let fieldValue = store.get(e.reference as string);
 
     if (fieldValue !== undefined) {
@@ -1734,7 +1733,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
     let references = !Array.isArray(e.reference) ? [e.reference] : e.reference;
     for (let ref of references) {
-      // taking advantage of the cardStore regardless of whether loadFields is set
       let value = store.get(ref);
       if (value !== undefined) {
         fieldValues.push(value);
