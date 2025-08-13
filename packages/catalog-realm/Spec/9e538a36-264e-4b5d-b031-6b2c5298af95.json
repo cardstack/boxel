@@ -4,6 +4,16 @@
       "adoptsFrom": {
         "name": "Spec",
         "module": "https://cardstack.com/base/spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../fields/geo-point",
+              "name": "GeoPointField"
+            }
+          }
+        ]
       }
     },
     "type": "card",
@@ -13,7 +23,7 @@
         "module": "../fields/geo-point"
       },
       "title": "GeoPointField",
-      "readMe": "# GeoPointField\n\nA field type for storing and displaying geographic coordinates (latitude and longitude).\n\n## Usage\n\n### Basic Implementation\n\n```gts\nimport { GeoPointField } from '../fields/geo-point';\nimport { CardDef, field, contains } from 'https://cardstack.com/base/card-api';\n\nexport class MyCard extends CardDef {\n  @field location = contains(GeoPointField);\n}\n```\n\n### Field Properties\n\n- **lat**: Latitude coordinate (number)\n- **lon**: Longitude coordinate (number)\n\n### Display Formats\n\n- **Atom**: Compact view with map icon and coordinates\n- **Embedded**: Full view with interactive map and coordinate editing\n- **Edit**: Form fields for latitude and longitude input\n\n### Example Data\n\n```json\n{\n  \"lat\": 37.7746,\n  \"lon\": -122.4068\n}\n```\n\n### Features\n\n- Interactive map rendering using Leaflet\n- Click-to-update coordinates\n- Responsive design with Boxel UI components\n- Support for custom tile servers\n- Coordinate validation and formatting\n\n### Map Interaction\n\nThe embedded view includes an interactive map where users can:\n- View the current location\n- Click to set new coordinates\n- See coordinate popups on hover\n- Update coordinates in real-time",
+      "readMe": "# GeoPointField\n\nA field type for storing and displaying geographic coordinates (latitude and longitude).\n\n## Usage\n\n### Basic Implementation\n\n```gts\nimport { GeoPointField } from '../fields/geo-point';\nimport { CardDef, field, contains } from 'https://cardstack.com/base/card-api';\n\nexport class MyCard extends CardDef {\n  @field location = contains(GeoPointField);\n}\n```\n\n### Field Properties\n\n- **lat**: Latitude coordinate (number)\n- **lon**: Longitude coordinate (number)\n\n### Display Formats\n\n- **Atom**: Compact view with map icon and coordinates\n- **Embedded**: Full view with interactive map and coordinate editing\n- **Edit**: Form fields for latitude and longitude input\n\n### Example Data\n\n```json\n{\n  \"lat\": 37.7746,\n  \"lon\": -122.4068\n}\n```",
       "cardInfo": {
         "notes": null,
         "title": null,
@@ -22,7 +32,12 @@
       },
       "specType": "field",
       "description": "Spec of GeoPointField",
-      "containedExamples": []
+      "containedExamples": [
+        {
+          "lat": null,
+          "lon": null
+        }
+      ]
     },
     "relationships": {
       "cardInfo.theme": {

@@ -27,11 +27,6 @@
           "self": null
         }
       },
-      "specs.0": {
-        "links": {
-          "self": "../Spec/9e538a36-264e-4b5d-b031-6b2c5298af95"
-        }
-      },
       "skills": {
         "links": {
           "self": null
@@ -40,6 +35,16 @@
       "license": {
         "links": {
           "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/9e538a36-264e-4b5d-b031-6b2c5298af95"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/7f239b84-fcb0-40f4-a56e-9fb3e9abd0ec"
         }
       },
       "publisher": {

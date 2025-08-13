@@ -7,7 +7,7 @@ interface MapRenderSignature {
     lat: number | undefined;
     lon: number | undefined;
     tileserverUrl?: string | undefined;
-    onCoordinatesUpdate?: (lat: number, lon: number) => void;
+    onMapClickUpdate?: (lat: number, lon: number) => void;
   };
   Element: HTMLElement;
 }
@@ -16,6 +16,62 @@ interface MapRenderSignature {
 // This is needed because Leaflet is loaded dynamically and creates a global 'L' variable
 declare global {
   var L: any;
+}
+
+// Helper functions
+// Creates the HTML content for a map popup, showing a title and coordinates.
+function createPopupContent(
+  coordinates: { lat: number; lng: number },
+  title: string,
+): string {
+  return `
+    <div style="text-align: center; min-width: 250px;">
+      <div style="font-weight: bold; margin-bottom: 8px;">📍 ${title}</div>
+      <div style="margin-bottom: 6px; color: #666;">
+        <strong>Coordinates:</strong><br>
+        ${coordinates.lat.toFixed(6)}, ${coordinates.lng.toFixed(6)}
+      </div>
+    </div>
+  `;
+}
+
+// Creates a Leaflet popup instance with custom options.
+function createPopup(): any {
+  return L.popup({
+    offset: [0, -20],
+    closeButton: false,
+    autoClose: false,
+  });
+}
+
+// Sets up popup behavior for a marker: shows popup on mouseover, hides on mouseout.
+function setupMarkerPopup(
+  marker: any,
+  coordinates: { lat: number; lng: number },
+  map: any,
+  title: string,
+): void {
+  const popup = createPopup().setContent(
+    createPopupContent(coordinates, title),
+  );
+
+  marker.on('mouseover', () => {
+    popup.setLatLng([coordinates.lat, coordinates.lng]).openOn(map);
+  });
+
+  marker.on('mouseout', () => {
+    popup.remove();
+  });
+}
+
+// Determines if a map click event originated from a marker element.
+function isMarkerClick(event: any): boolean {
+  if (!event.originalEvent?.target) return false;
+
+  const target = event.originalEvent.target as HTMLElement;
+  return !!(
+    target.closest('.leaflet-marker-icon') || target.closest('.leaflet-marker')
+  );
 }
 
 export class MapRender extends GlimmerComponent<MapRenderSignature> {
@@ -28,7 +84,7 @@ export class MapRender extends GlimmerComponent<MapRenderSignature> {
 
   @action
   handleMapClick(lat: number, lng: number) {
-    this.args.onCoordinatesUpdate?.(lat, lng);
+    this.args.onMapClickUpdate?.(lat, lng);
   }
 
   <template>
@@ -116,75 +172,39 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
 
         this.currentMarker = L.marker([defaultLat, defaultLon]).addTo(map);
 
-        const popupContent = `
-          <div style="text-align: center; min-width: 250px;">
-            <div style="font-weight: bold; margin-bottom: 8px;">📍 Current Location</div>
-            <div style="margin-bottom: 6px; color: #666;">
-              <strong>Coordinates:</strong><br>
-              ${lat?.toFixed(6) ?? 'N/A'}, ${lon?.toFixed(6) ?? 'N/A'}
-            </div>
-          </div>
-        `;
-
-        const popup = L.popup({
-          offset: [0, -20],
-          closeButton: false,
-          autoClose: false,
-        }).setContent(popupContent);
-
-        this.currentMarker.on('mouseover', () => {
-          popup.setLatLng([defaultLat, defaultLon]).openOn(map);
-        });
-
-        this.currentMarker.on('mouseout', () => {
-          popup.remove();
-        });
+        // Use helper function for initial popup setup
+        setupMarkerPopup(
+          this.currentMarker,
+          { lat: defaultLat, lng: defaultLon },
+          map,
+          'Current Location',
+        );
 
         map.on('click', (e: any) => {
-          if (e.originalEvent && e.originalEvent.target) {
-            const target = e.originalEvent.target as HTMLElement;
-            if (
-              target.closest('.leaflet-marker-icon') ||
-              target.closest('.leaflet-marker')
-            ) {
-              return;
-            }
+          // Use helper function to check if click target is a marker
+          if (isMarkerClick(e)) {
+            return;
           }
 
           const { lat: clickLat, lng: clickLng } = e.latlng;
 
+          // Remove previous marker if one exists
           if (this.currentMarker) {
             map.removeLayer(this.currentMarker);
           }
 
+          // Create new marker at clicked location
           this.currentMarker = L.marker([clickLat, clickLng]).addTo(map);
 
-          const popupContent = `
-            <div style="text-align: center; min-width: 250px;">
-              <div style="font-weight: bold; margin-bottom: 8px;">📍 Selected Location</div>
-              <div style="margin-bottom: 6px; color: #666;">
-                <strong>Coordinates:</strong><br>
-                ${clickLat?.toFixed(6) ?? 'N/A'}, ${
-                  clickLng?.toFixed(6) ?? 'N/A'
-                }
-              </div>
-            </div>
-          `;
+          // Use helper function for onMapClick marker popup setup
+          setupMarkerPopup(
+            this.currentMarker,
+            { lat: clickLat, lng: clickLng },
+            map,
+            'Selected Location',
+          );
 
-          const popup = L.popup({
-            offset: [0, -20],
-            closeButton: false,
-            autoClose: false,
-          }).setContent(popupContent);
-
-          this.currentMarker.on('mouseover', () => {
-            popup.setLatLng([clickLat, clickLng]).openOn(map);
-          });
-
-          this.currentMarker.on('mouseout', () => {
-            popup.remove();
-          });
-
+          // Call optional callback with coordinates
           onMapClick?.(clickLat, clickLng);
         });
 

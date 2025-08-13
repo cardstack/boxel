@@ -67,7 +67,7 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
       <MapRender
         @lat={{@model.lat}}
         @lon={{@model.lon}}
-        @onCoordinatesUpdate={{this.updateCoordinates}}
+        @onMapClickUpdate={{this.updateCoordinates}}
       />
     </div>
 
