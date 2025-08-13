@@ -108,7 +108,8 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
               @icon={{getFieldIcon @model key}}
               data-test-field={{key}}
             >
-              <Field />
+              {{! @glint-ignore: unknown not assignable to type Element }}
+              <Field class='in-isolated' />
             </FieldContainer>
           {{/each-in}}
         </section>
@@ -198,6 +199,9 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
       .default-card-template.edit > :deep(.boxel-field > .content .read-only) {
         padding-left: var(--boxel-icon-lg);
         padding-right: var(--boxel-icon-lg);
+      }
+      .in-isolated.field-component-card.fitted-format {
+        min-height: 65px;
       }
     </style>
   </template>

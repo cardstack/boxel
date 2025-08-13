@@ -534,10 +534,6 @@ export class CardsGrid extends GlimmerComponent<{
       .cards-grid-item {
         width: var(--grid-card-width);
         height: var(--grid-card-height);
-      }
-      .card {
-        height: 100%;
-        width: 100%;
         container-name: fitted-card;
         container-type: size;
       }

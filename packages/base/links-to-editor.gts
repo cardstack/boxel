@@ -101,6 +101,9 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       .links-to-editor > :deep(.boxel-card-container.embedded-format) {
         order: -1;
       }
+      .links-to-editor .field-component-card {
+        min-height: 65px;
+      }
       .remove {
         --icon-color: var(--boxel-light);
         --icon-border: var(--boxel-dark);
