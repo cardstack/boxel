@@ -447,13 +447,16 @@ class CarouselComponent extends GlimmerComponent<Signature> {
 }
 
 export class ListingFittedTemplate extends Component<typeof Listing> {
-  allRealmsInfoResource = commandData(this, GetAllRealmMetasCommand, undefined);
+  allRealmsInfoResource = commandData<typeof GetAllRealmMetasResult>(
+    this,
+    GetAllRealmMetasCommand,
+  );
 
   get writableRealms(): { name: string; url: string; iconURL?: string }[] {
-    const commandResource = this.allRealmsInfoResource?.current;
-    if (commandResource?.isSuccess && commandResource.value) {
-      const result = commandResource.value as GetAllRealmMetasResult;
-      if (result.results) {
+    const commandResource = this.allRealmsInfoResource;
+    if (commandResource?.isSuccess && commandResource) {
+      const result = commandResource.value;
+      if (result?.results) {
         return result.results
           .filter((realmMeta: RealmMetaField) => realmMeta.canWrite)
           .map((realmMeta: RealmMetaField) => ({
@@ -647,7 +650,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
                   class='realm-dropdown-menu'
                   @closeMenu={{dd.close}}
                   @items={{this.remixRealmOptions}}
-                  @loading={{this.allRealmsInfoResource.current.isLoading}}
+                  @loading={{this.allRealmsInfoResource.isLoading}}
                   data-test-catalog-listing-fitted-remix-dropdown
                 />
               </:content>

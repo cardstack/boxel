@@ -1,21 +1,16 @@
-import { waitForPromise } from '@ember/test-waiters';
 import { tracked } from '@glimmer/tracking';
 
 import {
-  CommandContextName,
   type CommandInvocation,
   type Command,
-  type FieldsOf,
   type CardInstance,
 } from '@cardstack/runtime-common';
 
 import { CommandContext } from '@cardstack/runtime-common';
 
-import { CardDefConstructor } from '../card-api';
+import { CardContext, CardDefConstructor } from '../card-api';
 
-import { inspectContext } from '../utils/inspect-context';
-
-import { maybe } from './maybe';
+import { resource } from 'ember-resources';
 
 export class CommandExecutionState<CardResultType extends CardDefConstructor>
   implements CommandInvocation<CardResultType>
@@ -62,40 +57,52 @@ export class CommandExecutionState<CardResultType extends CardDefConstructor>
  * }
  * ```
  */
+
+export function commandData<CardResultType extends CardDefConstructor>(
+  parent: { args: { context?: CardContext | undefined } },
+  commandClass: new (
+    context: CommandContext,
+  ) => Command<undefined, CardResultType>,
+): CommandExecutionState<CardResultType>;
+export function commandData<
+  CardInputType extends CardDefConstructor,
+  CardResultType extends CardDefConstructor,
+>(
+  parent: { args: { context?: CardContext | undefined } },
+  commandClass: new (
+    context: CommandContext,
+  ) => Command<CardInputType, CardResultType>,
+  executeArgs: () => Parameters<
+    Command<CardInputType, CardResultType>['execute']
+  >[0],
+): CommandExecutionState<CardResultType>;
 export function commandData<
   CardInputType extends CardDefConstructor | undefined,
   CardResultType extends CardDefConstructor,
 >(
-  parent: object,
+  parent: { args: { context?: CardContext | undefined } },
   commandClass: new (
     context: CommandContext,
   ) => Command<CardInputType, CardResultType>,
-  executeArgs: CardInputType extends CardDefConstructor
-    ? () => Partial<FieldsOf<CardInstance<CardInputType>>> | undefined
-    : undefined,
-) {
-  return maybe(parent, (_) => {
-    const commandContext = inspectContext(parent, CommandContextName);
-    if (!commandContext?.value) return;
-
-    let args;
-    if (executeArgs === undefined) {
-      args = executeArgs; // undefined, continue execution without args
-    } else {
-      // executeArgs is a thunk, evaluate it
-      args = typeof executeArgs === 'function' ? executeArgs() : executeArgs;
-      if (args === undefined) return; // thunk returned undefined, don't continue execution
-    }
-
-    const command = new commandClass(commandContext.value);
+  executeArgs?: () => Parameters<
+    Command<CardInputType, CardResultType>['execute']
+  >[0],
+): CommandExecutionState<CardResultType> {
+  return resource(parent, () => {
     const state = new CommandExecutionState<
       CardResultType extends CardDefConstructor ? CardResultType : never
     >();
+    let commandContext = parent.args.context?.commandContext;
+    if (!commandContext) {
+      //TODO: maybe strengthen type by saying commandContext is always there
+      state.setError(new Error('no context'));
+      return state;
+    }
+
+    const command = new commandClass(commandContext);
+
     state.setLoading();
-    waitForPromise(
-      args === undefined ? command.execute() : command.execute(args as any),
-      // TODO: Fix type. Just scope to any. execute is expecting a "never"
-    )
+    (executeArgs ? command.execute(executeArgs()) : command.execute())
       .then((result) => {
         state.setSuccess(result);
       })

@@ -50,10 +50,10 @@ import { Tag } from './tag';
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
 
-  allRealmsInfoResource = commandData(this, GetAllRealmMetasCommand, undefined);
+  allRealmsInfoResource = commandData(this, GetAllRealmMetasCommand);
 
   get writableRealms(): { name: string; url: string; iconURL?: string }[] {
-    const commandResource = this.allRealmsInfoResource?.current;
+    const commandResource = this.allRealmsInfoResource;
     if (commandResource?.isSuccess && commandResource.value) {
       const result = commandResource.value as GetAllRealmMetasResult;
       if (result.results) {
@@ -299,7 +299,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                     class='realm-dropdown-menu'
                     @closeMenu={{dd.close}}
                     @items={{this.remixRealmOptions}}
-                    @loading={{this.allRealmsInfoResource.current.isLoading}}
+                    @loading={{this.allRealmsInfoResource.isLoading}}
                     data-test-catalog-listing-embedded-remix-dropdown
                   />
                 </:content>

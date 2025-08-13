@@ -21,16 +21,13 @@ export class SimpleSearchCard extends CardDef {
       typeof SearchCardsByTypeAndTitleInput,
       typeof SearchCardsResult
     >(this, SearchCardsByTypeAndTitleCommand, () => {
-      if (!this.args.model.titleSearch) {
-        return undefined; // not executing command
-      }
-      return new SearchCardsByTypeAndTitleInput({
+      return {
         title: this.args.model.titleSearch,
-      });
+      };
     });
 
     get searchResults() {
-      const resource = this.searchResource?.current;
+      const resource = this.searchResource;
       if (resource?.isSuccess && resource.value?.cardIds) {
         return resource.value.cardIds;
       }
@@ -38,15 +35,15 @@ export class SimpleSearchCard extends CardDef {
     }
 
     get isLoading() {
-      return this.searchResource?.current?.isLoading ?? false;
+      return this.searchResource?.isLoading ?? false;
     }
 
     get isError() {
-      return !!this.searchResource?.current?.error;
+      return !!this.searchResource?.error;
     }
 
     get isSuccess() {
-      return this.searchResource?.current?.isSuccess ?? false;
+      return this.searchResource?.isSuccess ?? false;
     }
 
     <template>
