@@ -116,6 +116,13 @@ module('buildPromptForModel', (hooks) => {
             context: {
               realmUrl: 'http://localhost:4201/experiments',
               submode: 'code',
+              errorsDisplayed: [
+                {
+                  message: 'Error occurred',
+                  stack: 'Error stack trace',
+                  sourceUrl: 'http://localhost:4201/experiments/author.gts',
+                },
+              ],
               codeMode: {
                 currentFile: 'http://localhost:4201/experiments/Author/1',
                 moduleInspectorPanel: 'preview',
@@ -164,6 +171,10 @@ File open in code editor: http://localhost:4201/experiments/Author/1
 Module inspector panel: preview
 Viewing card instance: http://localhost:4201/experiments/Author/1
 In format: isolated
+Errors display:
+  - Error occurred
+    Stack trace: Error stack trace
+    Source URL: http://localhost:4201/experiments/author.gts
 
 Current date and time: 2025-06-11T11:43:00.533Z
 `,

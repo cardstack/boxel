@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -15,8 +16,13 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
+import type CommandService from '@cardstack/host/services/command-service';
+
+import type ErrorDisplayService from '@cardstack/host/services/error-display';
+import type { DisplayedErrorProvider } from '@cardstack/host/services/error-display';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
+import { BoxelErrorForContext } from 'https://cardstack.com/base/matrix-event';
 
 import SendErrorToAIAssistant from './send-error-to-ai-assistant';
 
@@ -34,10 +40,20 @@ interface Signature {
   };
 }
 
-export default class ErrorDisplay extends Component<Signature> {
+export default class ErrorDisplay
+  extends Component<Signature>
+  implements DisplayedErrorProvider
+{
   @tracked private showDetails = this.args.openDetails ?? false;
 
-  @service private declare commandService: any;
+  @service private declare commandService: CommandService;
+  @service private declare errorDisplay: ErrorDisplayService;
+
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    this.errorDisplay.register(this);
+    registerDestructor(this, () => this.errorDisplay.unregister(this));
+  }
 
   private viewInCodeMode = dropTask(async () => {
     let switchSubmodeCommand = new SwitchSubmodeCommand(
@@ -60,6 +76,13 @@ export default class ErrorDisplay extends Component<Signature> {
 
   private get errorText() {
     return JSON.stringify(this.errorObject);
+  }
+
+  getError(): BoxelErrorForContext {
+    return {
+      ...this.errorObject,
+      sourceUrl: this.args.fileToAttach?.sourceUrl,
+    };
   }
 
   private get headerText() {
