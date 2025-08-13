@@ -5,10 +5,8 @@ import * as emberHelper from '@ember/helper';
 import * as emberModifier from '@ember/modifier';
 import * as emberObject from '@ember/object';
 import * as emberObjectInternals from '@ember/object/internals';
-import * as emberOwner from '@ember/owner';
 import * as emberTemplate from '@ember/template';
 import * as emberTemplateFactory from '@ember/template-factory';
-import * as emberTestWaiters from '@ember/test-waiters';
 import * as glimmerComponent from '@glimmer/component';
 import * as glimmerTracking from '@glimmer/tracking';
 
@@ -59,7 +57,6 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@ember/object/internals', emberObjectInternals);
   virtualNetwork.shimModule('@ember/helper', emberHelper);
   virtualNetwork.shimModule('@ember/modifier', emberModifier);
-  virtualNetwork.shimModule('@ember/test-waiters', emberTestWaiters);
   virtualNetwork.shimModule(
     'ember-modify-based-class-resource',
     emberModifyClassBasedResource,
@@ -89,7 +86,6 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('tracked-built-ins', tracked);
   virtualNetwork.shimModule('date-fns', dateFns);
   virtualNetwork.shimModule('@ember/destroyable', emberDestroyable);
-  virtualNetwork.shimModule('@ember/owner', emberOwner);
   virtualNetwork.shimAsyncModule({
     id: 'ethers',
     resolve: () => import('ethers'),
