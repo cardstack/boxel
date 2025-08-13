@@ -28,19 +28,16 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
 
   modify(_positional: never[], named: CodeDiffResourceArgs['named']) {
     let { fileUrl, searchReplaceBlock } = named;
+    this.errorMessage = null;
     this.fileUrl = fileUrl;
     this.searchReplaceBlock = searchReplaceBlock;
     if (!fileUrl) {
-      this.errorMessage = 'Missing file URL in the code block';
       return;
     }
 
     if (!searchReplaceBlock) {
-      this.errorMessage = 'Missing search and replace block';
       return;
     }
-
-    this.errorMessage = null;
 
     this.load.perform();
   }
@@ -79,6 +76,8 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
       this.modifiedCode = patchedCode;
     } catch (error) {
       this.modifiedCode = this.originalCode;
+      this.errorMessage =
+        error instanceof Error ? error.message : String(error);
     }
   });
 }

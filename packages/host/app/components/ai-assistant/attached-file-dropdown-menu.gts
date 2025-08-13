@@ -30,12 +30,14 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
 import { Submodes } from '../submode-switcher';
+import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 export default class AttachedFileDropdownMenu extends Component<{
   Args: {
     file: FileDef;
     isNewFile: boolean;
     version?: 'diff-editor';
+    codePatchStatus: CodePatchStatus | 'applying' | 'ready';
   };
 }> {
   @service declare operatorModeStateService: OperatorModeStateService;
@@ -87,7 +89,10 @@ export default class AttachedFileDropdownMenu extends Component<{
         action: this.toggleRestorePatchedFileModal,
         icon: Undo2,
         dangerous: true,
-        disabled: !this.args.file?.sourceUrl || this.args.isNewFile,
+        disabled:
+          !this.args.file?.sourceUrl ||
+          this.args.isNewFile ||
+          this.args.codePatchStatus !== 'applied',
       }),
     ];
 

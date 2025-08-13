@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
-import { bool } from '@cardstack/boxel-ui/helpers';
+import { bool, cssVar } from '@cardstack/boxel-ui/helpers';
 
 import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
 
@@ -17,6 +17,7 @@ import { type FileDef } from 'https://cardstack.com/base/file-api';
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import AttachedFileDropdownMenu from '../attached-file-dropdown-menu';
+import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 export interface CodeBlockDiffEditorHeaderSignature {
   Args: {
@@ -28,6 +29,7 @@ export interface CodeBlockDiffEditorHeaderSignature {
     finalFileUrlAfterCodePatching?: string | null;
     originalUploadedFileUrl?: string | null;
     codePatchStatus: CodePatchStatus | 'applying' | 'ready';
+    codePatchErrorMessage?: string | null;
     userMessageThisMessageIsRespondingTo?: MatrixMessage;
   };
 }
@@ -50,12 +52,18 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
             <AttachedFileDropdownMenu
               @file={{this.file}}
               @isNewFile={{bool @codeData.isNewFile}}
+              @codePatchStatus={{@codePatchStatus}}
               @version='diff-editor'
             />
           </div>
         </div>
       </div>
       <div class='right-section'>
+        {{#if @codePatchErrorMessage}}
+          <FailureBordered
+            style={{cssVar icon-background-color='var(--boxel-error-400)'}}
+          />
+        {{/if}}
         {{#if @diffEditorStats}}
           <div class='changes'>
             <span
