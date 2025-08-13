@@ -17,8 +17,8 @@ COPY vendor/ ./vendor
 
 ADD . ./
 
-RUN CI=1 pnpm fetch
-RUN CI=1 pnpm install -r --offline
+RUN CI=1 PYTHON=/usr/bin/python3 pnpm fetch
+RUN CI=1 PYTHON=/usr/bin/python3 pnpm install -r --offline
 
 EXPOSE 3000
 
