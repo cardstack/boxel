@@ -27,6 +27,11 @@
           "self": null
         }
       },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/047f239b-84fc-4080-b465-6e9fb3e9abd0"
+        }
+      },
       "skills": {
         "links": {
           "self": null
@@ -37,19 +42,14 @@
           "self": null
         }
       },
-      "specs.0": {
+      "publisher": {
         "links": {
-          "self": "../Spec/047f239b-84fc-4080-b465-6e9fb3e9abd0"
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
       "examples.0": {
         "links": {
           "self": "../fields-preview/GeoPointPreview/ef3d6b85-cc8b-46fb-9447-a329d2ab270c"
-        }
-      },
-      "publisher": {
-        "links": {
-          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
       "categories.0": {
