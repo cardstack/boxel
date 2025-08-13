@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "geoPoint": {
+        "lat": -33.8568,
+        "lon": 151.2153
+      },
+      "tileserverUrl": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      "cardInfo": {
+        "title": "Sydney Opera House Harbor",
+        "description": "Stunning harbor view featuring the iconic Sydney Opera House and Harbour Bridge with surrounding botanical gardens",
+        "thumbnailURL": null,
+        "notes": "Perfect example of architectural masterpiece integrated with natural harbor setting"
+      },
+      "title": "Sydney Opera House Harbor",
+      "description": "Stunning harbor view featuring the iconic Sydney Opera House and Harbour Bridge with surrounding botanical gardens"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../leaflet-map",
+        "name": "LeafletMap"
+      }
+    }
+  }
+}

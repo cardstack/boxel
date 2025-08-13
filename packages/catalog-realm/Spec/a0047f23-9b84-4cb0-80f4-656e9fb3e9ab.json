@@ -4,25 +4,15 @@
       "adoptsFrom": {
         "name": "Spec",
         "module": "https://cardstack.com/base/spec"
-      },
-      "fields": {
-        "containedExamples": [
-          {
-            "adoptsFrom": {
-              "module": "../fields/contact-link",
-              "name": "ContactLinkField"
-            }
-          }
-        ]
       }
     },
     "type": "card",
     "attributes": {
       "ref": {
-        "name": "ContactLinkField",
-        "module": "../fields/contact-link"
+        "name": "LeafletMap",
+        "module": "../leaflet-map/leaflet-map"
       },
-      "title": "ContactLinkField",
+      "title": "LeafletMap",
       "readMe": null,
       "cardInfo": {
         "notes": null,
@@ -30,14 +20,9 @@
         "description": null,
         "thumbnailURL": null
       },
-      "specType": "field",
-      "description": null,
-      "containedExamples": [
-        {
-          "label": null,
-          "value": null
-        }
-      ]
+      "specType": "card",
+      "description": "Spec of LeafletMap",
+      "containedExamples": []
     },
     "relationships": {
       "cardInfo.theme": {
