@@ -20,7 +20,7 @@
         "description": null,
         "thumbnailURL": null
       },
-      "specType": "card",
+      "specType": "field",
       "description": null,
       "containedExamples": []
     },
