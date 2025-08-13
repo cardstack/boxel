@@ -1,0 +1,40 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "QRField",
+        "module": "../fields/qr-code"
+      },
+      "title": "QR Code",
+      "readMe": "A Field to embed QR codes in your cards.\n\n## Usage\n\nTo use the QR Code field in your card definitions:\n\n```typescript\nimport { QRCodeField } from '../fields/qr-code';\n\n@field code = contains(QRCodeField);\n```\n\nA typical pattern is to use a computed field that generates the QR code based on the card's ID:\n\n```typescript\n@field qrCode = contains(QRCodeField, {\n  computeVia: function() {\n    return new QRCodeField({data: this.id});\n  }\n});\n```\n\nTo display the QR code in your templates:\n\n```handlebars\n<@fields.qrCode @format='embedded'/>\n```\n\nThis field allows you to generate and display QR codes within your cards.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "specType": "field",
+      "description": null,
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples.0": {
+        "links": {
+          "self": "../fields-preview/QRCodePreview/789e97cd-bdf2-46ba-aa31-dcdc069c4551"
+        }
+      }
+    }
+  }
+}
