@@ -61,7 +61,7 @@ import {
   type RenderCard,
   type RenderCardParams,
   type Render,
-  IdentityContextWithErrors,
+  CardStoreWithErrors,
 } from '../services/render-service';
 
 import { directModuleDeps, recursiveModuleDeps } from './prerender-util';
@@ -375,7 +375,7 @@ export class CurrentRun {
 
   private async visitFile(
     url: URL,
-    identityContext?: IdentityContextWithErrors,
+    store?: CardStoreWithErrors,
   ): Promise<void> {
     if (isIgnored(this.#realmURL, this.ignoreMap, url)) {
       return;
@@ -408,8 +408,8 @@ export class CurrentRun {
     if (hasExecutableExtension(url.href)) {
       await this.indexModule(url, fileRef);
     } else {
-      if (!identityContext) {
-        identityContext = new IdentityContextWithErrors();
+      if (!store) {
+        store = new CardStoreWithErrors(this.network.fetch);
       }
 
       if (url.href.endsWith('.json')) {
@@ -437,7 +437,7 @@ export class CurrentRun {
             lastModified,
             resourceCreatedAt: created,
             resource,
-            identityContext,
+            store,
           });
         }
       }
@@ -623,14 +623,14 @@ export class CurrentRun {
     lastModified,
     resourceCreatedAt,
     resource,
-    identityContext,
+    store,
   }: {
     path: LocalPath;
     source: string;
     lastModified: number;
     resourceCreatedAt: number;
     resource: LooseCardResource;
-    identityContext: IdentityContextWithErrors;
+    store: CardStoreWithErrors;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     this.reportStatus('start', fileURL, resource);
@@ -689,7 +689,7 @@ export class CurrentRun {
           { data: adjustedResource },
           new URL(fileURL),
           {
-            identityContext,
+            store,
             // we'll deal with broken links during rendering
             ignoreBrokenLinks: true,
           },
@@ -701,7 +701,7 @@ export class CurrentRun {
               card,
               format: 'isolated',
               visit: this.visitFile.bind(this),
-              identityContext,
+              store,
               realmPath: this.#realmPaths,
             }),
           ),
@@ -712,7 +712,7 @@ export class CurrentRun {
               card,
               format: 'atom',
               visit: this.visitFile.bind(this),
-              identityContext,
+              store,
               realmPath: this.#realmPaths,
             }),
           ),
@@ -755,7 +755,7 @@ export class CurrentRun {
             card,
             typesMaybeError.types,
             'embedded',
-            identityContext,
+            store,
           );
         }
         if (card && typesMaybeError?.type === 'types') {
@@ -763,7 +763,7 @@ export class CurrentRun {
             card,
             typesMaybeError.types,
             'fitted',
-            identityContext,
+            store,
           );
         }
       } catch (err: any) {
@@ -790,7 +790,7 @@ export class CurrentRun {
       try {
         if (uncaughtError || typesMaybeError?.type === 'error') {
           let error: ErrorEntry | undefined;
-          identityContext.errors.add(instanceURL.href);
+          store.errors.add(instanceURL.href);
           if (uncaughtError) {
             error = {
               type: 'error',
@@ -882,7 +882,7 @@ export class CurrentRun {
     card: CardDef,
     types: CardType[],
     format: 'embedded' | 'fitted',
-    identityContext: IdentityContextWithErrors,
+    store: CardStoreWithErrors,
   ): Promise<{ [refURL: string]: string }> {
     let result: { [refURL: string]: string } = {};
     for (let { codeRef: componentCodeRef, refURL } of types) {
@@ -892,7 +892,7 @@ export class CurrentRun {
             card,
             format,
             visit: this.visitFile.bind(this),
-            identityContext,
+            store,
             realmPath: this.#realmPaths,
             componentCodeRef,
           }),

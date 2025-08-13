@@ -12,9 +12,9 @@ import {
   type CardErrorJSONAPI as CardError,
 } from '@cardstack/runtime-common';
 
-import IdentityContext, {
+import CardStore, {
   type ReferenceCount,
-} from '@cardstack/host/lib/gc-identity-context';
+} from '@cardstack/host/lib/gc-card-store';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type CardDef as CardInstance } from 'https://cardstack.com/base/card-api';
@@ -60,35 +60,30 @@ module('Unit | identity-context garbage collection', function (hooks) {
   }
 
   async function saveAll({
-    identityContext,
+    store,
     jade,
     queenzy,
     germaine,
     boris,
     hassan,
   }: {
-    identityContext: IdentityContext;
+    store: CardStore;
     jade: CardInstance;
     queenzy: CardInstance;
     germaine: CardInstance;
     boris: CardInstance;
     hassan: CardInstance;
   }) {
-    await saveCard(jade, `${testRealmURL}jade`, loader, identityContext);
-    await saveCard(queenzy, `${testRealmURL}queenzy`, loader, identityContext);
-    await saveCard(
-      germaine,
-      `${testRealmURL}germaine`,
-      loader,
-      identityContext,
-    );
-    await saveCard(boris, `${testRealmURL}boris`, loader, identityContext);
-    await saveCard(hassan, `${testRealmURL}hassan`, loader, identityContext);
+    await saveCard(jade, `${testRealmURL}jade`, loader, store);
+    await saveCard(queenzy, `${testRealmURL}queenzy`, loader, store);
+    await saveCard(germaine, `${testRealmURL}germaine`, loader, store);
+    await saveCard(boris, `${testRealmURL}boris`, loader, store);
+    await saveCard(hassan, `${testRealmURL}hassan`, loader, store);
   }
 
   async function setupTest(
     doSave?: (args: {
-      identityContext: IdentityContext;
+      store: CardStore;
       jade: CardInstance;
       queenzy: CardInstance;
       germaine: CardInstance;
@@ -114,16 +109,17 @@ module('Unit | identity-context garbage collection', function (hooks) {
     });
 
     let referenceCount: ReferenceCount = new Map();
-    let identityContext = new IdentityContext(referenceCount);
+    let fetch = getService('network').fetch;
+    let store = new CardStore(referenceCount, fetch);
 
-    identityContext.set(jade[localId], jade);
-    identityContext.set(germaine[localId], germaine);
-    identityContext.set(queenzy[localId], queenzy);
-    identityContext.set(boris[localId], boris);
-    identityContext.set(hassan[localId], hassan);
+    store.set(jade[localId], jade);
+    store.set(germaine[localId], germaine);
+    store.set(queenzy[localId], queenzy);
+    store.set(boris[localId], boris);
+    store.set(hassan[localId], hassan);
 
     await doSave?.({
-      identityContext,
+      store,
       jade,
       queenzy,
       germaine,
@@ -133,7 +129,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     return {
       referenceCount,
-      identityContext,
+      store,
       instances: { jade, queenzy, germaine, boris, hassan },
     };
   }
@@ -141,202 +137,162 @@ module('Unit | identity-context garbage collection', function (hooks) {
   test('can mark saved instances that have 0 reference count for GC', async function (assert) {
     let {
       referenceCount,
-      identityContext,
+      store,
       instances: { jade, germaine, queenzy, boris, hassan },
     } = await setupTest(saveAll);
 
     referenceCount.set(hassan.id, 1);
 
-    identityContext.sweep(api);
+    store.sweep(api);
 
     assert.deepEqual(
-      identityContext.gcCandidates,
+      store.gcCandidates,
       [boris[localId]],
       'the GC candidates are correct',
     );
+    assert.strictEqual(store.get(jade.id), jade, 'store contains "jade"');
     assert.strictEqual(
-      identityContext.get(jade.id),
-      jade,
-      'identityContext contains "jade"',
-    );
-    assert.strictEqual(
-      identityContext.get(queenzy.id),
+      store.get(queenzy.id),
       queenzy,
-      'identityContext contains "queenzy"',
+      'store contains "queenzy"',
     );
     assert.strictEqual(
-      identityContext.get(germaine.id),
+      store.get(germaine.id),
       germaine,
-      'identityContext contains "germaine"',
+      'store contains "germaine"',
     );
-    assert.strictEqual(
-      identityContext.get(boris.id),
-      boris,
-      'identityContext contains "boris"',
-    );
-    assert.strictEqual(
-      identityContext.get(hassan.id),
-      hassan,
-      'identityContext contains "hassan"',
-    );
+    assert.strictEqual(store.get(boris.id), boris, 'store contains "boris"');
+    assert.strictEqual(store.get(hassan.id), hassan, 'store contains "hassan"');
   });
 
   test('can mark unsaved instances without that have a 0 reference count for GC', async function (assert) {
     let {
       referenceCount,
-      identityContext,
+      store,
       instances: { jade, germaine, queenzy, boris, hassan },
     } = await setupTest();
 
     referenceCount.set(hassan[localId], 1);
 
-    identityContext.sweep(api);
+    store.sweep(api);
 
     assert.deepEqual(
-      identityContext.gcCandidates,
+      store.gcCandidates,
       [boris[localId]],
       'the GC candidates are correct',
     );
+    assert.strictEqual(store.get(jade[localId]), jade, 'store contains "jade"');
     assert.strictEqual(
-      identityContext.get(jade[localId]),
-      jade,
-      'identityContext contains "jade"',
-    );
-    assert.strictEqual(
-      identityContext.get(queenzy[localId]),
+      store.get(queenzy[localId]),
       queenzy,
-      'identityContext contains "queenzy"',
+      'store contains "queenzy"',
     );
     assert.strictEqual(
-      identityContext.get(germaine[localId]),
+      store.get(germaine[localId]),
       germaine,
-      'identityContext contains "germaine"',
+      'store contains "germaine"',
     );
     assert.strictEqual(
-      identityContext.get(boris[localId]),
+      store.get(boris[localId]),
       boris,
-      'identityContext contains "boris"',
+      'store contains "boris"',
     );
     assert.strictEqual(
-      identityContext.get(hassan[localId]),
+      store.get(hassan[localId]),
       hassan,
-      'identityContext contains "hassan"',
+      'store contains "hassan"',
     );
   });
 
   test('can remove unsubscribed instances for GC after being marked in 2 consecutive sweeps', async function (assert) {
     let {
       referenceCount,
-      identityContext,
+      store,
       instances: { jade, germaine, queenzy, boris, hassan },
     } = await setupTest(saveAll);
 
     referenceCount.set(hassan.id, 1);
 
-    identityContext.sweep(api);
-    identityContext.sweep(api);
+    store.sweep(api);
+    store.sweep(api);
 
-    assert.deepEqual(
-      identityContext.gcCandidates,
-      [],
-      'the GC candidates are correct',
-    );
+    assert.deepEqual(store.gcCandidates, [], 'the GC candidates are correct');
+    assert.strictEqual(store.get(jade.id), jade, 'store contains "jade"');
     assert.strictEqual(
-      identityContext.get(jade.id),
-      jade,
-      'identityContext contains "jade"',
-    );
-    assert.strictEqual(
-      identityContext.get(queenzy.id),
+      store.get(queenzy.id),
       queenzy,
-      'identityContext contains "queenzy"',
+      'store contains "queenzy"',
     );
     assert.strictEqual(
-      identityContext.get(germaine.id),
+      store.get(germaine.id),
       germaine,
-      'identityContext contains "germaine"',
+      'store contains "germaine"',
     );
+    assert.strictEqual(store.get(hassan.id), hassan, 'store contains "hassan"');
     assert.strictEqual(
-      identityContext.get(hassan.id),
-      hassan,
-      'identityContext contains "hassan"',
-    );
-    assert.strictEqual(
-      identityContext.get(boris.id),
+      store.get(boris.id),
       undefined,
-      'identityContext does not contain "boris"',
+      'store does not contain "boris"',
     );
   });
 
   test('a GC candidate is no longer considered a GC candidate if it is consumed by an instance that has a reference count > 0 ', async function (assert) {
     let {
       referenceCount,
-      identityContext,
+      store,
       instances: { germaine, boris, hassan },
     } = await setupTest(saveAll);
 
     referenceCount.set(hassan.id, 1);
 
-    identityContext.sweep(api);
+    store.sweep(api);
 
     germaine.friends = [boris];
-    identityContext.sweep(api);
+    store.sweep(api);
 
-    assert.deepEqual(
-      identityContext.gcCandidates,
-      [],
-      'the GC candidates are correct',
-    );
-    assert.strictEqual(
-      identityContext.get(boris.id),
-      boris,
-      'identityContext contains "boris"',
-    );
+    assert.deepEqual(store.gcCandidates, [], 'the GC candidates are correct');
+    assert.strictEqual(store.get(boris.id), boris, 'store contains "boris"');
   });
 
   test('a GC candidate is no longer considered a GC candidate if it is consumed by an unsaved instance that has a reference count > 0', async function (assert) {
     let {
       referenceCount,
-      identityContext,
+      store,
       instances: { germaine, boris, hassan },
     } = await setupTest();
 
     referenceCount.set(hassan[localId], 1);
 
-    identityContext.sweep(api);
+    store.sweep(api);
 
     germaine.friends = [boris];
-    identityContext.sweep(api);
+    store.sweep(api);
 
-    assert.deepEqual(
-      identityContext.gcCandidates,
-      [],
-      'the GC candidates are correct',
-    );
+    assert.deepEqual(store.gcCandidates, [], 'the GC candidates are correct');
     assert.strictEqual(
-      identityContext.get(boris[localId]),
+      store.get(boris[localId]),
       boris,
-      'identityContext contains "boris"',
+      'store contains "boris"',
     );
   });
 
   test('an instance becomes a GC candidate when its reference count drops to 0 for its remote id', async function (assert) {
     let {
       referenceCount,
-      identityContext,
+      store,
       instances: { jade, germaine, queenzy, hassan },
     } = await setupTest(saveAll);
 
     referenceCount.set(hassan.id, 1);
 
-    identityContext.sweep(api);
+    store.sweep(api);
 
     referenceCount.set(hassan.id, 0);
 
-    identityContext.sweep(api); // this sweep removed boris
+    store.sweep(api); // this sweep removed boris
 
     assert.deepEqual(
-      identityContext.gcCandidates.sort(),
+      store.gcCandidates.sort(),
       [
         jade[localId],
         germaine[localId],
@@ -350,20 +306,20 @@ module('Unit | identity-context garbage collection', function (hooks) {
   test('an instance becomes a GC candidate when its reference count drops to zero for its local id', async function (assert) {
     let {
       referenceCount,
-      identityContext,
+      store,
       instances: { jade, germaine, queenzy, hassan },
     } = await setupTest();
 
     referenceCount.set(hassan[localId], 1);
 
-    identityContext.sweep(api);
+    store.sweep(api);
 
     referenceCount.set(hassan[localId], 0);
 
-    identityContext.sweep(api); // this sweep removed boris
+    store.sweep(api); // this sweep removed boris
 
     assert.deepEqual(
-      identityContext.gcCandidates.sort(),
+      store.gcCandidates.sort(),
       [
         jade[localId],
         germaine[localId],
@@ -377,33 +333,33 @@ module('Unit | identity-context garbage collection', function (hooks) {
   test('a GC candidate no longer becomes a GC candidate if it is accessed in the identity map by remote id', async function (assert) {
     let {
       referenceCount,
-      identityContext,
+      store,
       instances: { boris, hassan },
     } = await setupTest(saveAll);
 
     referenceCount.set(hassan.id, 1);
 
-    identityContext.sweep(api);
+    store.sweep(api);
 
-    identityContext.get(boris.id);
+    store.get(boris.id);
 
     assert.deepEqual(
-      identityContext.gcCandidates,
+      store.gcCandidates,
       [],
       'the GC candidates are correct after getting by remote id',
     );
 
-    identityContext.sweep(api);
+    store.sweep(api);
 
     assert.deepEqual(
-      identityContext.gcCandidates,
+      store.gcCandidates,
       [boris[localId]],
       'the GC candidates are correct, sweep reintroduces GC candidate',
     );
 
-    identityContext.set(boris.id, boris);
+    store.set(boris.id, boris);
     assert.deepEqual(
-      identityContext.gcCandidates,
+      store.gcCandidates,
       [],
       'the GC candidates are correct after setting by remote id',
     );
@@ -412,33 +368,33 @@ module('Unit | identity-context garbage collection', function (hooks) {
   test('a GC candidate no longer becomes a GC candidate if it is accessed in the identity map by local id', async function (assert) {
     let {
       referenceCount,
-      identityContext,
+      store,
       instances: { boris, hassan },
     } = await setupTest();
 
     referenceCount.set(hassan[localId], 1);
 
-    identityContext.sweep(api);
+    store.sweep(api);
 
-    identityContext.get(boris[localId]);
+    store.get(boris[localId]);
 
     assert.deepEqual(
-      identityContext.gcCandidates,
+      store.gcCandidates,
       [],
       'the GC candidates are correct after getting by local id',
     );
 
-    identityContext.sweep(api);
+    store.sweep(api);
 
     assert.deepEqual(
-      identityContext.gcCandidates,
+      store.gcCandidates,
       [boris[localId]],
       'the GC candidates are correct, sweep reintroduces GC candidate',
     );
 
-    identityContext.set(boris[localId], boris);
+    store.set(boris[localId], boris);
     assert.deepEqual(
-      identityContext.gcCandidates,
+      store.gcCandidates,
       [],
       'the GC candidates are correct after setting by local id',
     );
@@ -447,44 +403,40 @@ module('Unit | identity-context garbage collection', function (hooks) {
   test('a GC candidate no longer remains a GC candidate if it accessed via setting a card error in the identity map', async function (assert) {
     let {
       referenceCount,
-      identityContext,
+      store,
       instances: { boris, hassan },
     } = await setupTest(saveAll);
 
     referenceCount.set(hassan.id, 1);
 
-    identityContext.sweep(api);
+    store.sweep(api);
 
-    identityContext.addInstanceOrError(boris.id, makeError(boris.id));
+    store.addInstanceOrError(boris.id, makeError(boris.id));
 
-    assert.deepEqual(
-      identityContext.gcCandidates,
-      [],
-      'the GC candidates are correct',
-    );
+    assert.deepEqual(store.gcCandidates, [], 'the GC candidates are correct');
   });
 
   test('can delete an instance from the identity map', async function (assert) {
     let {
-      identityContext,
+      store,
       instances: { hassan },
     } = await setupTest(saveAll);
 
-    identityContext.delete(hassan.id);
+    store.delete(hassan.id);
 
     assert.deepEqual(
-      identityContext.get(hassan.id),
+      store.get(hassan.id),
       undefined,
       'the instance does not exist',
     );
     assert.deepEqual(
-      identityContext.get(hassan[localId]),
+      store.get(hassan[localId]),
       undefined,
       'the instance does not exist via local id',
     );
 
     assert.deepEqual(
-      identityContext.getInstanceOrError(hassan.id),
+      store.getInstanceOrError(hassan.id),
       undefined,
       'the instance does not exist',
     );
@@ -492,26 +444,26 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
   test('can delete an instance from the identity map by local id', async function (assert) {
     let {
-      identityContext,
+      store,
       instances: { hassan },
     } = await setupTest(saveAll);
 
-    identityContext.delete(hassan[localId]);
+    store.delete(hassan[localId]);
 
     assert.deepEqual(
-      identityContext.get(hassan[localId]),
+      store.get(hassan[localId]),
       undefined,
       'the instance does not exist',
     );
 
     assert.deepEqual(
-      identityContext.get(hassan.id),
+      store.get(hassan.id),
       undefined,
       'the instance does not exist via remote id',
     );
 
     assert.deepEqual(
-      identityContext.getInstanceOrError(hassan[localId]),
+      store.getInstanceOrError(hassan[localId]),
       undefined,
       'the instance does not exist',
     );
@@ -519,15 +471,15 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
   test('can delete a card error from the identity map', async function (assert) {
     let {
-      identityContext,
+      store,
       instances: { hassan },
     } = await setupTest(saveAll);
 
-    identityContext.addInstanceOrError(hassan.id, makeError(hassan.id));
-    identityContext.delete(hassan.id);
+    store.addInstanceOrError(hassan.id, makeError(hassan.id));
+    store.delete(hassan.id);
 
     assert.deepEqual(
-      identityContext.getInstanceOrError(hassan.id),
+      store.getInstanceOrError(hassan.id),
       undefined,
       'the instance does not exist',
     );
@@ -536,80 +488,68 @@ module('Unit | identity-context garbage collection', function (hooks) {
   test('deleting an entry from the identity map by remote id removes the GC candidate', async function (assert) {
     let {
       referenceCount,
-      identityContext,
+      store,
       instances: { boris, hassan },
     } = await setupTest(saveAll);
 
     referenceCount.set(hassan.id, 1);
 
-    identityContext.sweep(api);
+    store.sweep(api);
 
-    identityContext.delete(boris.id);
+    store.delete(boris.id);
 
-    assert.deepEqual(
-      identityContext.gcCandidates,
-      [],
-      'the GC candidates are correct',
-    );
+    assert.deepEqual(store.gcCandidates, [], 'the GC candidates are correct');
   });
 
   test('deleting an entry from the identity map by local id removes the GC candidate', async function (assert) {
     let {
       referenceCount,
-      identityContext,
+      store,
       instances: { boris, hassan },
     } = await setupTest();
 
     referenceCount.set(hassan[localId], 1);
 
-    identityContext.sweep(api);
+    store.sweep(api);
 
-    identityContext.delete(boris[localId]);
+    store.delete(boris[localId]);
 
-    assert.deepEqual(
-      identityContext.gcCandidates,
-      [],
-      'the GC candidates are correct',
-    );
+    assert.deepEqual(store.gcCandidates, [], 'the GC candidates are correct');
   });
 
   test('resetting the identity map clears all GC candidates', async function (assert) {
     let {
       referenceCount,
-      identityContext,
+      store,
       instances: { hassan },
     } = await setupTest(saveAll);
 
     referenceCount.set(hassan.id, 1);
 
-    identityContext.sweep(api);
+    store.sweep(api);
 
-    identityContext.reset();
+    store.reset();
 
-    assert.deepEqual(
-      identityContext.gcCandidates,
-      [],
-      'the GC candidates are correct',
-    );
+    assert.deepEqual(store.gcCandidates, [], 'the GC candidates are correct');
   });
 
   test('resetting the identity map clears all instances but not card errors', async function (assert) {
     let {
-      identityContext,
+      store,
       instances: { hassan, jade },
     } = await setupTest(saveAll);
 
-    identityContext.addInstanceOrError(hassan.id, makeError(hassan.id));
-    identityContext.reset();
+    store.addInstanceOrError(hassan.id, makeError(hassan.id));
+    store.reset();
 
     assert.deepEqual(
-      identityContext.getInstanceOrError(hassan.id),
+      store.getInstanceOrError(hassan.id),
       makeError(hassan.id),
       'no error is returned from identity map',
     );
 
     assert.deepEqual(
-      identityContext.getInstanceOrError(jade.id),
+      store.getInstanceOrError(jade.id),
       undefined,
       'no instance is returned from identity map',
     );
@@ -617,23 +557,23 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
   test('can add a card error to the identity map', async function (assert) {
     let {
-      identityContext,
+      store,
       instances: { hassan },
     } = await setupTest(saveAll);
 
     // remove the current hassan instance so the stale card doesn't bleed thru
-    identityContext.delete(hassan.id);
+    store.delete(hassan.id);
 
     let error = makeError(hassan.id);
-    identityContext.addInstanceOrError(hassan.id, error);
+    store.addInstanceOrError(hassan.id, error);
 
     assert.strictEqual(
-      identityContext.get(hassan.id),
+      store.get(hassan.id),
       undefined,
       'no card instance exists for the id',
     );
     assert.strictEqual(
-      identityContext.getInstanceOrError(hassan.id),
+      store.getInstanceOrError(hassan.id),
       error,
       'a card error exists for the id',
     );
@@ -641,12 +581,12 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
   test('can get a card from identity map using getInstanceOrError() by remote id', async function (assert) {
     let {
-      identityContext,
+      store,
       instances: { hassan },
     } = await setupTest(saveAll);
 
     assert.strictEqual(
-      identityContext.getInstanceOrError(hassan.id),
+      store.getInstanceOrError(hassan.id),
       hassan,
       'card instance is returned',
     );
@@ -654,12 +594,12 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
   test('can get a card from identity map using getInstanceOrError() by local id', async function (assert) {
     let {
-      identityContext,
+      store,
       instances: { hassan },
     } = await setupTest();
 
     assert.strictEqual(
-      identityContext.getInstanceOrError(hassan[localId]),
+      store.getInstanceOrError(hassan[localId]),
       hassan,
       'card instance is returned',
     );
@@ -667,12 +607,12 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
   test('can get a card from the identity map by correlating the last part of the remote id with the local id for an instance that has a newly assigned remote id', async function (assert) {
     let {
-      identityContext,
+      store,
       instances: { hassan },
     } = await setupTest();
 
     assert.strictEqual(
-      identityContext.getInstanceOrError(`${testRealmURL}${hassan[localId]}`),
+      store.getInstanceOrError(`${testRealmURL}${hassan[localId]}`),
       hassan,
       'card instance is returned',
     );
@@ -685,7 +625,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
   });
 
   test('can handle encountering a NotLoaded error in an instance during garbage collection', async function (assert) {
-    let { identityContext } = await setupTest();
+    let { store } = await setupTest();
     let doc: LooseSingleCardDocument = {
       data: {
         id: `${testRealmURL}wu`,
@@ -713,7 +653,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
       },
     };
     let instance = await api.createFromSerialized(doc.data, doc, undefined, {
-      identityContext,
+      store,
     });
 
     try {
@@ -724,26 +664,26 @@ module('Unit | identity-context garbage collection', function (hooks) {
     }
 
     // success is not throwing
-    identityContext.sweep(api);
+    store.sweep(api);
   });
 
   test('return a stale instance when the server state reflects an error for an id', async function (assert) {
     let {
-      identityContext,
+      store,
       instances: { hassan },
     } = await setupTest(saveAll);
 
     let error = makeError(hassan.id);
-    identityContext.addInstanceOrError(hassan.id, error);
+    store.addInstanceOrError(hassan.id, error);
 
     assert.strictEqual(
-      identityContext.get(hassan.id),
+      store.get(hassan.id),
       hassan,
       'stale hassan instance is returned',
     );
 
     assert.strictEqual(
-      identityContext.getInstanceOrError(hassan.id),
+      store.getInstanceOrError(hassan.id),
       hassan,
       'stale hassan instance is returned',
     );
@@ -751,15 +691,15 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
   test('can get an error for an id when a stale instance exists', async function (assert) {
     let {
-      identityContext,
+      store,
       instances: { hassan },
     } = await setupTest(saveAll);
 
     let error = makeError(hassan.id);
-    identityContext.addInstanceOrError(hassan.id, error);
+    store.addInstanceOrError(hassan.id, error);
 
     assert.strictEqual(
-      identityContext.getError(hassan.id),
+      store.getError(hassan.id),
       error,
       'a card error exists for the id',
     );
@@ -767,21 +707,21 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
   test('setting an instance clears a card error', async function (assert) {
     let {
-      identityContext,
+      store,
       instances: { hassan },
     } = await setupTest(saveAll);
 
     let error = makeError(hassan.id);
-    identityContext.addInstanceOrError(hassan.id, error);
+    store.addInstanceOrError(hassan.id, error);
     assert.strictEqual(
-      identityContext.getError(hassan.id),
+      store.getError(hassan.id),
       error,
       'a card error exists for the id',
     );
 
-    identityContext.addInstanceOrError(hassan.id, hassan);
+    store.addInstanceOrError(hassan.id, hassan);
     assert.strictEqual(
-      identityContext.getError(hassan.id),
+      store.getError(hassan.id),
       undefined,
       'a card error does not exist for the id',
     );
@@ -789,11 +729,11 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
   test('can get the consumers of an instance', async function (assert) {
     let {
-      identityContext,
+      store,
       instances: { germaine, queenzy },
     } = await setupTest();
 
-    let consumers = identityContext.consumersOf(api, queenzy);
+    let consumers = store.consumersOf(api, queenzy);
     assert.deepEqual(
       consumers,
       [germaine],
@@ -803,11 +743,11 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
   test('can get the dependencies of an instance', async function (assert) {
     let {
-      identityContext,
+      store,
       instances: { hassan, jade, germaine },
     } = await setupTest();
 
-    let dependencies = identityContext.dependenciesOf(api, hassan);
+    let dependencies = store.dependenciesOf(api, hassan);
     assert.deepEqual(
       dependencies,
       [jade, germaine],

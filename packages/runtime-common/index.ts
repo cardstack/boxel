@@ -91,6 +91,7 @@ export * from './definitions';
 export * from './catalog';
 export * from './commands';
 export * from './constants';
+export * from './document';
 export * from './matrix-constants';
 export * from './matrix-client';
 export * from './queue';
