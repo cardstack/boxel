@@ -1,5 +1,4 @@
 import { GeoPointField } from '../fields/geo-point';
-import { MapRender } from '../components/map-render';
 
 import {
   CardDef,
