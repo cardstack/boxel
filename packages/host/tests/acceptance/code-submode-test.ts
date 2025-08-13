@@ -969,6 +969,52 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-send-error-to-ai-assistant]').exists();
     });
 
+    test('erroring cards attached as files instead and errors are included in AI context', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}broken-country.gts`,
+        aiAssistantOpen: true,
+        moduleInspector: 'preview',
+      });
+
+      assert.dom('[data-test-ai-assistant-panel]').exists();
+      let roomId = mockMatrixUtils.getRoomIds().pop()!;
+      await fillIn(
+        '[data-test-message-field]',
+        `Please try to fix the problem`,
+      );
+      await click('[data-test-send-message-btn]');
+
+      assertMessages(assert, [
+        {
+          from: 'testuser',
+          message: `Please try to fix the problem`,
+          files: [
+            {
+              name: 'broken-country.gts',
+              sourceUrl: `${testRealmURL}broken-country.gts`,
+            },
+            {
+              name: 'broken-country',
+              sourceUrl: `${testRealmURL}BrokenCountry/broken-country.json`,
+            },
+          ],
+        },
+      ]);
+      let matrixEvents = mockMatrixUtils.getRoomEvents(roomId);
+      let lastEvent = matrixEvents[matrixEvents.length - 1];
+      let aiContext = JSON.parse(lastEvent.content.data).context;
+      assert.strictEqual(
+        aiContext.errorsDisplayed[0].message,
+        'Encountered error rendering HTML for card: intentionalError is not defined',
+      );
+      assert.ok(aiContext.errorsDisplayed[0].stack.match(/at render/));
+      assert.strictEqual(
+        aiContext.errorsDisplayed[0].sourceUrl,
+        `${testRealmURL}broken-country.gts`,
+      );
+    });
+
     test('it shows card preview errors and fix it button in module inspector', async function (assert) {
       await visitOperatorMode({
         submode: 'code',

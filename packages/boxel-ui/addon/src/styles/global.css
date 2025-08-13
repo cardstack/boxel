@@ -89,6 +89,7 @@
   select:focus,
   textarea:focus {
     outline-color: var(--boxel-highlight);
+    outline-style: var(--boxel-outline-style, solid);
   }
 }
 
