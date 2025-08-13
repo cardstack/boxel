@@ -12,7 +12,7 @@ interface MapRenderSignature {
   Element: HTMLElement;
 }
 
-interface MapMouseEvent {
+interface LeafletMouseEvent {
   originalEvent: MouseEvent;
   latlng: { lat: number; lng: number };
   target: any;
@@ -72,7 +72,7 @@ function setupMarkerPopup(
 }
 
 // Determines if a map click event originated from a marker element.
-function isMarkerClick(event: MapMouseEvent): boolean {
+function isMarkerClick(event: LeafletMouseEvent): boolean {
   if (!event.originalEvent?.target) return false;
 
   const target = event.originalEvent.target as HTMLElement;
@@ -187,7 +187,7 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
           'Current Location',
         );
 
-        map.on('click', (event: MapMouseEvent) => {
+        map.on('click', (event: LeafletMouseEvent) => {
           // Use helper function to check if click target is a marker
           if (isMarkerClick(event)) {
             return;
