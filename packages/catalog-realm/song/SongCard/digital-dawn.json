@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "songTitle": "Digital Dawn",
+      "artist": "Echo Station",
+      "duration": "3:47",
+      "albumName": "Future Memories",
+      "genre": "Electronic",
+      "trackNumber": 1
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../song",
+        "name": "SongCard"
+      }
+    }
+  }
+}

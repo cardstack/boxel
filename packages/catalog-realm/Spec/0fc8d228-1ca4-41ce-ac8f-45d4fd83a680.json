@@ -1,0 +1,48 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "module": "../beat-maker/beat-maker",
+        "name": "DrumKitField"
+      },
+      "specType": "field",
+      "containedExamples": [
+        {
+          "kitName": null,
+          "kickParams": null,
+          "snareParams": null,
+          "hihatParams": null,
+          "openhatParams": null,
+          "clapParams": null,
+          "crashParams": null
+        }
+      ],
+      "title": "DrumKitField",
+      "description": null,
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../beat-maker/beat-maker",
+              "name": "DrumKitField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

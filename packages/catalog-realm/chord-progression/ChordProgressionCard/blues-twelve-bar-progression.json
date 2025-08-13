@@ -1,0 +1,53 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "progressionName": "12-Bar Blues (I-I-I-I-IV-IV-I-I-V-IV-I-V)",
+      "description": "The foundation of blues music and rock & roll. This 12-bar form uses dominant 7th chords and follows a specific pattern that creates the classic blues sound and feel.",
+      "key": "C major",
+      "scale": "blues",
+      "timeSignature": "4/4",
+      "tempo": 90,
+      "genre": "Blues",
+      "difficulty": "intermediate",
+      "popularSongs": "\"Sweet Home Chicago\", \"Stormy Monday\", \"The Thrill is Gone\", \"Crossroads\"",
+      "chordProgression": {
+        "progressionName": "12-Bar Blues",
+        "key": "C major",
+        "timeSignature": "4/4",
+        "tempo": 90,
+        "chords": [
+          {
+            "chordName": "C7",
+            "chordType": "dominant7",
+            "rootNote": "C",
+            "quality": "dominant seventh",
+            "notes": "[\"C\", \"E\", \"G\", \"Bb\"]"
+          },
+          {
+            "chordName": "F7",
+            "chordType": "dominant7",
+            "rootNote": "F",
+            "quality": "dominant seventh",
+            "notes": "[\"F\", \"A\", \"C\", \"Eb\"]"
+          },
+          {
+            "chordName": "G7",
+            "chordType": "dominant7",
+            "rootNote": "G",
+            "quality": "dominant seventh",
+            "notes": "[\"G\", \"B\", \"D\", \"F\"]"
+          }
+        ]
+      },
+      "title": "12-Bar Blues (I-I-I-I-IV-IV-I-I-V-IV-I-V)"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../chord-progression",
+        "name": "ChordProgressionCard"
+      }
+    }
+  }
+}

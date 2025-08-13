@@ -1,0 +1,31 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "BeatMakerCard",
+        "module": "../beat-maker"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "bpm": 162,
+      "swing": 50,
+      "pattern": "kick-snare-hihat-openhat",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "masterVolume": 75,
+      "instrumentKit": "House Kit"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

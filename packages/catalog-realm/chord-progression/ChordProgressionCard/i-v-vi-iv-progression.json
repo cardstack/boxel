@@ -1,0 +1,60 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "progressionName": "I-V-vi-IV (Classic Rock)",
+      "description": "A timeless progression that moves from stability through tension to resolution. The major-to-minor shift in the middle creates emotional depth that works across many genres.",
+      "key": "C major",
+      "scale": "major",
+      "timeSignature": "4/4",
+      "tempo": 110,
+      "genre": "Rock",
+      "difficulty": "beginner",
+      "popularSongs": "\"Let It Be\" by The Beatles, \"No Woman No Cry\" by Bob Marley, \"Beast of Burden\" by Rolling Stones",
+      "chordProgression": {
+        "progressionName": "I-V-vi-IV",
+        "key": "C major",
+        "timeSignature": "4/4",
+        "tempo": 110,
+        "chords": [
+          {
+            "chordName": "C",
+            "chordType": "major",
+            "rootNote": "C",
+            "quality": "major",
+            "notes": "[\"C\", \"E\", \"G\"]"
+          },
+          {
+            "chordName": "G",
+            "chordType": "major",
+            "rootNote": "G",
+            "quality": "major",
+            "notes": "[\"G\", \"B\", \"D\"]"
+          },
+          {
+            "chordName": "Am",
+            "chordType": "minor",
+            "rootNote": "A",
+            "quality": "minor",
+            "notes": "[\"A\", \"C\", \"E\"]"
+          },
+          {
+            "chordName": "F",
+            "chordType": "major",
+            "rootNote": "F",
+            "quality": "major",
+            "notes": "[\"F\", \"A\", \"C\"]"
+          }
+        ]
+      },
+      "title": "I-V-vi-IV (Classic Rock)"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../chord-progression",
+        "name": "ChordProgressionCard"
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "kitName": "House Kit",
+      "description": "Punchy four-on-the-floor kicks with clean snares and smooth hi-hats",
+      "category": "House",
+      "creator": "Beat Maker Studio",
+      "kit": {
+        "kitName": "House Kit",
+        "kickParams": "{\"type\": \"house\", \"frequency\": 65, \"decay\": 0.25, \"amplitude\": 1.0, \"shape\": 1.5, \"resonance\": 1}",
+        "snareParams": "{\"type\": \"house\", \"frequency\": 180, \"decay\": 0.2, \"amplitude\": 0.8, \"shape\": 2, \"resonance\": 0.5}",
+        "hihatParams": "{\"type\": \"house\", \"frequency\": 7000, \"decay\": 0.08, \"amplitude\": 0.5, \"shape\": 2, \"resonance\": 1}",
+        "openhatParams": "{\"type\": \"house\", \"frequency\": 6500, \"decay\": 0.25, \"amplitude\": 0.6, \"shape\": 1.5, \"resonance\": 1}",
+        "clapParams": "{\"type\": \"house\", \"frequency\": 1800, \"decay\": 0.15, \"amplitude\": 0.7, \"shape\": 2, \"resonance\": 3}",
+        "crashParams": "{\"type\": \"house\", \"frequency\": 3500, \"decay\": 0.8, \"amplitude\": 0.4, \"shape\": 1, \"resonance\": 1}"
+      },
+      "title": "House Kit"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../beat-maker",
+        "name": "DrumKitCard"
+      }
+    }
+  }
+}

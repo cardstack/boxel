@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "playlistName": "Midnight Chill",
+      "description": "Smooth beats and dreamy melodies for late-night relaxation and contemplation.",
+      "coverImageUrl": "https://dummyimage.com/300x300/1e293b/60a5fa&text=Midnight+Chill",
+      "songCount": 35,
+      "duration": "2h 18m",
+      "curator": "Alex Rivers",
+      "mood": "Chill"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../playlist",
+        "name": "PlaylistCard"
+      }
+    }
+  }
+}

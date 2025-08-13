@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "eventName": "Synthwave Night",
+      "artist": "Neon Cascade & Friends",
+      "venue": "The Electric Lounge",
+      "eventDate": "2024-12-15",
+      "eventTime": "8:00 PM",
+      "ticketPrice": 35,
+      "seatSection": "General Admission",
+      "ticketType": "Standard",
+      "isAvailable": true
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../event-ticket",
+        "name": "EventTicketCard"
+      }
+    }
+  }
+}

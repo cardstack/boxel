@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "eventName": "Indie Showcase",
+      "artist": "Local Rising Stars",
+      "venue": "Harmony Hall",
+      "eventDate": "2024-12-22",
+      "eventTime": "7:30 PM",
+      "ticketPrice": 25,
+      "seatSection": "Standing",
+      "ticketType": "Early Bird",
+      "isAvailable": true
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../event-ticket",
+        "name": "EventTicketCard"
+      }
+    }
+  }
+}

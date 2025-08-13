@@ -1,0 +1,103 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "MusicHubCard",
+        "module": "../music-hub"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "hubName": "Harmony Central",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "description": "A comprehensive music platform bringing together discovery, creation, and community. Explore new sounds, create your own music, and connect with fellow artists and music enthusiasts."
+    },
+    "relationships": {
+      "beatMaker": {
+        "links": {
+          "self": "../../beat-maker/BeatMakerCard/rhythm-studio"
+        }
+      },
+      "songBuilder": {
+        "links": {
+          "self": "../../song-builder/SongBuilderCard/ai-composer"
+        }
+      },
+      "creativeTool": {
+        "links": {
+          "self": "../../piano/Piano/20dfd090-15bd-45e3-bd0d-b2fe8c3dcc8d"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "featuredSongs.0": {
+        "links": {
+          "self": "../../song/SongCard/neon-nights"
+        }
+      },
+      "featuredSongs.1": {
+        "links": {
+          "self": "../../song/SongCard/digital-dawn"
+        }
+      },
+      "recordingStudio": {
+        "links": {
+          "self": "../../recording-studio/RecordingStudioCard/harmony-studio"
+        }
+      },
+      "featuredAlbums.0": {
+        "links": {
+          "self": "../../music-album/MusicAlbumCard/midnight-reveries"
+        }
+      },
+      "featuredAlbums.1": {
+        "links": {
+          "self": "../../music-album/MusicAlbumCard/electric-dreams"
+        }
+      },
+      "upcomingEvents.0": {
+        "links": {
+          "self": "../../event-ticket/EventTicketCard/synthwave-night"
+        }
+      },
+      "upcomingEvents.1": {
+        "links": {
+          "self": "../../event-ticket/EventTicketCard/indie-showcase"
+        }
+      },
+      "featuredMusicians.0": {
+        "links": {
+          "self": "../../musician-landing-page/MusicianLandingPage/django-reeves"
+        }
+      },
+      "featuredMusicians.1": {
+        "links": {
+          "self": "../../musician-landing-page/MusicianLandingPage/nova-eclipse"
+        }
+      },
+      "featuredPlaylists.0": {
+        "links": {
+          "self": "../../playlist/PlaylistCard/focus-flow"
+        }
+      },
+      "featuredPlaylists.1": {
+        "links": {
+          "self": "../../playlist/PlaylistCard/midnight-chill"
+        }
+      },
+      "chordProgressionPlayer": {
+        "links": {
+          "self": "../../chord-progression/ChordProgressionPlayerCard/43a76bb7-8d83-468e-a062-ced1850a65f4"
+        }
+      }
+    }
+  }
+}

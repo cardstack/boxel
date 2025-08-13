@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "songTitle": "Neon Nights",
+      "artist": "Cyber Dreamers",
+      "duration": "4:23",
+      "albumName": "Digital Horizons",
+      "genre": "Synthpop",
+      "trackNumber": 3
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../song",
+        "name": "SongCard"
+      }
+    }
+  }
+}

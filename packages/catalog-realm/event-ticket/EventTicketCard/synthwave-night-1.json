@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "eventName": "Synthwave Night",
+      "artist": "Kai Beats & Luna Solace",
+      "venue": "The Electric Venue",
+      "eventDate": "2025-02-15",
+      "eventTime": "8:00 PM",
+      "ticketPrice": 45,
+      "seatSection": "GA Floor",
+      "ticketType": "General Admission",
+      "isAvailable": true,
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../event-ticket",
+        "name": "EventTicketCard"
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "bpm": null,
+      "pattern": null,
+      "instrumentKit": null,
+      "swing": null,
+      "masterVolume": null,
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../beat-maker/beat-maker",
+        "name": "BeatMakerCard"
+      }
+    }
+  }
+}

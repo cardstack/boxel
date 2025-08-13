@@ -1,0 +1,60 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "progressionName": "Andalusian Cadence (i-VII-VI-V)",
+      "description": "A haunting minor progression with Spanish and classical influences. The descending bass line creates a sense of melancholy and drama that's been used across many genres.",
+      "key": "A minor",
+      "scale": "natural minor",
+      "timeSignature": "4/4",
+      "tempo": 80,
+      "genre": "Classical",
+      "difficulty": "intermediate",
+      "popularSongs": "\"Hit the Road Jack\", \"Stairway to Heaven\" (intro), \"Runaway\" by Del Shannon, \"Sultans of Swing\" (intro)",
+      "chordProgression": {
+        "progressionName": "Andalusian Cadence",
+        "key": "A minor",
+        "timeSignature": "4/4",
+        "tempo": 80,
+        "chords": [
+          {
+            "chordName": "Am",
+            "chordType": "minor",
+            "rootNote": "A",
+            "quality": "minor",
+            "notes": "[\"A\", \"C\", \"E\"]"
+          },
+          {
+            "chordName": "G",
+            "chordType": "major",
+            "rootNote": "G",
+            "quality": "major",
+            "notes": "[\"G\", \"B\", \"D\"]"
+          },
+          {
+            "chordName": "F",
+            "chordType": "major",
+            "rootNote": "F",
+            "quality": "major",
+            "notes": "[\"F\", \"A\", \"C\"]"
+          },
+          {
+            "chordName": "E",
+            "chordType": "major",
+            "rootNote": "E",
+            "quality": "major",
+            "notes": "[\"E\", \"G#\", \"B\"]"
+          }
+        ]
+      },
+      "title": "Andalusian Cadence (i-VII-VI-V)"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../chord-progression",
+        "name": "ChordProgressionCard"
+      }
+    }
+  }
+}

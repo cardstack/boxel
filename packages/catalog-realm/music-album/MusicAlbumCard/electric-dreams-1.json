@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "albumTitle": "Electric Dreams",
+      "artist": "Kai Beats",
+      "artworkUrl": "https://dummyimage.com/400x400/3b82f6/ffffff&text=Electric+Dreams",
+      "releaseYear": 2024,
+      "genre": "Synthwave",
+      "trackCount": 10,
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../music-album",
+        "name": "MusicAlbumCard"
+      }
+    }
+  }
+}

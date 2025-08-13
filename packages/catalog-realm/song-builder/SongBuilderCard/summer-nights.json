@@ -1,0 +1,400 @@
+{
+  "data": {
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "../song-builder",
+        "name": "SongBuilderCard"
+      }
+    },
+    "attributes": {
+      "songTitle": "Summer Nights",
+      "artist": "Melody Makers",
+      "description": "A catchy pop anthem with familiar chord progressions and memorable hooks",
+      "genre": "Pop",
+      "key": "G Major",
+      "tempo": 128,
+      "timeSignature": "4/4",
+      "sections": [
+        {
+          "sectionName": "intro",
+          "lyrics": "**[Pop Intro]**\n\nSummer nights are calling\nLights are slowly falling\nMusic in the distance\nThis is our moment",
+          "chords": [
+            {
+              "chordName": "G",
+              "chordType": "major",
+              "notes": ["G3", "B3", "D4", "G4"],
+              "rootNote": "G",
+              "quality": "major"
+            },
+            {
+              "chordName": "Em",
+              "chordType": "minor", 
+              "notes": ["E3", "G3", "B3", "E4"],
+              "rootNote": "E",
+              "quality": "minor"
+            },
+            {
+              "chordName": "C",
+              "chordType": "major",
+              "notes": ["C3", "E3", "G3", "C4"],
+              "rootNote": "C",
+              "quality": "major"
+            },
+            {
+              "chordName": "D",
+              "chordType": "major",
+              "notes": ["D3", "F#3", "A3", "D4"],
+              "rootNote": "D",
+              "quality": "major"
+            }
+          ],
+          "duration": 16,
+          "notes": "Classic G-Em-C-D progression. Start with acoustic guitar and light percussion."
+        },
+        {
+          "sectionName": "verse 1",
+          "lyrics": "**Verse 1:**\n\nWalking down the boardwalk\nHand in hand we're talking\nAbout our dreams and wishes\nEvery word is magic\n\nNeon signs are glowing\nWarm breeze gently blowing\nThis could last forever\nYou and me together",
+          "chords": [
+            {
+              "chordName": "G",
+              "chordType": "major",
+              "notes": ["G3", "B3", "D4", "G4"],
+              "rootNote": "G",
+              "quality": "major"
+            },
+            {
+              "chordName": "D",
+              "chordType": "major",
+              "notes": ["D3", "F#3", "A3", "D4"],
+              "rootNote": "D",
+              "quality": "major"
+            },
+            {
+              "chordName": "Em",
+              "chordType": "minor",
+              "notes": ["E3", "G3", "B3", "E4"],
+              "rootNote": "E",
+              "quality": "minor"
+            },
+            {
+              "chordName": "C",
+              "chordType": "major",
+              "notes": ["C3", "E3", "G3", "C4"],
+              "rootNote": "C",
+              "quality": "major"
+            }
+          ],
+          "duration": 32,
+          "notes": "Keep it simple and open. Focus on vocal melody with light instrumentation."
+        },
+        {
+          "sectionName": "pre-chorus",
+          "lyrics": "**Pre-Chorus:**\n\nTurn the music up loud\nLose yourself in the crowd\nEvery heartbeat's a song\nThis is where we belong",
+          "chords": [
+            {
+              "chordName": "Am",
+              "chordType": "minor",
+              "notes": ["A3", "C4", "E4", "A4"],
+              "rootNote": "A",
+              "quality": "minor"
+            },
+            {
+              "chordName": "C",
+              "chordType": "major",
+              "notes": ["C3", "E3", "G3", "C4"],
+              "rootNote": "C",
+              "quality": "major"
+            },
+            {
+              "chordName": "G",
+              "chordType": "major",
+              "notes": ["G3", "B3", "D4", "G4"],
+              "rootNote": "G",
+              "quality": "major"
+            },
+            {
+              "chordName": "D",
+              "chordType": "major",
+              "notes": ["D3", "F#3", "A3", "D4"],
+              "rootNote": "D",
+              "quality": "major"
+            }
+          ],
+          "duration": 16,
+          "notes": "Build energy here. Add layers and prepare for the big chorus."
+        },
+        {
+          "sectionName": "chorus", 
+          "lyrics": "**Chorus:**\n\nThese are the summer nights we'll remember\nDancing until the morning light\nNothing else matters when we're together\nEverything's gonna be alright\n\nSummer nights, summer nights\nFeel so good, feel so right\nSummer nights, summer nights\nLiving life in black and white",
+          "chords": [
+            {
+              "chordName": "G",
+              "chordType": "major",
+              "notes": ["G3", "B3", "D4", "G4"],
+              "rootNote": "G",
+              "quality": "major"
+            },
+            {
+              "chordName": "D",
+              "chordType": "major",
+              "notes": ["D3", "F#3", "A3", "D4"],
+              "rootNote": "D",
+              "quality": "major"
+            },
+            {
+              "chordName": "Em",
+              "chordType": "minor",
+              "notes": ["E3", "G3", "B3", "E4"],
+              "rootNote": "E",
+              "quality": "minor"
+            },
+            {
+              "chordName": "C",
+              "chordType": "major",
+              "notes": ["C3", "E3", "G3", "C4"],
+              "rootNote": "C",
+              "quality": "major"
+            }
+          ],
+          "duration": 32,
+          "notes": "Big, anthemic chorus! Full band, soaring vocals, memorable hook."
+        },
+        {
+          "sectionName": "verse 2",
+          "lyrics": "**Verse 2:**\n\nFireworks are starting\nEvery moment sparking\nMemories we're making\nHearts are wide awaking\n\nFeel the rhythm moving\nEvery step improving\nLife is like a movie\nAnd we're the leading stars",
+          "chords": [
+            {
+              "chordName": "G",
+              "chordType": "major",
+              "notes": ["G3", "B3", "D4", "G4"],
+              "rootNote": "G",
+              "quality": "major"
+            },
+            {
+              "chordName": "D",
+              "chordType": "major",
+              "notes": ["D3", "F#3", "A3", "D4"],
+              "rootNote": "D",
+              "quality": "major"
+            },
+            {
+              "chordName": "Em",
+              "chordType": "minor",
+              "notes": ["E3", "G3", "B3", "E4"],
+              "rootNote": "E",
+              "quality": "minor"
+            },
+            {
+              "chordName": "C",
+              "chordType": "major",
+              "notes": ["C3", "E3", "G3", "C4"],
+              "rootNote": "C",
+              "quality": "major"
+            }
+          ],
+          "duration": 32,
+          "notes": "Similar to verse 1 but with more energy and additional instrumentation layers."
+        },
+        {
+          "sectionName": "bridge",
+          "lyrics": "**Bridge:**\n\nWhen the stars come out to play\nAnd the world just fades away\nIn your eyes I see tomorrow\nNo more sadness, no more sorrow\n\nEvery moment feels like gold\nStories waiting to be told\nSummer nights will last forever\nIn our hearts we'll stay together",
+          "chords": [
+            {
+              "chordName": "Am",
+              "chordType": "minor",
+              "notes": ["A3", "C4", "E4", "A4"],
+              "rootNote": "A",
+              "quality": "minor"
+            },
+            {
+              "chordName": "F",
+              "chordType": "major",
+              "notes": ["F3", "A3", "C4", "F4"],
+              "rootNote": "F",
+              "quality": "major"
+            },
+            {
+              "chordName": "C",
+              "chordType": "major",
+              "notes": ["C3", "E3", "G3", "C4"],
+              "rootNote": "C",
+              "quality": "major"
+            },
+            {
+              "chordName": "G",
+              "chordType": "major",
+              "notes": ["G3", "B3", "D4", "G4"],
+              "rootNote": "G",
+              "quality": "major"
+            }
+          ],
+          "duration": 24,
+          "notes": "Emotional bridge section. Strip back instrumentation then build to massive final chorus."
+        },
+        {
+          "sectionName": "final chorus",
+          "lyrics": "**Final Chorus:**\n\nThese are the summer nights we'll remember\nDancing until the morning light\nNothing else matters when we're together\nEverything's gonna be alright\n\nSummer nights, summer nights\nFeel so good, feel so right\nSummer nights, summer nights\nLiving life in black and white\n\n*Summer nights forever!*\n*Dancing in the light!*\n*Everything's alright!*",
+          "chords": [
+            {
+              "chordName": "G",
+              "chordType": "major",
+              "notes": ["G3", "B3", "D4", "G4"],
+              "rootNote": "G",
+              "quality": "major"
+            },
+            {
+              "chordName": "D",
+              "chordType": "major",
+              "notes": ["D3", "F#3", "A3", "D4"],
+              "rootNote": "D",
+              "quality": "major"
+            },
+            {
+              "chordName": "Em",
+              "chordType": "minor",
+              "notes": ["E3", "G3", "B3", "E4"],
+              "rootNode": "E",
+              "quality": "minor"
+            },
+            {
+              "chordName": "C",
+              "chordType": "major",
+              "notes": ["C3", "E3", "G3", "C4"],
+              "rootNote": "C",
+              "quality": "major"
+            }
+          ],
+          "duration": 40,
+          "notes": "Biggest section with all elements. Extended outro with vocal ad-libs and full band."
+        },
+        {
+          "sectionName": "outro",
+          "lyrics": "**[Outro]**\n\n*Summer nights...*\n*Feel so right...*\n*In your eyes...*\n*Never goodbye...*\n\n*[Gentle fade with acoustic guitar]*",
+          "chords": [
+            {
+              "chordName": "G",
+              "chordType": "major",
+              "notes": ["G3", "B3", "D4", "G4"],
+              "rootNote": "G",
+              "quality": "major"
+            },
+            {
+              "chordName": "Em",
+              "chordType": "minor",
+              "notes": ["E3", "G3", "B3", "E4"],
+              "rootNote": "E",
+              "quality": "minor"
+            },
+            {
+              "chordName": "C",
+              "chordType": "major",
+              "notes": ["C3", "E3", "G3", "C4"],
+              "rootNote": "C",
+              "quality": "major"
+            }
+          ],
+          "duration": 18,
+          "notes": "Gentle acoustic outro with vocal echoes and reverb. End on G major."
+        }
+      ],
+      "tracks": [
+        {
+          "trackName": "Lead Vocals",
+          "instrument": "Lead Vocals",
+          "volume": 85,
+          "pan": 0,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Reverb, Compression, EQ, De-esser",
+          "notes": "Clear, bright pop vocal. Slight auto-tune for modern polish. Harmonies in chorus."
+        },
+        {
+          "trackName": "Backing Vocals",
+          "instrument": "Vocal Harmonies",
+          "volume": 70,
+          "pan": -15,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Wide Reverb, Chorus, EQ",
+          "notes": "Rich harmonies in chorus and bridge. Stack multiple takes for fullness."
+        },
+        {
+          "trackName": "Electric Guitar",
+          "instrument": "Electric Guitar",
+          "volume": 75,
+          "pan": 25,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Amp Simulation, Delay, Reverb",
+          "notes": "Clean tones in verses, driven in chorus. Classic pop guitar sounds."
+        },
+        {
+          "trackName": "Acoustic Guitar",
+          "instrument": "Acoustic Guitar",
+          "volume": 65,
+          "pan": -20,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "EQ, Compression, Subtle Reverb",
+          "notes": "Foundation rhythm throughout. Fingerpicked in intro and outro."
+        },
+        {
+          "trackName": "Bass",
+          "instrument": "Electric Bass",
+          "volume": 80,
+          "pan": 0,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Compression, EQ, DI + Amp Blend",
+          "notes": "Solid rhythm section foundation. Punchy and melodic basslines."
+        },
+        {
+          "trackName": "Drums",
+          "instrument": "Drum Kit",
+          "volume": 78,
+          "pan": 0,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Gate, Compression, EQ, Reverb",
+          "notes": "Modern pop drums. Tight kick and snare. Build energy through arrangement."
+        },
+        {
+          "trackName": "Piano",
+          "instrument": "Piano",
+          "volume": 60,
+          "pan": -10,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "EQ, Compression, Reverb",
+          "notes": "Subtle foundation chords. More prominent in bridge for emotional impact."
+        },
+        {
+          "trackName": "Strings",
+          "instrument": "String Section",
+          "volume": 55,
+          "pan": 10,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Hall Reverb, EQ",
+          "notes": "Lush strings in chorus and bridge. Create emotional lift and grandeur."
+        }
+      ],
+      "masterVolume": 90,
+      "songDuration": 210,
+      "cardInfo": {
+        "title": null,
+        "description": null,
+        "thumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
