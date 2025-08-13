@@ -14,6 +14,11 @@ import { getField } from '@cardstack/runtime-common';
 export class QRCodePreview extends CardDef {
   @field linkedCard = linksTo(() => CardDef);
   @field qrCode = contains(QRField);
+  @field qrCodeOfLinkedCard = contains(QRField, {
+    computeVia: function (this: QRCodePreview) {
+      return new QRField({ data: this.linkedCard?.id });
+    },
+  });
 
   static displayName = 'QR Code Preview';
   static isolated = class Isolated extends Component<typeof this> {
@@ -28,6 +33,7 @@ export class QRCodePreview extends CardDef {
         <@fields.qrCode @format='edit' />
         <FieldContainer @label='Embedded' @icon={{this.getFieldIcon 'qrCode'}}>
           <@fields.qrCode @format='embedded' />
+          <@fields.qrCodeOfLinkedCard @format='embedded' />
         </FieldContainer>
       </section>
       <style scoped>
