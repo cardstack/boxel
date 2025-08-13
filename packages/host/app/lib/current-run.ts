@@ -409,7 +409,10 @@ export class CurrentRun {
       await this.indexModule(url, fileRef);
     } else {
       if (!store) {
-        store = new CardStoreWithErrors(this.network.fetch);
+        // the special building index header is set on the middleware stack
+        // specifically in the loader's fetcher (as opposed to the virtual
+        // network's fetcher), so we need that fetcher specifically for our store.
+        store = new CardStoreWithErrors(this.loaderService.loader.fetch);
       }
 
       if (url.href.endsWith('.json')) {
