@@ -4,11 +4,13 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 import NetworkService from '../services/network';
+import RealmService from '../services/realm';
 
 export default class WriteTextFileCommand extends HostBaseCommand<
   typeof BaseCommandModule.WriteTextFileInput
 > {
   @service declare private network: NetworkService;
+  @service declare private realm: RealmService;
 
   description = `Write a text file to a realm, such as a module or a card.`;
   static actionVerb = 'Write';
@@ -24,7 +26,17 @@ export default class WriteTextFileCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.WriteTextFileInput,
   ): Promise<undefined> {
-    let url = new URL(input.path, input.realm);
+    let realm;
+    if (input.realm) {
+      realm = this.realm.realmOfURL(new URL(input.realm));
+      if (!realm) {
+        throw new Error(`Invalid or unknown realm provided: ${input.realm}`);
+      }
+    }
+    if (input.path.startsWith('/')) {
+      input.path = input.path.slice(1);
+    }
+    let url = new URL(input.path, realm?.href);
     if (!input.overwrite) {
       let existing = await this.network.authedFetch(url);
 

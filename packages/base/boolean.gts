@@ -35,9 +35,7 @@ export default class BooleanField extends FieldDef {
   static [fieldSerializer] = 'boolean';
   static [useIndexBasedKey]: never;
 
-  static get [emptyValue]() {
-    return false;
-  }
+  static [emptyValue] = false;
 
   static embedded = View;
   static atom = View;

@@ -429,6 +429,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
   });
 
   test(`skips over fields that can't be recognised`, async function (assert) {
+    assert.expect(2);
     let { field, contains, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
 
@@ -454,6 +455,17 @@ module('Unit | ai-function-generation-test', function (hooks) {
       },
       relationships: cardDefRelationships,
     });
+    try {
+      generateJsonSchemaForCardType(TestCard, cardApi, mappings, {
+        strict: true,
+      });
+    } catch (error) {
+      assert.strictEqual(
+        (error as any).message,
+        "No schema found for field 'skipField'. Ensure the field type is defined in the mappings.",
+        'Expected an error to be thrown about the missing field',
+      );
+    }
   });
 
   test(`handles subclasses`, async function (assert) {

@@ -1,5 +1,7 @@
 import { VirtualNetwork } from '@cardstack/runtime-common';
 
+import HostBaseCommand from '../lib/host-base-command';
+
 import * as AddFieldToCardDefinitionCommandModule from './add-field-to-card-definition';
 import * as AddSkillsToRoomCommandModule from './add-skills-to-room';
 import * as UseAiAssistantCommandModule from './ai-assistant';
@@ -177,3 +179,28 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     GetCardCommandModule,
   );
 }
+
+export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
+  AddFieldToCardDefinitionCommandModule.default,
+  AddSkillsToRoomCommandModule.default,
+  ApplySearchReplaceBlockCommandModule.default,
+  CreateAIAssistantRoomCommandModule.default,
+  GetCardCommandModule.default,
+  ReadCardForAiAssistantCommandModule.default,
+  ReadFileForAiAssistantCommandModule.default,
+  SaveCardCommandModule.default,
+  SearchCardsCommandModule.SearchCardsByQueryCommand,
+  SearchCardsCommandModule.SearchCardsByTypeAndTitleCommand,
+  OpenAiAssistantRoomCommandModule.default,
+  OpenWorkspaceCommandModule.default,
+  SendAiAssistantMessageModule.default,
+  SetActiveLlmModule.default,
+  ShowCardCommandModule.default,
+  SwitchSubmodeCommandModule.default,
+  TransformCardsCommandModule.default,
+  UpdateCodePathWithSelectionCommandModule.default,
+  UpdatePlaygroundSelectionCommandModule.default,
+  UpdateSkillActivationCommandModule.default,
+  UseAiAssistantCommandModule.default,
+  WriteTextFileCommandModule.default,
+];

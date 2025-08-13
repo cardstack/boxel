@@ -27,6 +27,14 @@ class StubRealmService extends RealmService {
       info: testRealmInfo,
     };
   }
+
+  realmOfURL(url: URL) {
+    // Recognize only the test realm URL as valid
+    if (url.href === testRealmURL) {
+      return url;
+    }
+    return undefined;
+  }
 }
 
 module('Integration | commands | write-text-file', function (hooks) {
@@ -109,5 +117,40 @@ module('Integration | commands | write-text-file', function (hooks) {
     let response = await fetch(new URL('test.txt', testRealmURL));
     let content = await response.text();
     assert.strictEqual(content, 'Hello again!');
+  });
+
+  test('handles a leading slash in the path', async function (assert) {
+    let commandService = getService('command-service');
+    let writeTextFileCommand = new WriteTextFileCommand(
+      commandService.commandContext,
+    );
+    await writeTextFileCommand.execute({
+      path: '/test.txt',
+      content: 'Hello with slash!',
+      realm: testRealmURL,
+    });
+    let response = await fetch(new URL('test.txt', testRealmURL));
+    let content = await response.text();
+    assert.strictEqual(content, 'Hello with slash!');
+  });
+
+  test('throws an error when an invalid realm is provided', async function (assert) {
+    let commandService = getService('command-service');
+    let writeTextFileCommand = new WriteTextFileCommand(
+      commandService.commandContext,
+    );
+    try {
+      await writeTextFileCommand.execute({
+        path: 'bad.txt',
+        content: 'Nope',
+        realm: 'https://not-a-known-realm.example/',
+      });
+      assert.notOk(true, 'Should have thrown an error for invalid realm');
+    } catch (error: any) {
+      assert.ok(
+        error.message.includes('Invalid or unknown realm provided'),
+        'Error message should mention invalid realm',
+      );
+    }
   });
 });

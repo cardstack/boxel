@@ -1,11 +1,6 @@
 import {
-  BaseDefConstructor,
-  BaseInstanceType,
   Component as BoxelComponent,
   CardDef,
-  FieldDef,
-  deserialize,
-  primitive,
 } from 'https://cardstack.com/base/card-api';
 import Component from '@glimmer/component';
 import StringField from 'https://cardstack.com/base/string';
@@ -44,7 +39,6 @@ import { Resource } from 'ember-modify-based-class-resource';
 
 import BooleanField from 'https://cardstack.com/base/boolean';
 import { tracked } from '@glimmer/tracking';
-import { BoxelInput } from '@cardstack/boxel-ui/components';
 import ChessIcon from '@cardstack/boxel-icons/chess';
 
 type ChessboardModifierSignature = {
@@ -452,7 +446,7 @@ class Isolated extends BoxelComponent<typeof Chess> {
         </h1>
       </div>
       <ChessGameComponent
-        @pgn={{@model.pgn}}
+        @pgn={{@model.validatedPgn}}
         @updatePgn={{this.updatePgn}}
         @analysis={{@model.analysis}}
       />
@@ -471,43 +465,27 @@ class Isolated extends BoxelComponent<typeof Chess> {
   </template>
 }
 
-class PgnField extends FieldDef {
-  static [primitive]: string;
-  static displayName = 'PGN';
-
-  static async [deserialize]<T extends BaseDefConstructor>(
-    this: T,
-    pgn: any,
-  ): Promise<BaseInstanceType<T>> {
-    if (pgn == null) {
-      return pgn;
-    }
-    // Validating pgn string
-    let chess = new ChessJS();
-    chess.loadPgn(pgn);
-    return pgn as BaseInstanceType<T>;
-  }
-
-  static edit = class Edit extends BoxelComponent<typeof this> {
-    <template>
-      <BoxelInput
-        @value={{@model}}
-        @onInput={{@set}}
-        @disabled={{not @canEdit}}
-      />
-    </template>
-  };
-}
-
 export class Chess extends CardDef {
   static displayName = 'Chess';
   static icon = ChessIcon;
-  @field pgn = contains(PgnField);
+  @field pgn = contains(StringField);
   @field analysis = contains(BooleanField);
 
   @field title = contains(StringField, {
     computeVia: function (this: Chess) {
       return 'Chess Game';
+    },
+  });
+
+  @field validatedPgn = contains(StringField, {
+    computeVia: function (this: Chess) {
+      if (this.pgn == null) {
+        return this.pgn;
+      }
+      // Validating pgn string
+      let chess = new ChessJS();
+      chess.loadPgn(this.pgn);
+      return this.pgn;
     },
   });
 
