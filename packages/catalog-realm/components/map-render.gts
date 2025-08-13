@@ -12,6 +12,13 @@ interface MapRenderSignature {
   Element: HTMLElement;
 }
 
+interface MapMouseEvent {
+  originalEvent: MouseEvent;
+  latlng: { lat: number; lng: number };
+  target: any;
+  type: string;
+}
+
 // Type declaration for Leaflet - this tells TypeScript about the global L object
 // This is needed because Leaflet is loaded dynamically and creates a global 'L' variable
 declare global {
@@ -36,7 +43,7 @@ function createPopupContent(
 }
 
 // Creates a Leaflet popup instance with custom options.
-function createPopup(): any {
+function createPopup() {
   return L.popup({
     offset: [0, -20],
     closeButton: false,
@@ -65,7 +72,7 @@ function setupMarkerPopup(
 }
 
 // Determines if a map click event originated from a marker element.
-function isMarkerClick(event: any): boolean {
+function isMarkerClick(event: MapMouseEvent): boolean {
   if (!event.originalEvent?.target) return false;
 
   const target = event.originalEvent.target as HTMLElement;
@@ -180,13 +187,13 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
           'Current Location',
         );
 
-        map.on('click', (e: any) => {
+        map.on('click', (event: MapMouseEvent) => {
           // Use helper function to check if click target is a marker
-          if (isMarkerClick(e)) {
+          if (isMarkerClick(event)) {
             return;
           }
 
-          const { lat: clickLat, lng: clickLng } = e.latlng;
+          const { lat: clickLat, lng: clickLng } = event.latlng;
 
           // Remove previous marker if one exists
           if (this.currentMarker) {
