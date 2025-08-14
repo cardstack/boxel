@@ -222,7 +222,6 @@ const loadLinksPromises = initSharedState(
   'loadLinksPromises',
   () => new WeakMap<BaseDef, Promise<any>>(),
 );
-// TODO do we really need this???
 const stores = initSharedState(
   'stores',
   () => new WeakMap<BaseDef, CardStore>(),
@@ -531,6 +530,8 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     let maybeNotLoaded = deserialized.get(this.name);
     // a not loaded error can blow up thru a computed containsMany field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
+      // TODO instead of throwing not loaded we trigger the load of this link.
+      // in this case we are dealing with a computed that is consuming a not loaded field
       throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
     }
     return getter(instance, this);
@@ -841,6 +842,8 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     let maybeNotLoaded = deserialized.get(this.name);
     // a not loaded error can blow up thru a computed contains field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
+      // TODO instead of throwing not loaded we trigger the load of this link.
+      // in this case we are dealing with a computed that is consuming a not loaded field
       throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
     }
     return getter(instance, this);
@@ -1039,6 +1042,24 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     cardTracking.get(instance);
     let maybeNotLoaded = deserialized.get(this.name);
     if (isNotLoadedValue(maybeNotLoaded)) {
+      // What happens to the visit() function that we were using in the render
+      // service as a result of catching this error that is being used to allow
+      // the indexer to visit the consumption graph for this unloaded link?
+      //
+      // is that something that we still care about? i think visit() is something that helps
+      // guide the order of the indexing such that we prioritize the links that the
+      // currently indexed card consumes--otherwise we would have to wait until the
+      // indexer eventually gets around to indexing our link... also, when we get to
+      // cross realm invalidation, the visit() could be a tool that allows us to trigger invalidation
+      // in a different realm
+      //
+      // should we trigger the visit of the unloaded link here instead? maybe the indexer
+      // visit() is part of the store?
+      //
+      // Perhaps we store an [isLoaded] meta for this field too in case the template
+      // wants to know about in-flight values?
+      // let store = getStore(instance);
+
       throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
     }
     return getter(instance, this);
@@ -1241,7 +1262,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     e: NotLoaded,
   ): Promise<BaseInstanceType<CardT> | undefined> {
     let deserialized = getDataBucket(instance as BaseDef);
-    let store = stores.get(instance as BaseDef) ?? new FallbackCardStore();
+    let store = getStore(instance);
     let fieldValue = store.get(e.reference as string);
 
     if (fieldValue !== undefined) {
@@ -1404,6 +1425,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
     // Handle the case where the field was set to a single NotLoadedValue during deserialization
     if (isNotLoadedValue(value)) {
+      // TODO instead of throwing not loaded we trigger the load of this field.
       throw new NotLoaded(instance, value.reference, this.name);
     }
 
@@ -1424,6 +1446,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
     }
     if (notLoadedRefs.length > 0) {
+      // TODO instead of throwing not loaded we trigger the load of these links
       throw new NotLoaded(instance, notLoadedRefs, this.name);
     }
 
@@ -1729,7 +1752,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
   ): Promise<T[] | undefined> {
     let result: T[] | undefined;
     let fieldValues: CardDef[] = [];
-    let store = stores.get(instance) ?? new FallbackCardStore();
+    let store = getStore(instance);
 
     let references = !Array.isArray(e.reference) ? [e.reference] : e.reference;
     for (let ref of references) {
@@ -2980,7 +3003,7 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
 export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
-  store: CardStore = new FallbackCardStore(),
+  store = getStore(instance),
   opts?: DeserializeOpts,
 ): Promise<BaseInstanceType<T>> {
   stores.set(instance, store);
@@ -3710,6 +3733,10 @@ declare module 'ember-provide-consume-context/context-registry' {
   export default interface ContextRegistry {
     [CardContextName]: CardContext;
   }
+}
+
+function getStore(instance: BaseDef): CardStore {
+  return stores.get(instance as BaseDef) ?? new FallbackCardStore();
 }
 
 function myLoader(): Loader {
