@@ -40,12 +40,17 @@
       },
       "featuredSongs.0": {
         "links": {
-          "self": "../../song/SongCard/neon-nights"
+          "self": "../../song/SongCard/funky-suspense"
         }
       },
       "featuredSongs.1": {
         "links": {
-          "self": "../../song/SongCard/digital-dawn"
+          "self": "../../song/SongCard/carefree"
+        }
+      },
+      "featuredSongs.2": {
+        "links": {
+          "self": "../../song/SongCard/monkeys-spinning-monkeys"
         }
       },
       "recordingStudio": {
@@ -93,9 +98,39 @@
           "self": "../../playlist/PlaylistCard/midnight-chill"
         }
       },
+      "featuredPlaylists.2": {
+        "links": {
+          "self": "../../playlist/PlaylistCard/chill-vibes"
+        }
+      },
+      "featuredPlaylists.3": {
+        "links": {
+          "self": "../../playlist/PlaylistCard/energy-boost"
+        }
+      },
       "chordProgressionPlayer": {
         "links": {
           "self": "../../chord-progression/ChordProgressionPlayerCard/43a76bb7-8d83-468e-a062-ced1850a65f4"
+        }
+      },
+      "moodPlaylists.0": {
+        "links": {
+          "self": "../../playlist/PlaylistCard/energetic-workout"
+        }
+      },
+      "moodPlaylists.1": {
+        "links": {
+          "self": "../../playlist/PlaylistCard/relaxed-chill"
+        }
+      },
+      "moodPlaylists.2": {
+        "links": {
+          "self": "../../playlist/PlaylistCard/focused-instrumental"
+        }
+      },
+      "moodSelector": {
+        "links": {
+          "self": "../../mood-selector-playlist/MoodSelectorPlaylistCard/music-mood-finder"
         }
       }
     }

@@ -10,7 +10,23 @@
       "curator": "Alex Rivers",
       "mood": "Chill"
     },
-    "relationships": {},
+    "relationships": {
+      "songs.0": {
+        "links": {
+          "self": "../../song/SongCard/funky-suspense"
+        }
+      },
+      "songs.1": {
+        "links": {
+          "self": "../../song/SongCard/carefree"
+        }
+      },
+      "songs.2": {
+        "links": {
+          "self": "../../song/SongCard/monkeys-spinning-monkeys"
+        }
+      }
+    },
     "meta": {
       "adoptsFrom": {
         "module": "../playlist",

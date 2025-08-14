@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "playlistName": "Energy Boost",
+      "description": "High-energy tracks to get you moving and boost your mood. Perfect for workouts and motivation.",
+      "coverImageUrl": "https://dummyimage.com/300x300/ef4444/ffffff&text=Energy+Boost",
+      "songCount": 2,
+      "duration": "6m 0s",
+      "curator": "DJ Marcus",
+      "mood": "Energetic",
+      "isPublic": true,
+      "isCollaborative": false,
+      "createdDate": "2024-12-10",
+      "lastUpdated": "2024-12-15",
+      "followers": 189,
+      "totalPlays": 2543,
+      "tags": "energetic, workout, upbeat, motivation",
+      "averageEnergy": 9,
+      "averageDanceability": 8,
+      "title": "Energy Boost"
+    },
+    "relationships": {
+      "songs.0": {
+        "links": {
+          "self": "../../song/SongCard/funky-suspense"
+        }
+      },
+      "songs.1": {
+        "links": {
+          "self": "../../song/SongCard/monkeys-spinning-monkeys"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../playlist",
+        "name": "PlaylistCard"
+      }
+    }
+  }
+}

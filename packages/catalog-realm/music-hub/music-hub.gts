@@ -25,6 +25,7 @@ import { RecordingStudioCard } from '../recording-studio/recording-studio';
 import { EventTicketCard } from '../event-ticket/event-ticket';
 import { SongCard } from '../song/song';
 import { PlaylistCard } from '../playlist/playlist';
+import { MoodSelectorPlaylistCard } from '../mood-selector-playlist/mood-selector-playlist';
 
 class MusicHubIsolated extends Component<typeof MusicHubCard> {
   // ³⁰ Main isolated format
@@ -190,6 +191,34 @@ class MusicHubIsolated extends Component<typeof MusicHubCard> {
                 <div class='songs-list'>
                   <@fields.featuredSongs @format='embedded' />
                 </div>
+              </div>
+            {{else}}
+              <div class='content-group'>
+                <h3 class='group-title'>Trending Songs</h3>
+                <div class='empty-state'>
+                  <svg
+                    viewBox='0 0 24 24'
+                    fill='none'
+                    stroke='currentColor'
+                    stroke-width='2'
+                  >
+                    <circle cx='12' cy='12' r='10' />
+                    <path
+                      d='M9 9h0a3 3 0 0 1 5.12 0 2.44 2.44 0 0 1 0 3A3 3 0 0 0 12 16.5'
+                    />
+                    <circle cx='12' cy='19.5' r='.5' />
+                  </svg>
+                  <p>No trending songs yet. Discover new music to see
+                    recommendations!</p>
+                </div>
+              </div>
+            {{/if}}
+
+            <!-- Interactive Mood Selector -->
+            {{#if @fields.moodSelector}}
+              <div class='content-group mood-selector-section'>
+                <h3 class='group-title'>Find Music for Your Mood</h3>
+                <@fields.moodSelector @format='embedded' />
               </div>
             {{/if}}
           </section>
@@ -742,12 +771,6 @@ class MusicHubIsolated extends Component<typeof MusicHubCard> {
         gap: 1.5rem;
       }
 
-      .playlists-grid > .containsMany-field {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-        gap: 1.5rem;
-      }
-
       .songs-list > .containsMany-field {
         display: flex;
         flex-direction: column;
@@ -764,6 +787,29 @@ class MusicHubIsolated extends Component<typeof MusicHubCard> {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
         gap: 1.5rem;
+      }
+
+      /* Interactive Mood Selector */
+      .mood-selector-section {
+        margin-top: 2rem;
+        padding-top: 2rem;
+        border-top: 1px solid #e2e8f0;
+      }
+
+      .group-subtitle {
+        font-size: 0.875rem;
+        color: #64748b;
+        margin: -1rem 0 2rem 0;
+        text-align: center;
+      }
+
+      .mood-selector-container {
+        background: white;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        border: 1px solid #e2e8f0;
+        min-height: 500px;
       }
 
       /* Compact Tool Explorer Layout */
@@ -1122,6 +1168,7 @@ export class MusicHubCard extends CardDef {
   @field songBuilder = linksTo(() => SongBuilderCard); // ¹³⁸ AI-powered song composition tool
   @field featuredMusicians = linksToMany(() => MusicianLandingPage);
   @field upcomingEvents = linksToMany(() => EventTicketCard);
+  @field moodSelector = linksTo(() => MoodSelectorPlaylistCard);
 
   @field title = contains(StringField, {
     computeVia: function (this: MusicHubCard) {

@@ -5,12 +5,26 @@
       "playlistName": "Focus Flow",
       "description": "Curated instrumental tracks perfect for deep work sessions and creative flow states.",
       "coverImageUrl": "https://dummyimage.com/300x300/065f46/6ee7b7&text=Focus+Flow",
-      "songCount": 28,
-      "duration": "1h 52m",
       "curator": "Maya Chen",
       "mood": "Focused"
     },
-    "relationships": {},
+    "relationships": {
+      "songs.0": {
+        "links": {
+          "self": "../../song/SongCard/funky-suspense"
+        }
+      },
+      "songs.1": {
+        "links": {
+          "self": "../../song/SongCard/carefree"
+        }
+      },
+      "songs.2": {
+        "links": {
+          "self": "../../song/SongCard/monkeys-spinning-monkeys"
+        }
+      }
+    },
     "meta": {
       "adoptsFrom": {
         "module": "../playlist",

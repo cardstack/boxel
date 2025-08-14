@@ -2,13 +2,17 @@ import {
   CardDef,
   field,
   contains,
+  linksToMany,
   Component,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import UrlField from 'https://cardstack.com/base/url';
+import DateField from 'https://cardstack.com/base/date';
+import TextAreaField from 'https://cardstack.com/base/text-area';
 import MusicIcon from '@cardstack/boxel-icons/music';
-import { and } from '@cardstack/boxel-ui/helpers';
+import { and, gt } from '@cardstack/boxel-ui/helpers';
+import { SongCard } from '../song/song';
 
 export class MusicAlbumCard extends CardDef {
   static displayName = 'MusicAlbum';
@@ -17,9 +21,49 @@ export class MusicAlbumCard extends CardDef {
   @field albumTitle = contains(StringField);
   @field artist = contains(StringField);
   @field artworkUrl = contains(UrlField);
+  @field releaseDate = contains(DateField);
   @field releaseYear = contains(NumberField);
   @field genre = contains(StringField);
-  @field trackCount = contains(NumberField);
+  @field trackCount = contains(NumberField, {
+    computeVia: function (this: MusicAlbumCard) {
+      try {
+        return this.songs?.length ?? 0;
+      } catch (e) {
+        console.error('MusicAlbumCard: Error computing track count', e);
+        return 0;
+      }
+    },
+  });
+  @field duration = contains(StringField, {
+    computeVia: function (this: MusicAlbumCard) {
+      try {
+        const songs = this.songs;
+        if (!songs || songs.length === 0) return '0m';
+
+        // For now return estimated duration based on song count
+        // In a real app, you'd sum actual song durations
+        const avgSongDuration = 3.5; // minutes
+        const totalMinutes = Math.round(songs.length * avgSongDuration);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+
+        if (hours > 0) {
+          return `${hours}h ${minutes}m`;
+        } else {
+          return `${minutes}m`;
+        }
+      } catch (e) {
+        console.error('MusicAlbumCard: Error computing duration', e);
+        return '0m';
+      }
+    },
+  });
+  @field recordLabel = contains(StringField);
+  @field producer = contains(StringField);
+  @field description = contains(TextAreaField);
+  @field songs = linksToMany(() => SongCard);
+  @field totalPlays = contains(NumberField);
+  @field rating = contains(NumberField); // Average user rating 1-5
 
   @field title = contains(StringField, {
     computeVia: function (this: MusicAlbumCard) {
@@ -33,6 +77,280 @@ export class MusicAlbumCard extends CardDef {
       }
     },
   });
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <div class='stage'>
+        <div class='album-mat'>
+          <div class='album-hero'>
+            {{#if @model.artworkUrl}}
+              <img
+                src={{@model.artworkUrl}}
+                alt='Album artwork'
+                class='hero-artwork'
+              />
+            {{else}}
+              <div class='hero-artwork-placeholder'>
+                <svg
+                  viewBox='0 0 24 24'
+                  fill='none'
+                  stroke='currentColor'
+                  stroke-width='2'
+                >
+                  <circle cx='12' cy='12' r='10' />
+                  <circle cx='12' cy='12' r='3' />
+                </svg>
+              </div>
+            {{/if}}
+
+            <div class='album-details'>
+              <h1 class='album-title'>{{if
+                  @model.albumTitle
+                  @model.albumTitle
+                  'Unknown Album'
+                }}</h1>
+              <h2 class='album-artist'>{{if
+                  @model.artist
+                  @model.artist
+                  'Unknown Artist'
+                }}</h2>
+
+              <div class='album-metadata'>
+                {{#if @model.releaseYear}}
+                  <span class='metadata-item'>{{@model.releaseYear}}</span>
+                {{/if}}
+                {{#if @model.genre}}
+                  <span class='metadata-item'>{{@model.genre}}</span>
+                {{/if}}
+                {{#if @model.trackCount}}
+                  <span class='metadata-item'>{{@model.trackCount}}
+                    tracks</span>
+                {{/if}}
+                {{#if @model.duration}}
+                  <span class='metadata-item'>{{@model.duration}}</span>
+                {{/if}}
+              </div>
+
+              {{#if @model.description}}
+                <p class='album-description'>{{@model.description}}</p>
+              {{/if}}
+
+              {{#if @model.recordLabel}}
+                <div class='label-info'>
+                  <span class='label'>{{@model.recordLabel}}</span>
+                  {{#if @model.producer}}
+                    <span class='producer'>Produced by
+                      {{@model.producer}}</span>
+                  {{/if}}
+                </div>
+              {{/if}}
+            </div>
+          </div>
+
+          <!-- Track Listing -->
+          <div class='track-listing'>
+            <h3 class='section-title'>Track Listing</h3>
+            {{#if (gt @model.songs.length 0)}}
+              <div class='tracks-container'>
+                <@fields.songs @format='embedded' />
+              </div>
+            {{else}}
+              <div class='empty-tracks'>
+                <svg
+                  viewBox='0 0 24 24'
+                  fill='none'
+                  stroke='currentColor'
+                  stroke-width='2'
+                >
+                  <circle cx='12' cy='12' r='10' />
+                  <path
+                    d='M9 9h0a3 3 0 0 1 5.12 0 2.44 2.44 0 0 1 0 3A3 3 0 0 0 12 16.5'
+                  />
+                  <circle cx='12' cy='19.5' r='.5' />
+                </svg>
+                <p>No tracks added to this album yet. Add some songs to complete
+                  the album!</p>
+              </div>
+            {{/if}}
+          </div>
+        </div>
+      </div>
+
+      <style scoped>
+        .stage {
+          width: 100%;
+          height: 100%;
+          display: flex;
+          justify-content: center;
+          padding: 0.5rem;
+        }
+
+        .album-mat {
+          max-width: 50rem;
+          width: 100%;
+          padding: 2rem;
+          overflow-y: auto;
+          max-height: 100%;
+          background: white;
+          border-radius: 12px;
+        }
+
+        .album-hero {
+          display: flex;
+          gap: 2rem;
+          margin-bottom: 3rem;
+          align-items: flex-start;
+        }
+
+        .hero-artwork,
+        .hero-artwork-placeholder {
+          width: 240px;
+          height: 240px;
+          border-radius: 12px;
+          flex-shrink: 0;
+        }
+
+        .hero-artwork {
+          object-fit: cover;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+
+        .hero-artwork-placeholder {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+
+        .hero-artwork-placeholder svg {
+          width: 80px;
+          height: 80px;
+        }
+
+        .album-details {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .album-title {
+          font-size: 2.5rem;
+          font-weight: 800;
+          color: #1f2937;
+          margin: 0 0 0.5rem 0;
+          line-height: 1.1;
+        }
+
+        .album-artist {
+          font-size: 1.5rem;
+          font-weight: 600;
+          color: #6b7280;
+          margin: 0 0 1.5rem 0;
+        }
+
+        .album-metadata {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 1rem;
+          margin-bottom: 1.5rem;
+        }
+
+        .metadata-item {
+          background: #f3f4f6;
+          color: #374151;
+          padding: 0.5rem 1rem;
+          border-radius: 8px;
+          font-size: 0.875rem;
+          font-weight: 600;
+        }
+
+        .album-description {
+          font-size: 1rem;
+          color: #4b5563;
+          line-height: 1.6;
+          margin: 0 0 1.5rem 0;
+        }
+
+        .label-info {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+
+        .label {
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: #6b7280;
+        }
+
+        .producer {
+          font-size: 0.75rem;
+          color: #9ca3af;
+          font-style: italic;
+        }
+
+        .track-listing {
+          border-top: 1px solid #e5e7eb;
+          padding-top: 2rem;
+        }
+
+        .section-title {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #1f2937;
+          margin: 0 0 1.5rem 0;
+        }
+
+        .tracks-container > .linksToMany-field {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .empty-tracks {
+          text-align: center;
+          padding: 3rem;
+          color: #6b7280;
+        }
+
+        .empty-tracks svg {
+          width: 64px;
+          height: 64px;
+          margin: 0 auto 1rem auto;
+          color: #cbd5e1;
+        }
+
+        .empty-tracks p {
+          font-size: 1rem;
+          margin: 0;
+          line-height: 1.5;
+        }
+
+        @media (max-width: 768px) {
+          .album-hero {
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+          }
+
+          .hero-artwork,
+          .hero-artwork-placeholder {
+            width: 200px;
+            height: 200px;
+          }
+
+          .album-title {
+            font-size: 2rem;
+          }
+
+          .album-artist {
+            font-size: 1.25rem;
+          }
+        }
+      </style>
+    </template>
+  };
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
