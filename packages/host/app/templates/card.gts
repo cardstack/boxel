@@ -88,6 +88,11 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
         {{@model.id}}
       </div>
     {{else}}
+      <iframe
+        class='connect'
+        title='connect'
+        src='http://localhost:4200/connect/FIXME'
+      />
       <section
         class='host-mode-container'
         style={{this.backgroundImageStyle}}
@@ -117,6 +122,15 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
 
       .card {
         width: 50rem;
+      }
+
+      .connect {
+        position: fixed;
+        top: var(--boxel-sp);
+        right: var(--boxel-sp);
+        width: 10rem;
+        height: 2rem;
+        border: none;
       }
     </style>
   </template>
