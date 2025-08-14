@@ -819,9 +819,6 @@ importers:
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
-      '@ember/test-waiters':
-        specifier: ^3.0.2
-        version: 3.1.0
       '@glimmer/component':
         specifier: ^1.1.2
         version: 1.1.2(@babel/core@7.26.10)
