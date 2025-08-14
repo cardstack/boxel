@@ -10,7 +10,7 @@
     "attributes": {
       "name": "Tournament Card",
       "images": [
-        "https://boxel-images.boxel.ai/app-assets/catalog/tournament-listing/screenshot-01.png"
+        "https://boxel-images.boxel.ai/app-assets/catalog/tournament-listing/screenshot_01.png"
       ],
       "summary": "Create and display esports tournaments with prize pools, schedules, participant tracking, and game integration",
       "cardInfo": {
