@@ -355,6 +355,8 @@ export function getBoxComponent(
         */
         width: 100%;
         height: 100%;
+        min-height: 40px;
+        max-height: 600px;
         container-name: fitted-card;
         container-type: size;
         overflow: hidden;
