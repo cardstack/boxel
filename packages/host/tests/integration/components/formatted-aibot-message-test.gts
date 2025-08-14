@@ -470,6 +470,36 @@ ${REPLACE_MARKER}
       .exists();
   });
 
+  test('it will render an error message when code diff does not apply', async function (assert) {
+    await renderFormattedAiBotMessage({
+      htmlParts: parseHtmlContent(
+        `
+<pre data-code-language="typescript">
+https://example.com/file.ts
+${SEARCH_MARKER}
+🍄 hallucinated code 🍄
+${SEPARATOR_MARKER}
+let a = 1;
+${REPLACE_MARKER}
+</pre>`,
+        roomId,
+        eventId,
+      ),
+      isStreaming: false,
+      isLastAssistantMessage: true,
+    });
+
+    assert
+      .dom('[data-test-boxel-menu-item-text="Restore Submitted Content"]')
+      .isDisabled();
+
+    assert
+      .dom(
+        `[data-test-error-message="Unable to process the code patch due to invalid code coming from AI (search pattern not found in the attached source file)"]`,
+      )
+      .exists();
+  });
+
   test('utils: makeCodeDiffStats', function (assert) {
     // A couple of real world examples where I got lineChanges from the monaco
     // diff editor (using editor.getLineChanges()) and I counted
