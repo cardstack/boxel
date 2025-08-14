@@ -14,7 +14,6 @@ export const APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES = {
   SEARCH_BLOCK_PARSE_ERROR: `${standardErrorMessage} (search block parse error)`,
   REPLACE_BLOCK_PARSE_ERROR: `${standardErrorMessage} (replace block parse error)`,
   SEARCH_PATTERN_NOT_FOUND: `${standardErrorMessage} (search pattern not found in the attached source file)`,
-  PATCH_DID_NOT_APPLY: `${standardErrorMessage} (code patch produced no changes in the attached source file)`,
 } as const;
 
 export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
@@ -57,12 +56,6 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
       );
     }
 
-    if (!input.fileContent.includes(searchPattern)) {
-      throw new Error(
-        APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_PATTERN_NOT_FOUND,
-      );
-    }
-
     // Apply the search/replace operation
     const resultContent = this.applySearchReplace(
       input.fileContent,
@@ -71,7 +64,7 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
     );
     if (resultContent === input.fileContent) {
       throw new Error(
-        APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.PATCH_DID_NOT_APPLY,
+        APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_PATTERN_NOT_FOUND,
       );
     }
 

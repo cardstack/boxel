@@ -295,7 +295,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
             />
 
-            <codeBlock.editor />
+            <codeBlock.editor @code={{this.codeForEditor}} />
 
             <codeBlock.actions as |actions|>
               <actions.copyCode
@@ -351,16 +351,21 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
                 @modifiedCode={{this.codeDiffResource.modifiedCode}}
               />
             </codeBlock.actions>
+          {{/if}}
 
-            {{#if this.codePatchErrorMessage}}
-              <codeBlock.patchFooter>
-                <Alert @type='error' class='code-patch-error' as |Alert|>
-                  <Alert.Messages
-                    @messages={{array this.codePatchErrorMessage}}
-                  />
-                </Alert>
-              </codeBlock.patchFooter>
-            {{/if}}
+          {{#if this.codePatchErrorMessage}}
+            <codeBlock.patchFooter>
+              <Alert
+                @type='error'
+                class='code-patch-error'
+                data-test-error-message={{this.codePatchErrorMessage}}
+                as |Alert|
+              >
+                <Alert.Messages
+                  @messages={{array this.codePatchErrorMessage}}
+                />
+              </Alert>
+            </codeBlock.patchFooter>
           {{/if}}
         {{/if}}
       {{else}}

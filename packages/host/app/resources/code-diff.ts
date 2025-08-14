@@ -32,6 +32,7 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
     this.fileUrl = fileUrl;
     this.searchReplaceBlock = searchReplaceBlock;
     if (!fileUrl) {
+      this.errorMessage = 'Missing file URL in the code block';
       return;
     }
 
