@@ -44,33 +44,48 @@ interface Signature {
   };
 }
 
-class CarouselComponent extends GlimmerComponent<Signature> {
-  @tracked currentIndex = 0;
-
-  get totalSlides() {
-    return this.args.items?.length ?? 0;
-  }
-
-  get prevIndex() {
-    return this.currentIndex === 0
-      ? this.totalSlides - 1
-      : this.currentIndex - 1;
-  }
-
-  get nextIndex() {
-    return this.currentIndex === this.totalSlides - 1
-      ? 0
-      : this.currentIndex + 1;
-  }
-
-  get hasSlide() {
-    return this.totalSlides > 0;
-  }
-
-  get hasMultipleSlides() {
-    return this.totalSlides > 1;
-  }
-
+/*
+ * CatalogImageOverlay handles catalog listing-specific interactions over an image carousel
+ *
+ * Cases to handle:
+ * 1. Preview Button:
+ *    - Show when listing has examples (examples?.length > 0)
+ *    - Click opens first example card
+ *    - Always visible for card listings with examples
+ *
+ * 2. Use Skills Button:
+ *    - Show ONLY when modelType === 'SkillListing'
+ *    - Enable when listing has skills (skills?.length > 0)
+ *    - Disable when skill listing has no skills (!hasSkills)
+ *    - Click adds skills to current AI room
+ *
+ * 3. Details Button:
+ *    - Always visible for all listing types
+ *    - Click opens listing card in isolated format
+ *    - Shows listing metadata/description
+ *
+ * 4. Carousel Click Area:
+ *    - Default click behavior opens first example (if exists)
+ *    - Same as Preview button functionality
+ *    - Entire carousel area is clickable for preview
+ *
+ * 5. Hover Behavior:
+ *    - Show overlay buttons on hover
+ *    - Hide on mouse leave
+ *    - Enhance image shadow on hover
+ *
+ * 6. Responsive Layout:
+ *    - Stack buttons vertically on narrow containers (< 250px)
+ *    - Hide overlay entirely on very small containers (< 140px height)
+ *    - Adjust button sizes and fonts
+ *
+ * 7. Error Handling:
+ *    - Throw error if no examples when trying to preview
+ *    - Throw error if no card ID when viewing details
+ *    - Throw error if no skills when trying to add skills
+ *    - Throw error if missing command context
+ */
+class CatalogImageOverlay extends GlimmerComponent<Signature> {
   get hasExample() {
     return this.args.examples && this.args.examples.length > 0;
   }
@@ -114,16 +129,6 @@ class CarouselComponent extends GlimmerComponent<Signature> {
     this.args.context?.actions?.viewCard?.(new URL(this.args.id), 'isolated');
   }
 
-  @action
-  updateCurrentIndex(index: number, e: MouseEvent) {
-    e.stopPropagation();
-
-    if (index < 0 || index >= this.totalSlides) {
-      return;
-    }
-    this.currentIndex = index;
-  }
-
   @action addSkillsToCurrentRoom(e: MouseEvent) {
     e.stopPropagation();
     this._addSkillsToCurrentRoom.perform();
@@ -148,225 +153,73 @@ class CarouselComponent extends GlimmerComponent<Signature> {
   });
 
   <template>
-    <div
-      class='carousel'
+    <ImageCarouselComponent
+      @items={{@items}}
+      class='catalog-image-overlay'
       tabindex='0'
       data-test-catalog-listing-fitted-preview
       aria-label='Preview Example'
       {{on 'click' this.previewExample}}
     >
-      <div
-        class='actions-buttons-container'
-        {{on 'mouseenter' this._stopPropagation}}
-      >
-        {{#if this.hasExample}}
-          <BoxelButton
-            @kind='secondary-dark'
-            class='preview-button'
-            data-test-catalog-listing-fitted-preview-button
-            aria-label='Preview Example'
-            {{on 'click' this.previewExample}}
-          >
-            Preview
-          </BoxelButton>
-        {{/if}}
-
-        {{#if this.isSkillListing}}
-          <BoxelButton
-            @kind='secondary-dark'
-            class='add-skills-button'
-            data-test-catalog-listing-fitted-add-skills-to-room-button
-            @loading={{this._addSkillsToCurrentRoom.isRunning}}
-            @disabled={{this.addSkillsDisabled}}
-            aria-label='Add Skills to Current Room'
-            {{on 'click' this.addSkillsToCurrentRoom}}
-          >
-            Use Skills
-          </BoxelButton>
-        {{/if}}
-
-        <BoxelButton
-          @kind='secondary-dark'
-          class='details-button'
-          data-test-catalog-listing-fitted-details-button
-          aria-label='View Listing Details'
-          {{on 'click' this.viewListingDetails}}
-        >
-          Details
-        </BoxelButton>
-      </div>
-
-      <div class='carousel-items'>
-        {{#each @items as |item index|}}
-          <div
-            class='carousel-item carousel-item-{{index}}
-              {{if (eq this.currentIndex index) "is-active"}}'
-            aria-hidden={{if (eq this.currentIndex index) 'false' 'true'}}
-          >
-            <img
-              src={{item}}
-              alt='Slide {{add index 1}} of {{this.totalSlides}}'
-            />
-          </div>
-        {{/each}}
-      </div>
-
-      {{#if this.hasMultipleSlides}}
+      <:overlay>
         <div
-          class='carousel-nav'
-          role='presentation'
+          class='actions-buttons-container'
           {{on 'mouseenter' this._stopPropagation}}
         >
-          <button
-            class='carousel-arrow carousel-arrow-prev'
-            aria-label='Previous slide'
-            {{on 'click' (fn this.updateCurrentIndex this.prevIndex)}}
-          >
-            &#10094;
-          </button>
-          <button
-            class='carousel-arrow carousel-arrow-next'
-            aria-label='Next slide'
-            {{on 'click' (fn this.updateCurrentIndex this.nextIndex)}}
-          >
-            &#10095;
-          </button>
-        </div>
-      {{/if}}
+          {{#if this.hasExample}}
+            <BoxelButton
+              @kind='secondary-dark'
+              class='preview-button'
+              data-test-catalog-listing-fitted-preview-button
+              aria-label='Preview Example'
+              {{on 'click' this.previewExample}}
+            >
+              Preview
+            </BoxelButton>
+          {{/if}}
 
-      {{#if this.hasMultipleSlides}}
-        <div
-          class='carousel-dots'
-          role='presentation'
-          {{on 'mouseenter' this._stopPropagation}}
-        >
-          {{#each @items as |_ index|}}
-            <div
-              class='carousel-dot
-                {{if (eq this.currentIndex index) "is-active"}}'
-              {{on 'click' (fn this.updateCurrentIndex index)}}
-              role='button'
-              aria-label='Go to slide {{add index 1}}'
-            />
-          {{/each}}
+          {{#if this.isSkillListing}}
+            <BoxelButton
+              @kind='secondary-dark'
+              class='add-skills-button'
+              data-test-catalog-listing-fitted-add-skills-to-room-button
+              @loading={{this._addSkillsToCurrentRoom.isRunning}}
+              @disabled={{this.addSkillsDisabled}}
+              aria-label='Add Skills to Current Room'
+              {{on 'click' this.addSkillsToCurrentRoom}}
+            >
+              Use Skills
+            </BoxelButton>
+          {{/if}}
+
+          <BoxelButton
+            @kind='secondary-dark'
+            class='details-button'
+            data-test-catalog-listing-fitted-details-button
+            aria-label='View Listing Details'
+            {{on 'click' this.viewListingDetails}}
+          >
+            Details
+          </BoxelButton>
         </div>
-      {{/if}}
-    </div>
+      </:overlay>
+
+      <:default>
+        {{yield}}
+      </:default>
+    </ImageCarouselComponent>
 
     <style scoped>
       @layer {
-        .carousel {
-          --boxel-carousel-z-index: 1;
-          position: relative;
-          width: 100%;
-          height: 100%;
-          overflow: hidden;
-          container-type: inline-size;
+        .catalog-image-overlay {
           outline: none;
         }
-        .carousel:focus-visible {
+        .catalog-image-overlay:focus-visible {
           outline: 2px solid var(--boxel-highlight);
           outline-offset: 2px;
         }
-        .carousel-items {
-          height: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          position: relative;
-        }
-        .carousel-item {
-          position: absolute;
-          visibility: hidden;
-          flex: 0 0 100%;
-          justify-content: center;
-          align-items: center;
-          padding: var(--boxel-sp) var(--boxel-sp-xs);
-          display: flex;
-          opacity: 0;
-          transition:
-            opacity 1s ease,
-            visibility 0s linear 1s;
-        }
-        .carousel-item.is-active {
-          visibility: visible;
-          opacity: 1;
-          transition:
-            opacity 1s ease,
-            visibility 0s;
-        }
-        .carousel-item img {
-          width: 100%;
-          height: auto;
-          object-fit: cover;
-          display: block;
-          border-radius: var(--boxel-border-radius-sm);
-          box-shadow:
-            0 15px 20px rgba(0, 0, 0, 0.12),
-            0 5px 10px rgba(0, 0, 0, 0.1);
-        }
-
-        .carousel-arrow {
-          all: unset;
-          cursor: pointer;
-          user-select: none;
-          padding: 0px;
-          width: 2rem;
-          height: 2rem;
-          display: inline-flex;
-          justify-content: center;
-          align-items: center;
-        }
-        .carousel-arrow-prev {
-          position: absolute;
-          left: 0;
-          top: 50%;
-          transform: translateY(-50%);
-          z-index: calc(var(--boxel-carousel-z-index));
-        }
-        .carousel-arrow-next {
-          position: absolute;
-          right: 0;
-          top: 50%;
-          transform: translateY(-50%);
-          z-index: calc(var(--boxel-carousel-z-index));
-        }
-
-        .carousel-arrow-next {
-          position: absolute;
-          right: 0;
-          top: 50%;
-          transform: translateY(-50%);
-        }
-        .carousel-dots {
-          position: absolute;
-          bottom: 5px;
-          left: 50%;
-          z-index: var(--boxel-carousel-z-index);
-          transform: translateX(-50%);
-          display: flex;
-          justify-content: center;
-          gap: 0.5rem;
-        }
-        .carousel-dot {
-          width: 10px;
-          height: 10px;
-          background-color: var(--boxel-100);
-          border: 1px solid var(--boxel-500);
-          border-radius: 50%;
-          cursor: pointer;
-          padding: 0px;
-        }
-        .carousel-dot.is-active {
-          background-color: var(--boxel-400);
-          border: 1px solid var(--boxel-700);
-        }
 
         .actions-buttons-container {
-          position: absolute;
-          top: 0;
-          left: 0;
-          z-index: var(--boxel-carousel-z-index);
           width: 100%;
           height: 100%;
           display: flex;
@@ -376,18 +229,11 @@ class CarouselComponent extends GlimmerComponent<Signature> {
           opacity: 0;
           background-color: rgba(0, 0, 0, 0.6);
           transition: opacity 0.3s ease;
+          pointer-events: auto;
         }
 
-        .carousel:hover .carousel-item img {
-          box-shadow:
-            0 15px 20px rgba(0, 0, 0, 0.2),
-            0 7px 10px rgba(0, 0, 0, 0.12);
-        }
-        .carousel:hover .actions-buttons-container {
+        .catalog-image-overlay:hover .actions-buttons-container {
           opacity: 1;
-        }
-        .carousel:hover .carousel-arrow {
-          color: var(--boxel-200);
         }
 
         .preview-button,
@@ -573,21 +419,19 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
   <template>
     <div class='fitted-template'>
       <div class='display-section'>
-        {{#if @model.images}}
-          <CarouselComponent
-            @context={{@context}}
-            @id={{@model.id}}
-            @items={{@model.images}}
-            @examples={{@model.examples}}
-            @skills={{@model.skills}}
-            @modelType={{this.modelType}}
-          />
-        {{else}}
+        <CatalogImageOverlay
+          @context={{@context}}
+          @id={{@model.id}}
+          @items={{@model.images}}
+          @examples={{@model.examples}}
+          @skills={{@model.skills}}
+          @modelType={{this.modelType}}
+        >
           <@model.constructor.icon
             data-test-card-type-icon
             class='card-type-icon'
           />
-        {{/if}}
+        </CatalogImageOverlay>
       </div>
       <div
         class='info-section'
