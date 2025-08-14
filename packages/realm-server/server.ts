@@ -655,7 +655,7 @@ function detectRealmCollision(realms: Realm[]): void {
   for (let realmA of realmsURLs) {
     for (let realmB of realmsURLs) {
       if (realmA.path.length > realmB.path.length) {
-        if (realmA.url.startsWith(realmB.url)) {
+        if (realmA.path.startsWith(realmB.path)) {
           collisions.push(`${realmA.url} collides with ${realmB.url}`);
         }
       }
