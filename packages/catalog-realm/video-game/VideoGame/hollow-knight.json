@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Hollow Knight",
+      "platform": "Steam",
+      "genre": "Metroidvania",
+      "releaseDate": "2017-02-24",
+      "coverImageUrl": "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400&h=600&fit=crop",
+      "description": "## Descend into Hallownest\n\nForge your own path in Hollow Knight! An epic action adventure through a vast ruined kingdom of insects and heroes.\n\n**Key Features:**\n- Hand-drawn 2D art and animation\n- Challenging combat and platforming\n- Over 130 enemies and 30 epic bosses\n- Evolving story told through environmental storytelling",
+      "price": 14.99,
+      "metacriticScore": 90,
+      "userRating": 9.3,
+      "isMultiplayer": false,
+      "estimatedHours": 35,
+      "achievements": 63,
+      "systemRequirements": "**Minimum Requirements:**\n- OS: Windows 7 (64bit)\n- Processor: Intel Core 2 Duo E5200\n- Memory: 4 GB RAM\n- Graphics: GeForce 9800GTX+ (1GB)\n- Storage: 9 GB available space"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../video-game",
+        "name": "VideoGame"
+      }
+    }
+  }
+}

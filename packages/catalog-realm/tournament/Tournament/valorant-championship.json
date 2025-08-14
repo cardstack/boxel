@@ -1,0 +1,43 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Tournament",
+        "module": "../tournament"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "VALORANT Champions Tour 2025",
+      "rules": "### General Rules\n1. All participants must be registered with verified accounts\n2. Teams must consist of exactly 5 players + 1 substitute\n3. All matches will be played on the latest patch\n4. Use of any third-party software is strictly prohibited\n\n### Match Format\n- **Round Robin:** Best of 1 (BO1)\n- **Playoffs:** Best of 3 (BO3)\n- **Finals:** Best of 5 (BO5)\n\n### Prize Distribution\n- 1st Place: $400,000\n- 2nd Place: $200,000\n- 3rd-4th Place: $100,000 each\n- 5th-8th Place: $50,000 each",
+      "format": "Double Elimination",
+      "status": "registration",
+      "endDate": "2025-02-28T20:00:00.000Z",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "organizer": "Riot Games",
+      "prizePool": 1000000,
+      "startDate": "2025-02-15T10:00:00.000Z",
+      "streamUrl": "https://www.twitch.tv/valorant",
+      "participants": 16,
+      "bracketImageUrl": "https://images.unsplash.com/photo-1579952363873-27d3bfad9c0d?w=800&h=600&fit=crop",
+      "registrationDeadline": "2025-02-01T23:59:59.000Z"
+    },
+    "relationships": {
+      "game": {
+        "links": {
+          "self": "../../video-game/VideoGame/valorant"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
