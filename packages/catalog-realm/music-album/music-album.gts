@@ -1,5 +1,4 @@
 import {
-  CardDef,
   field,
   contains,
   linksToMany,
@@ -8,22 +7,13 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import UrlField from 'https://cardstack.com/base/url';
-import DateField from 'https://cardstack.com/base/date';
-import TextAreaField from 'https://cardstack.com/base/text-area';
-import MusicIcon from '@cardstack/boxel-icons/music';
 import { and, gt } from '@cardstack/boxel-ui/helpers';
+
 import { SongCard } from '../song/song';
+import { MusicAlbumCard as BaseMusicAlbumCard } from '../base-entity/music-album';
 
-export class MusicAlbumCard extends CardDef {
-  static displayName = 'MusicAlbum';
-  static icon = MusicIcon;
-
-  @field albumTitle = contains(StringField);
-  @field artist = contains(StringField);
+export class MusicAlbumCard extends BaseMusicAlbumCard {
   @field artworkUrl = contains(UrlField);
-  @field releaseDate = contains(DateField);
-  @field releaseYear = contains(NumberField);
-  @field genre = contains(StringField);
   @field trackCount = contains(NumberField, {
     computeVia: function (this: MusicAlbumCard) {
       try {
@@ -58,9 +48,6 @@ export class MusicAlbumCard extends CardDef {
       }
     },
   });
-  @field recordLabel = contains(StringField);
-  @field producer = contains(StringField);
-  @field description = contains(TextAreaField);
   @field songs = linksToMany(() => SongCard);
   @field totalPlays = contains(NumberField);
   @field rating = contains(NumberField); // Average user rating 1-5
@@ -147,7 +134,6 @@ export class MusicAlbumCard extends CardDef {
             </div>
           </div>
 
-          <!-- Track Listing -->
           <div class='track-listing'>
             <h3 class='section-title'>Track Listing</h3>
             {{#if (gt @model.songs.length 0)}}
@@ -474,7 +460,6 @@ export class MusicAlbumCard extends CardDef {
   static fitted = class Fitted extends Component<typeof this> {
     <template>
       <div class='fitted-container'>
-        <!-- Badge format (≤150px width, ≤169px height) -->
         <div class='badge-format'>
           {{#if @model.artworkUrl}}
             <img src={{@model.artworkUrl}} alt='Album' class='badge-artwork' />
@@ -504,7 +489,6 @@ export class MusicAlbumCard extends CardDef {
           </div>
         </div>
 
-        <!-- Strip format (>150px width, ≤169px height) -->
         <div class='strip-format'>
           {{#if @model.artworkUrl}}
             <img src={{@model.artworkUrl}} alt='Album' class='strip-artwork' />
@@ -539,7 +523,6 @@ export class MusicAlbumCard extends CardDef {
           </div>
         </div>
 
-        <!-- Tile format (≤399px width, ≥170px height) -->
         <div class='tile-format'>
           <div class='tile-artwork-container'>
             {{#if @model.artworkUrl}}
@@ -580,7 +563,6 @@ export class MusicAlbumCard extends CardDef {
           </div>
         </div>
 
-        <!-- Card format (≥400px width, ≥170px height) -->
         <div class='card-format'>
           <div class='card-artwork-section'>
             {{#if @model.artworkUrl}}

@@ -1,4 +1,4 @@
-import { fn } from '@ember/helper';
+import { fn, concat } from '@ember/helper';
 import {
   CardDef,
   FieldDef,
@@ -9,26 +9,23 @@ import {
 } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
 import TextAreaField from 'https://cardstack.com/base/text-area';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Button } from '@cardstack/boxel-ui/components'; // ² UI components
-import { eq, gt, add } from '@cardstack/boxel-ui/helpers';
+import { eq, gt } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import MusicIcon from '@cardstack/boxel-icons/music';
+import { htmlSafe } from '@ember/template';
 
-// ³ Chord Definition Field - stores individual chord information
+// ³ Chord Definition Field - simplified structure
 export class ChordField extends FieldDef {
   static displayName = 'Chord';
   static icon = MusicIcon;
 
-  @field chordName = contains(StringField); // ⁴ e.g., "C", "Am", "G7"
-  @field chordType = contains(StringField); // e.g., "major", "minor", "dominant7"
-  @field notes = containsMany(StringField); // Array of note strings
-  @field rootNote = contains(StringField); // e.g., "C", "A", "G"
-  @field quality = contains(StringField); // e.g., "major", "minor", "diminished"
+  @field chordName = contains(StringField); // ⁴ e.g., "C", "Am", "G7" - the complete chord symbol
+  @field notes = containsMany(StringField); // Array of note strings for playback
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -39,9 +36,6 @@ export class ChordField extends FieldDef {
             'Chord'
           }}</div>
         <div class='chord-details'>
-          {{#if @model.quality}}
-            <span class='chord-quality'>{{@model.quality}}</span>
-          {{/if}}
           {{#if (gt @model.notes.length 0)}}
             <div class='chord-notes'>
               {{#each @model.notes as |note|}}
@@ -74,13 +68,6 @@ export class ChordField extends FieldDef {
           color: #1e293b;
           margin-bottom: 0.375rem;
           font-family: 'Georgia', serif;
-        }
-
-        .chord-quality {
-          font-size: 0.75rem;
-          color: #64748b;
-          text-transform: capitalize;
-          margin-bottom: 0.25rem;
         }
 
         .chord-notes {
@@ -265,7 +252,7 @@ export class SongSectionField extends FieldDef {
   };
 }
 
-// ⁵ Track Field - individual song tracks
+// ⁵ Track Field - simplified for song building
 export class TrackField extends FieldDef {
   static displayName = 'Track';
   static icon = MusicIcon;
@@ -273,19 +260,11 @@ export class TrackField extends FieldDef {
   @field trackName = contains(StringField); // ⁶ Track identification
   @field instrument = contains(StringField); // Piano, Guitar, Drums, Bass, etc.
   @field volume = contains(NumberField); // 0-100 volume level
-  @field pan = contains(NumberField); // -100 to +100 (left to right)
-  @field isMuted = contains(BooleanField); // Track mute state
-  @field isSolo = contains(BooleanField); // Track solo state
-  @field effects = contains(StringField); // Effects chain description
   @field notes = contains(TextAreaField); // Track-specific notes
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div
-        class='track-field
-          {{if @model.isMuted "muted"}}
-          {{if @model.isSolo "solo"}}'
-      >
+      <div class='track-field'>
         <div class='track-header'>
           <div class='track-info'>
             <h5 class='track-name'>{{if
@@ -299,23 +278,17 @@ export class TrackField extends FieldDef {
                 'Unknown'
               }}</span>
           </div>
-          <div class='track-controls'>
-            {{#if @model.isSolo}}
-              <span class='control-badge solo'>S</span>
-            {{/if}}
-            {{#if @model.isMuted}}
-              <span class='control-badge mute'>M</span>
-            {{/if}}
-          </div>
         </div>
 
         <div class='track-levels'>
           <div class='level-group'>
-            <label>Vol</label>
+            <label>Volume</label>
             <div class='level-bar'>
               <div
                 class='level-fill'
-                style='width: {{if @model.volume @model.volume 75}}%'
+                style={{htmlSafe
+                  (concat 'width: ' (if @model.volume @model.volume 75) '%')
+                }}
               ></div>
             </div>
             <span class='level-value'>{{if
@@ -324,25 +297,12 @@ export class TrackField extends FieldDef {
                 75
               }}</span>
           </div>
-
-          {{#if @model.pan}}
-            <div class='level-group'>
-              <label>Pan</label>
-              <div class='pan-indicator'>
-                <div
-                  class='pan-marker'
-                  style='left: {{add (if @model.pan @model.pan 0) 50}}%'
-                ></div>
-              </div>
-              <span class='level-value'>{{@model.pan}}</span>
-            </div>
-          {{/if}}
         </div>
 
-        {{#if @model.effects}}
-          <div class='track-effects'>
-            <label class='effects-label'>FX:</label>
-            <span class='effects-list'>{{@model.effects}}</span>
+        {{#if @model.notes}}
+          <div class='track-notes'>
+            <label class='notes-label'>Notes:</label>
+            <div class='notes-content'>{{@model.notes}}</div>
           </div>
         {{/if}}
       </div>
@@ -361,21 +321,11 @@ export class TrackField extends FieldDef {
           box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
         }
 
-        .track-field.muted {
-          opacity: 0.6;
-          background: #f3f4f6;
-        }
-
-        .track-field.solo {
-          border-color: #f59e0b;
-          background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-        }
-
         .track-header {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          margin-bottom: 0.5rem;
+          margin-bottom: 0.75rem;
         }
 
         .track-name {
@@ -391,56 +341,28 @@ export class TrackField extends FieldDef {
           text-transform: capitalize;
         }
 
-        .track-controls {
-          display: flex;
-          gap: 0.25rem;
-        }
-
-        .control-badge {
-          width: 20px;
-          height: 20px;
-          border-radius: 4px;
-          font-size: 0.75rem;
-          font-weight: 700;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-        }
-
-        .control-badge.mute {
-          background: #ef4444;
-        }
-
-        .control-badge.solo {
-          background: #f59e0b;
-        }
-
         .track-levels {
-          display: flex;
-          flex-direction: column;
-          gap: 0.375rem;
-          margin-bottom: 0.5rem;
+          margin-bottom: 0.75rem;
         }
 
         .level-group {
           display: flex;
           align-items: center;
-          gap: 0.5rem;
+          gap: 0.75rem;
           font-size: 0.75rem;
         }
 
         .level-group label {
-          min-width: 24px;
+          min-width: 50px;
           color: #64748b;
           font-weight: 600;
         }
 
         .level-bar {
           flex: 1;
-          height: 6px;
+          height: 8px;
           background: #e5e7eb;
-          border-radius: 3px;
+          border-radius: 4px;
           overflow: hidden;
         }
 
@@ -453,55 +375,38 @@ export class TrackField extends FieldDef {
             #fbbf24 80%,
             #ef4444 100%
           );
-          border-radius: 3px;
+          border-radius: 4px;
           transition: width 0.2s ease;
         }
 
-        .pan-indicator {
-          flex: 1;
-          height: 6px;
-          background: #e5e7eb;
-          border-radius: 3px;
-          position: relative;
-        }
-
-        .pan-marker {
-          position: absolute;
-          top: -2px;
-          width: 10px;
-          height: 10px;
-          background: #3b82f6;
-          border-radius: 50%;
-          transform: translateX(-50%);
-          transition: left 0.2s ease;
-        }
-
         .level-value {
-          min-width: 24px;
+          min-width: 30px;
           text-align: right;
           color: #374151;
           font-weight: 600;
+          font-family: 'JetBrains Mono', monospace;
         }
 
-        .track-effects {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
+        .track-notes {
+          border-top: 1px solid #e5e7eb;
+          padding-top: 0.75rem;
+        }
+
+        .notes-label {
+          display: block;
           font-size: 0.75rem;
-        }
-
-        .effects-label {
-          color: #64748b;
           font-weight: 600;
+          color: #64748b;
+          margin-bottom: 0.375rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
         }
 
-        .effects-list {
-          color: #3b82f6;
-          font-weight: 500;
-          flex: 1;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+        .notes-content {
+          font-size: 0.75rem;
+          color: #374151;
+          line-height: 1.4;
+          font-style: italic;
         }
       </style>
     </template>
@@ -518,11 +423,6 @@ class SongBuilderIsolated extends Component<typeof SongBuilderCard> {
   // ¹⁷ Calculate total duration from song sections
   get totalDuration() {
     try {
-      // First try to use the explicit song duration from the model
-      if (this.args?.model?.songDuration) {
-        return this.args.model.songDuration;
-      }
-
       // Fallback to calculating from sections
       if (this.args?.model?.sections && this.args.model.sections.length > 0) {
         const total = this.args.model.sections.reduce((sum, section) => {
@@ -1104,20 +1004,6 @@ class SongBuilderIsolated extends Component<typeof SongBuilderCard> {
   }
 
   @action
-  addNewTrack() {
-    // ⁹ Add a new track to the song
-    console.log('Adding new track');
-    // Implementation would add a new TrackField to the tracks array
-  }
-
-  @action
-  addNewSection() {
-    // ¹⁰ Add a new section to the arrangement
-    console.log('Adding new section');
-    // Implementation would add a new SongSectionField
-  }
-
-  @action
   updateTempo(event: Event) {
     const target = event.target as HTMLInputElement;
     const value = parseInt(target.value);
@@ -1127,9 +1013,11 @@ class SongBuilderIsolated extends Component<typeof SongBuilderCard> {
   }
 
   @action
-  updateKey(selectedKey: any) {
+  updateKey(event: Event) {
+    const target = event.target as HTMLSelectElement;
+    const value = target.value;
     if (this.args.model) {
-      this.args.model.key = selectedKey;
+      this.args.model.key = value;
     }
   }
 
@@ -1637,7 +1525,6 @@ class SongBuilderIsolated extends Component<typeof SongBuilderCard> {
 
   <template>
     <div class='song-builder'>
-      <!-- Professional Header with Transport Controls -->
       <div class='builder-header'>
         <div class='header-content'>
           <div class='project-info'>
@@ -1662,7 +1549,6 @@ class SongBuilderIsolated extends Component<typeof SongBuilderCard> {
               }}</p>
           </div>
 
-          <!-- Transport Controls -->
           <div class='transport-section'>
             <div class='playback-controls'>
               <Button
@@ -1707,7 +1593,6 @@ class SongBuilderIsolated extends Component<typeof SongBuilderCard> {
                 </div>
               {{/if}}
 
-              <!-- ⁶⁶ Live lyric display -->
               {{#if this.currentLyricPhrase}}
                 <div class='current-lyric-display'>
                   "{{this.currentLyricPhrase}}"
@@ -1718,19 +1603,21 @@ class SongBuilderIsolated extends Component<typeof SongBuilderCard> {
                 <div class='timeline-track'>
                   <div
                     class='playhead'
-                    style='left: {{this.playbackPosition}}%'
+                    style={{htmlSafe
+                      (concat 'left: ' this.playbackPosition '%')
+                    }}
                   ></div>
                 </div>
               </div>
             </div>
 
-            <!-- Key Musical Controls -->
             <div class='key-controls'>
               <div class='control-group'>
-                <label>Tempo</label>
+                <label for='tempo-slider'>Tempo</label>
                 <div class='tempo-control'>
                   <input
                     type='range'
+                    id='tempo-slider'
                     min='60'
                     max='200'
                     value={{if @model.tempo @model.tempo 120}}
@@ -1743,8 +1630,12 @@ class SongBuilderIsolated extends Component<typeof SongBuilderCard> {
               </div>
 
               <div class='control-group'>
-                <label>Key</label>
-                <select class='key-select' {{on 'change' (fn this.updateKey)}}>
+                <label for='key-select'>Key</label>
+                <select
+                  class='key-select'
+                  id='key-select'
+                  {{on 'change' this.updateKey}}
+                >
                   {{#each this.keyOptions as |keyOption|}}
                     <option
                       value={{keyOption}}
@@ -1757,7 +1648,7 @@ class SongBuilderIsolated extends Component<typeof SongBuilderCard> {
               </div>
 
               <div class='control-group'>
-                <label>Melody</label>
+                <label for='melody-toggle'>Melody</label>
                 <Button
                   class='melody-toggle
                     {{if this.melodyEnabled "enabled" "disabled"}}'
@@ -1796,7 +1687,6 @@ class SongBuilderIsolated extends Component<typeof SongBuilderCard> {
         </div>
       </div>
 
-      <!-- Professional Tab Navigation -->
       <nav class='builder-navigation'>
         <Button
           class='nav-tab {{if (eq this.currentTab "songInfo") "active" ""}}'
@@ -1896,7 +1786,6 @@ class SongBuilderIsolated extends Component<typeof SongBuilderCard> {
         </Button>
       </nav>
 
-      <!-- Tab Content Sections -->
       {{#if (eq this.currentTab 'songInfo')}}
         <section class='builder-section song-info-section'>
           <div class='section-header'>
@@ -1965,18 +1854,6 @@ class SongBuilderIsolated extends Component<typeof SongBuilderCard> {
           <div class='section-header'>
             <h2>Song Arrangement</h2>
             <p>Structure your song sections and flow</p>
-            <Button class='add-section-btn' {{on 'click' this.addNewSection}}>
-              <svg
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <line x1='12' y1='5' x2='12' y2='19' />
-                <line x1='5' y1='12' x2='19' y2='12' />
-              </svg>
-              Add Section
-            </Button>
           </div>
 
           {{#if (gt @model.sections.length 0)}}
@@ -2009,18 +1886,6 @@ class SongBuilderIsolated extends Component<typeof SongBuilderCard> {
           <div class='section-header'>
             <h2>Tracks & Instrumentation</h2>
             <p>Manage individual instrument tracks</p>
-            <Button class='add-track-btn' {{on 'click' this.addNewTrack}}>
-              <svg
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <line x1='12' y1='5' x2='12' y2='19' />
-                <line x1='5' y1='12' x2='19' y2='12' />
-              </svg>
-              Add Track
-            </Button>
           </div>
 
           {{#if (gt @model.tracks.length 0)}}
@@ -2059,8 +1924,9 @@ class SongBuilderIsolated extends Component<typeof SongBuilderCard> {
               <h3>Master Bus</h3>
               <div class='master-controls'>
                 <div class='master-fader'>
-                  <label>Master Volume</label>
+                  <label for='master-volume-fader'>Master Volume</label>
                   <input
+                    id='master-volume-fader'
                     type='range'
                     min='0'
                     max='100'
@@ -3331,7 +3197,7 @@ export class SongBuilderCard extends CardDef {
   @field sections = containsMany(SongSectionField);
   @field tracks = containsMany(TrackField);
   @field masterVolume = contains(NumberField);
-  @field songDuration = contains(NumberField); // In seconds
+  // Duration calculated automatically from sections
 
   @field title = contains(StringField, {
     computeVia: function (this: SongBuilderCard) {
@@ -3520,113 +3386,175 @@ export class SongBuilderCard extends CardDef {
   static fitted = class Fitted extends Component<typeof this> {
     <template>
       <div class='fitted-container'>
-        <!-- Badge format (≤150px width, ≤169px height) -->
         <div class='badge-format'>
-          <div class='badge-icon'>
-            <svg
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='2'
-            >
-              <path d='M9 18V5l12-2v13' />
-              <circle cx='6' cy='18' r='3' />
-              <circle cx='18' cy='16' r='3' />
-            </svg>
-          </div>
-          <div class='badge-info'>
-            <div class='badge-title'>Song Builder</div>
+          <div class='badge-content'>
+            <div class='badge-icon'>
+              <div class='ai-brain'>
+                <div class='brain-core'></div>
+                <div class='brain-pulse'></div>
+                <div class='brain-connections'>
+                  <div class='connection'></div>
+                  <div class='connection'></div>
+                  <div class='connection'></div>
+                </div>
+              </div>
+            </div>
+            <div class='badge-info'>
+              <div class='badge-title'>Song Builder</div>
+              <div class='badge-stats'>{{if
+                  @model.sections.length
+                  @model.sections.length
+                  7
+                }}
+                sections</div>
+            </div>
           </div>
         </div>
 
-        <!-- Strip format (>150px width, ≤169px height) -->
         <div class='strip-format'>
-          <div class='strip-icon'>
-            <svg
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='2'
-            >
-              <path d='M9 18V5l12-2v13' />
-              <circle cx='6' cy='18' r='3' />
-              <circle cx='18' cy='16' r='3' />
-            </svg>
-          </div>
-          <div class='strip-info'>
-            <div class='strip-title'>Song Builder</div>
-            <div class='strip-subtitle'>AI-powered composition</div>
-            {{#if @model.songTitle}}
-              <div class='strip-song'>{{@model.songTitle}}</div>
-            {{/if}}
+          <div class='strip-content'>
+            <div class='strip-visual'>
+              <div class='ai-processor'>
+                <div class='processor-core'>
+                  <div class='core-dot active'></div>
+                  <div class='core-dot'></div>
+                  <div class='core-dot active'></div>
+                </div>
+                <div class='processor-waves'>
+                  <div class='wave'></div>
+                  <div class='wave'></div>
+                  <div class='wave'></div>
+                </div>
+              </div>
+            </div>
+            <div class='strip-info'>
+              <div class='strip-title'>Song Builder</div>
+              <div class='strip-description'>{{if
+                  @model.songTitle
+                  @model.songTitle
+                  'Composition Studio'
+                }}
+                •
+                {{if @model.tempo @model.tempo 124}}
+                BPM</div>
+            </div>
+            <div class='strip-badge'>
+              <div class='ai-indicator'></div>
+              STUDIO
+            </div>
           </div>
         </div>
 
-        <!-- Tile format (≤399px width, ≥170px height) -->
         <div class='tile-format'>
           <div class='tile-header'>
-            <div class='tile-icon'>
-              <svg
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <path d='M9 18V5l12-2v13' />
-                <circle cx='6' cy='18' r='3' />
-                <circle cx='18' cy='16' r='3' />
-              </svg>
+            <div class='tile-visual'>
+              <div class='composition-studio'>
+                <div class='studio-brain'>
+                  <div class='neural-network'>
+                    <div class='neuron'></div>
+                    <div class='neuron active'></div>
+                    <div class='neuron'></div>
+                    <div class='neuron active'></div>
+                  </div>
+                  <div class='data-streams'>
+                    <div class='stream'></div>
+                    <div class='stream'></div>
+                    <div class='stream'></div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           <div class='tile-content'>
-            <h4 class='tile-title'>Song Builder</h4>
-            {{#if @model.songTitle}}
-              <p class='tile-song'>{{@model.songTitle}}</p>
-            {{else}}
-              <p class='tile-description'>AI-powered song composition</p>
-            {{/if}}
-          </div>
-          <div class='tile-features'>
-            <span class='tile-feature'>AI Collaboration</span>
-            <span class='tile-feature'>Real-time Edit</span>
+            <h3 class='tile-title'>Song Builder</h3>
+            <div class='tile-specs'>
+              <div class='spec-row'>
+                <span class='spec-label'>Song:</span>
+                <span class='spec-value'>{{if
+                    @model.songTitle
+                    @model.songTitle
+                    'Untitled'
+                  }}</span>
+              </div>
+              <div class='spec-row'>
+                <span class='spec-label'>Sections:</span>
+                <span class='spec-value'>{{@model.sections.length}}</span>
+              </div>
+              <div class='spec-row'>
+                <span class='spec-label'>Tracks:</span>
+                <span class='spec-value'>{{@model.tracks.length}}</span>
+              </div>
+            </div>
+            <div class='tile-features'>
+              <div class='feature-tag'>Compose</div>
+              <div class='feature-tag'>Lyrics</div>
+              <div class='feature-tag'>Multi-track</div>
+            </div>
           </div>
         </div>
 
-        <!-- Card format (≥400px width, ≥170px height) -->
         <div class='card-format'>
           <div class='card-header'>
-            <div class='card-icon-section'>
-              <div class='card-icon'>
-                <svg
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                >
-                  <path d='M9 18V5l12-2v13' />
-                  <circle cx='6' cy='18' r='3' />
-                  <circle cx='18' cy='16' r='3' />
-                </svg>
+            <div class='card-info'>
+              <h3 class='card-title'>Song Builder Studio</h3>
+              <p class='card-description'>Professional composition workspace
+                with real-time collaboration and advanced arrangement tools</p>
+            </div>
+            <div class='card-visual'>
+              <div class='ai-studio'>
+                <div class='studio-display'>
+                  <div class='display-line'>
+                    <span class='param-label'>PROJECT</span>
+                    <span class='param-value'>{{if
+                        @model.songTitle
+                        @model.songTitle
+                        'NEW'
+                      }}</span>
+                  </div>
+                  <div class='display-line'>
+                    <span class='param-label'>TEMPO</span>
+                    <span class='param-value'>{{if
+                        @model.tempo
+                        @model.tempo
+                        124
+                      }}</span>
+                  </div>
+                </div>
+                <div class='ai-indicators'>
+                  <div class='ai-led processing'></div>
+                  <div class='ai-led ready'></div>
+                  <div class='ai-led standby'></div>
+                </div>
               </div>
             </div>
-            <div class='card-content'>
-              <h3 class='card-title'>Song Builder Studio</h3>
-              {{#if @model.songTitle}}
-                <p class='card-song'>Current: {{@model.songTitle}}</p>
-              {{else}}
-                <p class='card-description'>AI-powered song composition with
-                  real-time collaboration</p>
-              {{/if}}
+          </div>
+          <div class='card-stats'>
+            <div class='stats-grid'>
+              <div class='stat-group'>
+                <div class='stat-number'>{{if
+                    @model.sections.length
+                    @model.sections.length
+                    7
+                  }}</div>
+                <div class='stat-label'>Sections</div>
+              </div>
+              <div class='stat-group'>
+                <div class='stat-number'>{{if
+                    @model.tracks.length
+                    @model.tracks.length
+                    8
+                  }}</div>
+                <div class='stat-label'>Tracks</div>
+              </div>
             </div>
           </div>
           <div class='card-features'>
-            <div class='feature-item'>
-              <span class='feature-label'>Collaboration</span>
-              <span class='feature-status'>Real-time</span>
-            </div>
-            <div class='feature-item'>
-              <span class='feature-label'>Output</span>
-              <span class='feature-status'>Professional</span>
+            <div class='features-label'>Studio Capabilities:</div>
+            <div class='feature-list'>
+              <div class='feature-pill'>Lyric Editor</div>
+              <div class='feature-pill'>Chord Progression</div>
+              <div class='feature-pill'>Arrangement</div>
+              <div class='feature-pill'>Real-time Sync</div>
             </div>
           </div>
         </div>
@@ -3637,9 +3565,13 @@ export class SongBuilderCard extends CardDef {
           container-type: size;
           width: 100%;
           height: 100%;
+          font-family:
+            'Inter',
+            -apple-system,
+            sans-serif;
         }
 
-        /* Hide all formats by default */
+        /* Hide all by default */
         .badge-format,
         .strip-format,
         .tile-format,
@@ -3649,95 +3581,252 @@ export class SongBuilderCard extends CardDef {
           height: 100%;
           padding: clamp(0.1875rem, 2%, 0.625rem);
           box-sizing: border-box;
+          background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+          border-radius: 12px;
+          overflow: hidden;
         }
 
-        /* Badge format activation */
+        /* Badge Format (≤150px width, ≤169px height) */
         @container (max-width: 150px) and (max-height: 169px) {
           .badge-format {
             display: flex;
             align-items: center;
-            gap: 0.375rem;
-            background: linear-gradient(135deg, #f8fafc, #f1f5f9);
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
           }
         }
 
-        /* Strip format activation */
-        @container (min-width: 151px) and (max-height: 169px) {
-          .strip-format {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: linear-gradient(135deg, #f8fafc, #f1f5f9);
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-          }
+        .badge-content {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          width: 100%;
         }
 
-        /* Tile format activation */
-        @container (max-width: 399px) and (min-height: 170px) {
-          .tile-format {
-            display: flex;
-            flex-direction: column;
-            background: linear-gradient(135deg, #f8fafc, #f1f5f9);
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
-          }
-        }
-
-        /* Card format activation */
-        @container (min-width: 400px) and (min-height: 170px) {
-          .card-format {
-            display: flex;
-            flex-direction: column;
-            background: linear-gradient(135deg, #f8fafc, #f1f5f9);
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
-          }
-        }
-
-        /* Badge format styles */
         .badge-icon {
-          width: 20px;
-          height: 20px;
-          color: #3b82f6;
+          width: 24px;
+          height: 24px;
           flex-shrink: 0;
+          position: relative;
+        }
+
+        .ai-brain {
+          width: 100%;
+          height: 100%;
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .brain-core {
+          width: 12px;
+          height: 12px;
+          background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%);
+          border-radius: 50%;
+          animation: brain-pulse 2s ease-in-out infinite;
+        }
+
+        .brain-pulse {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          width: 8px;
+          height: 8px;
+          background: rgba(139, 92, 246, 0.4);
+          border-radius: 50%;
+          animation: pulse-ring 2s ease-in-out infinite;
+        }
+
+        .brain-connections {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+        }
+
+        .connection {
+          position: absolute;
+          width: 2px;
+          height: 2px;
+          background: #8b5cf6;
+          border-radius: 50%;
+          animation: connection-blink 3s ease-in-out infinite;
+        }
+
+        .connection:nth-child(1) {
+          top: 2px;
+          left: 4px;
+          animation-delay: 0s;
+        }
+
+        .connection:nth-child(2) {
+          top: 8px;
+          right: 2px;
+          animation-delay: 0.5s;
+        }
+
+        .connection:nth-child(3) {
+          bottom: 4px;
+          left: 8px;
+          animation-delay: 1s;
+        }
+
+        @keyframes brain-pulse {
+          0%,
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.8;
+            transform: scale(1.1);
+          }
+        }
+
+        @keyframes pulse-ring {
+          0% {
+            opacity: 0.8;
+            transform: translate(-50%, -50%) scale(1);
+          }
+          100% {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(2.5);
+          }
+        }
+
+        @keyframes connection-blink {
+          0%,
+          70%,
+          100% {
+            opacity: 0.3;
+          }
+          35% {
+            opacity: 1;
+          }
         }
 
         .badge-info {
-          display: flex;
-          align-items: center;
-          gap: 0.25rem;
-          min-width: 0;
           flex: 1;
+          min-width: 0;
         }
 
         .badge-title {
           font-size: 0.75rem;
-          font-weight: 600;
-          color: #1e293b;
+          font-weight: 700;
+          color: #8b5cf6;
+          line-height: 1.2;
+          margin-bottom: 0.125rem;
+          white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          white-space: nowrap;
         }
 
-        .badge-ai {
-          background: #10b981;
-          color: white;
-          padding: 0.125rem 0.25rem;
-          border-radius: 4px;
+        .badge-stats {
           font-size: 0.625rem;
-          font-weight: 700;
+          color: rgba(255, 255, 255, 0.7);
+          font-family: 'JetBrains Mono', monospace;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        /* Strip Format (151px-399px width, ≤169px height) */
+        @container (min-width: 151px) and (max-height: 169px) {
+          .strip-format {
+            display: flex;
+            align-items: center;
+          }
+        }
+
+        .strip-content {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          width: 100%;
+        }
+
+        .strip-visual {
           flex-shrink: 0;
         }
 
-        /* Strip format styles */
-        .strip-icon {
+        .ai-processor {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 3px;
           width: 32px;
-          height: 32px;
-          color: #3b82f6;
-          flex-shrink: 0;
+          height: 24px;
+        }
+
+        .processor-core {
+          display: flex;
+          gap: 2px;
+        }
+
+        .core-dot {
+          width: 4px;
+          height: 4px;
+          background: rgba(139, 92, 246, 0.3);
+          border-radius: 50%;
+          transition: all 0.3s ease;
+        }
+
+        .core-dot.active {
+          background: #8b5cf6;
+          animation: core-pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes core-pulse {
+          0%,
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.6;
+            transform: scale(1.3);
+          }
+        }
+
+        .processor-waves {
+          display: flex;
+          gap: 1px;
+          align-items: flex-end;
+        }
+
+        .wave {
+          width: 2px;
+          background: rgba(139, 92, 246, 0.5);
+          border-radius: 1px;
+          animation: wave-flow 2s ease-in-out infinite;
+        }
+
+        .wave:nth-child(1) {
+          height: 8px;
+          animation-delay: 0s;
+        }
+
+        .wave:nth-child(2) {
+          height: 12px;
+          animation-delay: 0.3s;
+        }
+
+        .wave:nth-child(3) {
+          height: 6px;
+          animation-delay: 0.6s;
+        }
+
+        @keyframes wave-flow {
+          0%,
+          100% {
+            opacity: 0.5;
+            transform: scaleY(1);
+          }
+          50% {
+            opacity: 1;
+            transform: scaleY(1.4);
+          }
         }
 
         .strip-info {
@@ -3748,208 +3837,396 @@ export class SongBuilderCard extends CardDef {
         .strip-title {
           font-size: 0.875rem;
           font-weight: 700;
-          color: #1e293b;
+          color: #8b5cf6;
+          line-height: 1.2;
+          margin-bottom: 0.25rem;
+          white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          white-space: nowrap;
         }
 
-        .strip-subtitle {
+        .strip-description {
           font-size: 0.75rem;
-          color: #64748b;
+          color: rgba(255, 255, 255, 0.7);
+          white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          white-space: nowrap;
-          margin-top: 0.125rem;
         }
 
-        .strip-song {
-          font-size: 0.625rem;
-          color: #3b82f6;
-          font-weight: 600;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          margin-top: 0.25rem;
-        }
-
-        .strip-ai-badge {
-          background: #10b981;
-          color: white;
-          padding: 0.25rem 0.5rem;
-          border-radius: 6px;
-          font-size: 0.625rem;
-          font-weight: 700;
-          flex-shrink: 0;
-        }
-
-        /* Tile format styles */
-        .tile-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          margin-bottom: 1rem;
-        }
-
-        .tile-icon {
-          width: 40px;
-          height: 40px;
-          color: #3b82f6;
-        }
-
-        .tile-ai-badge {
+        .strip-badge {
           display: flex;
           align-items: center;
           gap: 0.25rem;
-          background: #10b981;
-          color: white;
           padding: 0.25rem 0.5rem;
+          background: rgba(139, 92, 246, 0.2);
+          border: 1px solid #8b5cf6;
           border-radius: 6px;
           font-size: 0.625rem;
           font-weight: 700;
+          color: #8b5cf6;
+          font-family: 'JetBrains Mono', monospace;
+          flex-shrink: 0;
         }
 
-        .tile-ai-badge svg {
-          width: 12px;
-          height: 12px;
+        .ai-indicator {
+          width: 6px;
+          height: 6px;
+          background: #8b5cf6;
+          border-radius: 50%;
+          animation: ai-pulse 1.5s ease-in-out infinite;
         }
 
-        .tile-content {
-          flex: 1;
-          text-align: center;
+        @keyframes ai-pulse {
+          0%,
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.6;
+            transform: scale(1.2);
+          }
         }
 
-        .tile-title {
-          font-size: 1rem;
-          font-weight: 700;
-          color: #1e293b;
-          margin: 0 0 0.5rem 0;
+        /* Tile Format (≤399px width, ≥170px height) */
+        @container (max-width: 399px) and (min-height: 170px) {
+          .tile-format {
+            display: flex;
+            flex-direction: column;
+          }
         }
 
-        .tile-song {
-          font-size: 0.875rem;
-          color: #3b82f6;
-          font-weight: 600;
-          margin: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .tile-description {
-          font-size: 0.75rem;
-          color: #64748b;
-          margin: 0;
-          line-height: 1.4;
-        }
-
-        .tile-features {
+        .tile-header {
+          position: relative;
+          height: 70px;
+          background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%);
           display: flex;
+          align-items: center;
           justify-content: center;
-          gap: 0.5rem;
-          margin-top: auto;
-          padding-top: 1rem;
-        }
-
-        .tile-feature {
-          background: #eff6ff;
-          color: #1e40af;
-          padding: 0.25rem 0.5rem;
-          border-radius: 4px;
-          font-size: 0.625rem;
-          font-weight: 600;
-        }
-
-        /* Card format styles */
-        .card-header {
-          display: flex;
-          gap: 1rem;
           margin-bottom: 1rem;
+          border-radius: 8px;
+          overflow: hidden;
         }
 
-        .card-icon-section {
+        .composition-studio {
           display: flex;
           flex-direction: column;
           align-items: center;
           gap: 0.5rem;
         }
 
-        .card-icon {
+        .studio-brain {
+          position: relative;
           width: 48px;
-          height: 48px;
-          color: #3b82f6;
+          height: 32px;
         }
 
-        .card-ai-badge {
+        .neural-network {
+          display: grid;
+          grid-template-columns: repeat(2, 8px);
+          grid-template-rows: repeat(2, 8px);
+          gap: 4px;
+          margin-bottom: 4px;
+        }
+
+        .neuron {
+          width: 8px;
+          height: 8px;
+          background: rgba(255, 255, 255, 0.3);
+          border-radius: 50%;
+          transition: all 0.3s ease;
+        }
+
+        .neuron.active {
+          background: rgba(255, 255, 255, 0.9);
+          box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+          animation: neuron-fire 2s ease-in-out infinite;
+        }
+
+        @keyframes neuron-fire {
+          0%,
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.7;
+            transform: scale(1.2);
+          }
+        }
+
+        .data-streams {
+          display: flex;
+          justify-content: space-between;
+          width: 100%;
+        }
+
+        .stream {
+          width: 2px;
+          height: 8px;
+          background: rgba(255, 255, 255, 0.6);
+          border-radius: 1px;
+          animation: data-flow 1.8s ease-in-out infinite;
+        }
+
+        .stream:nth-child(1) {
+          animation-delay: 0s;
+        }
+        .stream:nth-child(2) {
+          animation-delay: 0.3s;
+        }
+        .stream:nth-child(3) {
+          animation-delay: 0.6s;
+        }
+
+        @keyframes data-flow {
+          0%,
+          100% {
+            opacity: 0.4;
+            transform: scaleY(1);
+          }
+          50% {
+            opacity: 1;
+            transform: scaleY(1.5);
+          }
+        }
+
+        .tile-content {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .tile-title {
+          font-size: 1rem;
+          font-weight: 700;
+          color: #8b5cf6;
+          margin: 0;
+          line-height: 1.2;
+        }
+
+        .tile-specs {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .spec-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .spec-label {
+          font-size: 0.75rem;
+          color: rgba(255, 255, 255, 0.7);
+          font-weight: 500;
+        }
+
+        .spec-value {
+          font-size: 0.875rem;
+          color: #8b5cf6;
+          font-weight: 600;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        .tile-features {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.375rem;
+          margin-top: auto;
+        }
+
+        .feature-tag {
+          padding: 0.25rem 0.5rem;
+          background: rgba(139, 92, 246, 0.2);
+          border: 1px solid #8b5cf6;
+          color: #8b5cf6;
+          font-size: 0.625rem;
+          font-weight: 600;
+          border-radius: 4px;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Card Format (≥400px width, ≥170px height) */
+        @container (min-width: 400px) and (min-height: 170px) {
+          .card-format {
+            display: flex;
+            flex-direction: column;
+          }
+        }
+
+        .card-header {
           display: flex;
           align-items: center;
-          gap: 0.375rem;
-          background: #10b981;
-          color: white;
-          padding: 0.375rem 0.75rem;
+          justify-content: space-between;
+          background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%);
+          padding: 1rem;
           border-radius: 8px;
-          font-size: 0.75rem;
-          font-weight: 600;
-          white-space: nowrap;
+          margin-bottom: 1rem;
         }
 
-        .card-ai-badge svg {
-          width: 14px;
-          height: 14px;
-        }
-
-        .card-content {
+        .card-info {
           flex: 1;
         }
 
         .card-title {
           font-size: 1.25rem;
           font-weight: 700;
-          color: #1e293b;
+          color: white;
           margin: 0 0 0.5rem 0;
-        }
-
-        .card-song {
-          font-size: 1rem;
-          color: #3b82f6;
-          font-weight: 600;
-          margin: 0;
+          line-height: 1.2;
         }
 
         .card-description {
           font-size: 0.875rem;
-          color: #64748b;
+          color: rgba(255, 255, 255, 0.9);
           margin: 0;
-          line-height: 1.5;
+          line-height: 1.4;
         }
 
-        .card-features {
-          display: flex;
-          justify-content: space-between;
-          margin-top: auto;
-          padding-top: 1rem;
-          border-top: 1px solid #e2e8f0;
-        }
-
-        .feature-item {
+        .ai-studio {
           display: flex;
           flex-direction: column;
+          gap: 0.5rem;
+          padding: 0.75rem;
+          background: rgba(15, 23, 42, 0.7);
+          backdrop-filter: blur(8px);
+          border-radius: 8px;
+          min-width: 120px;
+        }
+
+        .studio-display {
+          background: #0f172a;
+          padding: 0.5rem;
+          border-radius: 4px;
+          border: 1px solid rgba(139, 92, 246, 0.3);
+        }
+
+        .display-line {
+          display: flex;
+          justify-content: space-between;
           align-items: center;
+          margin-bottom: 0.25rem;
+        }
+
+        .display-line:last-child {
+          margin-bottom: 0;
+        }
+
+        .param-label {
+          font-size: 0.625rem;
+          color: rgba(255, 255, 255, 0.6);
+          font-weight: 600;
+        }
+
+        .param-value {
+          font-size: 0.75rem;
+          color: #8b5cf6;
+          font-weight: 700;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        .ai-indicators {
+          display: flex;
+          justify-content: space-between;
           gap: 0.25rem;
         }
 
-        .feature-label {
-          font-size: 0.625rem;
-          color: #64748b;
-          font-weight: 600;
+        .ai-led {
+          width: 8px;
+          height: 8px;
+          background: #374151;
+          border: 1px solid #8b5cf6;
+          border-radius: 50%;
+          transition: all 0.3s ease;
+        }
+
+        .ai-led.processing {
+          background: #8b5cf6;
+          box-shadow: 0 0 8px rgba(139, 92, 246, 0.6);
+          animation: led-processing 1.5s ease-in-out infinite;
+        }
+
+        .ai-led.ready {
+          background: #10b981;
+          box-shadow: 0 0 4px rgba(16, 185, 129, 0.4);
+        }
+
+        .ai-led.standby {
+          background: #374151;
+        }
+
+        @keyframes led-processing {
+          0%,
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.6;
+            transform: scale(1.2);
+          }
+        }
+
+        .card-stats {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 1rem;
+          margin-bottom: 1rem;
+          background: rgba(248, 250, 252, 0.1);
+          border-radius: 8px;
+          padding: 1rem;
+        }
+
+        .stat-group {
+          text-align: center;
+        }
+
+        .stat-number {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #8b5cf6;
+          margin-bottom: 0.25rem;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        .stat-label {
+          font-size: 0.75rem;
+          color: rgba(255, 255, 255, 0.7);
+          font-weight: 500;
           text-transform: uppercase;
           letter-spacing: 0.05em;
         }
 
-        .feature-status {
+        .card-features {
+          margin-top: auto;
+        }
+
+        .features-label {
           font-size: 0.75rem;
-          color: #1e293b;
+          color: rgba(255, 255, 255, 0.7);
           font-weight: 600;
+          margin-bottom: 0.5rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .feature-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+        }
+
+        .feature-pill {
+          padding: 0.375rem 0.75rem;
+          background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%);
+          color: white;
+          font-size: 0.75rem;
+          font-weight: 600;
+          border-radius: 6px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
         }
       </style>
     </template>

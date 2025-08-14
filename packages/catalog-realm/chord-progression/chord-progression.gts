@@ -12,7 +12,7 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import MusicIcon from '@cardstack/boxel-icons/music';
 import { Button } from '@cardstack/boxel-ui/components';
-import { gt, eq, add } from '@cardstack/boxel-ui/helpers';
+import { gt, eq, add, lt } from '@cardstack/boxel-ui/helpers';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
@@ -514,7 +514,6 @@ class ChordProgressionPlayerIsolated extends Component<
 
   <template>
     <div class='progression-player'>
-      <!-- Header -->
       <div class='player-header'>
         <div class='header-content'>
           <h2>Chord Progression Explorer</h2>
@@ -574,7 +573,6 @@ class ChordProgressionPlayerIsolated extends Component<
         </div>
       </div>
 
-      <!-- Progression Library -->
       {{#if (gt this.availableProgressions.length 0)}}
         <div class='progression-library'>
           <h3 class='library-title'>
@@ -591,7 +589,6 @@ class ChordProgressionPlayerIsolated extends Component<
             </svg>
             Choose a Chord Progression
           </h3>
-          <!-- ¹²⁵ Enhanced library section title -->
           <div class='progressions-grid'>
             {{#each this.availableProgressions as |progression|}}
               <div
@@ -608,12 +605,11 @@ class ChordProgressionPlayerIsolated extends Component<
                 >
                   <div class='progression-card-preview'>
                     <div class='progression-preview-header'>
-                      <h4
+                      <p
                         class='progression-preview-name'
-                      >{{progression.progressionName}}</h4>
+                      >{{progression.progressionName}}</p>
                       {{#if (eq progression.id @model.currentProgression.id)}}
                         <span class='current-badge'>CURRENT</span>
-                        <!-- ¹²⁶ Better visual current indicator -->
                       {{/if}}
                     </div>
 
@@ -642,10 +638,8 @@ class ChordProgressionPlayerIsolated extends Component<
         </div>
       {{/if}}
 
-      <!-- Current Progression Display -->
       {{#if this.currentProgression}}
         <div class='now-playing-section'>
-          <!-- ¹²⁷ Dedicated "Now Playing" section -->
           <div class='now-playing-header'>
             <h3 class='now-playing-title'>
               <svg
@@ -671,7 +665,6 @@ class ChordProgressionPlayerIsolated extends Component<
               <@fields.currentProgression @format='embedded' />
             </div>
 
-            <!-- Interactive Chord Display -->
             {{#if (gt this.progressionChords.length 0)}}
               <div class='chord-player'>
                 <div class='playback-controls'>
@@ -700,7 +693,6 @@ class ChordProgressionPlayerIsolated extends Component<
 
                 <div class='chord-sequence'>
                   <div class='sequence-header'>
-                    <!-- ¹³³ Improved chord sequence instructions -->
                     <h4>🎹 Interactive Chord Sequence</h4>
                     <p>Click any chord button below to hear that chord, or use
                       "Play Progression" to hear them all in sequence</p>
@@ -722,7 +714,6 @@ class ChordProgressionPlayerIsolated extends Component<
                           {{on 'click' (fn this.playIndividualChord chord)}}
                         >
                           <div class='chord-symbol'>{{chord.chordName}}</div>
-                          <!-- ¹³⁶ Fixed chord name display with proper data access -->
                           <div class='chord-quality'>{{chord.quality}}</div>
                         </button>
                         {{#if (gt chord.notesList.length 0)}}
@@ -760,7 +751,6 @@ class ChordProgressionPlayerIsolated extends Component<
         </div>
       {{/if}}
 
-      <!-- Music Theory Info -->
       <div class='theory-section'>
         <h3>🎼 Understanding Chord Progressions</h3>
         <div class='theory-grid'>
@@ -1779,4 +1769,667 @@ export class ChordProgressionPlayerCard extends CardDef {
   });
 
   static isolated = ChordProgressionPlayerIsolated;
+
+  static fitted = class Fitted extends Component<typeof this> {
+    <template>
+      <div class='fitted-container'>
+        <div class='badge-format'>
+          <div class='badge-content'>
+            <div class='badge-icon'>
+              <div class='chord-symbol-mini'>♪</div>
+            </div>
+            <div class='badge-info'>
+              <div class='badge-title'>{{if
+                  @model.playerName
+                  @model.playerName
+                  'Harmony Explorer'
+                }}</div>
+              <div class='badge-stats'>{{if
+                  @model.currentProgression.key
+                  @model.currentProgression.key
+                  'C major'
+                }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class='strip-format'>
+          <div class='strip-content'>
+            <div class='strip-visual'>
+              <div class='chord-sequence-mini'>
+                <div class='chord-mini'>I</div>
+                <div class='chord-mini'>V</div>
+                <div class='chord-mini'>vi</div>
+                <div class='chord-mini'>IV</div>
+              </div>
+            </div>
+            <div class='strip-info'>
+              <div class='strip-title'>{{if
+                  @model.playerName
+                  @model.playerName
+                  'Harmony Explorer'
+                }}</div>
+              <div class='strip-description'>{{if
+                  @model.currentProgression.progressionName
+                  @model.currentProgression.progressionName
+                  'Popular Progressions'
+                }}
+                •
+                {{@model.availableProgressions.length}}
+                available</div>
+            </div>
+            <div class='strip-badge'>
+              <div class='play-indicator'></div>
+              LEARN
+            </div>
+          </div>
+        </div>
+
+        <div class='tile-format'>
+          <div class='tile-header'>
+            <div class='tile-visual'>
+              <div class='staff-notation'>
+                <div class='staff-lines'>
+                  <div class='staff-line'></div>
+                  <div class='staff-line'></div>
+                  <div class='staff-line'></div>
+                  <div class='staff-line'></div>
+                </div>
+                <div class='chord-symbols'>
+                  {{#if @model.currentProgression.chordProgression.chords}}
+                    {{#each
+                      @model.currentProgression.chordProgression.chords
+                      as |chord index|
+                    }}
+                      {{#if (lt index 4)}}
+                        <div class='chord-note'>{{chord.chordName}}</div>
+                      {{/if}}
+                    {{/each}}
+                  {{else}}
+                    <div class='chord-note'>Am</div>
+                    <div class='chord-note'>F</div>
+                    <div class='chord-note'>C</div>
+                    <div class='chord-note'>G</div>
+                  {{/if}}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class='tile-content'>
+            <h3 class='tile-title'>{{if
+                @model.playerName
+                @model.playerName
+                'Harmony Explorer'
+              }}</h3>
+            <div class='tile-specs'>
+              <div class='spec-row'>
+                <span class='spec-label'>Current:</span>
+                <span class='spec-value'>{{if
+                    @model.currentProgression.progressionName
+                    @model.currentProgression.progressionName
+                    'Andalusian Cadence'
+                  }}</span>
+              </div>
+              <div class='spec-row'>
+                <span class='spec-label'>Key:</span>
+                <span class='spec-value'>{{if
+                    @model.currentProgression.key
+                    @model.currentProgression.key
+                    'A minor'
+                  }}</span>
+              </div>
+              <div class='spec-row'>
+                <span class='spec-label'>Library:</span>
+                <span class='spec-value'>{{@model.availableProgressions.length}}
+                  progressions</span>
+              </div>
+            </div>
+            <div class='tile-features'>
+              <div class='feature-tag'>Audio</div>
+              <div class='feature-tag'>Theory</div>
+              <div class='feature-tag'>Learn</div>
+            </div>
+          </div>
+        </div>
+
+        <div class='card-format'>
+          <div class='card-header'>
+            <div class='card-info'>
+              <h3 class='card-title'>{{if
+                  @model.playerName
+                  @model.playerName
+                  'Harmony Explorer'
+                }}</h3>
+              <p class='card-description'>Interactive chord progression player
+                with audio synthesis and music theory education</p>
+            </div>
+            <div class='card-visual'>
+              <div class='musical-notation'>
+                <div class='treble-clef'>𝄞</div>
+                <div class='notation-staff'>
+                  <div class='staff-line'></div>
+                  <div class='staff-line'></div>
+                  <div class='staff-line'></div>
+                  <div class='staff-line'></div>
+                  <div class='staff-line'></div>
+                </div>
+                <div class='chord-progression-display'>
+                  {{#if @model.currentProgression.chordProgression.chords}}
+                    {{#each
+                      @model.currentProgression.chordProgression.chords
+                      as |chord index|
+                    }}
+                      {{#if (lt index 4)}}
+                        <div class='chord-symbol'>{{chord.chordName}}</div>
+                      {{/if}}
+                    {{/each}}
+                  {{else}}
+                    <div class='chord-symbol'>Am</div>
+                    <div class='chord-symbol'>G</div>
+                    <div class='chord-symbol'>F</div>
+                    <div class='chord-symbol'>E</div>
+                  {{/if}}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class='card-stats'>
+            <div class='stats-grid'>
+              <div class='stat-group'>
+                <div class='stat-number'>{{if
+                    @model.availableProgressions.length
+                    @model.availableProgressions.length
+                    12
+                  }}</div>
+                <div class='stat-label'>Progressions</div>
+              </div>
+              <div class='stat-group'>
+                <div class='stat-number'>{{if
+                    @model.currentProgression.chordProgression.chords.length
+                    @model.currentProgression.chordProgression.chords.length
+                    4
+                  }}</div>
+                <div class='stat-label'>Chords</div>
+              </div>
+              <div class='stat-group'>
+                <div class='stat-number'>{{if
+                    @model.currentProgression.tempo
+                    @model.currentProgression.tempo
+                    80
+                  }}</div>
+                <div class='stat-label'>BPM</div>
+              </div>
+            </div>
+          </div>
+          <div class='card-features'>
+            <div class='features-label'>Learning Features:</div>
+            <div class='feature-list'>
+              <div class='feature-pill'>Audio Playback</div>
+              <div class='feature-pill'>Roman Numerals</div>
+              <div class='feature-pill'>Theory Guide</div>
+              <div class='feature-pill'>Song Examples</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <style scoped>
+        .fitted-container {
+          container-type: size;
+          width: 100%;
+          height: 100%;
+          font-family:
+            'Inter',
+            -apple-system,
+            sans-serif;
+        }
+
+        /* Hide all by default */
+        .badge-format,
+        .strip-format,
+        .tile-format,
+        .card-format {
+          display: none;
+          width: 100%;
+          height: 100%;
+          padding: clamp(0.1875rem, 2%, 0.625rem);
+          box-sizing: border-box;
+          background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+          border-radius: 12px;
+          overflow: hidden;
+        }
+
+        /* Badge Format (≤150px width, ≤169px height) */
+        @container (max-width: 150px) and (max-height: 169px) {
+          .badge-format {
+            display: flex;
+            align-items: center;
+          }
+        }
+
+        .badge-content {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          width: 100%;
+        }
+
+        .badge-icon {
+          width: 24px;
+          height: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+          border-radius: 6px;
+          flex-shrink: 0;
+        }
+
+        .chord-symbol-mini {
+          color: white;
+          font-size: 14px;
+          font-weight: 700;
+          font-family: 'Georgia', serif;
+        }
+
+        .badge-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .badge-title {
+          font-size: 0.75rem;
+          font-weight: 700;
+          color: #3b82f6;
+          line-height: 1.2;
+          margin-bottom: 0.125rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .badge-stats {
+          font-size: 0.625rem;
+          color: rgba(59, 130, 246, 0.7);
+          font-family: 'Georgia', serif;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        /* Strip Format (151px-399px width, ≤169px height) */
+        @container (min-width: 151px) and (max-height: 169px) {
+          .strip-format {
+            display: flex;
+            align-items: center;
+          }
+        }
+
+        .strip-content {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          width: 100%;
+        }
+
+        .strip-visual {
+          flex-shrink: 0;
+        }
+
+        .chord-sequence-mini {
+          display: flex;
+          gap: 2px;
+          align-items: center;
+        }
+
+        .chord-mini {
+          width: 18px;
+          height: 18px;
+          background: #3b82f6;
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 4px;
+          font-size: 0.625rem;
+          font-weight: 700;
+          font-family: 'Georgia', serif;
+        }
+
+        .strip-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .strip-title {
+          font-size: 0.875rem;
+          font-weight: 700;
+          color: #3b82f6;
+          line-height: 1.2;
+          margin-bottom: 0.25rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .strip-description {
+          font-size: 0.75rem;
+          color: rgba(59, 130, 246, 0.7);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .strip-badge {
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          padding: 0.25rem 0.5rem;
+          background: rgba(16, 185, 129, 0.2);
+          border: 1px solid #10b981;
+          border-radius: 6px;
+          font-size: 0.625rem;
+          font-weight: 700;
+          color: #10b981;
+          font-family: 'JetBrains Mono', monospace;
+          flex-shrink: 0;
+        }
+
+        .play-indicator {
+          width: 6px;
+          height: 6px;
+          background: #10b981;
+          border-radius: 50%;
+          animation: learn-pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes learn-pulse {
+          0%,
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.6;
+            transform: scale(1.2);
+          }
+        }
+
+        /* Tile Format (≤399px width, ≥170px height) */
+        @container (max-width: 399px) and (min-height: 170px) {
+          .tile-format {
+            display: flex;
+            flex-direction: column;
+          }
+        }
+
+        .tile-header {
+          position: relative;
+          height: 70px;
+          background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 1rem;
+          border-radius: 8px;
+        }
+
+        .staff-notation {
+          position: relative;
+          width: 80px;
+          height: 40px;
+        }
+
+        .staff-lines {
+          position: absolute;
+          top: 50%;
+          left: 0;
+          right: 0;
+          transform: translateY(-50%);
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .staff-line {
+          height: 1px;
+          background: rgba(255, 255, 255, 0.6);
+          width: 100%;
+        }
+
+        .chord-symbols {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 4px;
+        }
+
+        .chord-note {
+          color: white;
+          font-size: 0.625rem;
+          font-weight: 700;
+          font-family: 'Georgia', serif;
+          background: rgba(255, 255, 255, 0.2);
+          border-radius: 3px;
+          padding: 0.125rem 0.25rem;
+        }
+
+        .tile-content {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .tile-title {
+          font-size: 1rem;
+          font-weight: 700;
+          color: #3b82f6;
+          margin: 0;
+          line-height: 1.2;
+        }
+
+        .tile-specs {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .spec-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .spec-label {
+          font-size: 0.75rem;
+          color: rgba(59, 130, 246, 0.7);
+          font-weight: 500;
+        }
+
+        .spec-value {
+          font-size: 0.875rem;
+          color: #3b82f6;
+          font-weight: 600;
+          font-family: 'Georgia', serif;
+        }
+
+        .tile-features {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.375rem;
+          margin-top: auto;
+        }
+
+        .feature-tag {
+          padding: 0.25rem 0.5rem;
+          background: rgba(59, 130, 246, 0.2);
+          border: 1px solid #3b82f6;
+          color: #3b82f6;
+          font-size: 0.625rem;
+          font-weight: 600;
+          border-radius: 4px;
+        }
+
+        /* Card Format (≥400px width, ≥170px height) */
+        @container (min-width: 400px) and (min-height: 170px) {
+          .card-format {
+            display: flex;
+            flex-direction: column;
+          }
+        }
+
+        .card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+          padding: 1rem;
+          border-radius: 8px;
+          margin-bottom: 1rem;
+        }
+
+        .card-info {
+          flex: 1;
+        }
+
+        .card-title {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: white;
+          margin: 0 0 0.5rem 0;
+          line-height: 1.2;
+        }
+
+        .card-description {
+          font-size: 0.875rem;
+          color: rgba(255, 255, 255, 0.9);
+          margin: 0;
+          line-height: 1.4;
+        }
+
+        .musical-notation {
+          position: relative;
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 0.75rem;
+          background: rgba(15, 23, 42, 0.7);
+          backdrop-filter: blur(8px);
+          border-radius: 8px;
+          min-width: 140px;
+        }
+
+        .treble-clef {
+          color: rgba(255, 255, 255, 0.9);
+          font-size: 1.5rem;
+          font-weight: 700;
+        }
+
+        .notation-staff {
+          position: relative;
+          width: 60px;
+          height: 32px;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+        }
+
+        .notation-staff .staff-line {
+          height: 1px;
+          background: rgba(255, 255, 255, 0.4);
+          width: 100%;
+        }
+
+        .chord-progression-display {
+          position: absolute;
+          top: 0;
+          left: 32px;
+          right: 0;
+          bottom: 0;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 4px;
+        }
+
+        .chord-symbol {
+          color: white;
+          font-size: 0.75rem;
+          font-weight: 700;
+          font-family: 'Georgia', serif;
+          background: rgba(255, 255, 255, 0.2);
+          border-radius: 4px;
+          padding: 0.125rem 0.25rem;
+        }
+
+        .card-stats {
+          background: rgba(248, 250, 252, 0.8);
+          border-radius: 8px;
+          padding: 1rem;
+          margin-bottom: 1rem;
+        }
+
+        .stats-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 1rem;
+        }
+
+        .stat-group {
+          text-align: center;
+        }
+
+        .stat-number {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #3b82f6;
+          margin-bottom: 0.25rem;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        .stat-label {
+          font-size: 0.75rem;
+          color: rgba(59, 130, 246, 0.7);
+          font-weight: 500;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .card-features {
+          margin-top: auto;
+        }
+
+        .features-label {
+          font-size: 0.75rem;
+          color: rgba(59, 130, 246, 0.7);
+          font-weight: 600;
+          margin-bottom: 0.5rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .feature-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+        }
+
+        .feature-pill {
+          padding: 0.375rem 0.75rem;
+          background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+          color: white;
+          font-size: 0.75rem;
+          font-weight: 600;
+          border-radius: 6px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+      </style>
+    </template>
+  };
 }

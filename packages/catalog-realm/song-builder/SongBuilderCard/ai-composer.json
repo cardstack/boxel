@@ -17,80 +17,48 @@
           "trackName": "Lead Vocals",
           "instrument": "Lead Vocals",
           "volume": 82,
-          "pan": 0,
-          "isMuted": false,
-          "isSolo": false,
-          "effects": "Reverb, Compression, De-esser, EQ",
           "notes": "Main vocal track. Clear and present. Use light auto-tune for modern polish."
         },
         {
           "trackName": "Vocal Harmonies",
           "instrument": "Vocal Harmonies",
           "volume": 65,
-          "pan": -20,
-          "isMuted": false,
-          "isSolo": false,
-          "effects": "Wide Reverb, Chorus, EQ",
           "notes": "Support harmonies. Wider stereo placement. More prominent in choruses and bridge."
         },
         {
           "trackName": "Lead Synth",
           "instrument": "Analog Synthesizer",
           "volume": 78,
-          "pan": 15,
-          "isMuted": false,
-          "isSolo": false,
-          "effects": "Delay, Analog Filter, Mild Distortion",
           "notes": "Main melodic synth. Warm analog tone with modern clarity. Key hook melody."
         },
         {
           "trackName": "Pad Synth",
           "instrument": "Digital Pad",
           "volume": 68,
-          "pan": 0,
-          "isMuted": false,
-          "isSolo": false,
-          "effects": "Hall Reverb, Chorus, Low-pass Filter",
           "notes": "Atmospheric foundation. Creates space and harmonic support. Subtle filter automation."
         },
         {
           "trackName": "Bass Synth",
           "instrument": "Synth Bass",
           "volume": 85,
-          "pan": 0,
-          "isMuted": false,
-          "isSolo": false,
-          "effects": "Compression, EQ, Slight Saturation",
           "notes": "Driving bass foundation. Punchy and clear. Side-chain duck from kick drum."
         },
         {
           "trackName": "Electronic Drums",
           "instrument": "Electronic Kit",
           "volume": 75,
-          "pan": 0,
-          "isMuted": false,
-          "isSolo": false,
-          "effects": "Drum Bus Compression, EQ, Reverb",
           "notes": "Modern electronic drums. Crisp kick, snappy snare. Use consistent sample set."
         },
         {
           "trackName": "Rhythmic Elements",
           "instrument": "Percussion & FX",
           "volume": 40,
-          "pan": -30,
-          "isMuted": false,
-          "isSolo": false,
-          "effects": "Ping-pong Delay, Reverb, High-pass Filter",
           "notes": "Textural percussion. Shakers, electronic hits, rhythmic bleeps. Adds groove detail."
         },
         {
           "trackName": "Atmosphere & FX",
           "instrument": "Sound Design",
           "volume": 30,
-          "pan": 25,
-          "isMuted": false,
-          "isSolo": false,
-          "effects": "Wide Stereo Reverb, Modulation, Filters",
           "notes": "Environmental sounds. Digital sweeps, risers, impacts. Enhance emotional transitions."
         }
       ],
@@ -107,27 +75,21 @@
           "chords": [
             {
               "chordName": "C",
-              "chordType": "major",
               "notes": [
                 "C3",
                 "E4",
                 "G4",
                 "C5"
-              ],
-              "rootNote": "C",
-              "quality": "major"
+              ]
             },
             {
               "chordName": "Am",
-              "chordType": "minor",
               "notes": [
                 "A2",
                 "C4",
                 "E4",
                 "A4"
-              ],
-              "rootNote": "A",
-              "quality": "minor"
+              ]
             }
           ],
           "duration": 16,
@@ -139,51 +101,39 @@
           "chords": [
             {
               "chordName": "C",
-              "chordType": "major",
               "notes": [
                 "C3",
                 "E4",
                 "G4",
                 "C5"
-              ],
-              "rootNote": "C",
-              "quality": "major"
+              ]
             },
             {
               "chordName": "G",
-              "chordType": "major",
               "notes": [
                 "G2",
                 "B3",
                 "D4",
                 "G4"
-              ],
-              "rootNote": "G",
-              "quality": "major"
+              ]
             },
             {
               "chordName": "Am",
-              "chordType": "minor",
               "notes": [
                 "A2",
                 "C4",
                 "E4",
                 "A4"
-              ],
-              "rootNote": "A",
-              "quality": "minor"
+              ]
             },
             {
               "chordName": "F",
-              "chordType": "major",
               "notes": [
                 "F2",
                 "A3",
                 "C4",
                 "F4"
-              ],
-              "rootNote": "F",
-              "quality": "major"
+              ]
             }
           ],
           "duration": 32,
@@ -195,51 +145,39 @@
           "chords": [
             {
               "chordName": "F",
-              "chordType": "major",
               "notes": [
                 "F2",
                 "A3",
                 "C4",
                 "F4"
-              ],
-              "rootNote": "F",
-              "quality": "major"
+              ]
             },
             {
               "chordName": "C",
-              "chordType": "major",
               "notes": [
                 "C3",
                 "E4",
                 "G4",
                 "C5"
-              ],
-              "rootNote": "C",
-              "quality": "major"
+              ]
             },
             {
               "chordName": "G",
-              "chordType": "major",
               "notes": [
                 "G2",
                 "B3",
                 "D4",
                 "G4"
-              ],
-              "rootNote": "G",
-              "quality": "major"
+              ]
             },
             {
               "chordName": "Am",
-              "chordType": "minor",
               "notes": [
                 "A2",
                 "C4",
                 "E4",
                 "A4"
-              ],
-              "rootNote": "A",
-              "quality": "minor"
+              ]
             }
           ],
           "duration": 32,
@@ -251,51 +189,39 @@
           "chords": [
             {
               "chordName": "C",
-              "chordType": "major",
               "notes": [
                 "C3",
                 "E4",
                 "G4",
                 "C5"
-              ],
-              "rootNote": "C",
-              "quality": "major"
+              ]
             },
             {
               "chordName": "G",
-              "chordType": "major",
               "notes": [
                 "G2",
                 "B3",
                 "D4",
                 "G4"
-              ],
-              "rootNote": "G",
-              "quality": "major"
+              ]
             },
             {
               "chordName": "Am",
-              "chordType": "minor",
               "notes": [
                 "A2",
                 "C4",
                 "E4",
                 "A4"
-              ],
-              "rootNote": "A",
-              "quality": "minor"
+              ]
             },
             {
               "chordName": "F",
-              "chordType": "major",
               "notes": [
                 "F2",
                 "A3",
                 "C4",
                 "F4"
-              ],
-              "rootNote": "F",
-              "quality": "major"
+              ]
             }
           ],
           "duration": 32,
@@ -307,51 +233,39 @@
           "chords": [
             {
               "chordName": "Dm",
-              "chordType": "minor",
               "notes": [
                 "D3",
                 "F4",
                 "A4",
                 "D5"
-              ],
-              "rootNote": "D",
-              "quality": "minor"
+              ]
             },
             {
               "chordName": "G",
-              "chordType": "major",
               "notes": [
                 "G2",
                 "B3",
                 "D4",
                 "G4"
-              ],
-              "rootNote": "G",
-              "quality": "major"
+              ]
             },
             {
               "chordName": "Em",
-              "chordType": "minor",
               "notes": [
                 "E3",
                 "G4",
                 "B4",
                 "E5"
-              ],
-              "rootNote": "E",
-              "quality": "minor"
+              ]
             },
             {
               "chordName": "Am",
-              "chordType": "minor",
               "notes": [
                 "A2",
                 "C4",
                 "E4",
                 "A4"
-              ],
-              "rootNote": "A",
-              "quality": "minor"
+              ]
             }
           ],
           "duration": 24,
@@ -363,51 +277,39 @@
           "chords": [
             {
               "chordName": "F",
-              "chordType": "major",
               "notes": [
                 "F2",
                 "A3",
                 "C4",
                 "F4"
-              ],
-              "rootNote": "F",
-              "quality": "major"
+              ]
             },
             {
               "chordName": "C",
-              "chordType": "major",
               "notes": [
                 "C3",
                 "E4",
                 "G4",
                 "C5"
-              ],
-              "rootNote": "C",
-              "quality": "major"
+              ]
             },
             {
               "chordName": "G",
-              "chordType": "major",
               "notes": [
                 "G2",
                 "B3",
                 "D4",
                 "G4"
-              ],
-              "rootNote": "G",
-              "quality": "major"
+              ]
             },
             {
               "chordName": "Am",
-              "chordType": "minor",
               "notes": [
                 "A2",
                 "C4",
                 "E4",
                 "A4"
-              ],
-              "rootNote": "A",
-              "quality": "minor"
+              ]
             }
           ],
           "duration": 40,
@@ -419,39 +321,30 @@
           "chords": [
             {
               "chordName": "Am",
-              "chordType": "minor",
               "notes": [
                 "A2",
                 "C4",
                 "E4",
                 "A4"
-              ],
-              "rootNote": "A",
-              "quality": "minor"
+              ]
             },
             {
               "chordName": "F",
-              "chordType": "major",
               "notes": [
                 "F2",
                 "A3",
                 "C4",
                 "F4"
-              ],
-              "rootNote": "F",
-              "quality": "major"
+              ]
             },
             {
               "chordName": "C",
-              "chordType": "major",
               "notes": [
                 "C3",
                 "E4",
                 "G4",
                 "C5"
-              ],
-              "rootNote": "C",
-              "quality": "major"
+              ]
             }
           ],
           "duration": 19,
@@ -461,7 +354,6 @@
       "songTitle": "Digital Dreams",
       "description": "A complete electronic pop song showcasing the Song Builder's professional features",
       "masterVolume": 85,
-      "songDuration": 195,
       "timeSignature": "4/4"
     },
     "relationships": {

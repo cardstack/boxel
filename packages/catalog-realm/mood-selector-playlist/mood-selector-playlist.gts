@@ -1,4 +1,4 @@
-import { fn } from '@ember/helper';
+import { fn, concat } from '@ember/helper';
 import {
   CardDef,
   FieldDef,
@@ -16,6 +16,7 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import MusicIcon from '@cardstack/boxel-icons/music';
 import { PlaylistCard } from '../playlist/playlist';
+import { htmlSafe } from '@ember/template';
 
 export class MoodField extends FieldDef {
   static displayName = 'Mood';
@@ -30,7 +31,10 @@ export class MoodField extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class='mood-field-display' style='background: {{@model.gradient}}'>
+      <div
+        class='mood-field-display'
+        style={{htmlSafe (concat 'background: ' @model.gradient)}}
+      >
         <span class='mood-emoji'>{{@model.emoji}}</span>
         <div class='mood-info'>
           <h4>{{@model.name}}</h4>
@@ -118,11 +122,12 @@ class MoodSelectorPlaylistEmbedded extends Component<
   <template>
     <div class='embedded-mood-selector'>
       {{#if this.selectedMood}}
-        <!-- Selected Mood State -->
         <div class='embedded-result'>
           <div
             class='mood-result-embedded'
-            style='background: {{this.selectedMood.gradient}}'
+            style={{htmlSafe
+              (concat 'background: ' this.selectedMood.gradient)
+            }}
           >
             <div class='result-content-embedded'>
               {{#if this.isAnimating}}
@@ -156,7 +161,6 @@ class MoodSelectorPlaylistEmbedded extends Component<
           </div>
         </div>
       {{else}}
-        <!-- Mood Selection State -->
         <div class='embedded-selection'>
           <header class='selector-header-embedded'>
             <h3>{{if
@@ -176,11 +180,11 @@ class MoodSelectorPlaylistEmbedded extends Component<
               {{#each this.moods as |mood|}}
                 <button
                   class='mood-card-embedded'
-                  style='background: {{mood.gradient}}'
+                  style={{htmlSafe (concat 'background: ' mood.gradient)}}
                   {{on 'click' (fn this.selectMood mood)}}
                 >
                   <div class='mood-emoji-embedded'>{{mood.emoji}}</div>
-                  <h4 class='mood-name-embedded'>{{mood.name}}</h4>
+                  <p class='mood-name-embedded'>{{mood.name}}</p>
                   <p class='mood-description-embedded'>{{mood.description}}</p>
                 </button>
               {{/each}}
@@ -197,7 +201,6 @@ class MoodSelectorPlaylistEmbedded extends Component<
     <style scoped>
       .embedded-mood-selector {
         width: 100%;
-        min-height: 400px;
         font-family:
           'Inter',
           -apple-system,
@@ -266,7 +269,7 @@ class MoodSelectorPlaylistEmbedded extends Component<
         font-size: 0.875rem;
         font-weight: 600;
         margin: 0 0 0.25rem 0;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        text-shadow: 0 1px 2px rgba(73, 39, 39, 0.2);
       }
 
       .mood-description-embedded {
@@ -462,11 +465,12 @@ class MoodSelectorPlaylistIsolated extends Component<
     <div class='stage'>
       <div class='mood-selector-mat'>
         {{#if this.selectedMood}}
-          <!-- Selected Mood State -->
           <div class='selected-mood-view'>
             <div
               class='mood-result'
-              style='background: {{this.selectedMood.gradient}}'
+              style={{htmlSafe
+                (concat 'background: ' this.selectedMood.gradient)
+              }}
             >
               <div class='result-content'>
                 {{#if this.isAnimating}}
@@ -499,7 +503,6 @@ class MoodSelectorPlaylistIsolated extends Component<
             </div>
           </div>
         {{else}}
-          <!-- Mood Selection State -->
           <div class='mood-selection'>
             <header class='selector-header'>
               <h1>{{if
@@ -519,16 +522,16 @@ class MoodSelectorPlaylistIsolated extends Component<
                 {{#each this.moods as |mood|}}
                   <button
                     class='mood-card'
-                    style='background: {{mood.gradient}}'
+                    style={{htmlSafe (concat 'background: ' mood.gradient)}}
                     {{on 'click' (fn this.selectMood mood)}}
                   >
                     <div class='mood-emoji'>{{mood.emoji}}</div>
-                    <h3 class='mood-name'>{{mood.name}}</h3>
+                    <p class='mood-name'>{{mood.name}}</p>
                     <p class='mood-description'>{{mood.description}}</p>
 
                     <div
                       class='mood-card-glow'
-                      style='background: {{mood.color}}'
+                      style={{htmlSafe (concat 'background: ' mood.color)}}
                     ></div>
                   </button>
                 {{/each}}

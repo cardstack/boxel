@@ -629,6 +629,10 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
     );
   }
 
+  getInstrumentVolume = (instrument: string): number => {
+    return (this.volumes as any)[instrument] || 0;
+  };
+
   // ¹⁰⁶ Get current kit sound parameters from loaded kit card - properly parse JSON strings
   get currentKitParams() {
     try {
@@ -1265,13 +1269,14 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
 
   <template>
     <div class='beat-maker-card'>
-      <!-- Header with Enhanced Controls -->
       <div class='beat-maker-header'>
         <div class='header-left'>
           <h3>Beat Maker Studio</h3>
           <div class='kit-selector'>
             {{#if (gt this.availableKits.length 0)}}
+              <label for='kit-selector' class='sr-only'>Select drum kit</label>
               <select
+                id='kit-selector'
                 class='kit-dropdown'
                 {{on 'change' this.handleKitSelection}}
               >
@@ -1290,8 +1295,9 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
 
         <div class='header-controls'>
           <div class='control-group'>
-            <label class='control-label'>BPM</label>
+            <label class='control-label' for='bpm-slider'>BPM</label>
             <input
+              id='bpm-slider'
               type='range'
               min='60'
               max='200'
@@ -1303,8 +1309,9 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
           </div>
 
           <div class='control-group'>
-            <label class='control-label'>Swing</label>
+            <label class='control-label' for='swing-slider'>Swing</label>
             <input
+              id='swing-slider'
               type='range'
               min='0'
               max='100'
@@ -1316,8 +1323,9 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
           </div>
 
           <div class='control-group'>
-            <label class='control-label'>Master</label>
+            <label class='control-label' for='master-volume'>Master</label>
             <input
+              id='master-volume'
               type='range'
               min='0'
               max='100'
@@ -1346,10 +1354,13 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
         </div>
       </div>
 
-      <!-- Dynamic Pattern Library -->
       {{#if (gt this.availablePatterns.length 0)}}
         <div class='presets-section'>
-          <label class='presets-label'>Pattern Library:</label>
+          <div class='presets-header'>
+            <label class='presets-label'>Pattern Library</label>
+            <div class='patterns-count'>{{this.availablePatterns.length}}
+              patterns</div>
+          </div>
           <div class='preset-buttons'>
             {{#each this.availablePatterns as |patternCard|}}
               <Button
@@ -1361,19 +1372,24 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
                   }}'
                 {{on 'click' (fn this.loadPreset patternCard)}}
               >
-                {{patternCard.patternName}}
-                {{#if patternCard.genre}}
-                  <span class='preset-genre'>({{patternCard.genre}})</span>
-                {{/if}}
+                <div class='preset-content'>
+                  <span class='preset-name'>{{patternCard.patternName}}</span>
+                  <div class='preset-meta'>
+                    {{#if patternCard.genre}}
+                      <span class='preset-genre'>{{patternCard.genre}}</span>
+                    {{/if}}
+                    {{#if patternCard.bpm}}
+                      <span class='preset-bpm'>{{patternCard.bpm}} BPM</span>
+                    {{/if}}
+                  </div>
+                </div>
               </Button>
             {{/each}}
           </div>
         </div>
       {{/if}}
 
-      <!-- Enhanced Beat Grid -->
       <div class='beat-grid'>
-        <!-- Step Numbers -->
         <div class='step-numbers'>
           <div class='instrument-controls'></div>
           {{#each (array 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16) as |stepNum|}}
@@ -1398,16 +1414,17 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
             <div class='instrument-controls'>
               <div class='instrument-label'>{{instrument}}</div>
               <div class='instrument-volume'>
+                <label class='sr-only' for='volume-slider'>Volume</label>
                 <input
+                  id='volume-slider'
                   type='range'
                   min='0'
                   max='100'
-                  value='{{get this.volumes instrument}}'
+                  value='{{this.getInstrumentVolume instrument}}'
                   class='volume-slider-small'
                   {{on 'input' (fn this.updateVolume instrument)}}
                 />
-                <span class='volume-value'>{{get
-                    this.volumes
+                <span class='volume-value'>{{this.getInstrumentVolume
                     instrument
                   }}</span>
               </div>
@@ -1481,7 +1498,6 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
         {{/each}}
       </div>
 
-      <!-- Enhanced Footer -->
       <div class='beat-maker-footer'>
         <div class='footer-info'>
           <span class='kit-info'>{{this.selectedKit}}</span>
@@ -1637,57 +1653,171 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
         height: 20px;
       }
 
-      /* Presets Section */
+      /* Compact Pattern Library */
       .presets-section {
+        margin-bottom: 1rem;
+        padding: 0.75rem;
+        background: rgba(55, 65, 81, 0.3);
+        border-radius: 6px;
+        border: 1px solid rgba(75, 85, 99, 0.2);
+      }
+
+      .presets-header {
         display: flex;
+        justify-content: space-between;
         align-items: center;
-        gap: 0.75rem;
-        margin-bottom: 1.5rem;
-        padding: 1rem;
-        background: rgba(55, 65, 81, 0.5);
-        border-radius: 8px;
+        margin-bottom: 0.5rem;
       }
 
       .presets-label {
         font-size: 0.75rem;
-        color: #9ca3af;
+        color: #e5e7eb;
         font-weight: 600;
-        min-width: 60px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .patterns-count {
+        font-size: 0.625rem;
+        color: #f59e0b;
+        font-weight: 600;
+        font-family: 'JetBrains Mono', monospace;
+        background: rgba(245, 158, 11, 0.1);
+        padding: 0.125rem 0.375rem;
+        border-radius: 3px;
+        border: 1px solid rgba(245, 158, 11, 0.2);
       }
 
       .preset-buttons {
         display: flex;
         gap: 0.5rem;
+        overflow-x: auto;
+        padding-bottom: 0.25rem;
+        max-height: 60px;
+      }
+
+      /* Horizontal scroll for pattern list */
+      .preset-buttons::-webkit-scrollbar {
+        height: 3px;
+      }
+
+      .preset-buttons::-webkit-scrollbar-track {
+        background: rgba(55, 65, 81, 0.3);
+        border-radius: 2px;
+      }
+
+      .preset-buttons::-webkit-scrollbar-thumb {
+        background: rgba(245, 158, 11, 0.5);
+        border-radius: 2px;
+      }
+
+      .preset-buttons::-webkit-scrollbar-thumb:hover {
+        background: rgba(245, 158, 11, 0.7);
       }
 
       .preset-button {
-        padding: 0.375rem 0.75rem;
-        background: #4b5563;
+        flex: 0 0 auto;
+        min-width: 120px;
+        padding: 0.5rem 0.75rem;
+        background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
         border: 1px solid #6b7280;
         color: white;
         border-radius: 6px;
-        font-size: 0.75rem;
-        font-weight: 500;
         cursor: pointer;
         transition: all 0.2s ease;
+        position: relative;
+        white-space: nowrap;
       }
 
       .preset-button:hover {
-        background: #374151;
-        border-color: #60a5fa;
-        color: #60a5fa;
+        background: linear-gradient(135deg, #4b5563 0%, #374151 100%);
+        border-color: #f59e0b;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
       }
 
       .preset-button.active-pattern {
-        background: #3b82f6;
-        border-color: #3b82f6;
+        background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+        border-color: #f59e0b;
         color: white;
+        box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+      }
+
+      .preset-button.active-pattern::before {
+        content: '';
+        position: absolute;
+        top: 0.25rem;
+        right: 0.25rem;
+        width: 6px;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 50%;
+        animation: active-pulse 2s ease-in-out infinite;
+      }
+
+      @keyframes active-pulse {
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.7;
+          transform: scale(1.2);
+        }
+      }
+
+      .preset-content {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        text-align: left;
+      }
+
+      .preset-name {
+        font-size: 0.75rem;
+        font-weight: 600;
+        line-height: 1.2;
+        color: inherit;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .preset-meta {
+        display: flex;
+        gap: 0.25rem;
+        flex-wrap: wrap;
       }
 
       .preset-genre {
-        font-size: 0.625rem;
-        opacity: 0.8;
-        margin-left: 0.25rem;
+        font-size: 0.5rem;
+        background: rgba(156, 163, 175, 0.2);
+        color: #d1d5db;
+        padding: 0.0625rem 0.25rem;
+        border-radius: 2px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+      }
+
+      .preset-bpm {
+        font-size: 0.5rem;
+        background: rgba(34, 211, 238, 0.2);
+        color: #22d3ee;
+        padding: 0.0625rem 0.25rem;
+        border-radius: 2px;
+        font-weight: 600;
+        font-family: 'JetBrains Mono', monospace;
+      }
+
+      .preset-button.active-pattern .preset-genre {
+        background: rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.9);
+      }
+
+      .preset-button.active-pattern .preset-bpm {
+        background: rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.9);
       }
 
       .kit-fallback {
@@ -1888,6 +2018,17 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
         animation: pulse 1.5s ease-in-out infinite;
       }
 
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        border: 0;
+      }
+
       @keyframes pulse {
         0%,
         100% {
@@ -1932,6 +2073,72 @@ class BeatMakerIsolated extends Component<typeof BeatMakerCard> {
           width: 24px;
           height: 20px;
         }
+
+        /* Mobile Pattern Library */
+        .presets-section {
+          padding: 0.5rem;
+          margin-bottom: 0.75rem;
+        }
+
+        .presets-header {
+          flex-direction: row;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 0.375rem;
+        }
+
+        .presets-label {
+          font-size: 0.625rem;
+        }
+
+        .patterns-count {
+          font-size: 0.5rem;
+          padding: 0.0625rem 0.25rem;
+        }
+
+        .preset-buttons {
+          gap: 0.375rem;
+          max-height: 50px;
+        }
+
+        .preset-button {
+          min-width: 100px;
+          padding: 0.375rem 0.5rem;
+        }
+
+        .preset-name {
+          font-size: 0.625rem;
+        }
+
+        .preset-genre,
+        .preset-bpm {
+          font-size: 0.4375rem;
+          padding: 0.0625rem 0.1875rem;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .preset-button {
+          min-width: 90px;
+          padding: 0.25rem 0.375rem;
+        }
+
+        .preset-name {
+          font-size: 0.5625rem;
+        }
+
+        .patterns-count {
+          font-size: 0.4375rem;
+          padding: 0.0625rem 0.1875rem;
+        }
+      }
+
+      /* Large screen optimizations */
+      @media (min-width: 1200px) {
+        .preset-buttons {
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          max-height: 220px;
+        }
       }
     </style>
   </template>
@@ -1958,4 +2165,708 @@ export class BeatMakerCard extends CardDef {
   });
 
   static isolated = BeatMakerIsolated;
+
+  static fitted = class Fitted extends Component<typeof this> {
+    <template>
+      <div class='fitted-container'>
+        <div class='badge-format'>
+          <div class='badge-content'>
+            <div class='badge-icon'>
+              <div class='beat-grid-mini'>
+                <div class='beat-dot active'></div>
+                <div class='beat-dot'></div>
+                <div class='beat-dot active'></div>
+                <div class='beat-dot'></div>
+              </div>
+            </div>
+            <div class='badge-info'>
+              <div class='badge-title'>Beat Maker</div>
+              <div class='badge-stats'>{{if @model.bpm @model.bpm 120}}
+                BPM</div>
+            </div>
+          </div>
+        </div>
+
+        <div class='strip-format'>
+          <div class='strip-content'>
+            <div class='strip-visual'>
+              <div class='beat-visualizer'>
+                <div class='beat-bar active'></div>
+                <div class='beat-bar'></div>
+                <div class='beat-bar active'></div>
+                <div class='beat-bar'></div>
+                <div class='beat-bar active'></div>
+              </div>
+            </div>
+            <div class='strip-info'>
+              <div class='strip-title'>Beat Maker Studio</div>
+              <div class='strip-description'>{{if @model.bpm @model.bpm 120}}
+                BPM •
+                {{if
+                  @model.currentKit.kitName
+                  @model.currentKit.kitName
+                  (if @model.instrumentKit @model.instrumentKit '808 Analog')
+                }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class='tile-format'>
+          <div class='tile-header'>
+            <div class='tile-visual'>
+              <div class='sequencer-grid'>
+                <div class='seq-row'>
+                  <div class='seq-step active'></div>
+                  <div class='seq-step'></div>
+                  <div class='seq-step'></div>
+                  <div class='seq-step active'></div>
+                </div>
+                <div class='seq-row'>
+                  <div class='seq-step'></div>
+                  <div class='seq-step active'></div>
+                  <div class='seq-step'></div>
+                  <div class='seq-step'></div>
+                </div>
+                <div class='seq-row'>
+                  <div class='seq-step active'></div>
+                  <div class='seq-step active'></div>
+                  <div class='seq-step active'></div>
+                  <div class='seq-step active'></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class='tile-content'>
+            <h3 class='tile-title'>Beat Maker</h3>
+            <div class='tile-specs'>
+              <div class='spec-row'>
+                <span class='spec-label'>BPM:</span>
+                <span class='spec-value'>{{if @model.bpm @model.bpm 120}}</span>
+              </div>
+              <div class='spec-row'>
+                <span class='spec-label'>Kit:</span>
+                <span class='spec-value'>{{if
+                    @model.currentKit.kitName
+                    @model.currentKit.kitName
+                    (if @model.instrumentKit @model.instrumentKit '808')
+                  }}</span>
+              </div>
+              <div class='spec-row'>
+                <span class='spec-label'>Patterns:</span>
+                <span
+                  class='spec-value'
+                >{{@model.availablePatterns.length}}</span>
+              </div>
+            </div>
+            <div class='tile-features'>
+              <div class='feature-tag'>16-Step</div>
+              <div class='feature-tag'>Synth</div>
+              <div class='feature-tag'>Swing</div>
+            </div>
+          </div>
+        </div>
+
+        <div class='card-format'>
+          <div class='card-header'>
+            <div class='card-info'>
+              <h3 class='card-title'>Beat Maker Studio</h3>
+              <p class='card-description'>Professional drum machine with dynamic
+                synthesis and pattern sequencing</p>
+            </div>
+            <div class='card-visual'>
+              <div class='drum-machine'>
+                <div class='machine-display'>
+                  <div class='display-line'>
+                    <span class='param-label'>BPM</span>
+                    <span class='param-value'>{{if
+                        @model.bpm
+                        @model.bpm
+                        120
+                      }}</span>
+                  </div>
+                  <div class='display-line'>
+                    <span class='param-label'>KIT</span>
+                    <span class='param-value'>{{if
+                        @model.currentKit.kitName
+                        @model.currentKit.kitName
+                        (if @model.instrumentKit @model.instrumentKit '808')
+                      }}</span>
+                  </div>
+                </div>
+                <div class='machine-controls'>
+                  <div class='control-knob'></div>
+                  <div class='control-knob'></div>
+                  <div class='control-knob'></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class='card-grid'>
+            <div class='grid-section'>
+              <div class='section-title'>Patterns</div>
+              <div class='pattern-count'>{{if
+                  @model.availablePatterns.length
+                  @model.availablePatterns.length
+                  8
+                }}
+                Available</div>
+            </div>
+            <div class='grid-section'>
+              <div class='section-title'>Drum Kits</div>
+              <div class='pattern-count'>{{if
+                  @model.availableKits.length
+                  @model.availableKits.length
+                  6
+                }}
+                Loaded</div>
+            </div>
+            <div class='grid-section'>
+              <div class='section-title'>Sequencer</div>
+              <div class='pattern-count'>16-Step Grid</div>
+            </div>
+          </div>
+          <div class='card-features'>
+            <div class='features-label'>Features:</div>
+            <div class='feature-list'>
+              <div class='feature-pill'>Dynamic Synthesis</div>
+              <div class='feature-pill'>Pattern Library</div>
+              <div class='feature-pill'>Real-time Control</div>
+              <div class='feature-pill'>Kit Management</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <style scoped>
+        .fitted-container {
+          container-type: size;
+          width: 100%;
+          height: 100%;
+          font-family: 'JetBrains Mono', 'Fira Code', monospace;
+        }
+
+        /* Hide all by default */
+        .badge-format,
+        .strip-format,
+        .tile-format,
+        .card-format {
+          display: none;
+          width: 100%;
+          height: 100%;
+          padding: clamp(0.1875rem, 2%, 0.625rem);
+          box-sizing: border-box;
+          background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+          border-radius: 12px;
+          overflow: hidden;
+        }
+
+        /* Badge Format (≤150px width, ≤169px height) */
+        @container (max-width: 150px) and (max-height: 169px) {
+          .badge-format {
+            display: flex;
+            align-items: center;
+          }
+        }
+
+        .badge-content {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          width: 100%;
+        }
+
+        .badge-icon {
+          width: 24px;
+          height: 24px;
+          flex-shrink: 0;
+        }
+
+        .beat-grid-mini {
+          display: grid;
+          grid-template-columns: repeat(2, 8px);
+          grid-template-rows: repeat(2, 8px);
+          gap: 2px;
+        }
+
+        .beat-dot {
+          width: 8px;
+          height: 8px;
+          background: rgba(245, 158, 11, 0.3);
+          border-radius: 2px;
+          transition: all 0.3s ease;
+        }
+
+        .beat-dot.active {
+          background: #f59e0b;
+          box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+          animation: beat-pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes beat-pulse {
+          0%,
+          100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.6;
+          }
+        }
+
+        .badge-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .badge-title {
+          font-size: 0.75rem;
+          font-weight: 700;
+          color: #f59e0b;
+          line-height: 1.2;
+          margin-bottom: 0.125rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .badge-stats {
+          font-size: 0.625rem;
+          color: rgba(255, 255, 255, 0.7);
+          font-family: 'JetBrains Mono', monospace;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        /* Strip Format (151px-399px width, ≤169px height) */
+        @container (min-width: 151px) and (max-height: 169px) {
+          .strip-format {
+            display: flex;
+            align-items: center;
+          }
+        }
+
+        .strip-content {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          width: 100%;
+        }
+
+        .strip-visual {
+          flex-shrink: 0;
+        }
+
+        .beat-visualizer {
+          display: flex;
+          align-items: flex-end;
+          gap: 2px;
+          height: 24px;
+          width: 32px;
+        }
+
+        .beat-bar {
+          width: 4px;
+          background: rgba(245, 158, 11, 0.3);
+          border-radius: 2px;
+          transition: all 0.3s ease;
+        }
+
+        .beat-bar:nth-child(1) {
+          height: 60%;
+        }
+        .beat-bar:nth-child(2) {
+          height: 30%;
+        }
+        .beat-bar:nth-child(3) {
+          height: 80%;
+        }
+        .beat-bar:nth-child(4) {
+          height: 40%;
+        }
+        .beat-bar:nth-child(5) {
+          height: 70%;
+        }
+
+        .beat-bar.active {
+          background: #f59e0b;
+          animation: bar-pulse 1.2s ease-in-out infinite;
+        }
+
+        @keyframes bar-pulse {
+          0%,
+          100% {
+            transform: scaleY(1);
+            opacity: 1;
+          }
+          50% {
+            transform: scaleY(1.4);
+            opacity: 0.8;
+          }
+        }
+
+        .strip-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .strip-title {
+          font-size: 0.875rem;
+          font-weight: 700;
+          color: #f59e0b;
+          line-height: 1.2;
+          margin-bottom: 0.25rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .strip-description {
+          font-size: 0.75rem;
+          color: rgba(255, 255, 255, 0.7);
+          font-family: 'JetBrains Mono', monospace;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .strip-badge {
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          padding: 0.25rem 0.5rem;
+          background: rgba(239, 68, 68, 0.2);
+          border: 1px solid #ef4444;
+          border-radius: 6px;
+          font-size: 0.625rem;
+          font-weight: 700;
+          color: #ef4444;
+          font-family: 'JetBrains Mono', monospace;
+          flex-shrink: 0;
+        }
+
+        .rec-indicator {
+          width: 6px;
+          height: 6px;
+          background: #ef4444;
+          border-radius: 50%;
+          animation: rec-pulse 1s ease-in-out infinite;
+        }
+
+        @keyframes rec-pulse {
+          0%,
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.4;
+            transform: scale(1.2);
+          }
+        }
+
+        /* Tile Format (≤399px width, ≥170px height) */
+        @container (max-width: 399px) and (min-height: 170px) {
+          .tile-format {
+            display: flex;
+            flex-direction: column;
+          }
+        }
+
+        .tile-header {
+          position: relative;
+          height: 70px;
+          background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 1rem;
+          border-radius: 8px;
+        }
+
+        .sequencer-grid {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+        }
+
+        .seq-row {
+          display: flex;
+          gap: 3px;
+        }
+
+        .seq-step {
+          width: 8px;
+          height: 8px;
+          background: rgba(255, 255, 255, 0.3);
+          border-radius: 2px;
+          transition: all 0.3s ease;
+        }
+
+        .seq-step.active {
+          background: rgba(255, 255, 255, 0.9);
+          box-shadow: 0 0 4px rgba(255, 255, 255, 0.8);
+        }
+
+        .tile-badge {
+          position: absolute;
+          top: 0.5rem;
+          right: 0.5rem;
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          padding: 0.25rem 0.5rem;
+          background: rgba(255, 255, 255, 0.2);
+          backdrop-filter: blur(8px);
+          border-radius: 6px;
+          font-size: 0.625rem;
+          font-weight: 700;
+          color: white;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        .live-dot {
+          width: 6px;
+          height: 6px;
+          background: #22d3ee;
+          border-radius: 50%;
+          animation: live-pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes live-pulse {
+          0%,
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.6;
+            transform: scale(1.2);
+          }
+        }
+
+        .tile-content {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .tile-title {
+          font-size: 1rem;
+          font-weight: 700;
+          color: #f59e0b;
+          margin: 0;
+          line-height: 1.2;
+        }
+
+        .tile-specs {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .spec-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .spec-label {
+          font-size: 0.75rem;
+          color: rgba(255, 255, 255, 0.7);
+          font-weight: 500;
+        }
+
+        .spec-value {
+          font-size: 0.875rem;
+          color: #f59e0b;
+          font-weight: 600;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        .tile-features {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.375rem;
+          margin-top: auto;
+        }
+
+        .feature-tag {
+          padding: 0.25rem 0.5rem;
+          background: rgba(245, 158, 11, 0.2);
+          border: 1px solid #f59e0b;
+          color: #f59e0b;
+          font-size: 0.625rem;
+          font-weight: 600;
+          border-radius: 4px;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Card Format (≥400px width, ≥170px height) */
+        @container (min-width: 400px) and (min-height: 170px) {
+          .card-format {
+            display: flex;
+            flex-direction: column;
+          }
+        }
+
+        .card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+          padding: 1rem;
+          border-radius: 8px;
+          margin-bottom: 1rem;
+        }
+
+        .card-info {
+          flex: 1;
+        }
+
+        .card-title {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: white;
+          margin: 0 0 0.5rem 0;
+          line-height: 1.2;
+        }
+
+        .card-description {
+          font-size: 0.875rem;
+          color: rgba(255, 255, 255, 0.9);
+          margin: 0;
+          line-height: 1.4;
+        }
+
+        .drum-machine {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          padding: 0.75rem;
+          background: rgba(15, 23, 42, 0.7);
+          backdrop-filter: blur(8px);
+          border-radius: 8px;
+          min-width: 120px;
+        }
+
+        .machine-display {
+          background: #0f172a;
+          padding: 0.5rem;
+          border-radius: 4px;
+          border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .display-line {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 0.25rem;
+        }
+
+        .display-line:last-child {
+          margin-bottom: 0;
+        }
+
+        .param-label {
+          font-size: 0.625rem;
+          color: rgba(255, 255, 255, 0.6);
+          font-weight: 600;
+        }
+
+        .param-value {
+          font-size: 0.75rem;
+          color: #f59e0b;
+          font-weight: 700;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        .machine-controls {
+          display: flex;
+          justify-content: space-between;
+          gap: 0.25rem;
+        }
+
+        .control-knob {
+          width: 16px;
+          height: 16px;
+          background: #374151;
+          border: 2px solid #f59e0b;
+          border-radius: 50%;
+          position: relative;
+        }
+
+        .control-knob::after {
+          content: '';
+          position: absolute;
+          top: 2px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 2px;
+          height: 6px;
+          background: #f59e0b;
+          border-radius: 1px;
+        }
+
+        .card-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 1rem;
+          margin-bottom: 1rem;
+          background: rgba(248, 250, 252, 0.1);
+          border-radius: 8px;
+          padding: 1rem;
+        }
+
+        .grid-section {
+          text-align: center;
+        }
+
+        .section-title {
+          font-size: 0.75rem;
+          color: rgba(255, 255, 255, 0.7);
+          font-weight: 600;
+          margin-bottom: 0.5rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .pattern-count {
+          font-size: 1rem;
+          color: #f59e0b;
+          font-weight: 700;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        .card-features {
+          margin-top: auto;
+        }
+
+        .features-label {
+          font-size: 0.75rem;
+          color: rgba(255, 255, 255, 0.7);
+          font-weight: 600;
+          margin-bottom: 0.5rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .feature-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+        }
+
+        .feature-pill {
+          padding: 0.375rem 0.75rem;
+          background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+          color: white;
+          font-size: 0.75rem;
+          font-weight: 600;
+          border-radius: 6px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+      </style>
+    </template>
+  };
 }

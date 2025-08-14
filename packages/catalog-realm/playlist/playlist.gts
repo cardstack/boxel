@@ -1,4 +1,4 @@
-import { fn } from '@ember/helper';
+import { fn, concat } from '@ember/helper';
 import {
   CardDef,
   field,
@@ -17,6 +17,7 @@ import { and, gt, eq, add } from '@cardstack/boxel-ui/helpers';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
+import { htmlSafe } from '@ember/template';
 import { SongCard } from '../song/song';
 
 class PlaylistEmbedded extends Component<typeof PlaylistCard> {
@@ -123,10 +124,10 @@ class PlaylistEmbedded extends Component<typeof PlaylistCard> {
         overflow: hidden;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
         transition: all 0.2s ease;
-        height: 180px; /* Reduced height for 2-column grid */
+        height: 180px;
         display: flex;
         flex-direction: column;
-        width: 100%; /* Ensure proper width for 2-column layout */
+        width: 100%;
       }
 
       .compact-playlist-card:hover {
@@ -137,7 +138,7 @@ class PlaylistEmbedded extends Component<typeof PlaylistCard> {
       .compact-cover {
         position: relative;
         width: 100%;
-        height: 140px; /* Reduced height for more compact layout */
+        height: 140px;
         overflow: hidden;
       }
 
@@ -454,7 +455,6 @@ class PlaylistIsolated extends Component<typeof PlaylistCard> {
   <template>
     <div class='stage'>
       <div class='playlist-mat'>
-        <!-- Playlist Header -->
         <header class='playlist-header'>
           <div class='playlist-cover-section'>
             {{#if @model.coverImageUrl}}
@@ -505,7 +505,6 @@ class PlaylistIsolated extends Component<typeof PlaylistCard> {
           </div>
         </header>
 
-        <!-- Playback Controls -->
         <div class='playback-controls'>
           <button
             class='control-btn play-btn {{if this.isPlaying "playing" ""}}'
@@ -583,7 +582,6 @@ class PlaylistIsolated extends Component<typeof PlaylistCard> {
           </button>
         </div>
 
-        <!-- Current Song Info -->
         {{#if this.currentSong}}
           <div class='current-song-info'>
             <div class='current-song-details'>
@@ -607,7 +605,7 @@ class PlaylistIsolated extends Component<typeof PlaylistCard> {
                   <div class='progress-bar-track'>
                     <div
                       class='progress-bar-fill'
-                      style='width: {{this.progress}}%'
+                      style={{htmlSafe (concat 'width: ' this.progress '%')}}
                     ></div>
                   </div>
                 </div>
@@ -616,13 +614,12 @@ class PlaylistIsolated extends Component<typeof PlaylistCard> {
           </div>
         {{/if}}
 
-        <!-- Songs List -->
         {{#if (gt @model.songs.length 0)}}
           <div class='songs-section'>
             <h2 class='songs-header'>Songs</h2>
             <div class='songs-list'>
               {{#each @model.songs as |song index|}}
-                <div
+                <button
                   class='song-item
                     {{if (eq index this.currentSongIndex) "current" ""}}'
                   {{on 'click' (fn this.playSongAtIndex index)}}
@@ -656,7 +653,7 @@ class PlaylistIsolated extends Component<typeof PlaylistCard> {
                     <div class='song-artist-list'>{{song.artist}}</div>
                   </div>
                   <div class='song-duration-list'>{{song.duration}}</div>
-                </div>
+                </button>
               {{/each}}
             </div>
           </div>
@@ -918,13 +915,15 @@ class PlaylistIsolated extends Component<typeof PlaylistCard> {
       }
 
       .song-item {
+        width: 100%;
         display: flex;
         align-items: center;
         gap: 1rem;
         padding: 0.75rem;
         border-radius: 8px;
         cursor: pointer;
-        transition: background-color 0.2s ease;
+        border: none;
+        background: none;
       }
 
       .song-item:hover {

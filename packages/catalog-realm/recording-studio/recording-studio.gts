@@ -11,9 +11,10 @@ import MusicIcon from '@cardstack/boxel-icons/music';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
+import { fn, concat } from '@ember/helper';
 import { gt, eq } from '@cardstack/boxel-ui/helpers';
 import { Button } from '@cardstack/boxel-ui/components';
+import { htmlSafe } from '@ember/template';
 
 class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
   // ⁵² Basic recording studio - simplified to match actual functionality
@@ -54,6 +55,7 @@ class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
 
   @tracked recordedChunks: Blob[] = [];
   @tracked currentPlayingId: string | null = null;
+  finalRecordingDuration: number = 0;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -117,11 +119,22 @@ class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
         }
       };
 
+      // Start the actual recording
+      this.mediaRecorder.start();
+
       // ⁵⁸ Update model values when recording starts
       if (this.args.model) {
         this.args.model.isRecording = true;
       }
+
+      // Clear any existing timer and reset
+      if (this.recordingTimer) {
+        clearInterval(this.recordingTimer);
+        this.recordingTimer = null;
+      }
       this.currentTime = 0;
+      this.recordingTime = '00:00';
+      this.finalRecordingDuration = 0;
 
       // Start recording timer and update model
       this.recordingTimer = window.setInterval(() => {
@@ -140,6 +153,9 @@ class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
   }
 
   stopRecording() {
+    // Store the final recording duration before resetting
+    this.finalRecordingDuration = this.currentTime;
+
     if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
       // Request data before stopping to ensure chunks are captured
       this.mediaRecorder.requestData();
@@ -155,6 +171,10 @@ class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
       clearInterval(this.recordingTimer);
       this.recordingTimer = null;
     }
+
+    // Reset timer display
+    this.currentTime = 0;
+    this.recordingTime = '00:00';
 
     // ⁶⁸ Clean up Web Audio API nodes
     if (this.gainNode) {
@@ -290,7 +310,7 @@ class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
       name: recordingName,
       blob: blob,
       url: url,
-      duration: this.currentTime,
+      duration: this.finalRecordingDuration,
     };
 
     this.recordings = [...this.recordings, recording];
@@ -299,33 +319,25 @@ class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
 
   <template>
     <div class='recording-studio'>
-      <!-- Studio Header -->
       <div class='studio-header'>
         <div class='project-info'>
           <h3>Simple Audio Recorder</h3>
+          <label for='project-name-input' class='sr-only'>Project Name</label>
           <input
             type='text'
             value={{this.projectName}}
             class='project-name-input'
+            id='project-name-input'
             placeholder='Project Name'
             {{on 'input' this.updateProjectName}}
           />
         </div>
 
         <div class='recording-status'>
-          {{#if this.isRecording}}
-            <span class='status-indicator recording'>
-              <div class='record-dot'></div>
-              REC
-            </span>
-          {{else}}
-            <span class='status-indicator ready'>READY</span>
-          {{/if}}
           <span class='recording-time'>{{this.recordingTime}}</span>
         </div>
       </div>
 
-      <!-- Simple Recording Controls -->
       <div class='recording-controls'>
         <Button
           class='record-btn {{if this.isRecording "recording" ""}}'
@@ -344,11 +356,11 @@ class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
           {{/if}}
         </Button>
 
-        <!-- Basic Audio Controls -->
         <div class='audio-controls'>
           <div class='control-group'>
-            <label class='control-label'>Microphone Gain</label>
+            <label class='control-label' for='microphone-gain'>Microphone Gain</label>
             <input
+              id='microphone-gain'
               type='range'
               min='0'
               max='100'
@@ -360,8 +372,9 @@ class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
           </div>
 
           <div class='control-group'>
-            <label class='control-label'>Playback Volume</label>
+            <label class='control-label' for='playback-volume'>Playback Volume</label>
             <input
+              id='playback-volume'
               type='range'
               min='0'
               max='100'
@@ -374,7 +387,6 @@ class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
         </div>
       </div>
 
-      <!-- Recording Info -->
       <div class='recording-info'>
         <div class='info-item'>
           <svg
@@ -403,47 +415,71 @@ class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
         </div>
       </div>
 
-      <!-- Recordings Library -->
       {{#if (gt this.recordings.length 0)}}
         <div class='recordings-library'>
           <h4>Your Recordings</h4>
           <div class='recordings-list'>
             {{#each this.recordings as |recording|}}
               <div class='recording-item'>
-                <div class='recording-info'>
-                  <div class='recording-name'>{{recording.name}}</div>
-                  <div class='recording-duration'>Duration:
-                    {{recording.duration}}
-                    seconds</div>
+                <div class='recording-header'>
+                  <div class='recording-info'>
+                    <div class='recording-name'>{{recording.name}}</div>
+                    <div class='recording-meta'>
+                      <span class='recording-duration'>
+                        <svg
+                          viewBox='0 0 24 24'
+                          fill='currentColor'
+                          class='duration-icon'
+                        >
+                          <circle cx='12' cy='12' r='10' />
+                          <polyline points='12,6 12,12 16,14' />
+                        </svg>
+                        {{recording.duration}}s
+                      </span>
+                      <span class='recording-size'>WebM Audio</span>
+                    </div>
+                  </div>
+                  <div class='recording-waveform'>
+                    <div class='waveform-bars'>
+                      <div class='bar'></div>
+                      <div class='bar'></div>
+                      <div class='bar'></div>
+                      <div class='bar'></div>
+                      <div class='bar'></div>
+                      <div class='bar'></div>
+                      <div class='bar'></div>
+                      <div class='bar'></div>
+                    </div>
+                  </div>
                 </div>
 
-                <div class='recording-controls'>
+                <div class='recording-actions'>
                   {{#if (eq this.currentPlayingId recording.id)}}
                     <button
-                      class='recording-btn stop-btn'
+                      class='action-btn primary stop-btn'
                       title='Stop playback'
                       {{on 'click' this.stopPlayback}}
                     >
                       <svg viewBox='0 0 24 24' fill='currentColor'>
-                        <rect x='6' y='6' width='12' height='12' />
+                        <rect x='6' y='6' width='12' height='12' rx='2' />
                       </svg>
-                      Stop
+                      <span>Stop</span>
                     </button>
                   {{else}}
                     <button
-                      class='recording-btn play-btn'
+                      class='action-btn primary play-btn'
                       title='Play recording'
                       {{on 'click' (fn this.playRecording recording.id)}}
                     >
                       <svg viewBox='0 0 24 24' fill='currentColor'>
                         <path d='M8 5v14l11-7z' />
                       </svg>
-                      Play
+                      <span>Play</span>
                     </button>
                   {{/if}}
 
                   <button
-                    class='recording-btn download-btn'
+                    class='action-btn secondary download-btn'
                     title='Download recording'
                     {{on 'click' (fn this.downloadRecording recording.id)}}
                   >
@@ -457,11 +493,11 @@ class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
                       <polyline points='7,10 12,15 17,10' />
                       <line x1='12' y1='15' x2='12' y2='3' />
                     </svg>
-                    Download
+                    <span>Download</span>
                   </button>
 
                   <button
-                    class='recording-btn delete-btn'
+                    class='action-btn danger delete-btn'
                     title='Delete recording'
                     {{on 'click' (fn this.deleteRecording recording.id)}}
                   >
@@ -475,8 +511,10 @@ class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
                       <path
                         d='M19,6v14a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6m3,0V4a2,2,0,0,1,2-2h4a2,2,0,0,1,2,2V6'
                       />
+                      <polyline points='10,11 10,17' />
+                      <polyline points='14,11 14,17' />
                     </svg>
-                    Delete
+                    <span>Delete</span>
                   </button>
                 </div>
               </div>
@@ -733,6 +771,17 @@ class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
         flex-shrink: 0;
       }
 
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        border: 0;
+      }
+
       /* Empty State */
       .empty-state {
         text-align: center;
@@ -776,13 +825,42 @@ class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
       }
 
       .recording-item {
+        background: linear-gradient(145deg, #1e293b 0%, #334155 100%);
+        border-radius: 16px;
+        padding: 1.5rem;
+        border: 1px solid rgba(148, 163, 184, 0.1);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .recording-item::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: linear-gradient(90deg, #10b981, #3b82f6, #8b5cf6);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+
+      .recording-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        border-color: rgba(148, 163, 184, 0.2);
+      }
+
+      .recording-item:hover::before {
+        opacity: 1;
+      }
+
+      .recording-header {
         display: flex;
         justify-content: space-between;
-        align-items: center;
-        padding: 0.75rem;
-        background: #1e293b;
-        border-radius: 8px;
-        border: 1px solid #374151;
+        align-items: flex-start;
+        margin-bottom: 1rem;
       }
 
       .recording-info {
@@ -790,72 +868,195 @@ class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
       }
 
       .recording-name {
-        font-size: 0.875rem;
-        font-weight: 600;
-        color: #e5e7eb;
-        margin-bottom: 0.25rem;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #f1f5f9;
+        margin-bottom: 0.5rem;
+        line-height: 1.4;
+      }
+
+      .recording-meta {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
       }
 
       .recording-duration {
-        font-size: 0.75rem;
-        color: #9ca3af;
-      }
-
-      .recording-controls {
-        display: flex;
-        gap: 0.5rem;
-      }
-
-      .recording-btn {
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        border: 1px solid #4b5563;
-        background: transparent;
-        color: #9ca3af;
-        cursor: pointer;
         display: flex;
         align-items: center;
-        justify-content: center;
-        transition: all 0.2s ease;
+        gap: 0.375rem;
+        font-size: 0.875rem;
+        color: #94a3b8;
+        font-weight: 500;
       }
 
-      .recording-btn:hover {
-        border-color: #60a5fa;
-        color: #60a5fa;
+      .duration-icon {
+        width: 14px;
+        height: 14px;
+        opacity: 0.7;
       }
 
-      .recording-btn svg {
+      .recording-size {
+        font-size: 0.75rem;
+        color: #64748b;
+        background: rgba(100, 116, 139, 0.2);
+        padding: 0.25rem 0.5rem;
+        border-radius: 12px;
+        font-weight: 500;
+      }
+
+      .recording-waveform {
+        margin-left: 1rem;
+      }
+
+      .waveform-bars {
+        display: flex;
+        align-items: end;
+        gap: 2px;
+        height: 32px;
+      }
+
+      .bar {
+        width: 3px;
+        background: linear-gradient(to top, #10b981, #34d399);
+        border-radius: 2px;
+        opacity: 0.6;
+        transition: all 0.3s ease;
+      }
+
+      .bar:nth-child(1) {
+        height: 20%;
+        animation-delay: 0s;
+      }
+      .bar:nth-child(2) {
+        height: 60%;
+        animation-delay: 0.1s;
+      }
+      .bar:nth-child(3) {
+        height: 40%;
+        animation-delay: 0.2s;
+      }
+      .bar:nth-child(4) {
+        height: 80%;
+        animation-delay: 0.3s;
+      }
+      .bar:nth-child(5) {
+        height: 30%;
+        animation-delay: 0.4s;
+      }
+      .bar:nth-child(6) {
+        height: 70%;
+        animation-delay: 0.5s;
+      }
+      .bar:nth-child(7) {
+        height: 50%;
+        animation-delay: 0.6s;
+      }
+      .bar:nth-child(8) {
+        height: 35%;
+        animation-delay: 0.7s;
+      }
+
+      .recording-item:hover .bar {
+        opacity: 1;
+        animation: waveform-pulse 1.5s ease-in-out infinite;
+      }
+
+      @keyframes waveform-pulse {
+        0%,
+        100% {
+          transform: scaleY(1);
+        }
+        50% {
+          transform: scaleY(1.3);
+        }
+      }
+
+      .recording-actions {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: flex-end;
+      }
+
+      .action-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.625rem 1rem;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        font-size: 0.875rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .action-btn svg {
         width: 16px;
         height: 16px;
+        transition: transform 0.2s ease;
       }
 
-      .play-btn:hover {
-        background: #10b981;
-        border-color: #10b981;
+      .action-btn:hover svg {
+        transform: scale(1.1);
+      }
+
+      .action-btn.primary {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
         color: white;
+        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+      }
+
+      .action-btn.primary:hover {
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+      }
+
+      .action-btn.secondary {
+        background: rgba(71, 85, 105, 0.5);
+        color: #cbd5e1;
+        border-color: rgba(148, 163, 184, 0.2);
+      }
+
+      .action-btn.secondary:hover {
+        background: rgba(71, 85, 105, 0.8);
+        color: #f1f5f9;
+        border-color: rgba(148, 163, 184, 0.3);
+        transform: translateY(-1px);
+      }
+
+      .action-btn.danger {
+        background: rgba(220, 38, 38, 0.1);
+        color: #fca5a5;
+        border-color: rgba(220, 38, 38, 0.3);
+      }
+
+      .action-btn.danger:hover {
+        background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
       }
 
       .stop-btn {
-        background: #ef4444;
-        border-color: #ef4444;
-        color: white;
+        background: linear-gradient(
+          135deg,
+          #f59e0b 0%,
+          #d97706 100%
+        ) !important;
+        box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3) !important;
       }
 
       .stop-btn:hover {
-        background: #dc2626;
-      }
-
-      .download-btn:hover {
-        background: #3b82f6;
-        border-color: #3b82f6;
-        color: white;
-      }
-
-      .delete-btn:hover {
-        background: #ef4444;
-        border-color: #ef4444;
-        color: white;
+        background: linear-gradient(
+          135deg,
+          #d97706 0%,
+          #b45309 100%
+        ) !important;
+        box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4) !important;
       }
 
       /* Responsive Design */
@@ -898,13 +1099,28 @@ class RecordingStudioIsolated extends Component<typeof RecordingStudioCard> {
         }
 
         .recording-item {
+          padding: 1rem;
+        }
+
+        .recording-header {
           flex-direction: column;
           gap: 0.75rem;
           align-items: stretch;
         }
 
-        .recording-controls {
+        .recording-waveform {
+          margin-left: 0;
+          margin-top: 0.5rem;
+        }
+
+        .recording-actions {
           justify-content: center;
+          flex-wrap: wrap;
+        }
+
+        .action-btn {
+          flex: 1;
+          min-width: 80px;
         }
       }
     </style>
@@ -947,31 +1163,6 @@ export class RecordingStudioCard extends CardDef {
                 'No Project'
               }}</p>
           </div>
-
-          <div
-            class='recording-badge
-              {{if @model.isRecording "recording" "ready"}}'
-          >
-            {{#if @model.isRecording}}
-              <div class='record-dot'></div>
-              REC
-            {{else}}
-              <svg
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <path
-                  d='M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z'
-                />
-                <path d='M19 10v2a7 7 0 0 1-14 0v-2' />
-                <line x1='12' y1='19' x2='12' y2='23' />
-                <line x1='8' y1='23' x2='16' y2='23' />
-              </svg>
-              READY
-            {{/if}}
-          </div>
         </div>
 
         <div class='studio-details'>
@@ -986,7 +1177,11 @@ export class RecordingStudioCard extends CardDef {
               <div class='level-bar'>
                 <div
                   class='level-fill'
-                  style='width: {{if @model.inputGain @model.inputGain 50}}%'
+                  style={{htmlSafe
+                    (concat
+                      'width: ' (if @model.inputGain @model.inputGain 50) '%'
+                    )
+                  }}
                 ></div>
               </div>
               <span class='level-value'>{{if
@@ -1001,11 +1196,13 @@ export class RecordingStudioCard extends CardDef {
               <div class='level-bar'>
                 <div
                   class='level-fill'
-                  style='width: {{if
-                    @model.outputVolume
-                    @model.outputVolume
-                    75
-                  }}%'
+                  style={{htmlSafe
+                    (concat
+                      'width: '
+                      (if @model.outputVolume @model.outputVolume 75)
+                      '%'
+                    )
+                  }}
                 ></div>
               </div>
               <span class='level-value'>{{if
@@ -1229,5 +1426,892 @@ export class RecordingStudioCard extends CardDef {
       </style>
     </template>
   };
-  isolated = RecordingStudioIsolated;
+
+  static fitted = class Fitted extends Component<typeof this> {
+    <template>
+      <div class='fitted-container'>
+        <div class='badge-format'>
+          <div class='badge-content'>
+            <div class='badge-icon'>
+              <div class='mixing-console-mini'>
+                <div class='console-led recording'></div>
+                <div class='mini-fader'></div>
+                <div class='mini-fader'></div>
+              </div>
+            </div>
+            <div class='badge-info'>
+              <div class='badge-title'>Studio</div>
+              <div class='badge-stats'>WebM</div>
+            </div>
+          </div>
+        </div>
+
+        <div class='strip-format'>
+          <div class='strip-content'>
+            <div class='strip-visual'>
+              <div class='channel-strips'>
+                <div class='channel-strip'>
+                  <div class='strip-led'></div>
+                  <div class='strip-fader'></div>
+                  <div class='level-meter'>
+                    <div
+                      class='level-fill'
+                      style={{htmlSafe
+                        (concat
+                          'height: '
+                          (if @model.inputGain @model.inputGain 50)
+                          '%'
+                        )
+                      }}
+                    ></div>
+                  </div>
+                </div>
+                <div class='channel-strip'>
+                  <div class='strip-led active'></div>
+                  <div class='strip-fader'></div>
+                  <div class='level-meter'>
+                    <div
+                      class='level-fill'
+                      style={{htmlSafe
+                        (concat
+                          'height: '
+                          (if @model.outputVolume @model.outputVolume 75)
+                          '%'
+                        )
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class='strip-info'>
+              <div class='strip-title'>Recording Studio</div>
+              <div class='strip-description'>{{if
+                  @model.projectName
+                  @model.projectName
+                  'New Project'
+                }}
+                • Professional audio</div>
+            </div>
+            <div class='strip-badge'>
+              <div class='rec-indicator'></div>
+              REC
+            </div>
+          </div>
+        </div>
+
+        <div class='tile-format'>
+          <div class='tile-header'>
+            <div class='tile-visual'>
+              <div class='mixing-board'>
+                <div class='board-display'>
+                  <div class='display-dot recording'></div>
+                  <div class='display-dot ready'></div>
+                  <div class='display-dot standby'></div>
+                </div>
+                <div class='board-channels'>
+                  <div class='board-channel'>
+                    <div class='channel-led'></div>
+                    <div class='channel-fader'></div>
+                  </div>
+                  <div class='board-channel'>
+                    <div class='channel-led active'></div>
+                    <div class='channel-fader'></div>
+                  </div>
+                  <div class='board-channel'>
+                    <div class='channel-led'></div>
+                    <div class='channel-fader'></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class='tile-content'>
+            <h3 class='tile-title'>Recording Studio</h3>
+            <div class='tile-specs'>
+              <div class='spec-row'>
+                <span class='spec-label'>Project:</span>
+                <span class='spec-value'>{{if
+                    @model.projectName
+                    @model.projectName
+                    'Untitled'
+                  }}</span>
+              </div>
+              <div class='spec-row'>
+                <span class='spec-label'>Status:</span>
+                <span class='spec-value'>{{if
+                    @model.isRecording
+                    'Recording'
+                    'Standby'
+                  }}</span>
+              </div>
+              <div class='spec-row'>
+                <span class='spec-label'>Format:</span>
+                <span class='spec-value'>WebM Audio</span>
+              </div>
+            </div>
+            <div class='tile-features'>
+              <div class='feature-tag'>Real-time</div>
+              <div class='feature-tag'>Gain Control</div>
+              <div class='feature-tag'>Export</div>
+            </div>
+          </div>
+        </div>
+
+        <div class='card-format'>
+          <div class='card-header'>
+            <div class='card-info'>
+              <h3 class='card-title'>Professional Recording Studio</h3>
+              <p class='card-description'>Multi-track audio recording with
+                real-time monitoring and professional-grade controls</p>
+            </div>
+            <div class='card-visual'>
+              <div class='studio-console'>
+                <div class='console-display'>
+                  <div class='display-line'>
+                    <span class='param-label'>PROJECT</span>
+                    <span class='param-value'>{{if
+                        @model.projectName
+                        @model.projectName
+                        'NEW'
+                      }}</span>
+                  </div>
+                </div>
+                <div class='console-leds'>
+                  <div
+                    class='led-indicator
+                      {{if @model.isRecording "recording" ""}}'
+                  ></div>
+                  <div class='led-indicator ready'></div>
+                  <div class='led-indicator standby'></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class='card-meters'>
+            <div class='meter-section'>
+              <div class='meter-label'>Input Gain</div>
+              <div class='level-meter-vertical'>
+                <div
+                  class='meter-fill'
+                  style={{htmlSafe
+                    (concat
+                      'height: ' (if @model.inputGain @model.inputGain 50) '%'
+                    )
+                  }}
+                ></div>
+              </div>
+              <div class='meter-value'>{{if
+                  @model.inputGain
+                  @model.inputGain
+                  50
+                }}%</div>
+            </div>
+            <div class='meter-section'>
+              <div class='meter-label'>Output Volume</div>
+              <div class='level-meter-vertical'>
+                <div
+                  class='meter-fill'
+                  style={{htmlSafe
+                    (concat
+                      'height: '
+                      (if @model.outputVolume @model.outputVolume 75)
+                      '%'
+                    )
+                  }}
+                ></div>
+              </div>
+              <div class='meter-value'>{{if
+                  @model.outputVolume
+                  @model.outputVolume
+                  75
+                }}%</div>
+            </div>
+            <div class='meter-section'>
+              <div class='meter-label'>Signal Level</div>
+              <div class='level-meter-vertical'>
+                <div
+                  class='meter-fill'
+                  style={{htmlSafe
+                    (concat 'height: ' (if @model.isRecording 85 25) '%')
+                  }}
+                ></div>
+              </div>
+              <div class='meter-value'>{{if @model.isRecording 85 25}}%</div>
+            </div>
+          </div>
+          <div class='card-features'>
+            <div class='features-label'>Studio Capabilities:</div>
+            <div class='feature-list'>
+              <div class='feature-pill'>Real-time Monitoring</div>
+              <div class='feature-pill'>Gain Control</div>
+              <div class='feature-pill'>WebM Export</div>
+              <div class='feature-pill'>Multi-track Ready</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <style scoped>
+        .fitted-container {
+          container-type: size;
+          width: 100%;
+          height: 100%;
+          font-family:
+            'Inter',
+            -apple-system,
+            sans-serif;
+        }
+
+        /* Hide all by default */
+        .badge-format,
+        .strip-format,
+        .tile-format,
+        .card-format {
+          display: none;
+          width: 100%;
+          height: 100%;
+          padding: clamp(0.1875rem, 2%, 0.625rem);
+          box-sizing: border-box;
+          background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+          border-radius: 12px;
+          overflow: hidden;
+        }
+
+        /* Badge Format (≤150px width, ≤169px height) */
+        @container (max-width: 150px) and (max-height: 169px) {
+          .badge-format {
+            display: flex;
+            align-items: center;
+          }
+        }
+
+        .badge-content {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          width: 100%;
+        }
+
+        .badge-icon {
+          width: 24px;
+          height: 24px;
+          flex-shrink: 0;
+        }
+
+        .mixing-console-mini {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 2px;
+          background: #1a1a2e;
+          border-radius: 3px;
+          padding: 3px;
+        }
+
+        .console-led {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #374151;
+        }
+
+        .console-led.recording {
+          background: #dc2626;
+          animation: led-pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes led-pulse {
+          0%,
+          100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.4;
+          }
+        }
+
+        .mini-fader {
+          width: 8px;
+          height: 12px;
+          background: #4b5563;
+          border-radius: 1px;
+          border: 1px solid #6b7280;
+        }
+
+        .badge-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .badge-title {
+          font-size: 0.75rem;
+          font-weight: 700;
+          color: #dc2626;
+          line-height: 1.2;
+          margin-bottom: 0.125rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .badge-stats {
+          font-size: 0.625rem;
+          color: rgba(255, 255, 255, 0.7);
+          font-family: 'JetBrains Mono', monospace;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        /* Strip Format (151px-399px width, ≤169px height) */
+        @container (min-width: 151px) and (max-height: 169px) {
+          .strip-format {
+            display: flex;
+            align-items: center;
+          }
+        }
+
+        .strip-content {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          width: 100%;
+        }
+
+        .strip-visual {
+          flex-shrink: 0;
+        }
+
+        .channel-strips {
+          display: flex;
+          gap: 3px;
+          background: #1a1a2e;
+          border-radius: 4px;
+          padding: 4px;
+        }
+
+        .channel-strip {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 2px;
+        }
+
+        .strip-led {
+          width: 4px;
+          height: 4px;
+          background: #374151;
+          border-radius: 50%;
+        }
+
+        .strip-led.active {
+          background: #dc2626;
+          animation: led-pulse 1.5s ease-in-out infinite;
+        }
+
+        .strip-fader {
+          width: 6px;
+          height: 12px;
+          background: #4b5563;
+          border-radius: 1px;
+          border: 1px solid #6b7280;
+        }
+
+        .level-meter {
+          width: 4px;
+          height: 12px;
+          background: #374151;
+          border-radius: 1px;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .level-meter .level-fill {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          background: linear-gradient(
+            0deg,
+            #10b981 0%,
+            #22d3ee 40%,
+            #fbbf24 70%,
+            #f97316 90%,
+            #dc2626 100%
+          );
+          transition: height 0.3s ease;
+          border: 1px solid rgba(220, 38, 38, 0.3);
+          border-radius: 1px;
+          animation: meter-glow 2s ease-in-out infinite;
+        }
+
+        @keyframes meter-glow {
+          0%,
+          100% {
+            box-shadow: 0 0 2px rgba(16, 185, 129, 0.3);
+          }
+          50% {
+            box-shadow: 0 0 4px rgba(220, 38, 38, 0.6);
+          }
+        }
+
+        .strip-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .strip-title {
+          font-size: 0.875rem;
+          font-weight: 700;
+          color: #dc2626;
+          line-height: 1.2;
+          margin-bottom: 0.25rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .strip-description {
+          font-size: 0.75rem;
+          color: rgba(255, 255, 255, 0.7);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .strip-badge {
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          padding: 0.25rem 0.5rem;
+          background: rgba(220, 38, 38, 0.2);
+          border: 1px solid #dc2626;
+          border-radius: 6px;
+          font-size: 0.625rem;
+          font-weight: 700;
+          color: #dc2626;
+          font-family: 'JetBrains Mono', monospace;
+          flex-shrink: 0;
+        }
+
+        .rec-indicator {
+          width: 6px;
+          height: 6px;
+          background: #dc2626;
+          border-radius: 50%;
+          animation: rec-pulse 1s ease-in-out infinite;
+        }
+
+        @keyframes rec-pulse {
+          0%,
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.4;
+            transform: scale(1.2);
+          }
+        }
+
+        /* Tile Format (≤399px width, ≥170px height) */
+        @container (max-width: 399px) and (min-height: 170px) {
+          .tile-format {
+            display: flex;
+            flex-direction: column;
+          }
+        }
+
+        .tile-header {
+          position: relative;
+          height: 70px;
+          background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 1rem;
+          border-radius: 8px;
+          overflow: hidden;
+        }
+
+        .tile-header::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: -100%;
+          width: 100%;
+          height: 100%;
+          background: linear-gradient(
+            90deg,
+            transparent 0%,
+            rgba(255, 255, 255, 0.2) 50%,
+            transparent 100%
+          );
+          animation: studio-sweep 3s ease-in-out infinite;
+        }
+
+        @keyframes studio-sweep {
+          0% {
+            left: -100%;
+          }
+          100% {
+            left: 100%;
+          }
+        }
+
+        .mixing-board {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .board-display {
+          display: flex;
+          gap: 3px;
+          margin-bottom: 0.25rem;
+        }
+
+        .display-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.3);
+        }
+
+        .display-dot.recording {
+          background: rgba(255, 255, 255, 0.9);
+          animation: led-pulse 1.5s ease-in-out infinite;
+        }
+
+        .display-dot.ready {
+          background: rgba(34, 211, 238, 0.8);
+        }
+
+        .display-dot.standby {
+          background: rgba(255, 255, 255, 0.4);
+        }
+
+        .board-channels {
+          display: flex;
+          gap: 4px;
+        }
+
+        .board-channel {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 2px;
+          animation: channel-activity 2s ease-in-out infinite;
+        }
+
+        .board-channel:nth-child(2) {
+          animation-delay: 0.3s;
+        }
+
+        .board-channel:nth-child(3) {
+          animation-delay: 0.6s;
+        }
+
+        @keyframes channel-activity {
+          0%,
+          70%,
+          100% {
+            opacity: 1;
+          }
+          35% {
+            opacity: 0.7;
+          }
+        }
+
+        .channel-led {
+          width: 4px;
+          height: 4px;
+          background: rgba(255, 255, 255, 0.3);
+          border-radius: 50%;
+        }
+
+        .channel-led.active {
+          background: rgba(255, 255, 255, 0.9);
+          animation: led-activity 1.5s ease-in-out infinite;
+        }
+
+        @keyframes led-activity {
+          0%,
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.6;
+            transform: scale(1.2);
+          }
+        }
+
+        .channel-fader {
+          width: 6px;
+          height: 16px;
+          background: rgba(255, 255, 255, 0.6);
+          border-radius: 1px;
+          border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+
+        .tile-content {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .tile-title {
+          font-size: 1rem;
+          font-weight: 700;
+          color: #dc2626;
+          margin: 0;
+          line-height: 1.2;
+        }
+
+        .tile-specs {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .spec-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .spec-label {
+          font-size: 0.75rem;
+          color: rgba(255, 255, 255, 0.7);
+          font-weight: 500;
+        }
+
+        .spec-value {
+          font-size: 0.875rem;
+          color: #dc2626;
+          font-weight: 600;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        .tile-features {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.375rem;
+          margin-top: auto;
+        }
+
+        .feature-tag {
+          padding: 0.25rem 0.5rem;
+          background: rgba(220, 38, 38, 0.2);
+          border: 1px solid #dc2626;
+          color: #dc2626;
+          font-size: 0.625rem;
+          font-weight: 600;
+          border-radius: 4px;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Card Format (≥400px width, ≥170px height) */
+        @container (min-width: 400px) and (min-height: 170px) {
+          .card-format {
+            display: flex;
+            flex-direction: column;
+          }
+        }
+
+        .card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+          padding: 1rem;
+          border-radius: 8px;
+          margin-bottom: 1rem;
+        }
+
+        .card-info {
+          flex: 1;
+        }
+
+        .card-title {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: white;
+          margin: 0 0 0.5rem 0;
+          line-height: 1.2;
+        }
+
+        .card-description {
+          font-size: 0.875rem;
+          color: rgba(255, 255, 255, 0.9);
+          margin: 0;
+          line-height: 1.4;
+        }
+
+        .studio-console {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          padding: 0.75rem;
+          background: rgba(15, 23, 42, 0.7);
+          backdrop-filter: blur(8px);
+          border-radius: 8px;
+          min-width: 120px;
+        }
+
+        .console-display {
+          background: #0f172a;
+          padding: 0.5rem;
+          border-radius: 4px;
+          border: 1px solid rgba(220, 38, 38, 0.3);
+        }
+
+        .display-line {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 0.25rem;
+        }
+
+        .display-line:last-child {
+          margin-bottom: 0;
+        }
+
+        .param-label {
+          font-size: 0.625rem;
+          color: rgba(255, 255, 255, 0.6);
+          font-weight: 600;
+        }
+
+        .param-value {
+          font-size: 0.75rem;
+          color: #dc2626;
+          font-weight: 700;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        .console-leds {
+          display: flex;
+          justify-content: space-between;
+          gap: 0.25rem;
+        }
+
+        .led-indicator {
+          width: 8px;
+          height: 8px;
+          background: #374151;
+          border: 1px solid #dc2626;
+          border-radius: 50%;
+          transition: all 0.3s ease;
+        }
+
+        .led-indicator.recording {
+          background: #dc2626;
+          box-shadow: 0 0 8px rgba(220, 38, 38, 0.6);
+          animation: led-pulse 1.5s ease-in-out infinite;
+        }
+
+        .led-indicator.ready {
+          background: #22d3ee;
+          box-shadow: 0 0 4px rgba(34, 211, 238, 0.4);
+        }
+
+        .led-indicator.standby {
+          background: #374151;
+        }
+
+        .card-meters {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 1rem;
+          margin-bottom: 1rem;
+          background: rgba(248, 250, 252, 0.1);
+          border-radius: 8px;
+          padding: 1rem;
+        }
+
+        .meter-section {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .meter-label {
+          font-size: 0.75rem;
+          color: rgba(255, 255, 255, 0.7);
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          text-align: center;
+        }
+
+        .level-meter-vertical {
+          width: 8px;
+          height: 40px;
+          background: #374151;
+          border-radius: 4px;
+          overflow: hidden;
+          position: relative;
+        }
+
+        .meter-fill {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          background: linear-gradient(
+            0deg,
+            #10b981 0%,
+            #fbbf24 60%,
+            #dc2626 100%
+          );
+          border-radius: 4px;
+          transition: height 0.3s ease;
+        }
+
+        .meter-value {
+          font-size: 0.75rem;
+          color: #dc2626;
+          font-weight: 600;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        .card-features {
+          margin-top: auto;
+        }
+
+        .features-label {
+          font-size: 0.75rem;
+          color: rgba(255, 255, 255, 0.7);
+          font-weight: 600;
+          margin-bottom: 0.5rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .feature-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+        }
+
+        .feature-pill {
+          padding: 0.375rem 0.75rem;
+          background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+          color: white;
+          font-size: 0.75rem;
+          font-weight: 600;
+          border-radius: 6px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+      </style>
+    </template>
+  };
+
+  static isolated = RecordingStudioIsolated;
 }
