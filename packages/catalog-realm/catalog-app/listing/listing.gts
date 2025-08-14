@@ -50,7 +50,10 @@ import { Tag } from './tag';
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
 
-  allRealmsInfoResource = commandData(this, GetAllRealmMetasCommand);
+  allRealmsInfoResource = commandData<typeof GetAllRealmMetasResult>(
+    this,
+    GetAllRealmMetasCommand,
+  );
 
   get writableRealms(): { name: string; url: string; iconURL?: string }[] {
     const commandResource = this.allRealmsInfoResource;

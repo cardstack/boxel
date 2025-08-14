@@ -47,17 +47,25 @@ export class CommandExecutionState<CardResultType extends CardDefConstructor>
 }
 
 /**
- * Data loading abstraction for commands - provides reactive state and automatic context handling.
- *
+ * Data loading abstraction for commands
  * @example
  * ```typescript
- * const commandResource = commandData(this, GetAllRealmMetasCommand, undefined);
- * if (commandResource.current?.isSuccess) {
- *   console.log(commandResource.current.result);
- * }
+ * // call example no input
+ * allRealmsInfoResource = commandData<typeof GetAllRealmMetasResult>(
+ *   this,
+ *   GetAllRealmMetasCommand,
+ * );
+ * // call example with reactive arg
+ * searchResource = commandData<
+ *   typeof SearchCardsByTypeAndTitleInput,
+ *   typeof SearchCardsResult
+ * >(this, SearchCardsByTypeAndTitleCommand, () => {
+ *   return {
+ *     title: this.args.model.titleSearch,
+ *   };
+ * });
  * ```
  */
-
 export function commandData<CardResultType extends CardDefConstructor>(
   parent: { args: { context?: CardContext | undefined } },
   commandClass: new (
@@ -94,7 +102,6 @@ export function commandData<
     >();
     let commandContext = parent.args.context?.commandContext;
     if (!commandContext) {
-      //TODO: maybe strengthen type by saying commandContext is always there
       state.setError(new Error('no context'));
       return state;
     }
