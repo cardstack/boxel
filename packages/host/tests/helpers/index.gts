@@ -881,3 +881,112 @@ export const cardInfo = {
   thumbnailURL: null,
   notes: null,
 };
+
+// UI interaction helpers for acceptance tests
+
+/**
+ * Verifies that a specific submode is active in the submode switcher
+ */
+export async function verifySubmode(assert: Assert, submode: string) {
+  await waitFor(`[data-test-submode-switcher=${submode}]`);
+  assert.dom(`[data-test-submode-switcher=${submode}]`).exists();
+}
+
+/**
+ * Toggles the file browser tree panel open/closed
+ */
+export async function toggleFileTree() {
+  await waitFor('[data-test-file-browser-toggle]');
+  await click('[data-test-file-browser-toggle]');
+}
+
+// File tree navigation and verification helpers for acceptance tests
+
+/**
+ * Opens a directory path in the file tree by clicking through the folder hierarchy
+ */
+export async function openDir(assert: Assert, path: string) {
+  const isFilePath = !path.endsWith('/');
+  const pathToProcess = isFilePath
+    ? path.substring(0, path.lastIndexOf('/'))
+    : path;
+
+  const pathSegments = pathToProcess
+    .split('/')
+    .filter((segment) => segment.length > 0);
+
+  let currentPath = '';
+
+  for (const segment of pathSegments) {
+    currentPath = currentPath ? `${currentPath}${segment}/` : `${segment}/`;
+
+    let selector = `[data-test-directory="${currentPath}"] .icon`;
+    await waitFor(selector);
+    let element = document.querySelector(selector);
+
+    if ((element as HTMLElement)?.classList.contains('closed')) {
+      await click(`[data-test-directory="${currentPath}"]`);
+      // Wait for the folder to open
+      await waitFor(`${selector}.open`);
+    }
+
+    assert.dom(selector).hasClass('open');
+  }
+
+  let finalSelector = `[data-test-directory="${pathToProcess}"] .icon`;
+  await waitFor(finalSelector);
+  let finalElement = document.querySelector(finalSelector);
+  let dirName = finalElement?.getAttribute('data-test-directory');
+  return dirName;
+}
+
+/**
+ * Verifies a folder with UUID pattern exists in the file tree and validates the UUID
+ */
+export async function verifyFolderWithUUIDInFileTree(
+  assert: Assert,
+  dirNamePrefix: string, // name without UUID
+) {
+  await waitFor(`[data-test-directory^="${dirNamePrefix}-"]`);
+  const element = document.querySelector(
+    `[data-test-directory^="${dirNamePrefix}-"]`,
+  );
+  const dirName = element?.getAttribute('data-test-directory');
+  const uuid =
+    dirName?.replace(`${dirNamePrefix}-`, '').replace('/', '') || '';
+  const { validate: uuidValidate } = await import('uuid');
+  assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
+  return dirName;
+}
+
+/**
+ * Verifies a file exists in the file tree
+ */
+export async function verifyFileInFileTree(assert: Assert, fileName: string) {
+  const fileSelector = `[data-test-file="${fileName}"]`;
+  await waitFor(fileSelector);
+  assert.dom(fileSelector).exists();
+}
+
+/**
+ * Verifies a JSON file with UUID pattern exists in a folder and validates the UUID
+ */
+export async function verifyJSONWithUUIDInFolder(assert: Assert, dirPath: string) {
+  const fileSelector = `[data-test-file^="${dirPath}"]`;
+  await waitFor(fileSelector);
+  assert.dom(fileSelector).exists();
+  const element = document.querySelector(fileSelector);
+  const filePath = element?.getAttribute('data-test-file');
+  let parts = filePath?.split('/');
+  if (parts) {
+    let fileName = parts[parts.length - 1];
+    let uuid = fileName.replace(`.json`, '');
+    const { validate: uuidValidate } = await import('uuid');
+    assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
+    return filePath;
+  } else {
+    throw new Error(
+      'file name shape not as expected when checking for [uuid].[extension]',
+    );
+  }
+}

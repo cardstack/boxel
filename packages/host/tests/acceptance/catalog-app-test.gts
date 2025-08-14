@@ -25,10 +25,16 @@ import { CardDef } from 'https://cardstack.com/base/card-api';
 import {
   setupLocalIndexing,
   setupOnSave,
-  testRealmURL,
+  testRealmURL as mockCatalogURL,
   setupUserSubscription,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  verifySubmode,
+  toggleFileTree,
+  openDir,
+  verifyFolderWithUUIDInFileTree,
+  verifyFileInFileTree,
+  verifyJSONWithUUIDInFolder,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -36,13 +42,14 @@ import { setupApplicationTest } from '../helpers/setup';
 import type { CardListing } from '@cardstack/catalog/listing/listing';
 
 const catalogRealmURL = 'http://localhost:4201/catalog/';
-const testRealm2URL = `http://test-realm/test2/`;
-const mortgageCalculatorCardId = `${catalogRealmURL}CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`;
-const leafletMapCardId = `${catalogRealmURL}CardListing/9b84fcb0-80f4-456e-9fb3-e9abd0ec3fcb`;
-const talkLikeAPirateCardId = `${catalogRealmURL}SkillListing/talk-like-a-pirate`;
-const calculatorTagId = `${catalogRealmURL}Tag/c1fe433a-b3df-41f4-bdcf-d98686ee42d7`;
-const apiDocumentationStubId = `${catalogRealmURL}CardListing/api-documentation`;
-const gameTagId = `${catalogRealmURL}Tag/51de249c-516a-4c4d-bd88-76e88274c483`;
+const testDestinationRealmURL = `http://test-realm/test2/`;
+// Reuse existing mock listings
+const mortgageCalculatorCardId = `${mockCatalogURL}Listing/author`; // Reuse author listing
+const leafletMapCardId = `${mockCatalogURL}Listing/author`; // Reuse author listing
+const talkLikeAPirateCardId = `${mockCatalogURL}Listing/empty-skill`; // Reuse empty-skill listing
+const calculatorTagId = `${mockCatalogURL}Tag/c1fe433a-b3df-41f4-bdcf-d98686ee42d7`; // Keep for tag tests
+const apiDocumentationStubId = `${mockCatalogURL}Listing/author`; // Reuse author listing
+const gameTagId = `${mockCatalogURL}Tag/51de249c-516a-4c4d-bd88-76e88274c483`; // Keep for tag tests
 
 const authorCardSource = `
   import { field, contains, CardDef, FieldDef } from 'https://cardstack.com/base/card-api';
@@ -92,7 +99,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [testRealmURL, testRealm2URL],
+    activeRealms: [mockCatalogURL, testDestinationRealmURL],
   });
 
   let { getRoomIds, getRoomEvents, createAndJoinRoom } = mockMatrixUtils;
@@ -105,7 +112,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     setupUserSubscription(matrixRoomId);
     // this setup test realm is pretending to be a mock catalog
     await setupAcceptanceTestRealm({
-      realmURL: testRealmURL,
+      realmURL: mockCatalogURL,
       mockMatrixUtils,
       contents: {
         'author/author.gts': authorCardSource,
@@ -120,7 +127,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: '../author',
+                module: `${mockCatalogURL}author/author`,
                 name: 'Author',
               },
             },
@@ -136,13 +143,13 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             relationships: {
               author: {
                 links: {
-                  self: `${testRealmURL}author/Author/example`,
+                  self: `${mockCatalogURL}author/Author/example`,
                 },
               },
             },
             meta: {
               adoptsFrom: {
-                module: '../blog-post',
+                module: `${mockCatalogURL}blog-post/blog-post`,
                 name: 'BlogPost',
               },
             },
@@ -154,7 +161,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             attributes: {
               ref: {
                 name: 'Author',
-                module: '../author/author',
+                module: `${mockCatalogURL}author/author`,
               },
             },
             specType: 'card',
@@ -183,12 +190,17 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             relationships: {
               'specs.0': {
                 links: {
-                  self: '../Spec/author',
+                  self: `${mockCatalogURL}Spec/author`,
                 },
               },
               'examples.0': {
                 links: {
-                  self: '../author/Author/example',
+                  self: `${mockCatalogURL}author/Author/example`,
+                },
+              },
+              'tags.0': {
+                links: {
+                  self: `${mockCatalogURL}Tag/c1fe433a-b3df-41f4-bdcf-d98686ee42d7`,
                 },
               },
             },
@@ -214,7 +226,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             relationships: {
               'skills.0': {
                 links: {
-                  self: `${catalogRealmURL}Skill/homework-grader`,
+                  self: `${mockCatalogURL}Skill/homework-grader`,
+                },
+              },
+              'tags.0': {
+                links: {
+                  self: `${mockCatalogURL}Tag/51de249c-516a-4c4d-bd88-76e88274c483`,
                 },
               },
             },
@@ -245,6 +262,34 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             },
           },
         },
+        'Tag/c1fe433a-b3df-41f4-bdcf-d98686ee42d7.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Calculator',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${catalogRealmURL}catalog-app/listing/tag`,
+                name: 'Tag',
+              },
+            },
+          },
+        },
+        'Tag/51de249c-516a-4c4d-bd88-76e88274c483.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Game',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${catalogRealmURL}catalog-app/listing/tag`,
+                name: 'Tag',
+              },
+            },
+          },
+        },
         'index.json': {
           data: {
             type: 'card',
@@ -252,7 +297,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             relationships: {
               'startHere.0': {
                 links: {
-                  self: './Listing/author',
+                  self: `${mockCatalogURL}Listing/author`,
                 },
               },
             },
@@ -274,7 +319,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
-      realmURL: testRealm2URL,
+      realmURL: testDestinationRealmURL,
       contents: {
         'index.json': {
           data: {
@@ -318,84 +363,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     assert.strictEqual(message.content.body, expectedMessage);
   }
 
-  async function verifySubmode(assert: Assert, submode: Submode) {
-    assert.dom(`[data-test-submode-switcher=${submode}]`).exists();
-  }
-
-  async function toggleFileTree() {
-    await click('[data-test-file-browser-toggle]');
-  }
-
-  //path can be directory/ or directory/file.gts
-  async function openDir(assert: Assert, path: string) {
-    const isFilePath = !path.endsWith('/');
-    const pathToProcess = isFilePath
-      ? path.substring(0, path.lastIndexOf('/'))
-      : path;
-
-    const pathSegments = pathToProcess
-      .split('/')
-      .filter((segment) => segment.length > 0);
-
-    let currentPath = '';
-
-    for (const segment of pathSegments) {
-      currentPath = currentPath ? `${currentPath}${segment}/` : `${segment}/`;
-
-      let selector = `[data-test-directory="${currentPath}"] .icon`;
-      let element = document.querySelector(selector);
-
-      if ((element as HTMLElement)?.classList.contains('closed')) {
-        await click(`[data-test-directory="${currentPath}"]`);
-      }
-
-      assert.dom(selector).hasClass('open');
-    }
-
-    let finalElement = document.querySelector(
-      `[data-test-directory="${pathToProcess}"] .icon`,
-    );
-    let dirName = finalElement?.getAttribute('data-test-directory');
-    return dirName;
-  }
-
-  async function verifyFolderWithUUIDInFileTree(
-    assert: Assert,
-    dirNamePrefix: string, //name without UUID
-  ) {
-    const element = document.querySelector(
-      `[data-test-directory^="${dirNamePrefix}-"]`,
-    );
-    const dirName = element?.getAttribute('data-test-directory');
-    const uuid =
-      dirName?.replace(`${dirNamePrefix}-`, '').replace('/', '') || '';
-    assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
-    return dirName;
-  }
-
-  async function verifyFileInFileTree(assert: Assert, fileName: string) {
-    const fileSelector = `[data-test-file="${fileName}"]`;
-    assert.dom(fileSelector).exists();
-  }
-
-  async function verifyJSONWithUUIDInFolder(assert: Assert, dirPath: string) {
-    const fileSelector = `[data-test-file^="${dirPath}"]`;
-    assert.dom(fileSelector).exists();
-    const element = document.querySelector(fileSelector);
-    const filePath = element?.getAttribute('data-test-file');
-    let parts = filePath?.split('/');
-    if (parts) {
-      let fileName = parts[parts.length - 1];
-      let uuid = fileName.replace(`.json`, '');
-      assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
-      return filePath;
-    } else {
-      throw new Error(
-        'file name shape not as expected when checking for [uuid].[extension]',
-      );
-    }
-  }
-
   async function executeCommand(
     commandClass:
       | typeof ListingUseCommand
@@ -416,19 +383,18 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
   }
 
-  module('catalog', async function (hooks) {
+  module('catalog index view', async function (hooks) {
     hooks.beforeEach(async function () {
       await visitOperatorMode({
         stacks: [
           [
             {
-              id: `${catalogRealmURL}`,
+              id: `${mockCatalogURL}index`,
               format: 'isolated',
             },
           ],
         ],
       });
-
       await waitFor('.catalog-content', { timeout: 5_000 });
       await waitFor('.showcase-center-div');
     });
@@ -455,16 +421,13 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
       skip('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
         await waitFor(
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
+          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Author"]`,
         );
         assert
           .dom(
-            `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
+            `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Author"]`,
           )
-          .containsText(
-            'Mortgage Calculator',
-            '"Mortgage Calculator" exist in listing',
-          );
+          .containsText('Author', '"Author" exist in listing');
         await verifyButtonAction(
           assert,
           `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-remix-button]`,
@@ -479,14 +442,14 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           stacks: [
             [
               {
-                id: `${testRealmURL}index`,
+                id: `${mockCatalogURL}index`,
                 format: 'isolated',
               },
             ],
           ],
         });
 
-        const listingId = testRealmURL + 'Listing/author';
+        const listingId = mockCatalogURL + 'Listing/author';
 
         await waitFor(
           `[data-test-card="${listingId}"] [data-test-card-title="Author"]`,
@@ -544,29 +507,26 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
       test('after clicking "Preview" button, the first example card opens up onto the stack', async function (assert) {
         await waitFor(
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
+          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Author"]`,
         );
         assert
           .dom(
-            `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
+            `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Author"]`,
           )
-          .containsText(
-            'Mortgage Calculator',
-            '"Mortgage Calculator" button exist in listing',
-          );
+          .containsText('Author', '"Author" button exist in listing');
         await click(
           `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
         );
         assert
           .dom(
-            `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
+            `[data-test-stack-card="${mockCatalogURL}author/Author/example"] [data-test-boxel-card-header-title]`,
           )
           .exists();
         assert
           .dom(
-            `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
+            `[data-test-stack-card="${mockCatalogURL}author/Author/example"] [data-test-boxel-card-header-title]`,
           )
-          .hasText('Mortgage Calculator - Untitled Mortgage Calculator');
+          .hasText('Author - Mike Dane');
       });
 
       test('after clicking "Use Skills" button, the skills is attached to the skill menu', async function (assert) {
@@ -598,29 +558,26 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
       test('after clicking "carousel" area, the first example card opens up onto the stack', async function (assert) {
         await waitFor(
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
+          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Author"]`,
         );
         assert
           .dom(
-            `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
+            `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Author"]`,
           )
-          .containsText(
-            'Mortgage Calculator',
-            '"Mortgage Calculator" button exist in listing',
-          );
+          .containsText('Author', '"Author" button exist in listing');
         await click(
           `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
         );
         assert
           .dom(
-            `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
+            `[data-test-stack-card="${mockCatalogURL}author/Author/example"] [data-test-boxel-card-header-title]`,
           )
           .exists();
         assert
           .dom(
-            `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
+            `[data-test-stack-card="${mockCatalogURL}author/Author/example"] [data-test-boxel-card-header-title]`,
           )
-          .hasText('Mortgage Calculator - Untitled Mortgage Calculator');
+          .hasText('Author - Mike Dane');
       });
 
       test('after clicking "Details" button, the listing details card opens up onto the stack', async function (assert) {
@@ -636,7 +593,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .dom(
             `[data-test-stack-card="${mortgageCalculatorCardId}"] [data-test-boxel-card-header-title]`,
           )
-          .hasText('CardListing - Mortgage Calculator');
+          .hasText('Listing - Author');
       });
 
       test('after clicking "info-section" area, the listing details card opens up onto the stack', async function (assert) {
@@ -652,12 +609,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .dom(
             `[data-test-stack-card="${mortgageCalculatorCardId}"] [data-test-boxel-card-header-title]`,
           )
-          .hasText('CardListing - Mortgage Calculator');
+          .hasText('Listing - Author');
       });
 
       test('no arrows and dots appear when one image exist', async function (assert) {
         await waitFor(
-          `[data-test-card="${leafletMapCardId}"] [data-test-card-title="Leaflet Map"]`,
+          `[data-test-card="${leafletMapCardId}"] [data-test-card-title="Author"]`,
         );
 
         const carouselNav = document.querySelector(
@@ -731,7 +688,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
       test('preview button appears only when examples exist', async function (assert) {
         await waitFor(
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Mortgage Calculator"]`,
+          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Author"]`,
         );
 
         const previewButton = document.querySelector(
@@ -885,7 +842,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         await click('[data-test-boxel-filter-list-button="LIFE"]');
         assert
           .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
-          .exists({ count: 12 });
+          .exists({ count: 2 });
       });
 
       skip('updates the card count correctly when filtering by a category', async function (assert) {
@@ -893,7 +850,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         await click('[data-test-boxel-filter-list-button="Health & Wellness"]');
         assert
           .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
-          .exists({ count: 2 });
+          .exists({ count: 1 });
       });
 
       skip('updates the card count correctly when filtering by a search input', async function (assert) {
@@ -917,7 +874,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .hasClass('selected');
         assert
           .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
-          .exists({ count: 2 });
+          .exists({ count: 1 });
       });
 
       test('updates the card count correctly when filtering by multiple tags', async function (assert) {
@@ -925,7 +882,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         await click(`[data-test-tag-list-pill="${gameTagId}"]`);
         assert
           .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
-          .exists({ count: 3 });
+          .exists({ count: 2 });
       });
 
       test('updates the card count correctly when multiple filters are applied together', async function (assert) {
@@ -960,7 +917,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       test('categories with null sphere fields are excluded from filter list', async function (assert) {
         // Setup: Create a category with null sphere field
         await setupAcceptanceTestRealm({
-          realmURL: testRealmURL,
+          realmURL: mockCatalogURL,
           mockMatrixUtils,
           contents: {
             'Category/category-with-null-sphere.json': {
@@ -978,7 +935,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: `${catalogRealmURL}catalog-app/listing/category`,
+                    module: `${mockCatalogURL}catalog-app/listing/category`,
                     name: 'Category',
                   },
                 },
@@ -991,7 +948,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           stacks: [
             [
               {
-                id: `${catalogRealmURL}`,
+                id: `${mockCatalogURL}`,
                 format: 'isolated',
               },
             ],
@@ -1062,18 +1019,18 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       );
       assert
         .dom(
-          `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
+          `[data-test-stack-card="${mockCatalogURL}author/Author/example"] [data-test-boxel-card-header-title]`,
         )
         .exists();
       assert
         .dom(
-          `[data-test-stack-card="${catalogRealmURL}mortgage-calculator/MortgageCalculator/example"] [data-test-boxel-card-header-title]`,
+          `[data-test-stack-card="${mockCatalogURL}author/Author/example"] [data-test-boxel-card-header-title]`,
         )
-        .hasText('Mortgage Calculator - Untitled Mortgage Calculator');
+        .hasText('Author - Mike Dane');
     });
 
     skip('display of sections when viewing listing details', async function (assert) {
-      const homeworkGraderId = `${catalogRealmURL}CardListing/cbe2c79b-60aa-4dca-bc13-82b610e31653`;
+      const homeworkGraderId = `${mockCatalogURL}CardListing/cbe2c79b-60aa-4dca-bc13-82b610e31653`;
       await visitOperatorMode({
         stacks: [
           [
@@ -1154,7 +1111,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
 
     test('remix button is disabled when remix a listing has no examples and no specs', async function (assert) {
-      const emptyListingId = `${testRealmURL}Listing/empty`;
+      const emptyListingId = `${mockCatalogURL}Listing/empty`;
       await visitOperatorMode({
         stacks: [
           [
@@ -1184,7 +1141,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
 
     test('remix button is disabled when remix a skill listing has no skills', async function (assert) {
-      const emptySkillListingId = `${testRealmURL}Listing/empty-skill`;
+      const emptySkillListingId = `${mockCatalogURL}Listing/empty-skill`;
       await visitOperatorMode({
         stacks: [
           [
@@ -1237,7 +1194,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
     module('"create"', async function () {
       test('card listing with single dependency module', async function (assert) {
-        const cardId = testRealmURL + 'author/Author/example';
+        const cardId = mockCatalogURL + 'author/Author/example';
         const commandService = getService('command-service');
         const command = new ListingCreateCommand(commandService.commandContext);
         await command.execute({
@@ -1246,7 +1203,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         await visitOperatorMode({
           submode: 'code',
           fileView: 'browser',
-          codePath: `${testRealmURL}index`,
+          codePath: `${mockCatalogURL}index`,
         });
         await verifySubmode(assert, 'code');
         const instanceFolder = 'CardListing/';
@@ -1279,7 +1236,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
 
       test('app listing with multiple dependency modules', async function (assert) {
-        const cardId = testRealmURL + 'blog-post/BlogPost/example';
+        const cardId = mockCatalogURL + 'blog-post/BlogPost/example';
         const commandService = getService('command-service');
         const command = new ListingCreateCommand(commandService.commandContext);
         await command.execute({
@@ -1288,7 +1245,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         await visitOperatorMode({
           submode: 'code',
           fileView: 'browser',
-          codePath: `${testRealmURL}index`,
+          codePath: `${mockCatalogURL}index`,
         });
         await verifySubmode(assert, 'code');
         const instanceFolder = 'AppListing/';
@@ -1325,12 +1282,16 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     module('"use"', async function () {
       skip('card listing', async function (assert) {
         const listingName = 'author';
-        const listingId = testRealmURL + 'Listing/author.json';
-        await executeCommand(ListingUseCommand, listingId, testRealm2URL);
+        const listingId = mockCatalogURL + 'Listing/author.json';
+        await executeCommand(
+          ListingUseCommand,
+          listingId,
+          testDestinationRealmURL,
+        );
         await visitOperatorMode({
           submode: 'code',
           fileView: 'browser',
-          codePath: `${testRealm2URL}index`,
+          codePath: `${testDestinationRealmURL}index`,
         });
         let outerFolder = await verifyFolderWithUUIDInFileTree(
           assert,
@@ -1349,12 +1310,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         await executeCommand(
           ListingInstallCommand,
           mortgageCalculatorCardId,
-          testRealm2URL,
+          testDestinationRealmURL,
         );
         await visitOperatorMode({
           submode: 'code',
           fileView: 'browser',
-          codePath: `${testRealm2URL}index`,
+          codePath: `${testDestinationRealmURL}index`,
         });
 
         let outerFolder = await verifyFolderWithUUIDInFileTree(
@@ -1371,18 +1332,18 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
       test('field listing', async function (assert) {
         const listingName = 'contact-link';
-        const contactLinkFieldListingCardId = `${catalogRealmURL}FieldListing/fb9494c4-0d61-4d2d-a6c0-7b16ca40b42b`;
+        const contactLinkFieldListingCardId = `${mockCatalogURL}FieldListing/fb9494c4-0d61-4d2d-a6c0-7b16ca40b42b`;
 
         await executeCommand(
           ListingInstallCommand,
           contactLinkFieldListingCardId,
-          testRealm2URL,
+          testDestinationRealmURL,
         );
 
         await visitOperatorMode({
           submode: 'code',
           fileView: 'browser',
-          codePath: `${testRealm2URL}index`,
+          codePath: `${testDestinationRealmURL}index`,
         });
 
         // contact-link-[uuid]/
@@ -1397,12 +1358,16 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
       test('skill listing', async function (assert) {
         const listingName = 'talk-like-a-pirate';
-        const listingId = `${catalogRealmURL}SkillListing/${listingName}`;
-        await executeCommand(ListingInstallCommand, listingId, testRealm2URL);
+        const listingId = `${mockCatalogURL}SkillListing/${listingName}`;
+        await executeCommand(
+          ListingInstallCommand,
+          listingId,
+          testDestinationRealmURL,
+        );
         await visitOperatorMode({
           submode: 'code',
           fileView: 'browser',
-          codePath: `${testRealm2URL}index`,
+          codePath: `${testDestinationRealmURL}index`,
         });
 
         let outerFolder = await verifyFolderWithUUIDInFileTree(
@@ -1417,11 +1382,15 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     module('"remix"', async function () {
       test('card listing: installs the card and redirects to code mode with persisted playground selection for first example successfully', async function (assert) {
         const listingName = 'author';
-        const listingId = `${testRealmURL}Listing/${listingName}`;
+        const listingId = `${mockCatalogURL}Listing/${listingName}`;
         await visitOperatorMode({
           stacks: [[]],
         });
-        await executeCommand(ListingRemixCommand, listingId, testRealm2URL);
+        await executeCommand(
+          ListingRemixCommand,
+          listingId,
+          testDestinationRealmURL,
+        );
         await settled();
         await verifySubmode(assert, 'code');
         await toggleFileTree();
@@ -1444,8 +1413,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
       test('skill listing: installs the card and redirects to code mode with preview on first skill successfully', async function (assert) {
         const listingName = 'talk-like-a-pirate';
-        const listingId = `${catalogRealmURL}SkillListing/${listingName}`;
-        await executeCommand(ListingRemixCommand, listingId, testRealm2URL);
+        const listingId = `${mockCatalogURL}SkillListing/${listingName}`;
+        await executeCommand(
+          ListingRemixCommand,
+          listingId,
+          testDestinationRealmURL,
+        );
         await settled();
         await verifySubmode(assert, 'code');
         await toggleFileTree();
@@ -1456,7 +1429,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         let instancePath = `${outerFolder}Skill/skill-pirate-speak.json`;
         await openDir(assert, instancePath);
         await verifyFileInFileTree(assert, instancePath);
-        let cardId = testRealm2URL + instancePath.replace('.json', '');
+        let cardId =
+          testDestinationRealmURL + instancePath.replace('.json', '');
         await waitFor('[data-test-card-resource-loaded]');
         assert
           .dom(`[data-test-code-mode-card-renderer-header="${cardId}"]`)
@@ -1466,16 +1440,16 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
     skip('"use" is successful even if target realm does not have a trailing slash', async function (assert) {
       const listingName = 'author';
-      const listingId = testRealmURL + 'Listing/author.json';
+      const listingId = mockCatalogURL + 'Listing/author.json';
       await executeCommand(
         ListingUseCommand,
         listingId,
-        removeTrailingSlash(testRealm2URL),
+        removeTrailingSlash(testDestinationRealmURL),
       );
       await visitOperatorMode({
         submode: 'code',
         fileView: 'browser',
-        codePath: `${testRealm2URL}index`,
+        codePath: `${testDestinationRealmURL}index`,
       });
       let outerFolder = await verifyFolderWithUUIDInFileTree(
         assert,
@@ -1492,12 +1466,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       await executeCommand(
         ListingInstallCommand,
         mortgageCalculatorCardId,
-        removeTrailingSlash(testRealm2URL),
+        removeTrailingSlash(testDestinationRealmURL),
       );
       await visitOperatorMode({
         submode: 'code',
         fileView: 'browser',
-        codePath: `${testRealm2URL}index`,
+        codePath: `${testDestinationRealmURL}index`,
       });
 
       let outerFolder = await verifyFolderWithUUIDInFileTree(
@@ -1516,14 +1490,14 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
     test('"remix" is successful even if target realm does not have a trailing slash', async function (assert) {
       const listingName = 'author';
-      const listingId = `${testRealmURL}Listing/${listingName}`;
+      const listingId = `${mockCatalogURL}Listing/${listingName}`;
       await visitOperatorMode({
         stacks: [[]],
       });
       await executeCommand(
         ListingRemixCommand,
         listingId,
-        removeTrailingSlash(testRealm2URL),
+        removeTrailingSlash(testDestinationRealmURL),
       );
       await settled();
       await verifySubmode(assert, 'code');
