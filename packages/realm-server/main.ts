@@ -14,7 +14,6 @@ import { resolve } from 'path';
 import { makeFastBootIndexRunner } from './fastboot';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
-import { insertPermissions, param, query } from '@cardstack/runtime-common';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import 'decorator-transforms/globals';
 
@@ -89,8 +88,6 @@ let {
   useRegistrationSecretFunction,
   migrateDB,
   workerManagerPort,
-  testPublishedRealmId,
-  testPublishedRealmOwner,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -153,14 +150,6 @@ let {
         'The port the worker manager is running on. used to wait for the workers to be ready',
       type: 'number',
     },
-    testPublishedRealmId: {
-      description: 'FIXME',
-      type: 'string',
-    },
-    testPublishedRealmOwner: {
-      description: 'FIXME',
-      type: 'string',
-    },
   })
   .parseSync();
 
@@ -206,25 +195,6 @@ let autoMigrate = migrateDB || undefined;
 (async () => {
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter({ autoMigrate });
-
-  if (testPublishedRealmId && testPublishedRealmOwner) {
-    await insertPermissions(dbAdapter, new URL(`http://published.realm/`), {
-      [testPublishedRealmOwner]: ['read', 'write', 'realm-owner'],
-      '*': ['read'],
-    });
-
-    await query(dbAdapter, [
-      'INSERT INTO published_realms (id, owner_username, source_realm_url, published_realm_url) VALUES (',
-      param(testPublishedRealmId),
-      ',',
-      param(testPublishedRealmOwner),
-      ',',
-      param('http://example.com'),
-      ',',
-      param('http://published.realm/'),
-      ')',
-    ]);
-  }
 
   let queue = new PgQueuePublisher(dbAdapter);
   let manager = new RunnerOptionsManager();
