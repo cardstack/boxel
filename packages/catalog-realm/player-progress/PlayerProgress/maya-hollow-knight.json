@@ -13,7 +13,6 @@
       "screenshotUrls": [
         "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=450&fit=crop"
       ],
-      "isWishlisted": false,
       "lastPlayedDate": "2025-01-05T19:45:00Z"
     },
     "relationships": {
@@ -24,7 +23,7 @@
       },
       "game": {
         "links": {
-          "self": "../../game/Game/hollow-knight"
+          "self": "../../video-game/VideoGame/hollow-knight"
         }
       }
     },

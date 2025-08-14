@@ -1,5 +1,4 @@
 import {
-  CardDef,
   field,
   contains,
   Component,
@@ -12,20 +11,19 @@ import DateField from 'https://cardstack.com/base/date';
 import UrlField from 'https://cardstack.com/base/url';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 
+import { Game } from '../base-entity/game';
+
 import { formatDateTime, formatCurrency } from '@cardstack/boxel-ui/helpers';
 
 import GamepadIcon from '@cardstack/boxel-icons/gamepad-2';
 
-export class Game extends CardDef {
-  static displayName = 'Game';
+export class VideoGame extends Game {
+  static displayName = 'Video Game';
   static icon = GamepadIcon;
 
-  @field title = contains(StringField);
   @field platform = contains(StringField);
-  @field genre = contains(StringField);
   @field releaseDate = contains(DateField);
   @field coverImageUrl = contains(UrlField);
-  @field description = contains(MarkdownField);
   @field price = contains(NumberField);
   @field metacriticScore = contains(NumberField);
   @field userRating = contains(NumberField);

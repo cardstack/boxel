@@ -30,10 +30,10 @@
     },
     "relationships": {
       "favoriteGames.0": {
-        "links": { "self": "../../game/Game/cyberpunk-2077" }
+        "links": { "self": "../../video-game/VideoGame/cyberpunk-2077" }
       },
       "wishlistGames.0": {
-        "links": { "self": "../../game/Game/hollow-knight" }
+        "links": { "self": "../../video-game/VideoGame/hollow-knight" }
       },
       "friends.0": {
         "links": { "self": "../../gaming-hub/GamingHub/diego-stratmaxx" }

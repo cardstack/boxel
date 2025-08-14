@@ -30,7 +30,7 @@
     },
     "relationships": {
       "wishlistGames.0": {
-        "links": { "self": "../../game/Game/valorant" }
+        "links": { "self": "../../video-game/VideoGame/valorant" }
       },
       "friends.0": {
         "links": { "self": "../../gaming-hub/GamingHub/ravi-cosmicrift" }

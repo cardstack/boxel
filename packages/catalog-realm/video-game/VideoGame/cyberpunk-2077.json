@@ -1,0 +1,39 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "VideoGame",
+        "module": "../video-game"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "genre": "Action RPG",
+      "price": 59.99,
+      "title": "Cyberpunk 2077",
+      "cardInfo": {
+        "notes": null,
+        "title": "null",
+        "description": null,
+        "thumbnailURL": null
+      },
+      "platform": "Steam",
+      "userRating": 8.1,
+      "description": "## Night City Awaits\n\nCyberpunk 2077 is an open-world, action-adventure RPG set in the dark future of Night City — a dangerous megalopolis obsessed with power, glamour, and ceaseless body modification.\n\n**Key Features:**\n- Immersive open world\n- Deep character customization\n- Branching storyline with meaningful choices\n- Advanced cybernetic enhancements",
+      "releaseDate": "2020-12-10",
+      "achievements": 44,
+      "coverImageUrl": "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&h=600&fit=crop",
+      "isMultiplayer": false,
+      "estimatedHours": 60,
+      "metacriticScore": 77,
+      "systemRequirements": "**Minimum Requirements:**\n- OS: Windows 10 64-bit\n- Processor: Intel Core i5-3570K or AMD FX-8310\n- Memory: 8 GB RAM\n- Graphics: NVIDIA GeForce GTX 780 or AMD Radeon RX 470\n- DirectX: Version 12\n- Storage: 70 GB available space"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

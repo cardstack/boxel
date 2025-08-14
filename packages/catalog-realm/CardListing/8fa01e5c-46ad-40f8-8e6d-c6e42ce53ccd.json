@@ -8,16 +8,16 @@
     },
     "type": "card",
     "attributes": {
-      "name": "Game Card",
+      "name": "Video Game Card",
       "images": [
-        "https://boxel-images.boxel.ai/app-assets/catalog/game-listing/screenshot-01.png"
+        "https://boxel-images.boxel.ai/app-assets/catalog/video-game-listing/screenshot-01.png"
       ],
-      "summary": "A comprehensive game card template featuring detailed game information, ratings, system requirements, and achievements with cyberpunk-themed styling.",
+      "summary": "A comprehensive video game card template featuring detailed game information, ratings, system requirements, and achievements with cyberpunk-themed styling.",
       "cardInfo": {
         "notes": null,
         "title": null,
         "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/game-listing/thumbnail.png"
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/video-game-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -48,7 +48,7 @@
       },
       "examples.0": {
         "links": {
-          "self": "../game/Game/cyberpunk-2077"
+          "self": "../video-game/VideoGame/cyberpunk-2077"
         }
       },
       "categories.0": {

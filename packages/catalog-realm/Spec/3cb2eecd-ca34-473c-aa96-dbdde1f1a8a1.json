@@ -4,8 +4,8 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../game/game",
-        "name": "Game"
+        "module": "../video-game/video-game",
+        "name": "VideoGame"
       },
       "specType": "card",
       "containedExamples": [],

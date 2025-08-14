@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "name": "Player Progres",
+      "name": "Player Progress",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/player-progress-listing/screenshot-01.png"
       ],
@@ -62,21 +62,6 @@
         }
       },
       "specs.5": {
-        "links": {
-          "self": "../Spec/b2eecdca-34f7-4caa-96db-dde1f1a8a134"
-        }
-      },
-      "specs.6": {
-        "links": {
-          "self": "../Spec/eecdca34-f73c-4a96-9bdd-e1f1a8a13474"
-        }
-      },
-      "specs.7": {
-        "links": {
-          "self": "../Spec/cdca34f7-3caa-46db-9de1-f1a8a13474a8"
-        }
-      },
-      "specs.8": {
         "links": {
           "self": "../Spec/ca34f73c-aa96-4bdd-a1f1-a8a13474a8be"
         }

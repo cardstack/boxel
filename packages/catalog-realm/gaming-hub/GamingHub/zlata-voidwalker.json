@@ -65,12 +65,12 @@
       },
       "favoriteGames.0": {
         "links": {
-          "self": "../../game/Game/hollow-knight"
+          "self": "../../video-game/VideoGame/hollow-knight"
         }
       },
       "wishlistGames.0": {
         "links": {
-          "self": "../../game/Game/valorant"
+          "self": "../../video-game/VideoGame/valorant"
         }
       },
       "cardInfo.theme": {
