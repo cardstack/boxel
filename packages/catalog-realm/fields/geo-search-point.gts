@@ -255,7 +255,7 @@ class EmbeddedTemplate extends Component<typeof GeoSearchPointField> {
         @lat={{this.latNumber}}
         @lon={{this.lonNumber}}
         @config={{@model.config}}
-        @disableMapClick={{false}}
+        @disableMapClick={{true}}
       />
     </div>
 
