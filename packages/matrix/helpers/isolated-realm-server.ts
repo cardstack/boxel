@@ -106,6 +106,8 @@ export async function startServer(includePublishedRealm = false) {
 
   if (includePublishedRealm) {
     serverArgs = serverArgs.concat([
+      `--fromUrl='http://published.realm/'`,
+      `--toUrl='http://localhost:4205/published/'`,
       `--test-published-realm-id='${publishedRealmId}'`,
       `--test-published-realm-owner='@node-test_realm:localhost'`,
     ]);

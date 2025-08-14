@@ -203,14 +203,6 @@ let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let dist: URL = new URL(distURL);
 let autoMigrate = migrateDB || undefined;
 
-if (testPublishedRealmId && testPublishedRealmOwner) {
-  console.log('adding mapping');
-  virtualNetwork.addURLMapping(
-    new URL(`http://published.realm/`),
-    new URL(`http://localhost:4205/published/`),
-  );
-}
-
 (async () => {
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter({ autoMigrate });
