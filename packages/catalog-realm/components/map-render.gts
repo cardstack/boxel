@@ -8,6 +8,7 @@ interface MapRenderSignature {
     lon?: number;
     tileserverUrl?: string;
     config?: any;
+    disableMapClick?: boolean;
     onMapClickUpdate?: (lat: number, lon: number) => void;
   };
   Element: HTMLElement;
@@ -109,6 +110,7 @@ export class MapRender extends GlimmerComponent<MapRenderSignature> {
           lon=@lon
           tileserverUrl=@tileserverUrl
           config=@config
+          disableMapClick=@disableMapClick
           setMap=this.setMap
           onMapClick=this.handleMapClick
         }}
@@ -223,6 +225,7 @@ interface LeafletModifierSignature {
       lon?: number;
       tileserverUrl?: string;
       config?: any;
+      disableMapClick?: boolean;
       setMap?: (map: any) => void;
       onMapClick?: (lat: number, lng: number) => void;
     };
@@ -299,6 +302,7 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
           namedArgs.config,
           namedArgs.setMap,
           namedArgs.onMapClick,
+          namedArgs.disableMapClick,
         );
       }
     }
@@ -311,6 +315,7 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
     config?: any,
     setMap?: (map: any) => void,
     onMapClick?: (lat: number, lng: number) => void,
+    disableMapClick?: boolean,
   ) {
     fetch('https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js')
       .then((r) => r.text())
@@ -348,46 +353,48 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
 
         setupMarkerPopup(this.marker, { lat, lng: lon }, map, 'Location');
 
-        // Add click handler
-        map.on('click', (event: LeafletMouseEvent) => {
-          // Use helper function to check if click target is a marker
-          if (isMarkerClick(event)) {
-            return;
-          }
+        // Add click handler only if map clicking is not disabled
+        if (!disableMapClick) {
+          map.on('click', (event: LeafletMouseEvent) => {
+            // Use helper function to check if click target is a marker
+            if (isMarkerClick(event)) {
+              return;
+            }
 
-          const { lat: clickLat, lng: clickLng } = event.latlng;
+            const { lat: clickLat, lng: clickLng } = event.latlng;
 
-          // Remove previous marker if one exists
-          if (this.marker) {
-            map.removeLayer(this.marker);
-          }
+            // Remove previous marker if one exists
+            if (this.marker) {
+              map.removeLayer(this.marker);
+            }
 
-          // Create new marker at clicked location
-          const clickMarkerColor = config?.markerColor || '#22c55e';
-          const clickStrokeColor = this.darkenColor(clickMarkerColor, 0.3);
+            // Create new marker at clicked location
+            const clickMarkerColor = config?.markerColor || '#22c55e';
+            const clickStrokeColor = this.darkenColor(clickMarkerColor, 0.3);
 
-          this.marker = L.marker([clickLat, clickLng], {
-            icon: L.divIcon({
-              className: 'marker',
-              html: `<svg width="24" height="32" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 0C5.373 0 0 5.373 0 12c0 8.5 12 20 12 20s12-11.5 12-20c0-6.627-5.373-12-12-12z" fill="${clickMarkerColor}" stroke="${clickStrokeColor}" stroke-width="1"/>
-                <circle cx="12" cy="12" r="4" fill="white" stroke="${clickStrokeColor}" stroke-width="1"/>
-              </svg>`,
-              iconSize: [24, 32],
-              iconAnchor: [12, 32],
-            }),
-          }).addTo(map);
+            this.marker = L.marker([clickLat, clickLng], {
+              icon: L.divIcon({
+                className: 'marker',
+                html: `<svg width="24" height="32" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 0C5.373 0 0 5.373 0 12c0 8.5 12 20 12 20s12-11.5 12-20c0-6.627-5.373-12-12-12z" fill="${clickMarkerColor}" stroke="${clickStrokeColor}" stroke-width="1"/>
+                  <circle cx="12" cy="12" r="4" fill="white" stroke="${clickStrokeColor}" stroke-width="1"/>
+                </svg>`,
+                iconSize: [24, 32],
+                iconAnchor: [12, 32],
+              }),
+            }).addTo(map);
 
-          setupMarkerPopup(
-            this.marker,
-            { lat: clickLat, lng: clickLng },
-            map,
-            'Location',
-          );
+            setupMarkerPopup(
+              this.marker,
+              { lat: clickLat, lng: clickLng },
+              map,
+              'Location',
+            );
 
-          // Call optional callback with coordinates
-          onMapClick?.(clickLat, clickLng);
-        });
+            // Call optional callback with coordinates
+            onMapClick?.(clickLat, clickLng);
+          });
+        }
 
         setMap?.(map);
       });
