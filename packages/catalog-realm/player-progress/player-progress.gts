@@ -9,7 +9,6 @@ import {
 
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
 import DateField from 'https://cardstack.com/base/date';
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import UrlField from 'https://cardstack.com/base/url';
@@ -32,7 +31,6 @@ import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
 import { VideoGame } from '../video-game/video-game';
 import { GamingHub } from '../gaming-hub/gaming-hub';
 
-// Player Progress Card - Link between player and game
 export class PlayerProgress extends CardDef {
   static displayName = 'Player Progress';
   static icon = TrendingUpIcon;
@@ -48,7 +46,6 @@ export class PlayerProgress extends CardDef {
   @field completedDate = contains(DateField);
   @field notes = contains(MarkdownField);
   @field screenshotUrls = containsMany(UrlField);
-  @field isWishlisted = contains(BooleanField);
   @field lastPlayedDate = contains(DatetimeField);
 
   @field title = contains(StringField, {
@@ -1128,11 +1125,7 @@ export class PlayerProgress extends CardDef {
           </div>
 
           {{#if
-            (or
-              (Boolean @model.startDate)
-              (Boolean @model.lastPlayedDate)
-              (Boolean @model.isWishlisted)
-            )
+            (or (Boolean @model.startDate) (Boolean @model.lastPlayedDate))
           }}
             <div class='progress-meta-compact'>
               {{#if @model.startDate}}
@@ -1142,9 +1135,6 @@ export class PlayerProgress extends CardDef {
               {{#if @model.lastPlayedDate}}
                 <span class='meta-item'>Last played
                   {{formatDateTime @model.lastPlayedDate size='short'}}</span>
-              {{/if}}
-              {{#if @model.isWishlisted}}
-                <span class='wishlist-mini'>❤️ Wishlisted</span>
               {{/if}}
             </div>
           {{/if}}
