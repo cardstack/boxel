@@ -489,6 +489,7 @@ ${REPLACE_MARKER}
       isLastAssistantMessage: true,
     });
 
+    await click('[data-test-attached-file-dropdown-button="file.ts"]');
     assert
       .dom('[data-test-boxel-menu-item-text="Restore Submitted Content"]')
       .isDisabled();
