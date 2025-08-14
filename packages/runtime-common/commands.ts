@@ -29,6 +29,7 @@ export interface CommandInvocation<CardResultType extends CardDefConstructor> {
   error: Error | null;
   status: 'pending' | 'success' | 'error';
   readonly isSuccess: boolean;
+  readonly isLoading: boolean;
 }
 
 export type FieldsOf<T> = { [K in keyof Omit<T, 'constructor'>]: T[K] };
