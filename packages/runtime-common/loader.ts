@@ -124,6 +124,10 @@ export class Loader {
     return clone;
   }
 
+  get fetch() {
+    return this.fetchImplementation;
+  }
+
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
     this.captureIdentitiesOfModuleExports(module, moduleIdentifier);
@@ -407,7 +411,7 @@ export class Loader {
     return new Request(urlOrRequest, init);
   }
 
-  private fetch = async (
+  private _fetch = async (
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ): Promise<MaybeCachedResponse> => {
@@ -666,7 +670,7 @@ export class Loader {
   > {
     let response: MaybeCachedResponse;
     try {
-      response = await this.fetch(moduleURL);
+      response = await this._fetch(moduleURL);
     } catch (err) {
       this.log.error(`fetch failed for ${moduleURL}`, err); // to aid in debugging, since this exception doesn't include the URL that failed
       // this particular exception might not be worth caching the module in a

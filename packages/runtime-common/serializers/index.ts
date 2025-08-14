@@ -15,7 +15,7 @@ import {
   type BaseDef,
   type BaseDefConstructor,
   type BaseInstanceType,
-  type IdentityContext,
+  type CardStore,
   type DeserializeOpts,
 } from 'https://cardstack.com/base/card-api';
 
@@ -42,7 +42,7 @@ interface Serializer {
     data: any,
     relativeTo: URL | undefined,
     doc?: CardDocument,
-    identityContext?: IdentityContext,
+    store?: CardStore,
     opts?: DeserializeOpts,
   ): Promise<BaseInstanceType<T>>;
   queryableValue(value: any, stack?: BaseDef[]): any;

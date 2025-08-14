@@ -48,7 +48,7 @@ import { RealmServerTokenClaims } from '@cardstack/host/services/realm-server';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
 
 import {
-  type IdentityContext,
+  type CardStore,
   type CardDef,
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
@@ -548,12 +548,12 @@ export async function saveCard(
   instance: CardDef,
   id: string,
   loader: Loader,
-  identityContext?: IdentityContext,
+  store?: CardStore,
 ) {
   let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
   let doc = api.serializeCard(instance);
   doc.data.id = id;
-  await api.updateFromSerialized(instance, doc, identityContext);
+  await api.updateFromSerialized(instance, doc, store);
   return doc;
 }
 

@@ -20,6 +20,7 @@ import {
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
+  CommandContextName,
 } from '@cardstack/runtime-common';
 
 import Auth from '@cardstack/host/components/matrix/auth';
@@ -90,6 +91,11 @@ export default class OperatorModeContainer extends Component<Signature> {
     return getCardCollection;
   }
 
+  @provide(CommandContextName)
+  private get commandContext() {
+    return this.commandService.commandContext;
+  }
+
   @provide(CardContextName)
   // @ts-ignore "context" is declared but not used
   private get context(): CardContext {
@@ -98,7 +104,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
       store: this.store,
-      commandContext: this.commandService.commandContext,
+      commandContext: this.commandContext,
       prerenderedCardSearchComponent: PrerenderedCardSearch,
     };
   }

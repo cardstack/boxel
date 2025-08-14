@@ -4,6 +4,13 @@ import { getOwner, setOwner } from '@ember/owner';
 
 import { resource } from 'ember-resources';
 
+/**
+ * This resource is meant for consumers to instantiate resources when some asynchronous
+ * conditions are met, e.g. if argument already exists. Callers should return a resource in resourceBuilder callback.
+ * @param parent - The parent object that owns this resource (must have an owner)
+ * @param resourceBuilder - Function that attempts to build the resource, returning undefined if unavailable
+ * @returns Resource with `current` property that may be undefined
+ */
 export function maybe<T>(
   parent: object,
   resourceBuilder: (context: object) => T | undefined,

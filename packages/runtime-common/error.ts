@@ -67,7 +67,7 @@ export function formattedError(
       meta = {
         lastKnownGoodHtml,
         scopedCssUrls,
-        stack: cardError.stack ?? err.stack ?? error.stack ?? null,
+        stack: cardError.stack ?? err.stack ?? error?.stack ?? null,
         cardTitle,
       };
     } else if (isCardError(additionalError)) {
@@ -87,11 +87,11 @@ export function formattedError(
             cardError.title ??
             status.message[cardError.status] ??
             cardError.message,
-          realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
+          realm: error?.responseHeaders?.get('X-Boxel-Realm-Url'),
           meta: meta ?? {
             lastKnownGoodHtml: null,
             scopedCssUrls: [],
-            stack: cardError.stack ?? err.stack ?? error.stack ?? null,
+            stack: cardError.stack ?? err.stack ?? error?.stack ?? null,
             cardTitle: null,
             ...(cardError.id ? { isCreationError: true } : {}),
           },
@@ -143,8 +143,9 @@ export class CardError extends Error implements SerializedError {
   source?: ErrorDetails['source'];
   responseText?: string;
   isCardError: true = true;
-  additionalErrors: (CardError | SearchResultError['error'] | Error)[] | null =
-    null;
+  additionalErrors:
+    | (CardError | SearchResultError['error'] | Error | CardErrorJSONAPI)[]
+    | null = null;
   deps?: string[];
 
   constructor(

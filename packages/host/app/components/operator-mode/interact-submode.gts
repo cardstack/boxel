@@ -46,7 +46,6 @@ import {
   type getCards,
   type getCardCollection,
   type Actions,
-  type CatalogActions,
   type CardActions,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -236,12 +235,7 @@ export default class InteractSubmode extends Component {
         here.operatorModeStateService.updateSubmode(submode);
       },
     };
-    let catalogActions: CatalogActions = {
-      allRealmsInfo: () => {
-        return here.realm.allRealmsInfo;
-      },
-    };
-    return { ...actions, ...catalogActions };
+    return actions;
   }
   stackBackgroundsState = stackBackgroundsResource(this);
 
