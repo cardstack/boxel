@@ -140,8 +140,14 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
 
   <template>
     <div class='edit-template'>
-      <FieldContainer @vertical={{true}} @label='Address' @tag='label'>
+      <FieldContainer
+        @vertical={{true}}
+        @label='Address'
+        @tag='label'
+        @for='address-search-input'
+      >
         <input
+          id='address-search-input'
           type='text'
           placeholder='Enter address to search...'
           value={{this.searchAddressValue}}
