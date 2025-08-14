@@ -458,7 +458,11 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
       const result = commandResource.value;
       if (result?.results) {
         return result.results
-          .filter((realmMeta: RealmMetaField) => realmMeta.canWrite)
+          .filter(
+            (realmMeta: RealmMetaField) =>
+              realmMeta.canWrite &&
+              realmMeta.url !== this.args.model[realmURL]?.href,
+          )
           .map((realmMeta: RealmMetaField) => ({
             name: realmMeta.info.name,
             url: realmMeta.url,
@@ -470,16 +474,14 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
   }
 
   private getRealmOptions(actionCallback: (realmUrl: string) => void) {
-    return this.writableRealms
-      .filter((realm) => realm.url !== this.args.model[realmURL]?.href)
-      .map((realm) => {
-        return new MenuItem(realm.name, 'action', {
-          action: () => {
-            actionCallback(realm.url);
-          },
-          iconURL: realm.iconURL ?? '/default-realm-icon.png',
-        });
+    return this.writableRealms.map((realm) => {
+      return new MenuItem(realm.name, 'action', {
+        action: () => {
+          actionCallback(realm.url);
+        },
+        iconURL: realm.iconURL ?? '/default-realm-icon.png',
       });
+    });
   }
 
   get remixRealmOptions() {

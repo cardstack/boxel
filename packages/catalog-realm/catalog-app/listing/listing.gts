@@ -61,7 +61,11 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       const result = commandResource.value as GetAllRealmMetasResult;
       if (result.results) {
         return result.results
-          .filter((realmMeta: RealmMetaField) => realmMeta.canWrite)
+          .filter(
+            (realmMeta: RealmMetaField) =>
+              realmMeta.canWrite &&
+              realmMeta.url !== this.args.model[realmURL]?.href,
+          )
           .map((realmMeta: RealmMetaField) => ({
             name: realmMeta.info.name,
             url: realmMeta.url,
@@ -72,22 +76,15 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return [];
   }
 
-  constructor(owner: any, args: any) {
-    super(owner, args);
-  }
-
   private getRealmOptions(actionCallback: (realmUrl: string) => void) {
-    const realms = this.writableRealms;
-    return realms
-      .filter((realm) => realm.url !== this.args.model[realmURL]?.href)
-      .map((realm) => {
-        return new MenuItem(realm.name, 'action', {
-          action: () => {
-            actionCallback(realm.url);
-          },
-          iconURL: realm.iconURL ?? '/default-realm-icon.png',
-        });
+    return this.writableRealms.map((realm) => {
+      return new MenuItem(realm.name, 'action', {
+        action: () => {
+          actionCallback(realm.url);
+        },
+        iconURL: realm.iconURL ?? '/default-realm-icon.png',
       });
+    });
   }
 
   get remixRealmOptions() {
