@@ -48,7 +48,7 @@ const mortgageCalculatorCardId = `${mockCatalogURL}Listing/author`; // Reuse aut
 const leafletMapCardId = `${mockCatalogURL}Listing/author`; // Reuse author listing
 const talkLikeAPirateCardId = `${mockCatalogURL}Listing/empty-skill`; // Reuse empty-skill listing
 const calculatorTagId = `${mockCatalogURL}Tag/c1fe433a-b3df-41f4-bdcf-d98686ee42d7`; // Keep for tag tests
-const apiDocumentationStubId = `${mockCatalogURL}Listing/author`; // Reuse author listing
+const apiDocumentationStubId = `${mockCatalogURL}Listing/api-documentation-stub`;
 const gameTagId = `${mockCatalogURL}Tag/51de249c-516a-4c4d-bd88-76e88274c483`; // Keep for tag tests
 
 const authorCardSource = `
@@ -286,6 +286,41 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
               adoptsFrom: {
                 module: `${catalogRealmURL}catalog-app/listing/tag`,
                 name: 'Tag',
+              },
+            },
+          },
+        },
+        'Tag/stub.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Stub',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${catalogRealmURL}catalog-app/listing/tag`,
+                name: 'Tag',
+              },
+            },
+          },
+        },
+        'Listing/api-documentation-stub.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'API Documentation',
+            },
+            relationships: {
+              'tags.0': {
+                links: {
+                  self: `${mockCatalogURL}Tag/stub`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${catalogRealmURL}catalog-app/listing/listing`,
+                name: 'Listing',
               },
             },
           },
