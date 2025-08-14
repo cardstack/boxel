@@ -54,6 +54,10 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
         content: 'let a = 1;\nlet b = 2;',
       });
     };
+
+    getService('matrix-service').fetchMatrixHostedFile = async (_url) => {
+      return new Response('let a = 1;\nlet b = 2;');
+    };
   });
 
   async function renderFormattedAiBotMessage(testScenario: any) {
@@ -491,9 +495,10 @@ ${REPLACE_MARKER}
     });
 
     await click('[data-test-attached-file-dropdown-button="file.ts"]');
+
     assert
-      .dom('[data-test-boxel-menu-item-text="Restore Submitted Content"]')
-      .isDisabled();
+      .dom('[data-test-boxel-menu-item-text="Restore Generated Content"]')
+      .hasAttribute('disabled');
 
     assert
       .dom(
