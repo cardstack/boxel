@@ -195,7 +195,6 @@ let autoMigrate = migrateDB || undefined;
 (async () => {
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter({ autoMigrate });
-
   let queue = new PgQueuePublisher(dbAdapter);
   let manager = new RunnerOptionsManager();
   let { getIndexHTML } = await makeFastBootIndexRunner(
