@@ -239,6 +239,11 @@ module(basename(__filename), function () {
       let newCardId = postResponse.body.data.id;
       let newCardPath = new URL(newCardId).pathname;
 
+      assert.ok(
+        postResponse.body.data.meta.resourceCreatedAt,
+        'created date should be set for new JSON file',
+      );
+
       await waitForIncrementalIndexEvent(
         getMessagesSince,
         realmEventTimestampStart,

@@ -52,7 +52,8 @@
     "onlyBuiltDependencies": [
       "esbuild",
       "fsevents",
-      "puppeteer"
+      "puppeteer",
+      "fs-xattr"
     ]
   },
   "devDependencies": {

@@ -432,6 +432,10 @@ module(basename(__filename), function () {
             .send(`//TEST UPDATE\n${cardSrc}`);
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
+          assert.ok(
+            response.headers['x-created'],
+            'created date should be set for new GTS file',
+          );
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
@@ -479,6 +483,14 @@ module(basename(__filename), function () {
             .send(`Hello World`);
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
+
+          let fileResponse = await request
+            .get('/hello-world.txt')
+            .set('Accept', 'application/vnd.card+source');
+          assert.ok(
+            fileResponse.headers['x-created'],
+            'created date should be set for new TXT file',
+          );
 
           let txtFile = join(
             dir.name,
