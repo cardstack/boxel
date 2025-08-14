@@ -1,3 +1,4 @@
+import CardIcon from '@cardstack/boxel-icons/captions';
 import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -7,7 +8,6 @@ import ThreeDotsHorizontal from '../../icons/three-dots-horizontal.gts';
 import BoxelDropdown from '../dropdown/index.gts';
 import IconButton from '../icon-button/index.gts';
 import BoxelHeader from './index.gts';
-import CardIcon from '@cardstack/boxel-icons/captions';
 
 export default class HeaderUsage extends Component {
   @tracked title = 'Title';
