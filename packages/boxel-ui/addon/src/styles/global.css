@@ -112,6 +112,13 @@
     overflow: hidden;
     white-space: nowrap;
   }
+
+  /* may need to add "max-width: 100%;" in some cases */
+  .boxel-ellipsize {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 #ember-basic-dropdown-wormhole

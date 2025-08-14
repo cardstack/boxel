@@ -38,27 +38,26 @@ const Container: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     @layer {
       .boxel-container {
-        --_sp: var(--spacing, var(--boxel-sp));
-        padding: var(--boxel-container-padding, var(--_sp));
+        padding: var(--boxel-container-padding, var(--boxel-sp));
       }
       .boxel-grid {
         display: grid;
-        gap: var(--boxel-container-gap, var(--_sp));
+        gap: var(--boxel-container-gap, var(--boxel-sp));
       }
       .boxel-inline-grid {
         display: inline-grid;
-        gap: var(--boxel-container-gap, var(--_sp));
+        gap: var(--boxel-container-gap, var(--boxel-sp));
       }
       .boxel-flex {
         display: flex;
         flex-wrap: wrap;
-        gap: var(--boxel-container-gap, var(--_sp));
+        gap: var(--boxel-container-gap, var(--boxel-sp));
         align-items: center;
       }
       .boxel-inline-flex {
         display: inline-flex;
         flex-wrap: wrap;
-        gap: var(--boxel-container-gap, var(--_sp));
+        gap: var(--boxel-container-gap, var(--boxel-sp));
         align-items: center;
       }
     }

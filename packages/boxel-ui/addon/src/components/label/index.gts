@@ -16,7 +16,7 @@ interface Signature {
 
 const Label: TemplateOnlyComponent<Signature> = <template>
   {{#let (element @tag) as |Tag|}}
-    <Tag class={{cn 'boxel-label' ellipsize=@ellipsize}} ...attributes>
+    <Tag class={{cn 'boxel-label' boxel-ellipsize=@ellipsize}} ...attributes>
       {{yield}}
     </Tag>
   {{/let}}
@@ -24,12 +24,8 @@ const Label: TemplateOnlyComponent<Signature> = <template>
     .boxel-label {
       color: var(--boxel-label-color);
       font: var(--boxel-label-font, 600 var(--boxel-font-sm));
+      font-family: inherit;
       letter-spacing: var(--boxel-label-letter-spacing, var(--boxel-lsp-sm));
-    }
-    .ellipsize {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
     }
   </style>
 </template>;
