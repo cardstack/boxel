@@ -37,6 +37,7 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
     }
 
     if (!searchReplaceBlock) {
+      this.errorMessage = 'Missing search and replace block';
       return;
     }
 
