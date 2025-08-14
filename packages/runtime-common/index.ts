@@ -465,11 +465,7 @@ export interface CopyCardsWithCodeRef {
   codeRef?: ResolvedCodeRef; // if provided the card will point to a new code ref
 }
 
-export interface CatalogActions {
-  allRealmsInfo: () => Record<string, { canWrite: boolean; info: RealmInfo }>;
-}
-
-export type Actions = CardActions & CatalogActions;
+export type Actions = CardActions;
 
 export function hasExecutableExtension(path: string): boolean {
   for (let extension of executableExtensions) {

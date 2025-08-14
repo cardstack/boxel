@@ -288,3 +288,25 @@ export {
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
 };
+
+export class RealmInfoField extends FieldDef {
+  @field name = contains(StringField);
+  @field backgroundURL = contains(StringField);
+  @field iconURL = contains(StringField);
+  @field showAsCatalog = contains(BooleanField);
+  @field visibility = contains(StringField);
+  @field realmUserId = contains(StringField);
+  @field publishable = contains(BooleanField);
+  @field isIndexing = contains(BooleanField);
+  @field isPublic = contains(BooleanField);
+}
+
+export class RealmMetaField extends FieldDef {
+  @field info = contains(RealmInfoField);
+  @field canWrite = contains(BooleanField);
+  @field url = contains(StringField);
+}
+
+export class GetAllRealmMetasResult extends CardDef {
+  @field results = containsMany(RealmMetaField);
+}

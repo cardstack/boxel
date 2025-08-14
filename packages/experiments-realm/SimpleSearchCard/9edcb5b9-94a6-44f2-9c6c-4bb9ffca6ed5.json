@@ -1,0 +1,27 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SimpleSearchCard",
+        "module": "../simple-search-card"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "titleSearch": "Hass"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

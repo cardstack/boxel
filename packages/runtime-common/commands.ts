@@ -3,7 +3,6 @@ import {
   isCardDef,
   codeRefWithAbsoluteURL,
 } from './code-ref';
-import { Deferred } from './deferred';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { CardDefConstructor } from 'https://cardstack.com/base/card-api';
 import {
@@ -25,37 +24,17 @@ export interface CommandContext {
   [CommandContextStamp]: boolean;
 }
 
-export class CommandInvocation<
-  CardInputType extends CardDefConstructor | undefined,
-  CardResultType extends CardDefConstructor | undefined = undefined,
-> {
-  result?: CardInstance<CardResultType>;
-  error: Error | undefined;
-  status: 'pending' | 'success' | 'error' = 'pending';
-  private deferred: Deferred<CardInstance<CardResultType>> = new Deferred<
-    CardInstance<CardResultType>
-  >();
-
-  constructor(public readonly input: CardInstance<CardInputType>) {}
-
-  get promise(): Promise<CardInstance<CardResultType>> {
-    return this.deferred.promise;
-  }
-
-  fulfill(result: CardInstance<CardResultType>): void {
-    this.status = 'success';
-    this.deferred.fulfill(result);
-  }
-
-  reject(error: unknown): void {
-    this.status = 'error';
-    this.deferred.reject(error);
-  }
+export interface CommandInvocation<CardResultType extends CardDefConstructor> {
+  value: CardInstance<CardResultType> | null;
+  error: Error | null;
+  status: 'pending' | 'success' | 'error';
+  readonly isSuccess: boolean;
+  readonly isLoading: boolean;
 }
 
-type FieldsOf<T> = { [K in keyof Omit<T, 'constructor'>]: T[K] };
+export type FieldsOf<T> = { [K in keyof Omit<T, 'constructor'>]: T[K] };
 
-type CardInstance<T extends CardDefConstructor | undefined> =
+export type CardInstance<T extends CardDefConstructor | undefined> =
   T extends CardDefConstructor ? InstanceType<T> : undefined;
 
 export abstract class Command<

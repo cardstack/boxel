@@ -4,7 +4,12 @@ import {
   CardContext,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
+import { commandData } from 'https://cardstack.com/base/resources/command-data';
 import type { Skill } from 'https://cardstack.com/base/skill';
+import type {
+  GetAllRealmMetasResult,
+  RealmMetaField,
+} from 'https://cardstack.com/base/command';
 import GlimmerComponent from '@glimmer/component';
 
 import { action } from '@ember/object';
@@ -15,7 +20,6 @@ import { add, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 
 import { type Listing } from '../listing/listing';
-import { setupAllRealmsInfo } from '../helper';
 
 import {
   BoxelDropdown,
@@ -26,6 +30,7 @@ import {
 import ListingBuildCommand from '@cardstack/boxel-host/commands/listing-action-build';
 import ListingRemixCommand from '@cardstack/boxel-host/commands/listing-remix';
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
+import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
 
 interface Signature {
   Element: HTMLElement;
@@ -442,36 +447,49 @@ class CarouselComponent extends GlimmerComponent<Signature> {
 }
 
 export class ListingFittedTemplate extends Component<typeof Listing> {
-  @tracked writableRealms: { name: string; url: string; iconURL?: string }[] =
-    [];
+  allRealmsInfoResource = commandData<typeof GetAllRealmMetasResult>(
+    this,
+    GetAllRealmMetasCommand,
+  );
 
-  constructor(owner: any, args: any) {
-    super(owner, args);
-    this.writableRealms = setupAllRealmsInfo(this.args);
+  get writableRealms(): { name: string; url: string; iconURL?: string }[] {
+    const commandResource = this.allRealmsInfoResource;
+    if (commandResource?.isSuccess && commandResource) {
+      const result = commandResource.value;
+      if (result?.results) {
+        return result.results
+          .filter(
+            (realmMeta: RealmMetaField) =>
+              realmMeta.canWrite &&
+              realmMeta.url !== this.args.model[realmURL]?.href,
+          )
+          .map((realmMeta: RealmMetaField) => ({
+            name: realmMeta.info.name,
+            url: realmMeta.url,
+            iconURL: realmMeta.info.iconURL,
+          }));
+      }
+    }
+    return [];
   }
 
-  get remixRealmOptions() {
-    return this.writableRealms
-      .filter((realm) => realm.url !== this.args.model[realmURL]?.href)
-      .map((realm) => {
-        return new MenuItem(realm.name, 'action', {
-          action: () => {
-            this.remix(realm.url);
-          },
-          iconURL: realm.iconURL ?? '/default-realm-icon.png',
-        });
-      });
-  }
-
-  get buildRealmOptions() {
+  private getRealmOptions(actionCallback: (realmUrl: string) => void) {
     return this.writableRealms.map((realm) => {
       return new MenuItem(realm.name, 'action', {
         action: () => {
-          this.build(realm.url);
+          actionCallback(realm.url);
         },
         iconURL: realm.iconURL ?? '/default-realm-icon.png',
       });
     });
+  }
+
+  get remixRealmOptions() {
+    return this.getRealmOptions((realmUrl) => this.remix(realmUrl));
+  }
+
+  get buildRealmOptions() {
+    return this.getRealmOptions((realmUrl) => this.build(realmUrl));
   }
 
   get firstImage() {
@@ -634,6 +652,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
                   class='realm-dropdown-menu'
                   @closeMenu={{dd.close}}
                   @items={{this.remixRealmOptions}}
+                  @loading={{this.allRealmsInfoResource.isLoading}}
                   data-test-catalog-listing-fitted-remix-dropdown
                 />
               </:content>
