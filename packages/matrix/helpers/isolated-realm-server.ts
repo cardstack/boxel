@@ -3,6 +3,7 @@ import { resolve, join } from 'path';
 // @ts-expect-error no types
 import { dirSync, setGracefulCleanup } from 'tmp';
 import { ensureDirSync, copySync, readFileSync } from 'fs-extra';
+import { v4 as uuidv4 } from 'uuid';
 
 setGracefulCleanup();
 
@@ -20,11 +21,19 @@ export const appURL = 'http://localhost:4205/test';
 // judgement to decide if your test really merits an isolated realm for testing
 // or if a mock would be more suitable.
 
-export async function startServer() {
+export async function startServer(includePublishedRealm = false) {
   let dir = dirSync();
   let testRealmDir = join(dir.name, 'test');
   ensureDirSync(testRealmDir);
   copySync(testRealmCards, testRealmDir);
+
+  let publishedRealmId = uuidv4();
+
+  if (includePublishedRealm) {
+    let publishedRealmDir = join(dir.name, '_published', publishedRealmId);
+    ensureDirSync(publishedRealmDir);
+    copySync(testRealmCards, publishedRealmDir);
+  }
 
   process.env.PGPORT = '5435';
   process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
@@ -50,6 +59,14 @@ export async function startServer() {
     `--fromUrl='https://cardstack.com/base/'`,
     `--toUrl='http://localhost:4201/base/'`,
   ]);
+
+  if (includePublishedRealm) {
+    workerArgs = workerArgs.concat([
+      `--fromUrl='http://published.realm/'`,
+      `--toUrl='http://localhost:4205/published/'`,
+    ]);
+  }
+
   let workerManager = spawn('ts-node', workerArgs, {
     cwd: realmServerDir,
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
@@ -86,6 +103,14 @@ export async function startServer() {
     `--fromUrl='http://localhost:4205/skills/'`,
     `--toUrl='http://localhost:4205/skills/'`,
   ]);
+
+  if (includePublishedRealm) {
+    serverArgs = serverArgs.concat([
+      `--test-published-realm-id='${publishedRealmId}'`,
+      `--test-published-realm-owner='@node-test_realm:localhost'`,
+    ]);
+  }
+
   serverArgs = serverArgs.concat([
     `--fromUrl='https://cardstack.com/base/'`,
     `--toUrl='http://localhost:4201/base/'`,
