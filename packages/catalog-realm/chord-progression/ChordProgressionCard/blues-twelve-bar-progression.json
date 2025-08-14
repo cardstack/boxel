@@ -1,20 +1,30 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ChordProgressionCard",
+        "module": "../chord-progression"
+      }
+    },
     "type": "card",
     "attributes": {
-      "progressionName": "12-Bar Blues (I-I-I-I-IV-IV-I-I-V-IV-I-V)",
-      "description": "The foundation of blues music and rock & roll. This 12-bar form uses dominant 7th chords and follows a specific pattern that creates the classic blues sound and feel.",
       "key": "C major",
-      "scale": "blues",
-      "timeSignature": "4/4",
-      "tempo": 90,
       "genre": "Blues",
+      "scale": "blues",
+      "tempo": 90,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
       "difficulty": "intermediate",
+      "description": "The foundation of blues music and rock & roll. This 12-bar form uses dominant 7th chords and follows a specific pattern that creates the classic blues sound and feel.",
       "popularSongs": "\"Sweet Home Chicago\", \"Stormy Monday\", \"The Thrill is Gone\", \"Crossroads\"",
+      "timeSignature": "4/4",
+      "progressionName": "12-Bar Blues (I-I-I-I-IV-IV-I-I-V-IV-I-V)",
       "chordProgression": {
-        "progressionName": "12-Bar Blues",
         "key": "C major",
-        "timeSignature": "4/4",
         "tempo": 90,
         "chords": [
           {
@@ -22,31 +32,44 @@
             "chordType": "dominant7",
             "rootNote": "C",
             "quality": "dominant seventh",
-            "notes": "[\"C\", \"E\", \"G\", \"Bb\"]"
+            "note1": "C",
+            "note2": "E",
+            "note3": "G",
+            "note4": "Bb",
+            "note5": null
           },
           {
             "chordName": "F7",
             "chordType": "dominant7",
             "rootNote": "F",
             "quality": "dominant seventh",
-            "notes": "[\"F\", \"A\", \"C\", \"Eb\"]"
+            "note1": "F",
+            "note2": "A",
+            "note3": "C",
+            "note4": "Eb",
+            "note5": null
           },
           {
             "chordName": "G7",
             "chordType": "dominant7",
             "rootNote": "G",
             "quality": "dominant seventh",
-            "notes": "[\"G\", \"B\", \"D\", \"F\"]"
+            "note1": "G",
+            "note2": "B",
+            "note3": "D",
+            "note4": "F",
+            "note5": null
           }
-        ]
-      },
-      "title": "12-Bar Blues (I-I-I-I-IV-IV-I-I-V-IV-I-V)"
+        ],
+        "timeSignature": "4/4",
+        "progressionName": "12-Bar Blues"
+      }
     },
-    "relationships": {},
-    "meta": {
-      "adoptsFrom": {
-        "module": "../chord-progression",
-        "name": "ChordProgressionCard"
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

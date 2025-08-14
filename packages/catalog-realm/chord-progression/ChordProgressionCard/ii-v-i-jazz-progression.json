@@ -22,21 +22,33 @@
             "chordType": "minor7",
             "rootNote": "D",
             "quality": "minor seventh",
-            "notes": "[\"D\", \"F\", \"A\", \"C\"]"
+            "note1": "D",
+            "note2": "F",
+            "note3": "A",
+            "note4": "C",
+            "note5": null
           },
           {
             "chordName": "G7",
             "chordType": "dominant7",
             "rootNote": "G",
             "quality": "dominant seventh",
-            "notes": "[\"G\", \"B\", \"D\", \"F\"]"
+            "note1": "G",
+            "note2": "B",
+            "note3": "D",
+            "note4": "F",
+            "note5": null
           },
           {
             "chordName": "CMaj7",
             "chordType": "major7",
             "rootNote": "C",
             "quality": "major seventh",
-            "notes": "[\"C\", \"E\", \"G\", \"B\"]"
+            "note1": "C",
+            "note2": "E",
+            "note3": "G",
+            "note4": "B",
+            "note5": null
           }
         ]
       },

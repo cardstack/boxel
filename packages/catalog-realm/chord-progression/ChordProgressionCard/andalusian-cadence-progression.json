@@ -22,28 +22,44 @@
             "chordType": "minor",
             "rootNote": "A",
             "quality": "minor",
-            "notes": "[\"A\", \"C\", \"E\"]"
+            "note1": "A",
+            "note2": "C",
+            "note3": "E",
+            "note4": null,
+            "note5": null
           },
           {
             "chordName": "G",
             "chordType": "major",
             "rootNote": "G",
             "quality": "major",
-            "notes": "[\"G\", \"B\", \"D\"]"
+            "note1": "G",
+            "note2": "B",
+            "note3": "D",
+            "note4": null,
+            "note5": null
           },
           {
             "chordName": "F",
             "chordType": "major",
             "rootNote": "F",
             "quality": "major",
-            "notes": "[\"F\", \"A\", \"C\"]"
+            "note1": "F",
+            "note2": "A",
+            "note3": "C",
+            "note4": null,
+            "note5": null
           },
           {
             "chordName": "E",
             "chordType": "major",
             "rootNote": "E",
             "quality": "major",
-            "notes": "[\"E\", \"G#\", \"B\"]"
+            "note1": "E",
+            "note2": "G#",
+            "note3": "B",
+            "note4": null,
+            "note5": null
           }
         ]
       },

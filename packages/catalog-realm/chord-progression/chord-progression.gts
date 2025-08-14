@@ -24,37 +24,70 @@ export class ChordField extends FieldDef {
 
   @field chordName = contains(StringField); // e.g., "C", "Am", "G7"
   @field chordType = contains(StringField); // e.g., "major", "minor", "dominant7"
-  @field notes = contains(StringField); // JSON string of notes array
   @field rootNote = contains(StringField); // e.g., "C", "A", "G"
   @field quality = contains(StringField); // e.g., "major", "minor", "diminished"
 
-  // ¹¹⁴ Parse notes from JSON string
+  // Individual note fields - much more user-friendly
+  @field note1 = contains(StringField); // First note (root)
+  @field note2 = contains(StringField); // Second note
+  @field note3 = contains(StringField); // Third note
+  @field note4 = contains(StringField); // Fourth note (for 7ths, etc.)
+  @field note5 = contains(StringField); // Fifth note (for extended chords)
+
+  // Computed property that combines individual notes into an array
   get notesList() {
-    try {
-      return JSON.parse(this.notes || '[]');
-    } catch (e) {
-      console.error('Error parsing chord notes:', e);
-      return [];
-    }
+    const notes = [
+      this.note1,
+      this.note2,
+      this.note3,
+      this.note4,
+      this.note5,
+    ].filter((note) => note && note.trim() !== ''); // Remove empty notes
+
+    return notes;
   }
 
   static embedded = class Embedded extends Component<typeof this> {
+    get displayNotes() {
+      const model = this.args.model;
+      if (!model) return [];
+
+      // First try individual note fields (new format)
+      const individualNotes = [
+        model.note1,
+        model.note2,
+        model.note3,
+        model.note4,
+        model.note5,
+      ].filter((note) => note && note.trim() !== '');
+
+      if (individualNotes.length > 0) {
+        return individualNotes;
+      }
+
+      return [];
+    }
+
     <template>
       <div class='chord-field'>
         <div class='chord-symbol'>{{if
             @model.chordName
             @model.chordName
-            'Chord'
+            'Untitled Chord'
           }}</div>
         <div class='chord-details'>
           {{#if @model.quality}}
             <span class='chord-quality'>{{@model.quality}}</span>
           {{/if}}
-          {{#if (gt @model.notesList.length 0)}}
+          {{#if (gt this.displayNotes.length 0)}}
             <div class='chord-notes'>
-              {{#each @model.notesList as |note|}}
+              {{#each this.displayNotes as |note|}}
                 <span class='note'>{{note}}</span>
               {{/each}}
+            </div>
+          {{else}}
+            <div class='no-notes'>
+              <span class='note-placeholder'>No notes</span>
             </div>
           {{/if}}
         </div>
@@ -104,6 +137,16 @@ export class ChordField extends FieldDef {
           border-radius: 12px;
           font-size: 0.625rem;
           font-weight: 600;
+        }
+
+        .note-placeholder {
+          background: #e5e7eb;
+          color: #6b7280;
+          padding: 0.125rem 0.375rem;
+          border-radius: 12px;
+          font-size: 0.625rem;
+          font-weight: 600;
+          font-style: italic;
         }
       </style>
     </template>
@@ -329,42 +372,33 @@ class ChordProgressionPlayerIsolated extends Component<
   get progressionChords() {
     try {
       const progression = this.currentProgression;
-      console.log('Current progression data:', progression);
-
-      // Access chords from the nested chordProgression field
       const chords = progression?.chordProgression?.chords || [];
-      console.log('Raw chords from progression:', chords);
 
-      // Process each chord and parse its notes
-      const processedChords = chords.map((chord, index) => {
-        console.log(`Processing chord ${index}:`, chord);
+      return chords.map((chord) => {
+        // Create notes list from individual note fields or parse JSON fallback
+        let notesList: string[] = [];
 
-        // Parse notes from JSON string if it exists
-        let notesList = [];
-        if (chord.notes) {
-          try {
-            notesList = JSON.parse(chord.notes);
-          } catch (e) {
-            console.error(`Error parsing notes for chord ${index}:`, e);
-            notesList = [];
-          }
+        // Try individual note fields first (new format)
+        const individualNotes = [
+          chord.note1,
+          chord.note2,
+          chord.note3,
+          chord.note4,
+          chord.note5,
+        ].filter((note) => note && note.trim() !== '');
+
+        if (individualNotes.length > 0) {
+          notesList = individualNotes;
         }
 
-        const processedChord = {
+        return {
           chordName: chord.chordName || '?',
           chordType: chord.chordType || 'unknown',
           rootNote: chord.rootNote || '',
           quality: chord.quality || 'unknown',
           notesList: notesList,
-          originalNotes: chord.notes,
         };
-
-        console.log(`Processed chord ${index}:`, processedChord);
-        return processedChord;
       });
-
-      console.log('All processed chords:', processedChords);
-      return processedChords;
     } catch (e) {
       console.error('Error accessing progression chords:', e);
       return [];
