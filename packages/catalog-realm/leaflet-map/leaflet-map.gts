@@ -31,6 +31,7 @@ export class LeafletMap extends CardDef {
         @lat={{@model.geoPoint.lat}}
         @lon={{@model.geoPoint.lon}}
         @tileserverUrl={{@model.tileserverUrl}}
+        @config={{@model.geoPoint.config}}
         @onMapClickUpdate={{this.updateCoordinates}}
       />
     </template>
