@@ -35,15 +35,15 @@ export class SimpleSearchCard extends CardDef {
     }
 
     get isLoading() {
-      return this.searchResource?.isLoading ?? false;
+      return this.searchResource.isLoading;
     }
 
     get isError() {
-      return !!this.searchResource?.error;
+      return !!this.searchResource.error;
     }
 
     get isSuccess() {
-      return this.searchResource?.isSuccess ?? false;
+      return this.searchResource.isSuccess;
     }
 
     <template>
