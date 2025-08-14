@@ -1,8 +1,10 @@
 import { visit, waitFor } from '@ember/test-helpers';
+
 import { getService } from '@universal-ember/test-support';
-import { baseRealm } from '@cardstack/runtime-common';
 
 import { module, test } from 'qunit';
+
+import { baseRealm } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
