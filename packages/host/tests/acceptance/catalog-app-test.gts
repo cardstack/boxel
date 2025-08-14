@@ -38,7 +38,7 @@ import type { CardListing } from '@cardstack/catalog/listing/listing';
 const catalogRealmURL = 'http://localhost:4201/catalog/';
 const testRealm2URL = `http://test-realm/test2/`;
 const mortgageCalculatorCardId = `${catalogRealmURL}CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`;
-const leafletMapCardId = `${catalogRealmURL}CardListing/552da558-5642-4541-89b0-28622db3bc84`;
+const leafletMapCardId = `${catalogRealmURL}CardListing/9b84fcb0-80f4-456e-9fb3-e9abd0ec3fcb`;
 const talkLikeAPirateCardId = `${catalogRealmURL}SkillListing/talk-like-a-pirate`;
 const calculatorTagId = `${catalogRealmURL}Tag/c1fe433a-b3df-41f4-bdcf-d98686ee42d7`;
 const apiDocumentationStubId = `${catalogRealmURL}CardListing/api-documentation`;

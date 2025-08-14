@@ -26,6 +26,7 @@ import {
   type Permissions,
   ResolvedCodeRef,
   extractCssVariables,
+  styleConversions,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
@@ -216,7 +217,7 @@ export function getBoxComponent(
       cardDef && 'cssVariables' in cardDef
         ? (cardDef as Theme).cssVariables
         : cardDef?.cardInfo?.theme?.cssVariables;
-    return sanitizedHtml(extractCssVariables(css));
+    return sanitizedHtml(styleConversions + extractCssVariables(css));
   }
 
   let component: TemplateOnlyComponent<{

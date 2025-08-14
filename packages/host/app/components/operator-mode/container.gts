@@ -20,6 +20,7 @@ import {
   GetCardContextName,
   GetCardsContextName,
   GetCardCollectionContextName,
+  CommandContextName,
 } from '@cardstack/runtime-common';
 
 import Auth from '@cardstack/host/components/matrix/auth';
@@ -90,6 +91,11 @@ export default class OperatorModeContainer extends Component<Signature> {
     return getCardCollection;
   }
 
+  @provide(CommandContextName)
+  private get commandContext() {
+    return this.commandService.commandContext;
+  }
+
   @provide(CardContextName)
   // @ts-ignore "context" is declared but not used
   private get context(): CardContext {
@@ -98,7 +104,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       getCards: this.getCards,
       getCardCollection: this.getCardCollection,
       store: this.store,
-      commandContext: this.commandService.commandContext,
+      commandContext: this.commandContext,
       prerenderedCardSearchComponent: PrerenderedCardSearch,
     };
   }
@@ -156,9 +162,9 @@ export default class OperatorModeContainer extends Component<Signature> {
 
     <style scoped>
       :global(:root) {
-        --boxel-sp-xxl: 2.5rem; /* 40px */
-        --boxel-sp-lg: 1.25rem; /* 20px */
-        --boxel-sp-xs: 0.625rem; /* 10px */
+        --boxel-sp-xxl: calc(var(--boxel-sp) * 2.5); /* 40px */
+        --boxel-sp-lg: calc(var(--boxel-sp) * 1.25); /* 20px */
+        --boxel-sp-xs: calc(var(--boxel-sp) * 0.625); /* 10px */
         --operator-mode-bg-color: #686283;
         --boxel-modal-max-width: 100%;
         --container-button-size: 2.5rem;

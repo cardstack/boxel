@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "VALORANT",
+      "platform": "Riot Games",
+      "genre": "Tactical FPS",
+      "releaseDate": "2020-06-02",
+      "coverImageUrl": "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&h=600&fit=crop&focalpoint=face",
+      "description": "## Tactical Shooter Meets Unique Agent Abilities\n\nVALORANT is a free-to-play first-person tactical hero shooter developed and published by Riot Games.\n\n**Key Features:**\n- Precise gunplay with tactical gameplay\n- Unique agents with special abilities\n- Competitive 5v5 matches\n- Anti-cheat system built from the ground up\n- Regular content updates",
+      "price": 0,
+      "metacriticScore": 80,
+      "userRating": 8.4,
+      "isMultiplayer": true,
+      "estimatedHours": 999,
+      "achievements": 0,
+      "systemRequirements": "**Minimum Requirements:**\n- OS: Windows 7/8/10 64-bit\n- Processor: Intel i3-4150\n- Memory: 4 GB RAM\n- Graphics: GeForce GT 730\n- Network: Broadband Internet connection\n- Storage: 8 GB available space"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../video-game",
+        "name": "VideoGame"
+      }
+    }
+  }
+}

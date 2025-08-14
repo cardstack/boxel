@@ -25,6 +25,8 @@ export default class PreviewFormatCommand extends HostBaseCommand<
     return PreviewFormatInput;
   }
 
+  requireInputFields = ['cardId', 'format', 'modulePath'];
+
   protected async run(
     input: BaseCommandModule.PreviewFormatInput,
   ): Promise<undefined> {

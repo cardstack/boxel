@@ -24,7 +24,7 @@
   --boxel-font-size-xs: 0.6875rem; /* 11px */
 
   /* letter-spacing */
-  /* Note: the px conversion is using default font_size = 16px */
+  /* Note: the px conversion is using default font_size = 16px (1rem) */
   /* Formula: px = em * font_size */
   --boxel-lsp-xxl: 0.1em; /* 1.6px */
   --boxel-lsp-xl: 0.05em; /* 0.8px */
@@ -35,7 +35,8 @@
   --boxel-lsp-xxs: 0.005em; /* 0.08px */
 
   /* Modular scale for spacing */
-  --boxel-spacing: 1rem; /* base size (16px) */
+  --_boxel-sp-unit: 0.25rem;
+  --boxel-spacing: calc(var(--_boxel-sp-unit) * 4); /* base size (1rem) */
   --boxel-ratio: 1.333; /* scale (based on "Perfect Fourth" scale) */
   --boxel-sp-6xs: calc(var(--boxel-sp-5xs) / var(--boxel-ratio)); /* 2.17px */
   --boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--boxel-ratio)); /* 2.88px */
@@ -59,27 +60,43 @@
   --boxel-icon-xl: 3.75rem; /* 60px */
   --boxel-icon-xxl: 5rem; /* 80px */
 
-  /* other */
-  --boxel-button-border-color: #acacac;
+  /* border-color */
   --boxel-border-color: #d3d3d3;
+  --boxel-button-border-color: #acacac;
+
+  /* border */
   --boxel-border: 1px solid var(--boxel-border-color);
   --boxel-border-dark: 1px solid var(--boxel-dark);
   --boxel-border-flexible: 1px solid rgba(255, 255, 255, 0.35);
   --boxel-border-card: 1px solid rgba(0, 0, 0, 0.1);
-  --boxel-border-radius-xxs: 1.5px;
-  --boxel-border-radius-xs: 4px;
-  --boxel-border-radius-sm: 7px;
-  --boxel-border-radius: 10px;
-  --boxel-border-radius-lg: 12px;
-  --boxel-border-radius-xl: 15px;
-  --boxel-border-radius-xxl: 20px;
+
+  /* border-radius */
+  --_boxel-radius: 10px;
+  --boxel-border-radius-xxs: calc(var(--boxel-border-radius-xs) - 2.5px);
+  --boxel-border-radius-xs: calc(var(--boxel-border-radius-sm) - 3px);
+  --boxel-border-radius-sm: calc(var(--boxel-border-radius) - 3px);
+  --boxel-border-radius: var(--_boxel-radius);
+  --boxel-border-radius-lg: calc(var(--boxel-border-radius) + 2px);
+  --boxel-border-radius-xl: calc(var(--boxel-border-radius-lg) + 3px);
+  --boxel-border-radius-xxl: calc(var(--boxel-border-radius-xl) + 5px);
+
+  /* transition */
   --boxel-transition: 0.2s ease;
+  --boxel-transition-properties:
+    color var(--boxel-transition), background-color var(--boxel-transition),
+    border-color var(--boxel-transition), box-shadow var(--boxel-transition); /* for commonly used properties */
+
+  /* box-shadow */
   --boxel-box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
   --boxel-box-shadow-hover: 0 3px 10px rgb(0 0 0 / 15%);
+  --boxel-deep-box-shadow: 0 5px 15px 0 rgba(0 0 0 / 50%);
+
+  /* outline */
   --boxel-outline-width: 2px;
   --boxel-outline-color: var(--boxel-blue);
-  --boxel-outline: var(--boxel-outline-width) solid var(--boxel-outline-color);
-  --boxel-deep-box-shadow: 0 5px 15px 0 rgba(0 0 0 / 50%);
+  --boxel-outline-style: solid;
+  --boxel-outline: var(--boxel-outline-width) var(--boxel-outline-style)
+    var(--boxel-outline-color);
 
   /* Container sizes */
   --boxel-xxs-container: 15.625rem; /* 250px */

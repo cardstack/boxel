@@ -22,6 +22,8 @@ export default class TransformCardsCommand extends HostBaseCommand<
     return VisitCardsInput;
   }
 
+  requireInputFields = ['query', 'commandRef'];
+
   protected async run(input: VisitCardsInput): Promise<undefined> {
     let { cardIds } = await new SearchCardsByQueryCommand(
       this.commandContext,

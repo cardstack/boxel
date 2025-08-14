@@ -9,9 +9,14 @@ import {
   Component,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
+import { commandData } from 'https://cardstack.com/base/resources/command-data';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 import { Skill } from 'https://cardstack.com/base/skill';
+import type {
+  GetAllRealmMetasResult,
+  RealmMetaField,
+} from 'https://cardstack.com/base/command';
 
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
@@ -35,45 +40,59 @@ import { ListingFittedTemplate } from '../components/listing-fitted';
 import ListingRemixCommand from '@cardstack/boxel-host/commands/listing-remix';
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 import ListingBuildCommand from '@cardstack/boxel-host/commands/listing-action-build';
+import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
 
 import { Publisher } from './publisher';
 import { Category } from './category';
 import { License } from './license';
 import { Tag } from './tag';
-import { setupAllRealmsInfo } from '../helper';
 
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
-  @tracked writableRealms: { name: string; url: string; iconURL?: string }[] =
-    [];
 
-  constructor(owner: any, args: any) {
-    super(owner, args);
-    this.writableRealms = setupAllRealmsInfo(this.args);
+  allRealmsInfoResource = commandData<typeof GetAllRealmMetasResult>(
+    this,
+    GetAllRealmMetasCommand,
+  );
+
+  get writableRealms(): { name: string; url: string; iconURL?: string }[] {
+    const commandResource = this.allRealmsInfoResource;
+    if (commandResource?.isSuccess && commandResource.value) {
+      const result = commandResource.value as GetAllRealmMetasResult;
+      if (result.results) {
+        return result.results
+          .filter(
+            (realmMeta: RealmMetaField) =>
+              realmMeta.canWrite &&
+              realmMeta.url !== this.args.model[realmURL]?.href,
+          )
+          .map((realmMeta: RealmMetaField) => ({
+            name: realmMeta.info.name,
+            url: realmMeta.url,
+            iconURL: realmMeta.info.iconURL,
+          }));
+      }
+    }
+    return [];
   }
 
-  get remixRealmOptions() {
-    return this.writableRealms
-      .filter((realm) => realm.url !== this.args.model[realmURL]?.href)
-      .map((realm) => {
-        return new MenuItem(realm.name, 'action', {
-          action: () => {
-            this.remix(realm.url);
-          },
-          iconURL: realm.iconURL ?? '/default-realm-icon.png',
-        });
-      });
-  }
-
-  get buildRealmOptions() {
+  private getRealmOptions(actionCallback: (realmUrl: string) => void) {
     return this.writableRealms.map((realm) => {
       return new MenuItem(realm.name, 'action', {
         action: () => {
-          this.build(realm.url);
+          actionCallback(realm.url);
         },
         iconURL: realm.iconURL ?? '/default-realm-icon.png',
       });
     });
+  }
+
+  get remixRealmOptions() {
+    return this.getRealmOptions((realmUrl) => this.remix(realmUrl));
+  }
+
+  get buildRealmOptions() {
+    return this.getRealmOptions((realmUrl) => this.build(realmUrl));
   }
 
   _build = task(async (realm: string) => {
@@ -280,6 +299,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                     class='realm-dropdown-menu'
                     @closeMenu={{dd.close}}
                     @items={{this.remixRealmOptions}}
+                    @loading={{this.allRealmsInfoResource.isLoading}}
                     data-test-catalog-listing-embedded-remix-dropdown
                   />
                 </:content>

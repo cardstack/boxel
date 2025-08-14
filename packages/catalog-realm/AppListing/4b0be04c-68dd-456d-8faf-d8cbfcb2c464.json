@@ -1,0 +1,178 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AppListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Gaming Hub",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/gaming-hub-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/gaming-hub-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/gaming-hub-listing/screenshot_03.png"
+      ],
+      "summary": "Comprehensive gaming profile and dashboard for tracking your complete gaming journey across platforms",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/gaming-hub-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/768812e7-104b-4be0-8c68-dd256dcfafd8"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/8812e710-4b0b-404c-a8dd-256dcfafd8cb"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/90768812-e710-4b0b-a04c-68dd256dcfaf"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/12e7104b-0be0-4c68-9d25-6dcfafd8cbfc"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/e7104b0b-e04c-48dd-a56d-cfafd8cbfcb2"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/104b0be0-4c68-4d25-adcf-afd8cbfcb2c4"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../gaming-hub/GamingHub/zlata-voidwalker"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../gaming-hub/GamingHub/alex-shadowblade"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../gaming-hub/GamingHub/diego-stratmaxx"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../gaming-hub/GamingHub/kai-thunderstrike"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../gaming-hub/GamingHub/maya-phoenixrise"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../gaming-hub/GamingHub/ravi-cosmicrift"
+        }
+      },
+      "examples.6": {
+        "links": {
+          "self": "../gaming-platform/GamingPlatform/steam-platform"
+        }
+      },
+      "examples.7": {
+        "links": {
+          "self": "../gaming-platform/GamingPlatform/steam-platform"
+        }
+      },
+      "examples.8": {
+        "links": {
+          "self": "../gaming-platform/GamingPlatform/xbox-live"
+        }
+      },
+      "examples.9": {
+        "links": {
+          "self": "../player-progress/PlayerProgress/alex-cyberpunk"
+        }
+      },
+      "examples.10": {
+        "links": {
+          "self": "../player-progress/PlayerProgress/maya-hollow-knight"
+        }
+      },
+      "examples.11": {
+        "links": {
+          "self": "../tournament/Tournament/street-fighter-evo"
+        }
+      },
+      "examples.12": {
+        "links": {
+          "self": "../tournament/Tournament/valorant-championship"
+        }
+      },
+      "examples.13": {
+        "links": {
+          "self": "../video-game/VideoGame/cyberpunk-2077"
+        }
+      },
+      "examples.14": {
+        "links": {
+          "self": "../video-game/VideoGame/hollow-knight"
+        }
+      },
+      "examples.15": {
+        "links": {
+          "self": "../video-game/VideoGame/valorant"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/video-games-interactive"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/social-networking"
+        }
+      },
+      "categories.2": {
+        "links": {
+          "self": "../Category/content-creation"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

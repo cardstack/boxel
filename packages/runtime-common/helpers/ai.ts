@@ -102,7 +102,7 @@ export type AttributesSchema =
 
 export interface CardSchema {
   attributes: AttributesSchema;
-  relationships: RelationshipsSchema;
+  relationships?: RelationshipsSchema;
 }
 
 /**
@@ -329,7 +329,14 @@ function generateJsonSchemaForContainsFields(
   def: typeof CardAPI.BaseDef,
   cardApi: typeof CardAPI,
   mappings: Map<typeof CardAPI.FieldDef, AttributesSchema>,
+  options?: {
+    require?: string[];
+    ignore?: string[];
+    strict?: boolean;
+  },
 ): AttributesSchema | undefined {
+  let ignoreFields = options?.ignore || [];
+  let requiredFields = options?.require || [];
   // If we're looking at a primitive field we can get the schema
   if (primitive in def) {
     return getPrimitiveType(def, mappings);
@@ -340,20 +347,21 @@ function generateJsonSchemaForContainsFields(
   let schema: ObjectSchema = {
     type: 'object',
     properties: {},
-    additionalProperties: false,
   };
 
   const { id: _removedIdField, ...fields } = cardApi.getFields(def, {
     usedLinksToFieldsOnly: false,
   });
 
+  let includedRequiredFields = [];
   for (let [fieldName, field] of Object.entries(fields)) {
     // We're generating patch data, so computeds should be skipped
     // We'll be handling relationships separately in `generatePatchCallRelationshipsSpecification`
     if (
       field.computeVia ||
       field.fieldType == 'linksTo' ||
-      field.fieldType == 'linksToMany'
+      field.fieldType == 'linksToMany' ||
+      ignoreFields.includes(fieldName)
     ) {
       continue;
     }
@@ -365,6 +373,11 @@ function generateJsonSchemaForContainsFields(
     ) as AttributesSchema | undefined;
     // This happens when we have no known schema for the field type
     if (fieldSchemaForSingleItem == undefined) {
+      if (options?.strict) {
+        throw new Error(
+          `No schema found for field '${fieldName}'. Ensure the field type is defined in the mappings.`,
+        );
+      }
       continue;
     }
 
@@ -380,8 +393,13 @@ function generateJsonSchemaForContainsFields(
     if (field.description) {
       schema.properties[fieldName].description = field.description;
     }
+    if (requiredFields.includes(fieldName)) {
+      includedRequiredFields.push(fieldName);
+    }
   }
-  schema.additionalProperties = false;
+  if (includedRequiredFields.length) {
+    schema.required = includedRequiredFields;
+  }
   return schema;
 }
 
@@ -394,7 +412,13 @@ type RelationshipFieldInfo = {
 function generateJsonSchemaForLinksToFields(
   def: typeof CardAPI.BaseDef,
   cardApi: typeof CardAPI,
+  options?: {
+    require?: string[];
+    ignore?: string[];
+  },
 ): RelationshipsSchema | undefined {
+  let ignoreFields = options?.ignore || [];
+  let requireFields = options?.require || [];
   let relationships: RelationshipFieldInfo[] = generateRelationshipFieldsInfo(
     def,
     cardApi,
@@ -406,7 +430,15 @@ function generateJsonSchemaForLinksToFields(
     type: 'object',
     properties: {},
   };
+  let includedRequiredFields = [];
   for (let rel of relationships) {
+    if (
+      ignoreFields.find((ignoreField) =>
+        rel.flatFieldName.startsWith(ignoreField),
+      )
+    ) {
+      continue;
+    }
     let relSchema: LinksToSchema = {
       type: 'object',
       properties: {
@@ -427,11 +459,18 @@ function generateJsonSchemaForLinksToFields(
             type: 'array',
             items: relSchema,
           };
-    schema.required = schema.required || [];
-    schema.required.push(rel.flatFieldName);
+    if (requireFields.includes(rel.flatFieldName)) {
+      includedRequiredFields.push(rel.flatFieldName);
+    }
     if (rel.description) {
       schema.properties[rel.flatFieldName].description = rel.description;
     }
+  }
+  if (Object.keys(schema.properties).length === 0) {
+    return;
+  }
+  if (includedRequiredFields.length) {
+    schema.required = includedRequiredFields;
   }
   return schema;
 }
@@ -480,38 +519,44 @@ function generateRelationshipFieldsInfo(
  * @param def - The card to generate the patch call specification for.
  * @param cardApi - The card API to use to generate the patch call specification
  * @param mappings - A map of field definitions to JSON schema
+ * @param options - Options to control the generation of the schema:
+ *   - ignore: An array of field names to ignore during schema generation
+ *   - require: An array of field names that will be marked as required in the schema
+ *   - strict: If true, the schema generation will throw errors for missing mappings
  * @returns The generated patch call specification as JSON schema
  */
 export function generateJsonSchemaForCardType(
   def: typeof CardAPI.CardDef,
   cardApi: typeof CardAPI,
   mappings: Map<typeof CardAPI.FieldDef, AttributesSchema>,
+  options?: {
+    require?: string[];
+    ignore?: string[];
+    strict?: boolean;
+  },
 ): CardSchema {
-  let schema = generateJsonSchemaForContainsFields(def, cardApi, mappings) as
-    | AttributesSchema
-    | undefined;
+  let schema = generateJsonSchemaForContainsFields(
+    def,
+    cardApi,
+    mappings,
+    options,
+  ) as AttributesSchema | undefined;
   if (schema == undefined) {
     return {
       attributes: {
         type: 'object',
         properties: {},
       },
-      relationships: {
-        type: 'object',
-        properties: {},
-        required: [],
-      },
     };
   } else {
-    let relationships = generateJsonSchemaForLinksToFields(def, cardApi);
-    if (
-      !relationships ||
-      !('required' in relationships) ||
-      !(relationships.required?.length ?? 0)
-    ) {
+    let relationships = generateJsonSchemaForLinksToFields(
+      def,
+      cardApi,
+      options,
+    );
+    if (!relationships) {
       return {
         attributes: schema,
-        relationships: { type: 'object', properties: {} },
       };
     }
     return {

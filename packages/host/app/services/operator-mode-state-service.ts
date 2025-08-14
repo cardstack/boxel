@@ -59,6 +59,7 @@ import NetworkService from './network';
 
 import type CardService from './card-service';
 import type CodeSemanticsService from './code-semantics-service';
+import type ErrorDisplayService from './error-display';
 import type { RecentFile } from './recent-files-service';
 import type ResetService from './reset';
 import type SpecPanelService from './spec-panel-service';
@@ -140,6 +141,7 @@ export default class OperatorModeStateService extends Service {
 
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
+  @service declare private errorDisplay: ErrorDisplayService;
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private monacoService: MonacoService;
@@ -1143,13 +1145,18 @@ export default class OperatorModeStateService extends Service {
         name: this.realm.info(url).name,
         type: 'catalog-workspace' as const,
       }));
-      return {
+      let result: BoxelContext = {
         agentId: this.matrixService.agentId,
         submode: 'workspace-chooser',
         debug: this.operatorModeController.debug,
         openCardIds: [],
         workspaces: [...userWorkspaces, ...catalogWorkspaces],
       };
+      let errorsDisplayed = this.errorDisplay.getDisplayedErrors();
+      if (errorsDisplayed.length) {
+        result.errorsDisplayed = errorsDisplayed;
+      }
+      return result;
     }
     if (this._state.submode === Submodes.Code) {
       codeMode = {
@@ -1202,7 +1209,7 @@ export default class OperatorModeStateService extends Service {
       canWrite: this.realm.canWrite(realmUrl),
     };
 
-    return {
+    let result: BoxelContext = {
       agentId: this.matrixService.agentId,
       submode: this._state.submode,
       debug: this.operatorModeController.debug,
@@ -1211,6 +1218,11 @@ export default class OperatorModeStateService extends Service {
       realmPermissions,
       codeMode,
     };
+    let errorsDisplayed = this.errorDisplay.getDisplayedErrors();
+    if (errorsDisplayed.length) {
+      result.errorsDisplayed = errorsDisplayed;
+    }
+    return result;
   }
 
   private makeRemoteIdsList(ids: (string | undefined)[]) {

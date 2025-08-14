@@ -1,5 +1,7 @@
 import { VirtualNetwork } from '@cardstack/runtime-common';
 
+import HostBaseCommand from '../lib/host-base-command';
+
 import * as AddFieldToCardDefinitionCommandModule from './add-field-to-card-definition';
 import * as AddSkillsToRoomCommandModule from './add-skills-to-room';
 import * as UseAiAssistantCommandModule from './ai-assistant';
@@ -7,6 +9,7 @@ import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-bl
 import * as CopyCardCommandModule from './copy-card';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
+import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
 import * as GetCardCommandModule from './get-card';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
 import * as ListingBuildCommandModule from './listing-action-build';
@@ -176,4 +179,33 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     '@cardstack/boxel-host/commands/get-card',
     GetCardCommandModule,
   );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/get-all-realm-metas',
+    GetAllRealmMetasCommandModule,
+  );
 }
+
+export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
+  AddFieldToCardDefinitionCommandModule.default,
+  AddSkillsToRoomCommandModule.default,
+  ApplySearchReplaceBlockCommandModule.default,
+  CreateAIAssistantRoomCommandModule.default,
+  GetCardCommandModule.default,
+  ReadCardForAiAssistantCommandModule.default,
+  ReadFileForAiAssistantCommandModule.default,
+  SaveCardCommandModule.default,
+  SearchCardsCommandModule.SearchCardsByQueryCommand,
+  SearchCardsCommandModule.SearchCardsByTypeAndTitleCommand,
+  OpenAiAssistantRoomCommandModule.default,
+  OpenWorkspaceCommandModule.default,
+  SendAiAssistantMessageModule.default,
+  SetActiveLlmModule.default,
+  ShowCardCommandModule.default,
+  SwitchSubmodeCommandModule.default,
+  TransformCardsCommandModule.default,
+  UpdateCodePathWithSelectionCommandModule.default,
+  UpdatePlaygroundSelectionCommandModule.default,
+  UpdateSkillActivationCommandModule.default,
+  UseAiAssistantCommandModule.default,
+  WriteTextFileCommandModule.default,
+];

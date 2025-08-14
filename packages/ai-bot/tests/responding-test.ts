@@ -646,13 +646,16 @@ module('Responding', (hooks) => {
     assert.equal(sentEvents[1].content.body, '', 'Body still empty');
 
     // Second reasoning update
-    await responder.onChunk(chunkWithReasoning(' and 2'), {} as any);
+    await responder.onChunk(
+      chunkWithReasoning(' and 2**New header**\n\nstep 3 might go here'),
+      {} as any,
+    );
     await responder.flush();
     sentEvents = fakeMatrixClient.getSentEvents();
     assert.equal(sentEvents.length, 3, 'Second reasoning update sent');
     assert.equal(
       sentEvents[2].content[APP_BOXEL_REASONING_CONTENT_KEY],
-      'reasoning step 1 and 2',
+      'reasoning step 1 and 2\n\n**New header**\n\nstep 3 might go here',
       'Second reasoning content',
     );
     assert.equal(sentEvents[2].content.body, '', 'Body still empty');
@@ -669,7 +672,7 @@ module('Responding', (hooks) => {
     );
     assert.equal(
       sentEvents[3].content[APP_BOXEL_REASONING_CONTENT_KEY],
-      'reasoning step 1 and 2',
+      'reasoning step 1 and 2\n\n**New header**\n\nstep 3 might go here',
       'Reasoning preserved with content update',
     );
 
@@ -685,7 +688,7 @@ module('Responding', (hooks) => {
     );
     assert.equal(
       sentEvents[4].content[APP_BOXEL_REASONING_CONTENT_KEY],
-      'reasoning step 1 and 2',
+      'reasoning step 1 and 2\n\n**New header**\n\nstep 3 might go here',
       'Reasoning still preserved',
     );
 

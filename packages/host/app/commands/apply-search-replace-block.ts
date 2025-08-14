@@ -35,6 +35,8 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
     return ApplySearchReplaceBlockInput;
   }
 
+  requireInputFields = ['codeBlock', 'fileContent'];
+
   protected async run(
     input: BaseCommandModule.ApplySearchReplaceBlockInput,
   ): Promise<BaseCommandModule.ApplySearchReplaceBlockResult> {

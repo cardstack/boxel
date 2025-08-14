@@ -39,9 +39,6 @@ import {
   CardDef,
   FieldDef,
   primitive,
-  deserialize,
-  BaseDefConstructor,
-  BaseInstanceType,
   contains,
   containsMany,
   field,
@@ -62,15 +59,6 @@ class DiagramType extends FieldDef {
   static displayName = 'Carving Turn Diagram Type';
   static [primitive]: 'heel' | 'toe' | 'toe-heel';
 
-  static async [deserialize]<T extends BaseDefConstructor>(
-    this: T,
-    val: any,
-  ): Promise<BaseInstanceType<T>> {
-    if (val === undefined || val === null) {
-      return 'toe-heel' as BaseInstanceType<T>;
-    }
-    return val as BaseInstanceType<T>;
-  }
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       {{@model}}
@@ -125,6 +113,7 @@ class IsolatedView extends Component<typeof CarvingTurnDiagram> {
   constructor(owner: Owner, args: any) {
     super(owner, args);
     (globalThis as any).__carvingDiagram = this;
+    this.args.model.diagramType = 'toe-heel';
   }
 
   get showToeTurn() {

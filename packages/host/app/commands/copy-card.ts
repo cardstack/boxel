@@ -33,6 +33,8 @@ export default class CopyCardCommand extends HostBaseCommand<
     return CopyCardInput;
   }
 
+  requireInputFields = ['sourceCard'];
+
   // Instances that are created via this method are eligible for garbage
   // collection--meaning that it will be detached from the store. This means you
   // MUST consume the instance IMMEDIATELY! it should not live in the state of

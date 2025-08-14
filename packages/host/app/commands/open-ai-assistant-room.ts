@@ -23,6 +23,8 @@ export default class OpenAiAssistantRoomCommand extends HostBaseCommand<
     return OpenAiAssistantRoomInput;
   }
 
+  requireInputFields = ['roomId'];
+
   protected async run(
     input: BaseCommandModule.OpenAiAssistantRoomInput,
   ): Promise<undefined> {
