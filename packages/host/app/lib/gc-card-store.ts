@@ -6,12 +6,13 @@ import {
   isNotLoadedError,
   isLocalId,
   localId as localIdSymbol,
+  loadDocument,
   type CardErrorJSONAPI as CardError,
 } from '@cardstack/runtime-common';
 
 import {
   type CardDef,
-  type IdentityContext,
+  type CardStore,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
@@ -87,9 +88,7 @@ class IDResolver {
   }
 }
 
-export default class IdentityContextWithGarbageCollection
-  implements IdentityContext
-{
+export default class CardStoreWithGarbageCollection implements CardStore {
   // importantly these properties are not tracked so that we are able
   // to deserialize an instance without glimmer rendering the inner workings of
   // the deserialization process.
@@ -101,9 +100,11 @@ export default class IdentityContextWithGarbageCollection
   #gcCandidates: Set<LocalId> = new Set();
   #referenceCount: ReferenceCount;
   #idResolver = new IDResolver();
+  #fetch: typeof globalThis.fetch;
 
-  constructor(referenceCount: ReferenceCount) {
+  constructor(referenceCount: ReferenceCount, fetch: typeof globalThis.fetch) {
     this.#referenceCount = referenceCount;
+    this.#fetch = fetch;
   }
 
   get(id: string): CardDef | undefined {
@@ -120,6 +121,10 @@ export default class IdentityContextWithGarbageCollection
 
   setNonTracked(id: string, instance: CardDef): void {
     this.setItem(id, instance, true);
+  }
+
+  async load(url: string) {
+    return await loadDocument(this.#fetch, url);
   }
 
   addInstanceOrError(id: string, instanceOrError: CardDef | CardError) {

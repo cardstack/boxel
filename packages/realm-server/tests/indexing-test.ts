@@ -615,7 +615,7 @@ module(basename(__filename), function () {
       if (entry?.type === 'error') {
         assert.strictEqual(
           entry.error.errorDetail.message,
-          'unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed for http://localhost:9000/this-is-a-link-to-nowhere',
+          'unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed',
         );
         assert.deepEqual(entry.error.errorDetail.deps, [
           `${testRealm}post`,
