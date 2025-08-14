@@ -16,6 +16,7 @@ import {
   uuidv4,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
 } from '@cardstack/runtime-common';
+import { validateAICredits } from '@cardstack/billing/ai-billing';
 import {
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
   SLIDING_SYNC_LIST_TIMELINE_LIMIT,
@@ -44,11 +45,11 @@ import {
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
-import { getAvailableCredits, saveUsageCost } from './lib/ai-billing';
+import { saveUsageCost } from '@cardstack/billing/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { OpenAIError } from 'openai/error';
-import { ChatCompletionStream } from 'openai/lib/ChatCompletionStream.mjs';
+import { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
 import { acquireLock, releaseLock } from './lib/queries';
 import { logger as matrixLogger } from 'matrix-js-sdk/lib/logger';
 import { setupSignalHandlers } from './lib/signal-handlers';
@@ -111,7 +112,12 @@ class Assistant {
     }
     trackAiUsageCostPromises.set(
       matrixUserId,
-      saveUsageCost(this.pgAdapter, matrixUserId, generationId).finally(() => {
+      saveUsageCost(
+        this.pgAdapter,
+        matrixUserId,
+        generationId,
+        process.env.OPENROUTER_API_KEY!,
+      ).finally(() => {
         trackAiUsageCostPromises.delete(matrixUserId);
       }),
     );
@@ -128,12 +134,12 @@ class Assistant {
       prompt.tools?.length === 0 ||
       (prompt.model && !this.toolCallCapableModels.has(prompt.model))
     ) {
-      return this.openai.beta.chat.completions.stream({
+      return this.openai.chat.completions.stream({
         model: prompt.model ?? DEFAULT_LLM,
         messages: prompt.messages as ChatCompletionMessageParam[],
       });
     } else {
-      return this.openai.beta.chat.completions.stream({
+      return this.openai.chat.completions.stream({
         model: prompt.model ?? DEFAULT_LLM,
         messages: prompt.messages as ChatCompletionMessageParam[],
         tools: prompt.tools,
@@ -365,12 +371,12 @@ Common issues are:
           }
         }
 
-        let availableCredits = await getAvailableCredits(
+        const creditValidation = await validateAICredits(
           assistant.pgAdapter,
           senderMatrixUserId,
         );
 
-        if (availableCredits < MINIMUM_AI_CREDITS_TO_CONTINUE) {
+        if (!creditValidation.hasEnoughCredits) {
           // Careful when changing this message, it's used in the UI as a detection of whether to show the "Buy credits" button.
           return responder.onError(
             `You need a minimum of ${MINIMUM_AI_CREDITS_TO_CONTINUE} credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.`,

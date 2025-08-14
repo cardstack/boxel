@@ -22,6 +22,8 @@ export default class UpdateSkillActivationCommand extends HostBaseCommand<
     return UpdateSkillActivationInput;
   }
 
+  requireInputFields = ['roomId', 'skillCardId', 'isActive'];
+
   protected async run(
     input: BaseCommandModule.UpdateSkillActivationInput,
   ): Promise<undefined> {

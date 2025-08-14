@@ -80,6 +80,8 @@ export default class ListingCreateCommand extends HostBaseCommand<
     return ListingCreateInput;
   }
 
+  requireInputFields = ['openCardId'];
+
   async createSpecTask(
     ref: ResolvedCodeRef,
     specType: SpecType,

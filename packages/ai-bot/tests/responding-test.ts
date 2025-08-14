@@ -561,6 +561,66 @@ module('Responding', (hooks) => {
     );
   });
 
+  test('Handles an empty tool call by eliding it (gpt-5 produces this at the time of this writing)', async () => {
+    const weatherCheckArgs = {
+      description: 'Check the weather in NYC',
+      attributes: {
+        zipCode: '10011',
+      },
+    };
+    await responder.ensureThinkingMessageSent();
+
+    await responder.onChunk({} as any, snapshotWithContent('some content'));
+
+    let snapshot = {
+      choices: [
+        {
+          message: {
+            tool_calls: [
+              undefined,
+              {
+                id: 'tool-call-1-id',
+                type: 'function' as 'function',
+                function: {
+                  name: 'checkWeather',
+                  arguments: JSON.stringify(weatherCheckArgs),
+                },
+              },
+            ],
+          },
+          finish_reason: null,
+          logprobs: null,
+          index: 0,
+        },
+      ],
+      id: '',
+      created: 0,
+      model: 'llm',
+    };
+    await responder.onChunk({} as any, snapshot as ChatCompletionSnapshot);
+
+    await responder.finalize();
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    assert.equal(
+      sentEvents.length,
+      3,
+      'Thinking message, and event with content, and event with one tool call should be sent',
+    );
+    assert.deepEqual(
+      sentEvents[2].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
+      [
+        {
+          id: 'tool-call-1-id',
+          name: 'checkWeather',
+          arguments:
+            '{"description":"Check the weather in NYC","attributes":{"zipCode":"10011"}}',
+        },
+      ],
+      'Command requests should be sent with correct content',
+    );
+  });
+
   test('Handles sequence of thinking -> reasoning -> content correctly', async () => {
     await responder.ensureThinkingMessageSent();
 
@@ -586,13 +646,16 @@ module('Responding', (hooks) => {
     assert.equal(sentEvents[1].content.body, '', 'Body still empty');
 
     // Second reasoning update
-    await responder.onChunk(chunkWithReasoning(' and 2'), {} as any);
+    await responder.onChunk(
+      chunkWithReasoning(' and 2**New header**\n\nstep 3 might go here'),
+      {} as any,
+    );
     await responder.flush();
     sentEvents = fakeMatrixClient.getSentEvents();
     assert.equal(sentEvents.length, 3, 'Second reasoning update sent');
     assert.equal(
       sentEvents[2].content[APP_BOXEL_REASONING_CONTENT_KEY],
-      'reasoning step 1 and 2',
+      'reasoning step 1 and 2\n\n**New header**\n\nstep 3 might go here',
       'Second reasoning content',
     );
     assert.equal(sentEvents[2].content.body, '', 'Body still empty');
@@ -609,7 +672,7 @@ module('Responding', (hooks) => {
     );
     assert.equal(
       sentEvents[3].content[APP_BOXEL_REASONING_CONTENT_KEY],
-      'reasoning step 1 and 2',
+      'reasoning step 1 and 2\n\n**New header**\n\nstep 3 might go here',
       'Reasoning preserved with content update',
     );
 
@@ -625,7 +688,7 @@ module('Responding', (hooks) => {
     );
     assert.equal(
       sentEvents[4].content[APP_BOXEL_REASONING_CONTENT_KEY],
-      'reasoning step 1 and 2',
+      'reasoning step 1 and 2\n\n**New header**\n\nstep 3 might go here',
       'Reasoning still preserved',
     );
 

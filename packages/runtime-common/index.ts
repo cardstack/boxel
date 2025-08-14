@@ -87,7 +87,7 @@ import { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './paths';
 export * from './cached-fetch';
-export * from './card-def-meta';
+export * from './definitions';
 export * from './catalog';
 export * from './commands';
 export * from './constants';
@@ -119,7 +119,10 @@ export {
   cardTypeIcon,
   getFieldIcon,
 } from './helpers/card-type-display-name';
-export { extractCssVariables } from './helpers/extract-css-variables';
+export {
+  extractCssVariables,
+  styleConversions,
+} from './helpers/extract-css-variables';
 export * from './url';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
@@ -451,10 +454,6 @@ export interface CardActions {
   ) => void;
   editCard: (card: CardDef) => void;
   saveCard: (id: string) => void;
-  doWithStableScroll: (
-    card: CardDef,
-    changeSizeCallback: () => Promise<void>,
-  ) => Promise<void>;
   changeSubmode: (
     url: URL,
     submode: 'code' | 'interact',

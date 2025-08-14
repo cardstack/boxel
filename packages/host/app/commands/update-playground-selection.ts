@@ -20,6 +20,8 @@ export default class UpdatePlaygroundSelectionCommand extends HostBaseCommand<
     return UpdatePlaygroundSelectionInput;
   }
 
+  requireInputFields = ['moduleId', 'cardId', 'format'];
+
   protected async run(
     input: BaseCommandModule.UpdatePlaygroundSelectionInput,
   ): Promise<undefined> {

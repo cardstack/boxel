@@ -171,6 +171,12 @@ export type EncodedCommandRequest = Omit<CommandRequest, 'arguments'> & {
   arguments: string;
 };
 
+export interface BoxelErrorForContext {
+  message: string;
+  stack?: string;
+  sourceUrl?: string;
+}
+
 export interface BoxelContext {
   agentId?: string;
   openCardIds?: string[];
@@ -179,6 +185,7 @@ export interface BoxelContext {
     canRead: boolean;
     canWrite: boolean;
   };
+  errorsDisplayed?: BoxelErrorForContext[];
   tools?: Tool[];
   toolChoice?: ToolChoice;
   submode?: string;

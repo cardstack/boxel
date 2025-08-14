@@ -1,0 +1,35 @@
+{
+  "data": {
+   "meta": {
+      "adoptsFrom": {
+        "name": "OnlineProduct",
+        "module": "../online-product"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "sku": "BSM-2024-015",
+      "price": 39.99,
+      "inStock": true,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "category": "Audio Equipment",
+      "imageUrl": "https://images.pexels.com/photos/1706694/pexels-photo-1706694.jpeg",
+      "inventory": 3,
+      "salePrice": 29.99,
+      "productName": "Bluetooth Speaker Mini",
+      "shortDescription": "Compact waterproof Bluetooth speaker with 360° sound and 12-hour playtime. Perfect for outdoor adventures, pool parties, and travel. Includes built-in microphone for hands-free calls."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

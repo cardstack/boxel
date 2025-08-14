@@ -24,6 +24,13 @@ export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
     return AddFieldToCardDefinitionInput;
   }
 
+  requireInputFields = [
+    'computedFieldFunctionSourceCode',
+    'fieldName',
+    'fieldRef',
+    'fieldType',
+  ];
+
   protected async run(
     input: BaseCommandModule.AddFieldToCardDefinitionInput,
   ): Promise<undefined> {

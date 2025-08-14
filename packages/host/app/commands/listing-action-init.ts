@@ -35,6 +35,8 @@ export default class ListingActionInitCommand extends HostBaseCommand<
     return ListingActionInput;
   }
 
+  requireInputFields = ['actionType', 'listing'];
+
   protected async run(
     input: BaseCommandModule.ListingActionInput,
   ): Promise<undefined> {

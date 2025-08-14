@@ -66,6 +66,9 @@ export abstract class Command<
 
   abstract getInputType(): Promise<CardInputType>;
 
+  ignoreInputFields: string[] = ['cardInfo'];
+  requireInputFields: string[] = [];
+
   name: string = this.constructor.name;
   description = '';
 
@@ -105,6 +108,7 @@ export abstract class Command<
   async getInputJsonSchema(
     cardApi: typeof CardAPI,
     mappings: Map<typeof CardAPI.FieldDef, AttributesSchema>,
+    strict = false,
   ): Promise<CardSchema> {
     let InputType = await this.getInputType();
     if (!InputType) {
@@ -119,7 +123,11 @@ export abstract class Command<
         },
       };
     }
-    return generateJsonSchemaForCardType(InputType, cardApi, mappings);
+    return generateJsonSchemaForCardType(InputType, cardApi, mappings, {
+      require: this.requireInputFields,
+      ignore: this.ignoreInputFields,
+      strict,
+    });
   }
 }
 

@@ -11,6 +11,7 @@ import type { MenuDivider } from '../../helpers/menu-divider.ts';
 import type { MenuItem } from '../../helpers/menu-item.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
 import CheckMark from '../../icons/check-mark.gts';
+import LoadingIndicator from '../loading-indicator/index.gts';
 
 // This little component helps to make glint understand when we have a MenuItem and when we have a MenuDivider
 class MenuItemRenderer extends Component<{
@@ -38,6 +39,7 @@ interface Signature {
     closeMenu?: () => void;
     itemClass?: string;
     items: Array<MenuItem | MenuDivider>;
+    loading?: boolean;
   };
   Element: HTMLUListElement;
 }
@@ -64,7 +66,16 @@ export default class Menu extends Component<Signature> {
 
   <template>
     <ul role='menu' class={{cn 'boxel-menu' @class}} ...attributes>
-      {{#if @items}}
+      {{#if @loading}}
+        <li role='none' class='boxel-menu__item' data-test-boxel-menu-loading>
+          <div class='boxel-menu__item__content'>
+            <span class='menu-item'>
+              <LoadingIndicator />
+              Loading...
+            </span>
+          </div>
+        </li>
+      {{else if @items}}
         {{#each (compact @items) as |menuItem|}}
           <MenuItemRenderer @menuItem={{menuItem}}>
             <:divider>

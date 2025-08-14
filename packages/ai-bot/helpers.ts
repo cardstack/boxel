@@ -1055,6 +1055,18 @@ export const buildContextMessage = async (
       result += `Viewing card instance: ${context.codeMode.previewPanelSelection.cardId}\n`;
       result += `In format: ${context.codeMode.previewPanelSelection.format}\n`;
     }
+    if (context.errorsDisplayed?.length) {
+      result += `Errors display:\n`;
+      context.errorsDisplayed.forEach((error) => {
+        result += `  - ${error.message}\n`;
+        if (error.stack) {
+          result += `    Stack trace: ${error.stack}\n`;
+        }
+        if (error.sourceUrl) {
+          result += `    Source URL: ${error.sourceUrl}\n`;
+        }
+      });
+    }
   } else {
     result += `The user has no open cards.\n`;
   }

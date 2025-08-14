@@ -1,5 +1,6 @@
 import { module, test, assert } from 'qunit';
 import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
+import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 
 import {
   buildPromptForModel,
@@ -115,6 +116,13 @@ module('buildPromptForModel', (hooks) => {
             context: {
               realmUrl: 'http://localhost:4201/experiments',
               submode: 'code',
+              errorsDisplayed: [
+                {
+                  message: 'Error occurred',
+                  stack: 'Error stack trace',
+                  sourceUrl: 'http://localhost:4201/experiments/author.gts',
+                },
+              ],
               codeMode: {
                 currentFile: 'http://localhost:4201/experiments/Author/1',
                 moduleInspectorPanel: 'preview',
@@ -163,6 +171,10 @@ File open in code editor: http://localhost:4201/experiments/Author/1
 Module inspector panel: preview
 Viewing card instance: http://localhost:4201/experiments/Author/1
 In format: isolated
+Errors display:
+  - Error occurred
+    Stack trace: Error stack trace
+    Source URL: http://localhost:4201/experiments/author.gts
 
 Current date and time: 2025-06-11T11:43:00.533Z
 `,
@@ -3448,7 +3460,8 @@ Current date and time: 2025-06-11T11:43:00.533Z
       'Should have one tool call',
     );
     assert.equal(
-      messages![4].tool_calls![0].function.name,
+      (messages![4].tool_calls![0] as ChatCompletionMessageFunctionToolCall)
+        .function.name,
       'patchCardInstance',
       'Should have patchCardInstance tool call',
     );

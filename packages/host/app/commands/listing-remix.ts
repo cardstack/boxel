@@ -47,6 +47,8 @@ export default class RemixCommand extends HostBaseCommand<
     return ListingInstallInput;
   }
 
+  requireInputFields = ['realm', 'listing'];
+
   protected async run(
     input: BaseCommandModule.ListingInstallInput,
   ): Promise<undefined> {

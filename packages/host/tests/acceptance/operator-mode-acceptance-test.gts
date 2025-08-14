@@ -17,7 +17,6 @@ import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 import {
   baseRealm,
-  primitive,
   type Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -96,21 +95,13 @@ module('Acceptance | operator mode tests', function (hooks) {
     let {
       field,
       contains,
-      deserialize,
       linksTo,
       linksToMany,
-      BaseDef,
-      CardDef,
       Component,
       FieldDef,
+      CardDef,
     } = cardApi;
     let { default: StringField } = string;
-    type BaseDefConstructor = typeof BaseDef;
-    type BaseInstanceType<T extends BaseDefConstructor> = T extends {
-      [primitive]: infer P;
-    }
-      ? P
-      : InstanceType<T>;
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -279,24 +270,14 @@ module('Acceptance | operator mode tests', function (hooks) {
       };
     }
 
-    class BoomField extends FieldDef {
-      static [primitive]: string;
-      static async [deserialize]<T extends BaseDefConstructor>(
-        this: T,
-      ): Promise<BaseInstanceType<T>> {
-        throw new Error('Boom!');
-      }
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          {{@model}}
-        </template>
-      };
-    }
-
     class BoomPerson extends CardDef {
       static displayName = 'Boom Person';
       @field firstName = contains(StringField);
-      @field boom = contains(BoomField);
+      @field boom = contains(StringField, {
+        computeVia: function (this: BoomPerson) {
+          throw new Error('Boom!');
+        },
+      });
       @field title = contains(StringField, {
         computeVia: function (this: BoomPerson) {
           return this.firstName;
@@ -308,7 +289,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       mockMatrixUtils,
       contents: {
         'address.gts': { Address },
-        'boom-field.gts': { BoomField },
         'boom-person.gts': { BoomPerson },
         'country-with-no-embedded-template.gts': { CountryWithNoEmbedded },
         'address-with-no-embedded-template.gts': { AddressWithNoEmbedded },

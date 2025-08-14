@@ -26,7 +26,9 @@ module.exports = function (environment) {
     'ember-cli-mirage': {
       enabled: false,
     },
-    logLevels: process.env.LOG_LEVELS || '*=info,current-run=error,matrix=info',
+    logLevels:
+      process.env.LOG_LEVELS ||
+      '*=info,current-run=error,matrix=info,realm:events=debug',
     matrixURL: process.env.MATRIX_URL || 'http://localhost:8008',
     matrixServerName: process.env.MATRIX_SERVER_NAME || 'localhost',
     autoSaveDelayMs: 500,
@@ -39,9 +41,8 @@ module.exports = function (environment) {
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
 
     // the fields below may be rewritten by the realm server
-    hostModeDomainRoot: process.env.HOST_MODE_DOMAIN_ROOT || 'localhost',
     hostsOwnAssets: true,
-    realmServerRoot: process.env.REALM_SERVER_ROOT || 'http://localhost:4201/',
+    realmServerDomain: process.env.REALM_SERVER_DOMAIN || 'localhost',
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
     resolvedSkillsRealmURL:
@@ -72,7 +73,7 @@ module.exports = function (environment) {
     ENV.autoSaveDelayMs = 0;
     ENV.monacoDebounceMs = 0;
     ENV.monacoCursorDebounceMs = 0;
-    ENV.realmServerRoot = 'http://test-realm/';
+    ENV.realmServerDomain = 'test-realm';
     ENV.serverEchoDebounceMs = 0;
     ENV.loginMessageTimeoutMs = 0;
     ENV.minSaveTaskDurationMs = 0;

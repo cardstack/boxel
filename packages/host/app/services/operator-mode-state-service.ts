@@ -59,6 +59,7 @@ import NetworkService from './network';
 
 import type CardService from './card-service';
 import type CodeSemanticsService from './code-semantics-service';
+import type ErrorDisplayService from './error-display';
 import type { RecentFile } from './recent-files-service';
 import type ResetService from './reset';
 import type SpecPanelService from './spec-panel-service';
@@ -140,6 +141,7 @@ export default class OperatorModeStateService extends Service {
 
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
+  @service declare private errorDisplay: ErrorDisplayService;
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private monacoService: MonacoService;
@@ -388,10 +390,33 @@ export default class OperatorModeStateService extends Service {
 
   get currentTrailItem() {
     if (this._state.trail.length === 0) {
-      return new URL('./index.json', this.realmURL).href;
+      // Try to get realm from last stack item, fallback to default readable realm
+      let realmPath =
+        this.getRealmFromLastStackItem() ||
+        this.realm.defaultReadableRealm.path;
+      return new URL('./index.json', realmPath).href;
     }
 
     return this._state.trail[this._state.trail.length - 1];
+  }
+
+  private getRealmFromLastStackItem(): string | null {
+    // Get the last stack item from the rightmost stack
+    let rightMostStack = this.rightMostStack();
+    if (rightMostStack && rightMostStack.length > 0) {
+      let lastStackItem = rightMostStack[rightMostStack.length - 1];
+      if (lastStackItem?.id) {
+        try {
+          let realm = this.realm.url(lastStackItem.id);
+          if (realm) {
+            return realm;
+          }
+        } catch (error) {
+          // If we can't determine the realm from the stack item, continue to fallback
+        }
+      }
+    }
+    return null;
   }
 
   private getRealmURLFromItemId(itemId: string): string {
@@ -916,6 +941,20 @@ export default class OperatorModeStateService extends Service {
       }
     }
 
+    // For host mode, determine realm from trail using availableRealmIndexCardIds
+    if (submode === Submodes.Host) {
+      // Check if current trail item is an available realm index card
+      let currentTrailItem = this.currentTrailItem;
+      // If trail item is not an index card, try to find the realm from the card's realm
+      if (currentTrailItem) {
+        let cardId = currentTrailItem.replace('.json', '');
+        let realm = this.realm.url(cardId);
+        if (realm) {
+          return new URL(realm);
+        }
+      }
+    }
+
     if (this.cachedRealmURL) {
       return this.cachedRealmURL;
     }
@@ -1020,6 +1059,10 @@ export default class OperatorModeStateService extends Service {
   }
 
   openWorkspace = async (realmUrl: string) => {
+    // Ensure realmUrl has a trailing slash
+    if (!realmUrl.endsWith('/')) {
+      realmUrl = realmUrl + '/';
+    }
     let id = `${realmUrl}index`;
     let stackItem = new StackItem({
       id,
@@ -1102,13 +1145,18 @@ export default class OperatorModeStateService extends Service {
         name: this.realm.info(url).name,
         type: 'catalog-workspace' as const,
       }));
-      return {
+      let result: BoxelContext = {
         agentId: this.matrixService.agentId,
         submode: 'workspace-chooser',
         debug: this.operatorModeController.debug,
         openCardIds: [],
         workspaces: [...userWorkspaces, ...catalogWorkspaces],
       };
+      let errorsDisplayed = this.errorDisplay.getDisplayedErrors();
+      if (errorsDisplayed.length) {
+        result.errorsDisplayed = errorsDisplayed;
+      }
+      return result;
     }
     if (this._state.submode === Submodes.Code) {
       codeMode = {
@@ -1161,7 +1209,7 @@ export default class OperatorModeStateService extends Service {
       canWrite: this.realm.canWrite(realmUrl),
     };
 
-    return {
+    let result: BoxelContext = {
       agentId: this.matrixService.agentId,
       submode: this._state.submode,
       debug: this.operatorModeController.debug,
@@ -1170,6 +1218,11 @@ export default class OperatorModeStateService extends Service {
       realmPermissions,
       codeMode,
     };
+    let errorsDisplayed = this.errorDisplay.getDisplayedErrors();
+    if (errorsDisplayed.length) {
+      result.errorsDisplayed = errorsDisplayed;
+    }
+    return result;
   }
 
   private makeRemoteIdsList(ids: (string | undefined)[]) {

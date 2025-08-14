@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "productName": "Vintage Canvas Travel Backpack",
+      "price": 89.99,
+      "salePrice": 67.49,
+      "sku": "VCT-BP-OLIVE",
+      "category": "Bags & Luggage",
+      "shortDescription": "Durable vintage-style canvas backpack perfect for travel and outdoor adventures. Features multiple compartments, padded laptop sleeve (fits up to 15 inches), adjustable straps, and weather-resistant coating. Available in olive green with leather accents.",
+      "inventory": 15,
+      "inStock": true,
+      "imageUrl": "https://images.pexels.com/photos/1545998/pexels-photo-1545998.jpeg",
+      "title": "Vintage Canvas Travel Backpack",
+      "cardInfo": {
+        "title": "Vintage Canvas Travel Backpack",
+        "description": "Durable vintage-style canvas backpack perfect for travel and outdoor adventures. Category: Bags & Luggage. SKU: VCT-BP-OLIVE",
+        "thumbnailURL": "https://images.pexels.com/photos/1545998/pexels-photo-1545998.jpeg",
+        "notes": null
+      },
+      "description": "Durable vintage-style canvas backpack perfect for travel and outdoor adventures. Category: Bags & Luggage. SKU: VCT-BP-OLIVE",
+      "thumbnailURL": "https://images.pexels.com/photos/1545998/pexels-photo-1545998.jpeg"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../online-product",
+        "name": "OnlineProduct"
+      },
+      "realmURL": "http://localhost:4201/catalog/"
+    }
+  }
+}

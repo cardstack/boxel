@@ -21,6 +21,8 @@ export default class ReadFileForAssistantCommand extends HostBaseCommand<
     return FileUrlCard;
   }
 
+  requireInputFields = ['fileUrl'];
+
   protected async run(
     input: BaseCommandModule.FileUrlCard,
   ): Promise<BaseCommandModule.FileForAttachmentCard> {

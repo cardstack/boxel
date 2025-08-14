@@ -344,10 +344,7 @@ jobs:
             "card-endpoints-test.ts",
             "card-source-endpoints-test.ts",
             "file-watcher-events-test.ts",
-            "index-query-engine-test.ts",
-            "index-writer-test.ts",
             "indexing-test.ts",
-            "loader-test.ts",
             "transpile-test.ts",
             "module-syntax-test.ts",
             "permissions/permission-checker-test.ts",
@@ -367,6 +364,7 @@ jobs:
             "server-endpoints-test.ts",
             "virtual-network-test.ts",
             "atomic-endpoints-test.ts",
+            "request-forward-test.ts",
           ]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2

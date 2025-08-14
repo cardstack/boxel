@@ -19,6 +19,8 @@ export default class SaveCardCommand extends HostBaseCommand<
     return SaveCardInput;
   }
 
+  requireInputFields = ['card'];
+
   // Instances that are saved via this method are eligible for garbage
   // collection--meaning that it will be detached from the store. This means you
   // MUST consume the instance IMMEDIATELY! it should not live in the state of
