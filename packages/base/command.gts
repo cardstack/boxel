@@ -11,6 +11,7 @@ import {
 import CodeRefField from './code-ref';
 import BooleanField from './boolean';
 import NumberField from './number';
+import ResponseField from './response-field';
 import { Skill } from './skill';
 import {
   JsonField,
@@ -281,6 +282,17 @@ export class PreviewFormatInput extends CardDef {
   @field cardId = contains(StringField);
   @field format = contains(StringField);
   @field modulePath = contains(StringField);
+}
+
+export class RequestForwardInput extends CardDef {
+  @field url = contains(StringField);
+  @field method = contains(StringField);
+  @field requestBody = contains(StringField);
+  @field headers = contains(JsonField); // optional
+}
+
+export class RequestForwardResult extends CardDef {
+  @field response = contains(ResponseField);
 }
 
 export {
