@@ -29,8 +29,9 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
-import { Submodes } from '../submode-switcher';
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
+
+import { Submodes } from '../submode-switcher';
 
 export default class AttachedFileDropdownMenu extends Component<{
   Args: {

@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
-import { bool, cssVar } from '@cardstack/boxel-ui/helpers';
+import { bool } from '@cardstack/boxel-ui/helpers';
 
 import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
 
@@ -17,7 +17,6 @@ import { type FileDef } from 'https://cardstack.com/base/file-api';
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
 import AttachedFileDropdownMenu from '../attached-file-dropdown-menu';
-import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 export interface CodeBlockDiffEditorHeaderSignature {
   Args: {
@@ -59,12 +58,7 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
         </div>
       </div>
       <div class='right-section'>
-        {{#if @codePatchErrorMessage}}
-          <FailureBordered
-            style={{cssVar icon-background-color='var(--boxel-error-400)'}}
-          />
-        {{/if}}
-        {{#if @diffEditorStats}}
+        {{#if this.showStats}}
           <div class='changes'>
             <span
               class='removed'
@@ -166,6 +160,10 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service private declare cardService: CardService;
+
+  private get showStats() {
+    return !!this.args.diffEditorStats && !this.args.codePatchErrorMessage;
+  }
 
   private get fileUrl() {
     return (

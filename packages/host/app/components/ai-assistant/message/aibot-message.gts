@@ -295,21 +295,27 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
             />
 
-            {{#unless this.codePatchErrorMessage}}
-              <codeBlock.editor @code={{this.codeForEditor}} />
-            {{/unless}}
+            <codeBlock.editor />
 
-            {{#if (eq @codePatchStatus 'applied')}}
-              <codeBlock.actions as |actions|>
-                <actions.copyCode
-                  @code={{this.extractReplaceCode @codeData.searchReplaceBlock}}
-                />
-                {{! This is just to show the ✅ icon to signalize that the code patch has been applied }}
-                <actions.applyCodePatch
-                  @codeData={{@codeData}}
-                  @patchCodeStatus={{@codePatchStatus}}
-                />
-              </codeBlock.actions>
+            <codeBlock.actions as |actions|>
+              <actions.copyCode
+                @code={{this.extractReplaceCode @codeData.searchReplaceBlock}}
+              />
+              {{! This is just to show the ✅ icon to signalize that the code patch has been applied }}
+              <actions.applyCodePatch
+                @codeData={{@codeData}}
+                @patchCodeStatus={{@codePatchStatus}}
+              />
+            </codeBlock.actions>
+
+            {{#if this.codePatchErrorMessage}}
+              <codeBlock.patchFooter>
+                <Alert @type='error' class='code-patch-error' as |Alert|>
+                  <Alert.Messages
+                    @messages={{array this.codePatchErrorMessage}}
+                  />
+                </Alert>
+              </codeBlock.patchFooter>
             {{/if}}
           </div>
         {{else}}
@@ -322,28 +328,39 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               @userMessageThisMessageIsRespondingTo={{@userMessageThisMessageIsRespondingTo}}
               @codePatchErrorMessage={{this.codePatchErrorMessage}}
             />
-            {{#unless this.codePatchErrorMessage}}
-              <codeBlock.diffEditor
+
+            <codeBlock.diffEditor
+              @originalCode={{this.codeDiffResource.originalCode}}
+              @modifiedCode={{this.codeDiffResource.modifiedCode}}
+              @language={{@codeData.language}}
+              @updateDiffEditorStats={{this.updateDiffEditorStats}}
+            />
+
+            <codeBlock.actions as |actions|>
+              <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
+
+              <actions.applyCodePatch
+                @codeData={{@codeData}}
+                @performPatch={{fn @onPatchCode @codeData}}
+                @patchCodeStatus={{if
+                  this.codePatchErrorMessage
+                  'failed'
+                  @codePatchStatus
+                }}
                 @originalCode={{this.codeDiffResource.originalCode}}
                 @modifiedCode={{this.codeDiffResource.modifiedCode}}
-                @language={{@codeData.language}}
-                @updateDiffEditorStats={{this.updateDiffEditorStats}}
               />
-            {{/unless}}
-            {{#unless this.codePatchErrorMessage}}
-              <codeBlock.actions as |actions|>
-                <actions.copyCode
-                  @code={{this.codeDiffResource.modifiedCode}}
-                />
-                <actions.applyCodePatch
-                  @codeData={{@codeData}}
-                  @performPatch={{fn @onPatchCode @codeData}}
-                  @patchCodeStatus={{@codePatchStatus}}
-                  @originalCode={{this.codeDiffResource.originalCode}}
-                  @modifiedCode={{this.codeDiffResource.modifiedCode}}
-                />
-              </codeBlock.actions>
-            {{/unless}}
+            </codeBlock.actions>
+
+            {{#if this.codePatchErrorMessage}}
+              <codeBlock.patchFooter>
+                <Alert @type='error' class='code-patch-error' as |Alert|>
+                  <Alert.Messages
+                    @messages={{array this.codePatchErrorMessage}}
+                  />
+                </Alert>
+              </codeBlock.patchFooter>
+            {{/if}}
           {{/if}}
         {{/if}}
       {{else}}
@@ -360,11 +377,5 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
         </codeBlock.actions>
       {{/if}}
     </CodeBlock>
-
-    {{#if this.codePatchErrorMessage}}
-      <Alert @type='error' as |Alert|>
-        <Alert.Messages @messages={{array this.codePatchErrorMessage}} />
-      </Alert>
-    {{/if}}
   </template>
 }

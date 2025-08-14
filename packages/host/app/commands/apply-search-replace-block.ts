@@ -9,7 +9,7 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import HostBaseCommand from '../lib/host-base-command';
 
 let standardErrorMessage =
-  'Unable to process the code patch due to malformed code coming from AI';
+  'Unable to process the code patch due to invalid code coming from AI';
 export const APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES = {
   SEARCH_BLOCK_PARSE_ERROR: `${standardErrorMessage} (search block parse error)`,
   REPLACE_BLOCK_PARSE_ERROR: `${standardErrorMessage} (replace block parse error)`,
