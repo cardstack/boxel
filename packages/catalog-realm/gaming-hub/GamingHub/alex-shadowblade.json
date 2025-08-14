@@ -35,17 +35,9 @@
         "FPS Masters"
       ],
       "streamSchedule": "Friday-Sunday 8PM-12AM CST",
-      "preferredGenres": [
-        "FPS",
-        "Battle Royale",
-        "Tactical Shooter",
-        "Racing"
-      ],
+      "preferredGenres": ["FPS", "Battle Royale", "Tactical Shooter", "Racing"],
       "profileImageUrl": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&h=400&fit=crop&crop=face",
-      "streamingPlatforms": [
-        "Twitch",
-        "YouTube Gaming"
-      ],
+      "streamingPlatforms": ["Twitch", "YouTube Gaming"],
       "contentCreatorStatus": true
     },
     "relationships": {
@@ -81,12 +73,12 @@
       },
       "favoriteGames.0": {
         "links": {
-          "self": "../../game/Game/valorant"
+          "self": "../../video-game/VideoGame/valorant"
         }
       },
       "favoriteGames.1": {
         "links": {
-          "self": "../../game/Game/cyberpunk-2077"
+          "self": "../../video-game/VideoGame/cyberpunk-2077"
         }
       },
       "connectedPlatforms.0": {

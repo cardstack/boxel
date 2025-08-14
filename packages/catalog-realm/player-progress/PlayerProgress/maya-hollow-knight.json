@@ -24,7 +24,7 @@
       },
       "game": {
         "links": {
-          "self": "../../game/Game/hollow-knight"
+          "self": "../../video-game/VideoGame/hollow-knight"
         }
       }
     },

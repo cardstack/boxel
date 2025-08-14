@@ -29,7 +29,7 @@ import { htmlSafe } from '@ember/template';
 
 import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
 
-import { Game } from '../game/game';
+import { VideoGame } from '../video-game/video-game';
 import { GamingHub } from '../gaming-hub/gaming-hub';
 
 // Player Progress Card - Link between player and game
@@ -38,7 +38,7 @@ export class PlayerProgress extends CardDef {
   static icon = TrendingUpIcon;
 
   @field player = linksTo(() => GamingHub);
-  @field game = linksTo(() => Game);
+  @field game = linksTo(() => VideoGame);
   @field hoursPlayed = contains(NumberField);
   @field status = contains(StringField);
   @field rating = contains(NumberField);

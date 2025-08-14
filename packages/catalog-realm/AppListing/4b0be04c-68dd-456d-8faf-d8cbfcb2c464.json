@@ -155,17 +155,17 @@
       },
       "examples.13": {
         "links": {
-          "self": "../game/Game/cyberpunk-2077"
+          "self": "../video-game/VideoGame/cyberpunk-2077"
         }
       },
       "examples.14": {
         "links": {
-          "self": "../game/Game/hollow-knight"
+          "self": "../video-game/VideoGame/hollow-knight"
         }
       },
       "examples.15": {
         "links": {
-          "self": "../game/Game/valorant"
+          "self": "../video-game/VideoGame/valorant"
         }
       },
       "categories.0": {

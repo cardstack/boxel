@@ -30,7 +30,7 @@
     "relationships": {
       "game": {
         "links": {
-          "self": "../../game/Game/valorant"
+          "self": "../../video-game/VideoGame/valorant"
         }
       },
       "cardInfo.theme": {

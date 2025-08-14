@@ -38,7 +38,7 @@ import GamepadIcon from '@cardstack/boxel-icons/gamepad-2';
 import TrophyIcon from '@cardstack/boxel-icons/trophy';
 import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
 
-import { Game } from '../game/game';
+import { VideoGame } from '../video-game/video-game';
 import { GamingPlatform } from '../gaming-platform/gaming-platform';
 import { Tournament } from '../tournament/tournament';
 import { PlayerProgress } from '../player-progress/player-progress';
@@ -3326,8 +3326,8 @@ export class GamingHub extends CardDef {
   @field gameProgress = linksToMany(() => PlayerProgress);
   @field tournaments = linksToMany(() => Tournament);
   @field friends = linksToMany(() => GamingHub);
-  @field favoriteGames = linksToMany(() => Game);
-  @field wishlistGames = linksToMany(() => Game);
+  @field favoriteGames = linksToMany(() => VideoGame);
+  @field wishlistGames = linksToMany(() => VideoGame);
 
   @field gamingGroups = containsMany(StringField);
   @field streamingPlatforms = containsMany(StringField);

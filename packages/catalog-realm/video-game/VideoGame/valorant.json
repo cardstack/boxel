@@ -19,8 +19,8 @@
     "relationships": {},
     "meta": {
       "adoptsFrom": {
-        "module": "../game",
-        "name": "Game"
+        "module": "../video-game",
+        "name": "VideoGame"
       }
     }
   }

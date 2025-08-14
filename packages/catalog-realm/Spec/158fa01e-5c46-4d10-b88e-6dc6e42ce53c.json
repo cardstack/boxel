@@ -4,12 +4,12 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "module": "../game/game",
-        "name": "Game"
+        "module": "../video-game/video-game",
+        "name": "VideoGame"
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Game",
+      "title": "Video Game",
       "description": null,
       "cardInfo": {},
       "thumbnailURL": null

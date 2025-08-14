@@ -16,14 +16,14 @@ import { formatDateTime, formatCurrency } from '@cardstack/boxel-ui/helpers';
 
 import TrophyIcon from '@cardstack/boxel-icons/trophy';
 
-import { Game } from '../game/game';
+import { VideoGame } from '../video-game/video-game';
 
 export class Tournament extends CardDef {
   static displayName = 'Tournament';
   static icon = TrophyIcon;
 
   @field name = contains(StringField);
-  @field game = linksTo(() => Game);
+  @field game = linksTo(() => VideoGame);
   @field startDate = contains(DatetimeField);
   @field endDate = contains(DatetimeField);
   @field participants = contains(NumberField);
