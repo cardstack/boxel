@@ -52,9 +52,7 @@ test.describe('Host mode', () => {
     await synapseStop(synapse.synapseId);
   });
 
-  test('back button from a workspace returns to the workspace chooser', async ({
-    page,
-  }) => {
+  test('card in a published realm renders in host mode', async ({ page }) => {
     await page.goto('http://published.realm/mango.json');
 
     await expect(
