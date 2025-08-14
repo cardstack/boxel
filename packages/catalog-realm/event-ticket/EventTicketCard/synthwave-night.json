@@ -10,7 +10,17 @@
       "ticketPrice": 35,
       "seatSection": "General Admission",
       "ticketType": "Standard",
-      "isAvailable": true
+      "isAvailable": true,
+      "maxCapacity": 500,
+      "soldTickets": 150,
+      "ticketQRCode": {
+        "data": "TICKET-SYNTHWAVE-2024-SN789",
+        "config": {
+          "foreground": "#8b5cf6",
+          "background": "#ffffff",
+          "margin": 2
+        }
+      }
     },
     "relationships": {},
     "meta": {

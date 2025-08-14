@@ -10,7 +10,17 @@
       "ticketPrice": 25,
       "seatSection": "Standing",
       "ticketType": "Early Bird",
-      "isAvailable": true
+      "isAvailable": true,
+      "maxCapacity": 200,
+      "soldTickets": 180,
+      "ticketQRCode": {
+        "data": "TICKET-INDIE-2024-IS456",
+        "config": {
+          "foreground": "#3b82f6",
+          "background": "#ffffff",
+          "margin": 2
+        }
+      }
     },
     "relationships": {},
     "meta": {
