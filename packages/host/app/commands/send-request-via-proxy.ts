@@ -6,26 +6,26 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import type RealmServerService from '../services/realm-server';
 
-export default class RequestForwardCommand extends HostBaseCommand<
-  typeof BaseCommandModule.RequestForwardInput,
-  typeof BaseCommandModule.RequestForwardResult
+export default class SendRequestViaProxyCommand extends HostBaseCommand<
+  typeof BaseCommandModule.SendRequestViaProxyInput,
+  typeof BaseCommandModule.SendRequestViaProxyResult
 > {
   @service declare private realmServer: RealmServerService;
 
-  static actionVerb = 'Forward Request';
-  description = 'Forward a request to an external API through the realm server';
+  static actionVerb = 'Send';
+  description = 'Make a request to an external API through the Boxel proxy';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
-    const { RequestForwardInput } = commandModule;
-    return RequestForwardInput;
+    const { SendRequestViaProxyInput } = commandModule;
+    return SendRequestViaProxyInput;
   }
 
   protected async run(
-    input: BaseCommandModule.RequestForwardInput,
-  ): Promise<BaseCommandModule.RequestForwardResult> {
+    input: BaseCommandModule.SendRequestViaProxyInput,
+  ): Promise<BaseCommandModule.SendRequestViaProxyResult> {
     const commandModule = await this.loadCommandModule();
-    const { RequestForwardResult } = commandModule;
+    const { SendRequestViaProxyResult } = commandModule;
 
     try {
       // Make the HTTP request to the realm server's _request-forward endpoint
@@ -36,7 +36,7 @@ export default class RequestForwardCommand extends HostBaseCommand<
         headers: input.headers,
       });
 
-      return new RequestForwardResult({
+      return new SendRequestViaProxyResult({
         response,
       });
     } catch (error) {
@@ -61,7 +61,7 @@ export default class RequestForwardCommand extends HostBaseCommand<
         },
       );
 
-      return new RequestForwardResult({
+      return new SendRequestViaProxyResult({
         response: errorResponse,
       });
     }

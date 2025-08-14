@@ -4,7 +4,7 @@ import { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import RequestForwardCommand from '@cardstack/host/commands/request-forward';
+import SendRequestViaProxyCommand from '@cardstack/host/commands/send-request-via-proxy';
 import RealmService from '@cardstack/host/services/realm';
 
 import {
@@ -27,7 +27,7 @@ class StubRealmService extends RealmService {
   }
 }
 
-module('Integration | commands | request-forward', function (hooks) {
+module('Integration | commands | send-request-via-proxy', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
@@ -167,8 +167,8 @@ module('Integration | commands | request-forward', function (hooks) {
     });
   });
 
-  // Helper function to create mock request forward input
-  function createMockRequestForwardInput(overrides = {}) {
+  // Helper function to create mock send request via proxy input
+  function createMockSendRequestViaProxyInput(overrides = {}) {
     return {
       url: 'https://api.example.com/test',
       method: 'POST',
@@ -179,13 +179,13 @@ module('Integration | commands | request-forward', function (hooks) {
   }
 
   // Test successful JSON response
-  test('successfully forwards request and returns JSON response', async function (assert) {
+  test('successfully sends request and returns JSON response', async function (assert) {
     const commandService = getService('command-service');
-    const requestForwardCommand = new RequestForwardCommand(
+    const requestForwardCommand = new SendRequestViaProxyCommand(
       commandService.commandContext,
     );
 
-    const input = createMockRequestForwardInput();
+    const input = createMockSendRequestViaProxyInput();
     const result = await requestForwardCommand.execute(input);
 
     assert.ok(result, 'Command should return a result');
@@ -200,13 +200,13 @@ module('Integration | commands | request-forward', function (hooks) {
   });
 
   // Test text response
-  test('successfully forwards request and returns text response', async function (assert) {
+  test('successfully sends request and returns text response', async function (assert) {
     const commandService = getService('command-service');
-    const requestForwardCommand = new RequestForwardCommand(
+    const requestForwardCommand = new SendRequestViaProxyCommand(
       commandService.commandContext,
     );
 
-    const input = createMockRequestForwardInput({
+    const input = createMockSendRequestViaProxyInput({
       url: 'https://api.example.com/text',
     });
     const result = await requestForwardCommand.execute(input);
@@ -219,15 +219,15 @@ module('Integration | commands | request-forward', function (hooks) {
   });
 
   // Test image response
-  test('successfully forwards request and returns image response', async function (assert) {
+  test('successfully sends request and returns image response', async function (assert) {
     const mockImageData = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]); // PNG header
 
     const commandService = getService('command-service');
-    const requestForwardCommand = new RequestForwardCommand(
+    const requestForwardCommand = new SendRequestViaProxyCommand(
       commandService.commandContext,
     );
 
-    const input = createMockRequestForwardInput({
+    const input = createMockSendRequestViaProxyInput({
       url: 'https://api.example.com/image',
       method: 'GET',
       requestBody: '',
@@ -247,7 +247,7 @@ module('Integration | commands | request-forward', function (hooks) {
   });
 
   // Test event stream response
-  test('successfully forwards request and returns event stream response', async function (assert) {
+  test('successfully sends request and returns event stream response', async function (assert) {
     const mockStreamData = [
       'data: {"event": "start", "id": "123"}\n\n',
       'data: {"event": "progress", "percent": 50}\n\n',
@@ -256,11 +256,11 @@ module('Integration | commands | request-forward', function (hooks) {
     ].join('');
 
     const commandService = getService('command-service');
-    const requestForwardCommand = new RequestForwardCommand(
+    const requestForwardCommand = new SendRequestViaProxyCommand(
       commandService.commandContext,
     );
 
-    const input = createMockRequestForwardInput({
+    const input = createMockSendRequestViaProxyInput({
       url: 'https://api.example.com/stream',
       stream: true,
     });
@@ -280,11 +280,11 @@ module('Integration | commands | request-forward', function (hooks) {
   // Test error response (4xx)
   test('handles 4xx error responses from external API', async function (assert) {
     const commandService = getService('command-service');
-    const requestForwardCommand = new RequestForwardCommand(
+    const requestForwardCommand = new SendRequestViaProxyCommand(
       commandService.commandContext,
     );
 
-    const input = createMockRequestForwardInput({
+    const input = createMockSendRequestViaProxyInput({
       url: 'https://api.example.com/error-400',
     });
     const result = await requestForwardCommand.execute(input);
@@ -304,11 +304,11 @@ module('Integration | commands | request-forward', function (hooks) {
   // Test error response (5xx)
   test('handles 5xx error responses from external API', async function (assert) {
     const commandService = getService('command-service');
-    const requestForwardCommand = new RequestForwardCommand(
+    const requestForwardCommand = new SendRequestViaProxyCommand(
       commandService.commandContext,
     );
 
-    const input = createMockRequestForwardInput({
+    const input = createMockSendRequestViaProxyInput({
       url: 'https://api.example.com/error-500',
     });
     const result = await requestForwardCommand.execute(input);
@@ -328,11 +328,11 @@ module('Integration | commands | request-forward', function (hooks) {
   // Test realm server error
   test('handles realm server errors gracefully', async function (assert) {
     const commandService = getService('command-service');
-    const requestForwardCommand = new RequestForwardCommand(
+    const requestForwardCommand = new SendRequestViaProxyCommand(
       commandService.commandContext,
     );
 
-    const input = createMockRequestForwardInput({
+    const input = createMockSendRequestViaProxyInput({
       url: 'https://api.example.com/realm-error',
     });
     const result = await requestForwardCommand.execute(input);
@@ -348,11 +348,11 @@ module('Integration | commands | request-forward', function (hooks) {
   // Test network error
   test('handles network errors gracefully', async function (assert) {
     const commandService = getService('command-service');
-    const requestForwardCommand = new RequestForwardCommand(
+    const requestForwardCommand = new SendRequestViaProxyCommand(
       commandService.commandContext,
     );
 
-    const input = createMockRequestForwardInput({
+    const input = createMockSendRequestViaProxyInput({
       url: 'https://api.example.com/network-error',
     });
     const result = await requestForwardCommand.execute(input);
@@ -371,11 +371,11 @@ module('Integration | commands | request-forward', function (hooks) {
 
     for (const method of methods) {
       const commandService = getService('command-service');
-      const requestForwardCommand = new RequestForwardCommand(
+      const requestForwardCommand = new SendRequestViaProxyCommand(
         commandService.commandContext,
       );
 
-      const input = createMockRequestForwardInput({ method });
+      const input = createMockSendRequestViaProxyInput({ method });
       const result = await requestForwardCommand.execute(input);
 
       assert.ok(result, `Command should return a result for ${method}`);
@@ -397,11 +397,11 @@ module('Integration | commands | request-forward', function (hooks) {
 
     for (const testCase of testCases) {
       const commandService = getService('command-service');
-      const requestForwardCommand = new RequestForwardCommand(
+      const requestForwardCommand = new SendRequestViaProxyCommand(
         commandService.commandContext,
       );
 
-      const input = createMockRequestForwardInput({
+      const input = createMockSendRequestViaProxyInput({
         url: testCase.url,
       });
       const result = await requestForwardCommand.execute(input);
@@ -421,11 +421,11 @@ module('Integration | commands | request-forward', function (hooks) {
   // Test with large response
   test('handles large response data', async function (assert) {
     const commandService = getService('command-service');
-    const requestForwardCommand = new RequestForwardCommand(
+    const requestForwardCommand = new SendRequestViaProxyCommand(
       commandService.commandContext,
     );
 
-    const input = createMockRequestForwardInput({
+    const input = createMockSendRequestViaProxyInput({
       url: 'https://api.example.com/large',
     });
     const result = await requestForwardCommand.execute(input);
@@ -449,11 +449,11 @@ module('Integration | commands | request-forward', function (hooks) {
     };
 
     const commandService = getService('command-service');
-    const requestForwardCommand = new RequestForwardCommand(
+    const requestForwardCommand = new SendRequestViaProxyCommand(
       commandService.commandContext,
     );
 
-    const input = createMockRequestForwardInput({
+    const input = createMockSendRequestViaProxyInput({
       url: specialUrl,
       headers: specialHeaders,
     });
@@ -466,11 +466,11 @@ module('Integration | commands | request-forward', function (hooks) {
   // Test with empty request body
   test('handles empty request body', async function (assert) {
     const commandService = getService('command-service');
-    const requestForwardCommand = new RequestForwardCommand(
+    const requestForwardCommand = new SendRequestViaProxyCommand(
       commandService.commandContext,
     );
 
-    const input = createMockRequestForwardInput({
+    const input = createMockSendRequestViaProxyInput({
       method: 'GET',
       requestBody: '',
     });
@@ -483,11 +483,11 @@ module('Integration | commands | request-forward', function (hooks) {
   // Test with null/undefined headers
   test('handles null/undefined headers', async function (assert) {
     const commandService = getService('command-service');
-    const requestForwardCommand = new RequestForwardCommand(
+    const requestForwardCommand = new SendRequestViaProxyCommand(
       commandService.commandContext,
     );
 
-    const input = createMockRequestForwardInput({
+    const input = createMockSendRequestViaProxyInput({
       headers: undefined,
     });
     const result = await requestForwardCommand.execute(input);

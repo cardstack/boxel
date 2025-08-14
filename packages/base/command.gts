@@ -284,14 +284,14 @@ export class PreviewFormatInput extends CardDef {
   @field modulePath = contains(StringField);
 }
 
-export class RequestForwardInput extends CardDef {
+export class SendRequestViaProxyInput extends CardDef {
   @field url = contains(StringField);
   @field method = contains(StringField);
   @field requestBody = contains(StringField);
   @field headers = contains(JsonField); // optional
 }
 
-export class RequestForwardResult extends CardDef {
+export class SendRequestViaProxyResult extends CardDef {
   @field response = contains(ResponseField);
 }
 

@@ -25,10 +25,10 @@ import * as PatchCodeCommandModule from './patch-code';
 import * as PreviewFormatCommandModule from './preview-format';
 import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assistant';
 import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assistant';
-import * as RequestForwardCommandModule from './request-forward';
 import * as SaveCardCommandModule from './save-card';
 import * as SearchCardsCommandModule from './search-cards';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
+import * as SendRequestViaProxyCommandModule from './send-request-via-proxy';
 import * as SetActiveLlmModule from './set-active-llm';
 import * as ShowCardCommandModule from './show-card';
 import * as SwitchSubmodeCommandModule from './switch-submode';
@@ -161,8 +161,8 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     UpdateSkillActivationCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/request-forward',
-    RequestForwardCommandModule,
+    '@cardstack/boxel-host/commands/send-request-via-proxy',
+    SendRequestViaProxyCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/ai-assistant',
