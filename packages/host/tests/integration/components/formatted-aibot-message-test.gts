@@ -1,6 +1,7 @@
 import Owner from '@ember/owner';
 import {
   RenderingTestContext,
+  click,
   render,
   settled,
   waitFor,
