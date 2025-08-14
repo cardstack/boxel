@@ -38,7 +38,7 @@ export default class AttachedFileDropdownMenu extends Component<{
     file: FileDef;
     isNewFile: boolean;
     version?: 'diff-editor';
-    codePatchStatus: CodePatchStatus | 'applying' | 'ready';
+    codePatchStatus?: CodePatchStatus | 'applying' | 'ready';
   };
 }> {
   @service declare operatorModeStateService: OperatorModeStateService;
