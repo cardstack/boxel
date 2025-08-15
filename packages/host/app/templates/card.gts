@@ -150,10 +150,13 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
         height: 3rem;
         border: none;
         background: transparent;
+        opacity: 1;
+        transition: opacity 0.2s ease-in-out;
       }
 
       .connect.not-loaded {
-        display: none;
+        width: 0;
+        opacity: 0;
       }
     </style>
   </template>
