@@ -8,11 +8,24 @@ import LoadingIndicator from '../loading-indicator/index.gts';
 
 export type BoxelButtonKind =
   | 'primary'
+  | 'secondary'
+  | 'outline'
   | 'secondary-dark'
   | 'secondary-light'
   | 'danger'
   | 'primary-dark'
   | 'text-only';
+
+export const buttonKindOptions: BoxelButtonKind[] = [
+  'primary',
+  'secondary',
+  'outline',
+  'secondary-dark',
+  'secondary-light',
+  'danger',
+  'primary-dark',
+  'text-only',
+];
 
 export type BoxelButtonSize =
   | 'extra-small'
@@ -102,7 +115,7 @@ export default class ButtonComponent extends Component<Signature> {
           justify-content: center;
           height: min-content;
           align-items: center;
-          border-radius: 100px;
+          border-radius: var(--radius, 100px);
           transition:
             background-color var(--boxel-transition),
             border var(--boxel-transition);
@@ -114,6 +127,7 @@ export default class ButtonComponent extends Component<Signature> {
 
           /* size variants */
           font: var(--boxel-button-font, var(--boxel-font-sm));
+          font-family: inherit;
           min-height: var(--boxel-button-min-height);
           min-width: var(--boxel-button-min-width, 5rem);
           padding: var(
@@ -124,6 +138,7 @@ export default class ButtonComponent extends Component<Signature> {
             --boxel-button-letter-spacing,
             var(--boxel-lsp-lg)
           );
+          box-shadow: var(--shadow);
         }
 
         .loading-indicator {
@@ -185,14 +200,33 @@ export default class ButtonComponent extends Component<Signature> {
       *
       */
         .kind-primary:not(:disabled) {
-          --boxel-button-color: var(--boxel-highlight);
+          /*
+            background-color: var(--primary);
+            color: var(--primary-foreground);
+          */
+          --boxel-button-color: var(--primary, var(--boxel-highlight));
           --boxel-button-border: 1px solid var(--boxel-button-color);
-          --boxel-button-text-color: var(--boxel-dark);
+          --boxel-button-text-color: var(
+            --primary-foreground,
+            var(--boxel-dark)
+          );
         }
-
         .kind-primary:not(:disabled):hover,
         .kind-primary:not(:disabled):active {
-          --boxel-button-color: var(--boxel-highlight-hover);
+          --boxel-button-color: var(--primary, var(--boxel-highlight-hover));
+        }
+
+        .kind-secondary:not(:disabled) {
+          --boxel-button-color: var(--secondary, var(--boxel-light));
+          --boxel-button-border: 1px solid var(--secondary, var(--boxel-400));
+          --boxel-button-text-color: var(
+            --secondary-foreground,
+            var(--boxel-dark)
+          );
+        }
+        .kind-secondary:not(:disabled):hover,
+        .kind-secondary:not(:disabled):active {
+          --boxel-button-border: 1px solid var(--secondary, currentColor);
         }
 
         .kind-secondary-dark:not(:disabled) {

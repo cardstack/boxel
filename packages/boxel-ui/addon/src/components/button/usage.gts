@@ -10,19 +10,13 @@ import { eq } from '../../helpers/truth-helpers.ts';
 import BoxelButton, {
   type BoxelButtonKind,
   type BoxelButtonSize,
+  buttonKindOptions,
 } from './index.gts';
 
 export default class ButtonUsage extends Component {
   sizeVariants = ['extra-small', 'small', 'base', 'tall', 'touch'];
   kindVariants = {
-    all: [
-      'primary',
-      'primary-dark',
-      'secondary-light',
-      'secondary-dark',
-      'danger',
-      'text-only',
-    ],
+    all: buttonKindOptions,
     light: ['primary', 'secondary-light'],
     dark: ['primary', 'secondary-dark'],
   };
