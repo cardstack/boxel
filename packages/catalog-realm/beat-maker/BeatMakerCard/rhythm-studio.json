@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "bpm": 120,
+      "bpm": 110,
       "swing": 0,
       "pattern": "House-Standard",
       "cardInfo": {
@@ -33,7 +33,7 @@
       },
       "currentPattern": {
         "links": {
-          "self": "../BeatPatternCard/basic-4-4-beat"
+          "self": "../BeatPatternCard/jazz-swing"
         }
       },
       "availableKits.0": {
