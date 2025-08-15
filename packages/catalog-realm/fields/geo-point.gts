@@ -13,7 +13,7 @@ import ColorField from 'https://cardstack.com/base/color';
 
 import { FieldContainer, ColorPalette } from '@cardstack/boxel-ui/components';
 
-class GeoPointConfigField extends FieldDef {
+export class GeoPointConfigField extends FieldDef {
   @field markerColor = contains(ColorField);
 }
 
@@ -68,8 +68,10 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
 
   @action
   updateCoordinates(lat: number, lon: number) {
-    this.args.model.lat = lat;
-    this.args.model.lon = lon;
+    if (this.args.model) {
+      this.args.model.lat = lat;
+      this.args.model.lon = lon;
+    }
   }
 
   <template>
@@ -123,22 +125,19 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
 
 class EditTemplate extends Component<typeof GeoPointField> {
   get configValue() {
-    if (!this.args.model.config) {
-      (this.args.model as any).config = {
-        markerColor: '#22c55e',
-      };
+    if (!this.args.model?.config) {
+      return { markerColor: '#22c55e' };
     }
     return this.args.model.config;
   }
 
   updateMarkerColor = (color: string) => {
-    if (!this.args.model.config) {
-      // Initialize config if it doesn't exist
-      (this.args.model as any).config = {
-        markerColor: '#22c55e',
-      };
+    if (!this.args.model?.config) {
+      this.args.model.config = new GeoPointConfigField();
+      this.args.model.config.markerColor = color;
+    } else {
+      this.args.model.config.markerColor = color;
     }
-    (this.args.model.config as any).markerColor = color;
   };
 
   <template>

@@ -6,7 +6,7 @@ import {
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { FieldContainer, ColorPalette } from '@cardstack/boxel-ui/components';
-import { GeoPointField } from './geo-point';
+import { GeoPointField, GeoPointConfigField } from './geo-point';
 import StringField from 'https://cardstack.com/base/string';
 import MapIcon from '@cardstack/boxel-icons/map';
 import { MapRender } from '../components/map-render';
@@ -55,7 +55,7 @@ class AtomTemplate extends Component<typeof GeoSearchPointField> {
 }
 
 class EditTemplate extends Component<typeof GeoSearchPointField> {
-  addressTimeout: any;
+  addressTimeout: ReturnType<typeof setTimeout> | undefined;
 
   get searchAddressValue() {
     return this.args.model.searchKey;
@@ -70,22 +70,22 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
   }
 
   get configValue() {
-    if (!this.args.model.config) {
-      (this.args.model as any).config = {
-        markerColor: '#22c55e',
-      };
+    if (!this.args.model?.config) {
+      return { markerColor: '#22c55e' };
     }
     return this.args.model.config;
   }
 
   private async geocodeAddressInternal(
     address: string,
-    latField: keyof typeof this.args.model,
-    lonField: keyof typeof this.args.model,
+    latField: 'lat',
+    lonField: 'lon',
   ) {
     if (!address) {
-      (this.args.model as any)[latField] = undefined;
-      (this.args.model as any)[lonField] = undefined;
+      if (this.args.model) {
+        this.args.model[latField] = undefined;
+        this.args.model[lonField] = undefined;
+      }
       return;
     }
 
@@ -98,8 +98,10 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
       const data = await response.json();
 
       if (data && data.length > 0) {
-        (this.args.model as any)[latField] = parseFloat(data[0].lat);
-        (this.args.model as any)[lonField] = parseFloat(data[0].lon);
+        if (this.args.model) {
+          this.args.model[latField] = parseFloat(data[0].lat);
+          this.args.model[lonField] = parseFloat(data[0].lon);
+        }
       }
     } catch (error) {
       console.error('Error geocoding address:', error);
@@ -121,22 +123,22 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
     this.args.model.searchKey = target.value;
 
     // Debounce geocoding - only geocode if user stops typing for 500ms
-    clearTimeout(this.addressTimeout);
+    if (this.addressTimeout) {
+      clearTimeout(this.addressTimeout);
+    }
     this.addressTimeout = setTimeout(() => {
       this.geocodeAddress();
     }, 500);
   }
 
-  @action
-  updateMarkerColor(color: string) {
-    if (!this.args.model.config) {
-      // Initialize config if it doesn't exis
-      (this.args.model as any).config = {
-        markerColor: '#22c55e',
-      };
+  updateMarkerColor = (color: string) => {
+    if (!this.args.model?.config) {
+      this.args.model.config = new GeoPointConfigField();
+      this.args.model.config.markerColor = color;
+    } else {
+      this.args.model.config.markerColor = color;
     }
-    (this.args.model.config as any).markerColor = color;
-  }
+  };
 
   <template>
     <div class='edit-template'>
