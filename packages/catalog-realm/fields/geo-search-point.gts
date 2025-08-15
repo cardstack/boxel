@@ -1,14 +1,16 @@
+import { action } from '@ember/object';
+import { on } from '@ember/modifier';
+import { task } from 'ember-concurrency';
+import { debounce } from 'lodash';
+import { FieldContainer, ColorPalette } from '@cardstack/boxel-ui/components';
+import MapIcon from '@cardstack/boxel-icons/map';
+import StringField from 'https://cardstack.com/base/string';
 import {
   Component,
   field,
   contains,
 } from 'https://cardstack.com/base/card-api';
-import { action } from '@ember/object';
-import { on } from '@ember/modifier';
-import { FieldContainer, ColorPalette } from '@cardstack/boxel-ui/components';
 import { GeoPointField, GeoPointConfigField } from './geo-point';
-import StringField from 'https://cardstack.com/base/string';
-import MapIcon from '@cardstack/boxel-icons/map';
 import { MapRender } from '../components/map-render';
 
 class AtomTemplate extends Component<typeof GeoSearchPointField> {
@@ -55,8 +57,6 @@ class AtomTemplate extends Component<typeof GeoSearchPointField> {
 }
 
 class EditTemplate extends Component<typeof GeoSearchPointField> {
-  addressTimeout: ReturnType<typeof setTimeout> | undefined;
-
   get searchAddressValue() {
     return this.args.model.searchKey;
   }
@@ -76,59 +76,54 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
     return this.args.model.config;
   }
 
-  private async geocodeAddressInternal(
-    address: string,
-    latField: 'lat',
-    lonField: 'lon',
-  ) {
-    if (!address) {
-      if (this.args.model) {
-        this.args.model[latField] = undefined;
-        this.args.model[lonField] = undefined;
-      }
-      return;
-    }
-
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-          address,
-        )}&limit=1`,
-      );
-      const data = await response.json();
-
-      if (data && data.length > 0) {
+  private geocodeAddressInternal = task(
+    async (address: string, latField: 'lat', lonField: 'lon') => {
+      if (!address) {
         if (this.args.model) {
-          this.args.model[latField] = parseFloat(data[0].lat);
-          this.args.model[lonField] = parseFloat(data[0].lon);
+          this.args.model[latField] = undefined;
+          this.args.model[lonField] = undefined;
         }
+        return;
       }
-    } catch (error) {
-      console.error('Error geocoding address:', error);
-    }
-  }
+
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+            address,
+          )}&limit=1`,
+        );
+        const data = await response.json();
+
+        if (data && data.length > 0) {
+          if (this.args.model) {
+            this.args.model[latField] = parseFloat(data[0].lat);
+            this.args.model[lonField] = parseFloat(data[0].lon);
+          }
+        }
+      } catch (error) {
+        console.error('Error geocoding address:', error);
+      }
+    },
+  );
 
   @action
-  async geocodeAddress() {
-    await this.geocodeAddressInternal(
+  geocodeAddress() {
+    this.geocodeAddressInternal.perform(
       this.args.model.searchKey || '',
       'lat',
       'lon',
     );
   }
 
+  private debouncedGeocodeAddress = debounce(() => {
+    this.geocodeAddress();
+  }, 500);
+
   @action
   updateSearchAddress(event: Event) {
     const target = event.target as HTMLInputElement;
     this.args.model.searchKey = target.value;
-
-    // Debounce geocoding - only geocode if user stops typing for 500ms
-    if (this.addressTimeout) {
-      clearTimeout(this.addressTimeout);
-    }
-    this.addressTimeout = setTimeout(() => {
-      this.geocodeAddress();
-    }, 500);
+    this.debouncedGeocodeAddress();
   }
 
   updateMarkerColor = (color: string) => {
@@ -157,9 +152,14 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
         />
 
         <div class='coordinates'>
-          📍 Lat:
-          {{this.latValue}}, Lon:
-          {{this.lonValue}}
+          {{#if this.geocodeAddressInternal.isRunning}}
+            Loading...
+          {{else}}
+            📍 Lat:
+            {{this.latValue}}, Lon:
+            {{this.lonValue}}
+
+          {{/if}}
         </div>
       </FieldContainer>
 
@@ -219,7 +219,6 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
 
       .color-palette-container {
         padding: 1rem;
-        background: var(-boxel-100);
         border-radius: var(--boxel-border-radius);
         border: var(--boxel-border-card);
       }

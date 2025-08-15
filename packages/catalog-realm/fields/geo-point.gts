@@ -162,7 +162,6 @@ class EditTemplate extends Component<typeof GeoPointField> {
 
       .color-palette-container {
         padding: 1rem;
-        background: var(--boxel-100);
         border-radius: var(--boxel-border-radius);
         border: var(--boxel-border-card);
       }
