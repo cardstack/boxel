@@ -147,8 +147,9 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
         top: var(--boxel-sp);
         right: var(--boxel-sp);
         width: 10rem;
-        height: 2rem;
+        height: 3rem;
         border: none;
+        background: transparent;
       }
 
       .connect.not-loaded {

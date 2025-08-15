@@ -17,10 +17,29 @@ let sendReadyMessage = modifier((_element: HTMLElement) => {
 
 class ConnectComponent extends Component<ConnectComponentSignature> {
   <template>
-    <BoxelButton data-test-connect {{sendReadyMessage}}>
+    <BoxelButton class='connect' data-test-connect {{sendReadyMessage}}>
       <BoxelIcon name='connect' width='16' height='16' class='connect-icon' />
       Connect
     </BoxelButton>
+
+    <style scoped>
+      :global(body) {
+        background: transparent;
+      }
+
+      .connect {
+        position: absolute;
+        right: 0;
+
+        background-color: var(--boxel-700);
+        border-radius: var(--boxel-border-radius-sm);
+        color: var(--boxel-light);
+        display: flex;
+        gap: var(--boxel-sp-xxxs);
+        font-weight: 400;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+      }
+    </style>
   </template>
 }
 
