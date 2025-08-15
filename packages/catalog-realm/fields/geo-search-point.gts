@@ -1,17 +1,16 @@
 import { action } from '@ember/object';
-import { on } from '@ember/modifier';
 import { task } from 'ember-concurrency';
 import { debounce } from 'lodash';
-import { FieldContainer, ColorPalette } from '@cardstack/boxel-ui/components';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import MapIcon from '@cardstack/boxel-icons/map';
 import StringField from 'https://cardstack.com/base/string';
 import {
   Component,
-  field,
   contains,
+  field,
 } from 'https://cardstack.com/base/card-api';
-import { GeoPointField, GeoPointConfigField } from './geo-point';
-import { MapRender } from '../components/map-render';
+import { GeoPointField } from './geo-point';
+import { MapRender, type Coordinates } from '../components/map-render';
 
 class AtomTemplate extends Component<typeof GeoSearchPointField> {
   get searchAddressValue() {
@@ -69,13 +68,6 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
     return this.args.model?.lon ?? 'N/A';
   }
 
-  get configValue() {
-    if (!this.args.model?.config) {
-      return { markerColor: '#22c55e' };
-    }
-    return this.args.model.config;
-  }
-
   private geocodeAddressInternal = task(
     async (address: string, latField: 'lat', lonField: 'lon') => {
       if (!address) {
@@ -117,89 +109,39 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
 
   private debouncedGeocodeAddress = debounce(() => {
     this.geocodeAddress();
-  }, 500);
+  }, 1000);
 
   @action
-  updateSearchAddress(event: Event) {
-    const target = event.target as HTMLInputElement;
-    this.args.model.searchKey = target.value;
+  updateSearchAddress(value: string) {
+    this.args.model.searchKey = value;
     this.debouncedGeocodeAddress();
   }
 
-  updateMarkerColor = (color: string) => {
-    if (!this.args.model?.config) {
-      this.args.model.config = new GeoPointConfigField();
-      this.args.model.config.markerColor = color;
-    } else {
-      this.args.model.config.markerColor = color;
-    }
-  };
-
   <template>
     <div class='edit-template'>
-      <FieldContainer
-        @vertical={{true}}
-        @label='Address'
-        @tag='label'
-        @for='address-search-input'
-      >
-        <input
-          id='address-search-input'
-          type='text'
-          placeholder='Enter address to search...'
-          value={{this.searchAddressValue}}
-          {{on 'input' this.updateSearchAddress}}
-        />
+      <BoxelInput
+        id='address-search-input'
+        type='text'
+        placeholder='Enter address to search...'
+        @value={{this.searchAddressValue}}
+        @onInput={{this.updateSearchAddress}}
+      />
 
-        <div class='coordinates'>
-          {{#if this.geocodeAddressInternal.isRunning}}
-            Loading...
-          {{else}}
-            📍 Lat:
-            {{this.latValue}}, Lon:
-            {{this.lonValue}}
+      <div class='coordinates'>
+        {{#if this.geocodeAddressInternal.isRunning}}
+          Loading...
+        {{else}}
+          📍 Lat:
+          {{this.latValue}}, Lon:
+          {{this.lonValue}}
 
-          {{/if}}
-        </div>
-      </FieldContainer>
-
-      <FieldContainer
-        @vertical={{true}}
-        @label='Origin Marker Colors'
-        @tag='label'
-      >
-        <ColorPalette
-          @color={{this.configValue.markerColor}}
-          @onChange={{this.updateMarkerColor}}
-          class='color-palette-container'
-        />
-      </FieldContainer>
+        {{/if}}
+      </div>
     </div>
 
     <style scoped>
       .edit-template > * + * {
         margin-top: 1rem;
-      }
-
-      input {
-        width: 100%;
-        padding: 12px 16px;
-        border: 2px solid #e5e7eb;
-        border-radius: 8px;
-        font-size: 14px;
-        transition: all 0.2s ease;
-        box-sizing: border-box;
-      }
-
-      input:focus {
-        outline: none;
-        border-color: #3b82f6;
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-      }
-
-      input::placeholder {
-        color: #9ca3af;
-        font-style: italic;
       }
 
       .coordinates-container {
@@ -247,6 +189,13 @@ class EmbeddedTemplate extends Component<typeof GeoSearchPointField> {
     return this.args.model?.lon ?? 0;
   }
 
+  get coordinates(): Coordinates {
+    return {
+      lat: this.latNumber,
+      lng: this.lonNumber,
+    };
+  }
+
   <template>
     <div class='coordinates-section'>
       <MapIcon class='map-icon' />
@@ -259,8 +208,7 @@ class EmbeddedTemplate extends Component<typeof GeoSearchPointField> {
     </div>
     <div class='map-section'>
       <MapRender
-        @lat={{this.latNumber}}
-        @lon={{this.lonNumber}}
+        @coordinates={{this.coordinates}}
         @config={{@model.config}}
         @disableMapClick={{true}}
       />

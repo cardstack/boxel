@@ -1,21 +1,15 @@
 import {
   Component,
-  field,
   contains,
   FieldDef,
+  field,
 } from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
-import MapIcon from '@cardstack/boxel-icons/map';
-import { MapRender } from '../components/map-render';
 import { action } from '@ember/object';
+import MapIcon from '@cardstack/boxel-icons/map';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';
-import ColorField from 'https://cardstack.com/base/color';
-
-import { FieldContainer, ColorPalette } from '@cardstack/boxel-ui/components';
-
-export class GeoPointConfigField extends FieldDef {
-  @field markerColor = contains(ColorField);
-}
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { MapRender } from '../components/map-render';
 
 class AtomTemplate extends Component<typeof GeoPointField> {
   get latValue() {
@@ -58,8 +52,10 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
     return this.args.model?.lon ?? 'N/A';
   }
 
-  get latNumber() {
-    return this.args.model?.lat ?? 0;
+  get coordinates() {
+    const lat = this.args.model?.lat ?? 0;
+    const lon = this.args.model?.lon ?? 0;
+    return { lat, lng: lon };
   }
 
   get lonNumber() {
@@ -67,10 +63,10 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
   }
 
   @action
-  updateCoordinates(lat: number, lon: number) {
+  updateCoordinates(coordinates: { lat: number; lng: number }) {
     if (this.args.model) {
-      this.args.model.lat = lat;
-      this.args.model.lon = lon;
+      this.args.model.lat = coordinates.lat;
+      this.args.model.lon = coordinates.lng;
     }
   }
 
@@ -81,8 +77,7 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
     </div>
     <div class='map-section'>
       <MapRender
-        @lat={{this.latNumber}}
-        @lon={{this.lonNumber}}
+        @coordinates={{this.coordinates}}
         @config={{@model.config}}
         @onMapClickUpdate={{this.updateCoordinates}}
       />
@@ -124,35 +119,12 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
 }
 
 class EditTemplate extends Component<typeof GeoPointField> {
-  get configValue() {
-    if (!this.args.model?.config) {
-      return { markerColor: '#22c55e' };
-    }
-    return this.args.model.config;
-  }
-
-  updateMarkerColor = (color: string) => {
-    if (!this.args.model?.config) {
-      this.args.model.config = new GeoPointConfigField();
-      this.args.model.config.markerColor = color;
-    } else {
-      this.args.model.config.markerColor = color;
-    }
-  };
-
   <template>
     <FieldContainer @vertical={{true}} @label='Latitude' @tag='label'>
       <@fields.lat />
     </FieldContainer>
     <FieldContainer @vertical={{true}} @label='Longitude' @tag='label'>
       <@fields.lon />
-    </FieldContainer>
-    <FieldContainer @vertical={{true}} @label='Marker Color' @tag='label'>
-      <ColorPalette
-        @color={{this.configValue.markerColor}}
-        @onChange={{this.updateMarkerColor}}
-        class='color-palette-container'
-      />
     </FieldContainer>
 
     <style scoped>
@@ -175,7 +147,6 @@ export class GeoPointField extends FieldDef {
 
   @field lat = contains(NumberField);
   @field lon = contains(NumberField);
-  @field config = contains(GeoPointConfigField);
 
   static atom = AtomTemplate;
   static embedded = EmbeddedTemplate;
