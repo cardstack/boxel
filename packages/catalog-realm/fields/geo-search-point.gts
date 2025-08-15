@@ -207,11 +207,7 @@ class EmbeddedTemplate extends Component<typeof GeoSearchPointField> {
       </div>
     </div>
     <div class='map-section'>
-      <MapRender
-        @coordinates={{this.coordinates}}
-        @config={{@model.config}}
-        @disableMapClick={{true}}
-      />
+      <MapRender @coordinates={{this.coordinates}} @disableMapClick={{true}} />
     </div>
 
     <style scoped>
