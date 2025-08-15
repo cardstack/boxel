@@ -35,10 +35,7 @@
       "containedExamples": [
         {
           "lat": 3.1336268,
-          "lon": 101.6299203,
-          "config": {
-            "markerColor": "#FA7F01"
-          }
+          "lon": 101.6299203
         }
       ]
     },
