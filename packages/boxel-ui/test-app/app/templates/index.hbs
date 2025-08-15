@@ -4,9 +4,17 @@
 <h1 class='boxel-sr-only'>Boxel Components Documentation</h1>
 
 <FreestyleGuide
+  class="boxel-freestyle-guide"
   @title='Boxel UI Components'
   @subtitle='Living Component Documentation'
+  style={{this.currentTheme.styles}}
 >
+  <this.fieldContainer class="theme-select" @label="Current Theme" @tag="label">
+    <this.boxelSelect @placeholder="Select Theme" @selected={{this.currentTheme}} @options={{this.themes}} @onChange={{this.selectTheme}} as |theme|>
+      {{theme.name}}
+    </this.boxelSelect>
+  </this.fieldContainer>
+
   <FreestyleSection
     @name='Components'
     class='freestyle-components-section'
@@ -22,6 +30,19 @@
     <IconsGrid />
   </FreestyleSection>
   <style scoped>
+    .boxel-freestyle-guide {
+      color: var(--foreground, var(--boxel-dark));
+      font-family: var(
+        --font-sans,
+        var(--boxel-font-family)
+      );
+      background-color: var(--background, var(--boxel-light));
+      font-size: var(--typescale-body, 13px);
+      line-height: var(--lineheight-base, calc(18 / 13));
+    }
+    .theme-select {
+      padding: 1rem;
+    }
     .FreestyleUsage {
       --radius: var(--boxel-border-radius);
       --border-color: var(--boxel-border-color);
