@@ -2,7 +2,9 @@ import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
+import { modifier } from 'ember-modifier';
 import { pageTitle } from 'ember-page-title';
+import window from 'ember-window-mock';
 
 import { consume, provide } from 'ember-provide-consume-context';
 import RouteTemplate from 'ember-route-template';
@@ -80,6 +82,21 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
     };
   }
 
+  addMessageListener = modifier((element: HTMLElement) => {
+    let messageHandler = (event: MessageEvent) => {
+      // FIXME check origin
+      if (event.data === 'ready') {
+        element.classList.remove('not-loaded');
+      }
+    };
+
+    window.addEventListener('message', messageHandler);
+
+    return () => {
+      window.removeEventListener('message', messageHandler);
+    };
+  });
+
   <template>
     {{pageTitle this.title}}
     {{#if this.isError}}
@@ -89,9 +106,10 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
       </div>
     {{else}}
       <iframe
-        class='connect'
+        class='connect not-loaded'
         title='connect'
         src='http://localhost:4200/connect/FIXME'
+        {{this.addMessageListener}}
       />
       <section
         class='host-mode-container'
@@ -131,6 +149,10 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
         width: 10rem;
         height: 2rem;
         border: none;
+      }
+
+      .connect.not-loaded {
+        display: none;
       }
     </style>
   </template>
