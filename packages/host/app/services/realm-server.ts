@@ -396,6 +396,37 @@ export default class RealmServerService extends Service {
     return response;
   }
 
+  async requestForward(args: {
+    url: string;
+    method: string;
+    requestBody: string;
+    headers?: Record<string, string>;
+  }) {
+    await this.login();
+
+    const response = await this.network.fetch(
+      `${this.url.href}_request-forward`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify(args),
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Request forward failed: ${response.status} - ${errorText}`,
+      );
+    }
+
+    return response;
+  }
+
   private async getToken() {
     if (!this.token) {
       await this.login();
