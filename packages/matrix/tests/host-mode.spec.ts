@@ -6,10 +6,11 @@ import {
   registerUser,
 } from '../docker/synapse';
 import {
+  appURL,
   startServer as startRealmServer,
   type IsolatedRealmServer,
 } from '../helpers/isolated-realm-server';
-import { registerRealmUsers } from '../helpers';
+import { assertLoggedIn, login, registerRealmUsers } from '../helpers';
 
 test.describe('Host mode', () => {
   let synapse: SynapseInstance;
@@ -44,5 +45,21 @@ test.describe('Host mode', () => {
 
     let connectIframe = page.frameLocator('iframe');
     await expect(connectIframe.locator('[data-test-connect]')).toBeVisible();
+  });
+
+  test('connect button shows session when logged in', async ({ page }) => {
+    let serverIndexUrl = new URL(appURL).origin;
+    await login(page, 'user1', 'pass', {
+      url: serverIndexUrl,
+    });
+
+    await assertLoggedIn(page);
+
+    await page.goto('http://published.realm/mango.json');
+
+    let connectIframe = page.frameLocator('iframe');
+    await expect(connectIframe.locator('[data-test-session]')).toHaveText(
+      '@user1:localhost',
+    );
   });
 });

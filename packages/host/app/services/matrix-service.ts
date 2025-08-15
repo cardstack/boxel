@@ -1745,6 +1745,7 @@ export default class MatrixService extends Service {
 }
 
 function saveAuth(auth: LoginResponse) {
+  console.log('saving auth as', auth);
   window.localStorage.setItem('auth', JSON.stringify(auth));
 }
 

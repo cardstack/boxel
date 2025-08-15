@@ -46,6 +46,15 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
 
   @service private declare store: StoreService;
 
+  get connectUrl() {
+    // FIXME this is a hack for testing at the moment
+    if (window.location.hostname === 'published.realm') {
+      return 'http://localhost:4205/connect/FIXME';
+    } else {
+      return 'http://localhost:4200/connect/FIXME';
+    }
+  }
+
   get isError() {
     return isCardErrorJSONAPI(this.args.model);
   }
@@ -108,7 +117,7 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
       <iframe
         class='connect not-loaded'
         title='connect'
-        src='http://localhost:4200/connect/FIXME'
+        src={{this.connectUrl}}
         {{this.addMessageListener}}
       />
       <section
