@@ -324,7 +324,9 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
         this.marker = createMarker(defaultCoords, '#ef4444', 'marker').addTo(
           map,
         );
-        setupMarkerPopup(this.marker, defaultCoords, map, 'Location');
+        if (this.marker) {
+          setupMarkerPopup(this.marker, defaultCoords, map, 'Location');
+        }
 
         // Handle map click events
         if (!disableMapClick) {
@@ -345,7 +347,9 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
               map,
             );
 
-            setupMarkerPopup(this.marker, clickCoords, map, 'Location');
+            if (this.marker) {
+              setupMarkerPopup(this.marker, clickCoords, map, 'Location');
+            }
             onMapClick?.(clickCoords);
           });
         }
