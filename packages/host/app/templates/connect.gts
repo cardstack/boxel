@@ -35,7 +35,7 @@ class ConnectComponent extends Component<ConnectComponentSignature> {
         border-radius: var(--boxel-border-radius-sm);
         color: var(--boxel-light);
         display: flex;
-        gap: var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-xxs);
         font-weight: 400;
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
       }
