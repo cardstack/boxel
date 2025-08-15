@@ -1,8 +1,7 @@
 import type { IContent } from 'matrix-js-sdk';
-import type { MatrixClient } from '../../lib/matrix/util';
-import { Method } from 'matrix-js-sdk';
+import { Method, MatrixClient } from 'matrix-js-sdk';
 
-export class FakeMatrixClient implements MatrixClient {
+export class FakeMatrixClient extends MatrixClient {
   private eventId = 0;
   private sentEvents: {
     eventId: string;
@@ -12,6 +11,10 @@ export class FakeMatrixClient implements MatrixClient {
   }[] = [];
 
   baseUrl = 'https://example.com';
+
+  constructor() {
+    super({ baseUrl: 'test' });
+  }
 
   async uploadContent(
     _content: string,
@@ -24,13 +27,7 @@ export class FakeMatrixClient implements MatrixClient {
     };
   }
 
-  http: {
-    authedRequest: (
-      method: Method,
-      path: string,
-      queryParams: any,
-    ) => Promise<any>;
-  } = {
+  http = {
     authedRequest: async (
       _method: Method,
       _path: string,
@@ -38,13 +35,14 @@ export class FakeMatrixClient implements MatrixClient {
     ) => {
       return { chunk: [] };
     },
-  };
+  } as any;
 
-  async sendEvent(
+  sendEvent = (async (
     roomId: string,
     eventType: string,
     content: IContent,
-  ): Promise<{ event_id: string }> {
+    _txnId?: string,
+  ): Promise<{ event_id: string }> => {
     const messageEventId = this.eventId.toString();
     this.sentEvents.push({
       eventId: messageEventId,
@@ -54,7 +52,7 @@ export class FakeMatrixClient implements MatrixClient {
     });
     this.eventId++;
     return { event_id: messageEventId.toString() };
-  }
+  }) as any;
 
   async setRoomName(
     _roomId: string,

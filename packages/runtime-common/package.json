@@ -60,7 +60,10 @@
     "typescript-memoize": "catalog:",
     "uuid": "catalog:",
     "prettier": "catalog:",
-    "prettier-plugin-ember-template-tag": "catalog:"
+    "prettier-plugin-ember-template-tag": "catalog:",
+    "matrix-js-sdk": "catalog:",
+    "@sentry/node": "catalog:",
+    "openai": "catalog:"
   },
   "devDependencies": {
     "@babel/core": "catalog:",

@@ -1,28 +1,18 @@
 import { setTitle } from './set-title';
-import {
-  sendErrorEvent,
-  sendMessageEvent,
-  MatrixClient,
-  sendPromptAsDebugMessage,
-  sendEventListAsDebugMessage,
-  sendDebugMessage,
-} from './matrix/util';
 import OpenAI from 'openai';
 
 import * as Sentry from '@sentry/node';
-import { getPromptParts } from '../helpers';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
-
-export function isRecognisedDebugCommand(eventBody: string) {
-  return (
-    eventBody.startsWith('debug:help') ||
-    eventBody.startsWith('debug:prompt') ||
-    eventBody.startsWith('debug:eventlist') ||
-    eventBody.startsWith('debug:title:') ||
-    eventBody.startsWith('debug:boom') ||
-    eventBody.startsWith('debug:patch:')
-  );
-}
+import {
+  getPromptParts,
+  isRecognisedDebugCommand,
+  sendErrorEvent,
+  sendMessageEvent,
+  sendPromptAsDebugMessage,
+  sendEventListAsDebugMessage,
+  sendDebugMessage,
+} from '@cardstack/runtime-common';
+import { MatrixClient } from 'matrix-js-sdk';
 
 export async function handleDebugCommands(
   openai: OpenAI,

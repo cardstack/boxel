@@ -1,5 +1,4 @@
-import { logger } from '@cardstack/runtime-common';
-import { isCommandOrCodePatchResult, type MatrixClient } from './matrix/util';
+import { logger, isCommandOrCodePatchResult } from '@cardstack/runtime-common';
 
 import * as Sentry from '@sentry/node';
 import { OpenAIError } from 'openai/error';
@@ -12,6 +11,7 @@ import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
 import MatrixResponsePublisher from './matrix/response-publisher';
 import ResponseState from './response-state';
+import { MatrixClient } from 'matrix-js-sdk';
 
 let log = logger('ai-bot');
 

@@ -1,16 +1,9 @@
-import { IContent, Method } from 'matrix-js-sdk';
-import {
-  logger,
-  REPLACE_MARKER,
-  SEARCH_MARKER,
-  SEPARATOR_MARKER,
-} from '@cardstack/runtime-common';
+import { IContent, MatrixClient, Method } from 'matrix-js-sdk';
+import { REPLACE_MARKER, SEARCH_MARKER, SEPARATOR_MARKER } from '../constants';
+import { logger } from '../log';
 import { OpenAIError } from 'openai/error';
 import * as Sentry from '@sentry/node';
-import {
-  CommandRequest,
-  encodeCommandRequests,
-} from '@cardstack/runtime-common/commands';
+import { CommandRequest, encodeCommandRequests } from '../commands';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_REASONING_CONTENT_KEY,
@@ -18,41 +11,15 @@ import {
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
-} from '@cardstack/runtime-common/matrix-constants';
+} from '../matrix-constants';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent } from 'matrix-js-sdk';
-import { PromptParts, mxcUrlToHttp } from '../../helpers';
+import { PromptParts } from './types';
 import { encodeUri } from 'matrix-js-sdk/lib/utils';
 import { SerializedFileDef } from 'https://cardstack.com/base/file-api';
 
-let log = logger('ai-bot');
-
-export interface MatrixClient {
-  baseUrl: string;
-
-  sendEvent(
-    roomId: string,
-    eventType: string,
-    content: IContent,
-  ): Promise<{ event_id: string }>;
-
-  uploadContent(
-    content: string,
-    opts: {
-      type: string;
-    },
-  ): Promise<{ content_uri: string }>;
-
-  sendStateEvent(
-    roomId: string,
-    eventType: string,
-    content: IContent,
-    stateKey: string,
-  ): Promise<{ event_id: string }>;
-
-  setRoomName(roomId: string, title: string): Promise<{ event_id: string }>;
-
-  getAccessToken(): string | null;
+function getLog() {
+  return logger('ai-bot');
 }
 
 export async function sendMatrixEvent(
@@ -71,7 +38,7 @@ export async function sendMatrixEvent(
       event_id: eventIdToReplace,
     };
   }
-  log.debug('sending event', content);
+  getLog().debug('sending event', content);
   return await client.sendEvent(roomId, eventType, content);
 }
 
@@ -84,7 +51,7 @@ export async function sendMessageEvent(
   commandRequests: Partial<CommandRequest>[] = [],
   reasoning: string | undefined = undefined,
 ) {
-  log.debug('sending message', body);
+  getLog().debug('sending message', body);
   let contentObject: IContent = {
     ...{
       body,
@@ -112,7 +79,7 @@ export async function sendErrorEvent(
 ) {
   try {
     let errorMessage = getErrorMessage(error);
-    log.error(errorMessage);
+    getLog().error(errorMessage);
     await sendMessageEvent(
       client,
       roomId,
@@ -126,7 +93,7 @@ export async function sendErrorEvent(
   } catch (e) {
     // We've had a problem sending the error message back to the user
     // Log and continue
-    log.error(`Error sending error message back to user: ${e}`);
+    getLog().error(`Error sending error message back to user: ${e}`);
     Sentry.captureException(e);
   }
 }
@@ -163,7 +130,7 @@ export async function sendEventListAsDebugMessage(
       attachedFiles: [
         {
           sourceUrl: '',
-          url: mxcUrlToHttp(sharedFile.content_uri, client.baseUrl),
+          url: client.mxcUrlToHttp(sharedFile.content_uri),
           name: 'debug-event.json',
           contentType: 'text/plain',
         },
@@ -190,7 +157,7 @@ export async function sendPromptAsDebugMessage(
       attachedFiles: [
         {
           sourceUrl: '',
-          url: mxcUrlToHttp(sharedFile.content_uri, client.baseUrl),
+          url: client.mxcUrlToHttp(sharedFile.content_uri),
           name: 'debug-event.json',
           contentType: 'text/plain',
         },

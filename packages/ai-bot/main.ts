@@ -15,6 +15,11 @@ import {
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   uuidv4,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
+  PromptParts,
+  isRecognisedDebugCommand,
+  getPromptParts,
+  isInDebugMode,
+  isCommandResultStatusApplied,
 } from '@cardstack/runtime-common';
 import { validateAICredits } from '@cardstack/billing/ai-billing';
 import {
@@ -22,15 +27,8 @@ import {
   SLIDING_SYNC_LIST_TIMELINE_LIMIT,
   SLIDING_SYNC_TIMEOUT,
 } from '@cardstack/runtime-common/matrix-constants';
-import {
-  type PromptParts,
-  isCommandResultStatusApplied,
-  getPromptParts,
-  isInDebugMode,
-} from './helpers';
 
-import { handleDebugCommands, isRecognisedDebugCommand } from './lib/debug';
-import { constructHistory } from './lib/history';
+import { handleDebugCommands } from './lib/debug';
 import { Responder } from './lib/responder';
 import {
   shouldSetRoomTitle,
@@ -39,9 +37,9 @@ import {
 } from './lib/set-title';
 import {
   getRoomEvents,
-  type MatrixClient,
   sendPromptAsDebugMessage,
-} from './lib/matrix/util';
+  constructHistory,
+} from '@cardstack/runtime-common';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
@@ -54,6 +52,7 @@ import { acquireLock, releaseLock } from './lib/queries';
 import { logger as matrixLogger } from 'matrix-js-sdk/lib/logger';
 import { setupSignalHandlers } from './lib/signal-handlers';
 import { isShuttingDown, setActiveGenerations } from './lib/shutdown';
+import { type MatrixClient } from 'matrix-js-sdk';
 
 // Silence FetchHttpApi Matrix SDK logs
 matrixLogger.setLevel('warn');

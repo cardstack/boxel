@@ -3,13 +3,6 @@ import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 
 import {
-  buildPromptForModel,
-  getPromptParts,
-  getRelevantCards,
-  getTools,
-  SKILL_INSTRUCTIONS_MESSAGE,
-} from '../helpers';
-import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
@@ -31,6 +24,11 @@ import { FakeMatrixClient } from './helpers/fake-matrix-client';
 import {
   type LooseCardResource,
   skillCardRef,
+  buildPromptForModel,
+  getPromptParts,
+  getRelevantCards,
+  getTools,
+  SKILL_INSTRUCTIONS_MESSAGE,
 } from '@cardstack/runtime-common';
 
 function oldPatchTool(card: CardDef, properties: any): Tool {

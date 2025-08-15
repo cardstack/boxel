@@ -21,16 +21,16 @@ import {
   IEvent,
   IRoomEvent,
   IStateEvent,
-  MatrixClient,
+  type MatrixClient,
   MatrixEvent,
 } from 'matrix-js-sdk';
 import { FakeMatrixClient } from './helpers/fake-matrix-client';
-import { constructHistory } from '../lib/history';
 import type OpenAI from 'openai';
 import {
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
+  constructHistory,
 } from '@cardstack/runtime-common';
 
 module('shouldSetRoomTitle', () => {
@@ -585,7 +585,7 @@ module('getLatestResultMessage', (hooks) => {
     ];
     let history: DiscreteMatrixEvent[] = await constructHistory(
       eventList,
-      fakeMatrixClient,
+      fakeMatrixClient as unknown as MatrixClient,
     );
 
     // Create a command result event that references the command request
