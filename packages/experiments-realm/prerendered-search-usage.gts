@@ -9,7 +9,7 @@ export default class PrerenderedSearchUsage extends CardDef {
         @model={{@model}}
         @context={{@context}}
         @cardTypeDisplayName='Plant Info'
-        @format='fitted/single-strip'
+        @format='fitted/small-tile'
         @fittedDisplayOption='grid'
         @hideOverlay={{true}}
         @hideContainer={{false}}

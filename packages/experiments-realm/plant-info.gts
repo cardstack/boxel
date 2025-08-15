@@ -109,6 +109,9 @@ export class PlantInfo extends CardDef {
   @field spacing = contains(StringField);
   @field spread = contains(StringField);
   @field seasonOfInterest = containsMany(SeasonsDropdown);
+  @field title = contains(StringField);
+  @field description = contains(StringField);
+  @field thumbnailURL = contains(StringField);
   static displayName = 'Plant Info';
   static icon = FlowerLotusIcon;
 
