@@ -10,27 +10,18 @@ import { eq } from '../../helpers/truth-helpers.ts';
 import BoxelButton, {
   type BoxelButtonKind,
   type BoxelButtonSize,
+  buttonKindOptions,
+  buttonSizeOptions,
 } from './index.gts';
 
 export default class ButtonUsage extends Component {
-  sizeVariants = ['extra-small', 'small', 'base', 'tall', 'touch'];
-  kindVariants = {
-    all: [
-      'primary',
-      'primary-dark',
-      'secondary-light',
-      'secondary-dark',
-      'danger',
-      'text-only',
-    ],
-    light: ['primary', 'secondary-light'],
-    dark: ['primary', 'secondary-dark'],
-  };
+  sizeVariants = buttonSizeOptions;
+  kindVariants = buttonKindOptions;
 
   // base button arguments
   @tracked as = 'button';
-  @tracked size: BoxelButtonSize = 'tall';
-  @tracked kind: BoxelButtonKind = 'primary';
+  @tracked size: BoxelButtonSize = 'base';
+  @tracked kind: BoxelButtonKind = 'secondary';
   @tracked disabled = false;
   @tracked loading = false;
 
@@ -47,7 +38,7 @@ export default class ButtonUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name='Button'>
+    <FreestyleUsage @name='Button' class='boxel-button-usage'>
       <:example>
         <div
           class={{cn
@@ -65,7 +56,7 @@ export default class ButtonUsage extends Component {
             @route={{this.route}}
             {{on 'click' this.alert}}
           >
-            Button Text
+            Sample CTA
           </BoxelButton>
         </div>
       </:example>
@@ -107,8 +98,8 @@ export default class ButtonUsage extends Component {
           @name='kind'
           @optional={{true}}
           @description='Controls the colors of the button'
-          @defaultValue='secondary-light'
-          @options={{this.kindVariants.all}}
+          @defaultValue='secondary'
+          @options={{this.kindVariants}}
           @onInput={{fn (mut this.kind)}}
           @value={{this.kind}}
         />
@@ -220,6 +211,7 @@ export default class ButtonUsage extends Component {
     <FreestyleUsage
       @name='LinkTo button'
       @description='This button links you to the index page'
+      class='boxel-button-usage'
     >
       <:example>
         <div
@@ -235,20 +227,22 @@ export default class ButtonUsage extends Component {
             @route='index'
             @query=''
           >
-            Button Text
+            Sample CTA
           </BoxelButton>
         </div>
       </:example>
     </FreestyleUsage>
     <style scoped>
+      .boxel-button-usage {
+        --boxel-border-radius: 100px;
+      }
+      :deep(.FreestyleUsage-preview) {
+        border-radius: 10px;
+      }
+
       .usage-button-container {
         display: flex;
         flex-wrap: wrap;
-      }
-
-      .usage-button-dark-mode-background {
-        background-color: var(--boxel-purple-600);
-        padding: 4px;
       }
 
       .usage-button-explanation {
@@ -270,6 +264,13 @@ export default class ButtonUsage extends Component {
         align-items: center;
         min-height: 100%;
         padding: 2rem;
+        background-color: var(--background, var(--boxel-light));
+        color: var(--foreground, var(--boxel-dark));
+      }
+
+      .usage-button-dark-mode-background {
+        background-color: var(--foreground, var(--boxel-700));
+        color: var(--background, var(--boxel-light));
       }
     </style>
   </template>

@@ -8,18 +8,41 @@ import LoadingIndicator from '../loading-indicator/index.gts';
 
 export type BoxelButtonKind =
   | 'primary'
+  | 'secondary'
+  | 'outline'
   | 'secondary-dark'
   | 'secondary-light'
   | 'danger'
   | 'primary-dark'
   | 'text-only';
 
+export const buttonKindOptions: BoxelButtonKind[] = [
+  'primary',
+  'secondary',
+  'outline',
+  'secondary-dark',
+  'secondary-light',
+  'danger',
+  'primary-dark',
+  'text-only',
+];
+
 export type BoxelButtonSize =
+  | 'auto'
   | 'extra-small'
   | 'small'
   | 'base'
   | 'tall'
   | 'touch';
+
+export const buttonSizeOptions = [
+  'auto',
+  'extra-small',
+  'small',
+  'base',
+  'tall',
+  'touch',
+];
 
 interface Signature {
   Args: {
@@ -40,22 +63,20 @@ interface Signature {
   Element: HTMLButtonElement | HTMLAnchorElement;
 }
 export default class ButtonComponent extends Component<Signature> {
-  defaultSize: BoxelButtonSize = 'base';
-  defaultKind: BoxelButtonKind = 'secondary-light';
-
   <template>
     {{#let
       (cn
         'boxel-button'
         @class
-        (concat 'size-' (if @size @size this.defaultSize))
-        (concat 'kind-' (if @kind @kind this.defaultKind))
+        (concat 'size-' (if @size @size 'base'))
+        (concat 'kind-' (if @kind @kind 'secondary'))
+        loading=@loading
       )
       as |classes|
     }}
       {{#if (or (not @as) (eq @as 'button'))}}
         <button
-          class={{cn classes (if @loading 'loading')}}
+          class={{classes}}
           tabindex={{if @loading -1 0}}
           disabled={{@disabled}}
           data-test-boxel-button
@@ -98,38 +119,47 @@ export default class ButtonComponent extends Component<Signature> {
       @layer {
         /* Button */
         .boxel-button {
+          --boxel-loading-indicator-size: var(
+            --boxel-button-loading-icon-size,
+            var(--boxel-icon-xs)
+          );
+
           display: inline-flex;
           justify-content: center;
           height: min-content;
           align-items: center;
-          border-radius: 100px;
-          transition:
-            background-color var(--boxel-transition),
-            border var(--boxel-transition);
+          border-radius: var(--radius, 100px);
+          transition: var(
+            --boxel-button-transition,
+            var(--boxel-transition-properties)
+          );
 
           /* kind variants + disabled state */
-          border: var(--boxel-button-border, var(--boxel-border));
-          color: var(--boxel-button-text-color, black);
-          background-color: var(--boxel-button-color, transparent);
+          border: var(
+            --boxel-button-border,
+            1px solid var(--boxel-button-color)
+          );
+          color: var(--boxel-button-text-color);
+          background-color: var(--boxel-button-color);
 
           /* size variants */
-          font: var(--boxel-button-font, var(--boxel-font-sm));
+          font: var(--boxel-button-font, 600 var(--boxel-font-sm));
+          font-family: inherit;
           min-height: var(--boxel-button-min-height);
-          min-width: var(--boxel-button-min-width, 5rem);
-          padding: var(
-            --boxel-button-padding,
-            var(--boxel-sp-xs) var(--boxel-sp-sm)
-          );
+          min-width: var(--boxel-button-min-width);
+          padding: var(--boxel-button-padding);
           letter-spacing: var(
             --boxel-button-letter-spacing,
-            var(--boxel-lsp-lg)
+            var(--boxel-lsp-sm)
           );
+          box-shadow: var(--boxel-button-box-shadow);
         }
 
         .loading-indicator {
-          width: var(--boxel-button-loading-icon-size);
-          height: var(--boxel-button-loading-icon-size);
-          margin-right: var(--boxel-sp-xxxs);
+          margin-right: var(
+            --boxel-button-loading-indicator-gap,
+            var(--boxel-sp-xxs)
+          );
         }
 
         /* select disabled buttons and links that don't have href */
@@ -143,9 +173,10 @@ export default class ButtonComponent extends Component<Signature> {
         a.boxel-button:not([href]),
         a.boxel-button[href=''],
         a.boxel-button.disabled-link {
-          --boxel-button-color: var(--boxel-button-border-color);
-          --boxel-button-border: 1px solid var(--boxel-button-border-color);
-          --boxel-button-text-color: var(--boxel-light);
+          --boxel-button-color: var(--muted, var(--boxel-border-color));
+          --boxel-button-border: 1px solid var(--boxel-button-color);
+          --boxel-button-text-color: var(--muted-foreground, var(--boxel-450));
+          --boxel-button-box-shadow: none;
 
           cursor: default;
         }
@@ -179,87 +210,124 @@ export default class ButtonComponent extends Component<Signature> {
       *
       * Classes for the @kind argument can control the following properties:
       *
-      * --boxel-button-color
-      * --boxel-button-border
-      * --boxel-button-text-color
+      * --boxel-button-color (css "background-color" property)
+      * --boxel-button-border (css shorthand "border" property)
+      * --boxel-button-text-color (css "color" property)
       *
       */
-        .kind-primary:not(:disabled) {
-          --boxel-button-color: var(--boxel-highlight);
-          --boxel-button-border: 1px solid var(--boxel-button-color);
-          --boxel-button-text-color: var(--boxel-dark);
+        .kind-primary {
+          --boxel-button-color: var(--primary, var(--boxel-highlight));
+          --boxel-button-text-color: var(
+            --primary-foreground,
+            var(--boxel-dark)
+          );
+          --boxel-button-box-shadow: var(--shadow);
         }
-
         .kind-primary:not(:disabled):hover,
         .kind-primary:not(:disabled):active {
-          --boxel-button-color: var(--boxel-highlight-hover);
+          --boxel-button-color: color-mix(
+            in oklab,
+            var(--primary, var(--boxel-highlight)) 95%,
+            var(--boxel-dark)
+          );
         }
 
-        .kind-secondary-dark:not(:disabled) {
-          /* transparent on dark background */
-          --boxel-button-color: transparent;
-          --boxel-button-border: 1px solid var(--boxel-400);
-          --boxel-button-text-color: var(--boxel-light);
+        .kind-secondary {
+          --boxel-button-color: var(--secondary, var(--boxel-light));
+          --boxel-button-text-color: var(
+            --secondary-foreground,
+            var(--boxel-dark)
+          );
+          --boxel-button-border: 1px solid
+            var(--secondary, var(--boxel-button-border-color));
+          --boxel-button-box-shadow: var(--shadow);
+        }
+        .kind-secondary:not(:disabled):hover,
+        .kind-secondary:not(:disabled):active {
+          --boxel-button-border: 1px solid
+            var(--boxel-button-text-color, var(--boxel-dark));
         }
 
-        .kind-secondary-dark:not(:disabled):hover,
-        .kind-secondary-dark:not(:disabled):active {
-          --boxel-button-border: 1px solid var(--boxel-light);
+        .kind-outline {
+          --boxel-button-color: var(--background, var(--boxel-light));
+          --boxel-button-text-color: var(--foreground, var(--boxel-dark));
+          --boxel-button-border: 1px solid
+            var(--border, var(--boxel-button-border-color));
+        }
+        .kind-outline:not(:disabled):hover,
+        .kind-outline:not(:disabled):active {
+          --boxel-button-color: var(--accent, var(--boxel-200));
+          --boxel-button-text-color: var(
+            --accent-foreground,
+            var(--boxel-dark)
+          );
         }
 
-        .kind-secondary-dark:disabled,
-        a.kind-secondary-dark:not([href]),
-        a.kind-secondary-dark[href=''],
-        a.kind-secondary-dark.disabled-link {
-          --boxel-button-color: transparent;
-          opacity: 0.35;
-        }
-
-        .kind-secondary-light:not(:disabled) {
+        .kind-secondary-light {
           /* transparent on light background */
           --boxel-button-color: transparent;
-          --boxel-button-border: 1px solid var(--boxel-button-border-color);
-          --boxel-button-text-color: var(--boxel-dark);
+          --boxel-button-text-color: var(--foreground, var(--boxel-dark));
+          --boxel-button-border: 1px solid
+            var(--border, var(--boxel-button-border-color));
+          --boxel-button-box-shadow: var(--shadow);
         }
-
+        .kind-secondary-dark {
+          /* transparent on dark background */
+          --boxel-button-color: transparent;
+          --boxel-button-text-color: var(--background, var(--boxel-light));
+          --boxel-button-border: 1px solid
+            var(--border, var(--boxel-button-border-color));
+          --boxel-button-box-shadow: var(--shadow);
+        }
         .kind-secondary-light:not(:disabled):hover,
-        .kind-secondary-light:not(:disabled):active {
-          --boxel-button-border: 1px solid var(--boxel-dark);
+        .kind-secondary-light:not(:disabled):active,
+        .kind-secondary-dark:not(:disabled):hover,
+        .kind-secondary-dark:not(:disabled):active {
+          --boxel-button-border: 1px solid var(--boxel-button-text-color);
         }
 
-        .kind-danger:not(:disabled) {
-          --boxel-button-color: var(--boxel-danger);
-          --boxel-button-border: 1px solid var(--boxel-danger);
-          --boxel-button-text-color: var(--boxel-light-100);
+        .kind-danger {
+          --boxel-button-color: var(--destructive, var(--boxel-danger));
+          --boxel-button-text-color: var(
+            --destructive-foreground,
+            var(--boxel-light-100)
+          );
+          --boxel-button-box-shadow: var(--shadow);
         }
-
         .kind-danger:not(:disabled):hover,
         .kind-danger:not(:disabled):active {
-          --boxel-button-border: 1px solid var(--boxel-danger-hover);
-          --boxel-button-color: var(--boxel-danger-hover);
+          --boxel-button-color: color-mix(
+            in oklab,
+            var(--destructive, var(--boxel-danger)) 95%,
+            var(--boxel-dark)
+          );
         }
 
-        .kind-primary-dark:not(:disabled) {
-          --boxel-button-color: var(--boxel-dark);
-          --boxel-button-border: 1px solid var(--boxel-dark);
-          --boxel-button-text-color: var(--boxel-light);
+        .kind-primary-dark {
+          --boxel-button-color: var(--secondary-foreground, var(--boxel-dark));
+          --boxel-button-text-color: var(--secondary, var(--boxel-light));
+          --boxel-button-box-shadow: var(--shadow);
         }
-
         .kind-primary-dark:not(:disabled):hover,
         .kind-primary-dark:not(:disabled):active {
-          --boxel-button-border: 1px solid var(--boxel-purple-800);
-          --boxel-button-color: var(--boxel-purple-800);
+          --boxel-button-color: color-mix(
+            in oklab,
+            var(--secondary-foreground, var(--boxel-dark)) 85%,
+            transparent
+          );
         }
 
-        .kind-text-only:not(:disabled) {
+        .kind-text-only {
           --boxel-button-color: transparent;
-          --boxel-button-border: 1px solid transparent;
-          --boxel-button-letter-spacing: var(--boxel-lsp-xs);
-          --boxel-button-text-color: var(--boxel-dark);
+          --boxel-button-text-color: inherit;
         }
-
-        .kind-text-only:not(:disabled):hover {
-          background-color: var(--boxel-dark-hover);
+        .kind-text-only:not(:disabled):hover,
+        .kind-text-only:not(:disabled):active {
+          --boxel-button-color: var(--accent, var(--boxel-200));
+          --boxel-button-text-color: var(
+            --accent-foreground,
+            var(--boxel-dark)
+          );
         }
 
         /**
@@ -275,42 +343,36 @@ export default class ButtonComponent extends Component<Signature> {
       * --boxel-button-min-height
       * --boxel-button-font
       * --boxel-button-letter-spacing
-      * --boxel-button-loading-icon-size
+      * --boxel-loading-indicator-size
       *
       */
 
         .size-extra-small {
-          --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp);
-          --boxel-button-font: var(--boxel-font-xs);
-          --boxel-button-loading-icon-size: var(--boxel-font-size-xs);
-          --boxel-button-letter-spacing: var(--boxel-lsp-lg);
-          --boxel-button-min-height: 1.8125rem;
+          --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-sm);
+          --boxel-button-min-height: 1.5rem;
+          --boxel-button-min-width: 5rem;
+          --boxel-button-loading-icon-size: var(--boxel-icon-xxs);
+          --boxel-button-font: 600 var(--boxel-font-xs);
         }
 
         /* thinner base button */
         .size-small {
           --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm);
-          --boxel-button-font: 600 var(--boxel-font-sm);
-          --boxel-button-loading-icon-size: var(--boxel-font-size-sm);
-          --boxel-button-letter-spacing: var(--boxel-lsp);
           --boxel-button-min-height: 2rem;
+          --boxel-button-min-width: 5rem;
         }
 
         .size-base {
           --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xl);
-          --boxel-button-font: 600 var(--boxel-font-sm);
-          --boxel-button-loading-icon-size: var(--boxel-font-size-sm);
-          --boxel-button-letter-spacing: var(--boxel-lsp);
           --boxel-button-min-height: 2rem;
+          --boxel-button-min-width: 5rem;
         }
 
         /* tall but thinner button */
         .size-tall {
           --boxel-button-padding: var(--boxel-sp-xxs) var(--boxel-sp);
-          --boxel-button-font: 600 var(--boxel-font-sm);
-          --boxel-button-loading-icon-size: var(--boxel-font-size-sm);
-          --boxel-button-letter-spacing: var(--boxel-lsp);
           --boxel-button-min-height: 2.5rem;
+          --boxel-button-min-width: 5rem;
         }
 
         /*
@@ -319,10 +381,16 @@ export default class ButtonComponent extends Component<Signature> {
         */
         .size-touch {
           --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
-          --boxel-button-font: 600 var(--boxel-font);
-          --boxel-button-loading-icon-size: var(--boxel-font-size);
-          --boxel-button-letter-spacing: var(--boxel-lsp-xs);
           --boxel-button-min-height: 3rem;
+          --boxel-button-min-width: 5rem;
+          --boxel-button-loading-icon-size: var(--boxel-icon-sm);
+          --boxel-button-font: 600 var(--boxel-font);
+          --boxel-button-letter-spacing: var(--boxel-lsp-xs);
+        }
+
+        /* auto size properties & smallest padding size */
+        .size-auto {
+          --boxel-button-padding: var(--boxel-sp-6xs);
         }
       }
     </style>
