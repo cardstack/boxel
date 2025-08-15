@@ -19,6 +19,7 @@ import type { Skill as SkillCard } from 'https://cardstack.com/base/skill';
 
 import CreateAiAssistantRoomCommand from '../commands/create-ai-assistant-room';
 
+import SummarizeSessionCommand from '../commands/summarize-session';
 import { Submodes } from '../components/submode-switcher';
 import { eventDebounceMs, isMatrixError } from '../lib/matrix-utils';
 import { importResource } from '../resources/import';
@@ -122,9 +123,11 @@ export default class AiAssistantPanelService extends Service {
     opts: {
       addSameSkills: boolean;
       shouldCopyFileHistory: boolean;
+      shouldSummarizeSession: boolean;
     } = {
       addSameSkills: false,
       shouldCopyFileHistory: false,
+      shouldSummarizeSession: false,
     },
   ) {
     this.displayRoomError = false;
@@ -258,9 +261,11 @@ export default class AiAssistantPanelService extends Service {
       opts: {
         addSameSkills: boolean;
         shouldCopyFileHistory: boolean;
+        shouldSummarizeSession: boolean;
       },
     ) => {
-      let { addSameSkills, shouldCopyFileHistory } = opts;
+      let { addSameSkills, shouldCopyFileHistory, shouldSummarizeSession } =
+        opts;
       try {
         let createRoomCommand = new CreateAiAssistantRoomCommand(
           this.commandService.commandContext,
@@ -290,19 +295,57 @@ export default class AiAssistantPanelService extends Service {
 
         window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);
 
-        // If file history should be copied, send an initial message with the files and cards
+        // Prepare message content based on options
+        let messageContent = '';
+        let attachedCards: CardDef[] = [];
+        let attachedFiles: FileDef[] = [];
+
+        if (shouldSummarizeSession) {
+          const currentRoomId = this.matrixService.currentRoomId;
+          if (currentRoomId) {
+            try {
+              const summarizeCommand = new SummarizeSessionCommand(
+                this.commandService.commandContext,
+              );
+              const result = await summarizeCommand.execute({
+                roomId: currentRoomId,
+              });
+
+              messageContent = `This is a summary of the previous conversation that should be included as context for our discussion:\n\n${result.summary}`;
+            } catch (error) {
+              console.error('Failed to summarize session:', error);
+              messageContent = '';
+            }
+          }
+        }
+
         if (shouldCopyFileHistory) {
-          const { attachedFiles, attachedCards } =
-            this.collectFileHistoryFromCurrentRoom();
+          // Copy file history
+          const fileHistory = this.collectFileHistoryFromCurrentRoom();
+          attachedCards = fileHistory.attachedCards;
+          attachedFiles = fileHistory.attachedFiles;
 
           if (attachedFiles.length > 0 || attachedCards.length > 0) {
-            await this.matrixService.sendMessage(
-              roomId,
-              'This session includes files and cards from the previous conversation for context.',
-              attachedCards,
-              attachedFiles,
-            );
+            messageContent =
+              messageContent !== ''
+                ? `${messageContent}\n`
+                : messageContent +
+                  'This session includes files and cards from the previous conversation for context.';
           }
+        }
+
+        // Send message once (if there's content to send)
+        if (
+          messageContent ||
+          attachedCards.length > 0 ||
+          attachedFiles.length > 0
+        ) {
+          await this.matrixService.sendMessage(
+            roomId,
+            messageContent,
+            attachedCards,
+            attachedFiles,
+          );
         }
 
         this.enterRoom(roomId);

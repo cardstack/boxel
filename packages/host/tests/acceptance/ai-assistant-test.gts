@@ -40,6 +40,7 @@ import {
   setupAcceptanceTestRealm,
   visitOperatorMode,
   assertMessages,
+  setupRealmServerEndpoints,
   type TestContextWithSave,
 } from '../helpers';
 
@@ -90,6 +91,84 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
   let { createAndJoinRoom, getRoomState, simulateRemoteMessage } =
     mockMatrixUtils;
+
+  // Setup realm server endpoints for summarization tests
+  setupRealmServerEndpoints(hooks, [
+    {
+      route: '_request-forward',
+      getResponse: async (req: Request) => {
+        const body = await req.json();
+
+        // Handle summarization requests
+        if (body.url.includes('openrouter.ai/api/v1/chat/completions')) {
+          const requestBody = JSON.parse(body.requestBody);
+
+          // Check if this is a summarization request
+          if (
+            requestBody.messages &&
+            requestBody.messages.some(
+              (msg: any) =>
+                msg.content &&
+                msg.content.includes('Please provide a concise summary'),
+            )
+          ) {
+            // Return a mock summary based on the conversation content
+            const conversationText = requestBody.messages
+              .filter(
+                (msg: any) =>
+                  msg.role === 'user' &&
+                  !msg.content.includes('Please provide a concise summary'),
+              )
+              .map((msg: any) => msg.content)
+              .join(' ');
+
+            let summary = 'This conversation focused on general discussion.';
+
+            if (conversationText.includes('project')) {
+              summary =
+                'This conversation focused on project help, specifically creating a new card for a person with name and age fields. The user requested assistance with card creation and field definition.';
+            } else if (
+              conversationText.includes('card') &&
+              conversationText.includes('file')
+            ) {
+              summary =
+                'This conversation involved discussing a person card (Hassan) and a pet definition file. The user shared both a Person card and a pet.gts file, then asked for help understanding the structure.';
+            } else if (conversationText.includes('error')) {
+              throw new Error('OpenRouter API error');
+            }
+
+            return new Response(
+              JSON.stringify({
+                choices: [
+                  {
+                    message: {
+                      content: summary,
+                    },
+                  },
+                ],
+              }),
+              {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
+        }
+
+        // Default response for other requests
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { id: 123, name: 'test' },
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      },
+    },
+  ]);
 
   setupBaseRealm(hooks);
 
@@ -2184,6 +2263,193 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
       },
     ]);
+  });
+
+  test('summarizes current session when creating new session with option checked', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // Send several messages to create conversation history
+    await fillIn(
+      '[data-test-message-field]',
+      'Hello, I need help with my project',
+    );
+    await click('[data-test-send-message-btn]');
+
+    await fillIn(
+      '[data-test-message-field]',
+      'I want to create a new card for a person',
+    );
+    await click('[data-test-send-message-btn]');
+
+    await fillIn(
+      '[data-test-message-field]',
+      'The person should have a name and age field',
+    );
+    await click('[data-test-send-message-btn]');
+
+    // Verify messages were sent
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message: 'Hello, I need help with my project',
+      },
+      {
+        from: 'testuser',
+        message: 'I want to create a new card for a person',
+      },
+      {
+        from: 'testuser',
+        message: 'The person should have a name and age field',
+      },
+    ]);
+
+    // Create new session with "Summarize Current Session" option
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await click(
+      '[data-test-new-session-settings-option="Summarize Current Session"]',
+    );
+    await click('[data-test-new-session-settings-create-button]');
+    await waitFor(`[data-room-settled]`);
+
+    // Verify the summary message was sent to the new room
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message:
+          'This is a summary of the previous conversation that should be included as context for our discussion: This conversation focused on project help, specifically creating a new card for a person with name and age fields. The user requested assistance with card creation and field definition.',
+      },
+    ]);
+  });
+
+  test('summarizes current session with cards and files when creating new session', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // Send message with a card
+    await fillIn('[data-test-message-field]', 'I have a person card here');
+    await selectCardFromCatalog(`${testRealmURL}Person/hassan`);
+    await click('[data-test-send-message-btn]');
+
+    // Send message with a file
+    await fillIn(
+      '[data-test-message-field]',
+      'And here is the pet definition file',
+    );
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-file-btn]');
+    await click('[data-test-file="pet.gts"]');
+    await click('[data-test-choose-file-modal-add-button]');
+    await click('[data-test-send-message-btn]');
+
+    // Send another message
+    await fillIn(
+      '[data-test-message-field]',
+      'Can you help me understand this structure?',
+    );
+    await click('[data-test-send-message-btn]');
+
+    // Verify messages were sent with attachments
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message: 'I have a person card here',
+        cards: [{ id: `${testRealmURL}Person/hassan`, title: 'Hassan' }],
+      },
+      {
+        from: 'testuser',
+        message: 'And here is the pet definition file',
+        files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
+      },
+      {
+        from: 'testuser',
+        message: 'Can you help me understand this structure?',
+        files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
+      },
+    ]);
+
+    // Create new session with "Summarize Current Session" option
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await click(
+      '[data-test-new-session-settings-option="Summarize Current Session"]',
+    );
+    await click('[data-test-new-session-settings-create-button]');
+    await waitFor(`[data-room-settled]`);
+
+    // Verify the summary message was sent to the new room
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message:
+          'This is a summary of the previous conversation that should be included as context for our discussion: This conversation involved discussing a person card (Hassan) and a pet definition file. The user shared both a Person card and a pet.gts file, then asked for help understanding the structure.',
+      },
+    ]);
+  });
+
+  test('handles summarization error gracefully when creating new session', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // Send a message to create some history
+    await fillIn('[data-test-message-field]', 'Test message for summarization');
+    await click('[data-test-send-message-btn]');
+
+    // Mock the realm server to return an error for summarization
+    // This would be handled by the realm server endpoint mock
+    const originalRequestForward = getService('realm-server').requestForward;
+    getService('realm-server').requestForward = async () => {
+      throw new Error('Summarization service unavailable');
+    };
+
+    // Create new session with "Summarize Current Session" option
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await click(
+      '[data-test-new-session-settings-option="Summarize Current Session"]',
+    );
+    await click('[data-test-new-session-settings-create-button]');
+    await waitFor(`[data-room-settled]`);
+
+    // Verify that the new session was created without the summary (graceful fallback)
+    assertMessages(assert, []);
+
+    // Restore the original function
+    getService('realm-server').requestForward = originalRequestForward;
   });
 
   test('ai assistant panel width persists to localStorage', async function (assert) {

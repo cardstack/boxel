@@ -62,7 +62,6 @@
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
     "matrix-js-sdk": "catalog:",
-    "@sentry/node": "catalog:",
     "openai": "catalog:"
   },
   "devDependencies": {

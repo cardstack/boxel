@@ -8,7 +8,7 @@ import type {
   RealmServerEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixClient, type IRoomEvent } from 'matrix-js-sdk';
-import * as Sentry from '@sentry/node';
+
 import { logger } from '../log';
 import {
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
@@ -162,14 +162,6 @@ function parseContentData(event: IRoomEvent) {
     try {
       event.content.data = JSON.parse(event.content.data);
     } catch (e) {
-      Sentry.captureException(e, {
-        attachments: [
-          {
-            data: event.content.data,
-            filename: 'rawEventContentData.txt',
-          },
-        ],
-      });
       getLog().error('Error parsing JSON', e);
       throw new HistoryConstructionError((e as Error).message);
     }

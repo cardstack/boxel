@@ -265,6 +265,110 @@ STRIPE_WEBHOOK_SECRET=... STRIPE_API_KEY=... pnpm start:all
 
 You should be able to subscribe successfully after you perform the steps above.
 
+## External API Proxy Setup
+
+The realm server provides a proxy endpoint that allows applications to make requests to external APIs through the realm server. This is useful for features like AI model calls, external service integrations, and other API interactions. You need to configure the `ALLOWED_PROXY_DESTINATIONS` environment variable to specify which external endpoints are allowed.
+
+### ALLOWED_PROXY_DESTINATIONS Configuration
+
+The `ALLOWED_PROXY_DESTINATIONS` environment variable configures which external API endpoints are allowed to be accessed through the realm server's proxy functionality.
+
+#### Format
+
+The value should be a JSON string containing an array of destination configurations:
+
+```json
+[
+  {
+    "url": "https://openrouter.ai/api/v1/chat/completions",
+    "apiKey": "your-openrouter-api-key",
+    "creditStrategy": "openrouter",
+    "whitelisted": true,
+    "supportsStreaming": true
+  },
+  {
+    "url": "https://api.example.com",
+    "apiKey": "your-example-api-key",
+    "creditStrategy": "no-credit",
+    "whitelisted": true,
+    "supportsStreaming": false
+  }
+]
+```
+
+#### Configuration Options
+
+- **url**: The base URL of the external API endpoint
+- **apiKey**: The API key to use for authentication (will be automatically added to requests)
+- **creditStrategy**: The credit strategy to use for this endpoint
+  - `"openrouter"`: Uses OpenRouter credit system (for paid AI APIs)
+  - `"no-credit"`: No credit system (for free APIs or APIs with their own billing)
+- **whitelisted**: Whether this endpoint is allowed (should be `true`)
+- **supportsStreaming**: Whether this endpoint supports streaming responses
+
+#### Examples
+
+**OpenRouter (AI API with credit system):**
+
+```json
+{
+  "url": "https://openrouter.ai/api/v1/chat/completions",
+  "apiKey": "your-openrouter-api-key",
+  "creditStrategy": "openrouter",
+  "whitelisted": true,
+  "supportsStreaming": true
+}
+```
+
+**Free API (no credit system):**
+
+```json
+{
+  "url": "https://api.example.com",
+  "apiKey": "your-example-api-key",
+  "creditStrategy": "no-credit",
+  "whitelisted": true,
+  "supportsStreaming": false
+}
+```
+
+#### Running with ALLOWED_PROXY_DESTINATIONS
+
+When starting the realm server, include the `ALLOWED_PROXY_DESTINATIONS` environment variable:
+
+```bash
+ALLOWED_PROXY_DESTINATIONS='[{"url":"https://openrouter.ai/api/v1/chat/completions","apiKey":"your-openrouter-api-key","creditStrategy":"openrouter","whitelisted":true,"supportsStreaming":true},{"url":"https://api.example.com","apiKey":"your-example-api-key","creditStrategy":"no-credit","whitelisted":true,"supportsStreaming":false}]' STRIPE_WEBHOOK_SECRET=... STRIPE_API_KEY=... pnpm start:all
+```
+
+For development, you can create a `.env` file in the `packages/realm-server` directory:
+
+```bash
+# packages/realm-server/.env
+ALLOWED_PROXY_DESTINATIONS='[
+  {
+    "url": "https://openrouter.ai/api/v1/chat/completions",
+    "apiKey": "your-openrouter-api-key",
+    "creditStrategy": "openrouter",
+    "whitelisted": true,
+    "supportsStreaming": true
+  },
+  {
+    "url": "https://api.example.com",
+    "apiKey": "your-example-api-key",
+    "creditStrategy": "no-credit",
+    "whitelisted": true,
+    "supportsStreaming": false
+  }
+]'
+```
+
+#### Security Notes
+
+- Only whitelisted URLs will be accessible through the proxy
+- API keys are automatically added to requests and should be kept secure
+- The proxy validates all requests against the allowed destinations list
+- Credit strategies help manage usage and costs for paid APIs
+
 ## Running the Tests
 
 There are currently 5 test suites:

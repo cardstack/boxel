@@ -2,7 +2,6 @@ import { IContent, MatrixClient, Method } from 'matrix-js-sdk';
 import { REPLACE_MARKER, SEARCH_MARKER, SEPARATOR_MARKER } from '../constants';
 import { logger } from '../log';
 import { OpenAIError } from 'openai/error';
-import * as Sentry from '@sentry/node';
 import { CommandRequest, encodeCommandRequests } from '../commands';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
@@ -94,7 +93,6 @@ export async function sendErrorEvent(
     // We've had a problem sending the error message back to the user
     // Log and continue
     getLog().error(`Error sending error message back to user: ${e}`);
-    Sentry.captureException(e);
   }
 }
 

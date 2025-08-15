@@ -311,7 +311,21 @@ Common issues are:
         );
 
         let promptParts: PromptParts;
-        let eventList = await getRoomEvents(room.roomId, client, event.getId());
+        let eventList: DiscreteMatrixEvent[];
+        try {
+          eventList = await getRoomEvents(room.roomId, client, event.getId());
+        } catch (e) {
+          log.error(e);
+          Sentry.captureException(e, {
+            extra: {
+              roomId: room.roomId,
+              eventId: eventId,
+              eventBody: eventBody,
+              senderMatrixUserId: senderMatrixUserId,
+            },
+          });
+          return;
+        }
 
         // Return early here if it's a debug event
         if (isRecognisedDebugCommand(eventBody)) {
@@ -346,6 +360,14 @@ Common issues are:
           await responder.ensureThinkingMessageSent();
         } catch (e) {
           log.error(e);
+          Sentry.captureException(e, {
+            extra: {
+              roomId: room.roomId,
+              eventId: eventId,
+              eventBody: eventBody,
+              senderMatrixUserId: senderMatrixUserId,
+            },
+          });
           await responder.onError(
             new Error(
               'There was an error processing chat history. Please open another session.',
@@ -450,7 +472,13 @@ Common issues are:
         return;
       } catch (e) {
         log.error(e);
-        Sentry.captureException(e);
+        Sentry.captureException(e, {
+          extra: {
+            roomId: room?.roomId,
+            eventId: event.getId(),
+            eventType: event.getType(),
+          },
+        });
         return;
       }
     },
@@ -487,7 +515,13 @@ Common issues are:
       return await assistant.setTitle(room.roomId, history, event);
     } catch (e) {
       log.error(e);
-      Sentry.captureException(e);
+      Sentry.captureException(e, {
+        extra: {
+          roomId: room?.roomId,
+          eventId: event.getId(),
+          eventType: event.getType(),
+        },
+      });
       return;
     }
   });
@@ -514,6 +548,10 @@ Common issues are:
   log.info('client started');
 })().catch((e) => {
   log.error(e);
-  Sentry.captureException(e);
+  Sentry.captureException(e, {
+    extra: {
+      aiBotInstanceId: aiBotInstanceId,
+    },
+  });
   process.exit(1);
 });

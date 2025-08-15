@@ -139,7 +139,12 @@ export class Responder {
   }
 
   async onError(error: OpenAIError | string) {
-    Sentry.captureException(error);
+    Sentry.captureException(error, {
+      extra: {
+        roomId: this.matrixResponsePublisher.roomId,
+        agentId: this.matrixResponsePublisher.agentId,
+      },
+    });
     if (this.responseState.isStreamingFinished) {
       return;
     }

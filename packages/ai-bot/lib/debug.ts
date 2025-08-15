@@ -69,8 +69,25 @@ To patch a card:\n
       }
     }
 
-    let promptParts = await getPromptParts(eventList, userId, client);
-    await sendPromptAsDebugMessage(client, roomId, promptParts, customMessage);
+    try {
+      let promptParts = await getPromptParts(eventList, userId, client);
+      await sendPromptAsDebugMessage(
+        client,
+        roomId,
+        promptParts,
+        customMessage,
+      );
+    } catch (error) {
+      Sentry.captureException(error, {
+        extra: {
+          roomId: roomId,
+          userId: userId,
+          eventBody: eventBody,
+          customMessage: customMessage,
+        },
+      });
+      await sendErrorEvent(client, roomId, error, undefined);
+    }
   }
 
   if (eventBody.startsWith('debug:eventlist')) {
@@ -116,7 +133,13 @@ To patch a card:\n
         );
       }
     } catch (error) {
-      Sentry.captureException(error);
+      Sentry.captureException(error, {
+        extra: {
+          roomId: roomId,
+          userId: userId,
+          patchMessage: patchMessage,
+        },
+      });
       return await sendMessageEvent(
         client,
         roomId,

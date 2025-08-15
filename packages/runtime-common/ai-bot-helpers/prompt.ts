@@ -44,7 +44,7 @@ import {
 } from '../index';
 import { ToolChoice } from '../helpers/ai';
 import { logger } from '../log';
-import * as Sentry from '@sentry/node';
+
 import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants';
 import { humanReadable } from '../code-ref';
 import { SEARCH_MARKER, REPLACE_MARKER, SEPARATOR_MARKER } from '../constants';
@@ -318,12 +318,6 @@ export async function getAttachedCards(
             result.content = await downloadFile(client, attachedCard);
           } catch (error) {
             getLog().error(`Failed to fetch file ${attachedCard.url}:`, error);
-            Sentry.captureException(error, {
-              extra: {
-                fileUrl: attachedCard.url,
-                fileName: attachedCard.name,
-              },
-            });
             result.error = `Error loading attached card: ${(error as Error).message}`;
             result.content = undefined;
           }
@@ -371,9 +365,6 @@ export async function getAttachedFiles(
           result.content = await downloadFile(client, attachedFile);
         } catch (error) {
           getLog().error(`Failed to fetch file ${attachedFile.url}:`, error);
-          Sentry.captureException(error, {
-            extra: { fileUrl: attachedFile.url, fileName: attachedFile.name },
-          });
           result.error = `Error loading attached file: ${(error as Error).message}`;
           result.content = undefined;
         }
@@ -432,9 +423,6 @@ export async function loadCurrentlySerializedFileDefs(
         };
       } catch (error) {
         getLog().error(`Failed to fetch file ${attachedFile.url}:`, error);
-        Sentry.captureException(error, {
-          extra: { fileUrl: attachedFile.url, fileName: attachedFile.name },
-        });
         return {
           sourceUrl: attachedFile.sourceUrl ?? '',
           url: attachedFile.url,
