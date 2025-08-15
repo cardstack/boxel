@@ -13,12 +13,7 @@ const AuthContainer: TemplateOnlyComponent<Signature> = <template>
   <div class='auth'>
     <div class='container'>
       <CardContainer class='auth-container'>
-        <BoxelHeader
-          @title='Boxel'
-          @displayBorder={{true}}
-          @hasBackground={{false}}
-          class='header'
-        >
+        <BoxelHeader @title='Boxel' class='header'>
           <:icon>
             <BoxelIcon />
           </:icon>
@@ -54,14 +49,9 @@ const AuthContainer: TemplateOnlyComponent<Signature> = <template>
       position: relative;
     }
     .header {
-      --boxel-header-padding: var(--boxel-sp);
-      --boxel-header-text-font: var(--boxel-font);
-
-      background-color: var(--boxel-light);
       text-transform: uppercase;
-      max-width: max-content;
-      min-width: 100%;
       gap: var(--boxel-sp-xxs);
+      font: 700 var(--boxel-font);
       letter-spacing: var(--boxel-lsp-lg);
     }
     .content {
