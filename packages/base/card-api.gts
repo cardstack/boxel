@@ -1437,6 +1437,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
     }
     if (notLoadedRefs.length > 0) {
+      if (!(globalThis as any).__lazilyLoadLinks) {
+        throw new NotLoaded(instance, notLoadedRefs, this.name);
+      }
       for (let [index, reference] of notLoadedRefs.entries()) {
         lazilyLoadLink(instance, this, reference, { value, index });
       }
