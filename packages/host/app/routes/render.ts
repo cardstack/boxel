@@ -4,10 +4,7 @@ import { service } from '@ember/service';
 
 import { TrackedMap } from 'tracked-built-ins';
 
-import {
-  isCardInstance,
-  LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
+import { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -28,6 +25,7 @@ export default class RenderRoute extends Route<Model> {
   @service declare private network: NetworkService;
 
   errorHandler = (event: Event) => {
+    // TODO capture error details in event.reason (this is shaped as a CardError)
     let element: HTMLElement = document.querySelector('[data-prerender]')!;
     element.innerHTML = `
       it broke
@@ -43,8 +41,15 @@ export default class RenderRoute extends Route<Model> {
   }
 
   deactivate() {
+    (globalThis as any)._lazilyLoadLinks = undefined;
     window.removeEventListener('error', this.errorHandler);
     window.removeEventListener('unhandledrejection', this.errorHandler);
+  }
+
+  beforeModel() {
+    // activate() doesn't run early enough for this to be set before the model()
+    // hook is run
+    (globalThis as any).__lazilyLoadLinks = true;
   }
 
   async model({ id }: { id: string }) {
@@ -88,22 +93,18 @@ export default class RenderRoute extends Route<Model> {
       },
     };
 
-    // We are fetching links so deeply that it seems very unlikely that we'll
-    // ever have an unloaded link after awaiting the store.add
+    // TODO we'll need a try/catch here to handle serialization errors which
+    // should get rendered into the DOM
     let instance = await this.store.add(enhancedDoc, {
       relativeTo: new URL(id),
       doNotPersist: true,
     });
-    if (!isCardInstance(instance)) {
-      throw new Error('todo: failed to load');
-    }
 
-    // todo: Placeholder for checking in-flight loads
     let state = new TrackedMap();
     state.set('ready', false);
-    Promise.resolve().then(() => {
-      state.set('ready', true);
-    });
+    // TODO we should expose the rejected loads so we can capture in an error doc
+    await this.store.loaded();
+    state.set('ready', true);
 
     return {
       instance,

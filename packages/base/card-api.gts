@@ -238,6 +238,10 @@ const fieldDescriptions = initSharedState(
   'fieldDescriptions',
   () => new WeakMap<typeof BaseDef, Map<string, string>>(),
 );
+const inflightLinkLoads = initSharedState(
+  'inflightLinkLoads',
+  () => new WeakMap<CardDef, Map<string, Promise<unknown>>>(),
+);
 
 // our place for notifying Glimmer when a card is ready to re-render
 const cardTracking = initSharedState(
@@ -322,7 +326,9 @@ export interface CardStore {
   set(url: string, instance: CardDef): void;
   setNonTracked(id: string, instance: CardDef): void;
   makeTracked(id: string): void;
-  load(url: string): Promise<SingleCardDocument | CardError>;
+  loadDocument(url: string): Promise<SingleCardDocument | CardError>;
+  trackLoad(load: Promise<unknown>): void;
+  loaded(): Promise<void>;
 }
 
 type JSONAPIResource =
@@ -530,9 +536,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     let maybeNotLoaded = deserialized.get(this.name);
     // a not loaded error can blow up thru a computed containsMany field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
-      // TODO instead of throwing not loaded we trigger the load of this link.
-      // in this case we are dealing with a computed that is consuming a not loaded field
-      throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
+      lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
     }
     return getter(instance, this);
   }
@@ -842,9 +846,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     let maybeNotLoaded = deserialized.get(this.name);
     // a not loaded error can blow up thru a computed contains field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
-      // TODO instead of throwing not loaded we trigger the load of this link.
-      // in this case we are dealing with a computed that is consuming a not loaded field
-      throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
+      lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
     }
     return getter(instance, this);
   }
@@ -1042,25 +1044,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     cardTracking.get(instance);
     let maybeNotLoaded = deserialized.get(this.name);
     if (isNotLoadedValue(maybeNotLoaded)) {
-      // What happens to the visit() function that we were using in the render
-      // service as a result of catching this error that is being used to allow
-      // the indexer to visit the consumption graph for this unloaded link?
-      //
-      // is that something that we still care about? i think visit() is something that helps
-      // guide the order of the indexing such that we prioritize the links that the
-      // currently indexed card consumes--otherwise we would have to wait until the
-      // indexer eventually gets around to indexing our link... also, when we get to
-      // cross realm invalidation, the visit() could be a tool that allows us to trigger invalidation
-      // in a different realm
-      //
-      // should we trigger the visit of the unloaded link here instead? maybe the indexer
-      // visit() is part of the store?
-      //
-      // Perhaps we store an [isLoaded] meta for this field too in case the template
-      // wants to know about in-flight values?
-      // let store = getStore(instance);
-
-      throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
+      lazilyLoadLink(instance, this, maybeNotLoaded.reference);
     }
     return getter(instance, this);
   }
@@ -1280,6 +1264,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     return fieldValue as BaseInstanceType<CardT>;
   }
 
+  // TODO we should be able to get rid of this when we decommission the old prerender
   private async loadMissingField(
     instance: CardDef,
     notLoaded: NotLoadedValue | NotLoaded,
@@ -1291,7 +1276,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       maybeRelativeReference as string,
       instance.id ?? relativeTo, // new instances may not yet have an ID, in that case fallback to the relativeTo
     ).href;
-    let doc = await store.load(reference);
+    let doc = await store.loadDocument(reference);
     if (isCardError(doc)) {
       let cardError = doc;
       cardError.deps = [reference];
@@ -1425,8 +1410,10 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
     // Handle the case where the field was set to a single NotLoadedValue during deserialization
     if (isNotLoadedValue(value)) {
-      // TODO instead of throwing not loaded we trigger the load of this field.
-      throw new NotLoaded(instance, value.reference, this.name);
+      value = this.emptyValue(instance);
+      deserialized.set(this.name, value);
+      lazilyLoadLink(instance, this, value.reference, { value, index: 0 });
+      return this.emptyValue as BaseInstanceType<FieldT>;
     }
 
     // Ensure we have an array - if not, something went wrong during deserialization
@@ -1446,8 +1433,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
     }
     if (notLoadedRefs.length > 0) {
-      // TODO instead of throwing not loaded we trigger the load of these links
-      throw new NotLoaded(instance, notLoadedRefs, this.name);
+      for (let [index, reference] of notLoadedRefs.entries()) {
+        lazilyLoadLink(instance, this, reference, { value, index });
+      }
     }
 
     return value as BaseInstanceType<FieldT>;
@@ -1795,6 +1783,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     return result;
   }
 
+  // TODO we should be able to get rid of this when we decommission the old prerender
   private async loadMissingFields(
     instance: CardDef,
     notLoaded: NotLoaded,
@@ -1813,7 +1802,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
     const loadPromises = refs.map(async (reference) => {
       try {
-        let doc = await store.load(reference);
+        let doc = await store.loadDocument(reference);
         if (isCardError(doc)) {
           let cardError = doc;
           cardError.deps = [reference];
@@ -2630,6 +2619,66 @@ function getUsedFields(instance: BaseDef): string[] {
   return [...getDataBucket(instance)?.keys()];
 }
 
+function lazilyLoadLink(
+  instance: CardDef,
+  field: Field,
+  link: string,
+  pluralArgs?: { value: any[]; index: number },
+) {
+  if ((globalThis as any).__lazilyLoadLinks) {
+    let inflightLoads = inflightLinkLoads.get(instance);
+    if (!inflightLoads) {
+      inflightLoads = new Map();
+      inflightLinkLoads.set(instance, inflightLoads);
+    }
+    let promise = inflightLoads.get(`${field.name}/${link}`);
+    let store = getStore(instance);
+    if (promise) {
+      store.trackLoad(promise);
+      return;
+    }
+    let deferred = new Deferred<void>();
+    inflightLoads.set(`${field.name}/${link}`, deferred.promise);
+    store.trackLoad(deferred.promise);
+    let reference = new URL(link, instance.id ?? instance[relativeTo]).href;
+    (async () => {
+      try {
+        let doc = await store.loadDocument(reference);
+        if (isCardError(doc)) {
+          let cardError = doc;
+          cardError.deps = [reference];
+          throw cardError;
+        }
+        let fieldValue = (await createFromSerialized(
+          doc.data,
+          doc,
+          new URL(doc.data.id!),
+          {
+            store,
+          },
+        )) as CardDef;
+        if (pluralArgs) {
+          let { value, index } = pluralArgs;
+          value[index] = fieldValue;
+        } else {
+          (instance as any)[field.name] = fieldValue;
+        }
+        deferred.fulfill();
+      } catch (e) {
+        // TODO We need to handle this error in rendering....
+        deferred.reject(e);
+      } finally {
+        inflightLoads.delete(`${field.name}/${link}`);
+        if (inflightLoads.size === 0) {
+          inflightLinkLoads.delete(instance);
+        }
+      }
+    })();
+  } else {
+    throw new NotLoaded(instance, link, field.name);
+  }
+}
+
 type Scalar =
   | string
   | number
@@ -3426,6 +3475,7 @@ export function getComponent(
   return boxComponent;
 }
 
+// TODO we should be able to get rid of this when we decommission the old prerender
 export async function ensureLinksLoaded(card: BaseDef): Promise<void> {
   // Note that after each async step we check to see if we are still the
   // current promise, otherwise we bail
@@ -3759,18 +3809,28 @@ export function getCardMeta<K extends keyof CardResourceMeta>(
 
 class FallbackCardStore implements CardStore {
   #instances: Map<string, CardDef> = new Map();
+  #inFlight: Promise<unknown>[] = [];
+
   get(id: string) {
+    id = id.replace(/\.json$/, '');
     return this.#instances.get(id);
   }
   set(id: string, instance: CardDef) {
+    id = id.replace(/\.json$/, '');
     return this.#instances.set(id, instance);
   }
   setNonTracked(id: string, instance: CardDef) {
+    id = id.replace(/\.json$/, '');
     return this.#instances.set(id, instance);
   }
   makeTracked(_id: string) {}
-
-  async load(url: string) {
+  trackLoad(load: Promise<unknown>) {
+    this.#inFlight.push(load);
+  }
+  async loaded() {
+    await Promise.allSettled(this.#inFlight);
+  }
+  async loadDocument(url: string) {
     return await loadDocument(fetch, url);
   }
 }

@@ -7,7 +7,9 @@ import {
   isLocalId,
   localId as localIdSymbol,
   loadDocument,
-  type CardErrorJSONAPI as CardError,
+  type CardErrorJSONAPI,
+  type CardError,
+  type SingleCardDocument,
 } from '@cardstack/runtime-common';
 
 import {
@@ -93,14 +95,17 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   // to deserialize an instance without glimmer rendering the inner workings of
   // the deserialization process.
   #nonTrackedCards = new Map<string, CardDef>();
-  #nonTrackedCardErrors = new Map<string, CardError>();
+  #nonTrackedCardErrors = new Map<string, CardErrorJSONAPI>();
 
   #cards = new TrackedMap<string, CardDef>();
-  #cardErrors = new TrackedMap<string, CardError>();
+  #cardErrors = new TrackedMap<string, CardErrorJSONAPI>();
   #gcCandidates: Set<LocalId> = new Set();
   #referenceCount: ReferenceCount;
   #idResolver = new IDResolver();
   #fetch: typeof globalThis.fetch;
+  #inFlight: Promise<unknown>[] = [];
+  #docsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
+    new Map();
 
   constructor(referenceCount: ReferenceCount, fetch: typeof globalThis.fetch) {
     this.#referenceCount = referenceCount;
@@ -123,11 +128,29 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.setItem(id, instance, true);
   }
 
-  async load(url: string) {
-    return await loadDocument(this.#fetch, url);
+  async loadDocument(url: string) {
+    let promise = this.#docsInFlight.get(url);
+    if (promise) {
+      return await promise;
+    }
+    try {
+      promise = loadDocument(this.#fetch, url);
+      this.#docsInFlight.set(url, promise);
+      return await promise;
+    } finally {
+      this.#docsInFlight.delete(url);
+    }
   }
 
-  addInstanceOrError(id: string, instanceOrError: CardDef | CardError) {
+  trackLoad(load: Promise<unknown>) {
+    this.#inFlight.push(load);
+  }
+
+  async loaded() {
+    await Promise.allSettled(this.#inFlight);
+  }
+
+  addInstanceOrError(id: string, instanceOrError: CardDef | CardErrorJSONAPI) {
     this.setItem(id, instanceOrError);
     if (!isCardInstance(instanceOrError)) {
       this.#idResolver.removeByRemoteId(id);
@@ -145,6 +168,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   delete(id: string): void {
+    id = id.replace(/\.json$/, '');
     let localId = isLocalId(id) ? id : undefined;
     let remoteId = !isLocalId(id) ? id : undefined;
 
@@ -228,6 +252,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   makeTracked(remoteId: string) {
+    remoteId = remoteId.replace(/\.json$/, '');
     let instance = this.#nonTrackedCards.get(remoteId);
     if (instance) {
       this.set(remoteId, instance);
@@ -258,6 +283,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   private deleteFromAll(id: string) {
+    id = id.replace(/\.json$/, '');
     this.#cards.delete(id);
     this.#cardErrors.delete(id);
     this.#nonTrackedCards.delete(id);
@@ -265,11 +291,12 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   }
 
   private getItem(type: 'instance', id: string): CardDef | undefined;
-  private getItem(type: 'error', id: string): CardError | undefined;
+  private getItem(type: 'error', id: string): CardErrorJSONAPI | undefined;
   private getItem(
     type: 'instance' | 'error',
     id: string,
-  ): CardDef | CardError | undefined {
+  ): CardDef | CardErrorJSONAPI | undefined {
+    id = id.replace(/\.json$/, '');
     let { item, localId } = this.tryFindingItem(type, id);
 
     if (!item && isLocalId(id)) {
@@ -291,7 +318,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       type === 'instance' ? this.#nonTrackedCards : this.#nonTrackedCardErrors;
     let localId = isLocalId(localOrRemoteId) ? localOrRemoteId : undefined;
     let remoteId = !isLocalId(localOrRemoteId) ? localOrRemoteId : undefined;
-    let item: CardDef | CardError | undefined;
+    let item: CardDef | CardErrorJSONAPI | undefined;
     if (remoteId) {
       if (localId) {
         remoteId = this.#idResolver.getRemoteIds(localId)?.[0];
@@ -320,7 +347,12 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     return { item, localId };
   }
 
-  private setItem(id: string, item: CardDef | CardError, notTracked?: true) {
+  private setItem(
+    id: string,
+    item: CardDef | CardErrorJSONAPI,
+    notTracked?: true,
+  ) {
+    id = id.replace(/\.json$/, '');
     let cardBucket = notTracked ? this.#nonTrackedCards : this.#cards;
     let errorBucket = notTracked
       ? this.#nonTrackedCardErrors

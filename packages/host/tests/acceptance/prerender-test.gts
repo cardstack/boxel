@@ -43,8 +43,15 @@ module('Acceptance | prerender', function (hooks) {
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
 
-    let { field, contains, linksTo, linksToMany, CardDef, StringField } =
-      cardApi;
+    let {
+      field,
+      contains,
+      containsMany,
+      linksTo,
+      linksToMany,
+      CardDef,
+      StringField,
+    } = cardApi;
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -52,9 +59,14 @@ module('Acceptance | prerender', function (hooks) {
       @field petFriend = linksTo(() => Pet);
       @field title = contains(StringField, {
         computeVia(this: Pet) {
-          return this.name;
+          return `${this.name}`;
         },
       });
+    }
+
+    class Cat extends Pet {
+      static displayName = 'Cat';
+      @field aliases = containsMany(StringField);
     }
 
     class Person extends CardDef {
@@ -67,11 +79,13 @@ module('Acceptance | prerender', function (hooks) {
         },
       });
     }
+
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },
         'pet.gts': { Pet },
+        'cat.gts': { Cat },
         'Pet/mango.json': {
           data: {
             attributes: { name: 'Mango' },
@@ -97,6 +111,20 @@ module('Acceptance | prerender', function (hooks) {
               adoptsFrom: {
                 module: '../pet',
                 name: 'Pet',
+              },
+            },
+          },
+        },
+        'Cat/paper.json': {
+          data: {
+            attributes: {
+              name: 'Paper',
+              aliases: ['Satan', "Satan's Mistress"],
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../cat',
+                name: 'Cat',
               },
             },
           },
@@ -130,8 +158,6 @@ module('Acceptance | prerender', function (hooks) {
     });
   });
 
-  // TODO set maxLinkDepth to 0 in order to test link loading properly
-
   test('can prerender instance with contains field', async function (assert) {
     let url = `${testRealmURL}Pet/vangogh.json`;
     await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
@@ -139,6 +165,16 @@ module('Acceptance | prerender', function (hooks) {
     assert.ok(
       /data-test-field="name"?.*Van Gogh/s.test(value),
       'failed to find "Van Gogh" field value in isolated HTML',
+    );
+  });
+
+  test('can prerender instance with containsMany field', async function (assert) {
+    let url = `${testRealmURL}Cat/paper.json`;
+    await visit(`/render/${encodeURIComponent(url)}/html/isolated/0`);
+    let { value } = await captureResult('innerHTML');
+    assert.ok(
+      /data-test-field="aliases"?.*Satan?.*Satan's Mistress/s.test(value),
+      `failed to find "Satan" and "Satan's Mistress" field value in isolated HTML`,
     );
   });
 
@@ -162,6 +198,10 @@ module('Acceptance | prerender', function (hooks) {
     );
   });
 
+  // TODO test prerender compound contains field
+  // TODO test prerender compound containsMany field
+  // TODO test prerender compound contains field that includes a linksTo field
+  // TODO test prerender compound containsMany that includes a linksTo field
   // TODO test prerender missing link in linksTo field
   // TODO test prerender missing link in linksToMany field
   // TODO test prerender computed that consumes linksTo
@@ -170,4 +210,5 @@ module('Acceptance | prerender', function (hooks) {
   // TODO test prerender missing link in computed that consumes linksToMany
   // TODO test prerender linksTo cycle
   // TODO test prerender linksToMany cycle
+  // TODO make tests for search docs. use existing search doc tests as the template
 });
