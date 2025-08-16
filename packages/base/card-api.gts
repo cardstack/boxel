@@ -1410,6 +1410,10 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
     // Handle the case where the field was set to a single NotLoadedValue during deserialization
     if (isNotLoadedValue(value)) {
+      if (!(globalThis as any).__lazilyLoadLinks) {
+        throw new NotLoaded(instance, value.reference, field.name);
+      }
+      // TODO figure out this test case...
       value = this.emptyValue(instance);
       deserialized.set(this.name, value);
       lazilyLoadLink(instance, this, value.reference, { value, index: 0 });
@@ -2631,16 +2635,17 @@ function lazilyLoadLink(
       inflightLoads = new Map();
       inflightLinkLoads.set(instance, inflightLoads);
     }
-    let promise = inflightLoads.get(`${field.name}/${link}`);
+    let reference = new URL(link, instance.id ?? instance[relativeTo]).href;
+    let key = `${field.name}/${reference}`;
+    let promise = inflightLoads.get(key);
     let store = getStore(instance);
     if (promise) {
       store.trackLoad(promise);
       return;
     }
     let deferred = new Deferred<void>();
-    inflightLoads.set(`${field.name}/${link}`, deferred.promise);
+    inflightLoads.set(key, deferred.promise);
     store.trackLoad(deferred.promise);
-    let reference = new URL(link, instance.id ?? instance[relativeTo]).href;
     (async () => {
       try {
         let doc = await store.loadDocument(reference);
@@ -2668,7 +2673,7 @@ function lazilyLoadLink(
         // TODO We need to handle this error in rendering....
         deferred.reject(e);
       } finally {
-        inflightLoads.delete(`${field.name}/${link}`);
+        inflightLoads.delete(key);
         if (inflightLoads.size === 0) {
           inflightLinkLoads.delete(instance);
         }
