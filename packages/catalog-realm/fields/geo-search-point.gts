@@ -68,43 +68,37 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
     return this.args.model?.lon ?? 'N/A';
   }
 
-  private geocodeAddressInternal = task(
-    async (address: string, latField: 'lat', lonField: 'lon') => {
-      if (!address) {
+  private fetchCoordinates = task(async (address: string | undefined) => {
+    if (!address) {
+      if (this.args.model) {
+        this.args.model.lat = undefined;
+        this.args.model.lon = undefined;
+      }
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+          address,
+        )}&limit=1`,
+      );
+      const data = await response.json();
+
+      if (data && data.length > 0) {
         if (this.args.model) {
-          this.args.model[latField] = undefined;
-          this.args.model[lonField] = undefined;
+          this.args.model.lat = parseFloat(data[0].lat);
+          this.args.model.lon = parseFloat(data[0].lon);
         }
-        return;
       }
-
-      try {
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-            address,
-          )}&limit=1`,
-        );
-        const data = await response.json();
-
-        if (data && data.length > 0) {
-          if (this.args.model) {
-            this.args.model[latField] = parseFloat(data[0].lat);
-            this.args.model[lonField] = parseFloat(data[0].lon);
-          }
-        }
-      } catch (error) {
-        console.error('Error geocoding address:', error);
-      }
-    },
-  );
+    } catch (error) {
+      console.error('Error geocoding address:', error);
+    }
+  });
 
   @action
   geocodeAddress() {
-    this.geocodeAddressInternal.perform(
-      this.args.model.searchKey || '',
-      'lat',
-      'lon',
-    );
+    this.fetchCoordinates.perform(this.args.model.searchKey);
   }
 
   private debouncedGeocodeAddress = debounce(() => {
@@ -128,7 +122,7 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
       />
 
       <div class='coordinates'>
-        {{#if this.geocodeAddressInternal.isRunning}}
+        {{#if this.fetchCoordinates.isRunning}}
           Loading...
         {{else}}
           📍 Lat:
