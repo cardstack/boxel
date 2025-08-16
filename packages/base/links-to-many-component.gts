@@ -245,11 +245,12 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
         margin: 0 0 var(--boxel-sp);
       }
       .list > li + li {
-        padding-top: var(--boxel-sp);
+        margin-top: var(--boxel-sp);
       }
       .editor {
         position: relative;
         display: grid;
+        min-height: 65px;
       }
       .editor.read-only {
         grid-template-columns: 1fr;
@@ -514,6 +515,9 @@ export function getLinksToManyComponent({
           .linksToMany-field.atom-effectiveFormat.display-container-true {
             display: inline-flex;
             gap: var(--boxel-sp-sm);
+          }
+          .linksToMany-field.fitted-effectiveFormat > .linksToMany-item {
+            min-height: 65px;
           }
         }
       </style>

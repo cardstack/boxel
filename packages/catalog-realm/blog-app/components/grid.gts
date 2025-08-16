@@ -103,6 +103,8 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
       .card {
         container-name: fitted-card;
         container-type: size;
+        width: 100%;
+        height: 100%;
       }
     </style>
   </template>

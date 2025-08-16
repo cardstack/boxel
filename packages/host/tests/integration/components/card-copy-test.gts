@@ -131,7 +131,15 @@ module('Integration | card-copy', function (hooks) {
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <h2 data-test-person={{@model.firstName}}><@fields.firstName /></h2>
-          <@fields.pet />
+          <div class='pet-container'>
+            <@fields.pet />
+          </div>
+          <style scoped>
+            .pet-container {
+              height: 80px;
+              padding: 10px;
+            }
+          </style>
         </template>
       };
     }
