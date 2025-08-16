@@ -23,7 +23,7 @@ class AtomTemplate extends Component<typeof GeoPointField> {
   <template>
     <div class='geo-point-display'>
       <MapIcon class='map-icon' />
-      <span class='coordinates'>{{this.latValue}}, {{this.lonValue}}</span>
+      <span class='coordinate'>{{this.latValue}}, {{this.lonValue}}</span>
     </div>
 
     <style scoped>
@@ -52,7 +52,7 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
     return this.args.model?.lon ?? 'N/A';
   }
 
-  get coordinates() {
+  get coordinate() {
     const lat = this.args.model?.lat ?? 0;
     const lon = this.args.model?.lon ?? 0;
     return { lat, lng: lon };
@@ -63,27 +63,27 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
   }
 
   @action
-  updateCoordinates(coordinates: { lat: number; lng: number }) {
+  updatecoordinate(coordinate: { lat: number; lng: number }) {
     if (this.args.model) {
-      this.args.model.lat = coordinates.lat;
-      this.args.model.lon = coordinates.lng;
+      this.args.model.lat = coordinate.lat;
+      this.args.model.lon = coordinate.lng;
     }
   }
 
   <template>
-    <div class='coordinates-section'>
+    <div class='coordinate-section'>
       <MapIcon class='map-icon' />
-      <span class='coordinates'>{{this.latValue}}, {{this.lonValue}}</span>
+      <span class='coordinate'>{{this.latValue}}, {{this.lonValue}}</span>
     </div>
     <div class='map-section'>
       <MapRender
-        @coordinates={{this.coordinates}}
-        @onMapClickUpdate={{this.updateCoordinates}}
+        @coordinate={{this.coordinate}}
+        @onMapClickUpdate={{this.updatecoordinate}}
       />
     </div>
 
     <style scoped>
-      .coordinates-section {
+      .coordinate-section {
         display: inline-flex;
         align-items: flex-start;
         gap: var(--boxel-sp-xxs);
@@ -97,7 +97,7 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
         height: var(--map-icon-height, 16px);
       }
 
-      .coordinates {
+      .coordinate {
         font-weight: 500;
         color: var(--boxel-text-color);
       }

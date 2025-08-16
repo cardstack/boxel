@@ -2,31 +2,31 @@ import GlimmerComponent from '@glimmer/component';
 import Modifier, { NamedArgs } from 'ember-modifier';
 import { action } from '@ember/object';
 
-export interface Coordinates {
+export interface Coordinate {
   lat: number;
   lng: number;
 }
 
-export interface RoutePoint extends Coordinates {
+export interface RoutePoint extends Coordinate {
   address?: string;
 }
 
 interface MapRenderSignature {
   Args:
     | {
-        coordinates: Coordinates;
+        coordinate: Coordinate;
         route?: never;
         tileserverUrl?: string;
         disableMapClick?: boolean;
-        onMapClickUpdate?: (coordinates: Coordinates) => void;
+        onMapClickUpdate?: (coordinate: Coordinate) => void;
         onRouteUpdate?: never;
       }
     | {
         route: RoutePoint[];
-        coordinates?: never;
+        coordinate?: never;
         tileserverUrl?: string;
         disableMapClick?: boolean;
-        onMapClickUpdate?: (coordinates: Coordinates) => void;
+        onMapClickUpdate?: (coordinate: Coordinate) => void;
         onRouteUpdate?: (route: RoutePoint[]) => void;
       };
   Element: HTMLElement;
@@ -34,7 +34,7 @@ interface MapRenderSignature {
 
 interface LeafletMouseEvent {
   originalEvent: MouseEvent;
-  latlng: Coordinates;
+  latlng: Coordinate;
   target: HTMLElement;
   type: string;
 }
@@ -66,12 +66,12 @@ export class MapRender extends GlimmerComponent<MapRenderSignature> {
   map: any;
 
   get shouldShowMap() {
-    const coords = getCoordinatesOrRoute(this.args);
+    const coords = getCoordinateOrRoute(this.args);
     return !!coords;
   }
 
-  get coordinates() {
-    return getCoordinatesOrRoute(this.args);
+  get coordinate() {
+    return getCoordinateOrRoute(this.args);
   }
 
   @action
@@ -80,9 +80,9 @@ export class MapRender extends GlimmerComponent<MapRenderSignature> {
   }
 
   @action
-  handleMapClick(coordinates: Coordinates) {
+  handleMapClick(coordinate: Coordinate) {
     if (this.args.onMapClickUpdate) {
-      this.args.onMapClickUpdate(coordinates);
+      this.args.onMapClickUpdate(coordinate);
     }
   }
 
@@ -97,7 +97,7 @@ export class MapRender extends GlimmerComponent<MapRenderSignature> {
     {{#if this.shouldShowMap}}
       <figure
         {{LeafletModifier
-          coordinates=@coordinates
+          coordinate=@coordinate
           route=@route
           tileserverUrl=@tileserverUrl
           disableMapClick=@disableMapClick
@@ -112,9 +112,9 @@ export class MapRender extends GlimmerComponent<MapRenderSignature> {
         <div class='placeholder-text'>
           <div class='simple-placeholder'>
             <div class='placeholder-icon'>📍</div>
-            <div class='placeholder-title'>Enter Location Coordinates</div>
+            <div class='placeholder-title'>Enter Location Coordinate</div>
             <div class='placeholder-description'>
-              Add correctly formatted coordinates to see the location on the map
+              Add correctly formatted coordinate to see the location on the map
             </div>
             <div class='placeholder-example'>
               <strong>Example:</strong><br />
@@ -212,12 +212,12 @@ interface LeafletModifierSignature {
   Args: {
     Positional: [];
     Named: {
-      coordinates?: Coordinates;
+      coordinate?: Coordinate;
       route?: RoutePoint[];
       tileserverUrl?: string;
       disableMapClick?: boolean;
       setMap?: (map: LeafletMap) => void;
-      onMapClick?: (coordinates: Coordinates) => void;
+      onMapClick?: (coordinate: Coordinate) => void;
       onRouteUpdate?: (route: RoutePoint[]) => void;
     };
   };
@@ -237,7 +237,7 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
 
     this.initializeMap(
       namedArgs.tileserverUrl,
-      namedArgs.coordinates,
+      namedArgs.coordinate,
       namedArgs.route,
       namedArgs.setMap,
       namedArgs.onMapClick,
@@ -248,10 +248,10 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
 
   private initializeMap(
     tileserverUrl?: string,
-    coordinates?: Coordinates,
+    coordinate?: Coordinate,
     route?: RoutePoint[],
     setMap?: (map: LeafletMap) => void,
-    onMapClick?: (coordinates: Coordinates) => void,
+    onMapClick?: (coordinate: Coordinate) => void,
     onRouteUpdate?: (route: RoutePoint[]) => void,
     disableMapClick?: boolean,
   ) {
@@ -261,8 +261,8 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
       .then((t) => {
         eval(t);
 
-        // Initialize map with coordinates or defaults
-        const defaultCoords: Coordinates = coordinates || { lat: 0, lng: 0 };
+        // Initialize map with coordinate or defaults
+        const defaultCoords: Coordinate = coordinate || { lat: 0, lng: 0 };
         const zoom = 13;
         let map = L.map(this.element!).setView(
           [defaultCoords.lat, defaultCoords.lng],
@@ -295,7 +295,7 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
               return;
             }
 
-            const clickCoords: Coordinates = event.latlng;
+            const clickCoords: Coordinate = event.latlng;
 
             // Remove existing marker
             if (this.marker) {
@@ -345,13 +345,13 @@ function darkenColor(color: string, factor: number): string {
 }
 
 function createMarker(
-  coordinates: Coordinates,
+  coordinate: Coordinate,
   color: string = '#ef4444',
   className: string = 'marker',
 ) {
   const strokeColor = darkenColor(color, 0.3);
 
-  return L.marker([coordinates.lat, coordinates.lng], {
+  return L.marker([coordinate.lat, coordinate.lng], {
     icon: L.divIcon({
       className,
       html: `<svg width="24" height="32" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg">
@@ -407,13 +407,13 @@ function drawRoute(
   onRouteUpdate?.(route);
 }
 
-function createPopupContent(coordinates: Coordinates, title: string): string {
+function createPopupContent(coordinate: Coordinate, title: string): string {
   return `
     <div style="text-align: center; min-width: 250px;">
       <div style="font-weight: bold; margin-bottom: 8px;">📍 ${title}</div>
       <div style="margin-bottom: 6px; color: #666;">
-        <strong>Coordinates:</strong><br>
-        ${coordinates.lat.toFixed(6)}, ${coordinates.lng.toFixed(6)}
+        <strong>Coordinate:</strong><br>
+        ${coordinate.lat.toFixed(6)}, ${coordinate.lng.toFixed(6)}
       </div>
     </div>
   `;
@@ -429,16 +429,14 @@ function createPopup() {
 
 function setupMarkerPopup(
   marker: LeafletMarker,
-  coordinates: Coordinates,
+  coordinate: Coordinate,
   map: LeafletMap,
   title: string,
 ): void {
-  const popup = createPopup().setContent(
-    createPopupContent(coordinates, title),
-  );
+  const popup = createPopup().setContent(createPopupContent(coordinate, title));
 
   marker.on('mouseover', () => {
-    popup.setLatLng([coordinates.lat, coordinates.lng]).openOn(map);
+    popup.setLatLng([coordinate.lat, coordinate.lng]).openOn(map);
   });
 
   marker.on('mouseout', () => {
@@ -455,11 +453,11 @@ function isMarkerClick(event: LeafletMouseEvent): boolean {
   );
 }
 
-function getCoordinatesOrRoute(
+function getCoordinateOrRoute(
   args: MapRenderSignature['Args'],
-): Coordinates | Coordinates[] | null {
-  if (args.coordinates) {
-    return args.coordinates;
+): Coordinate | Coordinate[] | null {
+  if (args.coordinate) {
+    return args.coordinate;
   }
 
   if (args.route) {

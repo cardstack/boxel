@@ -19,14 +19,14 @@ export class LeafletMap extends CardDef {
   @field tileserverUrl = contains(StringField);
 
   static isolated = class IsolatedTemplate extends Component<typeof this> {
-    updateCoordinates = (coordinates: { lat: number; lng: number }) => {
+    updatecoordinate = (coordinate: { lat: number; lng: number }) => {
       if (this.args.model?.geoPoint) {
-        this.args.model.geoPoint.lat = coordinates.lat;
-        this.args.model.geoPoint.lon = coordinates.lng;
+        this.args.model.geoPoint.lat = coordinate.lat;
+        this.args.model.geoPoint.lon = coordinate.lng;
       }
     };
 
-    get coordinates() {
+    get coordinate() {
       const lat = this.args.model.geoPoint?.lat ?? 0;
       const lon = this.args.model.geoPoint?.lon ?? 0;
       return { lat, lng: lon };
@@ -34,9 +34,9 @@ export class LeafletMap extends CardDef {
 
     <template>
       <MapRender
-        @coordinates={{this.coordinates}}
+        @coordinate={{this.coordinate}}
         @tileserverUrl={{@model.tileserverUrl}}
-        @onMapClickUpdate={{this.updateCoordinates}}
+        @onMapClickUpdate={{this.updatecoordinate}}
       />
     </template>
   };

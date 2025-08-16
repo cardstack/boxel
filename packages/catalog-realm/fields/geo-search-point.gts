@@ -10,7 +10,7 @@ import {
   field,
 } from 'https://cardstack.com/base/card-api';
 import { GeoPointField } from './geo-point';
-import { MapRender, type Coordinates } from '../components/map-render';
+import { MapRender, type Coordinate } from '../components/map-render';
 
 class AtomTemplate extends Component<typeof GeoSearchPointField> {
   get searchAddressValue() {
@@ -26,22 +26,22 @@ class AtomTemplate extends Component<typeof GeoSearchPointField> {
   }
 
   <template>
-    <div class='coordinates-section'>
+    <div class='coordinate-section'>
       <MapIcon class='map-icon' />
       <span
-        class='coordinates-section-info-title'
+        class='coordinate-section-info-title'
       >{{this.searchAddressValue}}</span>
     </div>
 
     <style scoped>
-      .coordinates-section {
+      .coordinate-section {
         display: inline-flex;
         align-items: center;
         gap: var(--boxel-sp-xxs);
         flex-shrink: 0;
       }
 
-      .coordinates-section-info-title {
+      .coordinate-section-info-title {
         line-height: normal;
       }
 
@@ -68,7 +68,7 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
     return this.args.model?.lon ?? 'N/A';
   }
 
-  private fetchCoordinates = task(async (address: string | undefined) => {
+  private fetchCoordinate = task(async (address: string | undefined) => {
     if (!address) {
       if (this.args.model) {
         this.args.model.lat = undefined;
@@ -98,7 +98,7 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
 
   @action
   geocodeAddress() {
-    this.fetchCoordinates.perform(this.args.model.searchKey);
+    this.fetchCoordinate.perform(this.args.model.searchKey);
   }
 
   private debouncedGeocodeAddress = debounce(() => {
@@ -121,8 +121,8 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
         @onInput={{this.updateSearchAddress}}
       />
 
-      <div class='coordinates'>
-        {{#if this.fetchCoordinates.isRunning}}
+      <div class='coordinate'>
+        {{#if this.fetchCoordinate.isRunning}}
           Loading...
         {{else}}
           📍 Lat:
@@ -138,11 +138,11 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
         margin-top: 1rem;
       }
 
-      .coordinates-container {
+      .coordinate-container {
         margin-top: 0.2rem;
       }
 
-      .coordinates {
+      .coordinate {
         margin-top: 8px;
         padding: 4px 10px;
         background: #f0f9ff;
@@ -183,7 +183,7 @@ class EmbeddedTemplate extends Component<typeof GeoSearchPointField> {
     return this.args.model?.lon ?? 0;
   }
 
-  get coordinates(): Coordinates {
+  get coordinate(): Coordinate {
     return {
       lat: this.latNumber,
       lng: this.lonNumber,
@@ -191,34 +191,34 @@ class EmbeddedTemplate extends Component<typeof GeoSearchPointField> {
   }
 
   <template>
-    <div class='coordinates-section'>
+    <div class='coordinate-section'>
       <MapIcon class='map-icon' />
-      <div class='coordinates-section-info'>
+      <div class='coordinate-section-info'>
         <h3
-          class='coordinates-section-info-title'
+          class='coordinate-section-info-title'
         >{{this.searchAddressValue}}</h3>
-        <span class='coordinates'>{{this.latValue}}, {{this.lonValue}}</span>
+        <span class='coordinate'>{{this.latValue}}, {{this.lonValue}}</span>
       </div>
     </div>
     <div class='map-section'>
-      <MapRender @coordinates={{this.coordinates}} @disableMapClick={{true}} />
+      <MapRender @coordinate={{this.coordinate}} @disableMapClick={{true}} />
     </div>
 
     <style scoped>
-      .coordinates-section {
+      .coordinate-section {
         display: inline-flex;
         align-items: flex-start;
         gap: var(--boxel-sp-xxs);
         flex-shrink: 0;
       }
 
-      .coordinates-section-info {
+      .coordinate-section-info {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xxs);
       }
 
-      .coordinates-section-info-title {
+      .coordinate-section-info-title {
         line-height: normal;
         margin: 0;
       }
@@ -230,7 +230,7 @@ class EmbeddedTemplate extends Component<typeof GeoSearchPointField> {
         height: var(--map-icon-height, 16px);
       }
 
-      .coordinates {
+      .coordinate {
         font-weight: 500;
         color: var(--boxel-text-color);
       }
