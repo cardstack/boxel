@@ -17,9 +17,6 @@
       "geoPoint": {
         "lat": 14.088849284896906,
         "lon": 1.0440563288688545,
-        "config": {
-          "markerColor": null
-        }
       }
     },
     "relationships": {

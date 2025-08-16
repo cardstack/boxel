@@ -88,6 +88,7 @@ export class LeafletGtfs extends CardDef {
     let activeRouteVariantPoints = this.activeRouteVariantPoints;
 
     if (activeRouteVariantPoints) {
+      const L = (window as any).L;
       this.routesFeatureGroup = L.featureGroup(
         activeRouteVariantPoints.map((points) => {
           return L.polyline(points);

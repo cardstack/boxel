@@ -17,9 +17,6 @@
       "geoSearchPoint": {
         "lat": 3.1336268,
         "lon": 101.6299203,
-        "config": {
-          "markerColor": "#9D00FF"
-        },
         "searchKey": "Glo Damansara"
       }
     },

@@ -58,48 +58,8 @@ interface LeafletMarker {
   remove: () => void;
 }
 
-interface LeafletPolyline {
-  addTo: (map: LeafletMap) => LeafletPolyline;
-  getBounds: () => any;
-}
-
-interface LeafletTileLayer {
-  addTo: (map: LeafletMap) => LeafletTileLayer;
-}
-
-interface LeafletPopup {
-  setContent: (content: string) => LeafletPopup;
-  setLatLng: (coords: [number, number]) => LeafletPopup;
-  openOn: (map: LeafletMap) => LeafletPopup;
-  remove: () => void;
-}
-
-interface LeafletDivIcon {
-  className: string;
-  html: string;
-  iconSize: [number, number];
-  iconAnchor: [number, number];
-}
-
 declare global {
-  var L: {
-    map: (element: HTMLElement) => LeafletMap;
-    marker: (
-      coords: [number, number],
-      options?: { icon?: LeafletDivIcon },
-    ) => LeafletMarker;
-    polyline: (
-      coords: [number, number][],
-      options?: { color: string; weight: number; opacity: number },
-    ) => LeafletPolyline;
-    tileLayer: (url: string) => LeafletTileLayer;
-    popup: (options?: {
-      offset: [number, number];
-      closeButton: boolean;
-      autoClose: boolean;
-    }) => LeafletPopup;
-    divIcon: (options: LeafletDivIcon) => LeafletDivIcon;
-  };
+  var L: any;
 }
 
 export class MapRender extends GlimmerComponent<MapRenderSignature> {
