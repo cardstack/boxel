@@ -105,7 +105,7 @@ export async function startServer(includePublishedRealm = false) {
 
         checkReady();
       }),
-      new Promise<true>((resolve) => setTimeout(() => resolve(true), 10_000)),
+      new Promise<true>((resolve) => setTimeout(() => resolve(true), 30_000)),
     ]);
 
     if (workerManagerStartupTimedOut) {

@@ -31,7 +31,13 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
-          args: ['--host-resolver-rules=MAP published.realm 127.0.0.1:4205'],
+          args: [
+            // Simulate resolving a custom workspace domain to a realm server
+            '--host-resolver-rules=MAP published.realm 127.0.0.1:4205',
+            // Allow iframe to request storage access depsite being considered insecure
+            '--unsafely-treat-insecure-origin-as-secure=http://published.realm',
+          ],
+          // devtools: true,
         },
       },
     },
