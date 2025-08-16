@@ -2,6 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
+      "title": "Catalog App",
       "description": null,
       "thumbnailURL": null
     },

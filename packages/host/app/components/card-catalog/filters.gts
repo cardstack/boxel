@@ -87,9 +87,8 @@ export default class CardCatalogFilters extends Component<Signature> {
     <style scoped>
       .filter-dropdown-trigger {
         height: 37px;
-        width: fit-content;
-        min-width: 15rem;
-        max-width: 100%;
+        width: 100%;
+        max-width: 15rem;
         display: flex;
         justify-content: flex-start;
         gap: var(--boxel-sp-sm);

@@ -1,15 +1,15 @@
 import {
   Component,
-  field,
   contains,
   FieldDef,
+  field,
 } from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
-import MapIcon from '@cardstack/boxel-icons/map';
-import { MapRender } from '../components/map-render';
 import { action } from '@ember/object';
-
+import MapIcon from '@cardstack/boxel-icons/map';
+import MapPinIcon from '@cardstack/boxel-icons/map-pin';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { MapRender } from '../components/map-render';
 
 class AtomTemplate extends Component<typeof GeoPointField> {
   get latValue() {
@@ -23,7 +23,7 @@ class AtomTemplate extends Component<typeof GeoPointField> {
   <template>
     <div class='geo-point-display'>
       <MapIcon class='map-icon' />
-      <span class='coordinates'>{{this.latValue}}, {{this.lonValue}}</span>
+      <span class='coordinate'>{{this.latValue}}, {{this.lonValue}}</span>
     </div>
 
     <style scoped>
@@ -52,30 +52,41 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
     return this.args.model?.lon ?? 'N/A';
   }
 
+  get coordinate() {
+    const lat = this.args.model?.lat ?? 0;
+    const lon = this.args.model?.lon ?? 0;
+    return { lat, lng: lon };
+  }
+
+  get lonNumber() {
+    return this.args.model?.lon ?? 0;
+  }
+
   @action
-  updateCoordinates(lat: number, lon: number) {
-    this.args.model.lat = lat;
-    this.args.model.lon = lon;
+  updatecoordinate(coordinate: { lat: number; lng: number }) {
+    if (this.args.model) {
+      this.args.model.lat = coordinate.lat;
+      this.args.model.lon = coordinate.lng;
+    }
   }
 
   <template>
-    <div class='coordinates-section'>
+    <div class='coordinate-section'>
       <MapIcon class='map-icon' />
-      <span class='coordinates'>{{this.latValue}}, {{this.lonValue}}</span>
+      <span class='coordinate'>{{this.latValue}}, {{this.lonValue}}</span>
     </div>
     <div class='map-section'>
       <MapRender
-        @lat={{@model.lat}}
-        @lon={{@model.lon}}
-        @onMapClickUpdate={{this.updateCoordinates}}
+        @coordinate={{this.coordinate}}
+        @onMapClickUpdate={{this.updatecoordinate}}
       />
     </div>
 
     <style scoped>
-      .coordinates-section {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
+      .coordinate-section {
+        display: inline-flex;
+        align-items: flex-start;
+        gap: var(--boxel-sp-xxs);
         flex-shrink: 0;
       }
 
@@ -86,7 +97,7 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
         height: var(--map-icon-height, 16px);
       }
 
-      .coordinates {
+      .coordinate {
         font-weight: 500;
         color: var(--boxel-text-color);
       }
@@ -106,29 +117,37 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
   </template>
 }
 
+class EditTemplate extends Component<typeof GeoPointField> {
+  <template>
+    <FieldContainer @vertical={{true}} @label='Latitude' @tag='label'>
+      <@fields.lat />
+    </FieldContainer>
+    <FieldContainer @vertical={{true}} @label='Longitude' @tag='label'>
+      <@fields.lon />
+    </FieldContainer>
+
+    <style scoped>
+      label + label {
+        margin-top: var(--boxel-sp-xs);
+      }
+
+      .color-palette-container {
+        padding: 1rem;
+        border-radius: var(--boxel-border-radius);
+        border: var(--boxel-border-card);
+      }
+    </style>
+  </template>
+}
+
 export class GeoPointField extends FieldDef {
   static displayName = 'Geo Point';
+  static icon = MapPinIcon;
 
   @field lat = contains(NumberField);
   @field lon = contains(NumberField);
 
-  static edit = class Edit extends Component<typeof this> {
-    <template>
-      <FieldContainer @vertical={{true}} @label='Latitude' @tag='label'>
-        <@fields.lat />
-      </FieldContainer>
-      <FieldContainer @vertical={{true}} @label='Longitude' @tag='label'>
-        <@fields.lon />
-      </FieldContainer>
-
-      <style scoped>
-        label + label {
-          margin-top: var(--boxel-sp-xs);
-        }
-      </style>
-    </template>
-  };
-
   static atom = AtomTemplate;
   static embedded = EmbeddedTemplate;
+  static edit = EditTemplate;
 }

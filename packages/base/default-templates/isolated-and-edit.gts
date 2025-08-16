@@ -66,7 +66,6 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
   <template>
     <div class={{cn 'default-card-template' @format}}>
       <Header
-        @hasBackground={{true}}
         @hasBottomBorder={{true}}
         class={{cn
           'card-info-header'
@@ -132,7 +131,7 @@ export default class DefaultCardDefTemplate extends GlimmerComponent<{
         --boxel-header-min-height: 9.375rem; /* 150px */
         --boxel-header-padding: var(--boxel-sp-lg);
         --boxel-header-gap: var(--boxel-sp-lg);
-        --boxel--header-border-color: var(--hr-color);
+        --boxel-header-border-color: var(--hr-color);
         align-items: flex-start;
         background-color: var(--muted, var(--boxel-100));
       }

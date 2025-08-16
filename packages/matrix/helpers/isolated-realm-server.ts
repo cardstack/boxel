@@ -3,6 +3,7 @@ import { resolve, join } from 'path';
 // @ts-expect-error no types
 import { dirSync, setGracefulCleanup } from 'tmp';
 import { ensureDirSync, copySync, readFileSync } from 'fs-extra';
+import { v4 as uuidv4 } from 'uuid';
 
 setGracefulCleanup();
 
@@ -20,11 +21,19 @@ export const appURL = 'http://localhost:4205/test';
 // judgement to decide if your test really merits an isolated realm for testing
 // or if a mock would be more suitable.
 
-export async function startServer() {
+export async function startServer(includePublishedRealm = false) {
   let dir = dirSync();
   let testRealmDir = join(dir.name, 'test');
   ensureDirSync(testRealmDir);
   copySync(testRealmCards, testRealmDir);
+
+  let publishedRealmId = uuidv4();
+
+  if (includePublishedRealm) {
+    let publishedRealmDir = join(dir.name, '_published', publishedRealmId);
+    ensureDirSync(publishedRealmDir);
+    copySync(testRealmCards, publishedRealmDir);
+  }
 
   process.env.PGPORT = '5435';
   process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
@@ -42,6 +51,7 @@ export async function startServer() {
     `--port=4212`,
     `--matrixURL='http://localhost:8008'`,
     `--distURL="${process.env.HOST_URL ?? 'http://localhost:4200'}"`,
+    `--migrateDB`,
 
     `--fromUrl='http://localhost:4205/test/'`,
     `--toUrl='http://localhost:4205/test/'`,
@@ -50,6 +60,14 @@ export async function startServer() {
     `--fromUrl='https://cardstack.com/base/'`,
     `--toUrl='http://localhost:4201/base/'`,
   ]);
+
+  if (includePublishedRealm) {
+    workerArgs = workerArgs.concat([
+      `--fromUrl='http://published.realm/'`,
+      `--toUrl='http://localhost:4205/published/'`,
+    ]);
+  }
+
   let workerManager = spawn('ts-node', workerArgs, {
     cwd: realmServerDir,
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
@@ -65,6 +83,65 @@ export async function startServer() {
     );
   }
 
+  // Add published realm database rows before starting realm server
+  if (includePublishedRealm) {
+    // Wait for worker manager startup to execute SQL
+    let workerManagerStartupTimedOut = await Promise.race([
+      new Promise<void>((resolve) => {
+        let checkReady = async () => {
+          try {
+            let response = await fetch('http://localhost:4212/');
+            if (response.ok) {
+              let json = await response.json();
+              if (json.ready) {
+                resolve();
+                return;
+              }
+            }
+          } catch (e) {}
+
+          setTimeout(checkReady, 100);
+        };
+
+        checkReady();
+      }),
+      new Promise<true>((resolve) => setTimeout(() => resolve(true), 10_000)),
+    ]);
+
+    if (workerManagerStartupTimedOut) {
+      throw new Error(`timed out waiting for worker manager to start`);
+    }
+
+    let sqlExecutor = new WorkerManagerSQLExecutor(workerManager);
+
+    await sqlExecutor.executeSQL(`
+      INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+      VALUES (
+        'http://published.realm/',
+        '@node-test_realm:localhost',
+        true,
+        true,
+        true
+      ), (
+        'http://published.realm/',
+        '*',
+        true,
+        false,
+        false
+      )
+    `);
+
+    await sqlExecutor.executeSQL(`
+      INSERT INTO published_realms (id, owner_username, source_realm_url, published_realm_url)
+      VALUES (
+        '${publishedRealmId}',
+        '@node-test_realm:localhost',
+        'http://example.com',
+        'http://published.realm/'
+      )
+    `);
+  }
+
   let serverArgs = [
     `--transpileOnly`,
     'main',
@@ -72,7 +149,6 @@ export async function startServer() {
     `--matrixURL='http://localhost:8008'`,
     `--realmsRootPath='${dir.name}'`,
     `--workerManagerPort=4212`,
-    `--migrateDB`,
     `--useRegistrationSecretFunction`,
 
     `--path='${testRealmDir}'`,
@@ -86,10 +162,19 @@ export async function startServer() {
     `--fromUrl='http://localhost:4205/skills/'`,
     `--toUrl='http://localhost:4205/skills/'`,
   ]);
+
+  if (includePublishedRealm) {
+    serverArgs = serverArgs.concat([
+      `--fromUrl='http://published.realm/'`,
+      `--toUrl='http://localhost:4205/published/'`,
+    ]);
+  }
+
   serverArgs = serverArgs.concat([
     `--fromUrl='https://cardstack.com/base/'`,
     `--toUrl='http://localhost:4201/base/'`,
   ]);
+
   let realmServer = spawn('ts-node', serverArgs, {
     cwd: realmServerDir,
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
@@ -215,5 +300,49 @@ export class IsolatedRealmServer {
     await workerManagerStop;
     this.workerManagerStopped = undefined;
     this.workerManagerProcess.send('kill');
+  }
+}
+
+class WorkerManagerSQLExecutor {
+  private workerManagerSqlResults: ((results: string) => void) | undefined;
+  private workerManagerSqlError: ((error: string) => void) | undefined;
+
+  constructor(private workerManagerProcess: ReturnType<typeof spawn>) {
+    workerManagerProcess.on('message', (message) => {
+      if (typeof message === 'string' && message.startsWith('sql-results:')) {
+        let results = message.substring('sql-results:'.length);
+        if (!this.workerManagerSqlResults) {
+          console.error(`received unprompted worker manager SQL: ${results}`);
+          return;
+        }
+        this.workerManagerSqlResults(results);
+      } else if (
+        typeof message === 'string' &&
+        message.startsWith('sql-error:')
+      ) {
+        let error = message.substring('sql-error:'.length);
+        if (!this.workerManagerSqlError) {
+          console.error(
+            `received unprompted worker manager SQL error: ${error}`,
+          );
+          return;
+        }
+        this.workerManagerSqlError(error);
+      }
+    });
+  }
+
+  async executeSQL(sql: string): Promise<Record<string, any>[]> {
+    let execute = new Promise<string>(
+      (resolve, reject: (reason: string) => void) => {
+        this.workerManagerSqlResults = resolve;
+        this.workerManagerSqlError = reject;
+      },
+    );
+    this.workerManagerProcess.send(`execute-sql:${sql}`);
+    let resultsStr = await execute;
+    this.workerManagerSqlResults = undefined;
+    this.workerManagerSqlError = undefined;
+    return JSON.parse(resultsStr);
   }
 }
