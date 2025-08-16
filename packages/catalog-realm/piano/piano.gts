@@ -1842,4 +1842,660 @@ export class Piano extends CardDef {
   @field notation = contains(StringField);
 
   static isolated = IsolatedPianoTemplate;
+
+  static fitted = class Fitted extends Component<typeof this> {
+    <template>
+      <div class='fitted-container'>
+        <div class='badge-format'>
+          <div class='badge-content'>
+            <div class='badge-icon'>
+              <div class='piano-keys-mini'>
+                <div class='key-mini white'></div>
+                <div class='key-mini black'></div>
+                <div class='key-mini white'></div>
+                <div class='key-mini black'></div>
+                <div class='key-mini white'></div>
+              </div>
+            </div>
+            <div class='badge-info'>
+              <div class='badge-title'>Piano</div>
+              <div class='badge-stats'>3 Octaves • Live</div>
+            </div>
+          </div>
+        </div>
+
+        <div class='strip-format'>
+          <div class='strip-content'>
+            <div class='strip-visual'>
+              <div class='piano-strip'>
+                <div class='strip-key white'></div>
+                <div class='strip-key black'></div>
+                <div class='strip-key white'></div>
+                <div class='strip-key black'></div>
+                <div class='strip-key white'></div>
+                <div class='strip-key white'></div>
+                <div class='strip-key black'></div>
+                <div class='strip-key white'></div>
+                <div class='strip-key black'></div>
+                <div class='strip-key white'></div>
+              </div>
+            </div>
+            <div class='strip-info'>
+              <div class='strip-title'>Piano Keyboard</div>
+              <div class='strip-description'>{{if
+                  @model.notation
+                  'Has notation'
+                  'Ready to play'
+                }}
+                • Real-time synthesis</div>
+            </div>
+            <div class='strip-badge'>
+              <div class='sound-indicator'></div>
+              AUDIO
+            </div>
+          </div>
+        </div>
+
+        <div class='tile-format'>
+          <div class='tile-header'>
+            <div class='tile-visual'>
+              <div class='piano-keyboard'>
+                <div class='keyboard-row'>
+                  <div class='key-tile white'></div>
+                  <div class='key-tile black'></div>
+                  <div class='key-tile white'></div>
+                  <div class='key-tile black'></div>
+                  <div class='key-tile white'></div>
+                  <div class='key-tile white'></div>
+                  <div class='key-tile black'></div>
+                  <div class='key-tile white'></div>
+                </div>
+                <div class='keyboard-glow'></div>
+              </div>
+            </div>
+          </div>
+          <div class='tile-content'>
+            <h3 class='tile-title'>Piano Keyboard</h3>
+            <div class='tile-specs'>
+              <div class='spec-row'>
+                <span class='spec-label'>Range:</span>
+                <span class='spec-value'>C3 - B5</span>
+              </div>
+              <div class='spec-row'>
+                <span class='spec-label'>Keys:</span>
+                <span class='spec-value'>37 Keys</span>
+              </div>
+              <div class='spec-row'>
+                <span class='spec-label'>Mode:</span>
+                <span class='spec-value'>{{if
+                    @model.notation
+                    'Notation'
+                    'Interactive'
+                  }}</span>
+              </div>
+            </div>
+            <div class='tile-features'>
+              <div class='feature-tag'>Real-time</div>
+              <div class='feature-tag'>Record</div>
+              <div class='feature-tag'>Play</div>
+            </div>
+          </div>
+        </div>
+
+        <div class='card-format'>
+          <div class='card-header'>
+            <div class='card-info'>
+              <h3 class='card-title'>Piano Keyboard</h3>
+              <p class='card-description'>Professional 3-octave virtual piano
+                with real-time audio synthesis and notation recording</p>
+            </div>
+            <div class='card-visual'>
+              <div class='piano-display'>
+                <div class='display-screen'>
+                  <div class='display-line'>
+                    <span class='param-label'>RANGE</span>
+                    <span class='param-value'>C3-B5</span>
+                  </div>
+                  <div class='display-line'>
+                    <span class='param-label'>MODE</span>
+                    <span class='param-value'>{{if
+                        @model.notation
+                        'NOTATION'
+                        'LIVE'
+                      }}</span>
+                  </div>
+                </div>
+                <div class='piano-controls'>
+                  <div class='control-led active'></div>
+                  <div class='control-led'></div>
+                  <div class='control-led active'></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class='card-keyboard'>
+            <div class='keyboard-preview'>
+              <div class='key-preview white'></div>
+              <div class='key-preview black'></div>
+              <div class='key-preview white'></div>
+              <div class='key-preview black'></div>
+              <div class='key-preview white'></div>
+              <div class='key-preview white'></div>
+              <div class='key-preview black'></div>
+              <div class='key-preview white'></div>
+              <div class='key-preview black'></div>
+              <div class='key-preview white'></div>
+              <div class='key-preview black'></div>
+              <div class='key-preview white'></div>
+            </div>
+          </div>
+          <div class='card-features'>
+            <div class='features-label'>Capabilities:</div>
+            <div class='feature-list'>
+              <div class='feature-pill'>Real-time Audio</div>
+              <div class='feature-pill'>Keyboard Input</div>
+              <div class='feature-pill'>Notation Recording</div>
+              <div class='feature-pill'>Playback Engine</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <style scoped>
+        .fitted-container {
+          container-type: size;
+          width: 100%;
+          height: 100%;
+          font-family:
+            'Inter',
+            -apple-system,
+            sans-serif;
+        }
+
+        /* Hide all by default */
+        .badge-format,
+        .strip-format,
+        .tile-format,
+        .card-format {
+          display: none;
+          width: 100%;
+          height: 100%;
+          padding: clamp(0.1875rem, 2%, 0.625rem);
+          box-sizing: border-box;
+          background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%);
+          border-radius: 12px;
+          overflow: hidden;
+        }
+
+        /* Badge Format (≤150px width, ≤169px height) */
+        @container (max-width: 150px) and (max-height: 169px) {
+          .badge-format {
+            display: flex;
+            align-items: center;
+          }
+        }
+
+        .badge-content {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          width: 100%;
+        }
+
+        .badge-icon {
+          width: 24px;
+          height: 24px;
+          flex-shrink: 0;
+        }
+
+        .piano-keys-mini {
+          display: flex;
+          gap: 1px;
+          background: #1a1a2e;
+          border-radius: 3px;
+          padding: 2px;
+        }
+
+        .key-mini {
+          border-radius: 1px;
+        }
+
+        .key-mini.white {
+          width: 3px;
+          height: 16px;
+          background: #f8f9fa;
+        }
+
+        .key-mini.black {
+          width: 2px;
+          height: 10px;
+          background: #2c3e50;
+          margin-top: 0;
+        }
+
+        .badge-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .badge-title {
+          font-size: 0.75rem;
+          font-weight: 700;
+          color: #667eea;
+          line-height: 1.2;
+          margin-bottom: 0.125rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .badge-stats {
+          font-size: 0.625rem;
+          color: rgba(255, 255, 255, 0.7);
+          font-family: 'JetBrains Mono', monospace;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        /* Strip Format (151px-399px width, ≤169px height) */
+        @container (min-width: 151px) and (max-height: 169px) {
+          .strip-format {
+            display: flex;
+            align-items: center;
+          }
+        }
+
+        .strip-content {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          width: 100%;
+        }
+
+        .strip-visual {
+          flex-shrink: 0;
+        }
+
+        .piano-strip {
+          display: flex;
+          gap: 1px;
+          align-items: flex-end;
+          height: 24px;
+          background: #1a1a2e;
+          border-radius: 4px;
+          padding: 2px;
+        }
+
+        .strip-key {
+          border-radius: 1px;
+        }
+
+        .strip-key.white {
+          width: 3px;
+          height: 20px;
+          background: #f8f9fa;
+        }
+
+        .strip-key.black {
+          width: 2px;
+          height: 14px;
+          background: #2c3e50;
+          margin-top: 6px;
+        }
+
+        .strip-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .strip-title {
+          font-size: 0.875rem;
+          font-weight: 700;
+          color: #667eea;
+          line-height: 1.2;
+          margin-bottom: 0.25rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .strip-description {
+          font-size: 0.75rem;
+          color: rgba(255, 255, 255, 0.7);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .strip-badge {
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          padding: 0.25rem 0.5rem;
+          background: rgba(139, 92, 246, 0.2);
+          border: 1px solid #8b5cf6;
+          border-radius: 6px;
+          font-size: 0.625rem;
+          font-weight: 700;
+          color: #8b5cf6;
+          font-family: 'JetBrains Mono', monospace;
+          flex-shrink: 0;
+        }
+
+        .sound-indicator {
+          width: 6px;
+          height: 6px;
+          background: #8b5cf6;
+          border-radius: 50%;
+          animation: audio-pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes audio-pulse {
+          0%,
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.6;
+            transform: scale(1.2);
+          }
+        }
+
+        /* Tile Format (≤399px width, ≥170px height) */
+        @container (max-width: 399px) and (min-height: 170px) {
+          .tile-format {
+            display: flex;
+            flex-direction: column;
+          }
+        }
+
+        .tile-header {
+          position: relative;
+          height: 70px;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 1rem;
+          border-radius: 8px;
+          overflow: hidden;
+        }
+
+        .piano-keyboard {
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .keyboard-row {
+          display: flex;
+          gap: 1px;
+          align-items: flex-end;
+          background: #1a1a2e;
+          border-radius: 4px;
+          padding: 3px;
+        }
+
+        .key-tile {
+          border-radius: 2px;
+        }
+
+        .key-tile.white {
+          width: 4px;
+          height: 24px;
+          background: rgba(255, 255, 255, 0.9);
+        }
+
+        .key-tile.black {
+          width: 3px;
+          height: 16px;
+          background: rgba(44, 62, 80, 0.9);
+          margin-top: 0;
+        }
+
+        .keyboard-glow {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: radial-gradient(
+            circle at center,
+            rgba(255, 255, 255, 0.1) 0%,
+            transparent 70%
+          );
+          pointer-events: none;
+        }
+
+        .tile-content {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .tile-title {
+          font-size: 1rem;
+          font-weight: 700;
+          color: #667eea;
+          margin: 0;
+          line-height: 1.2;
+        }
+
+        .tile-specs {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+
+        .spec-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .spec-label {
+          font-size: 0.75rem;
+          color: rgba(255, 255, 255, 0.7);
+          font-weight: 500;
+        }
+
+        .spec-value {
+          font-size: 0.875rem;
+          color: #667eea;
+          font-weight: 600;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        .tile-features {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.375rem;
+          margin-top: auto;
+        }
+
+        .feature-tag {
+          padding: 0.25rem 0.5rem;
+          background: rgba(102, 126, 234, 0.2);
+          border: 1px solid #667eea;
+          color: #667eea;
+          font-size: 0.625rem;
+          font-weight: 600;
+          border-radius: 4px;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Card Format (≥400px width, ≥170px height) */
+        @container (min-width: 400px) and (min-height: 170px) {
+          .card-format {
+            display: flex;
+            flex-direction: column;
+          }
+        }
+
+        .card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          padding: 1rem;
+          border-radius: 8px;
+          margin-bottom: 1rem;
+        }
+
+        .card-info {
+          flex: 1;
+        }
+
+        .card-title {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: white;
+          margin: 0 0 0.5rem 0;
+          line-height: 1.2;
+        }
+
+        .card-description {
+          font-size: 0.875rem;
+          color: rgba(255, 255, 255, 0.9);
+          margin: 0;
+          line-height: 1.4;
+        }
+
+        .piano-display {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          padding: 0.75rem;
+          background: rgba(15, 15, 35, 0.7);
+          backdrop-filter: blur(8px);
+          border-radius: 8px;
+          min-width: 120px;
+        }
+
+        .display-screen {
+          background: #0f0f23;
+          padding: 0.5rem;
+          border-radius: 4px;
+          border: 1px solid rgba(102, 126, 234, 0.3);
+        }
+
+        .display-line {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 0.25rem;
+        }
+
+        .display-line:last-child {
+          margin-bottom: 0;
+        }
+
+        .param-label {
+          font-size: 0.625rem;
+          color: rgba(255, 255, 255, 0.6);
+          font-weight: 600;
+        }
+
+        .param-value {
+          font-size: 0.75rem;
+          color: #667eea;
+          font-weight: 700;
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        .piano-controls {
+          display: flex;
+          justify-content: space-between;
+          gap: 0.25rem;
+        }
+
+        .control-led {
+          width: 8px;
+          height: 8px;
+          background: #374151;
+          border: 1px solid #667eea;
+          border-radius: 50%;
+          transition: all 0.3s ease;
+        }
+
+        .control-led.active {
+          background: #667eea;
+          box-shadow: 0 0 8px rgba(102, 126, 234, 0.6);
+        }
+
+        .card-keyboard {
+          background: rgba(248, 250, 252, 0.1);
+          border-radius: 8px;
+          padding: 1rem;
+          margin-bottom: 1rem;
+        }
+
+        .keyboard-preview {
+          display: flex;
+          gap: 1px;
+          align-items: flex-end;
+          height: 40px;
+          background: #1a1a2e;
+          border-radius: 6px;
+          padding: 4px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .key-preview {
+          border-radius: 2px;
+          transition: all 0.3s ease;
+        }
+
+        .key-preview.white {
+          width: 8px;
+          height: 32px;
+          background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+          border-right: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .key-preview.black {
+          width: 5px;
+          height: 20px;
+          background: linear-gradient(180deg, #2c3e50 0%, #1a252f 100%);
+          margin-left: -3px;
+          margin-right: -3px;
+          z-index: 2;
+          position: relative;
+        }
+
+        .card-features {
+          margin-top: auto;
+        }
+
+        .features-label {
+          font-size: 0.75rem;
+          color: rgba(255, 255, 255, 0.7);
+          font-weight: 600;
+          margin-bottom: 0.5rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .feature-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+        }
+
+        .feature-pill {
+          padding: 0.375rem 0.75rem;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          font-size: 0.75rem;
+          font-weight: 600;
+          border-radius: 6px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+      </style>
+    </template>
+  };
 }

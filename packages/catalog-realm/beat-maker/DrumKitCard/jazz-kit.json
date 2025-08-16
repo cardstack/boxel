@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "kitName": "Jazz Kit",
+      "description": "Warm acoustic simulation with natural textures and gentle filtering",
+      "category": "Jazz",
+      "creator": "Beat Maker Studio",
+      "kit": {
+        "kitName": "Jazz Kit",
+        "kickParams": "{\"type\": \"jazz\", \"frequency\": 70, \"decay\": 0.2, \"amplitude\": 0.8, \"shape\": 1.5, \"resonance\": 1}",
+        "snareParams": "{\"type\": \"jazz\", \"frequency\": 150, \"decay\": 0.25, \"amplitude\": 0.6, \"shape\": 1.5, \"resonance\": 0.5}",
+        "hihatParams": "{\"type\": \"jazz\", \"frequency\": 5000, \"decay\": 0.12, \"amplitude\": 0.4, \"shape\": 1.5, \"resonance\": 0.3}",
+        "openhatParams": "{\"type\": \"jazz\", \"frequency\": 4500, \"decay\": 0.35, \"amplitude\": 0.5, \"shape\": 1.2, \"resonance\": 0.5}",
+        "clapParams": "{\"type\": \"jazz\", \"frequency\": 1600, \"decay\": 0.18, \"amplitude\": 0.5, \"shape\": 1.8, \"resonance\": 2}",
+        "crashParams": "{\"type\": \"jazz\", \"frequency\": 3200, \"decay\": 1.2, \"amplitude\": 0.3, \"shape\": 0.8, \"resonance\": 0.5}"
+      },
+      "title": "Jazz Kit"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../beat-maker",
+        "name": "DrumKitCard"
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "kitName": "Trap Kit",
+      "description": "Sub-heavy kicks with snappy snares and metallic hi-hats for modern trap production",
+      "category": "Trap",
+      "creator": "Beat Maker Studio",
+      "kit": {
+        "kitName": "Trap Kit",
+        "kickParams": "{\"type\": \"trap\", \"frequency\": 50, \"decay\": 0.8, \"amplitude\": 1.5, \"shape\": 1, \"resonance\": 1}",
+        "snareParams": "{\"type\": \"trap\", \"frequency\": 2000, \"decay\": 0.08, \"amplitude\": 1.2, \"shape\": 3, \"resonance\": 10}",
+        "hihatParams": "{\"type\": \"trap\", \"frequency\": 10000, \"decay\": 0.03, \"amplitude\": 0.8, \"shape\": 5, \"resonance\": 2}",
+        "openhatParams": "{\"type\": \"trap\", \"frequency\": 9000, \"decay\": 0.2, \"amplitude\": 0.7, \"shape\": 2, \"resonance\": 3}",
+        "clapParams": "{\"type\": \"trap\", \"frequency\": 2500, \"decay\": 0.12, \"amplitude\": 0.8, \"shape\": 2.5, \"resonance\": 8}",
+        "crashParams": "{\"type\": \"trap\", \"frequency\": 4000, \"decay\": 0.6, \"amplitude\": 0.4, \"shape\": 1, \"resonance\": 2}"
+      },
+      "title": "Trap Kit"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../beat-maker",
+        "name": "DrumKitCard"
+      }
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ChordProgressionPlayerCard",
+        "module": "../chord-progression"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "playerName": "Harmony Explorer"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "currentProgression": {
+        "links": {
+          "self": "../ChordProgressionCard/i-v-vi-iv-progression"
+        }
+      },
+      "availableProgressions.0": {
+        "links": {
+          "self": "../ChordProgressionCard/vi-iv-i-v-progression"
+        }
+      },
+      "availableProgressions.1": {
+        "links": {
+          "self": "../ChordProgressionCard/ii-v-i-jazz-progression"
+        }
+      },
+      "availableProgressions.2": {
+        "links": {
+          "self": "../ChordProgressionCard/i-v-vi-iv-progression"
+        }
+      },
+      "availableProgressions.3": {
+        "links": {
+          "self": "../ChordProgressionCard/circle-of-fifths-progression"
+        }
+      },
+      "availableProgressions.4": {
+        "links": {
+          "self": "../ChordProgressionCard/blues-twelve-bar-progression"
+        }
+      },
+      "availableProgressions.5": {
+        "links": {
+          "self": "../ChordProgressionCard/andalusian-cadence-progression"
+        }
+      }
+    }
+  }
+}

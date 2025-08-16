@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SongCard",
+        "module": "../song"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "genre": "Acoustic",
+      "artist": "Kevin MacLeod",
+      "audioUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Carefree.mp3",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "duration": "3:32",
+      "songTitle": "Carefree",
+      "isExplicit": false,
+      "coverArtUrl": "https://dummyimage.com/300x300/22c55e/ffffff&text=Carefree"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

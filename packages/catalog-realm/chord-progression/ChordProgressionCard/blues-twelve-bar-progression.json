@@ -1,0 +1,76 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ChordProgressionCard",
+        "module": "../chord-progression"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "key": "C major",
+      "genre": "Blues",
+      "scale": "blues",
+      "tempo": 90,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "difficulty": "intermediate",
+      "description": "The foundation of blues music and rock & roll. This 12-bar form uses dominant 7th chords and follows a specific pattern that creates the classic blues sound and feel.",
+      "popularSongs": "\"Sweet Home Chicago\", \"Stormy Monday\", \"The Thrill is Gone\", \"Crossroads\"",
+      "timeSignature": "4/4",
+      "progressionName": "12-Bar Blues (I-I-I-I-IV-IV-I-I-V-IV-I-V)",
+      "chordProgression": {
+        "key": "C major",
+        "tempo": 90,
+        "chords": [
+          {
+            "chordName": "C7",
+            "chordType": "dominant7",
+            "rootNote": "C",
+            "quality": "dominant seventh",
+            "note1": "C",
+            "note2": "E",
+            "note3": "G",
+            "note4": "Bb",
+            "note5": null
+          },
+          {
+            "chordName": "F7",
+            "chordType": "dominant7",
+            "rootNote": "F",
+            "quality": "dominant seventh",
+            "note1": "F",
+            "note2": "A",
+            "note3": "C",
+            "note4": "Eb",
+            "note5": null
+          },
+          {
+            "chordName": "G7",
+            "chordType": "dominant7",
+            "rootNote": "G",
+            "quality": "dominant seventh",
+            "note1": "G",
+            "note2": "B",
+            "note3": "D",
+            "note4": "F",
+            "note5": null
+          }
+        ],
+        "timeSignature": "4/4",
+        "progressionName": "12-Bar Blues"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

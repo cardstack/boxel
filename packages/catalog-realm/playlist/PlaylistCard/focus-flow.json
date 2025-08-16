@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "playlistName": "Focus Flow",
+      "description": "Curated instrumental tracks perfect for deep work sessions and creative flow states.",
+      "coverImageUrl": "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=300&h=300&fit=crop&crop=center",
+      "curator": "Maya Chen",
+      "mood": "Focused"
+    },
+    "relationships": {
+      "songs.0": {
+        "links": {
+          "self": "../../song/SongCard/funky-suspense"
+        }
+      },
+      "songs.1": {
+        "links": {
+          "self": "../../song/SongCard/carefree"
+        }
+      },
+      "songs.2": {
+        "links": {
+          "self": "../../song/SongCard/monkeys-spinning-monkeys"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../playlist",
+        "name": "PlaylistCard"
+      }
+    }
+  }
+}

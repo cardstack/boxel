@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "patternName": "Jazz Swing",
+      "description": "Laid-back jazz pattern with subtle kick and brushed snare feel",
+      "bpm": 110,
+      "genre": "Jazz",
+      "creator": "Beat Maker Studio",
+      "pattern": {
+        "name": "Jazz Swing",
+        "kick": "[true,false,false,false,false,false,false,false,true,false,false,false,false,false,false,false]",
+        "snare": "[false,false,false,false,false,false,true,false,false,false,false,false,false,false,true,false]",
+        "hihat": "[true,false,true,false,true,false,true,false,true,false,true,false,true,false,true,false]",
+        "openhat": "[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,true]",
+        "clap": "[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]",
+        "crash": "[true,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]"
+      },
+      "title": "Jazz Swing"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../beat-maker",
+        "name": "BeatPatternCard"
+      }
+    }
+  }
+}

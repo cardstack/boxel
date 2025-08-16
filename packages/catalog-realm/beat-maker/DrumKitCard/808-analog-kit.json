@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "kitName": "808 Analog",
+      "description": "Classic analog drum machine sounds with deep kicks and crisp hi-hats",
+      "category": "Analog",
+      "creator": "Beat Maker Studio",
+      "kit": {
+        "kitName": "808 Analog",
+        "kickParams": "{\"type\": \"808\", \"frequency\": 60, \"decay\": 0.3, \"amplitude\": 1.0, \"shape\": 2}",
+        "snareParams": "{\"type\": \"808\", \"frequency\": 200, \"decay\": 0.1, \"amplitude\": 0.8, \"shape\": 1.5, \"resonance\": 5}",
+        "hihatParams": "{\"type\": \"808\", \"frequency\": 8000, \"decay\": 0.05, \"amplitude\": 0.6, \"shape\": 4, \"resonance\": 2}",
+        "openhatParams": "{\"type\": \"808\", \"frequency\": 6000, \"decay\": 0.3, \"amplitude\": 0.8, \"shape\": 1.5, \"resonance\": 2}",
+        "clapParams": "{\"type\": \"808\", \"frequency\": 2000, \"decay\": 0.1, \"amplitude\": 0.6, \"shape\": 2, \"resonance\": 5}",
+        "crashParams": "{\"type\": \"808\", \"frequency\": 3000, \"decay\": 1.0, \"amplitude\": 0.5, \"shape\": 0.5, \"resonance\": 1}"
+      },
+      "title": "808 Analog"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../beat-maker",
+        "name": "DrumKitCard"
+      }
+    }
+  }
+}

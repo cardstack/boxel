@@ -1,0 +1,76 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "progressionName": "Andalusian Cadence (i-VII-VI-V)",
+      "description": "A haunting minor progression with Spanish and classical influences. The descending bass line creates a sense of melancholy and drama that's been used across many genres.",
+      "key": "A minor",
+      "scale": "natural minor",
+      "timeSignature": "4/4",
+      "tempo": 80,
+      "genre": "Classical",
+      "difficulty": "intermediate",
+      "popularSongs": "\"Hit the Road Jack\", \"Stairway to Heaven\" (intro), \"Runaway\" by Del Shannon, \"Sultans of Swing\" (intro)",
+      "chordProgression": {
+        "progressionName": "Andalusian Cadence",
+        "key": "A minor",
+        "timeSignature": "4/4",
+        "tempo": 80,
+        "chords": [
+          {
+            "chordName": "Am",
+            "chordType": "minor",
+            "rootNote": "A",
+            "quality": "minor",
+            "note1": "A",
+            "note2": "C",
+            "note3": "E",
+            "note4": null,
+            "note5": null
+          },
+          {
+            "chordName": "G",
+            "chordType": "major",
+            "rootNote": "G",
+            "quality": "major",
+            "note1": "G",
+            "note2": "B",
+            "note3": "D",
+            "note4": null,
+            "note5": null
+          },
+          {
+            "chordName": "F",
+            "chordType": "major",
+            "rootNote": "F",
+            "quality": "major",
+            "note1": "F",
+            "note2": "A",
+            "note3": "C",
+            "note4": null,
+            "note5": null
+          },
+          {
+            "chordName": "E",
+            "chordType": "major",
+            "rootNote": "E",
+            "quality": "major",
+            "note1": "E",
+            "note2": "G#",
+            "note3": "B",
+            "note4": null,
+            "note5": null
+          }
+        ]
+      },
+      "title": "Andalusian Cadence (i-VII-VI-V)"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../chord-progression",
+        "name": "ChordProgressionCard"
+      }
+    }
+  }
+}

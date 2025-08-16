@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SongCard",
+        "module": "../song"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "genre": "Electronic",
+      "artist": "Kevin MacLeod",
+      "audioUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Sergio%2527s%20Magic%20Dustbin.mp3",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "duration": "2:31",
+      "songTitle": "Sergio's Magic Dustbin",
+      "isExplicit": false,
+      "coverArtUrl": "https://dummyimage.com/300x300/8b5cf6/ffffff&text=Sergio's+Magic+Dustbin"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Chord Progression Player",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/chord-progression-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/chord-progression-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/chord-progression-listing/screenshot_03.png"
+      ],
+      "summary": "An interactive card for playing and exploring musical chord progressions with customizable player settings and multiple progression options.",
+      "cardInfo": {
+        "notes": "Perfect for music education, composition, and practice. Supports various chord progressions and player customization.",
+        "title": "Chord Progression Player",
+        "description": "",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/chord-progression-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/ed5a1a3f-0dbf-47b5-b2a6-d88b0d2a7642"
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/109bc9f9-8190-4b54-9b6f-b57bcc8743f0"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/c9f98190-ab54-4b6f-b57b-cc8743f09eab"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/9bc9f981-90ab-445b-afb5-7bcc8743f09e"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/f98190ab-545b-4fb5-bbcc-8743f09eabf7"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../chord-progression/ChordProgressionPlayerCard/43a76bb7-8d83-468e-a062-ced1850a65f4"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../chord-progression/ChordProgressionCard/vi-iv-i-v-progression"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../chord-progression/ChordProgressionCard/ii-v-i-jazz-progression"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../chord-progression/ChordProgressionCard/i-v-vi-iv-progression"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../chord-progression/ChordProgressionCard/circle-of-fifths-progression"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../chord-progression/ChordProgressionCard/blues-twelve-bar-progression"
+        }
+      },
+      "examples.6": {
+        "links": {
+          "self": "../chord-progression/ChordProgressionCard/andalusian-cadence-progression"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/entertainment-media"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/creative-projects"
+        }
+      },
+      "categories.2": {
+        "links": {
+          "self": "../Category/ui-components-design"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

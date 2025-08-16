@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "playlistName": "Relaxed Chill",
+      "description": "Chill and mellow vibes for unwinding after a long day or studying",
+      "coverImageUrl": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop",
+      "songCount": 32,
+      "duration": "2h 18m",
+      "curator": "ChillVibes",
+      "mood": "Relaxed",
+      "isPublic": true,
+      "isCollaborative": false,
+      "createdDate": "2024-02-05",
+      "lastUpdated": "2024-12-10",
+      "followers": 18943,
+      "totalPlays": 156778,
+      "tags": "chill,relaxing,study,ambient",
+      "averageEnergy": 3,
+      "averageDanceability": 2
+    },
+    "relationships": {
+      "songs.0": {
+        "links": { "self": "../../song/SongCard/carefree" }
+      },
+      "songs.1": {
+        "links": { "self": "../../song/SongCard/monkeys-spinning-monkeys" }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../playlist",
+        "name": "PlaylistCard"
+      }
+    }
+  }
+}

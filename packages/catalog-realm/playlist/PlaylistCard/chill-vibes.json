@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "playlistName": "Chill Vibes",
+      "description": "Perfect background music for working, studying, or relaxing. Smooth beats and mellow tones.",
+      "coverImageUrl": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=300&h=300&fit=crop&crop=center",
+      "songCount": 3,
+      "duration": "10m 39s",
+      "curator": "Alex Chen",
+      "mood": "Relaxed",
+      "isPublic": true,
+      "isCollaborative": false,
+      "createdDate": "2024-12-01",
+      "lastUpdated": "2024-12-15",
+      "followers": 234,
+      "totalPlays": 1847,
+      "tags": "chill, ambient, focus, study",
+      "averageEnergy": 4,
+      "averageDanceability": 3,
+      "title": "Chill Vibes"
+    },
+    "relationships": {
+      "songs.0": {
+        "links": {
+          "self": "../../song/SongCard/cipher"
+        }
+      },
+      "songs.1": {
+        "links": {
+          "self": "../../song/SongCard/digital-dawn"
+        }
+      },
+      "songs.2": {
+        "links": {
+          "self": "../../song/SongCard/ambient-flow"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../playlist",
+        "name": "PlaylistCard"
+      }
+    }
+  }
+}

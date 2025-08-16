@@ -1,0 +1,76 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Recording Studio",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/recording-studio-listing/screenshot_01.png"
+      ],
+      "summary": "Professional recording studio management card for tracking projects, monitoring audio levels, and managing recording sessions",
+      "cardInfo": {
+        "notes": "Features include studio name management, project tracking, recording status monitoring, input gain control, and output volume management",
+        "title": "Recording Studio Management",
+        "description": "A comprehensive solution for managing recording studio operations including project tracking, audio monitoring, and session management",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/recording-studio-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/37b6edc5-df3b-4da3-8b11-dd8934a46c27"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../recording-studio/RecordingStudioCard/harmony-studio"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/content-creation"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/creative-projects"
+        }
+      },
+      "categories.2": {
+        "links": {
+          "self": "../Category/entertainment-media"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

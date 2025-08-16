@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "patternName": "Rock Beat",
+      "description": "Driving rock pattern with steady kick and punchy snare backbeat",
+      "bpm": 115,
+      "genre": "Rock",
+      "creator": "Beat Maker Studio",
+      "pattern": {
+        "name": "Rock Beat",
+        "kick": "[true,false,false,false,true,false,true,false,true,false,false,false,true,false,true,false]",
+        "snare": "[false,false,false,false,true,false,false,false,false,false,false,false,true,false,false,false]",
+        "hihat": "[true,false,true,false,true,false,true,false,true,false,true,false,true,false,true,false]",
+        "openhat": "[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]",
+        "clap": "[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]",
+        "crash": "[true,false,false,false,false,false,false,false,true,false,false,false,false,false,false,false]"
+      },
+      "title": "Rock Beat"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../beat-maker",
+        "name": "BeatPatternCard"
+      }
+    }
+  }
+}

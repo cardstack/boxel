@@ -1,0 +1,158 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AppListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Mood Selector Playlist",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/mood-selector-playlist-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/mood-selector-playlist-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/mood-selector-playlist-listing/screenshot_03.png"
+      ],
+      "summary": "Interactive music playlist selector based on your current mood",
+      "cardInfo": {
+        "notes": "Perfect for music apps, wellness platforms, or any application that wants to provide personalized music experiences",
+        "title": "Mood Selector Playlist",
+        "description": "An interactive card that helps users discover the perfect playlist based on their current mood. Features beautiful gradient mood cards with emojis and connects to curated playlists.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/mood-selector-playlist-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/df7b07a8-99d8-4330-b7cd-a54ca65b60a6"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/a899d8f3-3037-4da5-8ca6-5b60a65929dc"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/7b07a899-d8f3-4037-8da5-4ca65b60a659"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/99d8f330-37cd-454c-a65b-60a65929dcac"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/07a899d8-f330-47cd-a54c-a65b60a65929"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../mood-selector-playlist/MoodSelectorPlaylistCard/music-mood-finder"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../playlist/PlaylistCard/energetic-workout"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../playlist/PlaylistCard/relaxed-chill"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../playlist/PlaylistCard/focused-instrumental"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../playlist/PlaylistCard/energy-boost"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../playlist/PlaylistCard/midnight-chill"
+        }
+      },
+      "examples.6": {
+        "links": {
+          "self": "../playlist/PlaylistCard/focus-flow"
+        }
+      },
+      "examples.7": {
+        "links": {
+          "self": "../song/SongCard/funky-suspense"
+        }
+      },
+      "examples.8": {
+        "links": {
+          "self": "../song/SongCard/carefree"
+        }
+      },
+      "examples.9": {
+        "links": {
+          "self": "../song/SongCard/monkeys-spinning-monkeys"
+        }
+      },
+      "examples.10": {
+        "links": {
+          "self": "../song/SongCard/cipher"
+        }
+      },
+      "examples.11": {
+        "links": {
+          "self": "../song/SongCard/ambient-flow"
+        }
+      },
+      "examples.12": {
+        "links": {
+          "self": "../song/SongCard/digital-dawn"
+        }
+      },
+      "examples.13": {
+        "links": {
+          "self": "../song/SongCard/neon-nights"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/entertainment-media"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/ui-components-design"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "playlistName": "Happy Feel-Good",
+      "description": "Uplifting songs to brighten your day and put a smile on your face",
+      "coverImageUrl": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop&sat=2",
+      "songCount": 35,
+      "duration": "2h 24m",
+      "curator": "Sunshine Sounds",
+      "mood": "Happy",
+      "isPublic": true,
+      "isCollaborative": false,
+      "createdDate": "2024-03-01",
+      "lastUpdated": "2024-12-12",
+      "followers": 15432,
+      "totalPlays": 98765,
+      "tags": "feel-good,pop,uplifting,positive",
+      "averageEnergy": 7,
+      "averageDanceability": 8
+    },
+    "relationships": {
+      "songs.0": {
+        "links": { "self": "../../song/SongCard/carefree" }
+      },
+      "songs.1": {
+        "links": { "self": "../../song/SongCard/monkeys-spinning-monkeys" }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../playlist",
+        "name": "PlaylistCard"
+      }
+    }
+  }
+}

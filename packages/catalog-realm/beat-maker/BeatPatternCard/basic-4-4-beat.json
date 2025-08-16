@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "patternName": "Basic 4/4 Beat",
+      "description": "Classic four-on-the-floor pattern with kick on every beat and snare on 2 and 4",
+      "bpm": 120,
+      "genre": "Basic",
+      "creator": "Beat Maker Studio",
+      "pattern": {
+        "name": "Basic 4/4 Beat",
+        "kick": "[true,false,false,false,true,false,false,false,true,false,false,false,true,false,false,false]",
+        "snare": "[false,false,false,false,true,false,false,false,false,false,false,false,true,false,false,false]",
+        "hihat": "[true,true,true,true,true,true,true,true,true,true,true,true,true,true,true,true]",
+        "openhat": "[false,false,false,true,false,false,false,true,false,false,false,true,false,false,false,true]",
+        "clap": "[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]",
+        "crash": "[true,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]"
+      },
+      "title": "Basic 4/4 Beat"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../beat-maker",
+        "name": "BeatPatternCard"
+      }
+    }
+  }
+}

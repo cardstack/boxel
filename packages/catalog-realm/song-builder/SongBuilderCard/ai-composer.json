@@ -1,0 +1,367 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SongBuilderCard",
+        "module": "../song-builder"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "key": "C Major",
+      "genre": "Electronic Pop",
+      "tempo": 124,
+      "artist": "Studio Demo",
+      "tracks": [
+        {
+          "trackName": "Lead Vocals",
+          "instrument": "Lead Vocals",
+          "volume": 82,
+          "notes": "Main vocal track. Clear and present. Use light auto-tune for modern polish."
+        },
+        {
+          "trackName": "Vocal Harmonies",
+          "instrument": "Vocal Harmonies",
+          "volume": 65,
+          "notes": "Support harmonies. Wider stereo placement. More prominent in choruses and bridge."
+        },
+        {
+          "trackName": "Lead Synth",
+          "instrument": "Analog Synthesizer",
+          "volume": 78,
+          "notes": "Main melodic synth. Warm analog tone with modern clarity. Key hook melody."
+        },
+        {
+          "trackName": "Pad Synth",
+          "instrument": "Digital Pad",
+          "volume": 68,
+          "notes": "Atmospheric foundation. Creates space and harmonic support. Subtle filter automation."
+        },
+        {
+          "trackName": "Bass Synth",
+          "instrument": "Synth Bass",
+          "volume": 85,
+          "notes": "Driving bass foundation. Punchy and clear. Side-chain duck from kick drum."
+        },
+        {
+          "trackName": "Electronic Drums",
+          "instrument": "Electronic Kit",
+          "volume": 75,
+          "notes": "Modern electronic drums. Crisp kick, snappy snare. Use consistent sample set."
+        },
+        {
+          "trackName": "Rhythmic Elements",
+          "instrument": "Percussion & FX",
+          "volume": 40,
+          "notes": "Textural percussion. Shakers, electronic hits, rhythmic bleeps. Adds groove detail."
+        },
+        {
+          "trackName": "Atmosphere & FX",
+          "instrument": "Sound Design",
+          "volume": 30,
+          "notes": "Environmental sounds. Digital sweeps, risers, impacts. Enhance emotional transitions."
+        }
+      ],
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "sections": [
+        {
+          "sectionName": "intro",
+          "lyrics": "**[Atmospheric Intro]**\n\nSoft synth pads fade in\nBuilding anticipation\nDigital whispers calling\nTo a world of creation",
+          "chords": [
+            {
+              "chordName": "C",
+              "notes": [
+                "C3",
+                "E4",
+                "G4",
+                "C5"
+              ]
+            },
+            {
+              "chordName": "Am",
+              "notes": [
+                "A2",
+                "C4",
+                "E4",
+                "A4"
+              ]
+            }
+          ],
+          "duration": 16,
+          "notes": "Start minimal - just pad and light percussion. Build gradually with filter sweeps."
+        },
+        {
+          "sectionName": "verse 1",
+          "lyrics": "**Verse 1:**\n\nIn the glow of midnight screens\nWe're chasing all our digital dreams\nCode and pixels light the way\nTo a brand new kind of day\n\nEvery click becomes a choice\nEvery byte finds its voice\nIn this world we're building here\nThe future's never been so clear",
+          "chords": [
+            {
+              "chordName": "C",
+              "notes": [
+                "C3",
+                "E4",
+                "G4",
+                "C5"
+              ]
+            },
+            {
+              "chordName": "G",
+              "notes": [
+                "G2",
+                "B3",
+                "D4",
+                "G4"
+              ]
+            },
+            {
+              "chordName": "Am",
+              "notes": [
+                "A2",
+                "C4",
+                "E4",
+                "A4"
+              ]
+            },
+            {
+              "chordName": "F",
+              "notes": [
+                "F2",
+                "A3",
+                "C4",
+                "F4"
+              ]
+            }
+          ],
+          "duration": 32,
+          "notes": "Keep arrangement open. Introduce bass and light drums. Focus on vocal melody."
+        },
+        {
+          "sectionName": "chorus",
+          "lyrics": "**Chorus:**\n\nDigital dreams are calling out\nBreaking free from fear and doubt\nIn this space where hearts collide\nWe'll find the truth we hold inside\n\nDigital dreams, electric nights\nGuiding us to higher heights\nWhen the world feels upside down\nWe'll turn it all around",
+          "chords": [
+            {
+              "chordName": "F",
+              "notes": [
+                "F2",
+                "A3",
+                "C4",
+                "F4"
+              ]
+            },
+            {
+              "chordName": "C",
+              "notes": [
+                "C3",
+                "E4",
+                "G4",
+                "C5"
+              ]
+            },
+            {
+              "chordName": "G",
+              "notes": [
+                "G2",
+                "B3",
+                "D4",
+                "G4"
+              ]
+            },
+            {
+              "chordName": "Am",
+              "notes": [
+                "A2",
+                "C4",
+                "E4",
+                "A4"
+              ]
+            }
+          ],
+          "duration": 32,
+          "notes": "Full arrangement. Big drums, soaring lead synth. Add vocal harmonies on 'digital dreams'."
+        },
+        {
+          "sectionName": "verse 2",
+          "lyrics": "**Verse 2:**\n\nThrough fiber optic highways wide\nOur hopes and dreams begin to ride\nConnection points that span the globe\nUnlock the stories yet untold\n\nArtificial minds that learn and grow\nShow us paths we didn't know\nTogether human, silicon\nWe'll build tomorrow's rising sun",
+          "chords": [
+            {
+              "chordName": "C",
+              "notes": [
+                "C3",
+                "E4",
+                "G4",
+                "C5"
+              ]
+            },
+            {
+              "chordName": "G",
+              "notes": [
+                "G2",
+                "B3",
+                "D4",
+                "G4"
+              ]
+            },
+            {
+              "chordName": "Am",
+              "notes": [
+                "A2",
+                "C4",
+                "E4",
+                "A4"
+              ]
+            },
+            {
+              "chordName": "F",
+              "notes": [
+                "F2",
+                "A3",
+                "C4",
+                "F4"
+              ]
+            }
+          ],
+          "duration": 32,
+          "notes": "More dynamic than verse 1. Add rhythmic synth elements and build toward bridge."
+        },
+        {
+          "sectionName": "bridge",
+          "lyrics": "**Bridge:**\n\n*[Synth solo with vocoder harmonies]*\n\nWhen algorithms align with heart\nAnd technology becomes our art\nWe find ourselves in perfect flow\nWhere digital and human souls can grow\n\n*[Building intensity to final chorus]*",
+          "chords": [
+            {
+              "chordName": "Dm",
+              "notes": [
+                "D3",
+                "F4",
+                "A4",
+                "D5"
+              ]
+            },
+            {
+              "chordName": "G",
+              "notes": [
+                "G2",
+                "B3",
+                "D4",
+                "G4"
+              ]
+            },
+            {
+              "chordName": "Em",
+              "notes": [
+                "E3",
+                "G4",
+                "B4",
+                "E5"
+              ]
+            },
+            {
+              "chordName": "Am",
+              "notes": [
+                "A2",
+                "C4",
+                "E4",
+                "A4"
+              ]
+            }
+          ],
+          "duration": 24,
+          "notes": "Breakdown section. Strip to basics then build massively. Vocoder on bridge vocals."
+        },
+        {
+          "sectionName": "final chorus",
+          "lyrics": "**Final Chorus:**\n\nDigital dreams are calling out\nBreaking free from fear and doubt\nIn this space where hearts collide\nWe'll find the truth we hold inside\n\nDigital dreams, electric nights\nGuiding us to higher heights\nWhen the world feels upside down\nWe'll turn it all around\n\n*We'll turn it all around!*\n*Digital dreams alive!*",
+          "chords": [
+            {
+              "chordName": "F",
+              "notes": [
+                "F2",
+                "A3",
+                "C4",
+                "F4"
+              ]
+            },
+            {
+              "chordName": "C",
+              "notes": [
+                "C3",
+                "E4",
+                "G4",
+                "C5"
+              ]
+            },
+            {
+              "chordName": "G",
+              "notes": [
+                "G2",
+                "B3",
+                "D4",
+                "G4"
+              ]
+            },
+            {
+              "chordName": "Am",
+              "notes": [
+                "A2",
+                "C4",
+                "E4",
+                "A4"
+              ]
+            }
+          ],
+          "duration": 40,
+          "notes": "Biggest section. Full arrangement with extra elements. Extended with vocal ad-libs."
+        },
+        {
+          "sectionName": "outro",
+          "lyrics": "**[Outro]**\n\n*Digital dreams...*\n*Always within reach...*\n*In the code we write...*\n*In the songs we teach...*\n\n*[Gradual fade with ambient textures]*",
+          "chords": [
+            {
+              "chordName": "Am",
+              "notes": [
+                "A2",
+                "C4",
+                "E4",
+                "A4"
+              ]
+            },
+            {
+              "chordName": "F",
+              "notes": [
+                "F2",
+                "A3",
+                "C4",
+                "F4"
+              ]
+            },
+            {
+              "chordName": "C",
+              "notes": [
+                "C3",
+                "E4",
+                "G4",
+                "C5"
+              ]
+            }
+          ],
+          "duration": 19,
+          "notes": "Gentle fade with ethereal reverb. Leave space for emotional resonance."
+        }
+      ],
+      "songTitle": "Digital Dreams",
+      "description": "A complete electronic pop song showcasing the Song Builder's professional features",
+      "masterVolume": 85,
+      "timeSignature": "4/4"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

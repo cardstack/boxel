@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "patternName": "House Groove",
+      "description": "Steady four-on-the-floor house pattern with off-beat hi-hats",
+      "bpm": 125,
+      "genre": "House",
+      "creator": "Beat Maker Studio",
+      "pattern": {
+        "name": "House Groove",
+        "kick": "[true,false,false,false,true,false,false,false,true,false,false,false,true,false,false,false]",
+        "snare": "[false,false,false,false,true,false,false,false,false,false,false,false,true,false,false,false]",
+        "hihat": "[false,false,true,false,false,false,true,false,false,false,true,false,false,false,true,false]",
+        "openhat": "[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,true]",
+        "clap": "[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]",
+        "crash": "[true,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]"
+      },
+      "title": "House Groove"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../beat-maker",
+        "name": "BeatPatternCard"
+      }
+    }
+  }
+}

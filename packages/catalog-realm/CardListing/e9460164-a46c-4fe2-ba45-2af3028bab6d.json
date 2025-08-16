@@ -1,0 +1,88 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Song Builder",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/song-builder-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/song-builder-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/song-builder-listing/screenshot_03.png"
+      ],
+      "summary": "A song composition tool that helps users create original music with customizable genres, keys, tempo, and multi-track arrangements.",
+      "cardInfo": {
+        "notes": "",
+        "title": "AI Song Builder",
+        "description": "Create original music compositions with AI assistance. Features customizable song structures, multiple instrument tracks, tempo control, and various musical genres. Perfect for musicians, content creators, and music enthusiasts looking to compose original songs.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/song-builder-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/318c7fe9-4601-44a4-acff-e2ba452af302"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/8c7fe946-0164-446c-bfe2-ba452af3028b"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/3e318c7f-e946-4164-a46c-ffe2ba452af3"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/7fe94601-64a4-4cff-a2ba-452af3028bab"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../song-builder/SongBuilderCard/ai-composer"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/creative-projects"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/entertainment-media"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

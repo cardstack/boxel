@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "songTitle": "Funky Suspense",
+      "artist": "Kevin MacLeod",
+      "duration": "3:47",
+      "albumName": "Royalty Free Music",
+      "genre": "Funk",
+      "trackNumber": 1,
+      "audioUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Funky%20Suspense.mp3",
+      "coverArtUrl": "https://dummyimage.com/300x300/f59e0b/ffffff&text=Funky+Suspense",
+      "isExplicit": false,
+      "releaseDate": "2024-01-15",
+      "playCount": 2847,
+      "likes": 156,
+      "bpm": 120,
+      "key": "A Minor",
+      "energy": 8,
+      "danceability": 9,
+      "valence": 7,
+      "title": "Funky Suspense - Kevin MacLeod"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../song",
+        "name": "SongCard"
+      }
+    }
+  }
+}

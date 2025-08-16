@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "patternName": "Breakbeat",
+      "description": "Classic breakbeat pattern with syncopated kick and snare placement",
+      "bpm": 130,
+      "genre": "Breakbeat",
+      "creator": "Beat Maker Studio",
+      "pattern": {
+        "name": "Breakbeat",
+        "kick": "[true,false,false,false,false,false,true,false,false,true,false,false,false,false,false,false]",
+        "snare": "[false,false,false,false,true,false,false,false,false,false,true,false,false,false,false,false]",
+        "hihat": "[false,true,false,true,false,true,false,true,false,true,false,true,false,true,false,true]",
+        "openhat": "[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]",
+        "clap": "[false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]",
+        "crash": "[true,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false]"
+      },
+      "title": "Breakbeat"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../beat-maker",
+        "name": "BeatPatternCard"
+      }
+    }
+  }
+}

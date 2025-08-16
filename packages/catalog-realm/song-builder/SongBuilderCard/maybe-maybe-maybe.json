@@ -1,0 +1,574 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SongBuilderCard",
+        "module": "../song-builder"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "key": "E Major",
+      "genre": "Pop",
+      "tempo": 115,
+      "artist": "Sassy Pop",
+      "tracks": [
+        {
+          "trackName": "Lead Vocal",
+          "instrument": "Lead Vocals",
+          "volume": 90,
+          "pan": 0,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Close Mic, Compression, Minimal Reverb, Slight Distortion",
+          "notes": "VERY close, intimate vocal. Slightly breathy, conversational tone with edge."
+        },
+        {
+          "trackName": "Vocal Doubles",
+          "instrument": "Vocal Harmonies",
+          "volume": 65,
+          "pan": -12,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Tight Doubles, EQ, Compression",
+          "notes": "Tight vocal doubles for 'please please please' hooks only."
+        },
+        {
+          "trackName": "Hand Claps",
+          "instrument": "Hand Claps",
+          "volume": 85,
+          "pan": 0,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Dry, Punchy, No Reverb",
+          "notes": "Main percussion element. Sharp, dry claps on 2 and 4."
+        },
+        {
+          "trackName": "Kick Drum",
+          "instrument": "Pop Drum Kit",
+          "volume": 75,
+          "pan": 0,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Short, Punchy, Compressed",
+          "notes": "Minimal kick pattern. Short decay, very punchy."
+        },
+        {
+          "trackName": "Snare/Rim",
+          "instrument": "Sub Bass",
+          "volume": 70,
+          "pan": 0,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Dry, Compressed",
+          "notes": "Tight snare hits and rim shots. No reverb tail."
+        },
+        {
+          "trackName": "808 Bass",
+          "instrument": "Poly Synth",
+          "volume": 85,
+          "pan": 0,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Saturation, Sidechain to Kick",
+          "notes": "Modern 808-style bass. Prominent but controlled. Slight distortion."
+        },
+        {
+          "trackName": "Minimal Keys",
+          "instrument": "Synthesizer Pad",
+          "volume": 45,
+          "pan": 5,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "EQ, Compression",
+          "notes": "Very subtle chord stabs. Only in chorus. Electric piano tone."
+        },
+        {
+          "trackName": "Pop Elements",
+          "instrument": "Electronic FX",
+          "volume": 45,
+          "pan": -15,
+          "isMuted": false,
+          "isSolo": false,
+          "effects": "Delay, Reverb, Filtering",
+          "notes": "Modern pop production elements. Risers, impacts, and texture layers."
+        }
+      ],
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "sections": [
+        {
+          "sectionName": "intro",
+          "lyrics": "**[Intro]**\n\nMet your friends, you met my doubts\nNow I'm tryna play it cool but my brain's got mouth",
+          "chords": [
+            {
+              "chordName": "E",
+              "chordType": "major",
+              "notes": [
+                "E3",
+                "G#3",
+                "B3",
+                "E4"
+              ],
+              "rootNote": "E",
+              "quality": "major"
+            },
+            {
+              "chordName": "C#m",
+              "chordType": "minor",
+              "notes": [
+                "C#3",
+                "E3",
+                "G#3",
+                "C#4"
+              ],
+              "rootNote": "C#",
+              "quality": "minor"
+            },
+            {
+              "chordName": "A",
+              "chordType": "major",
+              "notes": [
+                "A2",
+                "C#3",
+                "E3",
+                "A3"
+              ],
+              "rootNote": "A",
+              "quality": "major"
+            },
+            {
+              "chordName": "B",
+              "chordType": "major",
+              "notes": [
+                "B2",
+                "D#3",
+                "F#3",
+                "B3"
+              ],
+              "rootNote": "B",
+              "quality": "major"
+            }
+          ],
+          "duration": 8,
+          "notes": "Sparse intro - just finger snaps, minimal bass. Very dry, intimate vocal."
+        },
+        {
+          "sectionName": "verse 1",
+          "lyrics": "**Verse 1:**\n\nYou say you're the good kind but drama makes a mess\nYeah, your phone goes off again, tell me who's that text\nI know what I'm getting with your risky streak\nGuess I like my trouble with a little mystique",
+          "chords": [
+            {
+              "chordName": "E",
+              "chordType": "major",
+              "notes": [
+                "E3",
+                "G#3",
+                "B3",
+                "E4"
+              ],
+              "rootNote": "E",
+              "quality": "major"
+            },
+            {
+              "chordName": "C#m",
+              "chordType": "minor",
+              "notes": [
+                "C#3",
+                "E3",
+                "G#3",
+                "C#4"
+              ],
+              "rootNote": "C#",
+              "quality": "minor"
+            },
+            {
+              "chordName": "A",
+              "chordType": "major",
+              "notes": [
+                "A2",
+                "C#3",
+                "E3",
+                "A3"
+              ],
+              "rootNote": "A",
+              "quality": "major"
+            },
+            {
+              "chordName": "B",
+              "chordType": "major",
+              "notes": [
+                "B2",
+                "D#3",
+                "F#3",
+                "B3"
+              ],
+              "rootNote": "B",
+              "quality": "major"
+            }
+          ],
+          "duration": 16,
+          "notes": "Talk-sing delivery. Dry kick, snare on 2 and 4. Bass enters subtly."
+        },
+        {
+          "sectionName": "pre-chorus",
+          "lyrics": "**Pre-Chorus:**\n\nWhispered promises, I'm on my best behavior\nBut every time you smile, I lose more willpower",
+          "chords": [
+            {
+              "chordName": "A",
+              "chordType": "major",
+              "notes": [
+                "A2",
+                "C#3",
+                "E3",
+                "A3"
+              ],
+              "rootNote": "A",
+              "quality": "major"
+            },
+            {
+              "chordName": "B",
+              "chordType": "major",
+              "notes": [
+                "B2",
+                "D#3",
+                "F#3",
+                "B3"
+              ],
+              "rootNote": "B",
+              "quality": "major"
+            },
+            {
+              "chordName": "C#m",
+              "chordType": "minor",
+              "notes": [
+                "C#3",
+                "E3",
+                "G#3",
+                "C#4"
+              ],
+              "rootNote": "C#",
+              "quality": "minor"
+            },
+            {
+              "chordName": "E",
+              "chordType": "major",
+              "notes": [
+                "E3",
+                "G#3",
+                "B3",
+                "E4"
+              ],
+              "rootNote": "E",
+              "quality": "major"
+            }
+          ],
+          "duration": 8,
+          "notes": "Strip down - remove drums, just bass and vocal building tension."
+        },
+        {
+          "sectionName": "chorus",
+          "lyrics": "**Chorus:**\n\nPlease, please, please—don't do it to me\nDon't make me explain you out in public, baby\nPlease, please, please—if you love me, don't embarrass me\nOh, I can beg so pretty, but I won't say pretty please\n\nPlease, please, please, (don't ruin this for me)",
+          "chords": [
+            {
+              "chordName": "E",
+              "chordType": "major",
+              "notes": [
+                "E3",
+                "G#3",
+                "B3",
+                "E4"
+              ],
+              "rootNote": "E",
+              "quality": "major"
+            },
+            {
+              "chordName": "C#m",
+              "chordType": "minor",
+              "notes": [
+                "C#3",
+                "E3",
+                "G#3",
+                "C#4"
+              ],
+              "rootNote": "C#",
+              "quality": "minor"
+            },
+            {
+              "chordName": "A",
+              "chordType": "major",
+              "notes": [
+                "A2",
+                "C#3",
+                "E3",
+                "A3"
+              ],
+              "rootNote": "A",
+              "quality": "major"
+            },
+            {
+              "chordName": "B",
+              "chordType": "major",
+              "notes": [
+                "B2",
+                "D#3",
+                "F#3",
+                "B3"
+              ],
+              "rootNote": "B",
+              "quality": "major"
+            }
+          ],
+          "duration": 20,
+          "notes": "Big claps/snaps on 2 and 4. Vocals layered but still dry. Bass prominent."
+        },
+        {
+          "sectionName": "verse 2",
+          "lyrics": "**Verse 2:**\n\nYou know I've got standards but my patience runs thin\nI let you get away with things—again, again\nLove your bad behavior when it's just for me\nBut save the headlines, keep it low-key",
+          "chords": [
+            {
+              "chordName": "E",
+              "chordType": "major",
+              "notes": [
+                "E3",
+                "G#3",
+                "B3",
+                "E4"
+              ],
+              "rootNote": "E",
+              "quality": "major"
+            },
+            {
+              "chordName": "C#m",
+              "chordType": "minor",
+              "notes": [
+                "C#3",
+                "E3",
+                "G#3",
+                "C#4"
+              ],
+              "rootNote": "C#",
+              "quality": "minor"
+            },
+            {
+              "chordName": "A",
+              "chordType": "major",
+              "notes": [
+                "A2",
+                "C#3",
+                "E3",
+                "A3"
+              ],
+              "rootNote": "A",
+              "quality": "major"
+            },
+            {
+              "chordName": "B",
+              "chordType": "major",
+              "notes": [
+                "B2",
+                "D#3",
+                "F#3",
+                "B3"
+              ],
+              "rootNote": "B",
+              "quality": "major"
+            }
+          ],
+          "duration": 16,
+          "notes": "Same as verse 1 but add subtle hi-hats. Keep it minimal."
+        },
+        {
+          "sectionName": "bridge",
+          "lyrics": "**Bridge:**\n\nDon't say you're sorry, just say you'll be kind\nIf trouble's coming, leave it at the door tonight",
+          "chords": [
+            {
+              "chordName": "A",
+              "chordType": "major",
+              "notes": [
+                "A2",
+                "C#3",
+                "E3",
+                "A3"
+              ],
+              "rootNote": "A",
+              "quality": "major"
+            },
+            {
+              "chordName": "E",
+              "chordType": "major",
+              "notes": [
+                "E3",
+                "G#3",
+                "B3",
+                "E4"
+              ],
+              "rootNote": "E",
+              "quality": "major"
+            },
+            {
+              "chordName": "B",
+              "chordType": "major",
+              "notes": [
+                "B2",
+                "D#3",
+                "F#3",
+                "B3"
+              ],
+              "rootNote": "B",
+              "quality": "major"
+            },
+            {
+              "chordName": "C#m",
+              "chordType": "minor",
+              "notes": [
+                "C#3",
+                "E3",
+                "G#3",
+                "C#4"
+              ],
+              "rootNote": "C#",
+              "quality": "minor"
+            }
+          ],
+          "duration": 8,
+          "notes": "Half-time drums. Vocal very intimate and close. Build tension."
+        },
+        {
+          "sectionName": "final chorus",
+          "lyrics": "**Final Chorus:**\n\nPlease, please, please—make me believe\nDon't give them headlines, just give them jealousy\nPlease, please, please—don't play with my pride\n(If you keep me guessing, you won't stay tonight)\n\nPlease, please, please, (don't ruin this for me)",
+          "chords": [
+            {
+              "chordName": "E",
+              "chordType": "major",
+              "notes": [
+                "E3",
+                "G#3",
+                "B3",
+                "E4"
+              ],
+              "rootNote": "E",
+              "quality": "major"
+            },
+            {
+              "chordName": "C#m",
+              "chordType": "minor",
+              "notes": [
+                "C#3",
+                "E3",
+                "G#3",
+                "C#4"
+              ],
+              "rootNote": "C#",
+              "quality": "minor"
+            },
+            {
+              "chordName": "A",
+              "chordType": "major",
+              "notes": [
+                "A2",
+                "C#3",
+                "E3",
+                "A3"
+              ],
+              "rootNote": "A",
+              "quality": "major"
+            },
+            {
+              "chordName": "B",
+              "chordType": "major",
+              "notes": [
+                "B2",
+                "D#3",
+                "F#3",
+                "B3"
+              ],
+              "rootNote": "B",
+              "quality": "major"
+            }
+          ],
+          "duration": 20,
+          "notes": "Biggest energy but still controlled. Multiple vocal layers."
+        },
+        {
+          "sectionName": "outro",
+          "lyrics": "**[Outro]**\n\nPlease (please), please (please), please (please), oh please",
+          "chords": [
+            {
+              "chordName": "E",
+              "chordType": "major",
+              "notes": [
+                "E3",
+                "G#3",
+                "B3",
+                "E4"
+              ],
+              "rootNote": "E",
+              "quality": "major"
+            },
+            {
+              "chordName": "C#m",
+              "chordType": "minor",
+              "notes": [
+                "C#3",
+                "E3",
+                "G#3",
+                "C#4"
+              ],
+              "rootNote": "C#",
+              "quality": "minor"
+            },
+            {
+              "chordName": "B",
+              "chordType": "major",
+              "notes": [
+                "B2",
+                "D#3",
+                "F#3",
+                "B3"
+              ],
+              "rootNote": "B",
+              "quality": "major"
+            },
+            {
+              "chordName": "C#",
+              "chordType": "major",
+              "notes": [
+                "C#3",
+                "F3",
+                "G#3",
+                "C#4"
+              ],
+              "rootNote": "C#",
+              "quality": "major"
+            }
+          ],
+          "duration": 6,
+          "notes": "Strip back to just snaps and vocal. Very intimate ending."
+        },
+        {
+          "sectionName": null,
+          "lyrics": null,
+          "chords": [],
+          "duration": 18,
+          "notes": null
+        }
+      ],
+      "songTitle": "Please Please Please (Style Demo)",
+      "description": "A sassy, tongue-in-cheek pop banger with attitude, repetitive hooks, and minimalist production",
+      "masterVolume": 92,
+      "songDuration": 150,
+      "timeSignature": "4/4"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

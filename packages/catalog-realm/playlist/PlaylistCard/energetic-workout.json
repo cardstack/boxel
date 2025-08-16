@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "playlistName": "Energetic Workout",
+      "description": "High-energy tracks to get you moving and pumped up during your workout sessions",
+      "coverImageUrl": "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=400&fit=crop",
+      "songCount": 24,
+      "duration": "1h 42m",
+      "curator": "FitBeats",
+      "mood": "Energetic",
+      "isPublic": true,
+      "isCollaborative": false,
+      "createdDate": "2024-01-10",
+      "lastUpdated": "2024-12-15",
+      "followers": 12847,
+      "totalPlays": 89234,
+      "tags": "upbeat,workout,high-energy,motivation",
+      "averageEnergy": 9,
+      "averageDanceability": 8
+    },
+    "relationships": {
+      "songs.0": {
+        "links": { "self": "../../song/SongCard/funky-suspense" }
+      },
+      "songs.1": {
+        "links": { "self": "../../song/SongCard/carefree" }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../playlist",
+        "name": "PlaylistCard"
+      }
+    }
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "progressionName": "ii-V-I (Jazz Standard)",
+      "description": "The cornerstone of jazz harmony. This progression creates strong forward motion through circle-of-fifths root movement and is the foundation of countless jazz standards.",
+      "key": "C major",
+      "scale": "major",
+      "timeSignature": "4/4",
+      "tempo": 120,
+      "genre": "Jazz",
+      "difficulty": "intermediate",
+      "popularSongs": "\"All The Things You Are\", \"Autumn Leaves\", \"Fly Me to the Moon\", \"Girl from Ipanema\"",
+      "chordProgression": {
+        "progressionName": "ii-V-I",
+        "key": "C major",
+        "timeSignature": "4/4",
+        "tempo": 120,
+        "chords": [
+          {
+            "chordName": "Dm7",
+            "chordType": "minor7",
+            "rootNote": "D",
+            "quality": "minor seventh",
+            "note1": "D",
+            "note2": "F",
+            "note3": "A",
+            "note4": "C",
+            "note5": null
+          },
+          {
+            "chordName": "G7",
+            "chordType": "dominant7",
+            "rootNote": "G",
+            "quality": "dominant seventh",
+            "note1": "G",
+            "note2": "B",
+            "note3": "D",
+            "note4": "F",
+            "note5": null
+          },
+          {
+            "chordName": "CMaj7",
+            "chordType": "major7",
+            "rootNote": "C",
+            "quality": "major seventh",
+            "note1": "C",
+            "note2": "E",
+            "note3": "G",
+            "note4": "B",
+            "note5": null
+          }
+        ]
+      },
+      "title": "ii-V-I (Jazz Standard)"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../chord-progression",
+        "name": "ChordProgressionCard"
+      }
+    }
+  }
+}

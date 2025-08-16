@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SongCard",
+        "module": "../song"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "genre": "Electronic",
+      "artist": "Kevin MacLeod",
+       "audioUrl": "https://www.soundjay.com/misc/sounds/bell-ringing-05.wav",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "duration": "4:22",
+      "songTitle": "Cipher",
+      "isExplicit": false,
+      "coverArtUrl": "https://dummyimage.com/300x300/1e40af/ffffff&text=Cipher"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
