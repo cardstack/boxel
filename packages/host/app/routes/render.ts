@@ -88,11 +88,12 @@ export default class RenderRoute extends Route<Model> {
       },
     };
 
-    let localId = await this.store.create(enhancedDoc);
-    if (typeof localId !== 'string') {
-      throw new Error('todo: failed to instantiate');
-    }
-    let instance = await this.store.get(localId);
+    // We are fetching links so deeply that it seems very unlikely that we'll
+    // ever have an unloaded link after awaiting the store.add
+    let instance = await this.store.add(enhancedDoc, {
+      relativeTo: new URL(id),
+      doNotPersist: true,
+    });
     if (!isCardInstance(instance)) {
       throw new Error('todo: failed to load');
     }
