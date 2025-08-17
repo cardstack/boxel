@@ -1,0 +1,76 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "progressionName": "vi-IV-I-V (Pop Progression)",
+      "description": "One of the most popular chord progressions in modern music. Found in countless pop, rock, and folk songs. Creates a sense of movement from minor to major with a strong resolution.",
+      "key": "C major",
+      "scale": "major",
+      "timeSignature": "4/4",
+      "tempo": 120,
+      "genre": "Pop",
+      "difficulty": "beginner",
+      "popularSongs": "\"Don't Stop Believin'\" by Journey, \"Someone Like You\" by Adele, \"With or Without You\" by U2, \"Let It Be\" by The Beatles",
+      "chordProgression": {
+        "progressionName": "vi-IV-I-V",
+        "key": "C major",
+        "timeSignature": "4/4",
+        "tempo": 120,
+        "chords": [
+          {
+            "chordName": "Am",
+            "chordType": "minor",
+            "rootNote": "A",
+            "quality": "minor",
+            "note1": "A",
+            "note2": "C",
+            "note3": "E",
+            "note4": null,
+            "note5": null
+          },
+          {
+            "chordName": "F",
+            "chordType": "major",
+            "rootNote": "F",
+            "quality": "major",
+            "note1": "F",
+            "note2": "A",
+            "note3": "C",
+            "note4": null,
+            "note5": null
+          },
+          {
+            "chordName": "C",
+            "chordType": "major",
+            "rootNote": "C",
+            "quality": "major",
+            "note1": "C",
+            "note2": "E",
+            "note3": "G",
+            "note4": null,
+            "note5": null
+          },
+          {
+            "chordName": "G",
+            "chordType": "major",
+            "rootNote": "G",
+            "quality": "major",
+            "note1": "G",
+            "note2": "B",
+            "note3": "D",
+            "note4": null,
+            "note5": null
+          }
+        ]
+      },
+      "title": "vi-IV-I-V (Pop Progression)"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../chord-progression",
+        "name": "ChordProgressionCard"
+      }
+    }
+  }
+}

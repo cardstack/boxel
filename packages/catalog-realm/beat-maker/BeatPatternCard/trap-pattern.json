@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "patternName": "Trap Pattern",
+      "description": "Modern trap beat with syncopated kicks and rapid hi-hat rolls",
+      "bpm": 140,
+      "genre": "Trap",
+      "creator": "Beat Maker Studio",
+      "pattern": {
+        "name": "Trap Pattern",
+        "kick": "[true,false,false,true,false,false,true,false,false,false,true,false,false,true,false,false]",
+        "snare": "[false,false,false,false,true,false,false,false,false,false,false,false,true,false,false,false]",
+        "hihat": "[true,false,true,true,false,true,true,false,true,false,true,true,false,true,true,false]",
+        "openhat": "[false,false,false,false,false,false,false,true,false,false,false,false,false,false,false,true]",
+        "clap": "[false,false,false,false,true,false,false,false,false,false,false,false,true,false,false,false]",
+        "crash": "[true,false,false,false,false,false,false,false,true,false,false,false,false,false,false,false]"
+      },
+      "title": "Trap Pattern"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../beat-maker",
+        "name": "BeatPatternCard"
+      }
+    }
+  }
+}
