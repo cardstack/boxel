@@ -344,16 +344,19 @@ export function getBoxComponent(
 
       .field-component-card.fitted-format {
         /*
-          The cards themselves need to be in charge of the styles within the card boundary
-          in order for the container queries to make sense--otherwise we need to do style
-          math to figure out what the actual breakpoints are. please resist the urge to add
-          padding or anything that alters the geometry inside of the card boundary.
+        The cards themselves need to be in charge of the styles within the card boundary
+        in order for the container queries to make sense--otherwise we need to do style
+        math to figure out what the actual breakpoints are. please resist the urge to add
+        padding or anything that alters the geometry inside of the card boundary.
 
-          we need to use height 100% because the container query for embedded cards only
-          works if we use up all the space horizontally and vertically that is available
-          to the card since some of our queries are height queries
-        */
-        height: 65px;
+        we need to use height 100% because the container query for fitted cards only
+        works if we use up all the space horizontally and vertically that is available
+        to the card since some of our queries are height queries
+      */
+        width: 100%;
+        height: 100%;
+        min-height: 40px;
+        max-height: 600px;
         container-name: fitted-card;
         container-type: size;
         overflow: hidden;
