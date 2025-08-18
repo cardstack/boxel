@@ -488,12 +488,14 @@ export function getLinksToManyComponent({
               ...attributes
             >
               {{#each (getComponents) as |Item i|}}
-                <Item
-                  @format={{getPluralChildFormat effectiveFormat model}}
-                  @displayContainer={{@displayContainer}}
-                  class='linksToMany-item'
-                  data-test-plural-view-item={{i}}
-                />
+                <div class='linksToMany-itemContainer'>
+                  <Item
+                    @format={{getPluralChildFormat effectiveFormat model}}
+                    @displayContainer={{@displayContainer}}
+                    class='linksToMany-item'
+                    data-test-plural-view-item={{i}}
+                  />
+                </div>
               {{/each}}
             </div>
           {{/let}}
@@ -502,11 +504,11 @@ export function getLinksToManyComponent({
       <style scoped>
         @layer {
           .linksToMany-field.fitted-effectiveFormat
-            > .linksToMany-item
-            + .linksToMany-item,
+            > .linksToMany-itemContainer
+            + .linksToMany-itemContainer,
           .linksToMany-field.embedded-effectiveFormat
-            > .linksToMany-item
-            + .linksToMany-item {
+            > .linksToMany-itemContainer
+            + .linksToMany-itemContainer {
             margin-top: var(--boxel-sp);
           }
           .linksToMany-field.atom-effectiveFormat.display-container-false {
@@ -516,8 +518,9 @@ export function getLinksToManyComponent({
             display: inline-flex;
             gap: var(--boxel-sp-sm);
           }
-          .linksToMany-field.fitted-effectiveFormat > .linksToMany-item {
-            min-height: 65px;
+          .linksToMany-field.fitted-effectiveFormat
+            > .linksToMany-itemContainer {
+            height: 65px;
           }
         }
       </style>

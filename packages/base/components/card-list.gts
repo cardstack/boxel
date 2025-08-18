@@ -117,10 +117,13 @@ export default class CardList extends Component<Signature> {
         height: var(--item-height);
       }
       .boxel-card-list-item > :deep(.fitted-card-item) {
+        width: 100%;
+        height: 100%;
+        min-height: 40px;
+        max-height: 600px;
         container-name: fitted-card;
         container-type: size;
-        height: 100%;
-        width: 100%;
+        overflow: hidden;
       }
       .boxel-card-list-item > :deep(.atom-card-item) {
         width: fit-content;
