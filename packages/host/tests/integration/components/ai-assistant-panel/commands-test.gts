@@ -146,10 +146,18 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
             <@fields.firstLetterOfTheName />
           </p>
           Pet:
-          <@fields.pet />
+          <div class='pet-container'>
+            <@fields.pet />
+          </div>
           Friends:
           <@fields.friends />
           <div data-test-addresses>Address: <@fields.address /></div>
+          <style scoped>
+            .pet-container {
+              height: 120px;
+              padding: 10px;
+            }
+          </style>
         </template>
       };
     }
@@ -1014,7 +1022,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     assert
       .dom('[data-test-ai-message-content] [data-test-editor]')
       .exists('View Code panel should remain open');
-
     await percySnapshot(assert); // can preview code in ViewCode panel
   });
 

@@ -84,10 +84,12 @@ export default class BasicFitted extends Component<Signature> {
         }
         .card-type-icon {
           aspect-ratio: 1 / 1;
-          width: 52px;
-          height: 52px;
-          max-width: 100%;
-          max-height: 100%;
+          min-width: 32px;
+          min-height: 32px;
+          max-height: 52px;
+          max-width: 52px;
+          width: 100%;
+          height: auto;
         }
         .info-section {
           width: 100%;
