@@ -47,6 +47,7 @@ import TagListUsage from './components/tag-list/usage.gts';
 import TagUsage from './components/tag/usage.gts';
 import TooltipUsage from './components/tooltip/usage.gts';
 import ViewSelectorUsage from './components/view-selector/usage.gts';
+import SelectionSummaryUsage from './components/selection-summary/usage.gts';
 
 export const ALL_USAGE_COMPONENTS = [
   ['Accordion', AccordionUsage],
@@ -88,6 +89,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['RealmIcon', RealmIconUsage],
   ['ResizablePanelGroup', ResizablePanelGroupUsage],
   ['Select', SelectUsage],
+  ['SelectionSummary', SelectionSummaryUsage],
   ['SkeletonPlaceholder', SkeletonPlaceholderUsage],
   ['Switch', SwitchUsage],
   ['TabbedHeader', TabbedHeaderUsage],
