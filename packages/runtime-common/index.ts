@@ -200,8 +200,6 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { RealmInfo } from './realm';
 import { PrerenderedCard } from './index-query-engine';
 
-export const maxLinkDepth = 5;
-
 export interface MatrixCardError {
   id?: string;
   error: Error;

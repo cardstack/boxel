@@ -66,3 +66,5 @@ export const EXTRA_TOKENS_PRICING: Record<number, number> = {
   20000: 30,
   80000: 100, // in USD
 };
+
+export const maxLinkDepth = 5;
