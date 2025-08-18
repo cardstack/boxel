@@ -128,6 +128,7 @@ export default class RemixCommand extends HostBaseCommand<
       openRoom: true,
       attachedCards: [listing],
       skillCardIds,
+      llmModel: 'anthropic/claude-sonnet-4',
     });
   }
 }
