@@ -127,6 +127,7 @@ export default class RemixCommand extends HostBaseCommand<
       roomId: 'new',
       prompt,
       openRoom: true,
+      roomName: `Remixing ${listing.name}`,
       attachedCards: [listing],
       skillCardIds,
       llmModel: DEFAULT_CODING_LLM,
