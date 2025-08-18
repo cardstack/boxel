@@ -1,4 +1,5 @@
 import { fn } from '@ember/helper';
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -13,11 +14,14 @@ import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
 import Captions from '@cardstack/boxel-icons/captions';
+import DeselectIcon from '@cardstack/boxel-icons/deselect';
+import SelectAllIcon from '@cardstack/boxel-icons/select-all';
 import { restartableTask, timeout, dropTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { provide, consume } from 'ember-provide-consume-context';
 
-import { TrackedArray } from 'tracked-built-ins';
+import pluralize from 'pluralize';
+import { TrackedSet } from 'tracked-built-ins';
 
 import {
   CardContainer,
@@ -62,6 +66,7 @@ import ElementTracker, {
 import CardRenderer from '../card-renderer';
 
 import CardError from './card-error';
+import DeleteModal from './delete-modal';
 
 import OperatorModeOverlays from './operator-mode-overlays';
 
@@ -116,7 +121,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @service private declare realm: RealmService;
   @service private declare store: StoreService;
 
-  @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);
+  @tracked private selectedCards = new TrackedSet<string>();
+
+  private normalizeCardId(cardDefOrId: CardDefOrId): string {
+    return typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
+  }
+
+  @tracked private showDeleteModal = false;
+  @tracked private numberOfCardsToDelete = 0;
+  @tracked private isDeletingCards = false;
+  @tracked private deleteError: string | undefined;
   @tracked private animationType:
     | 'opening'
     | 'closing'
@@ -256,12 +270,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
   });
 
   @action private toggleSelect(cardDefOrId: CardDefOrId) {
-    let index = this.selectedCards.findIndex((c) => c === cardDefOrId);
+    const cardId = this.normalizeCardId(cardDefOrId);
 
-    if (index === -1) {
-      this.selectedCards.push(cardDefOrId);
+    if (this.selectedCards.has(cardId)) {
+      this.selectedCards.delete(cardId);
     } else {
-      this.selectedCards.splice(index, 1);
+      this.selectedCards.add(cardId);
     }
 
     // pass a copy of the array so that this doesn't become a
@@ -270,8 +284,137 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private clearSelections = () => {
-    this.selectedCards.splice(0, this.selectedCards.length);
+    this.selectedCards.clear();
   };
+
+  private selectAll = () => {
+    // Get all selectable cards from the current view using cardTracker
+    const availableCards = this.renderedCardsForOverlayActions.map((entry) =>
+      this.normalizeCardId(entry.cardDefOrId),
+    );
+
+    // Add all available cards to the set (Set naturally handles duplicates)
+    availableCards.forEach((cardId) => {
+      this.selectedCards.add(cardId);
+    });
+
+    // Notify parent component of selection changes
+    this.args.onSelectedCards([...this.selectedCards], this.args.item);
+  };
+
+  private confirmAndDeleteSelected = () => {
+    this.numberOfCardsToDelete = this.selectedCards.size;
+    this.showDeleteModal = true;
+    this.deleteError = undefined;
+  };
+
+  private cancelDelete = () => {
+    this.showDeleteModal = false;
+    this.numberOfCardsToDelete = 0;
+    this.deleteError = undefined;
+  };
+
+  private performBulkDelete = async () => {
+    this.isDeletingCards = true;
+    this.deleteError = undefined;
+
+    const selectedIds = [...this.selectedCards];
+    const failedDeletes: string[] = [];
+    let successfulDeletes = 0;
+
+    try {
+      // Delete cards sequentially to avoid overwhelming the server
+      for (const cardId of selectedIds) {
+        try {
+          await this.operatorModeStateService.deleteCard(cardId);
+          successfulDeletes++;
+
+          // Remove successfully deleted card from selection
+          this.selectedCards.delete(cardId);
+        } catch (error) {
+          console.error('Failed to delete card:', error);
+          failedDeletes.push(cardId);
+        }
+      }
+
+      // Handle results and show appropriate message
+      if (failedDeletes.length === 0) {
+        // All deletions successful
+        this.showDeleteModal = false;
+        this.numberOfCardsToDelete = 0;
+        this.selectedCards.clear();
+        console.debug(`Successfully deleted ${successfulDeletes} items`);
+      } else if (successfulDeletes > 0) {
+        // Partial success
+        this.deleteError = `Deleted ${successfulDeletes} of ${selectedIds.length} items. ${failedDeletes.length} failed.`;
+        // Keep modal open for retry option
+      } else {
+        // All deletions failed
+        this.deleteError = `Failed to delete ${selectedIds.length} items. Please try again.`;
+      }
+    } catch (error) {
+      console.error('Bulk delete operation failed:', error);
+      this.deleteError = 'An unexpected error occurred. Please try again.';
+    } finally {
+      this.isDeletingCards = false;
+
+      // Notify parent component of selection changes
+      this.args.onSelectedCards([...this.selectedCards], this.args.item);
+    }
+  };
+
+  private get utilityMenu() {
+    if (this.selectedCards.size === 0) {
+      return undefined;
+    }
+
+    const selectedCount = this.selectedCards.size;
+    const availableCards = this.renderedCardsForOverlayActions;
+    const totalAvailableCount = availableCards.length;
+    const allSelected = selectedCount >= totalAvailableCount;
+
+    const menuItems: (MenuItem | { type: 'divider' })[] = [];
+
+    // Add "Select All" option if not all cards are selected
+    if (!allSelected && totalAvailableCount > selectedCount) {
+      menuItems.push(
+        new MenuItem('Select All', 'action', {
+          icon: SelectAllIcon,
+          action: this.selectAll,
+          disabled: false,
+        }),
+      );
+    }
+
+    // Add "Deselect All" option
+    menuItems.push(
+      new MenuItem('Deselect All', 'action', {
+        icon: DeselectIcon,
+        action: this.clearSelections,
+      }),
+    );
+
+    // Add divider before delete action
+    menuItems.push({ type: 'divider' });
+
+    // Add "Delete N items" option
+    menuItems.push(
+      new MenuItem(
+        `Delete ${selectedCount} item${selectedCount > 1 ? 's' : ''}`,
+        'action',
+        {
+          action: this.confirmAndDeleteSelected,
+          icon: IconTrash,
+          dangerous: true,
+        },
+      ),
+    );
+
+    return {
+      triggerText: `${selectedCount} Selected`,
+      menuItems,
+    };
+  }
 
   private get cardIdentifier() {
     return this.url;
@@ -624,6 +767,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @lastSavedMessage={{this.cardResource.autoSaveState.lastSavedErrorMsg}}
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
               @realmInfo={{realmInfo}}
+              @utilityMenu={{this.utilityMenu}}
               @onEdit={{if this.canEdit (fn @publicAPI.editCard this.card)}}
               @onFinishEditing={{if this.isEditing this.doneEditing}}
               @onClose={{unless this.isBuried this.closeItem}}
@@ -815,6 +959,26 @@ export default class OperatorModeStackItem extends Component<Signature> {
         align-items: center;
       }
     </style>
+
+    {{! Delete confirmation modal }}
+    {{#if this.showDeleteModal}}
+      <DeleteModal
+        @itemToDelete={{hash
+          id='bulk-delete'
+          selectedCount=this.numberOfCardsToDelete
+        }}
+        @isDeleteRunning={{this.isDeletingCards}}
+        @error={{this.deleteError}}
+        @onConfirm={{this.performBulkDelete}}
+        @onCancel={{this.cancelDelete}}
+      >
+        <:content>
+          Delete
+          {{this.numberOfCardsToDelete}}
+          {{pluralize 'card' this.numberOfCardsToDelete}}?
+        </:content>
+      </DeleteModal>
+    {{/if}}
   </template>
 }
 
