@@ -1,6 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat } from '@ember/helper';
 
+import cn from '../../helpers/cn.ts';
 import cssVar from '../../helpers/css-var.ts';
 import LoadingIndicatorIcon from '../../icons/loading-indicator.gts';
 
@@ -14,8 +15,10 @@ interface Signature {
 
 const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>
   <span
-    class='boxel-loading-indicator
-      {{if @variant (concat "variant-" @variant) "variant-default"}}'
+    class={{cn
+      'boxel-loading-indicator'
+      (if @variant (concat 'variant-' @variant) 'variant-default')
+    }}
     data-test-loading-indicator
     ...attributes
   >
