@@ -1,6 +1,7 @@
 import { service } from '@ember/service';
 
 import { isResolvedCodeRef, RealmPaths } from '@cardstack/runtime-common';
+import { DEFAULT_CODING_LLM } from '@cardstack/runtime-common/matrix-constants';
 
 import * as CardAPI from 'https://cardstack.com/base/card-api';
 import * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -128,6 +129,7 @@ export default class RemixCommand extends HostBaseCommand<
       openRoom: true,
       attachedCards: [listing],
       skillCardIds,
+      llmModel: DEFAULT_CODING_LLM,
     });
   }
 }
