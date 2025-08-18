@@ -13,8 +13,11 @@ import {
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '../../helpers/matrix-constants';
 import { appURL } from '../../helpers/isolated-realm-server';
 
-export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
-export const SYNAPSE_PORT = 8008;
+export const DEVELOPMENT_SYNAPSE_IP_ADDRESS = '172.20.0.5';
+export const DEVELOPMENT_SYNAPSE_PORT = 8008;
+
+export const TEST_SYNAPSE_IP_ADDRESS = '172.20.0.6';
+export const TEST_SYNAPSE_PORT = 8009;
 
 const registrationSecretFile = path.resolve(
   path.join(__dirname, '..', '..', 'registration_secret.txt'),
@@ -27,6 +30,7 @@ interface SynapseConfig {
   baseUrl: string;
   port: number;
   host: string;
+  isTestInstance?: boolean;
 }
 
 export interface SynapseInstance extends SynapseConfig {
@@ -42,6 +46,7 @@ function randB64Bytes(numBytes: number): string {
 export async function cfgDirFromTemplate(
   template: string,
   dataDir?: string,
+  isTestInstance?: boolean,
 ): Promise<SynapseConfig> {
   const templateDir = path.join(__dirname, template);
 
@@ -63,7 +68,12 @@ export async function cfgDirFromTemplate(
   const macaroonSecret = randB64Bytes(16);
   const formSecret = randB64Bytes(16);
 
-  const baseUrl = `http://${SYNAPSE_IP_ADDRESS}:${SYNAPSE_PORT}`;
+  // Use different IP and port for test instances to avoid conflicts
+  const host = isTestInstance
+    ? TEST_SYNAPSE_IP_ADDRESS
+    : DEVELOPMENT_SYNAPSE_IP_ADDRESS;
+  const port = isTestInstance ? TEST_SYNAPSE_PORT : DEVELOPMENT_SYNAPSE_PORT;
+  const baseUrl = `http://${host}:${port}`;
 
   // now copy homeserver.yaml, applying substitutions
   console.log(`Gen ${path.join(templateDir, 'homeserver.yaml')}`);
@@ -89,11 +99,12 @@ export async function cfgDirFromTemplate(
   );
 
   return {
-    port: SYNAPSE_PORT,
-    host: SYNAPSE_IP_ADDRESS,
+    port,
+    host,
     baseUrl,
     configDir,
     registrationSecret,
+    isTestInstance,
   };
 }
 
@@ -104,32 +115,54 @@ interface StartOptions {
   dataDir?: string;
   containerName?: string;
   suppressRegistrationSecretFile?: true;
+  isTestInstance?: boolean;
 }
 export async function synapseStart(
   opts?: StartOptions,
   stopExisting = true,
 ): Promise<SynapseInstance> {
+  const isTestInstance = opts?.isTestInstance ?? false;
+
   if (stopExisting) {
-    // Stop the main server if it's running
-    let stopPromises = [dockerStop({ containerId: 'boxel-synapse' })];
-    for (const [id, _synapse] of synapses) {
-      // Stop any other synapses that are running
-      stopPromises.push(synapseStop(id));
+    let stopPromises = [];
+
+    if (isTestInstance) {
+      // For test instances, only stop other test instances
+      for (const [id, synapse] of synapses) {
+        if (synapse.isTestInstance) {
+          stopPromises.push(synapseStop(id));
+        }
+      }
+    } else {
+      // For development instances, stop the main server and other non-test instances
+      // FIXME can we remove this entirely?
+      // stopPromises.push(dockerStop({ containerId: 'boxel-synapse' }));
+      // for (const [id, synapse] of synapses) {
+      //   if (!synapse.isTestInstance) {
+      //     stopPromises.push(synapseStop(id));
+      //   }
+      // }
     }
     await Promise.allSettled(stopPromises);
   }
   const synCfg = await cfgDirFromTemplate(
     opts?.template ?? 'test',
     opts?.dataDir,
+    isTestInstance,
   );
-  let containerName = opts?.containerName || path.basename(synCfg.configDir);
+
+  // Use different container names for test instances
+  let containerName =
+    opts?.containerName ||
+    (isTestInstance ? 'boxel-synapse-test' : 'boxel-synapse');
+
   console.log(
     `Starting synapse with config dir ${synCfg.configDir} in container ${containerName}...`,
   );
   await dockerCreateNetwork({ networkName: 'boxel' });
   const synapseId = await dockerRun({
     image: 'matrixdotorg/synapse:v1.126.0',
-    containerName: 'boxel-synapse',
+    containerName,
     dockerParams: [
       '--rm',
       '-v',
@@ -220,7 +253,7 @@ export async function registerUser(
   admin = false,
   displayName?: string,
 ): Promise<Credentials> {
-  const url = `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v1/register`;
+  const url = `http://localhost:${synapse.port}/_synapse/admin/v1/register`;
   const context = await request.newContext({ baseURL: url });
   const { nonce } = await (await context.get(url)).json();
   const mac = admin
@@ -255,6 +288,7 @@ export async function registerUser(
       JSON.stringify({
         realms: [`${appURL}/`],
       }),
+      synapse.port,
     );
   }
 
@@ -395,9 +429,11 @@ export async function updateAccountData(
   accessToken: string,
   type: string,
   data: string,
+  synapsePort = DEVELOPMENT_SYNAPSE_PORT,
 ): Promise<void> {
+  // FIXME why compose the URL vs using a complete one, consistent helper functions?
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/user/${userId}/account_data/${type}`,
+    `http://localhost:${synapsePort}/_matrix/client/v3/user/${userId}/account_data/${type}`,
     {
       method: 'PUT',
       headers: {

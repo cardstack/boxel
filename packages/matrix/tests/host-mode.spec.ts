@@ -20,6 +20,8 @@ test.describe('Host mode', () => {
     // to safely start the realm
     test.setTimeout(120_000);
     synapse = await synapseStart({
+      // FIXME can template test make this true automatically?
+      isTestInstance: true,
       template: 'test',
     });
     await registerRealmUsers(synapse);
