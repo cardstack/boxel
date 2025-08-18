@@ -1,4 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { concat } from '@ember/helper';
 
 import cssVar from '../../helpers/css-var.ts';
 import LoadingIndicatorIcon from '../../icons/loading-indicator.gts';
@@ -6,18 +7,22 @@ import LoadingIndicatorIcon from '../../icons/loading-indicator.gts';
 interface Signature {
   Args: {
     color?: string;
+    variant?: 'primary' | 'secondary' | 'muted' | 'destructive' | 'default';
   };
   Element: HTMLSpanElement;
 }
 
 const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>
   <span
-    class='boxel-loading-indicator'
+    class='boxel-loading-indicator
+      {{if @variant (concat "variant-" @variant) "variant-default"}}'
     data-test-loading-indicator
     ...attributes
   >
     <LoadingIndicatorIcon
-      style={{cssVar icon-color=@color}}
+      style={{cssVar
+        icon-color=(if @color @color 'var(--loading-indicator-color)')
+      }}
       role='presentation'
     />
   </span>
@@ -32,6 +37,26 @@ const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>
       width: var(--loading-indicator-size);
       height: var(--loading-indicator-size);
       flex-shrink: 0;
+    }
+
+    .variant-default {
+      --loading-indicator-color: var(--foreground);
+    }
+
+    .variant-primary {
+      --loading-indicator-color: var(--primary-foreground);
+    }
+
+    .variant-secondary {
+      --loading-indicator-color: var(--secondary-foreground);
+    }
+
+    .variant-muted {
+      --loading-indicator-color: var(--muted-foreground);
+    }
+
+    .variant-destructive {
+      --loading-indicator-color: var(--destructive-foreground);
     }
 
     /*
