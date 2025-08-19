@@ -30,7 +30,7 @@ export default class PillUsage extends Component {
     | 'secondary'
     | 'muted'
     | 'destructive'
-    | 'default' = this.pillVariantDefault;
+    | 'default' = undefined;
   @tracked pillBackgroundColor?: string;
   @tracked borderColor?: string;
   @tracked fontColor?: string;
@@ -107,21 +107,21 @@ export default class PillUsage extends Component {
             @description='3-or-6 digit hex color code for background color (overrides variant)'
             @value={{this.pillBackgroundColor}}
             @onInput={{fn (mut this.pillBackgroundColor)}}
-            @defaultValue='undefined'
+            @defaultValue='variant-default'
           />
           <Args.String
             @name='pillBorderColor'
             @description='Border color for the pill (overrides variant)'
             @value={{this.borderColor}}
             @onInput={{fn (mut this.borderColor)}}
-            @defaultValue='undefined'
+            @defaultValue='variant-default'
           />
           <Args.String
             @name='pillFontColor'
             @description='Font color for the pill (overrides variant)'
             @value={{this.fontColor}}
             @onInput={{fn (mut this.fontColor)}}
-            @defaultValue='undefined'
+            @defaultValue='variant-default'
           />
         </:api>
         <:cssVars as |Css|>
