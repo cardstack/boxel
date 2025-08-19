@@ -236,66 +236,23 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
   ) {
     this.element = element;
 
+    // Always clear existing map and reinitialize for a fresh render
     if (this.map) {
-      this.updateMap(namedArgs);
-    } else {
-      // Only initialize if map doesn't exist
-      this.initializeMap(
-        namedArgs.tileserverUrl,
-        namedArgs.coordinate,
-        namedArgs.route,
-        namedArgs.setMap,
-        namedArgs.onMapClick,
-        namedArgs.onRouteUpdate,
-        namedArgs.disableMapClick,
-      );
-    }
-  }
-
-  private updateMap(namedArgs: NamedArgs<LeafletModifierSignature>) {
-    if (!this.map) return;
-
-    // Clear existing route and markers
-    this.clearMap();
-
-    // Update coordinate
-    if (namedArgs.coordinate) {
-      this.map.setView(
-        [namedArgs.coordinate.lat, namedArgs.coordinate.lng],
-        13,
-      );
-      this.marker = createMarker(
-        namedArgs.coordinate,
-        '#ef4444',
-        'marker',
-      ).addTo(this.map);
-
-      if (this.marker) {
-        setupMarkerPopup(
-          this.marker,
-          namedArgs.coordinate,
-          this.map,
-          'Location',
-        );
-      }
+      this.map.remove();
+      this.map = null;
+      this.marker = null;
     }
 
-    // Update route
-    if (namedArgs.route && namedArgs.route.length > 0) {
-      drawRoute(this.map, namedArgs.route, namedArgs.onRouteUpdate);
-    }
-  }
-
-  private clearMap() {
-    if (!this.map) return;
-
-    // Remove all layers except the tile layer (base map)
-    this.map.eachLayer((layer: any) => {
-      if (layer instanceof L.TileLayer) return; // Keep base tiles
-      this.map!.removeLayer(layer);
-    });
-
-    this.marker = null;
+    // Initialize fresh map
+    this.initializeMap(
+      namedArgs.tileserverUrl,
+      namedArgs.coordinate,
+      namedArgs.route,
+      namedArgs.setMap,
+      namedArgs.onMapClick,
+      namedArgs.onRouteUpdate,
+      namedArgs.disableMapClick,
+    );
   }
 
   private initializeMap(
@@ -332,8 +289,12 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
           drawRoute(map, route, onRouteUpdate);
         }
 
-        // Only create default marker if no route is provided
-        if (!route || route.length === 0) {
+        // Only create default marker if no route is provided and coordinates are valid
+        const shouldCreateDefaultMarker =
+          (!route || route.length === 0) &&
+          (defaultCoords.lat !== 0 || defaultCoords.lng !== 0);
+
+        if (shouldCreateDefaultMarker) {
           this.marker = createMarker(defaultCoords, '#ef4444', 'marker').addTo(
             map,
           );
