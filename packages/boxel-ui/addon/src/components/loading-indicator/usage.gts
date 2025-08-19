@@ -18,7 +18,7 @@ export default class LoadingIndicatorUsage extends Component {
     | 'secondary'
     | 'muted'
     | 'destructive'
-    | 'default';
+    | 'default' = undefined;
 
   variants = ['default', 'primary', 'secondary', 'muted', 'destructive'];
 
