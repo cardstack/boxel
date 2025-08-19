@@ -10,6 +10,11 @@ import { Candyland } from './candyland.ts';
 import { Doom64 } from './doom64.ts';
 import { StarryNight } from './starry-night.ts';
 
+export interface Theme {
+  name: string;
+  styles?: string;
+}
+
 export const THEMES = {
   Bubblegum,
   Doom64,
@@ -26,7 +31,7 @@ function getThemeStyles(cssString: string) {
   return styleConversions + extractCssVariables(cssString);
 }
 
-const Themes = Object.entries(THEMES).map(([name, vars]) => ({
+const Themes: Theme[] = Object.entries(THEMES).map(([name, vars]) => ({
   name,
   styles: getThemeStyles(vars),
 }));
