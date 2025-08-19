@@ -11,10 +11,6 @@ import { MapRender, type RoutePoint } from '../components/map-render';
 import { GeoSearchPointField } from './geo-search-point';
 
 class AtomTemplate extends Component<typeof RouteField> {
-  get routeName() {
-    return this.args.model?.title ?? 'Untitled Route';
-  }
-
   get hasRoute() {
     return !!(
       this.args.model?.startPoint?.lat && this.args.model?.endPoint?.lat
@@ -25,7 +21,7 @@ class AtomTemplate extends Component<typeof RouteField> {
     <div class='route-display'>
       <MapIcon class='map-icon' />
       <div class='route-info'>
-        <span class='route-name'>{{this.routeName}}</span>
+        <span class='route-title'>{{@model.title}}</span>
       </div>
     </div>
 
@@ -43,7 +39,7 @@ class AtomTemplate extends Component<typeof RouteField> {
         gap: 2px;
       }
 
-      .route-name {
+      .route-title {
         font-weight: 500;
         line-height: normal;
       }
@@ -165,10 +161,6 @@ class EditTemplate extends Component<typeof RouteField> {
 }
 
 class EmbeddedTemplate extends Component<typeof RouteField> {
-  get routeName() {
-    return this.args.model?.title ?? 'Unnamed Route';
-  }
-
   get routeCoordinates(): RoutePoint[] {
     const points: RoutePoint[] = [];
 
@@ -241,7 +233,7 @@ class EmbeddedTemplate extends Component<typeof RouteField> {
         flex: 1;
       }
 
-      .route-name {
+      .route-title {
         margin: 0;
         font-size: 18px;
         font-weight: 600;
