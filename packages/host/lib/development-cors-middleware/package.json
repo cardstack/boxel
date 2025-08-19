@@ -1,0 +1,13 @@
+{
+  "name": "development-cors-middleware",
+  "ember-addon": {
+    "before": "broccoli-serve-files"
+  },
+  "keywords": [
+    "ember-addon"
+  ],
+  "dependencies": {
+    "ember-cli-babel": "*",
+    "ember-cli-typescript": "*"
+  }
+}

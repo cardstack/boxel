@@ -202,6 +202,24 @@ process.on('message', (message) => {
   } else if (message === 'kill') {
     log.info(`Ending worker manager process for ${port}...`);
     process.exit(0);
+  } else if (
+    typeof message === 'string' &&
+    message.startsWith('execute-sql:')
+  ) {
+    let sql = message.substring('execute-sql:'.length);
+    adapter
+      .execute(sql)
+      .then((results) => {
+        if (process.send) {
+          let serializedResults = JSON.stringify(results);
+          process.send(`sql-results:${serializedResults}`);
+        }
+      })
+      .catch((e) => {
+        if (process.send) {
+          process.send(`sql-error:${e.message}`);
+        }
+      });
   }
 });
 

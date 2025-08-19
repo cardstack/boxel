@@ -2197,9 +2197,11 @@ module('Integration | card-basics', function (hooks) {
       assert
         .dom('[data-test-plural-view="linksToMany"]')
         .hasStyle({ margin: '5px' });
-      assert.dom('[data-test-card-format="fitted"]').exists({ count: 2 });
       assert
-        .dom('[data-test-card-format="fitted"]:nth-child(2)')
+        .dom('.linksToMany-itemContainer [data-test-card-format="fitted"]')
+        .exists({ count: 2 });
+      assert
+        .dom('.linksToMany-itemContainer:nth-child(2)')
         .hasStyle({ marginTop: '16px' });
     });
 

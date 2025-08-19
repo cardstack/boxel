@@ -2447,6 +2447,9 @@ importers:
       '@types/node':
         specifier: ^18.18.5
         version: 18.19.54
+      '@types/uuid':
+        specifier: 'catalog:'
+        version: 9.0.8
       fs-extra:
         specifier: 'catalog:'
         version: 11.3.0
@@ -2465,6 +2468,9 @@ importers:
       typescript:
         specifier: ~5.1.6
         version: 5.1.6
+      uuid:
+        specifier: 'catalog:'
+        version: 9.0.1
 
   packages/postgres:
     dependencies:

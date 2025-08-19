@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "kitName": "Rock Kit",
+      "description": "Aggressive punchy drums with heavy compression and beater clicks",
+      "category": "Rock",
+      "creator": "Beat Maker Studio",
+      "kit": {
+        "kitName": "Rock Kit",
+        "kickParams": "{\"type\": \"rock\", \"frequency\": 58, \"decay\": 0.25, \"amplitude\": 1.1, \"shape\": 0.7, \"resonance\": 1}",
+        "snareParams": "{\"type\": \"rock\", \"frequency\": 220, \"decay\": 0.18, \"amplitude\": 1.0, \"shape\": 2, \"resonance\": 3}",
+        "hihatParams": "{\"type\": \"rock\", \"frequency\": 7500, \"decay\": 0.07, \"amplitude\": 0.8, \"shape\": 3, \"resonance\": 3}",
+        "openhatParams": "{\"type\": \"rock\", \"frequency\": 7000, \"decay\": 0.3, \"amplitude\": 0.7, \"shape\": 2, \"resonance\": 2}",
+        "clapParams": "{\"type\": \"rock\", \"frequency\": 2100, \"decay\": 0.12, \"amplitude\": 0.9, \"shape\": 2.5, \"resonance\": 4}",
+        "crashParams": "{\"type\": \"rock\", \"frequency\": 3800, \"decay\": 0.9, \"amplitude\": 0.6, \"shape\": 1, \"resonance\": 2}"
+      },
+      "title": "Rock Kit"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../beat-maker",
+        "name": "DrumKitCard"
+      }
+    }
+  }
+}
