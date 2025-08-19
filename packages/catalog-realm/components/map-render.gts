@@ -49,6 +49,7 @@ interface LeafletMap {
   removeLayer: (layer: any) => LeafletMap;
   fitBounds: (bounds: any) => LeafletMap;
   remove: () => void;
+  eachLayer: (callback: (layer: any) => void) => void;
 }
 
 interface LeafletMarker {
@@ -235,15 +236,66 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
   ) {
     this.element = element;
 
-    this.initializeMap(
-      namedArgs.tileserverUrl,
-      namedArgs.coordinate,
-      namedArgs.route,
-      namedArgs.setMap,
-      namedArgs.onMapClick,
-      namedArgs.onRouteUpdate,
-      namedArgs.disableMapClick,
-    );
+    if (this.map) {
+      this.updateMap(namedArgs);
+    } else {
+      // Only initialize if map doesn't exist
+      this.initializeMap(
+        namedArgs.tileserverUrl,
+        namedArgs.coordinate,
+        namedArgs.route,
+        namedArgs.setMap,
+        namedArgs.onMapClick,
+        namedArgs.onRouteUpdate,
+        namedArgs.disableMapClick,
+      );
+    }
+  }
+
+  private updateMap(namedArgs: NamedArgs<LeafletModifierSignature>) {
+    if (!this.map) return;
+
+    // Clear existing route and markers
+    this.clearMap();
+
+    // Update coordinate
+    if (namedArgs.coordinate) {
+      this.map.setView(
+        [namedArgs.coordinate.lat, namedArgs.coordinate.lng],
+        13,
+      );
+      this.marker = createMarker(
+        namedArgs.coordinate,
+        '#ef4444',
+        'marker',
+      ).addTo(this.map);
+
+      if (this.marker) {
+        setupMarkerPopup(
+          this.marker,
+          namedArgs.coordinate,
+          this.map,
+          'Location',
+        );
+      }
+    }
+
+    // Update route
+    if (namedArgs.route && namedArgs.route.length > 0) {
+      drawRoute(this.map, namedArgs.route, namedArgs.onRouteUpdate);
+    }
+  }
+
+  private clearMap() {
+    if (!this.map) return;
+
+    // Remove all layers except the tile layer (base map)
+    this.map.eachLayer((layer: any) => {
+      if (layer instanceof L.TileLayer) return; // Keep base tiles
+      this.map!.removeLayer(layer);
+    });
+
+    this.marker = null;
   }
 
   private initializeMap(
@@ -345,7 +397,7 @@ function darkenColor(color: string, factor: number): string {
 }
 
 function createMarker(
-  coordinate: Coordinate,
+  coordinate: Coordinate | RoutePoint,
   color: string = '#ef4444',
   className: string = 'marker',
 ) {
@@ -382,24 +434,17 @@ function drawRoute(
   }).addTo(map);
 
   route.forEach((point, index) => {
-    const marker = createMarker(point, '#ef4444', 'route-marker').addTo(map);
+    // Different styling for start vs other points
+    const isStartPoint = index === 0;
+    const markerColor = isStartPoint ? '#10b981' : '#ef4444'; // Green for start, red for others
+    const markerClass = isStartPoint
+      ? 'route-marker start-point'
+      : 'route-marker';
+
+    const marker = createMarker(point, markerColor, markerClass).addTo(map);
 
     if (point.address) {
-      const popupContent = `
-        <div style="min-width: 200px;">
-          ${
-            point.address
-              ? `<div style="color: #666; margin-bottom: 6px;">${point.address}</div>`
-              : ''
-          }
-          <div style="color: #666; font-size: 12px;">
-            <strong>Point ${index + 1}:</strong> ${point.lat.toFixed(
-              6,
-            )}, ${point.lng.toFixed(6)}
-          </div>
-        </div>
-      `;
-      marker.bindPopup(popupContent);
+      setupMarkerPopup(marker, point, map, point.address);
     }
   });
 
@@ -455,7 +500,7 @@ function isMarkerClick(event: LeafletMouseEvent): boolean {
 
 function getCoordinateOrRoute(
   args: MapRenderSignature['Args'],
-): Coordinate | Coordinate[] | null {
+): Coordinate | RoutePoint[] | null {
   if (args.coordinate) {
     return args.coordinate;
   }

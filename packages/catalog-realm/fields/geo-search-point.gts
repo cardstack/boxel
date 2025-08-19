@@ -81,7 +81,7 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
       const response = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
           address,
-        )}&limit=1`,
+        )}&limit=10`,
       );
       const data = await response.json();
 
@@ -96,13 +96,8 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
     }
   });
 
-  @action
-  geocodeAddress() {
-    this.fetchCoordinate.perform(this.args.model.searchKey);
-  }
-
   private debouncedGeocodeAddress = debounce(() => {
-    this.geocodeAddress();
+    this.fetchCoordinate.perform(this.args.model.searchKey);
   }, 1000);
 
   @action
