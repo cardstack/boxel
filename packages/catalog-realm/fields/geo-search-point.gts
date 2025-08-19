@@ -85,6 +85,8 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
       );
       const data = await response.json();
 
+      console.log('data', data);
+
       if (data && data.length > 0) {
         if (this.args.model) {
           this.args.model.lat = parseFloat(data[0].lat);
