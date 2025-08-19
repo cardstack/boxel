@@ -1,7 +1,10 @@
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { ComponentLike } from '@glint/template';
 import { tracked } from '@glimmer/tracking';
+import type RouterService from '@ember/routing/router-service';
+import { service } from '@ember/service';
 
 import BasicDropdownWormhole from 'ember-basic-dropdown/components/basic-dropdown';
 
@@ -11,14 +14,10 @@ import { pageTitle } from 'ember-page-title';
 import RouteTemplate from 'ember-route-template';
 
 import { ALL_USAGE_COMPONENTS } from '@cardstack/boxel-ui/usage';
-import THEMES from '../themes/index.ts';
+import Themes from '../themes/index';
 import IconsGrid from '../components/icons-grid';
 
 import { BoxelSelect, FieldContainer } from '@cardstack/boxel-ui/components';
-import {
-  extractCssVariables,
-  styleConversions,
-} from '@cardstack/boxel-ui/helpers';
 
 import formatComponentName from '../helpers/format-component-name';
 
@@ -32,18 +31,7 @@ interface UsageComponent {
   component: ComponentLike;
 }
 
-interface HostFreestyleSignature {
-  Args: {};
-}
-
-function getThemeStyles(cssString: string) {
-  if (!extractCssVariables) {
-    return;
-  }
-  return styleConversions + extractCssVariables(cssString);
-}
-
-class IndexComponent extends Component<HostFreestyleSignature> {
+class IndexComponent extends Component {
   <template>
     {{pageTitle 'Boxel Components'}}
     <BasicDropdownWormhole />
@@ -53,12 +41,12 @@ class IndexComponent extends Component<HostFreestyleSignature> {
       class='boxel-freestyle-guide'
       @title='Boxel UI Components'
       @subtitle='Living Component Documentation'
-      style={{this.currentTheme.styles}}
+      style={{this.theme.styles}}
     >
       <FieldContainer class='theme-select' @label='Current Theme' @tag='label'>
         <BoxelSelect
           @placeholder='Select Theme'
-          @selected={{this.currentTheme}}
+          @selected={{this.theme}}
           @options={{this.themes}}
           @onChange={{this.selectTheme}}
           as |theme|
@@ -104,13 +92,7 @@ class IndexComponent extends Component<HostFreestyleSignature> {
     </style>
   </template>
 
-  themes: Theme[] = [
-    { name: '<None Selected>' },
-    ...Object.entries(THEMES).map(([name, vars]) => ({
-      name,
-      styles: getThemeStyles(vars),
-    })),
-  ];
+  themes: Theme[] = [{ name: '<None Selected>' }, ...Themes];
   usageComponents = ALL_USAGE_COMPONENTS.map(([name, c]) => {
     return {
       title: name,
@@ -118,10 +100,24 @@ class IndexComponent extends Component<HostFreestyleSignature> {
     };
   }) as UsageComponent[];
 
-  @tracked currentTheme?: Theme;
+  @service declare router: RouterService;
+
+  @tracked theme?: Theme;
+
+  constructor(owner: Owner, args: {}) {
+    super(owner, args);
+    let themeName = this.router?.currentRoute?.queryParams?.theme;
+    if (!themeName) {
+      return;
+    }
+    this.theme = this.themes.find((t) => t.name === themeName);
+  }
 
   @action selectTheme(theme: Theme) {
-    this.currentTheme = theme?.styles ? theme : undefined;
+    this.theme = theme?.styles ? theme : undefined;
+    this.router.replaceWith('index', {
+      queryParams: { theme: this.theme?.name },
+    });
   }
 }
 
