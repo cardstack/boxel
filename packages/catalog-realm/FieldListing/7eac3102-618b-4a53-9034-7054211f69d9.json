@@ -10,8 +10,7 @@
     "attributes": {
       "name": "Route Preview Component",
       "images": [
-        "https://boxel-images.boxel.ai/app-assets/catalog/route-listing/screenshot_01.png",
-        "https://boxel-images.boxel.ai/app-assets/catalog/route-listing/screenshot_02.png"
+        "https://boxel-images.boxel.ai/app-assets/catalog/route-listing/screenshot_01.png"
       ],
       "summary": "Smart route visualization component that transforms complex navigation data into intuitive, interactive previews. Perfect for travel apps, delivery services, and mapping applications requiring clear route presentation",
       "cardInfo": {
