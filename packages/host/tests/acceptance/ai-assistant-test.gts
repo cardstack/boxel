@@ -41,6 +41,7 @@ import {
   visitOperatorMode,
   assertMessages,
   type TestContextWithSave,
+  delay,
 } from '../helpers';
 
 import {
@@ -1150,6 +1151,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     });
     await click('[data-test-open-ai-assistant]');
     await waitFor(`[data-room-settled]`);
+    // Focus pill should be hidden initially when no code reference is selected
+    assert
+      .dom('[data-test-focus-pill-main]')
+      .doesNotExist('FocusPill is hidden when no selected code ref');
     await fillIn('[data-test-message-field]', `Message - 1`);
     await click('[data-test-send-message-btn]');
 
@@ -1225,6 +1230,27 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       'Context sent with message contains correct realmPermissions',
     );
     await click('[data-test-clickable-definition-container]');
+
+    // After selecting a definition, FocusPill should appear with label and meta
+    await waitFor('[data-test-focus-pill-main]');
+    assert
+      .dom('[data-test-focus-pill-main]')
+      .containsText('Plant', 'FocusPill shows selected code label');
+    assert
+      .dom('[data-test-focus-pill-meta]')
+      .exists({ count: 2 }, 'FocusPill shows two meta pills');
+    {
+      const metaEls = document.querySelectorAll('[data-test-focus-pill-meta]');
+      assert
+        .dom(metaEls[0] as Element)
+        .hasText('Schema', 'FocusPill shows item type "Schema"');
+      assert
+        .dom(metaEls[1] as Element)
+        .hasText(
+          'Line 3',
+          'FocusPill shows single-line selection range "Line 3"',
+        );
+    }
 
     await fillIn('[data-test-message-field]', `Message - 2`);
     await click('[data-test-send-message-btn]');
@@ -1354,6 +1380,28 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       });
     }
 
+    // FocusPill should reflect Preview item type and multi-line selection range
+    await waitFor('[data-test-focus-pill-main]');
+    await delay(20); // editor selection updates are debounced
+    assert
+      .dom('[data-test-focus-pill-main]')
+      .containsText('Plant', 'FocusPill still shows selected code label');
+    assert
+      .dom('[data-test-focus-pill-meta]')
+      .exists({ count: 2 }, 'FocusPill shows two meta pills');
+    {
+      const metaEls = document.querySelectorAll('[data-test-focus-pill-meta]');
+      assert
+        .dom(metaEls[0] as Element)
+        .hasText('Preview', 'FocusPill shows item type "Preview"');
+      assert
+        .dom(metaEls[1] as Element)
+        .hasText(
+          'Lines 3-6',
+          'FocusPill shows multi-line selection range "Lines 3-6"',
+        );
+    }
+
     await fillIn('[data-test-message-field]', `Message - 3`);
     await click('[data-test-send-message-btn]');
 
@@ -1429,6 +1477,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click(
       '[data-test-boxel-button][data-test-module-inspector-view="spec"]',
     );
+
+    // FocusPill should reflect Spec item type (selection range unchanged)
+    await waitFor('[data-test-focus-pill-main]');
+    {
+      const metaEls = document.querySelectorAll('[data-test-focus-pill-meta]');
+      assert
+        .dom(metaEls[0] as Element)
+        .hasText('Spec', 'FocusPill shows item type "Spec"');
+    }
     await fillIn('[data-test-message-field]', `Message - 4`);
     await click('[data-test-send-message-btn]');
 

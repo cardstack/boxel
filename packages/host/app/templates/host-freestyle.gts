@@ -19,9 +19,9 @@ import {
 import AiAssistantApplyButtonUsage from '@cardstack/host/components/ai-assistant/apply-button/usage';
 import AiAssistantAttachmentPickerUsage from '@cardstack/host/components/ai-assistant/attachment-picker/usage';
 import AiAssistantChatInputUsage from '@cardstack/host/components/ai-assistant/chat-input/usage';
+import AiAssistantFocusPillUsage from '@cardstack/host/components/ai-assistant/focus-pill/usage';
 import AiAssistantMessageUsage from '@cardstack/host/components/ai-assistant/message/usage';
 import AiAssistantSkillMenuUsage from '@cardstack/host/components/ai-assistant/skill-menu/usage';
-import AiAssistantFocusPillUsage from '@cardstack/host/components/ai-assistant/focus-pill/usage';
 import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 import PillMenuUsage from '@cardstack/host/components/pill-menu/usage';
 import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
