@@ -12,7 +12,6 @@ interface ProxyDestinationInput {
   url: string;
   apiKey: string;
   creditStrategy: 'openrouter' | 'no-credit';
-  whitelisted: boolean; // Keep for backward compatibility with config files
   supportsStreaming: boolean;
 }
 

@@ -283,14 +283,12 @@ The value should be a JSON string containing an array of destination configurati
     "url": "https://openrouter.ai/api/v1/chat/completions",
     "apiKey": "your-openrouter-api-key",
     "creditStrategy": "openrouter",
-    "whitelisted": true,
     "supportsStreaming": true
   },
   {
     "url": "https://api.example.com",
     "apiKey": "your-example-api-key",
     "creditStrategy": "no-credit",
-    "whitelisted": true,
     "supportsStreaming": false
   }
 ]
@@ -303,7 +301,6 @@ The value should be a JSON string containing an array of destination configurati
 - **creditStrategy**: The credit strategy to use for this endpoint
   - `"openrouter"`: Uses OpenRouter credit system (for paid AI APIs)
   - `"no-credit"`: No credit system (for free APIs or APIs with their own billing)
-- **whitelisted**: Whether this endpoint is allowed (should be `true`)
 - **supportsStreaming**: Whether this endpoint supports streaming responses
 
 #### Examples
@@ -315,7 +312,6 @@ The value should be a JSON string containing an array of destination configurati
   "url": "https://openrouter.ai/api/v1/chat/completions",
   "apiKey": "your-openrouter-api-key",
   "creditStrategy": "openrouter",
-  "whitelisted": true,
   "supportsStreaming": true
 }
 ```
@@ -327,7 +323,6 @@ The value should be a JSON string containing an array of destination configurati
   "url": "https://api.example.com",
   "apiKey": "your-example-api-key",
   "creditStrategy": "no-credit",
-  "whitelisted": true,
   "supportsStreaming": false
 }
 ```
@@ -337,7 +332,7 @@ The value should be a JSON string containing an array of destination configurati
 When starting the realm server, include the `ALLOWED_PROXY_DESTINATIONS` environment variable:
 
 ```bash
-ALLOWED_PROXY_DESTINATIONS='[{"url":"https://openrouter.ai/api/v1/chat/completions","apiKey":"your-openrouter-api-key","creditStrategy":"openrouter","whitelisted":true,"supportsStreaming":true},{"url":"https://api.example.com","apiKey":"your-example-api-key","creditStrategy":"no-credit","whitelisted":true,"supportsStreaming":false}]' STRIPE_WEBHOOK_SECRET=... STRIPE_API_KEY=... pnpm start:all
+ALLOWED_PROXY_DESTINATIONS='[{"url":"https://openrouter.ai/api/v1/chat/completions","apiKey":"your-openrouter-api-key","creditStrategy":"openrouter","supportsStreaming":true},{"url":"https://api.example.com","apiKey":"your-example-api-key","creditStrategy":"no-credit","supportsStreaming":false}]' STRIPE_WEBHOOK_SECRET=... STRIPE_API_KEY=... pnpm start:all
 ```
 
 For development, you can create a `.env` file in the `packages/realm-server` directory:
@@ -349,14 +344,12 @@ ALLOWED_PROXY_DESTINATIONS='[
     "url": "https://openrouter.ai/api/v1/chat/completions",
     "apiKey": "your-openrouter-api-key",
     "creditStrategy": "openrouter",
-    "whitelisted": true,
     "supportsStreaming": true
   },
   {
     "url": "https://api.example.com",
     "apiKey": "your-example-api-key",
     "creditStrategy": "no-credit",
-    "whitelisted": true,
     "supportsStreaming": false
   }
 ]'
@@ -364,7 +357,6 @@ ALLOWED_PROXY_DESTINATIONS='[
 
 #### Security Notes
 
-- Only whitelisted URLs will be accessible through the proxy
 - API keys are automatically added to requests and should be kept secure
 - The proxy validates all requests against the allowed destinations list
 - Credit strategies help manage usage and costs for paid APIs
