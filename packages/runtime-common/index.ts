@@ -120,10 +120,6 @@ export {
   cardTypeIcon,
   getFieldIcon,
 } from './helpers/card-type-display-name';
-export {
-  extractCssVariables,
-  styleConversions,
-} from './helpers/extract-css-variables';
 export * from './url';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];

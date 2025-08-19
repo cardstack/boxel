@@ -1,0 +1,12 @@
+import Route from '@ember/routing/route';
+
+export default class Index extends Route {
+  queryParams = {
+    theme: {
+      refreshModel: false,
+    },
+    cycleThemes: {
+      refreshModel: false,
+    },
+  };
+}

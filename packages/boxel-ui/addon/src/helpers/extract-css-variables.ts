@@ -12,8 +12,8 @@ function normalizeSelector(selectorName: string): string {
   return selector;
 }
 
-function parseCssRules(rules: string): Map<string, string> | undefined {
-  if (!rules.trim()) {
+function parseCssRules(rules?: string): Map<string, string> | undefined {
+  if (!rules?.trim()) {
     return;
   }
   const cssMap = new Map<string, string>();
@@ -53,10 +53,10 @@ function parseCSSGroups(
     }
   } else {
     for (let match of matches) {
-      const selector = match[1].trim()
+      const selector = match[1]?.trim()
         ? normalizeSelector(match[1].trim())
         : ':root';
-      const rules = parseCssRules(match[2].trim());
+      const rules = parseCssRules(match[2]?.trim());
       if (rules?.size) {
         groups.set(selector, rules);
       }
@@ -72,7 +72,6 @@ export function extractCssVariables(cssString?: string | null) {
     }
     const groups = parseCSSGroups(cssString);
     const rootRules = groups?.get(':root'); // only considering :root for now
-    // TODO: handle dark mode and other theme selectors (for branding etc)
     if (!rootRules?.size) {
       return;
     }

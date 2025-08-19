@@ -25,11 +25,13 @@ import {
   type CodeRef,
   type Permissions,
   ResolvedCodeRef,
-  extractCssVariables,
-  styleConversions,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
+import {
+  extractCssVariables,
+  styleConversions,
+} from '@cardstack/boxel-ui/helpers';
 import Modifier from 'ember-modifier';
 import { isEqual, flatMap } from 'lodash';
 import { initSharedState } from './shared-state';
