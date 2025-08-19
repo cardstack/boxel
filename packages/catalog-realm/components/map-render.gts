@@ -49,7 +49,6 @@ interface LeafletMap {
   removeLayer: (layer: any) => LeafletMap;
   fitBounds: (bounds: any) => LeafletMap;
   remove: () => void;
-  eachLayer: (callback: (layer: any) => void) => void;
 }
 
 interface LeafletMarker {
