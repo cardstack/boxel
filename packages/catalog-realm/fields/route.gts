@@ -273,10 +273,9 @@ class EmbeddedTemplate extends Component<typeof RouteField> {
       }
 
       .route-preview {
-        border: 1px solid var(--boxel-border-color);
-        border-radius: var(--boxel-border-radius);
         overflow: hidden;
         background: var(--boxel-surface-secondary);
+        border: 1px solid var(--boxel-border-color);
       }
 
       .route-header {
