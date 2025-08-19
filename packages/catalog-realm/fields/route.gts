@@ -115,9 +115,6 @@ class EditTemplate extends Component<typeof RouteField> {
       });
     }
 
-    console.log('routeCoordinates', points);
-    console.log('routeCoordinates', this.args.model);
-
     return points;
   }
 
