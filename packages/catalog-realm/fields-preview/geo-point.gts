@@ -11,6 +11,9 @@ export class GeoPointPreview extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <section class='fields'>
+        <FieldContainer @vertical={{true}} @label='Edit'>
+          <@fields.geoPoint @format='edit' />
+        </FieldContainer>
         <FieldContainer @vertical={{true}} @label='Atom'>
           <@fields.geoPoint @format='atom' />
         </FieldContainer>
