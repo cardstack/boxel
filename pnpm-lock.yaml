@@ -2767,9 +2767,6 @@ importers:
       '@lukeed/uuid':
         specifier: 'catalog:'
         version: 2.0.1
-      '@sentry/node':
-        specifier: 'catalog:'
-        version: 8.31.0
       '@types/babel__core':
         specifier: 'catalog:'
         version: 7.1.19
