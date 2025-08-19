@@ -1734,8 +1734,8 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0(patch_hash=0e5253a008cc7bf02424d786e7a8fb2397bc48962f3cd1443f2c0fdd8200c96d)
       ember-freestyle:
-        specifier: ^0.20.0
-        version: 0.20.0(@babel/core@7.26.10)(@ember/string@3.1.1)(@glint/template@1.3.0)(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))(webpack@5.99.6)
+        specifier: ^0.22.0
+        version: 0.22.0(@babel/core@7.26.10)(@ember/string@3.1.1)(@glint/template@1.3.0)(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))(webpack@5.99.6)
       ember-load-initializers:
         specifier: ^2.1.2
         version: 2.1.2(@babel/core@7.26.10)
@@ -8174,6 +8174,12 @@ packages:
   ember-freestyle@0.20.0:
     resolution: {integrity: sha512-wbtaqfqqWuVvBvB3say2ixfg/IJ7BH4r/u/15ifuCABVNFz6qSQzWcXs5ULTsKDrnaLBfUKu/pQI12zJ+CcI/w==}
     engines: {node: 14.* || >= 16}
+    peerDependencies:
+      '@ember/string': ^3.1.1
+
+  ember-freestyle@0.22.0:
+    resolution: {integrity: sha512-31u86z5NHknkFHc9/tofiS5Ye5CjMtZxgOyEYHe/kqtM6r/IfyznYDaWt6oE7EuTbcQ7DRbATVgOjI1a8j10RQ==}
+    engines: {node: '>= 18'}
     peerDependencies:
       '@ember/string': ^3.1.1
 
@@ -20301,6 +20307,30 @@ snapshots:
       '@glimmer/tracking': 1.1.2
       ember-auto-import: 2.10.0(@glint/template@1.3.0)(webpack@5.99.6)
       ember-cli-babel: 7.26.11
+      ember-cli-htmlbars: 6.3.0
+      ember-cli-typescript: 5.2.1
+      ember-focus-trap: 1.0.1
+      ember-modifier: 4.1.0(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))
+      ember-named-blocks-polyfill: 0.2.5
+      ember-truth-helpers: 4.0.3(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))
+      json-formatter-js: 2.3.4
+      macro-decorators: 0.1.2
+      strip-indent: 3.0.0
+      tracked-built-ins: 3.3.0
+    transitivePeerDependencies:
+      - '@babel/core'
+      - '@glint/template'
+      - ember-source
+      - supports-color
+      - webpack
+
+  ember-freestyle@0.22.0(@babel/core@7.26.10)(@ember/string@3.1.1)(@glint/template@1.3.0)(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))(webpack@5.99.6):
+    dependencies:
+      '@ember/string': 3.1.1
+      '@glimmer/component': 1.1.2(@babel/core@7.26.10)
+      '@glimmer/tracking': 1.1.2
+      ember-auto-import: 2.10.0(@glint/template@1.3.0)(webpack@5.99.6)
+      ember-cli-babel: 8.2.0(@babel/core@7.26.10)
       ember-cli-htmlbars: 6.3.0
       ember-cli-typescript: 5.2.1
       ember-focus-trap: 1.0.1
