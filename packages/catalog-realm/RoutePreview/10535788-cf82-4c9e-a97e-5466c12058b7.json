@@ -2,22 +2,29 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "GeoSearchPointPreview",
-        "module": "../geo-search-point"
+        "name": "RoutePreview",
+        "module": "../fields-preview/route"
       }
     },
     "type": "card",
     "attributes": {
+      "route": {
+        "endPoint": {
+          "lat": 34.6937569,
+          "lon": 135.5014539,
+          "searchKey": "osaka"
+        },
+        "startPoint": {
+          "lat": 35.6768601,
+          "lon": 139.7638947,
+          "searchKey": "tokyo"
+        }
+      },
       "cardInfo": {
         "notes": null,
         "title": null,
         "description": null,
         "thumbnailURL": null
-      },
-      "geoSearchPoint": {
-        "lat": null,
-        "lon": null,
-        "searchKey": ""
       }
     },
     "relationships": {

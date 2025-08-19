@@ -3,7 +3,7 @@ import StringField from 'https://cardstack.com/base/string';
 import {
   Component,
   contains,
-  CardDef,
+  FieldDef,
   field,
 } from 'https://cardstack.com/base/card-api';
 import { gt } from '@cardstack/boxel-ui/helpers';
@@ -329,7 +329,7 @@ class EmbeddedTemplate extends Component<typeof RouteField> {
   </template>
 }
 
-export class RouteField extends CardDef {
+export class RouteField extends FieldDef {
   static displayName = 'Route';
 
   @field startPoint = contains(GeoSearchPointField);

@@ -1,0 +1,97 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "FieldListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Route Preview Component",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/route-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/route-listing/screenshot_02.png"
+      ],
+      "summary": "Smart route visualization component that transforms complex navigation data into intuitive, interactive previews. Perfect for travel apps, delivery services, and mapping applications requiring clear route presentation",
+      "cardInfo": {
+        "notes": null,
+        "title": "Route Preview Component",
+        "description": "Interactive component that displays route information and navigation previews for web applications. Provides visual feedback for routing states and navigation flows.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/route-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/dc835c92-0770-4eac-b102-618b3a539034"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/707eac31-0261-4b3a-9390-347054211f69"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/07707eac-3102-418b-ba53-90347054211f"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/5c920770-7eac-4102-a18b-3a5390347054"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/9207707e-ac31-4261-8b3a-539034705421"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/835c9207-707e-4c31-8261-8b3a53903470"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../RoutePreview/10535788-cf82-4c9e-a97e-5466c12058b7"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/38b5d1dc-00d3-4a19-8998-29f0c19081de"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/travel-experiences"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
