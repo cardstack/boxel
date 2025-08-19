@@ -332,12 +332,14 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
           drawRoute(map, route, onRouteUpdate);
         }
 
-        // Create default marker display on map
-        this.marker = createMarker(defaultCoords, '#ef4444', 'marker').addTo(
-          map,
-        );
-        if (this.marker) {
-          setupMarkerPopup(this.marker, defaultCoords, map, 'Location');
+        // Only create default marker if no route is provided
+        if (!route || route.length === 0) {
+          this.marker = createMarker(defaultCoords, '#ef4444', 'marker').addTo(
+            map,
+          );
+          if (this.marker) {
+            setupMarkerPopup(this.marker, defaultCoords, map, 'Location');
+          }
         }
 
         // Handle map click events
