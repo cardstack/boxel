@@ -21,6 +21,7 @@ import AiAssistantAttachmentPickerUsage from '@cardstack/host/components/ai-assi
 import AiAssistantChatInputUsage from '@cardstack/host/components/ai-assistant/chat-input/usage';
 import AiAssistantMessageUsage from '@cardstack/host/components/ai-assistant/message/usage';
 import AiAssistantSkillMenuUsage from '@cardstack/host/components/ai-assistant/skill-menu/usage';
+import AiAssistantFocusPillUsage from '@cardstack/host/components/ai-assistant/focus-pill/usage';
 import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 import PillMenuUsage from '@cardstack/host/components/pill-menu/usage';
 import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
@@ -66,6 +67,7 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
       ['AiAssistant::ApplyButton', AiAssistantApplyButtonUsage],
       ['AiAssistant::CardPicker', AiAssistantAttachmentPickerUsage],
       ['AiAssistant::ChatInput', AiAssistantChatInputUsage],
+      ['AiAssistant::FocusPill', AiAssistantFocusPillUsage],
       ['AiAssistant::Message', AiAssistantMessageUsage],
       ['AiAssistant::PillMenu', PillMenuUsage],
       ['AiAssistant::SkillMenu', AiAssistantSkillMenuUsage],
