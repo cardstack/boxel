@@ -114,7 +114,6 @@ class EditTemplate extends Component<typeof RouteField> {
       }
 
       .points-section {
-        padding: 1rem;
         background: var(--boxel-surface-secondary);
         display: flex;
         flex-direction: column;
