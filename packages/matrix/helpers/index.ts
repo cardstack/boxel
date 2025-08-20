@@ -720,15 +720,16 @@ export async function assertLoggedOut(page: Page) {
 }
 
 export async function getRoomEvents(
+  synapse: SynapseInstance,
   username = 'user1',
   password = 'pass',
   roomId?: string,
 ) {
-  let { accessToken } = await loginUser(username, password);
-  let rooms = await getJoinedRooms(accessToken);
+  let { accessToken } = await loginUser(synapse, username, password);
+  let rooms = await getJoinedRooms(synapse, accessToken);
   if (!roomId) {
     let roomsWithEvents = await Promise.all(
-      rooms.map((r) => getAllRoomEvents(r, accessToken)),
+      rooms.map((r) => getAllRoomEvents(synapse, r, accessToken)),
     );
     // there will generally be 2 rooms, one is the DM room we do for
     // authentication, the other is the actual chat (with app.boxel.message events)
@@ -742,7 +743,7 @@ export async function getRoomEvents(
       }) ?? []
     );
   }
-  return await getAllRoomEvents(roomId, accessToken);
+  return await getAllRoomEvents(synapse, roomId, accessToken);
 }
 
 export function getAgentId(
@@ -765,9 +766,13 @@ export function getAgentId(
   }
 }
 
-export async function getRoomsFromSync(username = 'user1', password = 'pass') {
-  let { accessToken } = await loginUser(username, password);
-  let response = (await sync(accessToken)) as any;
+export async function getRoomsFromSync(
+  synapse: SynapseInstance,
+  username = 'user1',
+  password = 'pass',
+) {
+  let { accessToken } = await loginUser(synapse, username, password);
+  let response = (await sync(synapse, accessToken)) as any;
   return response.rooms;
 }
 

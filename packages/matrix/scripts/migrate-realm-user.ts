@@ -21,7 +21,10 @@ if (!realmUser) {
 }
 
 (async () => {
-  let cred = await loginUser(adminUser, adminPassword, matrixURL);
+  let synapseInstance = {
+    port: matrixURL ? matrixURL.split(':')[1] : 8008,
+  } as any;
+  let cred = await loginUser(synapseInstance, adminUser, adminPassword);
   if (!cred.userId) {
     console.error(
       `Incorrect admin credentials. Specify the matrix admin credentials in the ADMIN_USERNAME and ADMIN_PASSWORD environment variables`,
@@ -29,6 +32,6 @@ if (!realmUser) {
     process.exit(-1);
   }
   let password = await realmPassword(realmUser, realmSecretSeed);
-  await updateUser(cred.accessToken, realmUser, { password, matrixURL });
+  await updateUser(synapseInstance, cred.accessToken, realmUser, { password });
   console.log(`completed migration of ${realmUser}`);
 })().catch((e) => console.error(`unexpected error`, e));

@@ -261,7 +261,7 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    let messages = await getRoomEvents();
+    let messages = await getRoomEvents(synapse);
     let message = messages[messages.length - 1];
     let messageData = JSON.parse(message.content.data);
     let cardText = await (
@@ -327,7 +327,7 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    let messages = await getRoomEvents();
+    let messages = await getRoomEvents(synapse);
     let lastMessage = messages[messages.length - 1];
     let attachedFiles = JSON.parse(lastMessage.content.data).attachedFiles;
     expect(attachedFiles.length).toStrictEqual(1);
@@ -396,7 +396,7 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    let messages = await getRoomEvents();
+    let messages = await getRoomEvents(synapse);
     let lastMessage = messages[messages.length - 1];
 
     let attachedCards = JSON.parse(lastMessage.content.data).attachedCards;
@@ -922,7 +922,7 @@ test.describe('Room messages', () => {
 
     // There should only be one card fragments event for multiple message events
     // if the card remains unchanged and is attached multiple times.
-    let events = await getRoomEvents();
+    let events = await getRoomEvents(synapse);
     let messageEvents = events.filter(
       (e) =>
         e.type === 'm.room.message' &&
@@ -974,6 +974,7 @@ test.describe('Room messages', () => {
     let room1 = await getRoomId(page);
 
     let event1 = await putEvent(
+      synapse,
       userCred.accessToken,
       room1,
       'm.room.message',
@@ -994,6 +995,7 @@ test.describe('Room messages', () => {
     ]);
 
     let replaceEvent1 = await putEvent(
+      synapse,
       userCred.accessToken,
       room1,
       'm.room.message',
@@ -1019,6 +1021,7 @@ test.describe('Room messages', () => {
     ]);
 
     let replaceEvent2 = await putEvent(
+      synapse,
       userCred.accessToken,
       room1,
       'm.room.message',

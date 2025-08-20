@@ -65,7 +65,7 @@ test.describe('Commands', () => {
     await sendMessage(page, room1, 'please change this card');
     let message;
     await expect(async () => {
-      message = (await getRoomEvents()).pop()!;
+      message = (await getRoomEvents(synapse)).pop()!;
       expect(message?.content?.msgtype).toStrictEqual(
         APP_BOXEL_MESSAGE_MSGTYPE,
       );
@@ -145,7 +145,7 @@ test.describe('Commands', () => {
     await sendMessage(page, room1, 'please change this card');
     let message;
     await expect(async () => {
-      message = (await getRoomEvents()).pop()!;
+      message = (await getRoomEvents(synapse)).pop()!;
       expect(message?.content?.msgtype).toStrictEqual(
         APP_BOXEL_MESSAGE_MSGTYPE,
       );
@@ -190,12 +190,19 @@ test.describe('Commands', () => {
         `[data-test-stack-card="${appURL}/index"] [data-test-cards-grid-item="${cardId}"]`,
       )
       .click();
-    await putEvent(userCred.accessToken, room1, 'm.room.message', '1', content);
+    await putEvent(
+      synapse,
+      userCred.accessToken,
+      room1,
+      'm.room.message',
+      '1',
+      content,
+    );
     await page.locator('[data-test-command-apply]').click();
     await page.locator('[data-test-command-idle]');
 
     await expect(async () => {
-      let events = await getRoomEvents('user1', 'pass', room1);
+      let events = await getRoomEvents(synapse, 'user1', 'pass', room1);
       let commandResultEvent = (events as any).find(
         (e: any) => e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       );
@@ -237,11 +244,18 @@ test.describe('Commands', () => {
         `[data-test-stack-card="${appURL}/index"] [data-test-cards-grid-item="${card_id}"]`,
       )
       .click();
-    await putEvent(userCred.accessToken, room1, 'm.room.message', '1', content);
+    await putEvent(
+      synapse,
+      userCred.accessToken,
+      room1,
+      'm.room.message',
+      '1',
+      content,
+    );
     await page.locator('[data-test-command-apply]').click();
     await page.locator('[data-test-command-idle]');
     await expect(async () => {
-      let events = await getRoomEvents('user1', 'pass', room1);
+      let events = await getRoomEvents(synapse, 'user1', 'pass', room1);
       let commandResultEvent = (events as any).find(
         (e: any) => e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       );
@@ -307,34 +321,41 @@ test.describe('Commands', () => {
     await page.locator('[data-test-message-idx="0"]').waitFor();
 
     let roomId = await getRoomId(page);
-    let roomEvents = await getRoomEvents('user1', 'pass', roomId);
+    let roomEvents = await getRoomEvents(synapse, 'user1', 'pass', roomId);
     let numEventsBeforeResponse = roomEvents.length;
     let agentId = getAgentId(roomEvents);
     // Note: this should really be posted by the aibot user but we can't do that easily
     // in this test, and this reproduces the bug
-    await putEvent(userCred.accessToken, roomId, 'm.room.message', '1', {
-      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      format: 'org.matrix.custom.html',
-      body: '',
-      data: JSON.stringify({
-        context: {
-          agentId,
-        },
-      }),
-      isStreamingFinished: true,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
-        {
-          id: '5e226a0f-4014-4e21-b051-ebbb92cabdcc',
-          name: 'switch-submode_dd88',
-          arguments: {
-            description: 'Switching to code submode',
-            attributes: {
-              submode: 'code',
+    await putEvent(
+      synapse,
+      userCred.accessToken,
+      roomId,
+      'm.room.message',
+      '1',
+      {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        body: '',
+        data: JSON.stringify({
+          context: {
+            agentId,
+          },
+        }),
+        isStreamingFinished: true,
+        [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          {
+            id: '5e226a0f-4014-4e21-b051-ebbb92cabdcc',
+            name: 'switch-submode_dd88',
+            arguments: {
+              description: 'Switching to code submode',
+              attributes: {
+                submode: 'code',
+              },
             },
           },
-        },
-      ],
-    });
+        ],
+      },
+    );
     await page.locator('[data-test-message-idx="1"]').waitFor();
 
     // Note: you don't have to click on apply button, because command on Skill
@@ -356,10 +377,10 @@ test.describe('Commands', () => {
     // verify that command result event was created correctly
     await waitUntil(
       async () =>
-        (await getRoomEvents('user1', 'pass', roomId)).length >
+        (await getRoomEvents(synapse, 'user1', 'pass', roomId)).length >
         numEventsBeforeResponse + 2,
     );
-    let message = (await getRoomEvents('user1', 'pass', roomId))
+    let message = (await getRoomEvents(synapse, 'user1', 'pass', roomId))
       .reverse()
       .slice(0, 5)
       .find((message) => {
@@ -386,29 +407,36 @@ test.describe('Commands', () => {
 
     // Note: this should really be posted by the aibot user but we can't do that easily
     // in this test, and this reproduces the bug
-    await putEvent(userCred.accessToken, roomId, 'm.room.message', '2', {
-      body: '',
-      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      format: 'org.matrix.custom.html',
-      isStreamingFinished: true,
-      data: JSON.stringify({
-        context: {
-          agentId,
-        },
-      }),
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
-        {
-          id: 'a8fe43a4-7bd3-40a7-8455-50e31038e3a4',
-          name: 'switch-submode_dd88',
-          arguments: {
-            description: 'Switching to interact submode',
-            attributes: {
-              submode: 'interact',
+    await putEvent(
+      synapse,
+      userCred.accessToken,
+      roomId,
+      'm.room.message',
+      '2',
+      {
+        body: '',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        data: JSON.stringify({
+          context: {
+            agentId,
+          },
+        }),
+        [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+          {
+            id: 'a8fe43a4-7bd3-40a7-8455-50e31038e3a4',
+            name: 'switch-submode_dd88',
+            arguments: {
+              description: 'Switching to interact submode',
+              attributes: {
+                submode: 'interact',
+              },
             },
           },
-        },
-      ],
-    });
+        ],
+      },
+    );
 
     await page.waitForSelector('[data-test-message-idx="3"]');
 

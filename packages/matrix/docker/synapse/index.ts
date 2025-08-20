@@ -284,13 +284,13 @@ export async function registerUser(
   // so it appears in the list of available realms
   if (username.startsWith('user')) {
     await updateAccountData(
+      synapse,
       response.user_id,
       response.access_token,
       APP_BOXEL_REALMS_EVENT_TYPE,
       JSON.stringify({
         realms: [`${appURL}/`],
       }),
-      synapse.port,
     );
   }
 
@@ -303,13 +303,11 @@ export async function registerUser(
 }
 
 export async function loginUser(
+  synapse: SynapseInstance,
   username: string,
   password: string,
-  matrixURL?: string,
 ): Promise<Credentials> {
-  let url = matrixURL
-    ? `${matrixURL}/_matrix/client/r0/login`
-    : `http://localhost:${SYNAPSE_PORT}/_matrix/client/r0/login`;
+  let url = `http://localhost:${synapse.port}/_matrix/client/r0/login`;
   let response = await (
     await fetch(url, {
       method: 'POST',
@@ -329,12 +327,13 @@ export async function loginUser(
 }
 
 export async function updateDisplayName(
+  synapse: SynapseInstance,
   userId: string,
   accessToken: string,
   newDisplayName: string,
 ): Promise<void> {
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/profile/${userId}/displayname`,
+    `http://localhost:${synapse.port}/_matrix/client/v3/profile/${userId}/displayname`,
     {
       method: 'PUT',
       headers: {
@@ -354,13 +353,20 @@ export async function updateDisplayName(
 }
 
 export async function createRegistrationToken(
+  synapse: SynapseInstance,
   adminAccessToken: string,
   registrationToken: string,
   usesAllowed = 1000,
-  synapsePort = DEVELOPMENT_SYNAPSE_PORT,
 ) {
+  console.log(
+    'createRegistrationToken',
+    adminAccessToken,
+    registrationToken,
+    usesAllowed,
+    synapse.port,
+  );
   let res = await fetch(
-    `http://localhost:${synapsePort}/_synapse/admin/v1/registration_tokens/new`,
+    `http://localhost:${synapse.port}/_synapse/admin/v1/registration_tokens/new`,
     {
       method: 'POST',
       headers: {
@@ -382,6 +388,7 @@ export async function createRegistrationToken(
 }
 
 export async function updateUser(
+  synapse: SynapseInstance,
   adminAccessToken: string,
   userId: string,
   {
@@ -389,21 +396,14 @@ export async function updateUser(
     displayname,
     avatar_url,
     emailAddresses,
-    matrixURL,
-    synapsePort = DEVELOPMENT_SYNAPSE_PORT,
   }: {
     password?: string;
     displayname?: string;
     avatar_url?: string;
     emailAddresses?: string[];
-    matrixURL?: string;
-    synapsePort?: number;
   },
 ) {
-  // FIXME can the port really be optional? URL?
-  let url = matrixURL
-    ? `${matrixURL}/_synapse/admin/v2/users/${userId}`
-    : `http://localhost:${synapsePort}/_synapse/admin/v2/users/${userId}`;
+  let url = `http://localhost:${synapse.port}/_synapse/admin/v2/users/${userId}`;
   let res = await fetch(url, {
     method: 'PUT',
     headers: {
@@ -431,15 +431,14 @@ export async function updateUser(
 }
 
 export async function updateAccountData(
+  synapse: SynapseInstance,
   userId: string,
   accessToken: string,
   type: string,
   data: string,
-  synapsePort = DEVELOPMENT_SYNAPSE_PORT,
 ): Promise<void> {
-  // FIXME why compose the URL vs using a complete one, consistent helper functions?
   let response = await fetch(
-    `http://localhost:${synapsePort}/_matrix/client/v3/user/${userId}/account_data/${type}`,
+    `http://localhost:${synapse.port}/_matrix/client/v3/user/${userId}/account_data/${type}`,
     {
       method: 'PUT',
       headers: {
@@ -457,12 +456,13 @@ export async function updateAccountData(
 }
 
 export async function getAccountData<T>(
+  synapse: SynapseInstance,
   userId: string,
   accessToken: string,
   type: string,
 ): Promise<T> {
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/user/${userId}/account_data/${type}`,
+    `http://localhost:${synapse.port}/_matrix/client/v3/user/${userId}/account_data/${type}`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -473,9 +473,12 @@ export async function getAccountData<T>(
   return json as T;
 }
 
-export async function getJoinedRooms(accessToken: string) {
+export async function getJoinedRooms(
+  synapse: SynapseInstance,
+  accessToken: string,
+) {
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/joined_rooms`,
+    `http://localhost:${synapse.port}/_matrix/client/v3/joined_rooms`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -487,12 +490,13 @@ export async function getJoinedRooms(accessToken: string) {
 }
 
 export async function getRoomStateEventType(
+  synapse: SynapseInstance,
   accessToken: string,
   roomId: string,
   eventType: string,
 ) {
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/state/${eventType}`,
+    `http://localhost:${synapse.port}/_matrix/client/v3/rooms/${roomId}/state/${eventType}`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -502,20 +506,39 @@ export async function getRoomStateEventType(
   return await response.json();
 }
 
-export async function getRoomName(accessToken: string, roomId: string) {
-  return await getRoomStateEventType(accessToken, roomId, 'm.room.name');
-}
-
-export async function getRoomRetentionPolicy(
+export async function getRoomName(
+  synapse: SynapseInstance,
   accessToken: string,
   roomId: string,
 ) {
-  return await getRoomStateEventType(accessToken, roomId, 'm.room.retention');
+  return await getRoomStateEventType(
+    synapse,
+    accessToken,
+    roomId,
+    'm.room.name',
+  );
 }
 
-export async function getRoomMembers(roomId: string, accessToken: string) {
+export async function getRoomRetentionPolicy(
+  synapse: SynapseInstance,
+  accessToken: string,
+  roomId: string,
+) {
+  return await getRoomStateEventType(
+    synapse,
+    accessToken,
+    roomId,
+    'm.room.retention',
+  );
+}
+
+export async function getRoomMembers(
+  synapse: SynapseInstance,
+  roomId: string,
+  accessToken: string,
+) {
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/joined_members`,
+    `http://localhost:${synapse.port}/_matrix/client/v3/rooms/${roomId}/joined_members`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -525,9 +548,9 @@ export async function getRoomMembers(roomId: string, accessToken: string) {
   return await response.json();
 }
 
-export async function sync(accessToken: string) {
+export async function sync(synapse: SynapseInstance, accessToken: string) {
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/sync`,
+    `http://localhost:${synapse.port}/_matrix/client/v3/sync`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -544,6 +567,7 @@ interface MessageOptions {
 const DEFAULT_PAGE_SIZE = 50;
 
 export async function getAllRoomEvents(
+  synapse: SynapseInstance,
   roomId: string,
   accessToken: string,
   opts?: MessageOptions,
@@ -553,7 +577,7 @@ export async function getAllRoomEvents(
 
   do {
     let response = await fetch(
-      `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/messages?dir=${
+      `http://localhost:${synapse.port}/_matrix/client/v3/rooms/${roomId}/messages?dir=${
         opts?.direction ? opts.direction.slice(0, 1) : 'f'
       }&limit=${opts?.pageSize ?? DEFAULT_PAGE_SIZE}${
         from ? '&from=' + from : ''
@@ -598,13 +622,14 @@ interface MessageEvent {
 }
 
 export async function putEvent(
+  synapse: SynapseInstance,
   accessToken: string,
   roomId: string,
   eventType: string,
   txnId: string,
   body: any,
 ) {
-  let url = `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/send/${eventType}/${txnId}`;
+  let url = `http://localhost:${synapse.port}/_matrix/client/v3/rooms/${roomId}/send/${eventType}/${txnId}`;
   let res = await await fetch(url, {
     method: 'PUT',
     headers: {

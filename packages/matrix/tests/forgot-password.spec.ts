@@ -45,20 +45,19 @@ test.describe('Forgot password', () => {
 
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await createRegistrationToken(
+      synapse,
       admin.accessToken,
       REGISTRATION_TOKEN,
       1000,
-      synapse.port,
     );
     await registerRealmUsers(synapse);
     realmServer = await startRealmServer();
     await clearLocalStorage(page, appURL);
     await gotoRegistration(page, appURL);
     await registerUser(synapse, username, password);
-    await updateUser(admin.accessToken, '@user1:localhost', {
+    await updateUser(synapse, admin.accessToken, '@user1:localhost', {
       emailAddresses: [email],
       displayname: name,
-      synapsePort: synapse.port,
     });
     await setupUserSubscribed('@user1:localhost', realmServer);
   });

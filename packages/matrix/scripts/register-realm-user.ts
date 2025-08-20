@@ -19,13 +19,14 @@ if (!realmUser) {
   process.exit(-1);
 }
 (async () => {
+  let synapseInstance = { port: 8008 } as any;
   let password = await realmPassword(realmUser, realmSecretSeed);
   return new Promise<string>((resolve, reject) => {
     const command = `docker exec boxel-synapse register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u ${realmUser} -p ${password} --no-admin`;
     childProcess.exec(command, async (err, stdout) => {
       if (err) {
         if (stdout.includes('User ID already taken')) {
-          let cred = await loginUser(realmUser, password);
+          let cred = await loginUser(synapseInstance, realmUser, password);
           if (!cred.userId) {
             reject(
               `User ${realmUser} already exists, but the password does not match. Use migrate-realm-user script to fix`,
