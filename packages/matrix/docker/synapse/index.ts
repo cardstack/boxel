@@ -121,7 +121,8 @@ export async function synapseStart(
   opts?: StartOptions,
   stopExisting = true,
 ): Promise<SynapseInstance> {
-  const isTestInstance = opts?.isTestInstance ?? false;
+  const isTestInstance =
+    opts?.isTestInstance ?? opts?.template?.startsWith('test');
 
   if (stopExisting) {
     let stopPromises = [];
