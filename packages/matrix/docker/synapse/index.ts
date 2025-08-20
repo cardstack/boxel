@@ -356,9 +356,10 @@ export async function createRegistrationToken(
   adminAccessToken: string,
   registrationToken: string,
   usesAllowed = 1000,
+  synapsePort = DEVELOPMENT_SYNAPSE_PORT,
 ) {
   let res = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v1/registration_tokens/new`,
+    `http://localhost:${synapsePort}/_synapse/admin/v1/registration_tokens/new`,
     {
       method: 'POST',
       headers: {
@@ -388,17 +389,20 @@ export async function updateUser(
     avatar_url,
     emailAddresses,
     matrixURL,
+    synapsePort = DEVELOPMENT_SYNAPSE_PORT,
   }: {
     password?: string;
     displayname?: string;
     avatar_url?: string;
     emailAddresses?: string[];
     matrixURL?: string;
+    synapsePort?: number;
   },
 ) {
+  // FIXME can the port really be optional? URL?
   let url = matrixURL
     ? `${matrixURL}/_synapse/admin/v2/users/${userId}`
-    : `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v2/users/${userId}`;
+    : `http://localhost:${synapsePort}/_synapse/admin/v2/users/${userId}`;
   let res = await fetch(url, {
     method: 'PUT',
     headers: {
