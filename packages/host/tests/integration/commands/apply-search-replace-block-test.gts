@@ -207,7 +207,7 @@ ${REPLACE_MARKER}`;
     } catch (error: any) {
       assert.ok(
         error.message.includes(
-          'search pattern not found in the attached source file',
+          'search pattern not found in the target source file',
         ),
         'Should throw an error when no matches are found',
       );

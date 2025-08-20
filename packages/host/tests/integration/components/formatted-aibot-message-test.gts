@@ -502,7 +502,7 @@ ${REPLACE_MARKER}
 
     assert
       .dom(
-        `[data-test-error-message="Unable to process the code patch due to invalid code coming from AI (search pattern not found in the attached source file)"]`,
+        `[data-test-error-message="Unable to process the code patch due to invalid code coming from AI (search pattern not found in the target source file)"]`,
       )
       .exists();
   });

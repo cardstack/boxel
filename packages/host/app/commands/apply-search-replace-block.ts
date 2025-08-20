@@ -13,7 +13,7 @@ let standardErrorMessage =
 export const APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES = {
   SEARCH_BLOCK_PARSE_ERROR: `${standardErrorMessage} (search block parse error)`,
   REPLACE_BLOCK_PARSE_ERROR: `${standardErrorMessage} (replace block parse error)`,
-  SEARCH_PATTERN_NOT_FOUND: `${standardErrorMessage} (search pattern not found in the attached source file)`,
+  SEARCH_PATTERN_NOT_FOUND: `${standardErrorMessage} (search pattern not found in the target source file)`,
 } as const;
 
 export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
