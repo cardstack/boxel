@@ -1,4 +1,4 @@
-import type { IContent } from 'matrix-js-sdk';
+import type { IContent, IHttpOpts, MatrixHttpApi } from 'matrix-js-sdk';
 import { Method, MatrixClient } from 'matrix-js-sdk';
 
 export class FakeMatrixClient extends MatrixClient {
@@ -28,22 +28,41 @@ export class FakeMatrixClient extends MatrixClient {
   }
 
   http = {
+    // Core request methods
     authedRequest: async (
       _method: Method,
       _path: string,
       _queryParams: any,
+      _body?: any,
+      _opts?: any,
     ) => {
       return { chunk: [] };
     },
-  } as any;
+  } as unknown as MatrixHttpApi<IHttpOpts & { onlyData: true }>;
 
-  sendEvent = (async (
+  sendEvent = async (
     roomId: string,
-    eventType: string,
-    content: IContent,
+    eventTypeOrThreadId: string | null,
+    contentOrEventType: IContent | string,
+    txnIdOrContent?: string | IContent,
     _txnId?: string,
   ): Promise<{ event_id: string }> => {
     const messageEventId = this.eventId.toString();
+
+    // Handle both overloads
+    let eventType: string;
+    let content: IContent;
+
+    if (typeof contentOrEventType === 'string') {
+      // Second overload: (roomId, threadId, eventType, content, txnId)
+      eventType = contentOrEventType;
+      content = txnIdOrContent as IContent;
+    } else {
+      // First overload: (roomId, eventType, content, txnId)
+      eventType = eventTypeOrThreadId as string;
+      content = contentOrEventType;
+    }
+
     this.sentEvents.push({
       eventId: messageEventId,
       roomId,
@@ -52,7 +71,7 @@ export class FakeMatrixClient extends MatrixClient {
     });
     this.eventId++;
     return { event_id: messageEventId.toString() };
-  }) as any;
+  };
 
   async setRoomName(
     _roomId: string,
