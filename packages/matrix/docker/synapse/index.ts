@@ -121,8 +121,8 @@ export async function synapseStart(
   opts?: StartOptions,
   stopExisting = true,
 ): Promise<SynapseInstance> {
-  const isTestInstance =
-    opts?.isTestInstance ?? opts?.template?.startsWith('test');
+  let templateName = opts?.template ?? 'test';
+  let isTestInstance = opts?.isTestInstance ?? templateName.startsWith('test');
 
   let containerName =
     opts?.containerName ||
@@ -140,7 +140,7 @@ export async function synapseStart(
   }
 
   const synCfg = await cfgDirFromTemplate(
-    opts?.template ?? 'test',
+    templateName,
     opts?.dataDir,
     isTestInstance,
   );

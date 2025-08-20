@@ -29,9 +29,7 @@ test.describe('Login using email', () => {
 
   test.beforeEach(async ({ page }) => {
     test.setTimeout(120_000);
-    synapse = await synapseStart({
-      template: 'test',
-    });
+    synapse = await synapseStart();
     await smtpStart();
 
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);

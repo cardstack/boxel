@@ -38,7 +38,7 @@ test.describe('Room messages', () => {
   test.beforeEach(async ({ page }) => {
     await setSkillsRedirect(page);
     test.setTimeout(120_000);
-    synapse = await synapseStart({ isTestInstance: true });
+    synapse = await synapseStart();
     await registerRealmUsers(synapse);
     userCred = await registerUser(synapse, 'user1', 'pass');
     realmServer = await startRealmServer();

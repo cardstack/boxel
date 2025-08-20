@@ -36,10 +36,7 @@ test.describe('Forgot password', () => {
     // These tests specifically are pretty slow as there's lots of reloading
     // Add 30s to the overall test timeout
     test.setTimeout(120_000);
-    synapse = await synapseStart({
-      template: 'test',
-      isTestInstance: true,
-    });
+    synapse = await synapseStart();
 
     await smtpStart();
 

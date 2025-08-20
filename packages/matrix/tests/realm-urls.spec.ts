@@ -23,9 +23,7 @@ test.describe('Realm URLs in Matrix account data', () => {
   let user: { accessToken: string };
 
   test.beforeEach(async () => {
-    synapse = await synapseStart({
-      template: 'test',
-    });
+    synapse = await synapseStart();
 
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await registerRealmUsers(synapse);

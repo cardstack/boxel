@@ -38,9 +38,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     // synapse defaults to 30s for beforeEach to finish, we need a bit more time
     // to safely start the realm
     test.setTimeout(60_000);
-    synapse = await synapseStart({
-      template: 'test',
-    });
+    synapse = await synapseStart();
     await registerRealmUsers(synapse);
     await smtpStart();
     realmServer = await startRealmServer();
