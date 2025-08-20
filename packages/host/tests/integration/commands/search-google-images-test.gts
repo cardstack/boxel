@@ -35,32 +35,91 @@ module('Integration | commands | search-google-images', function (hooks) {
         if (body.url.includes('googleapis.com/customsearch/v1')) {
           // Mock Google Custom Search API response
           const mockResponse = {
+            kind: 'customsearch#search',
+            url: {
+              type: 'application/json',
+              template:
+                'https://www.googleapis.com/customsearch/v1?q={searchTerms}&num={count?}&start={startIndex?}&searchType={searchType}&key={key}&cx={cx?}',
+            },
+            queries: {
+              request: [
+                {
+                  title: 'Google Custom Search - test',
+                  totalResults: '2',
+                  searchTerms: 'test',
+                  count: 2,
+                  startIndex: 1,
+                  inputEncoding: 'utf8',
+                  outputEncoding: 'utf8',
+                  safe: 'off',
+                  searchType: 'image',
+                },
+              ],
+              nextPage: [
+                {
+                  title: 'Google Custom Search - test',
+                  totalResults: '2',
+                  searchTerms: 'test',
+                  count: 2,
+                  startIndex: 3,
+                  inputEncoding: 'utf8',
+                  outputEncoding: 'utf8',
+                  safe: 'off',
+                  searchType: 'image',
+                },
+              ],
+            },
+            context: {
+              title: 'boxel-search-image',
+            },
+            searchInformation: {
+              searchTime: 0.5,
+              formattedSearchTime: '0.50',
+              totalResults: '2',
+              formattedTotalResults: '2',
+            },
             items: [
               {
+                kind: 'customsearch#result',
                 title: 'Test Image 1',
+                htmlTitle: '<b>Test</b> Image 1',
                 link: 'https://example.com/image1.jpg',
+                displayLink: 'example.com',
+                snippet: 'Test Image 1',
+                htmlSnippet: '<b>Test</b> Image 1',
+                mime: 'image/jpeg',
+                fileFormat: 'image/jpeg',
                 image: {
-                  thumbnailLink: 'https://example.com/thumb1.jpg',
                   contextLink: 'https://example.com/page1',
-                  width: 800,
                   height: 600,
+                  width: 800,
+                  byteSize: 50000,
+                  thumbnailLink: 'https://example.com/thumb1.jpg',
+                  thumbnailHeight: 84,
+                  thumbnailWidth: 150,
                 },
               },
               {
+                kind: 'customsearch#result',
                 title: 'Test Image 2',
+                htmlTitle: '<b>Test</b> Image 2',
                 link: 'https://example.com/image2.jpg',
+                displayLink: 'example.com',
+                snippet: 'Test Image 2',
+                htmlSnippet: '<b>Test</b> Image 2',
+                mime: 'image/png',
+                fileFormat: 'image/png',
                 image: {
-                  thumbnailLink: 'https://example.com/thumb2.jpg',
                   contextLink: 'https://example.com/page2',
-                  width: 1024,
                   height: 768,
+                  width: 1024,
+                  byteSize: 75000,
+                  thumbnailLink: 'https://example.com/thumb2.jpg',
+                  thumbnailHeight: 100,
+                  thumbnailWidth: 150,
                 },
               },
             ],
-            searchInformation: {
-              totalResults: '2',
-              searchTime: 0.5,
-            },
           };
 
           return new Response(JSON.stringify(mockResponse), {
@@ -106,6 +165,27 @@ module('Integration | commands | search-google-images', function (hooks) {
       0.5,
       'Should have correct search time',
     );
+    assert.strictEqual(
+      result.formattedTotalResults,
+      '2',
+      'Should have correct formatted total results',
+    );
+    assert.strictEqual(
+      result.formattedSearchTime,
+      '0.50',
+      'Should have correct formatted search time',
+    );
+    assert.strictEqual(result.hasNextPage, true, 'Should have next page');
+    assert.strictEqual(
+      result.nextPageStartIndex,
+      3,
+      'Should have correct next page start index',
+    );
+    assert.strictEqual(
+      result.currentStartIndex,
+      1,
+      'Should have correct current start index',
+    );
 
     // Check first image
     const firstImage = result.images[0];
@@ -131,6 +211,41 @@ module('Integration | commands | search-google-images', function (hooks) {
     );
     assert.strictEqual(firstImage.width, 800, 'Should have correct width');
     assert.strictEqual(firstImage.height, 600, 'Should have correct height');
+    assert.strictEqual(
+      firstImage.byteSize,
+      50000,
+      'Should have correct byte size',
+    );
+    assert.strictEqual(
+      firstImage.thumbnailWidth,
+      150,
+      'Should have correct thumbnail width',
+    );
+    assert.strictEqual(
+      firstImage.thumbnailHeight,
+      84,
+      'Should have correct thumbnail height',
+    );
+    assert.strictEqual(
+      firstImage.mime,
+      'image/jpeg',
+      'Should have correct mime type',
+    );
+    assert.strictEqual(
+      firstImage.fileFormat,
+      'image/jpeg',
+      'Should have correct file format',
+    );
+    assert.strictEqual(
+      firstImage.displayLink,
+      'example.com',
+      'Should have correct display link',
+    );
+    assert.strictEqual(
+      firstImage.snippet,
+      'Test Image 1',
+      'Should have correct snippet',
+    );
   });
 
   test('uses default maxResults when not provided', async function (assert) {
@@ -170,5 +285,28 @@ module('Integration | commands | search-google-images', function (hooks) {
       2,
       'Should return available images',
     );
+  });
+
+  test('supports pagination with startIndex parameter', async function (assert) {
+    const commandService = getService('command-service');
+    const searchCommand = new SearchGoogleImagesCommand(
+      commandService.commandContext,
+    );
+
+    const input = {
+      query: 'test images',
+      maxResults: 5,
+      startIndex: 3, // Start from the third result
+    };
+
+    const result = await searchCommand.execute(input);
+
+    assert.ok(result, 'Command should return a result');
+    assert.strictEqual(
+      result.currentStartIndex,
+      3,
+      'Should have correct start index',
+    );
+    assert.strictEqual(result.images.length, 2, 'Should return images');
   });
 });

@@ -31,11 +31,12 @@ export default class SearchGoogleImagesCommand extends HostBaseCommand<
 
     try {
       const maxResults = input.maxResults || 10;
+      const startIndex = input.startIndex || 1;
       const searchQuery = encodeURIComponent(input.query);
 
       // Build the Google Custom Search API URL
       // The API key and search engine ID will be handled by the proxy endpoint
-      const searchUrl = `https://www.googleapis.com/customsearch/v1?q=${searchQuery}&searchType=image&num=${Math.min(maxResults, 10)}`;
+      const searchUrl = `https://www.googleapis.com/customsearch/v1?q=${searchQuery}&searchType=image&num=${Math.min(maxResults, 10)}&start=${startIndex}&cx=064501294a5c9430a`;
 
       const sendRequestViaProxyCommand = new SendRequestViaProxyCommand(
         this.commandService.commandContext,
@@ -44,7 +45,6 @@ export default class SearchGoogleImagesCommand extends HostBaseCommand<
       const result = await sendRequestViaProxyCommand.execute({
         url: searchUrl,
         method: 'GET',
-        requestBody: '',
         headers: {
           Accept: 'application/json',
         },
@@ -67,15 +67,35 @@ export default class SearchGoogleImagesCommand extends HostBaseCommand<
           contextUrl: item.image?.contextLink || '',
           width: item.image?.width || 0,
           height: item.image?.height || 0,
+          byteSize: item.image?.byteSize || 0,
+          thumbnailWidth: item.image?.thumbnailWidth || 0,
+          thumbnailHeight: item.image?.thumbnailHeight || 0,
+          mime: item.mime || '',
+          fileFormat: item.fileFormat || '',
+          displayLink: item.displayLink || '',
+          snippet: item.snippet || '',
         })) || [];
 
       const totalResults = responseData.searchInformation?.totalResults || 0;
       const searchTime = responseData.searchInformation?.searchTime || 0;
+      const formattedTotalResults =
+        responseData.searchInformation?.formattedTotalResults || '';
+      const formattedSearchTime =
+        responseData.searchInformation?.formattedSearchTime || '';
+
+      // Extract pagination information
+      const nextPage = responseData.queries?.nextPage?.[0] || null;
+      const hasNextPage = !!nextPage;
 
       return new SearchGoogleImagesResult({
         images,
         totalResults: parseInt(totalResults) || 0,
         searchTime: parseFloat(searchTime) || 0,
+        formattedTotalResults,
+        formattedSearchTime,
+        hasNextPage,
+        nextPageStartIndex: nextPage?.startIndex || null,
+        currentStartIndex: startIndex,
       });
     } catch (error) {
       console.error('Google Image Search error:', error);

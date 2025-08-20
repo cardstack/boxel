@@ -1,19 +1,24 @@
 import { type CreditStrategy } from './credit-strategies';
 import { CreditStrategyFactory } from './credit-strategies';
 
+export type AuthMethod = 'header' | 'url-parameter';
+
 export interface AllowedProxyDestination {
   url: string;
   apiKey: string;
   creditStrategy: CreditStrategy;
   supportsStreaming: boolean;
+  authMethod: AuthMethod;
+  authParameterName?: string; // For URL parameter auth, e.g., 'key' for Google, 'api_key' for others
 }
 
 interface ProxyDestinationInput {
   url: string;
   apiKey: string;
   creditStrategy: 'openrouter' | 'no-credit';
-  whitelisted: boolean; // Keep for backward compatibility with config files
   supportsStreaming: boolean;
+  authMethod?: AuthMethod; // Defaults to 'header' for backward compatibility
+  authParameterName?: string; // For URL parameter auth
 }
 
 export class AllowedProxyDestinations {
@@ -37,6 +42,8 @@ export class AllowedProxyDestinations {
           config.apiKey,
         ),
         supportsStreaming: config.supportsStreaming,
+        authMethod: config.authMethod || 'header', // Default to header for backward compatibility
+        authParameterName: config.authParameterName,
       };
     }
   }

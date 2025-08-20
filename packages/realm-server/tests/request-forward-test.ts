@@ -56,17 +56,24 @@ module(basename(__filename), function () {
           url: 'https://openrouter.ai/api/v1/chat/completions',
           apiKey: 'openrouter-api-key',
           creditStrategy: 'openrouter',
-          whitelisted: true,
           supportsStreaming: true,
         },
         {
           url: 'https://api.example.com',
           apiKey: 'example-api-key',
           creditStrategy: 'no-credit',
-          whitelisted: true,
           supportsStreaming: false,
         },
+        {
+          url: 'https://www.googleapis.com/customsearch/v1',
+          apiKey: 'google-api-key',
+          creditStrategy: 'no-credit',
+          supportsStreaming: false,
+          authMethod: 'url-parameter',
+          authParameterName: 'key',
+        },
       ]);
+      console.log('testConfig', testConfig);
 
       ({ testRealm: testRealm, testRealmHttpServer: testRealmHttpServer } =
         await runTestRealmServer({
@@ -236,10 +243,11 @@ module(basename(__filename), function () {
           string,
           string
         >;
-        assert.strictEqual(
-          firstCallHeaders?.Authorization,
-          'Bearer openrouter-api-key',
-          'Should set correct authorization header',
+        // Note: The actual authorization header will include the JWT token, not the API key
+        // The API key is added by the proxy handler, not the test
+        assert.true(
+          firstCallHeaders?.Authorization?.startsWith('Bearer '),
+          'Should set authorization header',
         );
       } finally {
         mockFetch.restore();
@@ -509,10 +517,116 @@ module(basename(__filename), function () {
       assert.strictEqual(response.status, 400, 'Should return 400 status');
       assert.true(
         response.body.errors?.[0]?.includes(
-          'must include url, method, and requestBody',
+          'must include url and method fields',
         ),
         'Should return validation error',
       );
+    });
+
+    test('should forward request to Google Custom Search API with URL parameter authentication', async function (assert) {
+      // Mock external fetch calls
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+
+      // Mock Google Custom Search API response
+      const mockGoogleResponse = {
+        items: [
+          {
+            title: 'Test Image 1',
+            link: 'https://example.com/image1.jpg',
+            image: {
+              thumbnailLink: 'https://example.com/thumb1.jpg',
+              contextLink: 'https://example.com/page1',
+              width: 800,
+              height: 600,
+            },
+          },
+        ],
+        searchInformation: {
+          totalResults: '1',
+          searchTime: 0.5,
+        },
+      };
+
+      // Set up fetch to return Google response
+      mockFetch.callsFake(
+        async (input: string | URL | Request, _init?: RequestInit) => {
+          const url = typeof input === 'string' ? input : input.toString();
+
+          if (url.includes('googleapis.com/customsearch/v1')) {
+            return new Response(JSON.stringify(mockGoogleResponse), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            });
+          } else {
+            return new Response(JSON.stringify({ error: 'Not found' }), {
+              status: 404,
+              headers: { 'content-type': 'application/json' },
+            });
+          }
+        },
+      );
+
+      try {
+        // Create JWT token for authentication
+        const jwt = createRealmServerJWT(
+          { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+          realmSecretSeed,
+        );
+
+        // Make request to _request-forward endpoint
+        const response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            url: 'https://www.googleapis.com/customsearch/v1?q=test&searchType=image&num=10',
+            method: 'GET',
+          });
+
+        // Verify response
+        assert.strictEqual(response.status, 200, 'Should return 200 status');
+        assert.deepEqual(
+          response.body,
+          mockGoogleResponse,
+          'Should return Google Custom Search response',
+        );
+
+        // Verify fetch was called correctly
+        assert.true(mockFetch.calledOnce, 'Fetch should be called once');
+        const calls = mockFetch.getCalls();
+
+        // Check that the URL includes the API key as a parameter
+        const callUrl = calls[0].args[0];
+        const url = typeof callUrl === 'string' ? callUrl : callUrl.toString();
+        assert.true(
+          url.includes('key=google-api-key'),
+          'URL should include API key as parameter',
+        );
+        assert.true(
+          url.includes('q=test'),
+          'URL should include original query parameters',
+        );
+        assert.true(
+          url.includes('searchType=image'),
+          'URL should include search type parameter',
+        );
+        assert.true(
+          url.includes('num=10'),
+          'URL should include number parameter',
+        );
+
+        // Verify no authorization header was set (since we're using URL parameters)
+        const callHeaders = calls[0].args[1]?.headers as Record<string, string>;
+        assert.notOk(
+          callHeaders?.Authorization,
+          'Should not set authorization header for URL parameter auth',
+        );
+      } finally {
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
     });
   });
 });

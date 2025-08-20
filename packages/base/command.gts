@@ -326,10 +326,16 @@ export class GetAllRealmMetasResult extends CardDef {
 export class SearchGoogleImagesInput extends CardDef {
   @field query = contains(StringField);
   @field maxResults = contains(NumberField); // optional, default 10
+  @field startIndex = contains(NumberField); // optional, default 1, for pagination
 }
 
 export class SearchGoogleImagesResult extends CardDef {
   @field images = containsMany(JsonField);
   @field totalResults = contains(NumberField);
   @field searchTime = contains(NumberField);
+  @field formattedTotalResults = contains(StringField);
+  @field formattedSearchTime = contains(StringField);
+  @field hasNextPage = contains(BooleanField);
+  @field nextPageStartIndex = contains(NumberField);
+  @field currentStartIndex = contains(NumberField);
 }
