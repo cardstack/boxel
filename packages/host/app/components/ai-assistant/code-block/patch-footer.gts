@@ -11,7 +11,7 @@ export interface CodeBlockPatchFooterSignature {
 const CodeBlockPatchFooterComponent: TemplateOnlyComponent<CodeBlockPatchFooterSignature> =
   <template>
     <style scoped>
-      .code-block-patch-footer {
+      footer {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -19,15 +19,14 @@ const CodeBlockPatchFooterComponent: TemplateOnlyComponent<CodeBlockPatchFooterS
         background-color: var(--boxel-650);
         color: var(--boxel-light);
         padding: 8px 12px;
-        font-size: 14px;
-        height: 50px;
+        height: 60px;
       }
 
       :deep(.code-patch-error) {
         padding: 0;
       }
     </style>
-    <div class='code-block-patch-footer'>{{yield}}</div>
+    <footer>{{yield}}</footer>
   </template>;
 
 export default CodeBlockPatchFooterComponent;
