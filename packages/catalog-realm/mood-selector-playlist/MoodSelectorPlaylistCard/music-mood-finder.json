@@ -1,0 +1,96 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "selectorTitle": "How are you feeling?",
+      "description": "Choose your current mood and we'll suggest the perfect playlist to match your vibe",
+      "moods": [
+        {
+          "name": "Energetic",
+          "emoji": "⚡",
+          "description": "High-energy tracks for workouts and motivation",
+          "color": "#ef4444",
+          "gradient": "linear-gradient(135deg, #ef4444, #f97316)"
+        },
+        {
+          "name": "Relaxed",
+          "emoji": "🌙",
+          "description": "Chill vibes for unwinding and peace",
+          "color": "#3b82f6",
+          "gradient": "linear-gradient(135deg, #3b82f6, #6366f1)"
+        },
+        {
+          "name": "Focused",
+          "emoji": "🎯",
+          "description": "Instrumental music for concentration",
+          "color": "#10b981",
+          "gradient": "linear-gradient(135deg, #10b981, #059669)"
+        },
+        {
+          "name": "Happy",
+          "emoji": "☀️",
+          "description": "Feel-good songs to brighten your day",
+          "color": "#f59e0b",
+          "gradient": "linear-gradient(135deg, #f59e0b, #d97706)"
+        },
+        {
+          "name": "Nostalgic",
+          "emoji": "🎭",
+          "description": "Classic hits that bring back memories",
+          "color": "#8b5cf6",
+          "gradient": "linear-gradient(135deg, #8b5cf6, #7c3aed)"
+        },
+        {
+          "name": "Romantic",
+          "emoji": "💝",
+          "description": "Love songs for special moments",
+          "color": "#ec4899",
+          "gradient": "linear-gradient(135deg, #ec4899, #db2777)"
+        }
+      ]
+    },
+    "relationships": {
+      "moods.0.playlist": {
+        "links": {
+          "self": "../../playlist/PlaylistCard/energetic-workout"
+        }
+      },
+      "moods.1.playlist": {
+        "links": {
+          "self": "../../playlist/PlaylistCard/relaxed-chill"
+        }
+      },
+      "moods.2.playlist": {
+        "links": {
+          "self": "../../playlist/PlaylistCard/focused-instrumental"
+        }
+      },
+      "moods.3.playlist": {
+        "links": {
+          "self": "../../playlist/PlaylistCard/energy-boost"
+        }
+      },
+      "moods.4.playlist": {
+        "links": {
+          "self": "../../playlist/PlaylistCard/midnight-chill"
+        }
+      },
+      "moods.5.playlist": {
+        "links": {
+          "self": "../../playlist/PlaylistCard/focus-flow"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../mood-selector-playlist",
+        "name": "MoodSelectorPlaylistCard"
+      }
+    }
+  }
+}

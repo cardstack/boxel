@@ -1,0 +1,76 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "progressionName": "I-V-vi-IV (Classic Rock)",
+      "description": "A timeless progression that moves from stability through tension to resolution. The major-to-minor shift in the middle creates emotional depth that works across many genres.",
+      "key": "C major",
+      "scale": "major",
+      "timeSignature": "4/4",
+      "tempo": 110,
+      "genre": "Rock",
+      "difficulty": "beginner",
+      "popularSongs": "\"Let It Be\" by The Beatles, \"No Woman No Cry\" by Bob Marley, \"Beast of Burden\" by Rolling Stones",
+      "chordProgression": {
+        "progressionName": "I-V-vi-IV",
+        "key": "C major",
+        "timeSignature": "4/4",
+        "tempo": 110,
+        "chords": [
+          {
+            "chordName": "C",
+            "chordType": "major",
+            "rootNote": "C",
+            "quality": "major",
+            "note1": "C",
+            "note2": "E",
+            "note3": "G",
+            "note4": null,
+            "note5": null
+          },
+          {
+            "chordName": "G",
+            "chordType": "major",
+            "rootNote": "G",
+            "quality": "major",
+            "note1": "G",
+            "note2": "B",
+            "note3": "D",
+            "note4": null,
+            "note5": null
+          },
+          {
+            "chordName": "Am",
+            "chordType": "minor",
+            "rootNote": "A",
+            "quality": "minor",
+            "note1": "A",
+            "note2": "C",
+            "note3": "E",
+            "note4": null,
+            "note5": null
+          },
+          {
+            "chordName": "F",
+            "chordType": "major",
+            "rootNote": "F",
+            "quality": "major",
+            "note1": "F",
+            "note2": "A",
+            "note3": "C",
+            "note4": null,
+            "note5": null
+          }
+        ]
+      },
+      "title": "I-V-vi-IV (Classic Rock)"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../chord-progression",
+        "name": "ChordProgressionCard"
+      }
+    }
+  }
+}

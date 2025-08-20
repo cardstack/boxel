@@ -14,7 +14,6 @@ import { getContainsManyComponent } from './contains-many-component';
 import { LinksToEditor } from './links-to-editor';
 import { getLinksToManyComponent } from './links-to-many-component';
 import {
-  SupportedMimeType,
   Deferred,
   isCardResource,
   Loader,
@@ -66,6 +65,9 @@ import {
   type Store,
   type PrerenderedCardComponentSignature,
   getSerializer,
+  isCardError,
+  SingleCardDocument,
+  loadDocument,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
@@ -220,9 +222,9 @@ const loadLinksPromises = initSharedState(
   'loadLinksPromises',
   () => new WeakMap<BaseDef, Promise<any>>(),
 );
-const identityContexts = initSharedState(
-  'identityContexts',
-  () => new WeakMap<BaseDef, IdentityContext>(),
+const stores = initSharedState(
+  'stores',
+  () => new WeakMap<BaseDef, CardStore>(),
 );
 const subscribers = initSharedState(
   'subscribers',
@@ -235,6 +237,10 @@ const subscriberConsumer = initSharedState(
 const fieldDescriptions = initSharedState(
   'fieldDescriptions',
   () => new WeakMap<typeof BaseDef, Map<string, string>>(),
+);
+const inflightLinkLoads = initSharedState(
+  'inflightLinkLoads',
+  () => new WeakMap<CardDef, Map<string, Promise<unknown>>>(),
 );
 
 // our place for notifying Glimmer when a card is ready to re-render
@@ -315,11 +321,14 @@ export async function flushLogs() {
   await logger.flush();
 }
 
-export interface IdentityContext {
+export interface CardStore {
   get(url: string): CardDef | undefined;
   set(url: string, instance: CardDef): void;
   setNonTracked(id: string, instance: CardDef): void;
   makeTracked(id: string): void;
+  loadDocument(url: string): Promise<SingleCardDocument | CardError>;
+  trackLoad(load: Promise<unknown>): void;
+  loaded(): Promise<void>;
 }
 
 type JSONAPIResource =
@@ -368,7 +377,7 @@ export interface Field<
     doc: LooseSingleCardDocument | CardDocument,
     relationships: JSONAPIResource['relationships'] | undefined,
     fieldMeta: CardFields[string] | undefined,
-    identityContext: IdentityContext | undefined,
+    store: CardStore | undefined,
     instancePromise: Promise<BaseDef>,
     loadedValue: any,
     relativeTo: URL | undefined,
@@ -527,7 +536,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     let maybeNotLoaded = deserialized.get(this.name);
     // a not loaded error can blow up thru a computed containsMany field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
-      throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
+      lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
     }
     return getter(instance, this);
   }
@@ -657,7 +666,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     doc: CardDocument,
     relationships: JSONAPIResource['relationships'] | undefined,
     fieldMeta: CardFields[string] | undefined,
-    identityContext: IdentityContext,
+    store: CardStore,
     instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
@@ -699,7 +708,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
                 entry,
                 relativeTo,
                 doc,
-                identityContext,
+                store,
                 opts,
               );
             }
@@ -729,7 +738,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
             }
             return (
               await cardClassFromResource(resource, this.card, relativeTo)
-            )[deserialize](resource, relativeTo, doc, identityContext, opts);
+            )[deserialize](resource, relativeTo, doc, store, opts);
           }
         }),
       ),
@@ -837,7 +846,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     let maybeNotLoaded = deserialized.get(this.name);
     // a not loaded error can blow up thru a computed contains field that consumes a link
     if (isNotLoadedValue(maybeNotLoaded)) {
-      throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
+      lazilyLoadLink(instance as CardDef, this, maybeNotLoaded.reference);
     }
     return getter(instance, this);
   }
@@ -928,7 +937,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     doc: CardDocument,
     relationships: JSONAPIResource['relationships'] | undefined,
     fieldMeta: CardFields[string] | undefined,
-    identityContext: IdentityContext,
+    store: CardStore,
     _instancePromise: Promise<BaseDef>,
     _loadedValue: any,
     relativeTo: URL | undefined,
@@ -938,13 +947,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
       if (fieldSerializer in this.card) {
         assertIsSerializerName(this.card[fieldSerializer]);
         let serializer = getSerializer(this.card[fieldSerializer]);
-        return serializer.deserialize(
-          value,
-          relativeTo,
-          doc,
-          identityContext,
-          opts,
-        );
+        return serializer.deserialize(value, relativeTo, doc, store, opts);
       }
       return value;
     }
@@ -974,7 +977,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     }
     return (await cardClassFromResource(resource, this.card, relativeTo))[
       deserialize
-    ](resource, relativeTo, doc, identityContext, opts);
+    ](resource, relativeTo, doc, store, opts);
   }
 
   emptyValue(_instance: BaseDef) {
@@ -1041,7 +1044,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     cardTracking.get(instance);
     let maybeNotLoaded = deserialized.get(this.name);
     if (isNotLoadedValue(maybeNotLoaded)) {
-      throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
+      lazilyLoadLink(instance, this, maybeNotLoaded.reference);
     }
     return getter(instance, this);
   }
@@ -1156,7 +1159,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     doc: CardDocument,
     _relationships: undefined,
     _fieldMeta: undefined,
-    identityContext: IdentityContext,
+    store: CardStore,
     _instancePromise: Promise<CardDef>,
     loadedValue: any,
     relativeTo: URL | undefined,
@@ -1177,9 +1180,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     if (value?.links?.self == null || value.links.self === '') {
       return null;
     }
-    let cachedInstance = identityContext.get(
-      new URL(value.links.self, relativeTo).href,
-    );
+    let cachedInstance = store.get(new URL(value.links.self, relativeTo).href);
     if (cachedInstance) {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
@@ -1208,7 +1209,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       resource,
       relativeTo,
       doc,
-      identityContext,
+      store,
       opts,
     );
     deserialized[isSavedInstance] = true;
@@ -1245,10 +1246,8 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     e: NotLoaded,
   ): Promise<BaseInstanceType<CardT> | undefined> {
     let deserialized = getDataBucket(instance as BaseDef);
-    let identityContext =
-      identityContexts.get(instance as BaseDef) ?? new SimpleIdentityContext();
-    // taking advantage of the identityMap regardless of whether loadFields is set
-    let fieldValue = identityContext.get(e.reference as string);
+    let store = getStore(instance);
+    let fieldValue = store.get(e.reference as string);
 
     if (fieldValue !== undefined) {
       deserialized.set(this.name, fieldValue);
@@ -1258,17 +1257,18 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     fieldValue = await this.loadMissingField(
       instance,
       e,
-      identityContext,
+      store,
       instance[relativeTo],
     );
     deserialized.set(this.name, fieldValue);
     return fieldValue as BaseInstanceType<CardT>;
   }
 
+  // TODO we should be able to get rid of this when we decommission the old prerender
   private async loadMissingField(
     instance: CardDef,
     notLoaded: NotLoadedValue | NotLoaded,
-    identityContext: IdentityContext,
+    store: CardStore,
     relativeTo: URL | undefined,
   ): Promise<CardDef> {
     let { reference: maybeRelativeReference } = notLoaded;
@@ -1276,42 +1276,23 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       maybeRelativeReference as string,
       instance.id ?? relativeTo, // new instances may not yet have an ID, in that case fallback to the relativeTo
     ).href;
-    let response = await fetch(reference, {
-      headers: { Accept: SupportedMimeType.CardJson },
-    });
-    if (!response.ok) {
-      let cardError = await CardError.fromFetchResponse(reference, response);
+    let doc = await store.loadDocument(reference);
+    if (isCardError(doc)) {
+      let cardError = doc;
       cardError.deps = [reference];
       cardError.additionalErrors = [
         new NotLoaded(instance, reference, this.name),
       ];
       throw cardError;
     }
-    let json = await response.json();
-    if (!isSingleCardDocument(json)) {
-      throw new Error(
-        `instance ${reference} is not a card document. it is: ${JSON.stringify(
-          json,
-          null,
-          2,
-        )}`,
-      );
-    }
-
-    if (!json.data.id) {
-      throw new Error(
-        `should never get here: the document from the card we just fetched, ${reference}, did not have an id`,
-      );
-    }
-
     let fieldInstance = (await createFromSerialized(
-      json.data,
-      json,
-      new URL(json.data.id),
+      doc.data,
+      doc,
+      new URL(doc.data.id!),
       {
-        identityContext,
+        store,
       },
-    )) as CardDef; // a linksTo field could only be a composite card
+    )) as CardDef;
     return fieldInstance;
   }
 
@@ -1429,7 +1410,14 @@ class LinksToMany<FieldT extends CardDefConstructor>
 
     // Handle the case where the field was set to a single NotLoadedValue during deserialization
     if (isNotLoadedValue(value)) {
-      throw new NotLoaded(instance, value.reference, this.name);
+      if (!(globalThis as any).__lazilyLoadLinks) {
+        throw new NotLoaded(instance, value.reference, field.name);
+      }
+      // TODO figure out this test case...
+      value = this.emptyValue(instance);
+      deserialized.set(this.name, value);
+      lazilyLoadLink(instance, this, value.reference, { value, index: 0 });
+      return this.emptyValue as BaseInstanceType<FieldT>;
     }
 
     // Ensure we have an array - if not, something went wrong during deserialization
@@ -1449,7 +1437,12 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
     }
     if (notLoadedRefs.length > 0) {
-      throw new NotLoaded(instance, notLoadedRefs, this.name);
+      if (!(globalThis as any).__lazilyLoadLinks) {
+        throw new NotLoaded(instance, notLoadedRefs, this.name);
+      }
+      for (let [index, reference] of notLoadedRefs.entries()) {
+        lazilyLoadLink(instance, this, reference, { value, index });
+      }
     }
 
     return value as BaseInstanceType<FieldT>;
@@ -1604,7 +1597,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     doc: CardDocument,
     _relationships: undefined,
     _fieldMeta: undefined,
-    identityContext: IdentityContext,
+    store: CardStore,
     instancePromise: Promise<BaseDef>,
     loadedValues: any,
     relativeTo: URL | undefined,
@@ -1633,7 +1626,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
         if (value.links?.self == null) {
           return null;
         }
-        let cachedInstance = identityContext.get(
+        let cachedInstance = store.get(
           new URL(value.links.self, relativeTo).href,
         );
         if (cachedInstance) {
@@ -1671,7 +1664,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
           resource,
           relativeTo,
           doc,
-          identityContext,
+          store,
           opts,
         );
         deserialized[isSavedInstance] = true;
@@ -1754,13 +1747,11 @@ class LinksToMany<FieldT extends CardDefConstructor>
   ): Promise<T[] | undefined> {
     let result: T[] | undefined;
     let fieldValues: CardDef[] = [];
-    let identityContext =
-      identityContexts.get(instance) ?? new SimpleIdentityContext();
+    let store = getStore(instance);
 
     let references = !Array.isArray(e.reference) ? [e.reference] : e.reference;
     for (let ref of references) {
-      // taking advantage of the identityMap regardless of whether loadFields is set
-      let value = identityContext.get(ref);
+      let value = store.get(ref);
       if (value !== undefined) {
         fieldValues.push(value);
       }
@@ -1769,7 +1760,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     fieldValues = await this.loadMissingFields(
       instance,
       e,
-      identityContext,
+      store,
       instance[relativeTo],
     );
 
@@ -1799,10 +1790,11 @@ class LinksToMany<FieldT extends CardDefConstructor>
     return result;
   }
 
+  // TODO we should be able to get rid of this when we decommission the old prerender
   private async loadMissingFields(
     instance: CardDef,
     notLoaded: NotLoaded,
-    identityContext: IdentityContext,
+    store: CardStore,
     relativeTo: URL | undefined,
   ): Promise<CardDef[]> {
     let refs = (
@@ -1815,52 +1807,32 @@ class LinksToMany<FieldT extends CardDefConstructor>
     let errors = [];
     let fieldInstances: CardDef[] = [];
 
-    const fetchPromises = refs.map(async (reference) => {
+    const loadPromises = refs.map(async (reference) => {
       try {
-        let response = await fetch(reference, {
-          headers: { Accept: SupportedMimeType.CardJson },
-        });
-        if (!response.ok) {
-          let cardError = await CardError.fromFetchResponse(
-            reference,
-            response,
-          );
+        let doc = await store.loadDocument(reference);
+        if (isCardError(doc)) {
+          let cardError = doc;
           cardError.deps = [reference];
           cardError.additionalErrors = [
             new NotLoaded(instance, reference, this.name),
           ];
           throw cardError;
         }
-        let json = await response.json();
-        if (!isSingleCardDocument(json)) {
-          throw new Error(
-            `instance ${reference} is not a card document. it is: ${JSON.stringify(
-              json,
-              null,
-              2,
-            )}`,
-          );
-        }
-        if (!json.data.id) {
-          throw new Error(
-            `should never get here: the document from the card we just fetched, ${reference}, did not have an id`,
-          );
-        }
         let fieldInstance = (await createFromSerialized(
-          json.data,
-          json,
-          new URL(json.data.id),
+          doc.data,
+          doc,
+          new URL(doc.data.id!),
           {
-            identityContext,
+            store,
           },
-        )) as CardDef; // A linksTo field could only be a composite card
+        )) as CardDef;
         return { ok: true, value: fieldInstance };
       } catch (e) {
         return { ok: false, error: e };
       }
     });
 
-    const results = await Promise.allSettled(fetchPromises);
+    const results = await Promise.allSettled(loadPromises);
     for (let result of results) {
       if (result.status === 'fulfilled') {
         const fetchResult = result.value;
@@ -2127,20 +2099,13 @@ export class BaseDef {
     data: any,
     relativeTo: URL | undefined,
     doc?: CardDocument,
-    identityContext?: IdentityContext,
+    store?: CardStore,
     opts?: DeserializeOpts,
   ): Promise<BaseInstanceType<T>> {
     if (primitive in this) {
       return data;
     }
-    return _createFromSerialized(
-      this,
-      data,
-      doc,
-      relativeTo,
-      identityContext,
-      opts,
-    );
+    return _createFromSerialized(this, data, doc, relativeTo, store, opts);
   }
 
   static getComponent(
@@ -2424,7 +2389,7 @@ export class CardDef extends BaseDef {
       // TODO: can we eliminate this conditional branch?
 
       // we need to be careful that we don't trigger the ambient recompute() in our setters
-      // when we are instantiating an instance that is placed in the identityMap that has
+      // when we are instantiating an instance that is placed in the cardStore that has
       // not had it's field values set yet, as computeds may assume dependent fields are
       // available when they are not (e.g. Spec.isPrimitive trying to access its 'ref' field).
       // In this scenario, only the 'id' field is available. The rest of the fields will be
@@ -2661,6 +2626,67 @@ function getUsedFields(instance: BaseDef): string[] {
   return [...getDataBucket(instance)?.keys()];
 }
 
+function lazilyLoadLink(
+  instance: CardDef,
+  field: Field,
+  link: string,
+  pluralArgs?: { value: any[]; index: number },
+) {
+  if ((globalThis as any).__lazilyLoadLinks) {
+    let inflightLoads = inflightLinkLoads.get(instance);
+    if (!inflightLoads) {
+      inflightLoads = new Map();
+      inflightLinkLoads.set(instance, inflightLoads);
+    }
+    let reference = new URL(link, instance.id ?? instance[relativeTo]).href;
+    let key = `${field.name}/${reference}`;
+    let promise = inflightLoads.get(key);
+    let store = getStore(instance);
+    if (promise) {
+      store.trackLoad(promise);
+      return;
+    }
+    let deferred = new Deferred<void>();
+    inflightLoads.set(key, deferred.promise);
+    store.trackLoad(deferred.promise);
+    (async () => {
+      try {
+        let doc = await store.loadDocument(reference);
+        if (isCardError(doc)) {
+          let cardError = doc;
+          cardError.deps = [reference];
+          throw cardError;
+        }
+        let fieldValue = (await createFromSerialized(
+          doc.data,
+          doc,
+          new URL(doc.data.id!),
+          {
+            store,
+          },
+        )) as CardDef;
+        if (pluralArgs) {
+          let { value, index } = pluralArgs;
+          value[index] = fieldValue;
+        } else {
+          (instance as any)[field.name] = fieldValue;
+        }
+        deferred.fulfill();
+      } catch (e) {
+        // TODO We need to handle this error in rendering....
+        deferred.reject(e);
+      } finally {
+        inflightLoads.delete(key);
+        if (inflightLoads.size === 0) {
+          inflightLinkLoads.delete(instance);
+        }
+      }
+    })();
+  } else {
+    throw new NotLoaded(instance, link, field.name);
+  }
+}
+
 type Scalar =
   | string
   | number
@@ -2862,7 +2888,7 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
   resource,
   modelPromise,
   doc,
-  identityContext,
+  store,
   relativeTo,
   opts,
 }: {
@@ -2873,7 +2899,7 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
   resource: LooseCardResource;
   modelPromise: Promise<BaseDef>;
   doc: LooseSingleCardDocument | CardDocument;
-  identityContext: IdentityContext;
+  store: CardStore;
   relativeTo: URL | undefined;
   opts?: DeserializeOpts;
 }): Promise<any> {
@@ -2886,7 +2912,7 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
     doc,
     resource.relationships,
     resource.meta.fields?.[fieldName],
-    identityContext,
+    store,
     modelPromise,
     loadedValue,
     relativeTo,
@@ -3007,10 +3033,10 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   doc: LooseSingleCardDocument | CardDocument,
   relativeTo: URL | undefined,
   opts?: DeserializeOpts & {
-    identityContext?: IdentityContext;
+    store?: CardStore;
   },
 ): Promise<BaseInstanceType<T>> {
-  let identityContext = opts?.identityContext ?? new SimpleIdentityContext();
+  let store = opts?.store ?? new FallbackCardStore();
   let {
     meta: { adoptsFrom },
   } = resource;
@@ -3026,7 +3052,7 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
     resource,
     relativeTo,
     doc as CardDocument,
-    identityContext,
+    store,
     opts,
   ) as BaseInstanceType<T>;
 }
@@ -3034,10 +3060,10 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
 export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
-  identityContext: IdentityContext = new SimpleIdentityContext(),
+  store = getStore(instance),
   opts?: DeserializeOpts,
 ): Promise<BaseInstanceType<T>> {
-  identityContexts.set(instance, identityContext);
+  stores.set(instance, store);
   if (!instance[relativeTo] && doc.data.id) {
     instance[relativeTo] = new URL(doc.data.id);
   }
@@ -3051,7 +3077,7 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
     instance,
     resource: doc.data,
     doc,
-    identityContext,
+    store,
     opts,
   });
 }
@@ -3066,7 +3092,7 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   data: T extends { [primitive]: infer P } ? P : LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument | undefined,
   _relativeTo: URL | undefined,
-  identityContext: IdentityContext = new SimpleIdentityContext(),
+  store: CardStore = new FallbackCardStore(),
   opts?: DeserializeOpts,
 ): Promise<BaseInstanceType<T>> {
   let resource: LooseCardResource | undefined;
@@ -3088,7 +3114,7 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   }
   let instance: BaseInstanceType<T> | undefined;
   if (resource.id != null || resource.lid != null) {
-    instance = identityContext.get((resource.id ?? resource.lid)!) as
+    instance = store.get((resource.id ?? resource.lid)!) as
       | BaseInstanceType<T>
       | undefined;
   }
@@ -3099,12 +3125,12 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
     }) as BaseInstanceType<T>;
     instance[relativeTo] = _relativeTo;
   }
-  identityContexts.set(instance, identityContext);
+  stores.set(instance, store);
   return await _updateFromSerialized({
     instance,
     resource,
     doc,
-    identityContext,
+    store,
     opts,
   });
 }
@@ -3113,13 +3139,13 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   instance,
   resource,
   doc,
-  identityContext,
+  store,
   opts,
 }: {
   instance: BaseInstanceType<T>;
   resource: LooseCardResource;
   doc: LooseSingleCardDocument | CardDocument;
-  identityContext: IdentityContext;
+  store: CardStore;
   opts?: DeserializeOpts;
 }): Promise<BaseInstanceType<T>> {
   // because our store uses a tracked map for its identity map all the assembly
@@ -3127,7 +3153,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   // add the actual instance silently in a non-tracked way and only track it at
   // the very end.
   if (resource.id != null) {
-    identityContext.setNonTracked(resource.id, instance as CardDef);
+    store.setNonTracked(resource.id, instance as CardDef);
   }
   let deferred = new Deferred<BaseDef>();
   let card = Reflect.getPrototypeOf(instance)!.constructor as T;
@@ -3211,7 +3237,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
           resource,
           modelPromise: deferred.promise,
           doc,
-          identityContext,
+          store,
           relativeTo: relativeToVal,
           opts,
         }),
@@ -3270,7 +3296,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
 
   // now we make the instance "live" after it's all constructed
   if (resource.id != null) {
-    identityContext.makeTracked(resource.id);
+    store.makeTracked(resource.id);
   }
 
   deferred.fulfill(instance);
@@ -3457,6 +3483,7 @@ export function getComponent(
   return boxComponent;
 }
 
+// TODO we should be able to get rid of this when we decommission the old prerender
 export async function ensureLinksLoaded(card: BaseDef): Promise<void> {
   // Note that after each async step we check to see if we are still the
   // current promise, otherwise we bail
@@ -3766,6 +3793,10 @@ declare module 'ember-provide-consume-context/context-registry' {
   }
 }
 
+function getStore(instance: BaseDef): CardStore {
+  return stores.get(instance as BaseDef) ?? new FallbackCardStore();
+}
+
 function myLoader(): Loader {
   // we know this code is always loaded by an instance of our Loader, which sets
   // import.meta.loader.
@@ -3784,16 +3815,30 @@ export function getCardMeta<K extends keyof CardResourceMeta>(
   return card[meta]?.[metaKey] as CardResourceMeta[K] | undefined;
 }
 
-class SimpleIdentityContext implements IdentityContext {
+class FallbackCardStore implements CardStore {
   #instances: Map<string, CardDef> = new Map();
+  #inFlight: Promise<unknown>[] = [];
+
   get(id: string) {
+    id = id.replace(/\.json$/, '');
     return this.#instances.get(id);
   }
   set(id: string, instance: CardDef) {
+    id = id.replace(/\.json$/, '');
     return this.#instances.set(id, instance);
   }
   setNonTracked(id: string, instance: CardDef) {
+    id = id.replace(/\.json$/, '');
     return this.#instances.set(id, instance);
   }
   makeTracked(_id: string) {}
+  trackLoad(load: Promise<unknown>) {
+    this.#inFlight.push(load);
+  }
+  async loaded() {
+    await Promise.allSettled(this.#inFlight);
+  }
+  async loadDocument(url: string) {
+    return await loadDocument(fetch, url);
+  }
 }

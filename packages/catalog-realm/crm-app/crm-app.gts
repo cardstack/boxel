@@ -1,11 +1,11 @@
-import { CardsGrid } from './components/grid';
-import { CardList } from './components/card-list';
-import { Layout, TitleGroup, type LayoutFilter } from './components/layout';
+import { CardsGrid } from '../components/grid';
+import { CardList } from '../components/card-list';
+import { Layout, TitleGroup, type LayoutFilter } from '../components/layout';
 import {
   SortMenu,
   type SortOption,
   sortByCardTitleAsc,
-} from './components/sort';
+} from '../components/sort';
 import { SearchInput } from './components/search-input';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';

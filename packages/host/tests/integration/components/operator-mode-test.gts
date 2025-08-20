@@ -114,11 +114,17 @@ module('Integration | operator-mode', function (hooks) {
             <div class='friend'>
               <@fields.title />
               has a friend
-              <@fields.friend />
+              <div class="friend-container">
+                <@fields.friend />
+              </div>
             </div>
             <style scoped>
               .friend {
                 color: red;
+              }
+              .friend-container {
+                padding: 5px;
+                height: 65px;
               }
             </style>
           </template>

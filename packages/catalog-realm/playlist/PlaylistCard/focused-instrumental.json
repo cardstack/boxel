@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "playlistName": "Focused Instrumental",
+      "description": "Instrumental tracks for deep concentration and productivity",
+      "coverImageUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop",
+      "songCount": 28,
+      "duration": "1h 56m",
+      "curator": "Focus Flow",
+      "mood": "Focused",
+      "isPublic": true,
+      "isCollaborative": false,
+      "createdDate": "2024-01-20",
+      "lastUpdated": "2024-12-08",
+      "followers": 9876,
+      "totalPlays": 67543,
+      "tags": "instrumental,focus,concentration,productivity",
+      "averageEnergy": 5,
+      "averageDanceability": 3
+    },
+    "relationships": {
+      "songs.0": {
+        "links": { "self": "../../song/SongCard/funky-suspense" }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../playlist",
+        "name": "PlaylistCard"
+      }
+    }
+  }
+}

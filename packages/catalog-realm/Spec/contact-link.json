@@ -1,22 +1,54 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
+      },
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../fields/contact-link",
+              "name": "ContactLinkField"
+            }
+          }
+        ]
+      }
+    },
     "type": "card",
     "attributes": {
-      "readMe": null,
       "ref": {
         "name": "ContactLinkField",
         "module": "../fields/contact-link"
       },
-      "specType": "field",
-      "containedExamples": [],
       "title": "ContactLinkField",
+      "readMe": null,
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "specType": "field",
       "description": null,
-      "thumbnailURL": null
+      "containedExamples": [
+        {
+          "label": null,
+          "value": null
+        }
+      ]
     },
-    "meta": {
-      "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
-        "name": "Spec"
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

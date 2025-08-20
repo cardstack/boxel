@@ -91,6 +91,7 @@ export * from './definitions';
 export * from './catalog';
 export * from './commands';
 export * from './constants';
+export * from './document';
 export * from './matrix-constants';
 export * from './matrix-client';
 export * from './queue';
@@ -119,10 +120,6 @@ export {
   cardTypeIcon,
   getFieldIcon,
 } from './helpers/card-type-display-name';
-export {
-  extractCssVariables,
-  styleConversions,
-} from './helpers/extract-css-variables';
 export * from './url';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
@@ -198,8 +195,6 @@ import type {
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { RealmInfo } from './realm';
 import { PrerenderedCard } from './index-query-engine';
-
-export const maxLinkDepth = 5;
 
 export interface MatrixCardError {
   id?: string;

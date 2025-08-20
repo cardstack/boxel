@@ -39,7 +39,7 @@ export default class PillMenu extends Component<Signature> {
           <:icon>
             {{yield to='headerIcon'}}
           </:icon>
-          <:detail>
+          <:default>
             <button
               {{on 'click' this.collapseMenu}}
               class='detail-close-button'
@@ -47,8 +47,8 @@ export default class PillMenu extends Component<Signature> {
             >
               {{yield to='headerDetail'}}
             </button>
-          </:detail>
-          <:actions>
+          </:default>
+          <:detail>
             <button
               {{on 'click' this.collapseMenu}}
               class='header-button'
@@ -56,7 +56,7 @@ export default class PillMenu extends Component<Signature> {
             >
               <DropdownArrowFilled width='8px' height='8px' />
             </button>
-          </:actions>
+          </:detail>
         </Header>
         {{#if (has-block 'content')}}
           <div class='menu-content'>
@@ -88,8 +88,6 @@ export default class PillMenu extends Component<Signature> {
         --boxel-header-detail-margin-left: 0;
         --pill-menu-spacing: var(--boxel-pill-menu-spacing, var(--boxel-sp-xs));
         --boxel-header-padding: 0 0 0 var(--pill-menu-spacing);
-        --boxel-header-detail-max-width: 100%;
-        --boxel-header-letter-spacing: var(--boxel-lsp);
         --button-outline: 2px;
         --boxel-header-min-height: fit-content;
         --pill-menu-gradient-height: 5px;
@@ -131,6 +129,7 @@ export default class PillMenu extends Component<Signature> {
       .menu-header {
         overflow: hidden;
         padding: var(--chat-input-area-bottom-padding);
+        font: 600 var(--boxel-font-xs);
       }
       .menu-header :deep(.title) {
         font: 600 var(--boxel-font);
@@ -242,16 +241,7 @@ export default class PillMenu extends Component<Signature> {
       }
 
       .pill-menu :deep(.menu-header .detail) {
-        font: 600 var(--boxel-font-xs);
-      }
-      .pill-menu :deep(.menu-header .header-icon) {
-        order: 2;
-      }
-      .pill-menu :deep(.menu-header .detail) {
-        order: 3;
-      }
-      .pill-menu :deep(.menu-header .content) {
-        order: 1;
+        order: -1;
         margin-left: 0;
       }
       .minimized-arrow {
