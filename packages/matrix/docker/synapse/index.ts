@@ -124,39 +124,26 @@ export async function synapseStart(
   const isTestInstance =
     opts?.isTestInstance ?? opts?.template?.startsWith('test');
 
-  if (stopExisting) {
-    let stopPromises = [];
+  let containerName =
+    opts?.containerName ||
+    (isTestInstance ? 'boxel-synapse-test' : 'boxel-synapse');
 
-    if (isTestInstance) {
-      // For test instances, only stop other test instances
-      for (const [id, synapse] of synapses) {
-        // FIXME this seems to not be working?
-        if (synapse.isTestInstance) {
-          stopPromises.push(synapseStop(id));
-        }
-      }
-    } else {
-      // For development instances, stop the main server and other non-test instances
-      // FIXME can we remove this entirely?
-      // stopPromises.push(dockerStop({ containerId: 'boxel-synapse' }));
-      // for (const [id, synapse] of synapses) {
-      //   if (!synapse.isTestInstance) {
-      //     stopPromises.push(synapseStop(id));
-      //   }
-      // }
+  if (stopExisting) {
+    // Stop the existing container if it's running
+    let stopPromises = [dockerStop({ containerId: containerName })];
+    for (const [id, _synapse] of synapses) {
+      // Stop any other synapses that are running
+      stopPromises.push(synapseStop(id));
     }
+
     await Promise.allSettled(stopPromises);
   }
+
   const synCfg = await cfgDirFromTemplate(
     opts?.template ?? 'test',
     opts?.dataDir,
     isTestInstance,
   );
-
-  // Use different container names for test instances
-  let containerName =
-    opts?.containerName ||
-    (isTestInstance ? 'boxel-synapse-test' : 'boxel-synapse');
 
   console.log(
     `Starting synapse with config dir ${synCfg.configDir} in container ${containerName}...`,
