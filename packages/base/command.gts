@@ -322,3 +322,14 @@ export class RealmMetaField extends FieldDef {
 export class GetAllRealmMetasResult extends CardDef {
   @field results = containsMany(RealmMetaField);
 }
+
+export class SearchGoogleImagesInput extends CardDef {
+  @field query = contains(StringField);
+  @field maxResults = contains(NumberField); // optional, default 10
+}
+
+export class SearchGoogleImagesResult extends CardDef {
+  @field images = containsMany(JsonField);
+  @field totalResults = contains(NumberField);
+  @field searchTime = contains(NumberField);
+}
