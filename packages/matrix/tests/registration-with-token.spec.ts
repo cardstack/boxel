@@ -284,23 +284,6 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
 
     await validateEmail(page, 'user1@example.com', { sendAttempts: 2 });
   });
-});
-
-test.describe('User Registration w/ Token', () => {
-  let synapse: SynapseInstance;
-
-  test.beforeEach(async () => {
-    synapse = await synapseStart({
-      template: 'test',
-    });
-    await registerRealmUsers(synapse);
-    await smtpStart();
-  });
-
-  test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-    await smtpStop();
-  });
 
   test('it shows an error when the username is already taken', async ({
     page,
