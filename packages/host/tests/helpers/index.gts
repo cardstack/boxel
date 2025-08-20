@@ -289,7 +289,9 @@ export function setupLocalIndexing(hooks: NestedHooks) {
     // Without this, we have been experiencing test failures related to a destroyed owner, e.g.
     // "Cannot call .factoryFor('template:index-card_error') after the owner has been destroyed"
     await settled();
-    await getService('store').flushSaves();
+    let store = getService('store');
+    await store.flushSaves();
+    await store.loaded();
   });
 }
 

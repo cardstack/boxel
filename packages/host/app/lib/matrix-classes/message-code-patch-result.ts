@@ -15,6 +15,7 @@ import { Message } from './message';
 export default class MessageCodePatchResult {
   @tracked index: number;
   @tracked status: CodePatchStatus;
+  @tracked failureReason?: string;
   @tracked finalFileUrlAfterCodePatching: string;
   @tracked originalUploadedFileUrl: string;
 
@@ -26,6 +27,7 @@ export default class MessageCodePatchResult {
     finalFileUrlAfterCodePatching: string,
     originalUploadedFileUrl: string,
     owner: Owner,
+    failureReason?: string,
   ) {
     setOwner(this, owner);
 
@@ -33,6 +35,7 @@ export default class MessageCodePatchResult {
     this.status = status;
     this.finalFileUrlAfterCodePatching = finalFileUrlAfterCodePatching;
     this.originalUploadedFileUrl = originalUploadedFileUrl;
+    this.failureReason = failureReason;
   }
 
   @service declare commandService: CommandService;

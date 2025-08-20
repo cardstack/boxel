@@ -4,13 +4,13 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "Sort",
-        "module": "../crm-app/components/sort"
+        "name": "CardsGrid",
+        "module": "../components/grid"
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Sort",
-      "description": "Spec for Sort component",
+      "title": "Cards Grid",
+      "description": "Spec for Cards Grid component",
       "thumbnailURL": null
     },
     "relationships": {},

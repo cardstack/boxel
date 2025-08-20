@@ -14,7 +14,23 @@ import Pill, { type BoxelPillKind } from './index.gts';
 export default class PillUsage extends Component {
   pillKinds = ['button', 'default'];
   pillKindDefault: BoxelPillKind = 'default';
+  pillVariants = ['default', 'primary', 'secondary', 'muted', 'destructive'];
+  pillVariantDefault:
+    | undefined
+    | 'primary'
+    | 'secondary'
+    | 'muted'
+    | 'destructive'
+    | 'default' = undefined;
+
   @tracked kind: BoxelPillKind = this.pillKindDefault;
+  @tracked variant:
+    | undefined
+    | 'primary'
+    | 'secondary'
+    | 'muted'
+    | 'destructive'
+    | 'default' = undefined;
   @tracked pillBackgroundColor?: string;
   @tracked borderColor?: string;
   @tracked fontColor?: string;
@@ -25,6 +41,12 @@ export default class PillUsage extends Component {
   declare pillGap: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare pillIconSize: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'header-freestyle-container' })
+  declare boxelPillBackgroundColor: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'header-freestyle-container' })
+  declare boxelPillFontColor: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'header-freestyle-container' })
+  declare boxelPillBorderColor: CSSVariableInfo;
 
   <template>
     <div
@@ -33,6 +55,9 @@ export default class PillUsage extends Component {
         pill-padding=this.pillPadding.value
         pill-gap=this.pillGap.value
         pill-icon-size=this.pillIconSize.value
+        boxel-pill-background-color=this.boxelPillBackgroundColor.value
+        boxel-pill-font-color=this.boxelPillFontColor.value
+        boxel-pill-border-color=this.boxelPillBorderColor.value
       }}
     >
       <FreestyleUsage @name='Pill'>
@@ -41,8 +66,10 @@ export default class PillUsage extends Component {
           appealing manner. Similar to a tag, badge or label.
         </:description>
         <:example>
+          {{! Main interactive example }}
           <Pill
             @kind={{this.kind}}
+            @variant={{this.variant}}
             @pillBackgroundColor={{this.pillBackgroundColor}}
             @pillBorderColor={{this.borderColor}}
             @pillFontColor={{this.fontColor}}
@@ -67,25 +94,34 @@ export default class PillUsage extends Component {
             @value={{this.kind}}
           />
           <Args.String
+            @name='variant'
+            @optional={{true}}
+            @description='Theme-based variant for consistent styling'
+            @defaultValue={{this.pillVariantDefault}}
+            @options={{this.pillVariants}}
+            @onInput={{fn (mut this.variant)}}
+            @value={{this.variant}}
+          />
+          <Args.String
             @name='pillBackgroundColor'
-            @description='3-or-6 digit hex color code for background color'
+            @description='3-or-6 digit hex color code for background color (overrides variant)'
             @value={{this.pillBackgroundColor}}
             @onInput={{fn (mut this.pillBackgroundColor)}}
-            @defaultValue='#ffffff'
+            @defaultValue='variant-default'
           />
           <Args.String
             @name='pillBorderColor'
-            @description='Border color for the pill'
+            @description='Border color for the pill (overrides variant)'
             @value={{this.borderColor}}
             @onInput={{fn (mut this.borderColor)}}
-            @defaultValue='#afafb7'
+            @defaultValue='variant-default'
           />
           <Args.String
             @name='pillFontColor'
-            @description='Font color for the pill'
+            @description='Font color for the pill (overrides variant)'
             @value={{this.fontColor}}
             @onInput={{fn (mut this.fontColor)}}
-            @defaultValue=' #000000 or #ffffff based on contrast if pillBackgroundColor is a hex value'
+            @defaultValue='variant-default'
           />
         </:api>
         <:cssVars as |Css|>
@@ -109,6 +145,27 @@ export default class PillUsage extends Component {
             @description='Size of the icon'
             @value={{this.pillIconSize.value}}
             @onInput={{this.pillIconSize.update}}
+          />
+          <Css.Basic
+            @name='boxel-pill-background-color'
+            @type='color'
+            @description='Global override for pill background color (highest priority)'
+            @value={{this.boxelPillBackgroundColor.value}}
+            @onInput={{this.boxelPillBackgroundColor.update}}
+          />
+          <Css.Basic
+            @name='boxel-pill-font-color'
+            @type='color'
+            @description='Global override for pill font color (highest priority)'
+            @value={{this.boxelPillFontColor.value}}
+            @onInput={{this.boxelPillFontColor.update}}
+          />
+          <Css.Basic
+            @name='boxel-pill-border-color'
+            @type='color'
+            @description='Global override for pill border color (highest priority)'
+            @value={{this.boxelPillBorderColor.value}}
+            @onInput={{this.boxelPillBorderColor.update}}
           />
         </:cssVars>
       </FreestyleUsage>
