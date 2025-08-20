@@ -358,13 +358,6 @@ export async function createRegistrationToken(
   registrationToken: string,
   usesAllowed = 1000,
 ) {
-  console.log(
-    'createRegistrationToken',
-    adminAccessToken,
-    registrationToken,
-    usesAllowed,
-    synapse.port,
-  );
   let res = await fetch(
     `http://localhost:${synapse.port}/_synapse/admin/v1/registration_tokens/new`,
     {
