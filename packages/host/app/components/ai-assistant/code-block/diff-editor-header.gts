@@ -28,6 +28,7 @@ export interface CodeBlockDiffEditorHeaderSignature {
     finalFileUrlAfterCodePatching?: string | null;
     originalUploadedFileUrl?: string | null;
     codePatchStatus: CodePatchStatus | 'applying' | 'ready';
+    codePatchErrorMessage?: string | null;
     userMessageThisMessageIsRespondingTo?: MatrixMessage;
   };
 }
@@ -50,13 +51,14 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
             <AttachedFileDropdownMenu
               @file={{this.file}}
               @isNewFile={{bool @codeData.isNewFile}}
+              @codePatchStatus={{@codePatchStatus}}
               @version='diff-editor'
             />
           </div>
         </div>
       </div>
       <div class='right-section'>
-        {{#if @diffEditorStats}}
+        {{#if this.showStats}}
           <div class='changes'>
             <span
               class='removed'
@@ -158,6 +160,10 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service private declare cardService: CardService;
+
+  private get showStats() {
+    return !!this.args.diffEditorStats && !this.args.codePatchErrorMessage;
+  }
 
   private get fileUrl() {
     return (

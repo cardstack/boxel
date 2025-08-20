@@ -206,7 +206,9 @@ ${REPLACE_MARKER}`;
       });
     } catch (error: any) {
       assert.ok(
-        error.message.includes('The patch did not cleanly apply'),
+        error.message.includes(
+          'search pattern not found in the target source file',
+        ),
         'Should throw an error when no matches are found',
       );
     }
