@@ -129,6 +129,7 @@ export async function synapseStart(
     if (isTestInstance) {
       // For test instances, only stop other test instances
       for (const [id, synapse] of synapses) {
+        // FIXME this seems to not be working?
         if (synapse.isTestInstance) {
           stopPromises.push(synapseStop(id));
         }
