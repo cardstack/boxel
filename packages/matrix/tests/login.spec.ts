@@ -32,7 +32,7 @@ test.describe('Login', () => {
     // These tests specifically are pretty slow as there's lots of reloading
     // Add 120s to the overall test timeout
     test.setTimeout(120_000);
-    synapse = await synapseStart();
+    synapse = await synapseStart({ isTestInstance: true });
     await registerRealmUsers(synapse);
     realmServer = await startRealmServer();
     await registerUser(synapse, 'user1', 'pass');

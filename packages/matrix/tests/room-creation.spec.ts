@@ -38,7 +38,7 @@ test.describe('Room creation', () => {
 
   test.beforeEach(async ({ page }) => {
     test.setTimeout(120_000);
-    synapse = await synapseStart();
+    synapse = await synapseStart({ isTestInstance: true });
     await setSkillsRedirect(page);
     await registerRealmUsers(synapse);
     realmServer = await startRealmServer();

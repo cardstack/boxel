@@ -37,7 +37,7 @@ test.describe('Commands', () => {
   let userCred: Credentials;
   test.beforeEach(async ({ page }) => {
     await setSkillsRedirect(page);
-    synapse = await synapseStart();
+    synapse = await synapseStart({ isTestInstance: true });
     await registerRealmUsers(synapse);
     realmServer = await startRealmServer();
     userCred = await registerUser(synapse, 'user1', 'pass');

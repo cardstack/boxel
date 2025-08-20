@@ -32,7 +32,7 @@ test.describe('Skills', () => {
   test.beforeEach(async ({ page }) => {
     test.setTimeout(120_000);
     await setSkillsRedirect(page);
-    synapse = await synapseStart();
+    synapse = await synapseStart({ isTestInstance: true });
     await registerRealmUsers(synapse);
     realmServer = await startRealmServer();
     await registerUser(synapse, 'user1', 'pass');
