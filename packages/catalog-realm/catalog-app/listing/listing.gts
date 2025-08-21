@@ -18,7 +18,6 @@ import type {
   RealmMetaField,
 } from 'https://cardstack.com/base/command';
 
-import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
@@ -27,19 +26,16 @@ import { task } from 'ember-concurrency';
 import {
   Accordion,
   Pill,
-  BoxelDropdown,
   BoxelButton,
-  Menu as BoxelMenu,
   CardContainer,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem, eq } from '@cardstack/boxel-ui/helpers';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import AppListingHeader from '../components/app-listing-header';
+import ChooseRealmAction from '../components/choose-realm-action';
 import { ListingFittedTemplate } from '../components/listing-fitted';
+import { listingActions, isReady } from '../resources/listing-actions';
 
-import ListingRemixCommand from '@cardstack/boxel-host/commands/listing-remix';
-import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
-import ListingBuildCommand from '@cardstack/boxel-host/commands/listing-action-build';
 import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
 
 import { Publisher } from './publisher';
@@ -49,6 +45,10 @@ import { Tag } from './tag';
 
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
+
+  actionsResource = listingActions(this, () => ({
+    listing: this.args.model as Listing,
+  }));
 
   allRealmsInfoResource = commandData<typeof GetAllRealmMetasResult>(
     this,
@@ -76,111 +76,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return [];
   }
 
-  private getRealmOptions(actionCallback: (realmUrl: string) => void) {
-    return this.writableRealms.map((realm) => {
-      return new MenuItem(realm.name, 'action', {
-        action: () => {
-          actionCallback(realm.url);
-        },
-        iconURL: realm.iconURL ?? '/default-realm-icon.png',
-      });
-    });
-  }
-
-  get remixRealmOptions() {
-    return this.getRealmOptions((realmUrl) => this.remix(realmUrl));
-  }
-
-  get buildRealmOptions() {
-    return this.getRealmOptions((realmUrl) => this.build(realmUrl));
-  }
-
-  _build = task(async (realm: string) => {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
-      throw new Error('Missing commandContext');
-    }
-    try {
-      await new ListingBuildCommand(commandContext).execute({
-        realm,
-        listing: this.args.model as Listing,
-      });
-    } catch (error) {
-      console.error(error);
-    }
-  });
-
-  _remix = task(async (realm: string) => {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
-      throw new Error('Missing commandContext');
-    }
-    let listing = this.args.model as Listing;
-    await new ListingRemixCommand(commandContext).execute({
-      realm,
-      listing,
-    });
-  });
-
   get hasOneOrMoreSpec() {
     return this.args.model.specs && this.args.model?.specs?.length > 0;
-  }
-
-  get isSkillListing() {
-    return this.args.model instanceof SkillListing;
-  }
-
-  get hasSkills() {
-    return this.args.model.skills && this.args.model?.skills?.length > 0;
-  }
-
-  get addSkillsDisabled() {
-    return !this.isSkillListing || !this.hasSkills;
-  }
-
-  get isStub() {
-    return this.args.model.tags?.find((tag) => tag.name === 'Stub');
-  }
-
-  get remixDisabled() {
-    return (
-      (!this.isSkillListing && !this.hasOneOrMoreSpec) ||
-      (this.isSkillListing && !this.hasSkills)
-    );
-  }
-
-  @action addSkillsToCurrentRoom() {
-    this._addSkillsToCurrentRoom.perform();
-  }
-
-  _addSkillsToCurrentRoom = task(async () => {
-    let commandContext = this.args.context?.commandContext;
-    if (!commandContext) {
-      throw new Error('Missing commandContext');
-    }
-
-    let useAiAssistantCommand = new UseAiAssistantCommand(commandContext);
-    await useAiAssistantCommand.execute({
-      skillCards: Array.isArray(this.args.model.skills)
-        ? [...this.args.model.skills]
-        : [],
-      openRoom: true,
-    });
-  });
-
-  @action preview() {
-    if (!this.args.model.examples || this.args.model.examples.length === 0) {
-      throw new Error('No examples to preview');
-    }
-    this.args.context?.actions?.viewCard?.(this.args.model.examples[0]);
-  }
-
-  @action build(realmUrl: string) {
-    this._build.perform(realmUrl);
-  }
-
-  @action remix(realmUrl: string) {
-    this._remix.perform(realmUrl);
   }
 
   get appName(): string {
@@ -228,6 +125,39 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return Boolean(this.args.model.examples?.length);
   }
 
+  get hasSkills() {
+    return this.args.model?.skills;
+  }
+
+  get listingActions() {
+    if (isReady(this.actionsResource)) {
+      return this.actionsResource.actions;
+    }
+    return;
+  }
+
+  get stubActions() {
+    return this.listingActions?.type === 'stub'
+      ? this.listingActions
+      : undefined;
+  }
+
+  get regularActions() {
+    return this.listingActions?.type === 'regular'
+      ? this.listingActions
+      : undefined;
+  }
+
+  get skillActions() {
+    return this.listingActions?.type === 'skill'
+      ? this.listingActions
+      : undefined;
+  }
+
+  addSkillsToCurrentRoom = task(async () => {
+    this.skillActions?.addSkillsToRoom?.();
+  });
+
   <template>
     <div class='app-listing-embedded'>
       <AppListingHeader
@@ -237,75 +167,45 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         @publisher={{this.publisherName}}
       >
         <:action>
-          <div class='action-buttons'>
-            {{#if this.isSkillListing}}
-              <BoxelButton
-                class='action-button'
-                data-test-catalog-listing-embedded-add-skills-to-room-button
-                @loading={{this._addSkillsToCurrentRoom.isRunning}}
-                @disabled={{this.addSkillsDisabled}}
-                {{on 'click' this.addSkillsToCurrentRoom}}
-              >
-                Use Skills
-              </BoxelButton>
-            {{/if}}
-            {{#if this.hasExamples}}
-              <BoxelButton
-                class='action-button'
-                data-test-catalog-listing-embedded-preview-button
-                {{on 'click' this.preview}}
-              >
-                Preview
-              </BoxelButton>
-            {{/if}}
-            {{#if this.isStub}}
-              <BoxelDropdown @autoClose={{true}}>
-                <:trigger as |bindings|>
+          {{#if this.listingActions}}
+            <div class='action-buttons'>
+              {{#if this.listingActions.preview}}
+                <BoxelButton
+                  class='action-button'
+                  data-test-catalog-listing-embedded-preview-button
+                  {{on 'click' this.listingActions.preview}}
+                >
+                  Preview
+                </BoxelButton>
+              {{/if}}
+              {{#if this.skillActions}}
+                {{#if this.skillActions.addSkillsToRoom}}
                   <BoxelButton
                     class='action-button'
-                    data-test-catalog-listing-embedded-build-button
-                    @kind='primary'
-                    @loading={{this._build.isRunning}}
-                    {{bindings}}
+                    data-test-catalog-listing-embedded-add-skills-to-room-button
+                    {{on 'click' this.skillActions.addSkillsToRoom}}
                   >
-                    Build
+                    Use Skills
                   </BoxelButton>
-                </:trigger>
-                <:content as |dd|>
-                  <BoxelMenu
-                    class='realm-dropdown-menu'
-                    @closeMenu={{dd.close}}
-                    @items={{this.buildRealmOptions}}
-                    data-test-catalog-listing-embedded-build-dropdown
+                {{/if}}
+              {{/if}}
+              {{#if this.stubActions}}
+                <ChooseRealmAction
+                  @name='Build'
+                  @writableRealms={{this.writableRealms}}
+                  @onAction={{this.stubActions.build}}
+                />
+              {{else if this.regularActions}}
+                {{#if this.regularActions.remix}}
+                  <ChooseRealmAction
+                    @name='Remix'
+                    @writableRealms={{this.writableRealms}}
+                    @onAction={{this.regularActions.remix}}
                   />
-                </:content>
-              </BoxelDropdown>
-            {{else}}
-              <BoxelDropdown @autoClose={{true}}>
-                <:trigger as |bindings|>
-                  <BoxelButton
-                    class='action-button'
-                    data-test-catalog-listing-embedded-remix-button
-                    @kind='primary'
-                    @loading={{this._remix.isRunning}}
-                    @disabled={{this.remixDisabled}}
-                    {{bindings}}
-                  >
-                    Remix
-                  </BoxelButton>
-                </:trigger>
-                <:content as |dd|>
-                  <BoxelMenu
-                    class='realm-dropdown-menu'
-                    @closeMenu={{dd.close}}
-                    @items={{this.remixRealmOptions}}
-                    @loading={{this.allRealmsInfoResource.isLoading}}
-                    data-test-catalog-listing-embedded-remix-dropdown
-                  />
-                </:content>
-              </BoxelDropdown>
-            {{/if}}
-          </div>
+                {{/if}}
+              {{/if}}
+            </div>
+          {{/if}}
         </:action>
       </AppListingHeader>
 
@@ -517,16 +417,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       .action-button {
         flex: 1 1 auto;
       }
-      .realm-dropdown-menu {
-        --boxel-menu-item-content-padding: var(--boxel-sp-xs);
-        --boxel-menu-item-gap: var(--boxel-sp-xs);
-        min-width: 13rem;
-        max-height: 13rem;
-        overflow-y: scroll;
-      }
-      .realm-dropdown-menu :deep(.menu-item__icon-url) {
-        border-radius: var(--boxel-border-radius-xs);
-      }
       .app-listing-embedded
         :deep(.ember-basic-dropdown-content-wormhole-origin) {
         position: absolute;
@@ -650,7 +540,7 @@ export class Listing extends CardDef {
     },
   });
 
-  static isolated = EmbeddedTemplate; //temporary
+  static isolated = EmbeddedTemplate;
   static embedded = EmbeddedTemplate;
   static fitted = ListingFittedTemplate;
 }
