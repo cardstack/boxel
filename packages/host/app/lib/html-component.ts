@@ -3,6 +3,7 @@ import { capabilities } from '@ember/component';
 import { setComponentTemplate } from '@ember/component';
 
 import templateOnly from '@ember/component/template-only';
+import { htmlSafe } from '@ember/template';
 import { precompileTemplate } from '@ember/template-compilation';
 
 import { ComponentLike } from '@glint/template';
@@ -10,12 +11,16 @@ import { modifier } from 'ember-modifier';
 
 import { compiler } from '@cardstack/runtime-common/etc';
 
-class _HTMLComponent {
+class _DynamicHTMLComponent {
   constructor(
     readonly component: TopElement,
     readonly attrs: Record<string, string>,
     readonly children: Node[],
   ) {}
+}
+
+class _SimpleHTMLComponent {
+  constructor(readonly htmlString: string) {}
 }
 
 export type HTMLComponent = ComponentLike<{ Args: {}; Element: Element }>;
@@ -30,41 +35,46 @@ type TopElement = ComponentLike<{
 export function htmlComponent(html: string): HTMLComponent {
   let testContainer = document.createElement('div');
   testContainer.innerHTML = html;
-  if (testContainer.children.length !== 1) {
-    throw new Error(
-      `htmlComponent expected exactly one element, found ${testContainer.children.length}`,
-    );
-  }
-  let cardElement = testContainer.children[0];
-  let tagName = cardElement.tagName.toLowerCase();
+  if (
+    testContainer.childNodes.length === 1 &&
+    testContainer.children.length === 1
+  ) {
+    let cardElement = testContainer.children[0];
+    let tagName = cardElement.tagName.toLowerCase();
 
-  let sourceParts: string[] = [];
-  let attrs: Record<string, string> = {};
+    let sourceParts: string[] = [];
+    let attrs: Record<string, string> = {};
 
-  sourceParts.push(`<${tagName} `);
+    sourceParts.push(`<${tagName} `);
 
-  for (let { name, value } of cardElement.attributes) {
-    attrs[name] = value;
-    sourceParts.push(`${name}={{@attrs.${name}}} `);
-  }
+    for (let { name, value } of cardElement.attributes) {
+      attrs[name] = value;
+      sourceParts.push(`${name}={{@attrs.${name}}} `);
+    }
 
-  sourceParts.push(`...attributes />`);
+    sourceParts.push(`...attributes />`);
 
-  let source = sourceParts.join('');
-  let component: TopElement;
-  if (cache.has(source)) {
-    component = cache.get(source)!;
+    let source = sourceParts.join('');
+    let component: TopElement;
+    if (cache.has(source)) {
+      component = cache.get(source)!;
+    } else {
+      component = setComponentTemplate(
+        compiler.compile(source, { strictMode: true }),
+        templateOnly(),
+      ) as TopElement;
+      cache.set(source, component);
+    }
+
+    return new _DynamicHTMLComponent(component, attrs, [
+      ...cardElement.childNodes,
+    ]) as unknown as HTMLComponent;
   } else {
-    component = setComponentTemplate(
-      compiler.compile(source, { strictMode: true }),
-      templateOnly(),
-    ) as TopElement;
-    cache.set(source, component);
+    console.warn(
+      `htmlComponent expected exactly one childNode that is a childNode, found ${JSON.stringify(testContainer.childNodes)}`,
+    );
+    return new _SimpleHTMLComponent(html) as unknown as HTMLComponent;
   }
-
-  return new _HTMLComponent(component, attrs, [
-    ...cardElement.childNodes,
-  ]) as unknown as HTMLComponent;
 }
 
 setComponentTemplate(
@@ -75,7 +85,15 @@ setComponentTemplate(
       scope: () => ({ withChildren }),
     },
   ),
-  _HTMLComponent.prototype,
+  _DynamicHTMLComponent.prototype,
+);
+
+setComponentTemplate(
+  precompileTemplate('{{htmlSafe this.htmlString}}', {
+    strictMode: true,
+    scope: () => ({ htmlSafe }),
+  }),
+  _SimpleHTMLComponent.prototype,
 );
 
 type ComponentManager = ReturnType<Parameters<typeof setComponentManager>[0]>;
@@ -85,17 +103,25 @@ class HTMLComponentManager implements ComponentManager {
   static create(_owner: unknown) {
     return new HTMLComponentManager();
   }
-  createComponent(htmlComponent: _HTMLComponent, _args: unknown) {
+  createComponent(
+    htmlComponent: _DynamicHTMLComponent | _SimpleHTMLComponent,
+    _args: unknown,
+  ) {
     return htmlComponent;
   }
-  getContext(htmlComponent: _HTMLComponent) {
+  getContext(htmlComponent: _DynamicHTMLComponent | _SimpleHTMLComponent) {
     return htmlComponent;
   }
 }
 
 setComponentManager(
   (owner) => HTMLComponentManager.create(owner),
-  _HTMLComponent.prototype,
+  _DynamicHTMLComponent.prototype,
+);
+
+setComponentManager(
+  (owner) => HTMLComponentManager.create(owner),
+  _SimpleHTMLComponent.prototype,
 );
 
 const withChildren = modifier((element: Element, [children]: [Node[]]) => {
