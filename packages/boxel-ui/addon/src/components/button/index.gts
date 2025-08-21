@@ -144,7 +144,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         min-height: var(--boxel-button-min-height);
         min-width: var(--boxel-button-min-width);
         padding: var(--boxel-button-padding);
-        letter-spacing: var(--boxel-button-letter-spacing, var(--boxel-lsp-sm));
+        letter-spacing: var(--boxel-button-letter-spacing, var(--boxel-lsp));
         box-shadow: var(--boxel-button-box-shadow);
       }
       .boxel-button:not(:disabled):hover {
@@ -335,6 +335,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         --boxel-button-min-width: 5rem;
         --boxel-button-loading-icon-size: var(--boxel-icon-xxs);
         --boxel-button-font: 600 var(--boxel-font-xs);
+        --boxel-button-letter-spacing: var(--boxel-lsp-lg);
       }
 
       /* thinner base button */
