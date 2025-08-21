@@ -483,15 +483,15 @@ export async function getAttachedFiles(
         try {
           result.content = await downloadFile(client, attachedFile);
         } catch (error) {
-          if (error instanceof UnsupportedFileError) {
-            return null; // Gracefully ignore unsupported files for now
-          }
-          log.error(`Failed to fetch file ${attachedFile.url}:`, error);
-          Sentry.captureException(error, {
-            extra: { fileUrl: attachedFile.url, fileName: attachedFile.name },
-          });
           result.error = `Error loading attached file: ${(error as Error).message}`;
           result.content = undefined;
+          log.error(`Failed to fetch file ${attachedFile.url}:`, error);
+          if (!(error instanceof UnsupportedFileError)) {
+            // No need to report unsupported files to Sentry
+            Sentry.captureException(error, {
+              extra: { fileUrl: attachedFile.url, fileName: attachedFile.name },
+            });
+          }
         }
       }
       return result;
