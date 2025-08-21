@@ -543,7 +543,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     await waitFor(`[data-test-cards-grid-item="${cardId}"]`);
     if (title) {
       await waitFor(
-        `[data-test-card="${cardId}"] [data-test-card-title="${title}"]`,
+        `[data-test-cards-grid-item="${cardId}"] [data-test-card-title="${title}"]`,
         //its problematic when we are waiting for computed title
         //my recommendation for the purposes of test is to populate the card title in the realm
       );
@@ -667,16 +667,13 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
 
     module('listing fitted', async function () {
-      skip('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
+      test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
         await selectTab('Cards');
         await waitForGrid();
-        await waitFor(`[data-test-cards-grid-item="${authorListingId}"]`);
-        await waitFor(
-          `[data-test-card="${authorListingId}"] [data-test-card-title="Author"]`,
-        );
+        await waitForCardOnGrid(authorListingId, 'Author');
         assert
           .dom(
-            `[data-test-card="${authorListingId}"] [data-test-card-title="Author"]`,
+            `[data-test-cards-grid-item="${authorListingId}"] [data-test-card-title="Author"]`,
           )
           .containsText('Author', '"Author" exist in listing');
         await verifyListingAction(
@@ -684,6 +681,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           `[data-test-cards-grid-item="${authorListingId}"] [data-test-catalog-listing-action="Remix"]`,
           'Remix',
           'Remix done! Please suggest two example prompts on how to edit this card.',
+          'Test Workspace B',
         );
       });
 
