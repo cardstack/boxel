@@ -70,6 +70,7 @@ export {
 };
 export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
+import { validate as uuidValidate } from 'uuid';
 
 export const testModuleRealm = 'http://localhost:4202/test/';
 
@@ -921,20 +922,16 @@ export async function openDir(assert: Assert, path: string) {
     currentPath = currentPath ? `${currentPath}${segment}/` : `${segment}/`;
 
     let selector = `[data-test-directory="${currentPath}"] .icon`;
-    await waitFor(selector);
     let element = document.querySelector(selector);
 
     if ((element as HTMLElement)?.classList.contains('closed')) {
       await click(`[data-test-directory="${currentPath}"]`);
-      // Wait for the folder to open
-      await waitFor(`${selector}.open`);
     }
 
     assert.dom(selector).hasClass('open');
   }
 
   let finalSelector = `[data-test-directory="${pathToProcess}"] .icon`;
-  await waitFor(finalSelector);
   let finalElement = document.querySelector(finalSelector);
   let dirName = finalElement?.getAttribute('data-test-directory');
   return dirName;
@@ -952,8 +949,7 @@ export async function verifyFolderWithUUIDInFileTree(
     `[data-test-directory^="${dirNamePrefix}-"]`,
   );
   const dirName = element?.getAttribute('data-test-directory');
-  const uuid =
-    dirName?.replace(`${dirNamePrefix}-`, '').replace('/', '') || '';
+  const uuid = dirName?.replace(`${dirNamePrefix}-`, '').replace('/', '') || '';
   const { validate: uuidValidate } = await import('uuid');
   assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
   return dirName;
@@ -970,8 +966,13 @@ export async function verifyFileInFileTree(assert: Assert, fileName: string) {
 
 /**
  * Verifies a JSON file with UUID pattern exists in a folder and validates the UUID
+ * TODO: this api is not very good because it looks for the first file in the directory and users may not assume that
  */
-export async function verifyJSONWithUUIDInFolder(assert: Assert, dirPath: string) {
+
+export async function verifyJSONWithUUIDInFolder(
+  assert: Assert,
+  dirPath: string,
+) {
   const fileSelector = `[data-test-file^="${dirPath}"]`;
   await waitFor(fileSelector);
   assert.dom(fileSelector).exists();
@@ -981,7 +982,9 @@ export async function verifyJSONWithUUIDInFolder(assert: Assert, dirPath: string
   if (parts) {
     let fileName = parts[parts.length - 1];
     let uuid = fileName.replace(`.json`, '');
-    const { validate: uuidValidate } = await import('uuid');
+    console.log('===');
+    console.log(fileName);
+    console.log(uuid);
     assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
     return filePath;
   } else {

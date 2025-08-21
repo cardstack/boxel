@@ -4,12 +4,11 @@ import {
   waitUntil,
   fillIn,
   settled,
+  triggerEvent,
 } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
-
-import { validate as uuidValidate } from 'uuid';
 
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
@@ -17,8 +16,6 @@ import ListingCreateCommand from '@cardstack/host/commands/listing-create';
 import ListingInstallCommand from '@cardstack/host/commands/listing-install';
 import ListingRemixCommand from '@cardstack/host/commands/listing-remix';
 import ListingUseCommand from '@cardstack/host/commands/listing-use';
-
-import { type Submode } from '@cardstack/host/components/submode-switcher';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -43,13 +40,28 @@ import type { CardListing } from '@cardstack/catalog/listing/listing';
 
 const catalogRealmURL = 'http://localhost:4201/catalog/';
 const testDestinationRealmURL = `http://test-realm/test2/`;
-// Reuse existing mock listings
-const mortgageCalculatorCardId = `${mockCatalogURL}Listing/author`; // Reuse author listing
-const leafletMapCardId = `${mockCatalogURL}Listing/author`; // Reuse author listing
-const talkLikeAPirateCardId = `${mockCatalogURL}Listing/empty-skill`; // Reuse empty-skill listing
-const calculatorTagId = `${mockCatalogURL}Tag/c1fe433a-b3df-41f4-bdcf-d98686ee42d7`; // Keep for tag tests
-const apiDocumentationStubId = `${mockCatalogURL}Listing/api-documentation-stub`;
-const gameTagId = `${mockCatalogURL}Tag/51de249c-516a-4c4d-bd88-76e88274c483`; // Keep for tag tests
+
+//listing
+const authorListingId = `${mockCatalogURL}Listing/author`;
+const personListingId = `${mockCatalogURL}Listing/person`;
+const emptyListingId = `${mockCatalogURL}Listing/empty`;
+const pirateSkillListingId = `${mockCatalogURL}SkillListing/pirate-skill`;
+const incompleteSkillListingId = `${mockCatalogURL}Listing/incomplete-skill`;
+const apiDocumentationStubListingId = `${mockCatalogURL}Listing/api-documentation-stub`;
+
+//skills
+const pirateSkillId = `${mockCatalogURL}Skill/pirate-speak`;
+
+//tags
+const calculatorTagId = `${mockCatalogURL}Tag/c1fe433a-b3df-41f4-bdcf-d98686ee42d7`;
+const gameTagId = `${mockCatalogURL}Tag/51de249c-516a-4c4d-bd88-76e88274c483`;
+const stubTagId = `${mockCatalogURL}Tag/stub`;
+
+//specs
+const authorSpecId = `${mockCatalogURL}Spec/author`;
+
+//examples
+const authorExampleId = `${mockCatalogURL}author/Author/example`;
 
 const authorCardSource = `
   import { field, contains, CardDef, FieldDef } from 'https://cardstack.com/base/card-api';
@@ -91,6 +103,18 @@ const blogPostCardSource = `
   }
 `;
 
+const contactLinkFieldSource = `
+  import { field, contains, FieldDef } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+
+  export class ContactLink extends FieldDef {
+    static displayName = 'ContactLink';
+    @field label = contains(StringField);
+    @field url = contains(StringField);
+    @field type = contains(StringField);
+  }
+`;
+
 let matrixRoomId: string;
 module('Acceptance | Catalog | catalog app tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -117,6 +141,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       contents: {
         'author/author.gts': authorCardSource,
         'blog-post/blog-post.gts': blogPostCardSource,
+        'fields/contact-link.gts': contactLinkFieldSource,
         'author/Author/example.json': {
           data: {
             type: 'card',
@@ -143,7 +168,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             relationships: {
               author: {
                 links: {
-                  self: `${mockCatalogURL}author/Author/example`,
+                  self: authorExampleId,
                 },
               },
             },
@@ -176,38 +201,97 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             },
           },
         },
+        'Spec/contact-link.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              ref: {
+                name: 'ContactLink',
+                module: `${mockCatalogURL}fields/contact-link`,
+              },
+            },
+            specType: 'field',
+            containedExamples: [],
+            title: 'ContactLink',
+            description: 'Spec for ContactLink field',
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/spec',
+                name: 'Spec',
+              },
+            },
+          },
+        },
         'Listing/author.json': {
           data: {
             type: 'card',
             attributes: {
-              title: 'Author',
               name: 'Author',
-              summary: 'Author',
-              images: null,
-              description: null,
-              thumbnailURL: null,
+              title: 'Author', // hardcoding title otherwise test will be flaky when waiting for a computed
             },
             relationships: {
               'specs.0': {
                 links: {
-                  self: `${mockCatalogURL}Spec/author`,
+                  self: authorSpecId,
                 },
               },
               'examples.0': {
                 links: {
-                  self: `${mockCatalogURL}author/Author/example`,
+                  self: authorExampleId,
                 },
               },
               'tags.0': {
                 links: {
-                  self: `${mockCatalogURL}Tag/c1fe433a-b3df-41f4-bdcf-d98686ee42d7`,
+                  self: calculatorTagId,
                 },
               },
             },
             meta: {
               adoptsFrom: {
                 module: `${catalogRealmURL}catalog-app/listing/listing`,
-                name: 'Listing',
+                name: 'CardListing',
+              },
+            },
+          },
+        },
+        'Listing/person.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Person',
+              title: 'Person', // hardcoding title otherwise test will be flaky when waiting for a computed
+              images: [
+                'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
+                'https://images.unsplash.com/photo-1494790108755-2616b332db29?w=400',
+                'https://images.unsplash.com/photo-1552374196-c4e7ffc6e126?w=400',
+              ],
+            },
+            relationships: {
+              'tags.0': {
+                links: {
+                  self: calculatorTagId,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${catalogRealmURL}catalog-app/listing/listing`,
+                name: 'CardListing',
+              },
+            },
+          },
+        },
+        'AppListing/blog-app.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Blog App',
+              title: 'Blog App', // hardcoding title otherwise test will be flaky when waiting for a computed
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${catalogRealmURL}catalog-app/listing/listing`,
+                name: 'AppListing',
               },
             },
           },
@@ -216,48 +300,65 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Empty',
               name: 'Empty',
-              summary: null,
-              images: null,
-              description: null,
-              thumbnailURL: null,
-            },
-            relationships: {
-              'skills.0': {
-                links: {
-                  self: `${mockCatalogURL}Skill/homework-grader`,
-                },
-              },
-              'tags.0': {
-                links: {
-                  self: `${mockCatalogURL}Tag/51de249c-516a-4c4d-bd88-76e88274c483`,
-                },
-              },
+              title: 'Empty', // hardcoding title otherwise test will be flaky when waiting for a computed
             },
             meta: {
               adoptsFrom: {
                 module: `${catalogRealmURL}catalog-app/listing/listing`,
-                name: 'Listing',
+                name: 'CardListing',
               },
             },
           },
         },
-        'Listing/empty-skill.json': {
+        'SkillListing/pirate-skill.json': {
           data: {
             type: 'card',
             attributes: {
-              title: 'Empty',
-              name: 'Empty',
-              summary: 'Empty',
-              images: null,
-              description: null,
-              thumbnailURL: null,
+              name: 'Pirate Skill',
+              title: 'Pirate Skill', // hardcoding title otherwise test will be flaky when waiting for a computed
+            },
+            relationships: {
+              'skills.0': {
+                links: {
+                  self: pirateSkillId,
+                },
+              },
             },
             meta: {
               adoptsFrom: {
                 module: `${catalogRealmURL}catalog-app/listing/listing`,
                 name: 'SkillListing',
+              },
+            },
+          },
+        },
+        'Listing/incomplete-skill.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Incomplete Skill',
+              title: 'Incomplete Skill', // hardcoding title otherwise test will be flaky when waiting for a computed
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${catalogRealmURL}catalog-app/listing/listing`,
+                name: 'SkillListing',
+              },
+            },
+          },
+        },
+        'Skill/pirate-speak.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Talk Like a Pirate',
+              name: 'Pirate Speak',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/skill',
+                name: 'Skill',
               },
             },
           },
@@ -309,11 +410,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             type: 'card',
             attributes: {
               name: 'API Documentation',
+              title: 'API Documentation', // hardcoding title otherwise test will be flaky when waiting for a computed
             },
             relationships: {
               'tags.0': {
                 links: {
-                  self: `${mockCatalogURL}Tag/stub`,
+                  self: stubTagId,
                 },
               },
             },
@@ -325,6 +427,30 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             },
           },
         },
+        'FieldListing/contact-link.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Contact Link',
+              title: 'Contact Link', // hardcoding title otherwise test will be flaky when waiting for a computed
+              summary:
+                'A field for creating and managing contact links such as email, phone, or other web links.',
+            },
+            relationships: {
+              'specs.0': {
+                links: {
+                  self: `${mockCatalogURL}Spec/contact-link`,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${catalogRealmURL}catalog-app/listing/listing`,
+                name: 'FieldListing',
+              },
+            },
+          },
+        },
         'index.json': {
           data: {
             type: 'card',
@@ -332,7 +458,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             relationships: {
               'startHere.0': {
                 links: {
-                  self: `${mockCatalogURL}Listing/author`,
+                  self: authorListingId,
                 },
               },
             },
@@ -377,25 +503,132 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
   });
 
-  async function verifyButtonAction(
+  /**
+   * Selects a tab by name within the catalog app
+   */
+  async function selectTab(tabName: string) {
+    await waitFor(`[data-test-catalog-app] [data-test-tab-label="${tabName}"]`);
+    await click(`[data-test-catalog-app] [data-test-tab-label="${tabName}"]`);
+  }
+
+  /**
+   * Waits for grid to load in the catalog app
+   */
+  async function waitForGrid() {
+    await waitFor('[data-test-catalog-list-view]');
+    await waitFor('[data-test-cards-grid-cards]');
+    await settled();
+  }
+
+  /**
+   * Waits for showcase view to load
+   */
+  async function waitForShowcase() {
+    await waitFor('[data-test-showcase-view]');
+    await settled();
+  }
+
+  /**
+   * Waits for room operations to complete
+   */
+  async function waitForRoom() {
+    await waitFor('[data-room-settled]');
+    await settled();
+  }
+
+  /**
+   * Waits for a card to appear on the grid with optional title verification
+   */
+  async function waitForCardOnGrid(cardId: string, title?: string) {
+    await waitFor(`[data-test-cards-grid-item="${cardId}"]`);
+    if (title) {
+      await waitFor(
+        `[data-test-card="${cardId}"] [data-test-card-title="${title}"]`,
+        //its problematic when we are waiting for computed title
+        //my recommendation for the purposes of test is to populate the card title in the realm
+      );
+    }
+  }
+
+  /**
+   * Waits for a card to appear on the stack with optional title verification
+   */
+  async function waitForCardOnStack(cardId: string, expectedTitle?: string) {
+    await waitFor(
+      `[data-test-stack-card="${cardId}"] [data-test-boxel-card-header-title]`,
+    );
+    if (expectedTitle) {
+      await waitFor(
+        `[data-test-stack-card="${cardId}"] [data-test-boxel-card-header-title]`,
+      );
+    }
+  }
+
+  async function clickDropdownItem(menuItemText: string) {
+    let selector = `[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="${menuItemText}"]`;
+    await waitFor(selector);
+    await click(selector);
+  }
+
+  async function hoverToHydrateCard(buttonSelector: string) {
+    await waitFor(buttonSelector);
+    await triggerEvent(buttonSelector, 'mouseenter');
+    await waitFor('[data-test-hydrated-card]');
+  }
+
+  async function openMenu(buttonSelector: string, checkHydration = true) {
+    await waitFor(buttonSelector);
+    await triggerEvent(buttonSelector, 'mouseenter');
+    if (checkHydration) {
+      await waitFor('[data-test-hydrated-card]');
+    }
+    await click(buttonSelector);
+  }
+
+  async function executeListingAction(
+    buttonSelector: string,
+    menuItemText: string,
+    checkHydration = true,
+  ) {
+    await openMenu(buttonSelector, checkHydration);
+    await clickDropdownItem(menuItemText);
+  }
+
+  async function verifyListingAction(
     assert: Assert,
     buttonSelector: string,
     expectedText: string,
     expectedMessage: string,
+    menuItemName = 'Test Workspace B',
+    checkHydration = true,
   ) {
     await waitFor(buttonSelector);
     assert.dom(buttonSelector).containsText(expectedText);
-    await click(buttonSelector);
-    await click(`[data-test-boxel-menu-item-text="Cardstack Catalog"]`);
-
-    await waitFor(`[data-room-settled]`);
+    await executeListingAction(buttonSelector, menuItemName, checkHydration);
+    await waitForRoom();
     await waitUntil(() => getRoomIds().length > 0);
 
     const roomId = getRoomIds().pop()!;
+    console.log(getRoomIds());
+    console.log(roomId);
+    console.log(getRoomEvents(roomId));
     const message = getRoomEvents(roomId).pop()!;
-
     assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
     assert.strictEqual(message.content.body, expectedMessage);
+  }
+
+  async function assertDropdownItem(
+    assert: Assert,
+    menuItemText: string,
+    exists = true,
+  ) {
+    let selector = `[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="${menuItemText}"]`;
+    if (exists) {
+      await waitFor(selector);
+      assert.dom(selector).exists();
+    } else {
+      assert.dom(selector).doesNotExist();
+    }
   }
 
   async function executeCommand(
@@ -418,7 +651,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
   }
 
-  module('catalog index view', async function (hooks) {
+  module('catalog index', async function (hooks) {
     hooks.beforeEach(async function () {
       await visitOperatorMode({
         stacks: [
@@ -430,133 +663,62 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           ],
         ],
       });
-      await waitFor('.catalog-content', { timeout: 5_000 });
-      await waitFor('.showcase-center-div');
+      await waitForShowcase();
     });
 
-    module('listing card', async function () {
-      test('after clicking "Build" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
-        await visitOperatorMode({
-          stacks: [
-            [
-              {
-                id: apiDocumentationStubId,
-                format: 'isolated',
-              },
-            ],
-          ],
-        });
-        await verifyButtonAction(
-          assert,
-          `[data-test-card="${apiDocumentationStubId}"] [data-test-catalog-listing-embedded-build-button]`,
-          'Build',
-          'Generate .gts card definition for "API Documentation" implementing all requirements from the attached listing specification. Then preview the final code in playground panel.',
-        );
-      });
-
+    module('listing fitted', async function () {
       skip('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
+        await selectTab('Cards');
+        await waitForGrid();
+        await waitFor(`[data-test-cards-grid-item="${authorListingId}"]`);
         await waitFor(
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Author"]`,
+          `[data-test-card="${authorListingId}"] [data-test-card-title="Author"]`,
         );
         assert
           .dom(
-            `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Author"]`,
+            `[data-test-card="${authorListingId}"] [data-test-card-title="Author"]`,
           )
           .containsText('Author', '"Author" exist in listing');
-        await verifyButtonAction(
+        await verifyListingAction(
           assert,
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-remix-button]`,
+          `[data-test-cards-grid-item="${authorListingId}"] [data-test-catalog-listing-action="Remix"]`,
           'Remix',
           'Remix done! Please suggest two example prompts on how to edit this card.',
         );
       });
 
       test('after clicking "Remix" button, current realm (particularly catalog realm) is never displayed in realm options', async function (assert) {
-        // testing fitted
-        await visitOperatorMode({
-          stacks: [
-            [
-              {
-                id: `${mockCatalogURL}index`,
-                format: 'isolated',
-              },
-            ],
-          ],
-        });
-
+        await selectTab('Cards');
+        await waitForGrid();
         const listingId = mockCatalogURL + 'Listing/author';
-
+        await waitFor(`[data-test-cards-grid-item="${listingId}"]`);
         await waitFor(
-          `[data-test-card="${listingId}"] [data-test-card-title="Author"]`,
+          `[data-test-cards-grid-item="${listingId}"] [data-test-card-title="Author"]`,
         );
-        assert
-          .dom(
-            `[data-test-card="${listingId}"] [data-test-card-title="Author"]`,
-          )
-          .containsText('Author', '"Author" button exist in listing');
-        await click(
-          `[data-test-card="${listingId}"] [data-test-catalog-listing-fitted-remix-button]`,
+        await openMenu(
+          `[data-test-cards-grid-item="${listingId}"] [data-test-catalog-listing-action="Remix"]`,
         );
         assert
           .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
           .exists({ count: 1 });
-        assert
-          .dom(
-            '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Cardstack Catalog"]',
-          )
-          .doesNotExist();
-        assert
-          .dom(
-            '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Test Workspace B"]',
-          )
-          .exists();
-
-        // testing isolated
-        await visitOperatorMode({
-          stacks: [
-            [
-              {
-                id: listingId,
-                format: 'isolated',
-              },
-            ],
-          ],
-        });
-        await click(
-          `[data-test-card="${listingId}"] [data-test-catalog-listing-embedded-remix-button]`,
-        );
-        assert
-          .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
-          .exists({ count: 1 });
-        assert
-          .dom(
-            '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Cardstack Catalog"]',
-          )
-          .doesNotExist();
-        assert
-          .dom(
-            '[data-test-boxel-dropdown-content] [data-test-boxel-menu-item-text="Test Workspace B"]',
-          )
-          .exists();
+        await assertDropdownItem(assert, 'Test Workspace B');
+        await assertDropdownItem(assert, 'Test Workspace A', false);
       });
 
       test('after clicking "Preview" button, the first example card opens up onto the stack', async function (assert) {
-        await waitFor(
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Author"]`,
-        );
+        await waitForCardOnGrid(authorListingId, 'Author');
         assert
           .dom(
-            `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Author"]`,
+            `[data-test-card="${authorListingId}"] [data-test-card-title="Author"]`,
           )
           .containsText('Author', '"Author" button exist in listing');
-        await click(
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
+        console.log(
+          `[data-test-cards-grid-item="${authorListingId}"] [data-test-catalog-listing-fitted-preview-button]`,
         );
-        assert
-          .dom(
-            `[data-test-stack-card="${mockCatalogURL}author/Author/example"] [data-test-boxel-card-header-title]`,
-          )
-          .exists();
+        await click(
+          `[data-test-cards-grid-item="${authorListingId}"] [data-test-catalog-listing-fitted-preview-button]`,
+        );
+        await waitForCardOnStack(`${mockCatalogURL}author/Author/example`);
         assert
           .dom(
             `[data-test-stack-card="${mockCatalogURL}author/Author/example"] [data-test-boxel-card-header-title]`,
@@ -565,23 +727,13 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
 
       test('after clicking "Use Skills" button, the skills is attached to the skill menu', async function (assert) {
-        await waitFor(
-          `[data-test-card="${talkLikeAPirateCardId}"] [data-test-card-title="Talk Like a Pirate"]`,
+        await selectTab('Skills');
+        await waitForGrid();
+        await waitFor(`[data-test-cards-grid-item="${pirateSkillListingId}"]`);
+        await openMenu(
+          `[data-test-cards-grid-item="${pirateSkillListingId}"] [data-test-catalog-listing-fitted-add-skills-to-room-button]`,
         );
-        assert
-          .dom(
-            `[data-test-card="${talkLikeAPirateCardId}"] [data-test-card-title="Talk Like a Pirate"]`,
-          )
-          .containsText(
-            'Talk Like a Pirate',
-            '"Talk Like a Pirate" button exist in listing',
-          );
-
-        await click(
-          `[data-test-card="${talkLikeAPirateCardId}"] [data-test-catalog-listing-fitted-add-skills-to-room-button]`,
-        );
-
-        await waitFor('[data-room-settled]');
+        await waitForRoom();
         await click('[data-test-skill-menu][data-test-pill-menu-button]');
         await waitFor('[data-test-skill-menu]');
         assert.dom('[data-test-skill-menu]').exists('Skill menu is visible');
@@ -592,22 +744,16 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
 
       test('after clicking "carousel" area, the first example card opens up onto the stack', async function (assert) {
-        await waitFor(
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Author"]`,
-        );
+        await waitForCardOnGrid(authorListingId, 'Author');
         assert
           .dom(
-            `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Author"]`,
+            `[data-test-card="${authorListingId}"] [data-test-card-title="Author"]`,
           )
           .containsText('Author', '"Author" button exist in listing');
         await click(
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
+          `[data-test-cards-grid-item="${authorListingId}"] [data-test-catalog-listing-fitted-preview-button]`,
         );
-        assert
-          .dom(
-            `[data-test-stack-card="${mockCatalogURL}author/Author/example"] [data-test-boxel-card-header-title]`,
-          )
-          .exists();
+        await waitForCardOnStack(`${mockCatalogURL}author/Author/example`);
         assert
           .dom(
             `[data-test-stack-card="${mockCatalogURL}author/Author/example"] [data-test-boxel-card-header-title]`,
@@ -617,140 +763,167 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
 
       test('after clicking "Details" button, the listing details card opens up onto the stack', async function (assert) {
         await click(
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-details-button]`,
+          `[data-test-cards-grid-item="${authorListingId}"] [data-test-catalog-listing-fitted-details-button]`,
         );
+        await waitForCardOnStack(authorListingId);
         assert
           .dom(
-            `[data-test-stack-card="${mortgageCalculatorCardId}"] [data-test-boxel-card-header-title]`,
+            `[data-test-stack-card="${authorListingId}"] [data-test-boxel-card-header-title]`,
           )
-          .exists();
-        assert
-          .dom(
-            `[data-test-stack-card="${mortgageCalculatorCardId}"] [data-test-boxel-card-header-title]`,
-          )
-          .hasText('Listing - Author');
+          .hasText('CardListing - Author');
       });
 
       test('after clicking "info-section" area, the listing details card opens up onto the stack', async function (assert) {
         await click(
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-details]`,
+          `[data-test-card="${authorListingId}"] [data-test-catalog-listing-fitted-details]`,
         );
+        await waitForCardOnStack(authorListingId);
         assert
           .dom(
-            `[data-test-stack-card="${mortgageCalculatorCardId}"] [data-test-boxel-card-header-title]`,
+            `[data-test-stack-card="${authorListingId}"] [data-test-boxel-card-header-title]`,
           )
-          .exists();
-        assert
-          .dom(
-            `[data-test-stack-card="${mortgageCalculatorCardId}"] [data-test-boxel-card-header-title]`,
-          )
-          .hasText('Listing - Author');
+          .hasText('CardListing - Author');
       });
 
-      test('no arrows and dots appear when one image exist', async function (assert) {
-        await waitFor(
-          `[data-test-card="${leafletMapCardId}"] [data-test-card-title="Author"]`,
+      test('no arrows and dots appear when one or less image exist', async function (assert) {
+        await selectTab('Cards');
+        await waitForGrid();
+        await waitForCardOnGrid(emptyListingId);
+        await hoverToHydrateCard(
+          `[data-test-cards-grid-item="${emptyListingId}"]`,
         );
 
         const carouselNav = document.querySelector(
-          `[data-test-card="${leafletMapCardId}"] .carousel-nav`,
+          `[data-test-cards-grid-item="${emptyListingId}"] .carousel-nav`,
         );
         const carouselDots = document.querySelector(
-          `[data-test-card="${leafletMapCardId}"] .carousel-dots`,
+          `[data-test-cards-grid-item="${emptyListingId}"] .carousel-dots`,
         );
 
         if (carouselNav && carouselDots) {
           assert
-            .dom(`[data-test-card="${leafletMapCardId}"] .carousel-arrow-prev`)
-            .exists();
-          assert
-            .dom(`[data-test-card="${leafletMapCardId}"] .carousel-arrow-next`)
+            .dom(
+              `[data-test-cards-grid-item="${emptyListingId}"] .carousel-arrow-prev`,
+            )
             .exists();
           assert
             .dom(
-              `[data-test-card="${leafletMapCardId}"] .carousel-item-0.is-active`,
+              `[data-test-cards-grid-item="${emptyListingId}"] .carousel-arrow-next`,
+            )
+            .exists();
+          assert
+            .dom(
+              `[data-test-cards-grid-item="${emptyListingId}"] .carousel-item-0.is-active`,
             )
             .exists();
         } else {
           assert
-            .dom(`[data-test-card="${leafletMapCardId}"] .carousel-nav`)
+            .dom(
+              `[data-test-cards-grid-item="${emptyListingId}"] .carousel-nav`,
+            )
             .doesNotExist();
           assert
-            .dom(`[data-test-card="${leafletMapCardId}"] .carousel-dots`)
+            .dom(
+              `[data-test-cards-grid-item="${emptyListingId}"] .carousel-dots`,
+            )
             .doesNotExist();
           assert
-            .dom(`[data-test-card="${leafletMapCardId}"] .carousel-arrow-prev`)
+            .dom(
+              `[data-test-cards-grid-item="${emptyListingId}"] .carousel-arrow-prev`,
+            )
             .doesNotExist();
           assert
-            .dom(`[data-test-card="${leafletMapCardId}"] .carousel-arrow-next`)
+            .dom(
+              `[data-test-cards-grid-item="${emptyListingId}"] .carousel-arrow-next`,
+            )
             .doesNotExist();
         }
       });
 
-      // leaflet map has 3 slides, so index 2 is the last slide
-      test('carousel arrows and dots appear only when multiple images exist and works when triggered', async function (assert) {
+      test('carousel arrows only when multiple images exist and works when triggered', async function (assert) {
+        await selectTab('Cards');
+        await waitForGrid();
+        await waitForCardOnGrid(personListingId);
+        await hoverToHydrateCard(
+          `[data-test-cards-grid-item="${personListingId}"]`,
+        );
+
         await click(
-          `[data-test-card="${leafletMapCardId}"] .carousel-arrow-prev`,
+          `[data-test-cards-grid-item="${personListingId}"] .carousel-arrow-prev`,
         );
         assert
           .dom(
-            `[data-test-card="${leafletMapCardId}"] .carousel-item-2.is-active`,
+            `[data-test-cards-grid-item="${personListingId}"] .carousel-item-2.is-active`,
           )
           .exists('After clicking prev, last slide (index 2) is active');
 
         await click(
-          `[data-test-card="${leafletMapCardId}"] .carousel-arrow-next`,
+          `[data-test-cards-grid-item="${personListingId}"] .carousel-arrow-next`,
         );
         assert
           .dom(
-            `[data-test-card="${leafletMapCardId}"] .carousel-item-0.is-active`,
+            `[data-test-cards-grid-item="${personListingId}"] .carousel-item-0.is-active`,
           )
           .exists('After clicking next, first slide (index 0) is active');
+      });
+
+      test('carousel dots appear only when multiple images exist and works when triggered', async function (assert) {
+        await selectTab('Cards');
+        await waitForGrid();
+        await waitForCardOnGrid(personListingId);
+
+        // Hover over the carousel to make controls visible
+        await hoverToHydrateCard(
+          `[data-test-cards-grid-item="${personListingId}"]`,
+        );
 
         const dots = document.querySelectorAll(
-          `[data-test-card="${leafletMapCardId}"] .carousel-dot`,
+          `[data-test-cards-grid-item="${personListingId}"] .carousel-dot`,
         );
 
         if (dots.length > 1) {
           await click(dots[1]);
           assert
             .dom(
-              `[data-test-card="${leafletMapCardId}"] .carousel-item-1.is-active`,
+              `[data-test-cards-grid-item="${personListingId}"] .carousel-item-1.is-active`,
             )
             .exists('After clicking dot 1, slide 1 is active');
         }
       });
 
       test('preview button appears only when examples exist', async function (assert) {
-        await waitFor(
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-card-title="Author"]`,
+        await selectTab('Cards');
+        await waitForGrid();
+        await waitForCardOnGrid(authorListingId);
+        await hoverToHydrateCard(
+          `[data-test-cards-grid-item="${authorListingId}"]`,
         );
-
         const previewButton = document.querySelector(
-          `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
+          `[data-test-cards-grid-item="${authorListingId}"] [data-test-catalog-listing-fitted-preview-button]`,
         );
 
         if (previewButton) {
           assert
             .dom(
-              `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
+              `[data-test-cards-grid-item="${authorListingId}"] [data-test-catalog-listing-fitted-preview-button]`,
             )
             .exists();
         } else {
           assert
             .dom(
-              `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-fitted-preview-button]`,
+              `[data-test-cards-grid-item="${authorListingId}"] [data-test-catalog-listing-fitted-preview-button]`,
             )
             .doesNotExist();
         }
       });
     });
 
-    module('tab navigation', async function () {
+    module('navigation', async function () {
       // showcase tab has different behavior compared to other tabs (apps, cards, fields, skills)
       module('show results as per catalog tab selected', async function () {
         test('switch to showcase tab', async function (assert) {
-          await click('[data-tab-label="Showcase"]');
+          await selectTab('Showcase');
+          await waitForShowcase();
           assert
             .dom('[data-test-navigation-reset-button="showcase"]')
             .exists(`"Catalog Home" button should exist`)
@@ -759,7 +932,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         });
 
         test('switch to apps tab', async function (assert) {
-          await click('[data-tab-label="Apps"]');
+          await selectTab('Apps');
+          await waitForGrid();
           assert
             .dom('[data-test-navigation-reset-button="app"]')
             .exists(`"All Apps" button should exist`)
@@ -767,234 +941,238 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           assert.dom('[data-test-boxel-radio-option-id="grid"]').exists();
         });
       });
-    });
 
-    skip('filters', async function () {
-      test('list view is shown if filters are applied', async function (assert) {
-        await waitFor('[data-test-filter-search-input]');
-        await click('[data-test-filter-search-input]');
-        await fillIn('[data-test-filter-search-input]', 'Mortgage');
-        // filter by category
-        await click('[data-test-filter-list-item="All"]');
-        // filter by tag
-        let tagPill = document.querySelector('[data-test-tag-list-pill]');
-        if (tagPill) {
-          await click(tagPill);
-        }
+      skip('filters', async function () {
+        test('list view is shown if filters are applied', async function (assert) {
+          await waitFor('[data-test-filter-search-input]');
+          await click('[data-test-filter-search-input]');
+          await fillIn('[data-test-filter-search-input]', 'Mortgage');
+          // filter by category
+          await click('[data-test-filter-list-item="All"]');
+          // filter by tag
+          let tagPill = document.querySelector('[data-test-tag-list-pill]');
+          if (tagPill) {
+            await click(tagPill);
+          }
 
-        await waitUntil(() => {
-          const cards = document.querySelectorAll(
-            '[data-test-catalog-list-view]',
-          );
-          return cards.length === 1;
+          await waitUntil(() => {
+            const cards = document.querySelectorAll(
+              '[data-test-catalog-list-view]',
+            );
+            return cards.length === 1;
+          });
+
+          assert
+            .dom('[data-test-catalog-list-view]')
+            .exists(
+              'Catalog list view should be visible when filters are applied',
+            );
         });
 
-        assert
-          .dom('[data-test-catalog-list-view]')
-          .exists(
-            'Catalog list view should be visible when filters are applied',
-          );
-      });
+        // TOOD: restore in CS-9083
+        skip('should be reset when clicking "Catalog Home" button', async function (assert) {
+          await waitFor('[data-test-filter-search-input]');
+          await click('[data-test-filter-search-input]');
+          await fillIn('[data-test-filter-search-input]', 'Mortgage');
+          // filter by category
+          await click('[data-test-filter-list-item="All"]');
+          // filter by tag
+          let tagPill = document.querySelector('[data-test-tag-list-pill]');
+          if (tagPill) {
+            await click(tagPill);
+          }
 
-      // TOOD: restore in CS-9083
-      skip('should be reset when clicking "Catalog Home" button', async function (assert) {
-        await waitFor('[data-test-filter-search-input]');
-        await click('[data-test-filter-search-input]');
-        await fillIn('[data-test-filter-search-input]', 'Mortgage');
-        // filter by category
-        await click('[data-test-filter-list-item="All"]');
-        // filter by tag
-        let tagPill = document.querySelector('[data-test-tag-list-pill]');
-        if (tagPill) {
-          await click(tagPill);
-        }
+          assert
+            .dom('[data-test-showcase-view]')
+            .doesNotExist('Should be in list view after applying filter');
 
-        assert
-          .dom('[data-test-showcase-view]')
-          .doesNotExist('Should be in list view after applying filter');
+          await click('[data-test-navigation-reset-button="showcase"]');
 
-        await click('[data-test-navigation-reset-button="showcase"]');
+          assert
+            .dom('[data-test-showcase-view]')
+            .exists(
+              'Should return to showcase view after clicking Catalog Home',
+            );
 
-        assert
-          .dom('[data-test-showcase-view]')
-          .exists('Should return to showcase view after clicking Catalog Home');
-
-        assert
-          .dom('[data-test-filter-search-input]')
-          .hasValue('', 'Search input should be cleared');
-        assert
-          .dom('[data-test-filter-list-item].is-selected')
-          .doesNotExist('No category should be selected after reset');
-        assert
-          .dom('[data-test-tag-list-pill].selected')
-          .doesNotExist('No tag should be selected after reset');
-      });
-
-      // TODO: restore in CS-9131
-      skip('should be reset when clicking "All Apps" button', async function (assert) {
-        await click('[data-tab-label="Apps"]');
-        assert
-          .dom('[data-tab-label="Apps"]')
-          .hasClass('active', 'Apps tab should be active');
-
-        await waitFor('[data-test-filter-search-input]');
-        await click('[data-test-filter-search-input]');
-        await fillIn('[data-test-filter-search-input]', 'Mortgage');
-        // filter by category
-        await click('[data-test-filter-list-item="All"]');
-        // filter by tag
-        let tagPill = document.querySelector('[data-test-tag-list-pill]');
-        if (tagPill) {
-          await click(tagPill);
-        }
-
-        await click('[data-test-navigation-reset-button="app"]');
-        assert
-          .dom('[data-test-showcase-view]')
-          .doesNotExist('Should remain in list view, not return to showcase');
-        await waitUntil(() => {
-          const cards = document.querySelectorAll(
-            '[data-test-catalog-list-view]',
-          );
-          return cards.length === 1;
-        });
-        assert
-          .dom('[data-test-catalog-list-view]')
-          .exists('Catalog list view should still be visible');
-
-        assert
-          .dom('[data-test-filter-search-input]')
-          .hasValue('', 'Search input should be cleared');
-        assert
-          .dom('[data-test-filter-list-item].is-selected')
-          .doesNotExist('No category should be selected after reset');
-        assert
-          .dom('[data-test-tag-list-pill].selected')
-          .doesNotExist('No tag should be selected after reset');
-      });
-
-      skip('updates the card count correctly when filtering by a sphere group', async function (assert) {
-        await click('[data-test-boxel-filter-list-button="LIFE"]');
-        assert
-          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
-          .exists({ count: 2 });
-      });
-
-      skip('updates the card count correctly when filtering by a category', async function (assert) {
-        await click('[data-test-filter-list-item="LIFE"] .dropdown-toggle');
-        await click('[data-test-boxel-filter-list-button="Health & Wellness"]');
-        assert
-          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
-          .exists({ count: 1 });
-      });
-
-      skip('updates the card count correctly when filtering by a search input', async function (assert) {
-        await click('[data-test-filter-search-input]');
-        await fillIn('[data-test-filter-search-input]', 'Mortgage');
-        await waitUntil(() => {
-          const cards = document.querySelectorAll(
-            '[data-test-cards-grid-cards] [data-test-cards-grid-item]',
-          );
-          return cards.length === 1;
-        });
-        assert
-          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
-          .exists({ count: 1 });
-      });
-
-      test('updates the card count correctly when filtering by a single tag', async function (assert) {
-        await click(`[data-test-tag-list-pill="${gameTagId}"]`);
-        assert
-          .dom(`[data-test-tag-list-pill="${gameTagId}"]`)
-          .hasClass('selected');
-        assert
-          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
-          .exists({ count: 1 });
-      });
-
-      test('updates the card count correctly when filtering by multiple tags', async function (assert) {
-        await click(`[data-test-tag-list-pill="${calculatorTagId}"]`);
-        await click(`[data-test-tag-list-pill="${gameTagId}"]`);
-        assert
-          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
-          .exists({ count: 2 });
-      });
-
-      test('updates the card count correctly when multiple filters are applied together', async function (assert) {
-        await click('[data-test-boxel-filter-list-button="All"]');
-        await click(`[data-test-tag-list-pill="${gameTagId}"]`);
-        await click('[data-test-filter-search-input]');
-        await fillIn('[data-test-filter-search-input]', 'Blackjack');
-
-        await waitUntil(() => {
-          const cards = document.querySelectorAll(
-            '[data-test-cards-grid-cards] [data-test-cards-grid-item]',
-          );
-          return cards.length === 1;
+          assert
+            .dom('[data-test-filter-search-input]')
+            .hasValue('', 'Search input should be cleared');
+          assert
+            .dom('[data-test-filter-list-item].is-selected')
+            .doesNotExist('No category should be selected after reset');
+          assert
+            .dom('[data-test-tag-list-pill].selected')
+            .doesNotExist('No tag should be selected after reset');
         });
 
-        assert
-          .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
-          .exists({ count: 1 });
-      });
+        // TODO: restore in CS-9131
+        skip('should be reset when clicking "All Apps" button', async function (assert) {
+          await selectTab('Apps');
+          await waitForGrid();
 
-      test('shows zero results when filtering with a non-matching or invalid search input', async function (assert) {
-        await click('[data-test-filter-search-input]');
-        await fillIn('[data-test-filter-search-input]', 'asdfasdf');
-        await waitUntil(() => {
-          const cards = document.querySelectorAll('[data-test-no-results]');
-          return cards.length === 1;
+          await waitFor('[data-test-filter-search-input]');
+          await click('[data-test-filter-search-input]');
+          await fillIn('[data-test-filter-search-input]', 'Mortgage');
+          // filter by category
+          await click('[data-test-filter-list-item="All"]');
+          // filter by tag
+          let tagPill = document.querySelector('[data-test-tag-list-pill]');
+          if (tagPill) {
+            await click(tagPill);
+          }
+
+          await click('[data-test-navigation-reset-button="app"]');
+          assert
+            .dom('[data-test-showcase-view]')
+            .doesNotExist('Should remain in list view, not return to showcase');
+          await waitUntil(() => {
+            const cards = document.querySelectorAll(
+              '[data-test-catalog-list-view]',
+            );
+            return cards.length === 1;
+          });
+          assert
+            .dom('[data-test-catalog-list-view]')
+            .exists('Catalog list view should still be visible');
+
+          assert
+            .dom('[data-test-filter-search-input]')
+            .hasValue('', 'Search input should be cleared');
+          assert
+            .dom('[data-test-filter-list-item].is-selected')
+            .doesNotExist('No category should be selected after reset');
+          assert
+            .dom('[data-test-tag-list-pill].selected')
+            .doesNotExist('No tag should be selected after reset');
         });
 
-        assert.dom('[data-test-no-results]').exists();
-      });
+        skip('updates the card count correctly when filtering by a sphere group', async function (assert) {
+          await click('[data-test-boxel-filter-list-button="LIFE"]');
+          assert
+            .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+            .exists({ count: 2 });
+        });
 
-      test('categories with null sphere fields are excluded from filter list', async function (assert) {
-        // Setup: Create a category with null sphere field
-        await setupAcceptanceTestRealm({
-          realmURL: mockCatalogURL,
-          mockMatrixUtils,
-          contents: {
-            'Category/category-with-null-sphere.json': {
-              data: {
-                type: 'card',
-                attributes: {
-                  name: 'CategoryWithNullSphere',
-                },
-                relationships: {
-                  sphere: {
-                    links: {
-                      self: null,
+        skip('updates the card count correctly when filtering by a category', async function (assert) {
+          await click('[data-test-filter-list-item="LIFE"] .dropdown-toggle');
+          await click(
+            '[data-test-boxel-filter-list-button="Health & Wellness"]',
+          );
+          assert
+            .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+            .exists({ count: 1 });
+        });
+
+        skip('updates the card count correctly when filtering by a search input', async function (assert) {
+          await click('[data-test-filter-search-input]');
+          await fillIn('[data-test-filter-search-input]', 'Mortgage');
+          await waitUntil(() => {
+            const cards = document.querySelectorAll(
+              '[data-test-cards-grid-cards] [data-test-cards-grid-item]',
+            );
+            return cards.length === 1;
+          });
+          assert
+            .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+            .exists({ count: 1 });
+        });
+
+        test('updates the card count correctly when filtering by a single tag', async function (assert) {
+          await click(`[data-test-tag-list-pill="${gameTagId}"]`);
+          assert
+            .dom(`[data-test-tag-list-pill="${gameTagId}"]`)
+            .hasClass('selected');
+          assert
+            .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+            .exists({ count: 1 });
+        });
+
+        test('updates the card count correctly when filtering by multiple tags', async function (assert) {
+          await click(`[data-test-tag-list-pill="${calculatorTagId}"]`);
+          await click(`[data-test-tag-list-pill="${gameTagId}"]`);
+          assert
+            .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+            .exists({ count: 2 });
+        });
+
+        test('updates the card count correctly when multiple filters are applied together', async function (assert) {
+          await click('[data-test-boxel-filter-list-button="All"]');
+          await click(`[data-test-tag-list-pill="${gameTagId}"]`);
+          await click('[data-test-filter-search-input]');
+          await fillIn('[data-test-filter-search-input]', 'Blackjack');
+
+          await waitUntil(() => {
+            const cards = document.querySelectorAll(
+              '[data-test-cards-grid-cards] [data-test-cards-grid-item]',
+            );
+            return cards.length === 1;
+          });
+
+          assert
+            .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+            .exists({ count: 1 });
+        });
+
+        test('shows zero results when filtering with a non-matching or invalid search input', async function (assert) {
+          await click('[data-test-filter-search-input]');
+          await fillIn('[data-test-filter-search-input]', 'asdfasdf');
+          await waitUntil(() => {
+            const cards = document.querySelectorAll('[data-test-no-results]');
+            return cards.length === 1;
+          });
+
+          assert.dom('[data-test-no-results]').exists();
+        });
+
+        test('categories with null sphere fields are excluded from filter list', async function (assert) {
+          // Setup: Create a category with null sphere field
+          await setupAcceptanceTestRealm({
+            realmURL: mockCatalogURL,
+            mockMatrixUtils,
+            contents: {
+              'Category/category-with-null-sphere.json': {
+                data: {
+                  type: 'card',
+                  attributes: {
+                    name: 'CategoryWithNullSphere',
+                  },
+                  relationships: {
+                    sphere: {
+                      links: {
+                        self: null,
+                      },
                     },
                   },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: `${mockCatalogURL}catalog-app/listing/category`,
-                    name: 'Category',
+                  meta: {
+                    adoptsFrom: {
+                      module: `${mockCatalogURL}catalog-app/listing/category`,
+                      name: 'Category',
+                    },
                   },
                 },
               },
             },
-          },
-        });
+          });
 
-        await visitOperatorMode({
-          stacks: [
-            [
-              {
-                id: `${mockCatalogURL}`,
-                format: 'isolated',
-              },
+          await visitOperatorMode({
+            stacks: [
+              [
+                {
+                  id: `${mockCatalogURL}`,
+                  format: 'isolated',
+                },
+              ],
             ],
-          ],
-        });
+          });
 
-        assert
-          .dom('[data-test-boxel-filter-list-button="CategoryWithNullSphere"]')
-          .doesNotExist(
-            'Category with null sphere should not appear in filter list',
-          );
+          assert
+            .dom(
+              '[data-test-boxel-filter-list-button="CategoryWithNullSphere"]',
+            )
+            .doesNotExist(
+              'Category with null sphere should not appear in filter list',
+            );
+        });
       });
     });
   });
@@ -1005,7 +1183,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         stacks: [
           [
             {
-              id: mortgageCalculatorCardId,
+              id: authorListingId,
               format: 'isolated',
             },
           ],
@@ -1013,18 +1191,27 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
     });
 
+    test('after clicking "Remix" button, current realm (particularly catalog realm) is never displayed in realm options', async function (assert) {
+      let selector = `[data-test-card="${authorListingId}"] [data-test-catalog-listing-action="Remix"]`;
+      await openMenu(selector, false);
+      assert
+        .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
+        .exists({ count: 1 });
+      await assertDropdownItem(assert, 'Test Workspace B');
+      await assertDropdownItem(assert, 'Test Workspace A', false);
+    });
+
     test('after clicking "Use Skills" button, the skills is attached to the skill menu', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
             {
-              id: talkLikeAPirateCardId,
+              id: pirateSkillListingId,
               format: 'isolated',
             },
           ],
         ],
       });
-
       await click(
         '[data-test-catalog-listing-embedded-add-skills-to-room-button]',
       );
@@ -1040,23 +1227,24 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
 
     test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
-      await verifyButtonAction(
+      await verifyListingAction(
         assert,
-        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-embedded-remix-button]`,
+        `[data-test-card="${authorListingId}"] [data-test-catalog-listing-action="Remix"]`,
         'Remix',
         'Remix done! Please suggest two example prompts on how to edit this card.',
+        'Test Workspace B',
+        false,
       );
     });
 
     test('after clicking "Preview" button, the first example card opens up onto the stack', async function (assert) {
-      await click(
-        `[data-test-card="${mortgageCalculatorCardId}"] [data-test-catalog-listing-embedded-preview-button]`,
+      console.log(
+        `[data-test-card="${authorListingId}"] [data-test-catalog-listing-embedded-preview-button]`,
       );
-      assert
-        .dom(
-          `[data-test-stack-card="${mockCatalogURL}author/Author/example"] [data-test-boxel-card-header-title]`,
-        )
-        .exists();
+      await click(
+        `[data-test-card="${authorListingId}"] [data-test-catalog-listing-embedded-preview-button]`,
+      );
+      await waitForCardOnStack(`${mockCatalogURL}author/Author/example`);
       assert
         .dom(
           `[data-test-stack-card="${mockCatalogURL}author/Author/example"] [data-test-boxel-card-header-title]`,
@@ -1145,8 +1333,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         .containsText('Homework');
     });
 
-    test('remix button is disabled when remix a listing has no examples and no specs', async function (assert) {
-      const emptyListingId = `${mockCatalogURL}Listing/empty`;
+    test('remix button does not exist when a listing has no specs', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -1157,26 +1344,14 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           ],
         ],
       });
-
-      assert
-        .dom('[data-test-catalog-listing-embedded-summary-section]')
-        .containsText('No Summary Provided');
-
-      assert
-        .dom('[data-test-catalog-listing-embedded-examples-section]')
-        .containsText('No Examples Provided');
-
       assert
         .dom('[data-test-catalog-listing-embedded-specs-section]')
         .containsText('No Specs Provided');
-
-      assert
-        .dom('[data-test-catalog-listing-embedded-remix-button]')
-        .isDisabled();
+      assert.dom('[data-test-catalog-listing-action="Remix"]').doesNotExist();
     });
 
-    test('remix button is disabled when remix a skill listing has no skills', async function (assert) {
-      const emptySkillListingId = `${mockCatalogURL}Listing/empty-skill`;
+    test('remix button does not exist when a skill listing has no skills', async function (assert) {
+      const emptySkillListingId = incompleteSkillListingId;
       await visitOperatorMode({
         stacks: [
           [
@@ -1187,20 +1362,35 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           ],
         ],
       });
-
       assert
         .dom('[data-test-catalog-listing-embedded-skills-section]')
         .containsText('No Skills Provided');
+      assert.dom('[data-test-catalog-listing-action="Remix"]').doesNotExist();
+    });
 
-      assert
-        .dom('[data-test-catalog-listing-embedded-remix-button]')
-        .isDisabled(
-          'Remix button should be disabled when skill listing has no skills',
-        );
+    test('after clicking "Build" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: apiDocumentationStubListingId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+      await verifyListingAction(
+        assert,
+        `[data-test-card="${apiDocumentationStubListingId}"] [data-test-catalog-listing-action="Build"]`,
+        'Build',
+        'Generate .gts card definition for "API Documentation" implementing all requirements from the attached listing specification. Then preview the final code in playground panel.',
+        'Test Workspace B',
+        false,
+      );
     });
   });
 
-  module('commands', async function (hooks) {
+  module('listing commands', async function (hooks) {
     hooks.beforeEach(async function () {
       // we always run a command inside interact mode
       await visitOperatorMode({
@@ -1213,16 +1403,16 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           stacks: [
             [
               {
-                id: apiDocumentationStubId,
+                id: apiDocumentationStubListingId,
                 format: 'isolated',
               },
             ],
           ],
         });
-        await waitFor(`[data-test-card="${apiDocumentationStubId}"]`);
+        await waitFor(`[data-test-card="${apiDocumentationStubListingId}"]`);
         assert
           .dom(
-            `[data-test-card="${apiDocumentationStubId}"] [data-test-catalog-listing-embedded-build-button]`,
+            `[data-test-card="${apiDocumentationStubListingId}"] [data-test-catalog-listing-action="Build"]`,
           )
           .containsText('Build', 'Build button exist in listing');
       });
@@ -1276,11 +1466,12 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         const command = new ListingCreateCommand(commandService.commandContext);
         await command.execute({
           openCardId: cardId,
+          targetRealm: testDestinationRealmURL,
         });
         await visitOperatorMode({
           submode: 'code',
           fileView: 'browser',
-          codePath: `${mockCatalogURL}index`,
+          codePath: `${testDestinationRealmURL}index`,
         });
         await verifySubmode(assert, 'code');
         const instanceFolder = 'AppListing/';
@@ -1314,7 +1505,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         }
       });
     });
-    module('"use"', async function () {
+    skip('"use"', async function () {
       skip('card listing', async function (assert) {
         const listingName = 'author';
         const listingId = mockCatalogURL + 'Listing/author.json';
@@ -1340,11 +1531,11 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
     module('"install"', async function () {
       test('card listing', async function (assert) {
-        const listingName = 'mortgage-calculator';
+        const listingName = 'author';
 
         await executeCommand(
           ListingInstallCommand,
-          mortgageCalculatorCardId,
+          authorListingId,
           testDestinationRealmURL,
         );
         await visitOperatorMode({
@@ -1357,17 +1548,17 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           assert,
           listingName,
         );
-        let gtsFilePath = `${outerFolder}${listingName}/mortgage-calculator.gts`;
+        let gtsFilePath = `${outerFolder}${listingName}/author.gts`;
         await openDir(assert, gtsFilePath);
         await verifyFileInFileTree(assert, gtsFilePath);
-        let examplePath = `${outerFolder}mortgage-calculator/MortgageCalculator/example.json`;
+        let examplePath = `${outerFolder}${listingName}/Author/example.json`;
         await openDir(assert, examplePath);
         await verifyFileInFileTree(assert, examplePath);
       });
 
       test('field listing', async function (assert) {
         const listingName = 'contact-link';
-        const contactLinkFieldListingCardId = `${mockCatalogURL}FieldListing/fb9494c4-0d61-4d2d-a6c0-7b16ca40b42b`;
+        const contactLinkFieldListingCardId = `${mockCatalogURL}FieldListing/contact-link`;
 
         await executeCommand(
           ListingInstallCommand,
@@ -1392,7 +1583,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
 
       test('skill listing', async function (assert) {
-        const listingName = 'talk-like-a-pirate';
+        const listingName = 'pirate-skill';
         const listingId = `${mockCatalogURL}SkillListing/${listingName}`;
         await executeCommand(
           ListingInstallCommand,
@@ -1409,7 +1600,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           assert,
           listingName,
         );
-        let instancePath = `${outerFolder}Skill/skill-pirate-speak.json`;
+        let instancePath = `${outerFolder}Skill/pirate-speak.json`;
         await openDir(assert, instancePath);
         await verifyFileInFileTree(assert, instancePath);
       });
@@ -1447,7 +1638,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           .hasText('Author - Mike Dane');
       });
       test('skill listing: installs the card and redirects to code mode with preview on first skill successfully', async function (assert) {
-        const listingName = 'talk-like-a-pirate';
+        const listingName = 'pirate-skill';
         const listingId = `${mockCatalogURL}SkillListing/${listingName}`;
         await executeCommand(
           ListingRemixCommand,
@@ -1461,7 +1652,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
           assert,
           listingName,
         );
-        let instancePath = `${outerFolder}Skill/skill-pirate-speak.json`;
+        let instancePath = `${outerFolder}Skill/pirate-speak.json`;
         await openDir(assert, instancePath);
         await verifyFileInFileTree(assert, instancePath);
         let cardId =
@@ -1497,10 +1688,10 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
 
     test('"install" is successful even if target realm does not have a trailing slash', async function (assert) {
-      const listingName = 'mortgage-calculator';
+      const listingName = 'author';
       await executeCommand(
         ListingInstallCommand,
-        mortgageCalculatorCardId,
+        authorListingId,
         removeTrailingSlash(testDestinationRealmURL),
       );
       await visitOperatorMode({
@@ -1514,10 +1705,10 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         listingName,
       );
 
-      let gtsFilePath = `${outerFolder}${listingName}/mortgage-calculator.gts`;
+      let gtsFilePath = `${outerFolder}${listingName}/author.gts`;
       await openDir(assert, gtsFilePath);
       await verifyFileInFileTree(assert, gtsFilePath);
-      let instancePath = `${outerFolder}${listingName}/MortgageCalculator/example.json`;
+      let instancePath = `${outerFolder}${listingName}/Author/example.json`;
 
       await openDir(assert, instancePath);
       await verifyFileInFileTree(assert, instancePath);

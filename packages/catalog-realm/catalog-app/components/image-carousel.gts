@@ -12,7 +12,7 @@ interface Signature {
   };
   Blocks: {
     overlay?: [];
-    default?: [];
+    icon: [];
   };
 }
 
@@ -55,9 +55,9 @@ export default class ImageCarouselComponent extends GlimmerComponent<Signature> 
 
   <template>
     <div class='image-carousel' ...attributes>
-      {{#if (has-block "overlay")}}
+      {{#if (has-block 'overlay')}}
         <div class='carousel-overlay'>
-          {{yield to="overlay"}}
+          {{yield to='overlay'}}
         </div>
       {{/if}}
 
@@ -76,9 +76,9 @@ export default class ImageCarouselComponent extends GlimmerComponent<Signature> 
             </div>
           {{/each}}
         </div>
-      {{else if (has-block "default")}}
+      {{else if (has-block 'icon')}}
         <div class='carousel-default'>
-          {{yield to="default"}}
+          {{yield to='icon'}}
         </div>
       {{/if}}
 
@@ -126,7 +126,7 @@ export default class ImageCarouselComponent extends GlimmerComponent<Signature> 
           overflow: hidden;
           container-type: inline-size;
         }
-        
+
         .carousel-overlay {
           position: absolute;
           top: 0;
@@ -136,14 +136,14 @@ export default class ImageCarouselComponent extends GlimmerComponent<Signature> 
           height: 100%;
           pointer-events: none;
         }
-        
+
         .carousel-default {
           height: 100%;
           display: flex;
           align-items: center;
           justify-content: center;
         }
-        
+
         .carousel-items {
           height: 100%;
           display: flex;
@@ -151,7 +151,7 @@ export default class ImageCarouselComponent extends GlimmerComponent<Signature> 
           justify-content: center;
           position: relative;
         }
-        
+
         .carousel-item {
           position: absolute;
           visibility: hidden;
@@ -165,7 +165,7 @@ export default class ImageCarouselComponent extends GlimmerComponent<Signature> 
             opacity 1s ease,
             visibility 0s linear 1s;
         }
-        
+
         .carousel-item.is-active {
           visibility: visible;
           opacity: 1;
@@ -173,7 +173,7 @@ export default class ImageCarouselComponent extends GlimmerComponent<Signature> 
             opacity 1s ease,
             visibility 0s;
         }
-        
+
         .carousel-item img {
           width: 100%;
           height: auto;
@@ -197,7 +197,7 @@ export default class ImageCarouselComponent extends GlimmerComponent<Signature> 
           align-items: center;
           color: var(--boxel-200);
         }
-        
+
         .carousel-arrow-prev {
           position: absolute;
           left: 0;
@@ -205,7 +205,7 @@ export default class ImageCarouselComponent extends GlimmerComponent<Signature> 
           transform: translateY(-50%);
           z-index: calc(var(--boxel-carousel-z-index) + 2);
         }
-        
+
         .carousel-arrow-next {
           position: absolute;
           right: 0;
@@ -224,7 +224,7 @@ export default class ImageCarouselComponent extends GlimmerComponent<Signature> 
           justify-content: center;
           gap: 0.5rem;
         }
-        
+
         .carousel-dot {
           width: 10px;
           height: 10px;
@@ -234,7 +234,7 @@ export default class ImageCarouselComponent extends GlimmerComponent<Signature> 
           cursor: pointer;
           padding: 0px;
         }
-        
+
         .carousel-dot.is-active {
           background-color: var(--boxel-400);
           border: 1px solid var(--boxel-700);
