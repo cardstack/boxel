@@ -16,6 +16,7 @@ import stringify from 'safe-stable-stringify';
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
 import {
+  Deferred,
   ResolvedCodeRef,
   baseRealm,
   skillCardRef,
@@ -2450,6 +2451,73 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // Restore the original function
     getService('realm-server').requestForward = originalRequestForward;
+  });
+
+  test('cancel button cancels session preparation and shows correct wording', async function (assert) {
+    // Mock the matrix service getPromptParts method to block summarization
+    const matrixService = getService('matrix-service');
+    const originalGetPromptParts = matrixService.getPromptParts;
+    matrixService.getPromptParts = async (roomId: string) => {
+      if (summarizationDeferred) {
+        await summarizationDeferred.promise;
+      }
+      return originalGetPromptParts.call(matrixService, roomId);
+    };
+
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // Send a message to create some history
+    await fillIn('[data-test-message-field]', 'Test message for summarization');
+    await click('[data-test-send-message-btn]');
+
+    let summarizationDeferred = new Deferred<void>();
+    // Create new session with "Summarize Current Session" option
+    await click('[data-test-create-room-btn]', { shiftKey: true });
+    await click(
+      '[data-test-new-session-settings-option="Summarize Current Session"]',
+    );
+    await click('[data-test-new-session-settings-create-button]');
+
+    // Verify the session preparation message is shown with correct wording
+    assert
+      .dom('[data-test-session-preparation]')
+      .includesText('Summarizing previous session');
+    assert
+      .dom('[data-test-session-preparation]')
+      .includesText('Takes 10-20 seconds');
+    assert.dom('[data-test-session-preparation-cancel-button]').exists();
+    assert
+      .dom('[data-test-session-preparation-cancel-button]')
+      .hasText('Cancel');
+    // Click the cancel button
+    await click('[data-test-session-preparation-cancel-button]');
+
+    // Verify that the session preparation UI is no longer shown
+    assert.dom('[data-test-session-preparation]').doesNotExist();
+
+    // Verify that the message input is now enabled (canSend should be true)
+    assert.dom('[data-test-message-field]').isNotDisabled();
+
+    assertMessages(assert, []);
+
+    // Resolve the deferred promise to clean up
+    summarizationDeferred.fulfill();
+
+    // Restore the original getPromptParts method
+    matrixService.getPromptParts = originalGetPromptParts;
   });
 
   test('ai assistant panel width persists to localStorage', async function (assert) {
