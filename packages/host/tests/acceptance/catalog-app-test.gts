@@ -608,7 +608,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     await waitUntil(() => getRoomIds().length > 0);
 
     const roomId = getRoomIds().pop()!;
-    await waitFor(`[data-test-room="${roomId}"]`);
     await waitFor(`[data-test-room="${roomId}"][data-test-room-settled]`);
     await waitFor(
       `[data-test-room="${roomId}"] [data-test-ai-assistant-message]`,
