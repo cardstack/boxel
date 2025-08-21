@@ -176,7 +176,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
   ): Promise<undefined> {
     const cardAPI = await this.loadCardAPI();
 
-    let { openCardId } = input;
+    let { openCardId, targetRealm: targetRealmFromInput } = input;
 
     if (!openCardId) {
       throw new Error('Card id is required');
@@ -188,7 +188,8 @@ export default class ListingCreateCommand extends HostBaseCommand<
       throw new Error('Instance is not a card');
     }
 
-    const targetRealm = instance[cardAPI.realmURL]?.href;
+    const targetRealm =
+      targetRealmFromInput ?? instance[cardAPI.realmURL]?.href;
 
     if (!targetRealm) {
       throw new Error('Realm not found');

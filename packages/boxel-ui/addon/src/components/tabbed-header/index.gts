@@ -52,8 +52,7 @@ export default class TabbedHeader extends Component<Signature> {
                   href='#{{tab.tabId}}'
                   {{on 'click' (fn @setActiveTab tab.tabId)}}
                   class={{if (eq @activeTabId tab.tabId) 'active'}}
-                  data-tab-label={{tab.displayName}}
-                  {{! do not remove data-tab-label attribute }}
+                  data-test-tab-label={{tab.displayName}}
                 >
                   {{tab.displayName}}
                 </a>
@@ -127,7 +126,7 @@ export default class TabbedHeader extends Component<Signature> {
       /* this prevents layout shift when text turns bold on hover/active */
       .app-tab-list a::after {
         display: block;
-        content: attr(data-tab-label);
+        content: attr(data-test-tab-label);
         height: 0;
         visibility: hidden;
         user-select: none;
