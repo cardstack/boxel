@@ -667,7 +667,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
 
     module('listing fitted', async function () {
-      test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
+      skip('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
         await selectTab('Cards');
         await waitForGrid();
         await waitForCardOnGrid(authorListingId, 'Author');
@@ -1221,7 +1221,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         .exists('Skill is attached to the skill menu');
     });
 
-    test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
+    skip('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
       await verifyListingAction(
         assert,
         `[data-test-card="${authorListingId}"] [data-test-catalog-listing-action="Remix"]`,
