@@ -12,6 +12,8 @@ import { getService } from '@universal-ember/test-support';
 
 import ms from 'ms';
 
+import { validate as uuidValidate } from 'uuid';
+
 import {
   RealmAdapter,
   LooseSingleCardDocument,
@@ -70,7 +72,6 @@ export {
 };
 export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
-import { validate as uuidValidate } from 'uuid';
 
 export const testModuleRealm = 'http://localhost:4202/test/';
 
@@ -982,9 +983,6 @@ export async function verifyJSONWithUUIDInFolder(
   if (parts) {
     let fileName = parts[parts.length - 1];
     let uuid = fileName.replace(`.json`, '');
-    console.log('===');
-    console.log(fileName);
-    console.log(uuid);
     assert.ok(uuidValidate(uuid), 'uuid is a valid uuid');
     return filePath;
   } else {

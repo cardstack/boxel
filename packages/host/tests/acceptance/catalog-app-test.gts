@@ -609,9 +609,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     await waitUntil(() => getRoomIds().length > 0);
 
     const roomId = getRoomIds().pop()!;
-    console.log(getRoomIds());
-    console.log(roomId);
-    console.log(getRoomEvents(roomId));
     const message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
     assert.strictEqual(message.content.body, expectedMessage);
