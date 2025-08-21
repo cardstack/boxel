@@ -58,7 +58,7 @@ export default class ChooseRealmAction extends GlimmerComponent<ChooseRealmActio
           {{on 'click' this.handleStopPropagation}}
           {{bindings}}
         >
-          {{this.args.name}}
+          {{@name}}
         </BoxelButton>
       </:trigger>
       <:content as |dd|>
