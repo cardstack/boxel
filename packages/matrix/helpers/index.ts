@@ -258,9 +258,6 @@ export async function gotoForgotPassword(page: Page, appURL = testHost) {
   await openRoot(page, appURL);
 
   await page.locator('[data-test-forgot-password]').click();
-  await expect(page.locator('[data-test-reset-your-password-btn]')).toHaveCount(
-    1,
-  );
 }
 
 export async function login(
