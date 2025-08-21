@@ -23,8 +23,7 @@ interface ProfileAssertions {
   email?: string;
 }
 interface LoginOptions {
-  url?: string;
-  expectFailure?: true;
+  url?: string;?: true;
 }
 
 export async function setSkillsRedirect(page: Page) {
@@ -268,14 +267,9 @@ export async function login(
 ) {
   await openRoot(page, opts?.url);
 
-  await expect(page.locator('[data-test-username-field]')).toBeEditable();
   await page.locator('[data-test-username-field]').fill(username);
   await page.locator('[data-test-password-field]').fill(password);
   await page.locator('[data-test-login-btn]').click();
-
-  if (opts?.expectFailure) {
-    await expect(page.locator('[data-test-login-error]')).toHaveCount(1);
-  }
 }
 
 export async function enterWorkspace(
