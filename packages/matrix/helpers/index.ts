@@ -252,7 +252,6 @@ export async function gotoRegistration(page: Page, appURL = testHost) {
   await openRoot(page, appURL);
 
   await page.locator('[data-test-register-user]').click();
-  await expect(page.locator('[data-test-register-btn]')).toHaveCount(1);
 }
 
 export async function gotoForgotPassword(page: Page, appURL = testHost) {

@@ -61,6 +61,8 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await clearLocalStorage(page, serverIndexUrl);
     await gotoRegistration(page, serverIndexUrl);
 
+    await expect(page.locator('[data-test-register-btn]')).toHaveCount(1);
+
     await expect(
       page.locator('[data-test-token-field]'),
       'token field is not displayed',
