@@ -315,7 +315,11 @@ export default class FileDefManagerImpl
           throw new Error('File needs a realm server source URL to upload');
         }
 
-        let response = await this.network.authedFetch(file.sourceUrl);
+        let response = await this.network.authedFetch(file.sourceUrl, {
+          headers: {
+            Accept: 'application/vnd.card+source',
+          },
+        });
 
         // We only support uploading text files (code) for now.
         // When we start supporting other file types (pdfs, images, etc)
