@@ -10,8 +10,6 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
-import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
-
 import ListingCreateCommand from '@cardstack/host/commands/listing-create';
 import ListingInstallCommand from '@cardstack/host/commands/listing-install';
 import ListingRemixCommand from '@cardstack/host/commands/listing-remix';
@@ -126,7 +124,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     activeRealms: [mockCatalogURL, testDestinationRealmURL],
   });
 
-  let { getRoomIds, getRoomEvents, createAndJoinRoom } = mockMatrixUtils;
+  let { getRoomIds, createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
