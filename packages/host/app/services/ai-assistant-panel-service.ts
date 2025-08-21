@@ -395,7 +395,7 @@ export default class AiAssistantPanelService extends Service {
   }
 
   @action
-  cancelSessionPreparation() {
+  skipSessionPreparation() {
     this.summarizeSessionTask.cancelAll();
     this.copyFileHistoryTask.cancelAll();
     this.prepareSessionContextTask.cancelAll();

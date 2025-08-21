@@ -2453,7 +2453,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     getService('realm-server').requestForward = originalRequestForward;
   });
 
-  test('cancel button cancels session preparation and shows correct wording', async function (assert) {
+  test('skip button skips session preparation and shows correct wording', async function (assert) {
     // Mock the matrix service getPromptParts method to block summarization
     const matrixService = getService('matrix-service');
     const originalGetPromptParts = matrixService.getPromptParts;
@@ -2498,12 +2498,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert
       .dom('[data-test-session-preparation]')
       .includesText('Takes 10-20 seconds');
-    assert.dom('[data-test-session-preparation-cancel-button]').exists();
-    assert
-      .dom('[data-test-session-preparation-cancel-button]')
-      .hasText('Cancel');
-    // Click the cancel button
-    await click('[data-test-session-preparation-cancel-button]');
+    assert.dom('[data-test-session-preparation-skip-button]').exists();
+    assert.dom('[data-test-session-preparation-skip-button]').hasText('Skip');
+    // Click the skip button to skip session preparation
+    await click('[data-test-session-preparation-skip-button]');
 
     // Verify that the session preparation UI is no longer shown
     assert.dom('[data-test-session-preparation]').doesNotExist();

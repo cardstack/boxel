@@ -153,11 +153,11 @@ export default class Room extends Component<Signature> {
               </span>
               <button
                 type='button'
-                class='session-preparation-cancel-button'
-                {{on 'click' this.cancelSessionPreparation}}
-                data-test-session-preparation-cancel-button
+                class='session-preparation-skip-button'
+                {{on 'click' this.skipSessionPreparation}}
+                data-test-session-preparation-skip-button
               >
-                Cancel
+                Skip
               </button>
             </div>
           {{else}}
@@ -369,7 +369,7 @@ export default class Room extends Component<Signature> {
         font: 500 var(--boxel-font-xs);
       }
 
-      .session-preparation-cancel-button {
+      .session-preparation-skip-button {
         background: none;
         border: 1px solid var(--boxel-400);
         border-radius: var(--boxel-border-radius-lg);
@@ -381,7 +381,7 @@ export default class Room extends Component<Signature> {
         margin-top: var(--boxel-sp-sm);
       }
 
-      .session-preparation-cancel-button:hover {
+      .session-preparation-skip-button:hover {
         background: var(--boxel-400);
         color: var(--boxel-light);
       }
@@ -1082,8 +1082,8 @@ export default class Room extends Component<Signature> {
   }
 
   @action
-  private cancelSessionPreparation() {
-    this.aiAssistantPanelService.cancelSessionPreparation();
+  private skipSessionPreparation() {
+    this.aiAssistantPanelService.skipSessionPreparation();
   }
 
   private get displaySkillMenu() {
