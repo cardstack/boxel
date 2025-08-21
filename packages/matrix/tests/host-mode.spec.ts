@@ -57,12 +57,13 @@ test.describe('Host mode', () => {
 
     await page.goto('http://published.realm/mango.json');
 
+    let connectIframe = page.frameLocator('iframe');
+
     // FIXME whaaa
-    if (await page.locator('[data-test-connect]').isVisible()) {
-      await page.locator('[data-test-connect]').click();
+    if (await connectIframe.locator('[data-test-connect]').isVisible()) {
+      await connectIframe.locator('[data-test-connect]').click();
     }
 
-    let connectIframe = page.frameLocator('iframe');
     await expect(connectIframe.locator('[data-test-session]')).toHaveText(
       '@user1:localhost',
     );
