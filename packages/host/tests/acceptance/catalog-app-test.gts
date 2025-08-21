@@ -712,9 +712,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             `[data-test-card="${authorListingId}"] [data-test-card-title="Author"]`,
           )
           .containsText('Author', '"Author" button exist in listing');
-        console.log(
-          `[data-test-cards-grid-item="${authorListingId}"] [data-test-catalog-listing-fitted-preview-button]`,
-        );
         await click(
           `[data-test-cards-grid-item="${authorListingId}"] [data-test-catalog-listing-fitted-preview-button]`,
         );
@@ -1238,9 +1235,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
 
     test('after clicking "Preview" button, the first example card opens up onto the stack', async function (assert) {
-      console.log(
-        `[data-test-card="${authorListingId}"] [data-test-catalog-listing-embedded-preview-button]`,
-      );
       await click(
         `[data-test-card="${authorListingId}"] [data-test-catalog-listing-embedded-preview-button]`,
       );
