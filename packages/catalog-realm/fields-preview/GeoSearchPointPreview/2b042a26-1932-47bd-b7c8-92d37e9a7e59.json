@@ -1,0 +1,31 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "GeoSearchPointPreview",
+        "module": "../geo-search-point"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "geoSearchPoint": {
+        "lat": 3.1336268,
+        "lon": 101.6299203,
+        "searchKey": "Glo Damansara"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

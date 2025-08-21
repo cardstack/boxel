@@ -11,6 +11,7 @@ import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { tracked } from '@glimmer/tracking';
 import { triggerEvent } from '@ember/test-helpers';
+import type { Orientation } from '@cardstack/boxel-ui/components/resizable-panel-group/utils/types';
 
 const RESIZE_HANDLE_WIDTH = 8;
 const PANEL_INDEX_1_MIN_SIZE = 15;
@@ -64,13 +65,13 @@ interface MyTestContext extends RenderingTestContext {
 
 let orientationPropertiesToTest = [
   {
-    orientation: 'horizontal',
+    orientation: 'horizontal' as Orientation,
     axis: 'x',
     dimension: 'width',
     perpendicularDimension: 'height',
   },
   {
-    orientation: 'vertical',
+    orientation: 'vertical' as Orientation,
     axis: 'y',
     dimension: 'height',
     perpendicularDimension: 'width',

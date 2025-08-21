@@ -8,6 +8,14 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
+let standardErrorMessage =
+  'Unable to process the code patch due to invalid code coming from AI';
+export const APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES = {
+  SEARCH_BLOCK_PARSE_ERROR: `${standardErrorMessage} (search block parse error)`,
+  REPLACE_BLOCK_PARSE_ERROR: `${standardErrorMessage} (replace block parse error)`,
+  SEARCH_PATTERN_NOT_FOUND: `${standardErrorMessage} (search pattern not found in the target source file)`,
+} as const;
+
 export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
   typeof BaseCommandModule.ApplySearchReplaceBlockInput,
   typeof BaseCommandModule.ApplySearchReplaceBlockResult
@@ -41,9 +49,13 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
     );
 
     if (searchPattern == null) {
-      throw new Error("Can't parse SEARCH block");
+      throw new Error(
+        APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_BLOCK_PARSE_ERROR,
+      );
     } else if (replacePattern == null) {
-      throw new Error("Can't parse REPLACE block");
+      throw new Error(
+        APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.REPLACE_BLOCK_PARSE_ERROR,
+      );
     }
 
     // Apply the search/replace operation
@@ -53,7 +65,9 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
       replacePattern,
     );
     if (resultContent === input.fileContent) {
-      throw new Error('The patch did not cleanly apply.');
+      throw new Error(
+        APPLY_SEARCH_REPLACE_BLOCK_ERROR_MESSAGES.SEARCH_PATTERN_NOT_FOUND,
+      );
     }
 
     return new ApplySearchReplaceBlockResult({

@@ -194,6 +194,10 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
+  loaded(): Promise<void> {
+    return this.store.loaded();
+  }
+
   // This method creates a new instance in the store and return the new card ID
   async create(
     doc: LooseSingleCardDocument,
@@ -483,12 +487,10 @@ export default class StoreService extends Service implements StoreInterface {
     let card = (await api.createFromSerialized(resource, doc, relativeTo, {
       store: this.store,
     })) as T;
-    // it's important that we absorb the field async here so that glimmer won't
-    // encounter NotLoaded errors, since we don't have the luxury of the indexer
-    // being able to inform us of which fields are used or not at this point.
-    // (this is something that the card compiler could optimize for us in the
-    // future)
-    await api.ensureLinksLoaded(card);
+    if (!(globalThis as any).__lazilyLoadLinks) {
+      // TODO we should be able to get rid of this when we decommission the old prerender
+      await api.ensureLinksLoaded(card);
+    }
     return card;
   }
 

@@ -1,4 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { concat } from '@ember/helper';
 import { hash } from '@ember/helper';
 
 import { cn, element, eq } from '../../helpers.ts';
@@ -14,6 +15,7 @@ export interface PillSignature {
     pillBorderColor?: string;
     pillFontColor?: string;
     tag?: keyof HTMLElementTagNameMap;
+    variant?: 'primary' | 'secondary' | 'muted' | 'destructive' | 'default';
   };
   Blocks: {
     default: [];
@@ -26,7 +28,11 @@ export interface PillSignature {
 const Pill: TemplateOnlyComponent<PillSignature> = <template>
   {{#let (element (if (eq @kind 'button') 'button' @tag)) as |Tag|}}
     <Tag
-      class={{cn 'pill' button-pill=(eq @kind 'button')}}
+      class={{cn
+        'pill'
+        (if (eq @kind 'button') 'button-pill')
+        (if @variant (concat 'variant-' @variant) 'variant-default')
+      }}
       style={{cssVar
         pill-background-color=@pillBackgroundColor
         pill-font-color=(if
@@ -59,25 +65,123 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
   <style scoped>
     @layer {
       .pill {
+        --pill-background-color: var(
+          --boxel-pill-background-color,
+          var(--boxel-light)
+        );
+        --pill-font-color: var(--boxel-pill-font-color, var(--boxel-dark));
+        --pill-border-color: var(--boxel-pill-border-color, var(--boxel-400));
+
         --default-pill-font: 600 var(--boxel-font-sm);
         --default-pill-padding: var(--boxel-sp-5xs) var(--boxel-sp-xxxs);
-        --default-pill-border: 1px solid
-          var(--pill-border-color, var(--boxel-400));
+        --default-pill-border: 1px solid var(--pill-border-color);
+
         display: inline-flex;
         align-items: center;
         gap: var(--pill-gap, var(--boxel-sp-5xs));
         padding: var(--pill-padding, var(--default-pill-padding));
-        background-color: var(--pill-background-color, var(--boxel-light));
-        color: var(--pill-font-color, var(--boxel-dark));
+        background-color: var(--pill-background-color);
+        color: var(--pill-font-color);
         border: var(--pill-border, var(--default-pill-border));
         border-radius: var(--pill-border-radius, var(--boxel-border-radius-sm));
-        font: var(--pill-font, var(--default-pill-font));
+        font: var(--boxel-pill-font, var(--default-pill-font));
+        font-family: inherit;
         letter-spacing: var(--boxel-lsp-xs);
         word-break: break-word;
       }
 
-      .button-pill:not(:disabled):hover {
-        background-color: var(--pill-background-color-hover, var(--boxel-100));
+      .variant-default {
+        --pill-background-color: var(
+          --boxel-pill-background-color,
+          var(--background, var(--boxel-light))
+        );
+        --pill-font-color: var(
+          --boxel-pill-font-color,
+          var(--foreground, var(--boxel-dark))
+        );
+        --pill-border-color: var(
+          --boxel-pill-border-color,
+          var(--border, var(--boxel-400))
+        );
+      }
+
+      .variant-primary {
+        --pill-background-color: var(
+          --boxel-pill-background-color,
+          var(--primary, var(--boxel-600))
+        );
+        --pill-font-color: var(
+          --boxel-pill-font-color,
+          var(--primary-foreground, var(--boxel-light))
+        );
+        --pill-border-color: var(
+          --boxel-pill-border-color,
+          var(--primary, var(--boxel-600))
+        );
+      }
+
+      .variant-secondary {
+        --pill-background-color: var(
+          --boxel-pill-background-color,
+          var(--secondary, var(--boxel-400))
+        );
+        --pill-font-color: var(
+          --boxel-pill-font-color,
+          var(--secondary-foreground, var(--boxel-dark))
+        );
+        --pill-border-color: var(
+          --boxel-pill-border-color,
+          var(--secondary, var(--boxel-400))
+        );
+      }
+
+      .variant-muted {
+        --pill-background-color: var(
+          --boxel-pill-background-color,
+          var(--muted, var(--boxel-200))
+        );
+        --pill-font-color: var(
+          --boxel-pill-font-color,
+          var(--muted-foreground, var(--boxel-dark))
+        );
+        --pill-border-color: var(
+          --boxel-pill-border-color,
+          var(--muted, var(--boxel-200))
+        );
+      }
+
+      .variant-destructive {
+        --pill-background-color: var(
+          --boxel-pill-background-color,
+          var(--destructive, var(--boxel-600))
+        );
+        --pill-font-color: var(
+          --boxel-pill-font-color,
+          var(--destructive-foreground, var(--boxel-light))
+        );
+        --pill-border-color: var(
+          --boxel-pill-border-color,
+          var(--destructive, var(--boxel-600))
+        );
+      }
+
+      .button-pill.variant-default:not(:disabled):hover,
+      .button-pill.variant-primary:not(:disabled):hover,
+      .button-pill.variant-destructive:not(:disabled):hover {
+        --pill-background-color: color-mix(
+          in srgb,
+          var(--pill-background-color) 90%,
+          transparent
+        );
+      }
+
+      .button-pill.variant-secondary:not(:disabled):hover,
+      .button-pill.variant-muted:not(:disabled):hover {
+        --pill-background-color: color-mix(
+          in srgb,
+          var(--pill-background-color) 80%,
+          transparent
+        );
       }
 
       .icon {

@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SongCard",
+        "module": "../song"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "genre": "Cinematic",
+      "artist": "Kevin MacLeod",
+      "audioUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Impact%20Moderato.mp3",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "duration": "2:45",
+      "songTitle": "Dreams Become Real",
+      "isExplicit": false,
+      "coverArtUrl": "https://dummyimage.com/300x300/8b5cf6/ffffff&text=Dreams+Become+Real"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

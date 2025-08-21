@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "songTitle": "Carefree",
+      "artist": "Kevin MacLeod",
+      "duration": "3:32",
+      "albumName": "Royalty Free Music",
+      "genre": "Acoustic",
+      "trackNumber": 2,
+      "audioUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Carefree.mp3",
+      "coverArtUrl": "https://dummyimage.com/300x300/22c55e/ffffff&text=Carefree",
+      "isExplicit": false,
+      "releaseDate": "2024-02-22",
+      "playCount": 1923,
+      "likes": 89,
+      "bpm": 140,
+      "key": "D Major",
+      "energy": 7,
+      "danceability": 6,
+      "valence": 9,
+      "title": "Carefree - Kevin MacLeod"
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../song",
+        "name": "SongCard"
+      }
+    }
+  }
+}

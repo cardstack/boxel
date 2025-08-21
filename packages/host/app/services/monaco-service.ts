@@ -1,5 +1,7 @@
 import type Owner from '@ember/owner';
+import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 
 import { tracked } from '@glimmer/tracking';
 
@@ -68,6 +70,9 @@ export default class MonacoService extends Service {
       });
       this.editor.onDidBlurEditorText(() => {
         this.hasFocus = false;
+      });
+      this.editor.onDidChangeCursorSelection(() => {
+        debounce(this, this.updateSelection, isTesting() ? 10 : 200);
       });
 
       // Use shared waiter manager to track editor initialization
@@ -206,6 +211,11 @@ export default class MonacoService extends Service {
 
   getSelection() {
     return this.editor?.getSelection();
+  }
+
+  @tracked trackedSelection = this.getSelection();
+  updateSelection() {
+    this.trackedSelection = this.getSelection();
   }
 }
 

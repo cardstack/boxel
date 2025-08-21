@@ -24,6 +24,9 @@ import CodeBlockCommandHeader, {
 import CodeBlockDiffEditorHeader, {
   type CodeBlockDiffEditorHeaderSignature,
 } from './diff-editor-header';
+import CodeBlockPatchFooterComponent, {
+  type CodeBlockPatchFooterSignature,
+} from './patch-footer';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -72,6 +75,7 @@ interface Signature {
         editor: ComponentLike<CodeBlockEditorSignature>;
         diffEditor: ComponentLike<CodeBlockDiffEditorSignature>;
         actions: ComponentLike<CodeBlockActionsSignature>;
+        patchFooter: ComponentLike<CodeBlockPatchFooterSignature>;
       },
     ];
   };
@@ -100,6 +104,7 @@ const CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
           language=@language
         )
         actions=(component CodeBlockActionsComponent codeData=@codeData)
+        patchFooter=(component CodeBlockPatchFooterComponent)
       )
     }}
   </section>

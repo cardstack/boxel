@@ -1,0 +1,434 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "AppListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Music Hub",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/music-hub-listing/screenshot_01.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/music-hub-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/music-hub-listing/screenshot_03.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/music-hub-listing/screenshot_04.png"
+      ],
+      "summary": "A comprehensive music creation and discovery platform with integrated tools for musicians",
+      "cardInfo": {
+        "notes": null,
+        "title": "Music Hub - Complete Music Platform",
+        "description": "An all-in-one music platform featuring album discovery, playlist management, song building tools, beat making, recording studio, chord progression player, and artist networking capabilities.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/music-hub-listing/thumbnail.png"
+      }
+    },
+    "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "specs.0": {
+        "links": {
+          "self": "../Spec/455a5aac-04c3-4fcf-ac81-f9b8d920fde3"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/ac04c39f-cf2c-41f9-b8d9-20fde39eba2a"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/5a5aac04-c39f-4f2c-81f9-b8d920fde39e"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/04c39fcf-2c81-49b8-9920-fde39eba2a27"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/5aac04c3-9fcf-4c81-b9b8-d920fde39eba"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/c39fcf2c-81f9-48d9-a0fd-e39eba2a27f6"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/cf2c81f9-b8d9-40fd-a39e-ba2a27f64869"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/9fcf2c81-f9b8-4920-bde3-9eba2a27f648"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/2c81f9b8-d920-4de3-9eba-2a27f6486979"
+        }
+      },
+      "specs.9": {
+        "links": {
+          "self": "../Spec/81f9b8d9-20fd-439e-ba2a-27f648697901"
+        }
+      },
+      "specs.10": {
+        "links": {
+          "self": "../Spec/f9b8d920-fde3-4eba-aa27-f64869790156"
+        }
+      },
+      "specs.11": {
+        "links": {
+          "self": "../Spec/b8d920fd-e39e-4a2a-a7f6-4869790156b7"
+        }
+      },
+      "specs.12": {
+        "links": {
+          "self": "../Spec/d920fde3-9eba-4a27-b648-69790156b795"
+        }
+      },
+      "specs.13": {
+        "links": {
+          "self": "../Spec/20fde39e-ba2a-47f6-8869-790156b79516"
+        }
+      },
+      "specs.14": {
+        "links": {
+          "self": "../Spec/fde39eba-2a27-4648-a979-0156b79516c0"
+        }
+      },
+      "specs.15": {
+        "links": {
+          "self": "../Spec/e39eba2a-27f6-4869-b901-56b79516c0ef"
+        }
+      },
+      "specs.16": {
+        "links": {
+          "self": "../Spec/9eba2a27-f648-4979-8156-b79516c0ef47"
+        }
+      },
+      "specs.17": {
+        "links": {
+          "self": "../Spec/ba2a27f6-4869-4901-96b7-9516c0ef47e0"
+        }
+      },
+      "specs.18": {
+        "links": {
+          "self": "../Spec/2a27f648-6979-4156-b795-16c0ef47e085"
+        }
+      },
+      "specs.19": {
+        "links": {
+          "self": "../Spec/27f64869-7901-46b7-9516-c0ef47e08593"
+        }
+      },
+      "specs.20": {
+        "links": {
+          "self": "../Spec/f6486979-0156-4795-96c0-ef47e0859395"
+        }
+      },
+      "specs.21": {
+        "links": {
+          "self": "../Spec/48697901-56b7-4516-80ef-47e08593954d"
+        }
+      },
+      "specs.22": {
+        "links": {
+          "self": "../Spec/69790156-b795-46c0-af47-e08593954d3e"
+        }
+      },
+      "specs.23": {
+        "links": {
+          "self": "../Spec/790156b7-9516-40ef-87e0-8593954d3e6a"
+        }
+      },
+      "specs.24": {
+        "links": {
+          "self": "../Spec/0156b795-16c0-4f47-a085-93954d3e6a0e"
+        }
+      },
+      "specs.25": {
+        "links": {
+          "self": "../Spec/56b79516-c0ef-47e0-8593-954d3e6a0ed1"
+        }
+      },
+      "specs.26": {
+        "links": {
+          "self": "../Spec/b79516c0-ef47-4085-9395-4d3e6a0ed146"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../music-hub/MusicHubCard/music-hub-demo"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../playlist/PlaylistCard/energetic-workout"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../playlist/PlaylistCard/relaxed-chill"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../playlist/PlaylistCard/focused-instrumental"
+        }
+      },
+      "examples.4": {
+        "links": {
+          "self": "../playlist/PlaylistCard/energy-boost"
+        }
+      },
+      "examples.5": {
+        "links": {
+          "self": "../playlist/PlaylistCard/midnight-chill"
+        }
+      },
+      "examples.6": {
+        "links": {
+          "self": "../playlist/PlaylistCard/focus-flow"
+        }
+      },
+      "examples.7": {
+        "links": {
+          "self": "../song/SongCard/funky-suspense"
+        }
+      },
+      "examples.8": {
+        "links": {
+          "self": "../song/SongCard/carefree"
+        }
+      },
+      "examples.9": {
+        "links": {
+          "self": "../song/SongCard/monkeys-spinning-monkeys"
+        }
+      },
+      "examples.10": {
+        "links": {
+          "self": "../song/SongCard/cipher"
+        }
+      },
+      "examples.11": {
+        "links": {
+          "self": "../song/SongCard/ambient-flow"
+        }
+      },
+      "examples.12": {
+        "links": {
+          "self": "../song/SongCard/digital-dawn"
+        }
+      },
+      "examples.13": {
+        "links": {
+          "self": "../song/SongCard/neon-nights"
+        }
+      },
+      "examples.14": {
+        "links": {
+          "self": "../mood-selector-playlist/MoodSelectorPlaylistCard/music-mood-finder"
+        }
+      },
+      "examples.15": {
+        "links": {
+          "self": "../chord-progression/ChordProgressionPlayerCard/43a76bb7-8d83-468e-a062-ced1850a65f4"
+        }
+      },
+      "examples.16": {
+        "links": {
+          "self": "../chord-progression/ChordProgressionCard/vi-iv-i-v-progression"
+        }
+      },
+      "examples.17": {
+        "links": {
+          "self": "../chord-progression/ChordProgressionCard/ii-v-i-jazz-progression"
+        }
+      },
+      "examples.18": {
+        "links": {
+          "self": "../chord-progression/ChordProgressionCard/i-v-vi-iv-progression"
+        }
+      },
+      "examples.19": {
+        "links": {
+          "self": "../chord-progression/ChordProgressionCard/circle-of-fifths-progression"
+        }
+      },
+      "examples.20": {
+        "links": {
+          "self": "../chord-progression/ChordProgressionCard/blues-twelve-bar-progression"
+        }
+      },
+      "examples.21": {
+        "links": {
+          "self": "../chord-progression/ChordProgressionCard/andalusian-cadence-progression"
+        }
+      },
+      "examples.22": {
+        "links": {
+          "self": "../music-album/MusicAlbumCard/midnight-reveries"
+        }
+      },
+      "examples.23": {
+        "links": {
+          "self": "../music-album/MusicAlbumCard/electric-dreams"
+        }
+      },
+      "examples.24": {
+        "links": {
+          "self": "../beat-maker/BeatMakerCard/rhythm-studio"
+        }
+      },
+      "examples.25": {
+        "links": {
+          "self": "../beat-maker/DrumKitCard/808-analog-kit"
+        }
+      },
+      "examples.26": {
+        "links": {
+          "self": "../beat-maker/DrumKitCard/trap-kit"
+        }
+      },
+      "examples.27": {
+        "links": {
+          "self": "../beat-maker/DrumKitCard/house-kit"
+        }
+      },
+      "examples.28": {
+        "links": {
+          "self": "../beat-maker/DrumKitCard/techno-kit"
+        }
+      },
+      "examples.29": {
+        "links": {
+          "self": "../beat-maker/DrumKitCard/jazz-kit"
+        }
+      },
+      "examples.30": {
+        "links": {
+          "self": "../beat-maker/DrumKitCard/rock-kit"
+        }
+      },
+      "examples.31": {
+        "links": {
+          "self": "../beat-maker/BeatPatternCard/basic-4-4-beat"
+        }
+      },
+      "examples.32": {
+        "links": {
+          "self": "../beat-maker/BeatPatternCard/trap-pattern"
+        }
+      },
+      "examples.33": {
+        "links": {
+          "self": "../beat-maker/BeatPatternCard/jazz-swing"
+        }
+      },
+      "examples.34": {
+        "links": {
+          "self": "../beat-maker/BeatPatternCard/house-groove"
+        }
+      },
+      "examples.35": {
+        "links": {
+          "self": "../beat-maker/BeatPatternCard/breakbeat"
+        }
+      },
+      "examples.36": {
+        "links": {
+          "self": "../beat-maker/BeatPatternCard/rock-beat"
+        }
+      },
+      "examples.37": {
+        "links": {
+          "self": "../beat-maker/BeatPatternCard/jazz-swing"
+        }
+      },
+      "examples.38": {
+        "links": {
+          "self": "../beat-maker/BeatPatternCard/rock-beat"
+        }
+      },
+      "examples.39": {
+        "links": {
+          "self": "../piano/Piano/20dfd090-15bd-45e3-bd0d-b2fe8c3dcc8d"
+        }
+      },
+      "examples.40": {
+        "links": {
+          "self": "../recording-studio/RecordingStudioCard/harmony-studio"
+        }
+      },
+      "examples.41": {
+        "links": {
+          "self": "../song-builder/SongBuilderCard/ai-composer"
+        }
+      },
+      "examples.42": {
+        "links": {
+          "self": "../musician-landing-page/MusicianLandingPage/django-reeves"
+        }
+      },
+      "examples.43": {
+        "links": {
+          "self": "../musician-landing-page/MusicianLandingPage/nova-eclipse"
+        }
+      },
+      "examples.44": {
+        "links": {
+          "self": "../event-ticket/EventTicketCard/indie-showcase"
+        }
+      },
+      "examples.45": {
+        "links": {
+          "self": "../event-ticket/EventTicketCard/synthwave-night"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/entertainment-media"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/creative-projects"
+        }
+      },
+      "categories.2": {
+        "links": {
+          "self": "../Category/content-creation"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -324,6 +324,10 @@ export class CharacterSheet extends CardDef {
           box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
         }
 
+        .character-spells li {
+          height: 85px;
+        }
+
         .character-info {
           display: grid;
           grid-template-columns: repeat(2, 1fr);

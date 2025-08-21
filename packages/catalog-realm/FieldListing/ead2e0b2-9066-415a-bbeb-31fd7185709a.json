@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "name": "Geo Point",
+      "name": "Geo Point Field",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/geo-point-listing/screenshot_01.png",
         "https://boxel-images.boxel.ai/app-assets/catalog/geo-point-listing/screenshot_02.png"

@@ -1,19 +1,16 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import cn from '../../helpers/cn.ts';
-import { eq, or } from '../../helpers/truth-helpers.ts';
-import Label from '../label/index.gts';
+import { eq } from '../../helpers/truth-helpers.ts';
 
 interface Signature {
   Args: {
     hasBackground?: boolean;
     hasBottomBorder?: boolean;
     size?: 'large';
-    subtitle?: string;
     title?: string;
   };
   Blocks: {
-    actions: [];
     default: [];
     detail: [];
     icon: [];
@@ -24,8 +21,8 @@ interface Signature {
 const Header: TemplateOnlyComponent<Signature> = <template>
   <header
     class={{cn
-      has-background=@hasBackground
       large=(eq @size 'large')
+      has-background=@hasBackground
       hasBottomBorder=@hasBottomBorder
     }}
     data-test-boxel-header
@@ -35,98 +32,67 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       {{yield to='icon'}}
     {{/if}}
 
-    {{#if (or @subtitle @title)}}
-      <div
-        class='title {{if (has-block "detail") "with-detail"}}'
-        data-test-boxel-header-title
-      >
-        {{#if @title}}{{@title}}{{/if}}
-        {{#if @subtitle}}
-          <Label data-test-boxel-header-label>
-            {{@subtitle}}
-
-          </Label>
-        {{/if}}
+    {{#if @title}}
+      <div class='title boxel-ellipsize' data-test-boxel-header-title>
+        {{@title}}
       </div>
     {{/if}}
+
+    {{yield}}
 
     {{#if (has-block 'detail')}}
       <div class='detail'>
         {{yield to='detail'}}
       </div>
     {{/if}}
-
-    {{yield}}
-
-    {{#if (has-block 'actions')}}
-      <div class='content' data-test-boxel-header-content>
-        {{yield to='actions'}}
-      </div>
-    {{/if}}
   </header>
   <style scoped>
     @layer {
       header {
-        --default-header-padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp-sm);
+        --_h-padding: var(--boxel-sp);
+        --_h-min-height: 1.875rem; /* 30px */
         position: relative;
         display: flex;
         align-items: center;
-        min-height: var(--boxel-header-min-height, 1.875rem); /* 30px */
-        color: var(--boxel-header-text-color, var(--boxel-dark));
-        border-top-right-radius: calc(
-          var(--boxel-header-border-radius, var(--boxel-border-radius)) - 1px
-        );
-        border-top-left-radius: calc(
-          var(--boxel-header-border-radius, var(--boxel-border-radius)) - 1px
-        );
-        font: var(--boxel-header-font-weight, 600)
-          var(--boxel-header-text-font, var(--boxel-font-sm));
-        letter-spacing: var(--boxel-header-letter-spacing, normal);
-        text-transform: var(--boxel-header-text-transform);
-        transition:
-          background-color var(--boxel-transition),
-          color var(--boxel-transition);
         gap: var(--boxel-header-gap, var(--boxel-sp-xs));
-        padding: var(--boxel-header-padding, var(--default-header-padding));
-      }
-      header .title {
-        max-width: var(
-          --boxel-header-max-width,
-          100%
-        ); /* this includes the space to show the header buttons */
-        text-overflow: var(--boxel-header-text-overflow, ellipsis);
-        overflow: hidden;
-        text-wrap: nowrap;
-      }
-      header .title.with-detail {
-        max-width: var(
-          --boxel-header-detail-max-width,
-          calc(100% - 23rem)
-        ); /* fits last saved message */
+        max-width: 100%;
+        min-height: var(--boxel-header-min-height, var(--_h-min-height));
+        padding: var(--boxel-header-padding, var(--_h-padding));
+        background-color: var(
+          --boxel-header-background-color,
+          var(--_h-bg-color)
+        );
+        color: var(--boxel-header-text-color, var(--_h-color));
       }
       .large {
-        padding: var(--boxel-header-padding, var(--boxel-sp-xl));
-        font: var(--boxel-header-font-weight, 600)
-          var(--boxel-header-text-font, var(--boxel-font-lg));
+        --_h-padding: var(--boxel-sp-xl);
+        --_h-title-fs: var(--typescale-h1, var(--boxel-font-size-lg));
+        --_h-title-fw: 600;
+        --_h-title-lh: calc(30 / 22);
       }
       .hasBottomBorder {
         border-bottom: 1px solid
-          var(--boxel--header-border-color, var(--boxel-200));
+          var(--boxel-header-border-color, var(--border, var(--boxel-200)));
       }
       .has-background {
-        background-color: var(
-          --boxel-header-background-color,
-          var(--boxel-100)
+        --_h-bg-color: var(--muted, var(--boxel-100));
+        --_h-color: var(--muted-foreground, var(--boxel-dark));
+      }
+      .title {
+        font-size: var(--boxel-header-title-font-size, var(--_h-title-fs));
+        font-weight: var(--boxel-header-title-font-weight, var(--_h-title-fw));
+        line-height: var(
+          --boxel-header-title-line-height,
+          var(--lineheight-base, var(--_h-title-lh))
         );
       }
-      .content {
+      .detail {
         display: flex;
         align-items: center;
-        margin-left: auto;
-        gap: var(--boxel-sp-xxs);
-      }
-      .detail {
         margin-left: var(--boxel-header-detail-margin-left, auto);
+      }
+      header > :deep(svg, img) {
+        flex-shrink: 0;
       }
     }
   </style>
