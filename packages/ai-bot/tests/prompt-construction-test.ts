@@ -24,12 +24,14 @@ import { FakeMatrixClient } from './helpers/fake-matrix-client';
 import {
   type LooseCardResource,
   skillCardRef,
+} from '@cardstack/runtime-common';
+import {
   buildPromptForModel,
   getPromptParts,
   getRelevantCards,
   getTools,
   SKILL_INSTRUCTIONS_MESSAGE,
-} from '@cardstack/runtime-common';
+} from '@cardstack/runtime-common/ai';
 
 function oldPatchTool(card: CardDef, properties: any): Tool {
   return {

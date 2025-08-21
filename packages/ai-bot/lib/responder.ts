@@ -1,4 +1,5 @@
-import { logger, isCommandOrCodePatchResult } from '@cardstack/runtime-common';
+import { logger } from '@cardstack/runtime-common';
+import { isCommandOrCodePatchResult } from '@cardstack/runtime-common/ai';
 
 import * as Sentry from '@sentry/node';
 import { OpenAIError } from 'openai/error';

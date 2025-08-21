@@ -1,5 +1,5 @@
 import { module, test, assert } from 'qunit';
-import { cleanContent } from '@cardstack/runtime-common';
+import { cleanContent } from '@cardstack/runtime-common/ai';
 
 module('cleanContent', () => {
   test('should be able to remove whitespace around the outside of the text', () => {

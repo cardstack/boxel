@@ -1,5 +1,6 @@
 import '../setup-logger'; // This should be first
-import { aiBotUsername, getRoomEvents } from '@cardstack/runtime-common';
+import { aiBotUsername } from '@cardstack/runtime-common';
+import { getRoomEvents } from '@cardstack/runtime-common/ai';
 import { createClient } from 'matrix-js-sdk';
 import { writeFileSync } from 'fs';
 

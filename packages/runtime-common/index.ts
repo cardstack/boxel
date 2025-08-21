@@ -94,7 +94,6 @@ export * from './constants';
 export * from './document';
 export * from './matrix-constants';
 export * from './matrix-client';
-export * from './ai-bot-helpers';
 export * from './queue';
 export * from './expression';
 export * from './index-query-engine';

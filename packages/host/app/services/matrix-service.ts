@@ -36,8 +36,8 @@ import {
   SEARCH_MARKER,
   REPLACE_MARKER,
   SEPARATOR_MARKER,
-  getPromptParts,
 } from '@cardstack/runtime-common';
+import { getPromptParts } from '@cardstack/runtime-common/ai';
 
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 

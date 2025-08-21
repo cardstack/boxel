@@ -30,8 +30,8 @@ import {
   REPLACE_MARKER,
   SEARCH_MARKER,
   SEPARATOR_MARKER,
-  constructHistory,
 } from '@cardstack/runtime-common';
+import { constructHistory } from '@cardstack/runtime-common/ai';
 
 module('shouldSetRoomTitle', () => {
   test('Do not set a title when there is no content', () => {

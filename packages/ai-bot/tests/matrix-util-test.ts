@@ -5,10 +5,8 @@ import type {
   CardMessageEvent,
   MatrixEvent as DiscreteMatrixEvent,
 } from 'https://cardstack.com/base/matrix-event';
-import {
-  APP_BOXEL_MESSAGE_MSGTYPE,
-  getRoomEvents,
-} from '@cardstack/runtime-common';
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common';
+import { getRoomEvents } from '@cardstack/runtime-common/ai';
 
 /**
  * Creates a mock Matrix event with all required properties

@@ -20,7 +20,7 @@ import {
   isCommandResultStatusApplied,
   attachedCardsToMessage,
   getRelevantCards,
-} from '@cardstack/runtime-common';
+} from '@cardstack/runtime-common/ai';
 import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
 
 const SET_TITLE_SYSTEM_MESSAGE = `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words.

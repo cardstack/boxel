@@ -15,12 +15,17 @@ import {
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   uuidv4,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
+} from '@cardstack/runtime-common';
+import {
   PromptParts,
   isRecognisedDebugCommand,
   getPromptParts,
   isInDebugMode,
   isCommandResultStatusApplied,
-} from '@cardstack/runtime-common';
+  getRoomEvents,
+  sendPromptAsDebugMessage,
+  constructHistory,
+} from '@cardstack/runtime-common/ai';
 import { validateAICredits } from '@cardstack/billing/ai-billing';
 import {
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
@@ -35,11 +40,6 @@ import {
   setTitle,
   roomTitleAlreadySet,
 } from './lib/set-title';
-import {
-  getRoomEvents,
-  sendPromptAsDebugMessage,
-  constructHistory,
-} from '@cardstack/runtime-common';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 

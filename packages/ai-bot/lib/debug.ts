@@ -11,7 +11,7 @@ import {
   sendPromptAsDebugMessage,
   sendEventListAsDebugMessage,
   sendDebugMessage,
-} from '@cardstack/runtime-common';
+} from '@cardstack/runtime-common/ai';
 import { MatrixClient } from 'matrix-js-sdk';
 
 export async function handleDebugCommands(

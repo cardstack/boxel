@@ -4,9 +4,11 @@ import {
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+} from '@cardstack/runtime-common';
+import {
   constructHistory,
   HistoryConstructionError,
-} from '@cardstack/runtime-common';
+} from '@cardstack/runtime-common/ai';
 
 import { EventStatus, type IRoomEvent } from 'matrix-js-sdk';
 import type {

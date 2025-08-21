@@ -1,6 +1,6 @@
 import { thinkingMessage } from '../constants';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
-import { cleanContent } from '@cardstack/runtime-common';
+import { cleanContent } from '@cardstack/runtime-common/ai';
 
 export default class ResponseState {
   latestReasoning: string = '';
