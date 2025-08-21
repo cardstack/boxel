@@ -17,10 +17,6 @@ const skillsRealmDir = resolve(
 const matrixDir = resolve(join(__dirname, '..'));
 export const appURL = 'http://localhost:4205/test';
 
-// The isolated realm is fairly expensive to test with. Please use your best
-// judgement to decide if your test really merits an isolated realm for testing
-// or if a mock would be more suitable.
-
 export async function startServer(includePublishedRealm = false) {
   let dir = dirSync();
   let testRealmDir = join(dir.name, 'test');
@@ -41,7 +37,6 @@ export async function startServer(includePublishedRealm = false) {
   process.env.REALM_SERVER_SECRET_SEED = "mum's the word";
   process.env.REALM_SECRET_SEED = "shhh! it's a secret";
   process.env.GRAFANA_SECRET = "shhh! it's a secret";
-  // FIXME this is a flag AND an environment variable?
   process.env.MATRIX_URL = 'http://localhost:8009';
   process.env.REALM_SERVER_MATRIX_USERNAME = 'realm_server';
   process.env.NODE_ENV = 'test';
