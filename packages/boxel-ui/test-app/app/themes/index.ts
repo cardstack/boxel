@@ -1,6 +1,6 @@
 import {
   extractCssVariables,
-  styleConversions,
+  getStyleConversions,
 } from '@cardstack/boxel-ui/helpers';
 
 import { Bubblegum } from './bubblegum.ts';
@@ -28,7 +28,9 @@ function getThemeStyles(cssString: string) {
   if (!extractCssVariables) {
     return;
   }
-  return styleConversions + extractCssVariables(cssString);
+  return [getStyleConversions(), extractCssVariables(cssString)]
+    .filter(Boolean)
+    .join('');
 }
 
 const Themes: Theme[] = Object.entries(THEMES).map(([name, vars]) => ({

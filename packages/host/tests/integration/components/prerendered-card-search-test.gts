@@ -330,9 +330,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         </:loading>
         <:response as |cards|>
           {{#each cards as |card|}}
-            <div class='card-container'>
-              <card.component />
-            </div>
+            <card.component />
           {{/each}}
         </:response>
       </PrerenderedCardSearch>
@@ -413,9 +411,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         </:loading>
         <:response as |cards|>
           {{#each cards as |card|}}
-            <div class='card-container' data-test-is-error={{card.isError}}>
-              <card.component />
-            </div>
+            <card.component />
           {{/each}}
         </:response>
       </PrerenderedCardSearch>
@@ -471,9 +467,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         </:loading>
         <:response as |cards|>
           {{#each cards as |card|}}
-            <div class='card-container'>
-              <card.component />
-            </div>
+            <card.component />
           {{/each}}
         </:response>
       </PrerenderedCardSearch>

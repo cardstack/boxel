@@ -5,7 +5,7 @@ import Component from '@glimmer/component';
 
 import { ComponentLike } from '@glint/template';
 
-import { CardContainer, Label } from '@cardstack/boxel-ui/components';
+import { Label } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
@@ -45,14 +45,11 @@ class SearchResult extends Component<SearchResultSignature> {
   <template>
     <div class={{cn 'container' is-compact=@isCompact}}>
       {{#if @component}}
-        <CardContainer
-          @displayBoundaries={{true}}
-          data-test-search-result={{removeFileExtension @cardId}}
+        <@component
           class='search-result'
+          data-test-search-result={{removeFileExtension @cardId}}
           ...attributes
-        >
-          <@component />
-        </CardContainer>
+        />
 
       {{else if @card}}
         <CardRenderer
