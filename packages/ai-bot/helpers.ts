@@ -42,6 +42,7 @@ import {
   MatrixClient,
   isCommandOrCodePatchResult,
   extractCodePatchBlocks,
+  UnsupportedFileError,
 } from './lib/matrix/util';
 import { constructHistory } from './lib/history';
 import { isRecognisedDebugCommand } from './lib/debug';
@@ -457,7 +458,7 @@ export async function getAttachedFiles(
   history: DiscreteMatrixEvent[],
 ): Promise<SerializedFileDef[]> {
   let attachedFiles = matrixEvent.content?.data?.attachedFiles ?? [];
-  return Promise.all(
+  let results = await Promise.all(
     attachedFiles.map(async (attachedFile: SerializedFileDef) => {
       // If the file is attached later in the history, we should not include the content here
       let shouldIncludeContent = !history
@@ -482,6 +483,9 @@ export async function getAttachedFiles(
         try {
           result.content = await downloadFile(client, attachedFile);
         } catch (error) {
+          if (error instanceof UnsupportedFileError) {
+            return null; // Gracefully ignore unsupported files for now
+          }
           log.error(`Failed to fetch file ${attachedFile.url}:`, error);
           Sentry.captureException(error, {
             extra: { fileUrl: attachedFile.url, fileName: attachedFile.name },
@@ -492,6 +496,9 @@ export async function getAttachedFiles(
       }
       return result;
     }),
+  );
+  return results.filter(
+    (result): result is SerializedFileDef => result !== null,
   );
 }
 

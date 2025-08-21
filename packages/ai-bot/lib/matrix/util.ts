@@ -27,6 +27,13 @@ import { SerializedFileDef } from 'https://cardstack.com/base/file-api';
 
 let log = logger('ai-bot');
 
+export class UnsupportedFileError extends Error {
+  constructor(message?: string) {
+    super(message);
+    this.name = 'UnsupportedFileError';
+  }
+}
+
 export interface MatrixClient {
   baseUrl: string;
 
@@ -276,7 +283,7 @@ export async function downloadFile(
     !attachedFile?.contentType?.includes('text/') &&
     !attachedFile.contentType?.includes('application/vnd.card+json')
   ) {
-    throw new Error(
+    throw new UnsupportedFileError(
       `Unsupported file type: ${attachedFile.contentType}. For now, only text files are supported.`,
     );
   }
