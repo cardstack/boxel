@@ -23,7 +23,7 @@ interface ProfileAssertions {
   email?: string;
 }
 interface LoginOptions {
-  url?: string;?: true;
+  url?: string;
 }
 
 export async function setSkillsRedirect(page: Page) {
