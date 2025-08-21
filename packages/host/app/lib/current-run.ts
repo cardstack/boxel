@@ -698,16 +698,14 @@ export class CurrentRun {
           },
         );
         await api.flushLogs();
-        isolatedHtml = unwrap(
-          sanitizeHTML(
-            await this.renderCard({
-              card,
-              format: 'isolated',
-              visit: this.visitFile.bind(this),
-              store,
-              realmPath: this.#realmPaths,
-            }),
-          ),
+        isolatedHtml = sanitizeHTML(
+          await this.renderCard({
+            card,
+            format: 'isolated',
+            visit: this.visitFile.bind(this),
+            store,
+            realmPath: this.#realmPaths,
+          }),
         );
         atomHtml = unwrap(
           sanitizeHTML(
@@ -889,17 +887,15 @@ export class CurrentRun {
   ): Promise<{ [refURL: string]: string }> {
     let result: { [refURL: string]: string } = {};
     for (let { codeRef: componentCodeRef, refURL } of types) {
-      let html = unwrap(
-        sanitizeHTML(
-          await this.renderCard({
-            card,
-            format,
-            visit: this.visitFile.bind(this),
-            store,
-            realmPath: this.#realmPaths,
-            componentCodeRef,
-          }),
-        ),
+      let html = sanitizeHTML(
+        await this.renderCard({
+          card,
+          format,
+          visit: this.visitFile.bind(this),
+          store,
+          realmPath: this.#realmPaths,
+          componentCodeRef,
+        }),
       );
       result[refURL] = html;
     }
@@ -1018,7 +1014,7 @@ function assertURLEndsWithJSON(url: URL): URL {
 // we unwrap the outer div (and cleanup empty html comments) as the
 // outer div is actually the container that the card HTML is
 // rendering into
-function unwrap(html: string): string {
+export function unwrap(html: string): string {
   return html
     .trim()
     .replace(/^<div ([^>]*>)/, '')

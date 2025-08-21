@@ -7,8 +7,6 @@ import {
   type PrerenderedCardLike,
 } from '@cardstack/runtime-common';
 
-import { CardContainer } from '@cardstack/boxel-ui/components';
-
 interface CardListSignature {
   Args: {
     query: Query;
@@ -38,19 +36,16 @@ export class CardList extends GlimmerComponent<CardListSignature> {
           </:loading>
           <:response as |cards|>
             {{#each cards key='url' as |card|}}
-              <li class='card-list-item'>
-                <CardContainer
-                  {{@context.cardComponentModifier
-                    cardId=card.url
-                    format='data'
-                    fieldType=undefined
-                    fieldName=undefined
-                  }}
-                  class='card'
-                  @displayBoundaries={{true}}
-                >
-                  <card.component />
-                </CardContainer>
+              <li
+                class='card-list-item'
+                {{@context.cardComponentModifier
+                  cardId=card.url
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
+              >
+                <card.component />
                 {{#if (has-block 'meta')}}
                   {{yield card to='meta'}}
                 {{/if}}
