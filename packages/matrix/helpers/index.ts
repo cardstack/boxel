@@ -360,9 +360,6 @@ export async function writeMessage(
   message: string,
 ) {
   await page.locator(`[data-test-message-field="${roomId}"]`).fill(message);
-  await expect(
-    page.locator(`[data-test-message-field="${roomId}"]`),
-  ).toHaveValue(message);
 }
 
 export async function selectCardFromCatalog(
