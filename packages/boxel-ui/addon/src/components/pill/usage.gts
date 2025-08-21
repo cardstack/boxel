@@ -47,6 +47,8 @@ export default class PillUsage extends Component {
   declare boxelPillFontColor: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare boxelPillBorderColor: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'header-freestyle-container' })
+  declare boxelPillFont: CSSVariableInfo;
 
   <template>
     <div
@@ -58,6 +60,7 @@ export default class PillUsage extends Component {
         boxel-pill-background-color=this.boxelPillBackgroundColor.value
         boxel-pill-font-color=this.boxelPillFontColor.value
         boxel-pill-border-color=this.boxelPillBorderColor.value
+        boxel-pill-font=this.boxelPillFont.value
       }}
     >
       <FreestyleUsage @name='Pill'>
@@ -166,6 +169,13 @@ export default class PillUsage extends Component {
             @description='Global override for pill border color (highest priority)'
             @value={{this.boxelPillBorderColor.value}}
             @onInput={{this.boxelPillBorderColor.update}}
+          />
+          <Css.Basic
+            @name='boxel-pill-font'
+            @type='font'
+            @description='Global override for pill font (highest priority)'
+            @value={{this.boxelPillFont.value}}
+            @onInput={{this.boxelPillFont.update}}
           />
         </:cssVars>
       </FreestyleUsage>
