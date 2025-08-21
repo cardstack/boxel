@@ -1,6 +1,6 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { array, concat, hash } from '@ember/helper';
 import { LinkTo } from '@ember/routing';
-import Component from '@glimmer/component';
 
 import cn from '../../helpers/cn.ts';
 import { eq, not, or } from '../../helpers/truth-helpers.ts';
@@ -62,147 +62,140 @@ interface Signature {
   };
   Element: HTMLButtonElement | HTMLAnchorElement;
 }
-export default class ButtonComponent extends Component<Signature> {
-  <template>
-    {{#let
-      (cn
-        'boxel-button'
-        @class
-        (concat 'size-' (if @size @size 'base'))
-        (concat 'kind-' (if @kind @kind 'secondary'))
-        loading=@loading
-      )
-      as |classes|
-    }}
-      {{#if (or (not @as) (eq @as 'button'))}}
-        <button
-          class={{classes}}
-          tabindex={{if @loading -1 0}}
-          disabled={{@disabled}}
-          data-test-boxel-button
-          ...attributes
-        >
-          {{#if @loading}}
-            <LoadingIndicator
-              class='loading-indicator'
-              @color='var(--boxel-button-text-color)'
-              data-test-boxel-button-loading-indicator
-            />
-          {{/if}}
-          {{yield}}
-        </button>
-      {{else if (eq @as 'anchor')}}
-        <a
-          class={{classes}}
-          href={{unless @disabled @href}}
-          data-test-boxel-button
-          ...attributes
-        >
-          {{yield}}
-        </a>
-      {{else if (eq @as 'link-to')}}
-        <LinkTo
-          class={{classes}}
-          @route={{@route}}
-          @models={{if @models @models (array)}}
-          @query={{if @query @query (hash)}}
-          @disabled={{@disabled}}
-          data-test-boxel-button
-          tabindex={{if @disabled -1 0}}
-          ...attributes
-        >
-          {{yield}}
-        </LinkTo>
-      {{/if}}
-    {{/let}}
-    <style scoped>
-      @layer {
-        /* Button */
-        .boxel-button {
-          --boxel-loading-indicator-size: var(
-            --boxel-button-loading-icon-size,
-            var(--boxel-icon-xs)
-          );
+const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
+  {{#let
+    (cn
+      'boxel-button'
+      @class
+      (concat 'size-' (if @size @size 'base'))
+      (concat 'kind-' (if @kind @kind 'secondary'))
+      loading=@loading
+    )
+    as |classes|
+  }}
+    {{#if (or (not @as) (eq @as 'button'))}}
+      <button
+        class={{classes}}
+        tabindex={{if @loading -1 0}}
+        disabled={{@disabled}}
+        data-test-boxel-button
+        ...attributes
+      >
+        {{#if @loading}}
+          <LoadingIndicator
+            class='loading-indicator'
+            @color='var(--boxel-button-text-color)'
+            data-test-boxel-button-loading-indicator
+          />
+        {{/if}}
+        {{yield}}
+      </button>
+    {{else if (eq @as 'anchor')}}
+      <a
+        class={{classes}}
+        href={{unless @disabled @href}}
+        data-test-boxel-button
+        ...attributes
+      >
+        {{yield}}
+      </a>
+    {{else if (eq @as 'link-to')}}
+      <LinkTo
+        class={{classes}}
+        @route={{@route}}
+        @models={{if @models @models (array)}}
+        @query={{if @query @query (hash)}}
+        @disabled={{@disabled}}
+        data-test-boxel-button
+        tabindex={{if @disabled -1 0}}
+        ...attributes
+      >
+        {{yield}}
+      </LinkTo>
+    {{/if}}
+  {{/let}}
+  <style scoped>
+    @layer {
+      /* Button */
+      .boxel-button {
+        --boxel-loading-indicator-size: var(
+          --boxel-button-loading-icon-size,
+          var(--boxel-icon-xs)
+        );
 
-          display: inline-flex;
-          justify-content: center;
-          height: min-content;
-          align-items: center;
-          border-radius: var(--radius, 100px);
-          transition: var(
-            --boxel-button-transition,
-            var(--boxel-transition-properties)
-          );
+        display: inline-flex;
+        justify-content: center;
+        height: min-content;
+        align-items: center;
+        border-radius: var(--boxel-button-border-radius, var(--radius, 100px));
+        transition: var(
+          --boxel-button-transition,
+          var(--boxel-transition-properties)
+        );
 
-          /* kind variants + disabled state */
-          border: var(
-            --boxel-button-border,
-            1px solid var(--boxel-button-color)
-          );
-          color: var(--boxel-button-text-color);
-          background-color: var(--boxel-button-color);
+        /* kind variants + disabled state */
+        border: var(--boxel-button-border, 1px solid var(--boxel-button-color));
+        color: var(--boxel-button-text-color);
+        background-color: var(--boxel-button-color);
 
-          /* size variants */
-          font: var(--boxel-button-font, 600 var(--boxel-font-sm));
-          font-family: inherit;
-          min-height: var(--boxel-button-min-height);
-          min-width: var(--boxel-button-min-width);
-          padding: var(--boxel-button-padding);
-          letter-spacing: var(
-            --boxel-button-letter-spacing,
-            var(--boxel-lsp-sm)
-          );
-          box-shadow: var(--boxel-button-box-shadow);
-        }
+        /* size variants */
+        font: var(--boxel-button-font, 600 var(--boxel-font-sm));
+        font-family: inherit;
+        min-height: var(--boxel-button-min-height);
+        min-width: var(--boxel-button-min-width);
+        padding: var(--boxel-button-padding);
+        letter-spacing: var(--boxel-button-letter-spacing, var(--boxel-lsp-sm));
+        box-shadow: var(--boxel-button-box-shadow);
+      }
 
-        .loading-indicator {
-          margin-right: var(
-            --boxel-button-loading-indicator-gap,
-            var(--boxel-sp-xxs)
-          );
-        }
+      .loading-indicator {
+        margin-right: var(
+          --boxel-button-loading-indicator-gap,
+          var(--boxel-sp-xxs)
+        );
+      }
 
-        /* select disabled buttons and links that don't have href */
+      /* select disabled buttons and links that don't have href */
 
-        /*
+      /*
         a.disabled-link is a special case for an automatically appended class by the LinkTo component
         the LinkTo component appends the href regardless, so we have to select it in other ways.
         Removing the chained classes will make kind-variants overwrite the disabled style on the LinkTo (specificity issues)
       */
-        .boxel-button:disabled,
-        a.boxel-button:not([href]),
-        a.boxel-button[href=''],
-        a.boxel-button.disabled-link {
-          --boxel-button-color: var(--muted, var(--boxel-border-color));
-          --boxel-button-border: 1px solid var(--boxel-button-color);
-          --boxel-button-text-color: var(--muted-foreground, var(--boxel-450));
-          --boxel-button-box-shadow: none;
+      .boxel-button:disabled,
+      a.boxel-button:not([href]),
+      a.boxel-button[href=''],
+      a.boxel-button.disabled-link {
+        --boxel-button-color: var(--muted, var(--boxel-border-color));
+        --boxel-button-border: 1px solid var(--boxel-button-color);
+        --boxel-button-text-color: var(--muted-foreground, var(--boxel-450));
+        --boxel-button-box-shadow: none;
 
-          cursor: default;
-        }
+        cursor: default;
+      }
 
-        /* the a element does not have a disabled attribute. Clicking will still trigger event listeners */
-        a.boxel-button:not([href]),
-        a.boxel-button[href=''],
-        a.boxel-button.disabled-link {
-          pointer-events: none;
-        }
+      /* the a element does not have a disabled attribute. Clicking will still trigger event listeners */
+      a.boxel-button:not([href]),
+      a.boxel-button[href=''],
+      a.boxel-button.disabled-link {
+        pointer-events: none;
+      }
 
-        /*
+      /*
         loading state.
         this should only be relevant for buttons - links shouldn't need it.
         We want to preserve the "normal" styling of the button but not allow interaction
       */
-        .loading {
-          pointer-events: none;
-        }
+      .loading {
+        pointer-events: none;
+      }
 
-        /* overwrite the global style for links in global.css */
-        a.boxel-button:hover {
-          color: var(--boxel-button-text-color);
-        }
+      /* overwrite the global style for links in global.css */
+      a.boxel-button:hover {
+        color: var(--boxel-button-text-color);
+      }
 
-        /**
+      /**
       * Kind variants - variants that control the colors on a button
       *
       * The @kind argument on the button component should create a corresponding class with format
@@ -215,122 +208,113 @@ export default class ButtonComponent extends Component<Signature> {
       * --boxel-button-text-color (css "color" property)
       *
       */
-        .kind-primary {
-          --boxel-button-color: var(--primary, var(--boxel-highlight));
-          --boxel-button-text-color: var(
-            --primary-foreground,
-            var(--boxel-dark)
-          );
-          --boxel-button-box-shadow: var(--shadow);
-        }
-        .kind-primary:not(:disabled):hover,
-        .kind-primary:not(:disabled):active {
-          --boxel-button-color: color-mix(
-            in oklab,
-            var(--primary, var(--boxel-highlight)) 95%,
-            var(--boxel-dark)
-          );
-        }
+      .kind-primary {
+        --boxel-button-color: var(--primary, var(--boxel-highlight));
+        --boxel-button-text-color: var(--primary-foreground, var(--boxel-dark));
+        --boxel-button-box-shadow: var(--shadow);
+      }
+      .kind-primary:not(:disabled):hover,
+      .kind-primary:not(:disabled):active {
+        --boxel-button-color: color-mix(
+          in oklab,
+          var(--primary, var(--boxel-highlight)) 95%,
+          var(--boxel-dark)
+        );
+      }
 
-        .kind-secondary {
-          --boxel-button-color: var(--secondary, var(--boxel-light));
-          --boxel-button-text-color: var(
-            --secondary-foreground,
-            var(--boxel-dark)
-          );
-          --boxel-button-border: 1px solid
-            var(--secondary, var(--boxel-button-border-color));
-          --boxel-button-box-shadow: var(--shadow);
-        }
-        .kind-secondary:not(:disabled):hover,
-        .kind-secondary:not(:disabled):active {
-          --boxel-button-border: 1px solid
-            var(--boxel-button-text-color, var(--boxel-dark));
-        }
+      .kind-secondary {
+        --boxel-button-color: var(--secondary, var(--boxel-light));
+        --boxel-button-text-color: var(
+          --secondary-foreground,
+          var(--boxel-dark)
+        );
+        --boxel-button-border: 1px solid
+          var(--secondary, var(--boxel-button-border-color));
+        --boxel-button-box-shadow: var(--shadow);
+      }
+      .kind-secondary:not(:disabled):hover,
+      .kind-secondary:not(:disabled):active {
+        --boxel-button-border: 1px solid
+          var(--boxel-button-text-color, var(--boxel-dark));
+      }
 
-        .kind-outline {
-          --boxel-button-color: var(--background, var(--boxel-light));
-          --boxel-button-text-color: var(--foreground, var(--boxel-dark));
-          --boxel-button-border: 1px solid
-            var(--border, var(--boxel-button-border-color));
-        }
-        .kind-outline:not(:disabled):hover,
-        .kind-outline:not(:disabled):active {
-          --boxel-button-color: var(--accent, var(--boxel-200));
-          --boxel-button-text-color: var(
-            --accent-foreground,
-            var(--boxel-dark)
-          );
-        }
+      .kind-outline {
+        --boxel-button-color: var(--background, var(--boxel-light));
+        --boxel-button-text-color: var(--foreground, var(--boxel-dark));
+        --boxel-button-border: 1px solid
+          var(--border, var(--boxel-button-border-color));
+      }
+      .kind-outline:not(:disabled):hover,
+      .kind-outline:not(:disabled):active {
+        --boxel-button-color: var(--accent, var(--boxel-200));
+        --boxel-button-text-color: var(--accent-foreground, var(--boxel-dark));
+      }
 
-        .kind-secondary-light {
-          /* transparent on light background */
-          --boxel-button-color: transparent;
-          --boxel-button-text-color: var(--foreground, var(--boxel-dark));
-          --boxel-button-border: 1px solid
-            var(--border, var(--boxel-button-border-color));
-          --boxel-button-box-shadow: var(--shadow);
-        }
-        .kind-secondary-dark {
-          /* transparent on dark background */
-          --boxel-button-color: transparent;
-          --boxel-button-text-color: var(--background, var(--boxel-light));
-          --boxel-button-border: 1px solid
-            var(--border, var(--boxel-button-border-color));
-          --boxel-button-box-shadow: var(--shadow);
-        }
-        .kind-secondary-light:not(:disabled):hover,
-        .kind-secondary-light:not(:disabled):active,
-        .kind-secondary-dark:not(:disabled):hover,
-        .kind-secondary-dark:not(:disabled):active {
-          --boxel-button-border: 1px solid var(--boxel-button-text-color);
-        }
+      .kind-secondary-light {
+        /* transparent on light background */
+        --boxel-button-color: transparent;
+        --boxel-button-text-color: var(--foreground, var(--boxel-dark));
+        --boxel-button-border: 1px solid
+          var(--border, var(--boxel-button-border-color));
+        --boxel-button-box-shadow: var(--shadow);
+      }
+      .kind-secondary-dark {
+        /* transparent on dark background */
+        --boxel-button-color: transparent;
+        --boxel-button-text-color: var(--background, var(--boxel-light));
+        --boxel-button-border: 1px solid
+          var(--border, var(--boxel-button-border-color));
+        --boxel-button-box-shadow: var(--shadow);
+      }
+      .kind-secondary-light:not(:disabled):hover,
+      .kind-secondary-light:not(:disabled):active,
+      .kind-secondary-dark:not(:disabled):hover,
+      .kind-secondary-dark:not(:disabled):active {
+        --boxel-button-border: 1px solid var(--boxel-button-text-color);
+      }
 
-        .kind-danger {
-          --boxel-button-color: var(--destructive, var(--boxel-danger));
-          --boxel-button-text-color: var(
-            --destructive-foreground,
-            var(--boxel-light-100)
-          );
-          --boxel-button-box-shadow: var(--shadow);
-        }
-        .kind-danger:not(:disabled):hover,
-        .kind-danger:not(:disabled):active {
-          --boxel-button-color: color-mix(
-            in oklab,
-            var(--destructive, var(--boxel-danger)) 95%,
-            var(--boxel-dark)
-          );
-        }
+      .kind-danger {
+        --boxel-button-color: var(--destructive, var(--boxel-danger));
+        --boxel-button-text-color: var(
+          --destructive-foreground,
+          var(--boxel-light-100)
+        );
+        --boxel-button-box-shadow: var(--shadow);
+      }
+      .kind-danger:not(:disabled):hover,
+      .kind-danger:not(:disabled):active {
+        --boxel-button-color: color-mix(
+          in oklab,
+          var(--destructive, var(--boxel-danger)) 95%,
+          var(--boxel-dark)
+        );
+      }
 
-        .kind-primary-dark {
-          --boxel-button-color: var(--secondary-foreground, var(--boxel-dark));
-          --boxel-button-text-color: var(--secondary, var(--boxel-light));
-          --boxel-button-box-shadow: var(--shadow);
-        }
-        .kind-primary-dark:not(:disabled):hover,
-        .kind-primary-dark:not(:disabled):active {
-          --boxel-button-color: color-mix(
-            in oklab,
-            var(--secondary-foreground, var(--boxel-dark)) 85%,
-            transparent
-          );
-        }
+      .kind-primary-dark {
+        --boxel-button-color: var(--secondary-foreground, var(--boxel-dark));
+        --boxel-button-text-color: var(--secondary, var(--boxel-light));
+        --boxel-button-box-shadow: var(--shadow);
+      }
+      .kind-primary-dark:not(:disabled):hover,
+      .kind-primary-dark:not(:disabled):active {
+        --boxel-button-color: color-mix(
+          in oklab,
+          var(--secondary-foreground, var(--boxel-dark)) 85%,
+          transparent
+        );
+      }
 
-        .kind-text-only {
-          --boxel-button-color: transparent;
-          --boxel-button-text-color: inherit;
-        }
-        .kind-text-only:not(:disabled):hover,
-        .kind-text-only:not(:disabled):active {
-          --boxel-button-color: var(--accent, var(--boxel-200));
-          --boxel-button-text-color: var(
-            --accent-foreground,
-            var(--boxel-dark)
-          );
-        }
+      .kind-text-only {
+        --boxel-button-color: transparent;
+        --boxel-button-text-color: inherit;
+      }
+      .kind-text-only:not(:disabled):hover,
+      .kind-text-only:not(:disabled):active {
+        --boxel-button-color: var(--accent, var(--boxel-200));
+        --boxel-button-text-color: var(--accent-foreground, var(--boxel-dark));
+      }
 
-        /**
+      /**
       * Size variants - variants that control the size and spacing of a button
       *
       * The @size argument on the button component should create a corresponding class with format
@@ -347,52 +331,53 @@ export default class ButtonComponent extends Component<Signature> {
       *
       */
 
-        .size-extra-small {
-          --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-sm);
-          --boxel-button-min-height: 1.5rem;
-          --boxel-button-min-width: 5rem;
-          --boxel-button-loading-icon-size: var(--boxel-icon-xxs);
-          --boxel-button-font: 600 var(--boxel-font-xs);
-        }
+      .size-extra-small {
+        --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-sm);
+        --boxel-button-min-height: 1.5rem;
+        --boxel-button-min-width: 5rem;
+        --boxel-button-loading-icon-size: var(--boxel-icon-xxs);
+        --boxel-button-font: 600 var(--boxel-font-xs);
+      }
 
-        /* thinner base button */
-        .size-small {
-          --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm);
-          --boxel-button-min-height: 2rem;
-          --boxel-button-min-width: 5rem;
-        }
+      /* thinner base button */
+      .size-small {
+        --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm);
+        --boxel-button-min-height: 2rem;
+        --boxel-button-min-width: 5rem;
+      }
 
-        .size-base {
-          --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xl);
-          --boxel-button-min-height: 2rem;
-          --boxel-button-min-width: 5rem;
-        }
+      .size-base {
+        --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xl);
+        --boxel-button-min-height: 2rem;
+        --boxel-button-min-width: 5rem;
+      }
 
-        /* tall but thinner button */
-        .size-tall {
-          --boxel-button-padding: var(--boxel-sp-xxs) var(--boxel-sp);
-          --boxel-button-min-height: 2.5rem;
-          --boxel-button-min-width: 5rem;
-        }
+      /* tall but thinner button */
+      .size-tall {
+        --boxel-button-padding: var(--boxel-sp-xxs) var(--boxel-sp);
+        --boxel-button-min-height: 2.5rem;
+        --boxel-button-min-width: 5rem;
+      }
 
-        /*
+      /*
         extra tall button mainly used in mobile screens
         touchable as it's bigger
         */
-        .size-touch {
-          --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
-          --boxel-button-min-height: 3rem;
-          --boxel-button-min-width: 5rem;
-          --boxel-button-loading-icon-size: var(--boxel-icon-sm);
-          --boxel-button-font: 600 var(--boxel-font);
-          --boxel-button-letter-spacing: var(--boxel-lsp-xs);
-        }
-
-        /* auto size properties & smallest padding size */
-        .size-auto {
-          --boxel-button-padding: var(--boxel-sp-6xs);
-        }
+      .size-touch {
+        --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
+        --boxel-button-min-height: 3rem;
+        --boxel-button-min-width: 5rem;
+        --boxel-button-loading-icon-size: var(--boxel-icon-sm);
+        --boxel-button-font: 600 var(--boxel-font);
+        --boxel-button-letter-spacing: var(--boxel-lsp-xs);
       }
-    </style>
-  </template>
-}
+
+      /* auto size properties & smallest padding size */
+      .size-auto {
+        --boxel-button-padding: var(--boxel-sp-6xs);
+      }
+    }
+  </style>
+</template>;
+
+export default ButtonComponent;

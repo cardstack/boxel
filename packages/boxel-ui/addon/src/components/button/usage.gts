@@ -205,7 +205,47 @@ export default class ButtonUsage extends Component {
             </tr>
           </tbody>
         </table>
+
+        <p>Note: All css-variables below can be set at the top-level element.</p>
       </:description>
+      <:cssVars as |Css|>
+        <Css.Basic @name='--boxel-button-text-color' @type='color' />
+        <Css.Basic @name='--boxel-button-color' @type='background-color' />
+        <Css.Basic
+          @name='--boxel-button-border'
+          @type='border'
+          @description='(css shorthand property)'
+        />
+        <Css.Basic @name='--boxel-button-border-radius' @type='border-radius' />
+        <Css.Basic
+          @name='--boxel-button-font'
+          @type='font'
+          @description='(css shorthand property)'
+        />
+        <Css.Basic
+          @name='--boxel-button-letter-spacing'
+          @type='letter-spacing'
+        />
+        <Css.Basic
+          @name='--boxel-button-transition'
+          @type='transition'
+          @description='(css shorthand property)'
+        />
+        <Css.Basic @name='--boxel-button-min-height' @type='min-height' />
+        <Css.Basic @name='--boxel-button-min-width' @type='min-width' />
+        <Css.Basic @name='--boxel-button-padding' @type='padding' />
+        <Css.Basic @name='--boxel-button-box-shadow' @type='box-shadow' />
+        <Css.Basic
+          @name='--boxel-button-loading-icon-size'
+          @type='width, height'
+          @description='loading-indicator size'
+        />
+        <Css.Basic
+          @name='--boxel-button-loading-indicator-gap'
+          @type='margin-right'
+          @description='for loading-indicator icon'
+        />
+      </:cssVars>
     </FreestyleUsage>
 
     <FreestyleUsage
@@ -222,12 +262,12 @@ export default class ButtonUsage extends Component {
         >
           <BoxelButton
             @as='link-to'
-            @kind='primary'
-            @size='base'
+            @kind={{this.kind}}
+            @size={{this.size}}
             @route='index'
             @query=''
           >
-            Sample CTA
+            Link CTA
           </BoxelButton>
         </div>
       </:example>
@@ -271,6 +311,10 @@ export default class ButtonUsage extends Component {
       .usage-button-dark-mode-background {
         background-color: var(--foreground, var(--boxel-700));
         color: var(--background, var(--boxel-light));
+      }
+
+      :deep(.FreestyleUsageCssVar input) {
+        display: none;
       }
     </style>
   </template>
