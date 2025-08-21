@@ -39,6 +39,7 @@ class ConnectComponent extends Component<ConnectComponentSignature> {
 
   @action
   async connect() {
+    console.log('connect clicked');
     // FIXME Chrome only
     let handle = await window.document.requestStorageAccess({
       localStorage: true,
