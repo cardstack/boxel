@@ -283,7 +283,6 @@ export default function handleRequestForward({
         // Default to header authentication
         headers.Authorization = `Bearer ${destinationConfig.apiKey}`;
       }
-      console.log('finalUrl', finalUrl);
 
       // Handle streaming requests
       if (json.stream) {

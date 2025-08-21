@@ -27,6 +27,7 @@ import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assista
 import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assistant';
 import * as SaveCardCommandModule from './save-card';
 import * as SearchCardsCommandModule from './search-cards';
+import * as SearchGoogleImagesCommandModule from './search-google-images';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SendRequestViaProxyCommandModule from './send-request-via-proxy';
 import * as SetActiveLlmModule from './set-active-llm';
@@ -188,6 +189,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     '@cardstack/boxel-host/commands/get-all-realm-metas',
     GetAllRealmMetasCommandModule,
   );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/search-google-images',
+    SearchGoogleImagesCommandModule,
+  );
 }
 
 export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
@@ -213,4 +218,5 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   UpdateSkillActivationCommandModule.default,
   UseAiAssistantCommandModule.default,
   WriteTextFileCommandModule.default,
+  SearchGoogleImagesCommandModule.default,
 ];
