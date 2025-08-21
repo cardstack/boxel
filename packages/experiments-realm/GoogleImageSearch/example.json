@@ -9,8 +9,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../google-image-search-card",
-        "name": "GoogleImageSearchCard"
+        "module": "../google-image-search",
+        "name": "GoogleImageSearch"
       }
     },
     "relationships": {

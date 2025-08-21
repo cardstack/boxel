@@ -6,8 +6,6 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
 import StringField from 'https://cardstack.com/base/string';
-import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
 import { commandData } from 'https://cardstack.com/base/resources/command-data';
 import {
   SearchGoogleImagesInput,
@@ -15,42 +13,37 @@ import {
 } from 'https://cardstack.com/base/command';
 import SearchGoogleImagesCommand from '@cardstack/boxel-host/commands/search-google-images';
 import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
-import {
-  IconSearchThick,
-  IconChevronLeft,
-  IconChevronRight,
-} from '@cardstack/boxel-ui/icons';
+import { IconSearchThick } from '@cardstack/boxel-ui/icons';
+import ArrowRight from '@cardstack/boxel-icons/arrow-right';
+import ArrowLeft from '@cardstack/boxel-icons/arrow-left';
 import { or, not } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { tracked } from '@glimmer/tracking';
 
-export class GoogleImageSearchCard extends CardDef {
+export class GoogleImageSearch extends CardDef {
   static displayName = 'Google Image Search';
 
   @field searchQuery = contains(StringField);
   @field maxResults = contains(NumberField);
 
-  static isolated = class Isolated extends Component<typeof this> {
-    @tracked currentPage = 1;
-    @tracked searchPerformed = false;
+  @tracked currentPage = 1;
+  @tracked searchPerformed = false;
 
+  static isolated = class Isolated extends Component<typeof this> {
     searchResource = commandData<
       typeof SearchGoogleImagesInput,
       typeof SearchGoogleImagesResult
     >(this, SearchGoogleImagesCommand, () => {
-      if (!this.args.model.searchQuery) {
-        return null;
-      }
       return {
         query: this.args.model.searchQuery,
         maxResults: this.args.model.maxResults || 10,
-        startIndex: this.currentPage,
+        startIndex: this.args.model.currentPage,
       };
     });
 
     get searchResults() {
       const resource = this.searchResource;
-      debugger;
       if (resource?.isSuccess && resource.value?.images) {
         return resource.value.images;
       }
@@ -93,61 +86,62 @@ export class GoogleImageSearchCard extends CardDef {
     }
 
     get canGoPrevious() {
-      return this.currentPage > 1 && !this.isLoading;
+      return (
+        this.args.model.currentPage &&
+        this.args.model.currentPage > 1 &&
+        !this.isLoading
+      );
     }
 
-    @action
-    performSearch() {
+    performSearch = () => {
       if (this.args.model.searchQuery) {
-        this.searchPerformed = true;
-        this.currentPage = 1;
-        this.searchResource.refresh();
+        this.args.model.searchPerformed = true;
+        this.args.model.currentPage = 1;
       }
-    }
+    };
 
-    @action
-    nextPage() {
-      if (this.canGoNext) {
-        this.currentPage++;
-        this.searchResource.refresh();
+    nextPage = () => {
+      if (this.canGoNext && this.args.model.currentPage) {
+        this.args.model.currentPage++;
       }
-    }
+    };
 
-    @action
-    previousPage() {
-      if (this.canGoPrevious) {
-        this.currentPage--;
-        this.searchResource.refresh();
+    previousPage = () => {
+      if (this.canGoPrevious && this.args.model.currentPage) {
+        this.args.model.currentPage--;
       }
-    }
+    };
 
-    @action
-    handleKeyPress(event: KeyboardEvent) {
+    handleKeyPress = (event: KeyboardEvent) => {
       if (event.key === 'Enter') {
         this.performSearch();
       }
-    }
+    };
 
-    @action
-    openImageInNewTab(imageUrl: string) {
+    openImageInNewTab = (imageUrl: string) => {
       window.open(imageUrl, '_blank');
-    }
+    };
+
+    setSearchQuery = (e: Event) => {
+      this.args.model.searchQuery = (e.target as HTMLInputElement).value;
+    };
+
+    setMaxResults = (e: Event) => {
+      this.args.model.maxResults = Number((e.target as HTMLInputElement).value);
+    };
 
     <template>
-      <div class='google-image-search-card'>
-        <!-- Search Form -->
+      <div class='google-image-search'>
         <div class='search-form'>
           <FieldContainer @label='Search Query'>
             <input
               type='text'
               class='search-input'
               placeholder='Enter your search query...'
-              value={{this.args.model.searchQuery}}
-              {{on
-                'input'
-                (fn (mut this.args.model.searchQuery) value='target.value')
-              }}
+              value={{@model.searchQuery}}
+              {{on 'input' this.setSearchQuery}}
               {{on 'keypress' this.handleKeyPress}}
+              id='search-query-input'
             />
           </FieldContainer>
 
@@ -157,11 +151,9 @@ export class GoogleImageSearchCard extends CardDef {
               class='max-results-input'
               min='1'
               max='10'
-              value={{this.args.model.maxResults}}
-              {{on
-                'input'
-                (fn (mut this.args.model.maxResults) value='target.value')
-              }}
+              value={{@model.maxResults}}
+              {{on 'input' this.setMaxResults}}
+              id='max-results-input'
             />
           </FieldContainer>
 
@@ -177,7 +169,6 @@ export class GoogleImageSearchCard extends CardDef {
           </Button>
         </div>
 
-        <!-- Loading State -->
         {{#if this.isLoading}}
           <div class='loading-state'>
             <div class='loading-spinner'></div>
@@ -185,7 +176,6 @@ export class GoogleImageSearchCard extends CardDef {
           </div>
         {{/if}}
 
-        <!-- Error State -->
         {{#if this.isError}}
           <div class='error-state'>
             <p class='error-message'>{{this.errorMessage}}</p>
@@ -195,8 +185,7 @@ export class GoogleImageSearchCard extends CardDef {
           </div>
         {{/if}}
 
-        <!-- Search Results -->
-        {{#if this.searchPerformed}}
+        {{#if @model.searchPerformed}}
           {{#if this.searchInfo}}
             <div class='search-info'>
               <p>
@@ -213,13 +202,9 @@ export class GoogleImageSearchCard extends CardDef {
           {{/if}}
 
           {{#if this.searchResults.length}}
-            <!-- Image Grid -->
             <div class='image-grid'>
               {{#each this.searchResults as |image|}}
-                <div
-                  class='image-card'
-                  {{on 'click' (fn this.openImageInNewTab image.imageUrl)}}
-                >
+                <div class='image-card'>
                   <div class='image-container'>
                     <img
                       src={{image.thumbnailUrl}}
@@ -241,12 +226,19 @@ export class GoogleImageSearchCard extends CardDef {
                           }}</span>
                       {{/if}}
                     </div>
+                    <Button
+                      @variant='secondary'
+                      @size='small'
+                      class='open-image-button'
+                      {{on 'click' (fn this.openImageInNewTab image.imageUrl)}}
+                    >
+                      Open Image
+                    </Button>
                   </div>
                 </div>
               {{/each}}
             </div>
 
-            <!-- Pagination -->
             {{#if (or this.canGoPrevious this.canGoNext)}}
               <div class='pagination'>
                 <Button
@@ -255,13 +247,13 @@ export class GoogleImageSearchCard extends CardDef {
                   @disabled={{not this.canGoPrevious}}
                   class='pagination-button'
                 >
-                  <IconChevronLeft />
+                  <ArrowLeft />
                   Previous
                 </Button>
 
                 <span class='page-info'>
                   Page
-                  {{this.currentPage}}
+                  {{@model.currentPage}}
                   {{#if this.searchInfo}}
                     of
                     {{this.calculateTotalPages this.searchInfo.totalResults}}
@@ -275,13 +267,13 @@ export class GoogleImageSearchCard extends CardDef {
                   class='pagination-button'
                 >
                   Next
-                  <IconChevronRight />
+                  <ArrowRight />
                 </Button>
               </div>
             {{/if}}
           {{else if (not this.isLoading)}}
             <div class='no-results'>
-              <p>No images found for "{{this.args.model.searchQuery}}"</p>
+              <p>No images found for "{{@model.searchQuery}}"</p>
               <p>Try a different search term or check your spelling.</p>
             </div>
           {{/if}}
@@ -289,7 +281,7 @@ export class GoogleImageSearchCard extends CardDef {
       </div>
 
       <style scoped>
-        .google-image-search-card {
+        .google-image-search {
           padding: var(--boxel-sp-lg);
           max-width: 1200px;
           margin: 0 auto;
@@ -384,13 +376,7 @@ export class GoogleImageSearchCard extends CardDef {
           transition:
             transform 0.2s ease,
             box-shadow 0.2s ease;
-          cursor: pointer;
           background: white;
-        }
-
-        .image-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
 
         .image-container {
@@ -443,6 +429,12 @@ export class GoogleImageSearchCard extends CardDef {
           gap: var(--boxel-sp-sm);
           font-size: var(--boxel-font-size-xs);
           color: var(--boxel-color-neutral-500);
+          margin-bottom: var(--boxel-sp-sm);
+        }
+
+        .open-image-button {
+          width: 100%;
+          margin-top: var(--boxel-sp-xs);
         }
 
         .pagination {
