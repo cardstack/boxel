@@ -147,6 +147,13 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         letter-spacing: var(--boxel-button-letter-spacing, var(--boxel-lsp-sm));
         box-shadow: var(--boxel-button-box-shadow);
       }
+      .boxel-button:not(:disabled):hover {
+        background-color: color-mix(
+          in oklab,
+          var(--boxel-button-color) 90%,
+          transparent
+        );
+      }
 
       .loading-indicator {
         margin-right: var(
@@ -215,11 +222,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       }
       .kind-primary:not(:disabled):hover,
       .kind-primary:not(:disabled):active {
-        --boxel-button-color: color-mix(
-          in oklab,
-          var(--primary, var(--boxel-highlight)) 95%,
-          var(--boxel-dark)
-        );
+        --boxel-button-color: var(--primary, var(--boxel-highlight-hover));
       }
 
       .kind-secondary {
@@ -234,8 +237,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       }
       .kind-secondary:not(:disabled):hover,
       .kind-secondary:not(:disabled):active {
-        --boxel-button-border: 1px solid
-          var(--boxel-button-text-color, var(--boxel-dark));
+        --boxel-button-border: 1px solid var(--secondary, var(--boxel-dark));
       }
 
       .kind-outline {
@@ -283,11 +285,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       }
       .kind-danger:not(:disabled):hover,
       .kind-danger:not(:disabled):active {
-        --boxel-button-color: color-mix(
-          in oklab,
-          var(--destructive, var(--boxel-danger)) 95%,
-          var(--boxel-dark)
-        );
+        --boxel-button-color: var(--destructive, var(--boxel-danger-hover));
       }
 
       .kind-primary-dark {
