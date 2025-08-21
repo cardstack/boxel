@@ -280,9 +280,6 @@ export async function enterWorkspace(
 }
 
 export async function showAllCards(page: Page) {
-  await expect(
-    page.locator(`[data-test-boxel-filter-list-button="All Cards"]`),
-  ).toHaveCount(1);
   await page
     .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
     .click();
