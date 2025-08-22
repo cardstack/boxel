@@ -73,6 +73,7 @@ interface Signature {
         openSearchToPrompt: () => void;
         openSearchToResults: (term: string) => void;
         updateSubmode: (submode: Submode) => void;
+        toggleSubscriptionPlans: () => void;
       },
     ];
   };
