@@ -126,6 +126,7 @@ interface StartOptions {
   containerName?: string;
   suppressRegistrationSecretFile?: true;
   isTestInstance?: boolean;
+  uniquePort?: number;
 }
 export async function synapseStart(
   opts?: StartOptions,
@@ -134,9 +135,15 @@ export async function synapseStart(
   let templateName = opts?.template ?? 'test';
   let isTestInstance = opts?.isTestInstance ?? templateName.startsWith('test');
 
-  let containerName =
-    opts?.containerName ||
-    (isTestInstance ? 'boxel-synapse-test' : 'boxel-synapse');
+  let containerName;
+
+  if (opts?.containerName) {
+    containerName = opts.containerName;
+  } else if (opts?.uniquePort) {
+    containerName = `boxel-synapse-test-${opts.uniquePort}`;
+  } else {
+    containerName = isTestInstance ? 'boxel-synapse-test' : 'boxel-synapse';
+  }
 
   if (stopExisting) {
     // Stop the existing container if it's running
@@ -153,6 +160,7 @@ export async function synapseStart(
     templateName,
     opts?.dataDir,
     isTestInstance,
+    opts?.uniquePort,
   );
 
   console.log(
