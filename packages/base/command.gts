@@ -296,6 +296,14 @@ export class SendRequestViaProxyResult extends CardDef {
   @field response = contains(ResponseField);
 }
 
+export class SummarizeSessionInput extends CardDef {
+  @field roomId = contains(StringField);
+}
+
+export class SummarizeSessionResult extends CardDef {
+  @field summary = contains(StringField);
+}
+
 export {
   SearchCardsByQueryInput,
   SearchCardsByTypeAndTitleInput,

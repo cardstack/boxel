@@ -42,6 +42,7 @@ import {
   setupOnSave,
   getMonacoContent,
   setMonacoContent,
+  setupRealmServerEndpoints,
 } from '../../../helpers';
 import {
   CardDef,
@@ -96,6 +97,84 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     setReadReceipt,
     getRoomEvents,
   } = mockMatrixUtils;
+
+  // Setup realm server endpoints for summarization tests
+  setupRealmServerEndpoints(hooks, [
+    {
+      route: '_request-forward',
+      getResponse: async (req: Request) => {
+        const body = await req.json();
+
+        // Handle summarization requests
+        if (body.url.includes('openrouter.ai/api/v1/chat/completions')) {
+          const requestBody = JSON.parse(body.requestBody);
+
+          // Check if this is a summarization request
+          if (
+            requestBody.messages &&
+            requestBody.messages.some(
+              (msg: any) =>
+                msg.content &&
+                msg.content.includes('Please provide a concise summary'),
+            )
+          ) {
+            // Return a mock summary based on the conversation content
+            const conversationText = requestBody.messages
+              .filter(
+                (msg: any) =>
+                  msg.role === 'user' &&
+                  !msg.content.includes('Please provide a concise summary'),
+              )
+              .map((msg: any) => msg.content)
+              .join(' ');
+
+            let summary = 'This conversation focused on general discussion.';
+
+            if (conversationText.includes('project')) {
+              summary =
+                'This conversation focused on project help, specifically creating a new card for a person with name and age fields. The user requested assistance with card creation and field definition.';
+            } else if (
+              conversationText.includes('card') &&
+              conversationText.includes('file')
+            ) {
+              summary =
+                'This conversation involved discussing a person card (Hassan) and a pet definition file. The user shared both a Person card and a pet.gts file, then asked for help understanding the structure.';
+            } else if (conversationText.includes('error')) {
+              throw new Error('OpenRouter API error');
+            }
+
+            return new Response(
+              JSON.stringify({
+                choices: [
+                  {
+                    message: {
+                      content: summary,
+                    },
+                  },
+                ],
+              }),
+              {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
+        }
+
+        // Default response for other requests
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: { id: 123, name: 'test' },
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      },
+    },
+  ]);
 
   let noop = () => {};
 
@@ -1353,13 +1432,16 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
     assert
       .dom('[data-test-new-session-settings-option]')
-      .exists({ count: 2 }, 'All three options are present');
+      .exists({ count: 3 }, 'All three options are present');
     assert
       .dom('[data-test-new-session-settings-label="Add Same Skills"]')
       .exists('First option is present');
     assert
       .dom('[data-test-new-session-settings-label="Copy File History"]')
       .exists('Second option is present');
+    assert
+      .dom('[data-test-new-session-settings-label="Summarize Current Session"]')
+      .exists('Third option is present');
 
     assert
       .dom('[data-test-new-session-settings-option].checked')
@@ -1376,6 +1458,10 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     await click(
       '[data-test-new-session-settings-checkbox="Copy File History"]',
     );
+
+    assert
+      .dom('[data-test-new-session-settings-option].checked')
+      .exists({ count: 2 }, 'One checkboxes should be checked');
 
     assert
       .dom('[data-test-new-session-settings-option].checked')
@@ -1422,7 +1508,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     assert
       .dom('[data-test-new-session-settings-create-button]')
       .hasText('Start New Session', 'Create button should have correct text');
-
     await click('[data-test-new-session-settings-create-button]');
 
     assert

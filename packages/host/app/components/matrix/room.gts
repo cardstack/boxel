@@ -1,5 +1,6 @@
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { schedule } from '@ember/runloop';
@@ -92,7 +93,6 @@ interface Signature {
 }
 
 export default class Room extends Component<Signature> {
-  @service declare aiAssistantPanelService: AiAssistantPanelService;
   <template>
     {{#if (not this.doMatrixEventFlush.isRunning)}}
       <section
@@ -115,10 +115,52 @@ export default class Room extends Component<Signature> {
           @setScrollPosition={{this.setScrollPosition}}
         >
           {{#if this.matrixService.isLoadingTimeline}}
-            <LoadingIndicator
-              @color='var(--boxel-light)'
-              class='loading-indicator'
-            />
+            <div class='session-preparation-container'>
+              <LoadingIndicator
+                @color='var(--boxel-light)'
+                class='loading-indicator'
+              />
+            </div>
+          {{else if this.aiAssistantPanelService.isPreparingSession}}
+            <div
+              class='session-preparation-container'
+              data-test-session-preparation
+            >
+              <LoadingIndicator
+                @color='var(--boxel-light)'
+                class='loading-indicator'
+              />
+              <span class='session-preparation-message'>
+                {{#if
+                  (and
+                    this.aiAssistantPanelService.isSummarizingSession
+                    this.aiAssistantPanelService.isCopyingFileHistory
+                  )
+                }}
+                  Summarizing session and copying files
+                {{else if this.aiAssistantPanelService.isSummarizingSession}}
+                  Summarizing previous session
+                {{else if this.aiAssistantPanelService.isCopyingFileHistory}}
+                  Copying file history from previous session
+                {{else}}
+                  Preparing session context
+                {{/if}}
+              </span>
+              <span class='session-preparation-message'>
+                Please keep Assistant open
+              </span>
+              <span class='session-preparation-small-message'>
+                Takes 10-20 seconds
+              </span>
+              <button
+                type='button'
+                class='session-preparation-skip-button'
+                {{on 'click' this.skipSessionPreparation}}
+                data-test-session-preparation-skip-button
+              >
+                Skip
+              </button>
+            </div>
           {{else}}
             {{#each this.messages key='eventId' as |message i|}}
               <RoomMessage
@@ -320,11 +362,45 @@ export default class Room extends Component<Signature> {
         margin-top: auto;
       }
 
+      .session-preparation-container {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 100%;
+        gap: 4px;
+      }
+
       .loading-indicator {
-        margin-top: auto;
-        margin-bottom: auto;
-        margin-left: auto;
-        margin-right: auto;
+        margin-bottom: var(--boxel-sp-xxs);
+      }
+
+      .session-preparation-message {
+        text-align: center;
+        color: var(--boxel-light);
+        font: 500 var(--boxel-font-sm);
+      }
+
+      .session-preparation-small-message {
+        color: var(--boxel-400);
+        font: 500 var(--boxel-font-xs);
+      }
+
+      .session-preparation-skip-button {
+        background: none;
+        border: 1px solid var(--boxel-400);
+        border-radius: var(--boxel-border-radius-lg);
+        color: var(--boxel-light);
+        font: 500 var(--boxel-font-xs);
+        padding: 4px 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        margin-top: var(--boxel-sp-sm);
+      }
+
+      .session-preparation-skip-button:hover {
+        background: var(--boxel-400);
+        color: var(--boxel-light);
       }
 
       .chat-input-area :deep(.pill-menu-button) {
@@ -362,6 +438,7 @@ export default class Room extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
   @service private declare specPanelService: SpecPanelService;
+  @service private declare aiAssistantPanelService: AiAssistantPanelService;
 
   private autoAttachmentResource = getAutoAttachment(this, {
     submode: () => this.operatorModeStateService.state.submode,
@@ -986,7 +1063,8 @@ export default class Room extends Component<Signature> {
       ) &&
       !!this.room &&
       !this.messages.some((m) => this.isPendingMessage(m)) &&
-      !this.matrixService.isLoadingTimeline
+      !this.matrixService.isLoadingTimeline &&
+      !this.aiAssistantPanelService.isPreparingSession
     );
   }
 
@@ -1018,6 +1096,11 @@ export default class Room extends Component<Signature> {
     action: 'skill-menu' | 'llm-select' | undefined,
   ) {
     this.selectedBottomAction = action;
+  }
+
+  @action
+  private skipSessionPreparation() {
+    this.aiAssistantPanelService.skipSessionPreparation();
   }
 
   private get displaySkillMenu() {
