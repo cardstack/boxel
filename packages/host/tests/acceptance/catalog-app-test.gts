@@ -10,8 +10,6 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
-import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
-
 import ListingCreateCommand from '@cardstack/host/commands/listing-create';
 import ListingInstallCommand from '@cardstack/host/commands/listing-install';
 import ListingRemixCommand from '@cardstack/host/commands/listing-remix';
@@ -126,7 +124,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     activeRealms: [mockCatalogURL, testDestinationRealmURL],
   });
 
-  let { getRoomIds, getRoomEvents, createAndJoinRoom } = mockMatrixUtils;
+  let { getRoomIds, createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
@@ -605,13 +603,22 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     await waitFor(buttonSelector);
     assert.dom(buttonSelector).containsText(expectedText);
     await executeListingAction(buttonSelector, menuItemName, checkHydration);
-    await waitForRoom();
     await waitUntil(() => getRoomIds().length > 0);
 
     const roomId = getRoomIds().pop()!;
-    const message = getRoomEvents(roomId).pop()!;
-    assert.strictEqual(message.content.msgtype, APP_BOXEL_MESSAGE_MSGTYPE);
-    assert.strictEqual(message.content.body, expectedMessage);
+    await waitFor(`[data-test-room="${roomId}"][data-test-room-settled]`);
+    await waitFor(
+      `[data-test-room="${roomId}"] [data-test-ai-assistant-message]`,
+    );
+
+    await waitFor(
+      `[data-test-room="${roomId}"] [data-test-ai-message-content]`,
+    );
+    await settled();
+
+    assert
+      .dom(`[data-test-room="${roomId}"] [data-test-ai-message-content]`)
+      .containsText(expectedMessage);
   }
 
   async function assertDropdownItem(
@@ -664,7 +671,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
     });
 
     module('listing fitted', async function () {
-      skip('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
+      test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
         await selectTab('Cards');
         await waitForGrid();
         await waitForCardOnGrid(authorListingId, 'Author');
@@ -1218,7 +1225,7 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         .exists('Skill is attached to the skill menu');
     });
 
-    skip('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
+    test('after clicking "Remix" button, the ai room is initiated, and prompt is given correctly', async function (assert) {
       await verifyListingAction(
         assert,
         `[data-test-card="${authorListingId}"] [data-test-catalog-listing-action="Remix"]`,
