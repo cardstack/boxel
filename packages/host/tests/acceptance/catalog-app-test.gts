@@ -941,8 +941,42 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
         });
       });
 
-      skip('filters', async function () {
-        test('list view is shown if filters are applied', async function (assert) {
+      // TOOD: restore in CS-9083
+      test('should be reset when clicking "Catalog Home" button', async function (assert) {
+        await waitFor('[data-test-filter-search-input]');
+        await click('[data-test-filter-search-input]');
+        await fillIn('[data-test-filter-search-input]', 'Aut');
+        // filter by category
+        await click('[data-test-filter-list-item="All"]');
+        // filter by tag
+        let tagPill = document.querySelector('[data-test-tag-list-pill]');
+        if (tagPill) {
+          await click(tagPill);
+        }
+
+        assert
+          .dom('[data-test-showcase-view]')
+          .doesNotExist('Should be in list view after applying filter');
+
+        await click('[data-test-navigation-reset-button="showcase"]');
+
+        assert
+          .dom('[data-test-showcase-view]')
+          .exists('Should return to showcase view after clicking Catalog Home');
+
+        assert
+          .dom('[data-test-filter-search-input]')
+          .hasValue('', 'Search input should be cleared');
+        assert
+          .dom('[data-test-filter-list-item].is-selected')
+          .doesNotExist('No category should be selected after reset');
+        assert
+          .dom('[data-test-tag-list-pill].selected')
+          .doesNotExist('No tag should be selected after reset');
+      });
+
+      test('filters', async function () {
+        skip('list view is shown if filters are applied', async function (assert) {
           await waitFor('[data-test-filter-search-input]');
           await click('[data-test-filter-search-input]');
           await fillIn('[data-test-filter-search-input]', 'Mortgage');
@@ -966,42 +1000,6 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             .exists(
               'Catalog list view should be visible when filters are applied',
             );
-        });
-
-        // TOOD: restore in CS-9083
-        skip('should be reset when clicking "Catalog Home" button', async function (assert) {
-          await waitFor('[data-test-filter-search-input]');
-          await click('[data-test-filter-search-input]');
-          await fillIn('[data-test-filter-search-input]', 'Mortgage');
-          // filter by category
-          await click('[data-test-filter-list-item="All"]');
-          // filter by tag
-          let tagPill = document.querySelector('[data-test-tag-list-pill]');
-          if (tagPill) {
-            await click(tagPill);
-          }
-
-          assert
-            .dom('[data-test-showcase-view]')
-            .doesNotExist('Should be in list view after applying filter');
-
-          await click('[data-test-navigation-reset-button="showcase"]');
-
-          assert
-            .dom('[data-test-showcase-view]')
-            .exists(
-              'Should return to showcase view after clicking Catalog Home',
-            );
-
-          assert
-            .dom('[data-test-filter-search-input]')
-            .hasValue('', 'Search input should be cleared');
-          assert
-            .dom('[data-test-filter-list-item].is-selected')
-            .doesNotExist('No category should be selected after reset');
-          assert
-            .dom('[data-test-tag-list-pill].selected')
-            .doesNotExist('No tag should be selected after reset');
         });
 
         // TODO: restore in CS-9131
