@@ -226,7 +226,11 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       {{/if}}
 
       {{#if permissions.canWrite}}
-        <AddButton {{on 'click' @add}} data-test-add-new={{@field.name}}>
+        <AddButton
+          class='add-new'
+          {{on 'click' @add}}
+          data-test-add-new={{@field.name}}
+        >
           Add
           {{getPlural @field.card.displayName}}
         </AddButton>

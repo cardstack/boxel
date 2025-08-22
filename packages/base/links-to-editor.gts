@@ -57,6 +57,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         {{#if this.isEmpty}}
           {{#if permissions.canWrite}}
             <AddButton
+              class='add-new'
               @hideIcon={{true}}
               {{on 'click' this.add}}
               data-test-add-new={{@field.name}}

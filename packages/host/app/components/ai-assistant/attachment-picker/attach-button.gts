@@ -3,10 +3,11 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
+import PlusIcon from '@cardstack/boxel-icons/plus';
 import FileCode from '@cardstack/boxel-icons/file-code';
 import { restartableTask } from 'ember-concurrency';
 
-import { BoxelSelect, AddButton } from '@cardstack/boxel-ui/components';
+import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { chooseCard, baseCardRef, chooseFile } from '@cardstack/runtime-common';
@@ -20,34 +21,12 @@ interface AttachButtonTriggerSignature {
 
 const AttachButtonTrigger: TemplateOnlyComponent<AttachButtonTriggerSignature> =
   <template>
-    <AddButton
-      class='attach-button__trigger'
-      @variant='pill'
+    <PlusIcon
+      class='attach-button__trigger-icon'
+      width='22px'
+      height='22px'
       data-test-attach-button
-      ...attributes
     />
-    <style scoped>
-      :deep(.ember-basic-dropdown-trigger) {
-        border: none;
-      }
-      .attach-button__trigger {
-        height: var(--attach-button-height, 22px);
-        width: var(--attach-button-width, 22px);
-        padding: 0;
-        gap: var(--boxel-sp-xs);
-        background: none;
-      }
-      .attach-button__trigger:hover:not(:disabled),
-      .attach-button__trigger:focus:not(:disabled) {
-        --icon-color: #e0e0e0;
-        color: #e0e0e0;
-        background: none;
-        box-shadow: none;
-      }
-      .attach-button__trigger > :deep(svg > path) {
-        stroke: none;
-      }
-    </style>
   </template>;
 
 interface Signature {
@@ -91,11 +70,11 @@ export default class AttachButton extends Component<Signature> {
     <style scoped>
       .attach-button {
         border: none;
-        padding-top: var(--boxel-sp-4xs);
+        margin-top: var(--boxel-sp-4xs);
       }
-      .attach-button[aria-expanded='true'] :deep(.attach-button__trigger) {
-        background-color: var(--boxel-dark);
-        --icon-color: var(--boxel-light);
+      .attach-button:not(:disabled):hover,
+      .attach-button:not(:disabled):focus:not(:focus-visible) {
+        color: #e0e0e0;
       }
       .attach-button
         + :deep(

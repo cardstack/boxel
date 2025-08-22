@@ -120,7 +120,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
           </ul>
         {{/if}}
         {{#if permissions.canWrite}}
-          <AddButton {{on 'click' this.add}} data-test-add-new>
+          <AddButton class='add-new' {{on 'click' this.add}} data-test-add-new>
             Add
             {{getPlural @field.card.displayName}}
           </AddButton>

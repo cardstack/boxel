@@ -16,20 +16,24 @@ interface Signature {
 const AddButton: TemplateOnlyComponent<Signature> = <template>
   {{#if (eq @variant 'pill')}}
     <Pill
-      class='add-new add-button--pill'
+      class='base-add-button add-button--pill'
       @kind='button'
       @variant='primary'
       ...attributes
     >
       <:iconLeft>
-        <IconPlus width='12px' height='12px' alt='plus' />
+        <IconPlus class='icon' width='12px' height='12px' alt='plus' />
       </:iconLeft>
       <:default>
         {{yield}}
       </:default>
     </Pill>
   {{else}}
-    <Button class='add-new add-button--full-width' @kind='muted' ...attributes>
+    <Button
+      class='base-add-button add-button--full-width'
+      @kind='muted'
+      ...attributes
+    >
       {{#unless @hideIcon}}
         <IconPlus class='icon' width='12px' height='12px' alt='plus' />
       {{/unless}}
@@ -37,15 +41,19 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
     </Button>
   {{/if}}
   <style scoped>
-    .add-new {
+    .base-add-button {
       --_ab-gap: var(--add-button-gap, var(--boxel-sp-xxxs));
       --_ab-padding: var(
         --add-button-padding,
         var(--boxel-sp-5xs) var(--boxel-sp-sm)
       );
+      --icon-color: var(--add-button-icon-color, currentColor);
     }
-    .add-new:not(:disabled):hover {
+    .base-add-button:not(:disabled):hover {
       box-shadow: var(--shadow, var(--boxel-box-shadow));
+    }
+    .icon {
+      color: var(--icon-color);
     }
 
     .add-button--pill {
