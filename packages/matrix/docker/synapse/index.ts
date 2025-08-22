@@ -47,6 +47,7 @@ export async function cfgDirFromTemplate(
   template: string,
   dataDir?: string,
   isTestInstance?: boolean,
+  uniquePort?: number,
 ): Promise<SynapseConfig> {
   const templateDir = path.join(__dirname, template);
 
@@ -68,12 +69,21 @@ export async function cfgDirFromTemplate(
   const macaroonSecret = randB64Bytes(16);
   const formSecret = randB64Bytes(16);
 
-  // Use different IP and port for test instances to avoid conflicts
-  const host = isTestInstance
-    ? TEST_SYNAPSE_IP_ADDRESS
-    : DEVELOPMENT_SYNAPSE_IP_ADDRESS;
-  const port = isTestInstance ? TEST_SYNAPSE_PORT : DEVELOPMENT_SYNAPSE_PORT;
-  const baseUrl = `http://${host}:${port}`;
+  let host: string;
+  let port: number;
+
+  if (uniquePort) {
+    const uniqueIpSuffix = 100 + (uniquePort % 155);
+    host = `172.20.0.${uniqueIpSuffix}`;
+    port = uniquePort;
+  } else {
+    host = isTestInstance
+      ? TEST_SYNAPSE_IP_ADDRESS
+      : DEVELOPMENT_SYNAPSE_IP_ADDRESS;
+    port = isTestInstance ? TEST_SYNAPSE_PORT : DEVELOPMENT_SYNAPSE_PORT;
+  }
+
+  let baseUrl = `http://localhost:${port}`;
 
   // now copy homeserver.yaml, applying substitutions
   console.log(`Gen ${path.join(templateDir, 'homeserver.yaml')}`);
