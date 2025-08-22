@@ -46,7 +46,7 @@
       },
       "specs.6": {
         "links": {
-          "self": "../Spec/crm-app-card-list"
+          "self": "../Spec/card-list"
         }
       },
       "specs.7": {
@@ -56,7 +56,7 @@
       },
       "specs.8": {
         "links": {
-          "self": "../Spec/crm-app-contact-link"
+          "self": "../Spec/contact-link"
         }
       },
       "specs.9": {
@@ -96,12 +96,12 @@
       },
       "specs.16": {
         "links": {
-          "self": "../Spec/crm-app-grid"
+          "self": "../Spec/grid"
         }
       },
       "specs.17": {
         "links": {
-          "self": "../Spec/crm-app-layout"
+          "self": "../Spec/layout"
         }
       },
       "specs.18": {
@@ -116,7 +116,7 @@
       },
       "specs.20": {
         "links": {
-          "self": "../Spec/crm-app-sort"
+          "self": "../Spec/sort"
         }
       },
       "specs.21": {

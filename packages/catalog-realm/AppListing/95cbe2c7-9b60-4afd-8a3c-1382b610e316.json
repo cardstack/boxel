@@ -20,32 +20,32 @@
       },
       "specs.1": {
         "links": {
-          "self": "../Spec/blog-app-featured-image"
+          "self": "../Spec/featured-image"
         }
       },
       "specs.2": {
         "links": {
-          "self": "../Spec/blog-app-contact-link"
+          "self": "../Spec/contact-link"
         }
       },
       "specs.3": {
         "links": {
-          "self": "../Spec/blog-app-card-list"
+          "self": "../Spec/card-list"
         }
       },
       "specs.4": {
         "links": {
-          "self": "../Spec/blog-app-grid"
+          "self": "../Spec/grid"
         }
       },
       "specs.5": {
         "links": {
-          "self": "../Spec/blog-app-sort"
+          "self": "../Spec/sort"
         }
       },
       "specs.6": {
         "links": {
-          "self": "../Spec/blog-app-layout"
+          "self": "../Spec/layout"
         }
       },
       "specs.7": {

@@ -4,11 +4,7 @@ import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation/bro
 //@ts-ignore breaks esbuild for VS Code extension
 import type { Options as EmberTemplatePluginOptions } from 'babel-plugin-ember-template-compilation/src/plugin';
 //@ts-ignore breaks esbuild for VS Code extension
-import type { EmberTemplateCompiler } from 'babel-plugin-ember-template-compilation/src/ember-template-compiler';
-//@ts-ignore breaks esbuild for VS Code extension
 import type { ExtendedPluginBuilder } from 'babel-plugin-ember-template-compilation/src/js-utils';
-//@ts-ignore no types are available
-import * as etc from 'ember-source/dist/ember-template-compiler';
 import { loaderPlugin } from './loader-plugin';
 //@ts-ignore ironically no types are available
 import typescriptPlugin from '@babel/plugin-transform-typescript';
@@ -18,6 +14,7 @@ import { generateScopedCSSPlugin } from 'glimmer-scoped-css/ast-transform';
 
 //@ts-ignore no upstream types
 import decoratorTransforms from 'decorator-transforms';
+import { compiler } from './etc';
 
 const scopedCSSTransform = generateScopedCSSPlugin({
   noGlobal: true,
@@ -37,7 +34,7 @@ export function transpileJS(content: string, debugFilename: string): string {
   }).code;
 
   let templateOptions: EmberTemplatePluginOptions = {
-    compiler: etc as unknown as EmberTemplateCompiler,
+    compiler,
     transforms: [scopedCSSTransform],
   };
 

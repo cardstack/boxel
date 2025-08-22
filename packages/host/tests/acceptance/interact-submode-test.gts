@@ -239,7 +239,9 @@ module('Acceptance | interact submode tests', function (hooks) {
             <@fields.firstLetterOfTheName />
           </p>
           Pet:
-          <@fields.pet />
+          <div class='pet-container'>
+            <@fields.pet />
+          </div>
           Friends:
           <@fields.friends />
           Primary Address:
@@ -252,6 +254,12 @@ module('Acceptance | interact submode tests', function (hooks) {
           >
             Update and Save Pet
           </button>
+          <style scoped>
+            .pet-container {
+              height: 80px;
+              padding: 10px;
+            }
+          </style>
         </template>
       };
     }

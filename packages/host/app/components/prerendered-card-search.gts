@@ -56,8 +56,10 @@ export class PrerenderedCard implements PrerenderedCardLike {
 }
 function getErrorComponent(realmURL: string, url: string) {
   let name = new RealmPaths(new URL(realmURL)).local(new URL(url));
-  const DefaultErrorResultComponent: TemplateOnlyComponent = <template>
-    <div class='error'>
+  const DefaultErrorResultComponent: TemplateOnlyComponent<{
+    Element: Element;
+  }> = <template>
+    <div class='error' ...attributes>
       <div class='thumbnail'>
         <TriangleAlert />
       </div>

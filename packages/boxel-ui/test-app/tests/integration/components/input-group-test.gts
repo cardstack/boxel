@@ -3,9 +3,9 @@ import { setupRenderingTest } from 'test-app/tests/helpers';
 import { render, settled } from '@ember/test-helpers';
 import { BoxelInputGroup } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import type { Icon } from '@cardstack/boxel-ui/icons';
 
-const OverrideIcon: TemplateOnlyComponent = <template>
+const OverrideIcon: Icon = <template>
   <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'>
     <text data-test-override-icon>hey</text>
   </svg>
@@ -17,8 +17,8 @@ module('Integration | Component | InputGroup', function (hooks) {
   test('renders override icon arguments', async function (assert) {
     class StateObject {
       @tracked state = 'valid';
-      @tracked validIcon: TemplateOnlyComponent | undefined;
-      @tracked invalidIcon: TemplateOnlyComponent | undefined;
+      @tracked validIcon: Icon | undefined;
+      @tracked invalidIcon: Icon | undefined;
     }
 
     let stateObject = new StateObject();

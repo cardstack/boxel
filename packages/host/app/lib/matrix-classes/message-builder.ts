@@ -383,6 +383,7 @@ export default class MessageBuilder {
           finalFileUrlAfterCodePatching,
           originalUploadedFileUrl,
           getOwner(this)!,
+          codePatchResultEvent.content.failureReason,
         ),
       );
     }
