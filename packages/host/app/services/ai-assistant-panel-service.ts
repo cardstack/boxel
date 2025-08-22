@@ -25,10 +25,16 @@ import { eventDebounceMs, isMatrixError } from '../lib/matrix-utils';
 import { importResource } from '../resources/import';
 import { NewSessionIdPersistenceKey } from '../utils/local-storage-keys';
 
+import { titleize } from '../utils/titleize';
+
 import LocalPersistenceService from './local-persistence-service';
 
+import { DEFAULT_MODULE_INSPECTOR_VIEW } from './operator-mode-state-service';
+
+import type CodeSemanticsService from './code-semantics-service';
 import type CommandService from './command-service';
 import type MatrixService from './matrix-service';
+import type MonacoService from './monaco-service';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type StoreService from './store';
 import type { Message } from '../lib/matrix-classes/message';
@@ -42,9 +48,11 @@ export interface SessionRoomData {
 }
 
 export default class AiAssistantPanelService extends Service {
-  @service declare private matrixService: MatrixService;
-  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private codeSemanticsService: CodeSemanticsService;
   @service declare private commandService: CommandService;
+  @service declare private matrixService: MatrixService;
+  @service declare private monacoService: MonacoService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private localPersistenceService: LocalPersistenceService;
   @service declare private store: StoreService;
 
@@ -82,6 +90,36 @@ export default class AiAssistantPanelService extends Service {
 
   get isOpen() {
     return this.operatorModeStateService.aiAssistantOpen;
+  }
+
+  get isFocusPillVisible() {
+    return !!this.focusPillLabel;
+  }
+
+  get focusPillLabel() {
+    let selectedCodeRef = this.codeSemanticsService.selectedCodeRef;
+    if (selectedCodeRef?.name) {
+      return selectedCodeRef?.name;
+    }
+    return undefined;
+  }
+
+  get focusPillItemType() {
+    return titleize(
+      this.operatorModeStateService.state.moduleInspector ??
+        DEFAULT_MODULE_INSPECTOR_VIEW,
+    );
+  }
+
+  get focusPillCodeRange() {
+    let selection = this.monacoService.trackedSelection;
+    if (!selection) {
+      return undefined;
+    }
+    if (selection.startLineNumber === selection.endLineNumber) {
+      return `Line ${selection.startLineNumber}`;
+    }
+    return `Lines ${selection.startLineNumber}-${selection.endLineNumber}`;
   }
 
   @action

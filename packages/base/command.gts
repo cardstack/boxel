@@ -250,6 +250,7 @@ export class ListingInstallResult extends CardDef {
 
 export class ListingCreateInput extends CardDef {
   @field openCardId = contains(StringField);
+  @field targetRealm = contains(StringField);
 }
 
 export class VisitCardsInput extends CardDef {

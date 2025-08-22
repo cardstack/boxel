@@ -68,6 +68,7 @@ import type { Skill } from 'https://cardstack.com/base/skill';
 import AiAssistantActionBar from '../ai-assistant/action-bar';
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
+import FocusPill from '../ai-assistant/focus-pill';
 import LLMModeToggle from '../ai-assistant/llm-mode-toggle';
 import LLMSelect from '../ai-assistant/llm-select';
 import { AiAssistantConversation } from '../ai-assistant/message';
@@ -92,6 +93,7 @@ interface Signature {
 }
 
 export default class Room extends Component<Signature> {
+  @service declare aiAssistantPanelService: AiAssistantPanelService;
   <template>
     {{#if (not this.doMatrixEventFlush.isRunning)}}
       <section
@@ -219,8 +221,16 @@ export default class Room extends Component<Signature> {
                 @canSend={{this.canSend}}
                 data-test-message-field={{@roomId}}
               />
+              {{#if this.aiAssistantPanelService.isFocusPillVisible}}
+                <FocusPill
+                  @label={{this.aiAssistantPanelService.focusPillLabel}}
+                  @itemType={{this.aiAssistantPanelService.focusPillItemType}}
+                  @codeRange={{this.aiAssistantPanelService.focusPillCodeRange}}
+                  class='pill-row'
+                />
+              {{/if}}
               {{#if this.displayAttachedItems}}
-                <AttachedItems />
+                <AttachedItems class='pill-row' />
               {{/if}}
 
               <div class='chat-input-area__bottom-actions'>
@@ -334,6 +344,14 @@ export default class Room extends Component<Signature> {
 
       .chat-input-area__bottom-actions:has(.menu-content) {
         padding: 0;
+      }
+
+      .pill-row {
+        margin: var(--boxel-sp-xxxs);
+      }
+
+      .pill-row + .pill-row {
+        margin-top: 0;
       }
 
       .llm-mode-toggle {

@@ -1,6 +1,7 @@
 import Owner from '@ember/owner';
 import {
   RenderingTestContext,
+  click,
   render,
   settled,
   waitFor,
@@ -52,6 +53,10 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
         status: 200,
         content: 'let a = 1;\nlet b = 2;',
       });
+    };
+
+    getService('matrix-service').fetchMatrixHostedFile = async (_url) => {
+      return new Response('let a = 1;\nlet b = 2;');
     };
   });
 
@@ -466,6 +471,38 @@ ${REPLACE_MARKER}
     assert
       .dom(
         `[data-test-error-message="Failed to load code from malformed file url"]`,
+      )
+      .exists();
+  });
+
+  test('it will render an error message when code diff does not apply', async function (assert) {
+    await renderFormattedAiBotMessage({
+      htmlParts: parseHtmlContent(
+        `
+<pre data-code-language="typescript">
+https://example.com/file.ts
+${SEARCH_MARKER}
+🍄 hallucinated code 🍄
+${SEPARATOR_MARKER}
+let a = 1;
+${REPLACE_MARKER}
+</pre>`,
+        roomId,
+        eventId,
+      ),
+      isStreaming: false,
+      isLastAssistantMessage: true,
+    });
+
+    await click('[data-test-attached-file-dropdown-button="file.ts"]');
+
+    assert
+      .dom('[data-test-boxel-menu-item-text="Restore Generated Content"]')
+      .hasAttribute('disabled');
+
+    assert
+      .dom(
+        `[data-test-error-message="Unable to process the code patch due to invalid code coming from AI (search pattern not found in the target source file)"]`,
       )
       .exists();
   });

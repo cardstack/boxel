@@ -1,16 +1,41 @@
 {
   "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "CardListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
     "type": "card",
     "attributes": {
       "name": "Todo Mvc",
-      "summary": "TodoMVC is a simple yet powerful demonstration app that showcases how different JavaScript frameworks implement the same basic functionality—a to-do list. It provides a consistent way to compare frameworks by offering a shared baseline in UI and features.",
       "images": [
         "https://boxel-images.boxel.ai/app-assets/catalog/todo-mvc-listing/screenshot-01.png"
       ],
-      "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/todo-mvc-listing/thumbnail.png"
+      "summary": "TodoMVC is a simple yet powerful demonstration app that showcases how different JavaScript frameworks implement the same basic functionality—a to-do list. It provides a consistent way to compare frameworks by offering a shared baseline in UI and features.",
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
     },
     "relationships": {
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
       "specs.0": {
         "links": {
           "self": "../Spec/todo-mvc"
@@ -21,31 +46,20 @@
           "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
         }
       },
-      "categories": {
+      "categories.0": {
         "links": {
-          "self": null
-        }
-      },
-      "tags": {
-        "links": {
-          "self": null
-        }
-      },
-      "license": {
-        "links": {
-          "self": null
+          "self": "../Category/project-management"
         }
       },
       "examples.0": {
         "links": {
           "self": "../todo-mvc/TodoMvc/56ed8571-7774-4829-989a-ce8fd4530737"
         }
-      }
-    },
-    "meta": {
-      "adoptsFrom": {
-        "module": "../catalog-app/listing/listing",
-        "name": "CardListing"
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

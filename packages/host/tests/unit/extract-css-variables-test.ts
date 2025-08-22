@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 
-import { extractCssVariables } from '@cardstack/runtime-common';
+import { extractCssVariables } from '@cardstack/boxel-ui/helpers';
 
 module('Unit | extract-css-variables', function () {
   test('extracts CSS variables from a string', function (assert) {
