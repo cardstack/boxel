@@ -192,10 +192,9 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
   map: any | null = null;
 
   markersGroup: any | null = null;
-  routeGroup: any | null = null;
+  geoJsonLayerGroup: any | null = null;
   startMarkerGroup: any | null = null;
   endMarkerGroup: any | null = null;
-  polyline: any | null = null;
   moduleSet: boolean = false;
 
   modify(
@@ -203,24 +202,28 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
     _positional: [],
     named: NamedArgs<LeafletModifierSignature>,
   ) {
-    console.log(named.coordinates);
     this.element = element;
+
+    // Use the coordinates passed in through named arguments directly.
+    // This ensures we always get the latest array reference from Ember's reactivity system,
+    // instead of reusing a stale reference or mutating the original array in place.
+    // By reassigning here, the map layer will correctly re-render with updated points.
+    let coordinates = named.coordinates;
+    let mapConfig = named.mapConfig;
+    let onMapClickUpdate = named.onMapClickUpdate;
 
     (async () => {
       if (!this.moduleSet) {
-        // 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js',
         let module = await fetch(
           'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
-
-          // 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet-src.esm.js',
         );
         let script = await module.text();
         eval(script);
-        this.initMap(named.mapConfig, named.onMapClickUpdate);
+        this.initMap(mapConfig, onMapClickUpdate);
         this.moduleSet = true;
       }
       this.resetLayers();
-      this.updateLayers(named.coordinates);
+      this.updateLayers(coordinates);
     })();
   }
 
@@ -233,10 +236,6 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
   //
 
   private initMap(mapConfig?: any, onMapClickUpdate?: (c: Coordinate) => void) {
-    console.log('checking initmap');
-    console.log(window.L);
-    console.log(oldL);
-    console.log(window.L == oldL);
     if (!window.L) {
       throw new Error('Leaflet is not loaded, window L is not exist');
     }
@@ -256,7 +255,16 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
     this.startMarkerGroup = L.layerGroup().addTo(this.map);
     this.endMarkerGroup = L.layerGroup().addTo(this.map);
     this.markersGroup = L.layerGroup().addTo(this.map);
-    this.routeGroup = L.layerGroup().addTo(this.map);
+    this.geoJsonLayerGroup = L.geoJSON(null, {
+      style: function (feature: any) {
+        return {
+          color: feature.properties.color,
+          weight: feature.properties.weight,
+          opacity: feature.properties.opacity,
+          smoothFactor: 1,
+        };
+      },
+    }).addTo(this.map);
 
     if (!mapConfig?.disableMapClick && onMapClickUpdate) {
       this.map.on('click', (event: any) => {
@@ -267,24 +275,11 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
   }
 
   private resetLayers() {
-    console.log('🧹 Resetting all layers...');
-
-    // Clear polyline first
-    if (this.polyline) {
-      try {
-        this.routeGroup?.removeLayer(this.polyline);
-      } catch (error) {
-        console.warn('Error removing polyline:', error);
-      }
-      this.polyline = null;
-    }
-
-    // Clear all layer groups
     [
       this.startMarkerGroup,
       this.endMarkerGroup,
       this.markersGroup,
-      this.routeGroup,
+      this.geoJsonLayerGroup,
     ].forEach((group, index) => {
       if (group) {
         try {
@@ -339,17 +334,24 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
         throw new Error('Leaflet not loaded');
       }
 
-      const latLngs = coordinates.map((c) => L.latLng(c.lat, c.lng));
+      // Create GeoJSON LineString feature
+      const lineStringFeature = {
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: coordinates.map((c) => [c.lng, c.lat]), // GeoJSON uses [lng, lat] order
+        },
+        properties: {
+          name: 'Route',
+          color: '#3b82f6',
+          weight: 4,
+          opacity: 0.7,
+        },
+      };
 
-      this.polyline = L.polyline(latLngs, {
-        color: '#3b82f6',
-        weight: 4,
-        opacity: 0.7,
-        smoothFactor: 1,
-      });
-
-      this.routeGroup.addLayer(this.polyline);
-    } catch (error) {
+      // Add the new LineString to the existing GeoJSON layer
+      this.geoJsonLayerGroup.addData(lineStringFeature);
+    } catch (error: any) {
       console.error('❌ Error in addPolyline:', error.message);
       console.error('Error stack:', error.stack);
     }
@@ -409,16 +411,11 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
   }
 
   private teardown() {
-    if (this.polyline) {
-      this.routeGroup?.removeLayer(this.polyline);
-      this.polyline = null;
-    }
-
     [
       this.startMarkerGroup,
       this.endMarkerGroup,
       this.markersGroup,
-      this.routeGroup,
+      this.geoJsonLayerGroup,
     ].forEach((g) => {
       g?.clearLayers();
       if (this.map && this.map.hasLayer(g)) {
