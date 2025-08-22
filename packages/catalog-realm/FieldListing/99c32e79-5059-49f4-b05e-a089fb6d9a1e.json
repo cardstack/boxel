@@ -41,19 +41,19 @@
           "self": "../Spec/1dde6ecb-e779-4fb7-89de-597399bb1530"
         }
       },
-      "examples.0": {
-        "links": {
-          "self": "../fields-preview/QRCodePreview/789e97cd-bdf2-46ba-aa31-dcdc069c4551"
-        }
-      },
       "publisher": {
         "links": {
           "self": null
         }
       },
-      "categories": {
+      "categories.0": {
         "links": {
-          "self": null
+          "self": "../Category/developer-tools-code"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../fields-preview/QRCodePreview/789e97cd-bdf2-46ba-aa31-dcdc069c4551"
         }
       },
       "cardInfo.theme": {
