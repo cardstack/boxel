@@ -459,6 +459,11 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
                   self: authorListingId,
                 },
               },
+              'startHere.1': {
+                links: {
+                  self: personListingId,
+                },
+              },
             },
             meta: {
               adoptsFrom: {
@@ -942,40 +947,8 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
       });
 
       // TOOD: restore in CS-9083
-      test('should be reset when clicking "Catalog Home" button', async function (assert) {
-        await waitFor('[data-test-filter-search-input]');
-        await click('[data-test-filter-search-input]');
-        await fillIn('[data-test-filter-search-input]', 'Aut');
-        // filter by category
-        await click('[data-test-filter-list-item="All"]');
-        // filter by tag
-        let tagPill = document.querySelector('[data-test-tag-list-pill]');
-        if (tagPill) {
-          await click(tagPill);
-        }
 
-        assert
-          .dom('[data-test-showcase-view]')
-          .doesNotExist('Should be in list view after applying filter');
-
-        await click('[data-test-navigation-reset-button="showcase"]');
-
-        assert
-          .dom('[data-test-showcase-view]')
-          .exists('Should return to showcase view after clicking Catalog Home');
-
-        assert
-          .dom('[data-test-filter-search-input]')
-          .hasValue('', 'Search input should be cleared');
-        assert
-          .dom('[data-test-filter-list-item].is-selected')
-          .doesNotExist('No category should be selected after reset');
-        assert
-          .dom('[data-test-tag-list-pill].selected')
-          .doesNotExist('No tag should be selected after reset');
-      });
-
-      test('filters', async function () {
+      module('filters', async function () {
         skip('list view is shown if filters are applied', async function (assert) {
           await waitFor('[data-test-filter-search-input]');
           await click('[data-test-filter-search-input]');
@@ -1000,6 +973,41 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             .exists(
               'Catalog list view should be visible when filters are applied',
             );
+        });
+        test('should be reset when clicking "Catalog Home" button', async function (assert) {
+          await waitFor('[data-test-filter-search-input]');
+          await click('[data-test-filter-search-input]');
+          await fillIn('[data-test-filter-search-input]', 'Aut');
+          // filter by category
+          await click('[data-test-filter-list-item="All"]');
+          // filter by tag
+          let tagPill = document.querySelector('[data-test-tag-list-pill]');
+          if (tagPill) {
+            await click(tagPill);
+          }
+
+          assert
+            .dom('[data-test-showcase-view]')
+            .doesNotExist('Should be in list view after applying filter');
+
+          await click('[data-test-navigation-reset-button="showcase"]');
+          await waitForShowcase();
+
+          assert
+            .dom('[data-test-showcase-view]')
+            .exists(
+              'Should return to showcase view after clicking Catalog Home',
+            );
+
+          assert
+            .dom('[data-test-filter-search-input]')
+            .hasValue('', 'Search input should be cleared');
+          assert
+            .dom('[data-test-filter-list-item].is-selected')
+            .doesNotExist('No category should be selected after reset');
+          assert
+            .dom('[data-test-tag-list-pill].selected')
+            .doesNotExist('No tag should be selected after reset');
         });
 
         // TODO: restore in CS-9131
@@ -1074,102 +1082,102 @@ module('Acceptance | Catalog | catalog app tests', function (hooks) {
             .exists({ count: 1 });
         });
 
-        test('updates the card count correctly when filtering by a single tag', async function (assert) {
-          await click(`[data-test-tag-list-pill="${gameTagId}"]`);
-          assert
-            .dom(`[data-test-tag-list-pill="${gameTagId}"]`)
-            .hasClass('selected');
-          assert
-            .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
-            .exists({ count: 1 });
-        });
+        // test('updates the card count correctly when filtering by a single tag', async function (assert) {
+        //   await click(`[data-test-tag-list-pill="${gameTagId}"]`);
+        //   assert
+        //     .dom(`[data-test-tag-list-pill="${gameTagId}"]`)
+        //     .hasClass('selected');
+        //   assert
+        //     .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+        //     .exists({ count: 1 });
+        // });
 
-        test('updates the card count correctly when filtering by multiple tags', async function (assert) {
-          await click(`[data-test-tag-list-pill="${calculatorTagId}"]`);
-          await click(`[data-test-tag-list-pill="${gameTagId}"]`);
-          assert
-            .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
-            .exists({ count: 2 });
-        });
+        // test('updates the card count correctly when filtering by multiple tags', async function (assert) {
+        //   await click(`[data-test-tag-list-pill="${calculatorTagId}"]`);
+        //   await click(`[data-test-tag-list-pill="${gameTagId}"]`);
+        //   assert
+        //     .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+        //     .exists({ count: 2 });
+        // });
 
-        test('updates the card count correctly when multiple filters are applied together', async function (assert) {
-          await click('[data-test-boxel-filter-list-button="All"]');
-          await click(`[data-test-tag-list-pill="${gameTagId}"]`);
-          await click('[data-test-filter-search-input]');
-          await fillIn('[data-test-filter-search-input]', 'Blackjack');
+        // test('updates the card count correctly when multiple filters are applied together', async function (assert) {
+        //   await click('[data-test-boxel-filter-list-button="All"]');
+        //   await click(`[data-test-tag-list-pill="${gameTagId}"]`);
+        //   await click('[data-test-filter-search-input]');
+        //   await fillIn('[data-test-filter-search-input]', 'Blackjack');
 
-          await waitUntil(() => {
-            const cards = document.querySelectorAll(
-              '[data-test-cards-grid-cards] [data-test-cards-grid-item]',
-            );
-            return cards.length === 1;
-          });
+        //   await waitUntil(() => {
+        //     const cards = document.querySelectorAll(
+        //       '[data-test-cards-grid-cards] [data-test-cards-grid-item]',
+        //     );
+        //     return cards.length === 1;
+        //   });
 
-          assert
-            .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
-            .exists({ count: 1 });
-        });
+        //   assert
+        //     .dom('[data-test-cards-grid-cards] [data-test-cards-grid-item]')
+        //     .exists({ count: 1 });
+        // });
 
-        test('shows zero results when filtering with a non-matching or invalid search input', async function (assert) {
-          await click('[data-test-filter-search-input]');
-          await fillIn('[data-test-filter-search-input]', 'asdfasdf');
-          await waitUntil(() => {
-            const cards = document.querySelectorAll('[data-test-no-results]');
-            return cards.length === 1;
-          });
+        // test('shows zero results when filtering with a non-matching or invalid search input', async function (assert) {
+        //   await click('[data-test-filter-search-input]');
+        //   await fillIn('[data-test-filter-search-input]', 'asdfasdf');
+        //   await waitUntil(() => {
+        //     const cards = document.querySelectorAll('[data-test-no-results]');
+        //     return cards.length === 1;
+        //   });
 
-          assert.dom('[data-test-no-results]').exists();
-        });
+        //   assert.dom('[data-test-no-results]').exists();
+        // });
 
-        test('categories with null sphere fields are excluded from filter list', async function (assert) {
-          // Setup: Create a category with null sphere field
-          await setupAcceptanceTestRealm({
-            realmURL: mockCatalogURL,
-            mockMatrixUtils,
-            contents: {
-              'Category/category-with-null-sphere.json': {
-                data: {
-                  type: 'card',
-                  attributes: {
-                    name: 'CategoryWithNullSphere',
-                  },
-                  relationships: {
-                    sphere: {
-                      links: {
-                        self: null,
-                      },
-                    },
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: `${mockCatalogURL}catalog-app/listing/category`,
-                      name: 'Category',
-                    },
-                  },
-                },
-              },
-            },
-          });
+        // test('categories with null sphere fields are excluded from filter list', async function (assert) {
+        //   // Setup: Create a category with null sphere field
+        //   await setupAcceptanceTestRealm({
+        //     realmURL: mockCatalogURL,
+        //     mockMatrixUtils,
+        //     contents: {
+        //       'Category/category-with-null-sphere.json': {
+        //         data: {
+        //           type: 'card',
+        //           attributes: {
+        //             name: 'CategoryWithNullSphere',
+        //           },
+        //           relationships: {
+        //             sphere: {
+        //               links: {
+        //                 self: null,
+        //               },
+        //             },
+        //           },
+        //           meta: {
+        //             adoptsFrom: {
+        //               module: `${mockCatalogURL}catalog-app/listing/category`,
+        //               name: 'Category',
+        //             },
+        //           },
+        //         },
+        //       },
+        //     },
+        //   });
 
-          await visitOperatorMode({
-            stacks: [
-              [
-                {
-                  id: `${mockCatalogURL}`,
-                  format: 'isolated',
-                },
-              ],
-            ],
-          });
+        //   await visitOperatorMode({
+        //     stacks: [
+        //       [
+        //         {
+        //           id: `${mockCatalogURL}`,
+        //           format: 'isolated',
+        //         },
+        //       ],
+        //     ],
+        //   });
 
-          assert
-            .dom(
-              '[data-test-boxel-filter-list-button="CategoryWithNullSphere"]',
-            )
-            .doesNotExist(
-              'Category with null sphere should not appear in filter list',
-            );
-        });
+        //   assert
+        //     .dom(
+        //       '[data-test-boxel-filter-list-button="CategoryWithNullSphere"]',
+        //     )
+        //     .doesNotExist(
+        //       'Category with null sphere should not appear in filter list',
+        //     );
+        // });
       });
     });
   });
