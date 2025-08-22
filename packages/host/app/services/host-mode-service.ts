@@ -53,10 +53,12 @@ export default class HostModeService extends Service {
   }
 
   get originIsNotMatrixTests() {
-    return (
-      this.hostModeOrigin !== 'http://localhost:4202' &&
-      this.hostModeOrigin !== 'http://localhost:4205'
-    );
+    // FIXME 4205 is no longer stable, how to pass this through to host from dynamic port isolated realm server?
+    return false;
+    // return (
+    //   this.hostModeOrigin !== 'http://localhost:4202' &&
+    //   this.hostModeOrigin !== 'http://localhost:4205'
+    // );
   }
 }
 
