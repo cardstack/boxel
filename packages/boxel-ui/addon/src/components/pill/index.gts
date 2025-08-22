@@ -88,6 +88,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
         font-family: inherit;
         letter-spacing: var(--boxel-lsp-xs);
         word-break: break-word;
+        transition: var(--pill-transition, var(--boxel-transition-properties));
       }
 
       .variant-default {
@@ -108,22 +109,22 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
       .variant-primary {
         --pill-background-color: var(
           --boxel-pill-background-color,
-          var(--primary, var(--boxel-600))
+          var(--primary, var(--boxel-highlight))
         );
         --pill-font-color: var(
           --boxel-pill-font-color,
-          var(--primary-foreground, var(--boxel-light))
+          var(--primary-foreground, var(--boxel-dark))
         );
         --pill-border-color: var(
           --boxel-pill-border-color,
-          var(--primary, var(--boxel-600))
+          var(--primary, var(--boxel-highlight))
         );
       }
 
       .variant-secondary {
         --pill-background-color: var(
           --boxel-pill-background-color,
-          var(--secondary, var(--boxel-400))
+          var(--secondary, var(--boxel-light))
         );
         --pill-font-color: var(
           --boxel-pill-font-color,
@@ -138,7 +139,7 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
       .variant-muted {
         --pill-background-color: var(
           --boxel-pill-background-color,
-          var(--muted, var(--boxel-200))
+          var(--muted, var(--boxel-100))
         );
         --pill-font-color: var(
           --boxel-pill-font-color,
@@ -146,14 +147,14 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
         );
         --pill-border-color: var(
           --boxel-pill-border-color,
-          var(--muted, var(--boxel-200))
+          var(--muted, var(--boxel-100))
         );
       }
 
       .variant-destructive {
         --pill-background-color: var(
           --boxel-pill-background-color,
-          var(--destructive, var(--boxel-600))
+          var(--destructive, var(--boxel-danger))
         );
         --pill-font-color: var(
           --boxel-pill-font-color,
@@ -161,14 +162,14 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
         );
         --pill-border-color: var(
           --boxel-pill-border-color,
-          var(--destructive, var(--boxel-600))
+          var(--destructive, var(--boxel-danger))
         );
       }
 
       .button-pill.variant-default:not(:disabled):hover,
       .button-pill.variant-primary:not(:disabled):hover,
       .button-pill.variant-destructive:not(:disabled):hover {
-        --pill-background-color: color-mix(
+        background-color: color-mix(
           in srgb,
           var(--pill-background-color) 90%,
           transparent
@@ -177,22 +178,37 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
 
       .button-pill.variant-secondary:not(:disabled):hover,
       .button-pill.variant-muted:not(:disabled):hover {
-        --pill-background-color: color-mix(
+        background-color: color-mix(
           in srgb,
           var(--pill-background-color) 80%,
           transparent
         );
       }
 
+      .button-pill.variant-default:not(:disabled):hover {
+        --pill-background-color: var(--background, var(--boxel-100));
+      }
+      .button-pill.variant-primary:not(:disabled):hover {
+        --pill-background-color: var(--primary, var(--boxel-highlight-hover));
+        --pill-border-color: var(--pill-background-color);
+      }
+      .button-pill.variant-secondary:not(:disabled):hover {
+        --pill-border-color: var(--secondary, var(--pill-font-color));
+      }
+      .button-pill.variant-destructive:not(:disabled):hover {
+        --pill-background-color: var(--destructive, var(--boxel-danger-hover));
+        --pill-border-color: var(--pill-background-color);
+      }
+
       .icon {
         display: flex;
         margin-block: 0;
         margin-inline: 0;
-        --icon-color: var(--pill-font-color, var(--boxel-dark));
+        --icon-color: var(--pill-font-color, currentColor);
       }
 
       .icon > :deep(*) {
-        height: var(--pill-icon-size, 1.25rem);
+        height: var(--pill-icon-size, var(--boxel-icon-xxs));
       }
     }
   </style>
