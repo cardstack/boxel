@@ -52,7 +52,7 @@ const pirateSkillId = `${mockCatalogURL}Skill/pirate-speak`;
 
 //tags
 const calculatorTagId = `${mockCatalogURL}Tag/c1fe433a-b3df-41f4-bdcf-d98686ee42d7`;
-const gameTagId = `${mockCatalogURL}Tag/51de249c-516a-4c4d-bd88-76e88274c483`;
+// const gameTagId = `${mockCatalogURL}Tag/51de249c-516a-4c4d-bd88-76e88274c483`;
 const stubTagId = `${mockCatalogURL}Tag/stub`;
 
 //specs
