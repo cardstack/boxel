@@ -339,16 +339,16 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
         throw new Error('Leaflet not loaded');
       }
 
-      const latLngs = coordinates.map((c) => ({ lat: c.lat, lng: c.lng }));
+      const latLngs = coordinates.map((c) => L.latLng(c.lat, c.lng));
 
-      let polyline = L.polyline(latLngs, {
+      this.polyline = L.polyline(latLngs, {
         color: '#3b82f6',
         weight: 4,
         opacity: 0.7,
         smoothFactor: 1,
       });
 
-      this.routeGroup.addLayer(polyline);
+      this.routeGroup.addLayer(this.polyline);
     } catch (error) {
       console.error('❌ Error in addPolyline:', error.message);
       console.error('Error stack:', error.stack);
