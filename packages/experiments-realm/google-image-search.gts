@@ -52,7 +52,6 @@ export class GoogleImageSearch extends CardDef {
 
     get searchInfo() {
       const resource = this.searchResource;
-      console.log('resource', resource);
       if (resource?.isSuccess && resource.value) {
         return {
           totalResults: resource.value.totalResults,
@@ -112,7 +111,7 @@ export class GoogleImageSearch extends CardDef {
       }
     };
 
-    handleKeyPress = (event: KeyboardEvent) => {
+    submitOnEnter = (event: KeyboardEvent) => {
       if (event.key === 'Enter') {
         this.performSearch();
       }
@@ -140,7 +139,7 @@ export class GoogleImageSearch extends CardDef {
               placeholder='Enter your search query...'
               value={{@model.searchQuery}}
               {{on 'input' this.setSearchQuery}}
-              {{on 'keypress' this.handleKeyPress}}
+              {{on 'keypress' this.submitOnEnter}}
               id='search-query-input'
             />
           </FieldContainer>

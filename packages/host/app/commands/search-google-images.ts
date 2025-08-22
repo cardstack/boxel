@@ -1,21 +1,16 @@
-import { service } from '@ember/service';
-
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
 import SendRequestViaProxyCommand from './send-request-via-proxy';
 
-import type CommandService from '../services/command-service';
-
 export default class SearchGoogleImagesCommand extends HostBaseCommand<
   typeof BaseCommandModule.SearchGoogleImagesInput,
   typeof BaseCommandModule.SearchGoogleImagesResult
 > {
-  @service declare private commandService: CommandService;
-
   static actionVerb = 'Search Google Images';
   description = 'Search for images on Google using the Custom Search API';
+  requireInputFields = ['query'];
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
@@ -35,11 +30,11 @@ export default class SearchGoogleImagesCommand extends HostBaseCommand<
       const searchQuery = encodeURIComponent(input.query);
 
       // Build the Google Custom Search API URL
-      // The API key and search engine ID will be handled by the proxy endpoint
+      // The API key will be handled by the proxy endpoint
       const searchUrl = `https://www.googleapis.com/customsearch/v1?q=${searchQuery}&searchType=image&num=${Math.min(maxResults, 10)}&start=${startIndex}&cx=064501294a5c9430a`;
 
       const sendRequestViaProxyCommand = new SendRequestViaProxyCommand(
-        this.commandService.commandContext,
+        this.commandContext,
       );
 
       const result = await sendRequestViaProxyCommand.execute({

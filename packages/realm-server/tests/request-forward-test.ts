@@ -73,7 +73,6 @@ module(basename(__filename), function () {
           authParameterName: 'key',
         },
       ]);
-      console.log('testConfig', testConfig);
 
       ({ testRealm: testRealm, testRealmHttpServer: testRealmHttpServer } =
         await runTestRealmServer({
