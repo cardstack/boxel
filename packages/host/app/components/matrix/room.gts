@@ -93,7 +93,6 @@ interface Signature {
 }
 
 export default class Room extends Component<Signature> {
-  @service declare aiAssistantPanelService: AiAssistantPanelService;
   <template>
     {{#if (not this.doMatrixEventFlush.isRunning)}}
       <section

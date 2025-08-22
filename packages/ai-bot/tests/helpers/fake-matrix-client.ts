@@ -40,27 +40,32 @@ export class FakeMatrixClient extends MatrixClient {
     },
   } as unknown as MatrixHttpApi<IHttpOpts & { onlyData: true }>;
 
-  sendEvent = async (
+  sendEvent(
     roomId: string,
-    eventTypeOrThreadId: string | null,
-    contentOrEventType: IContent | string,
-    txnIdOrContent?: string | IContent,
-    _txnId?: string,
-  ): Promise<{ event_id: string }> => {
+    eventType: string,
+    content: IContent,
+    txnId?: string,
+  ): Promise<{ event_id: string }>;
+  sendEvent(
+    roomId: string,
+    threadId: string | null,
+    eventType: string,
+    content: IContent,
+    txnId?: string,
+  ): Promise<{ event_id: string }>;
+  async sendEvent(...args: any[]): Promise<{ event_id: string }> {
     const messageEventId = this.eventId.toString();
 
-    // Handle both overloads
+    let roomId: string;
     let eventType: string;
     let content: IContent;
 
-    if (typeof contentOrEventType === 'string') {
-      // Second overload: (roomId, threadId, eventType, content, txnId)
-      eventType = contentOrEventType;
-      content = txnIdOrContent as IContent;
+    if (typeof args[2] === 'object') {
+      // First overload: (roomId, eventType, content, txnId?)
+      [roomId, eventType, content] = args;
     } else {
-      // First overload: (roomId, eventType, content, txnId)
-      eventType = eventTypeOrThreadId as string;
-      content = contentOrEventType;
+      // Second overload: (roomId, threadId, eventType, content, txnId?)
+      [roomId, , eventType, content] = args;
     }
 
     this.sentEvents.push({
@@ -71,7 +76,7 @@ export class FakeMatrixClient extends MatrixClient {
     });
     this.eventId++;
     return { event_id: messageEventId.toString() };
-  };
+  }
 
   async setRoomName(
     _roomId: string,
