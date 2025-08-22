@@ -55,7 +55,7 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
   get coordinate() {
     const lat = this.args.model?.lat ?? 0;
     const lon = this.args.model?.lon ?? 0;
-    return { lat, lng: lon };
+    return [{ lat, lng: lon }];
   }
 
   get lonNumber() {
@@ -89,7 +89,7 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
 
           <div class='map-container'>
             <MapRender
-              @coordinate={{this.coordinate}}
+              @coordinates={{this.coordinate}}
               @onMapClickUpdate={{this.updatecoordinate}}
             />
           </div>

@@ -69,7 +69,7 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
   }
 
   private fetchCoordinate = task(async (address: string | undefined) => {
-    if (!address) {
+    if (!address || address.trim() === '') {
       if (this.args.model) {
         this.args.model.lat = undefined;
         this.args.model.lon = undefined;
@@ -83,16 +83,55 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
           address,
         )}&limit=10`,
       );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const data = await response.json();
 
       if (data && data.length > 0) {
         if (this.args.model) {
-          this.args.model.lat = parseFloat(data[0].lat);
-          this.args.model.lon = parseFloat(data[0].lon);
+          const lat = parseFloat(data[0].lat);
+          const lon = parseFloat(data[0].lon);
+
+          // Validate the parsed coordinates
+          if (
+            !isNaN(lat) &&
+            !isNaN(lon) &&
+            lat >= -90 &&
+            lat <= 90 &&
+            lon >= -180 &&
+            lon <= 180
+          ) {
+            this.args.model.lat = lat;
+            this.args.model.lon = lon;
+            console.log('✅ Coordinates updated successfully:', { lat, lon });
+          } else {
+            console.log('❌ Invalid coordinates returned from geocoding API:', {
+              lat,
+              lon,
+            });
+            // Reset coordinates if invalid
+            this.args.model.lat = undefined;
+            this.args.model.lon = undefined;
+          }
+        }
+      } else {
+        console.log('❌ No geocoding results found for address:', address);
+        // Reset coordinates when no results found
+        if (this.args.model) {
+          this.args.model.lat = undefined;
+          this.args.model.lon = undefined;
         }
       }
     } catch (error) {
       console.error('Error geocoding address:', error);
+      // Reset coordinates on any error
+      if (this.args.model) {
+        this.args.model.lat = undefined;
+        this.args.model.lon = undefined;
+      }
     }
   });
 
@@ -103,6 +142,16 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
   @action
   updateSearchAddress(value: string) {
     this.args.model.searchKey = value;
+
+    // If address is cleared, immediately reset coordinates
+    if (!value || value.trim() === '') {
+      if (this.args.model) {
+        this.args.model.lat = undefined;
+        this.args.model.lon = undefined;
+      }
+      return;
+    }
+
     this.debouncedGeocodeAddress();
   }
 
@@ -118,12 +167,19 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
 
       <div class='coordinate'>
         {{#if this.fetchCoordinate.isRunning}}
-          Loading...
+          <div class='loading-state'>
+            🔍 Searching for coordinates...
+          </div>
+        {{else if this.hasNoCoordinates}}
+          <div class='no-coordinates'>
+            No coordinates available
+          </div>
         {{else}}
-          📍 Lat:
-          {{this.latValue}}, Lon:
-          {{this.lonValue}}
-
+          <div class='coordinate-display'>
+            📍 Lat:
+            {{this.latValue}}, Lon:
+            {{this.lonValue}}
+          </div>
         {{/if}}
       </div>
     </div>
@@ -139,13 +195,38 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
 
       .coordinate {
         margin-top: 8px;
-        padding: 4px 10px;
-        background: #f0f9ff;
-        border-left: 4px solid #0ea5e9;
+        padding: 8px 12px;
         border-radius: 4px;
         font-size: 13px;
         font-family: 'Monaco', 'Menlo', monospace;
+      }
+
+      .loading-state {
+        background: #fef3c7;
+        border-left: 4px solid #f59e0b;
+        color: #92400e;
+        padding: 4px 10px;
+      }
+
+      .coordinate-display {
+        background: #f0f9ff;
+        border-left: 4px solid #0ea5e9;
         color: #0c4a6e;
+        padding: 4px 10px;
+      }
+
+      .partial-coordinates {
+        background: #fef3c7;
+        border-left: 4px solid #f59e0b;
+        color: #92400e;
+        padding: 4px 10px;
+      }
+
+      .no-coordinates {
+        background: #fef2f2;
+        border-left: 4px solid #ef4444;
+        color: #991b1b;
+        padding: 4px 10px;
       }
 
       .color-palette-container {
@@ -171,22 +252,61 @@ class EmbeddedTemplate extends Component<typeof GeoSearchPointField> {
   }
 
   get latNumber() {
-    return this.args.model?.lat ?? 0;
+    return this.args.model?.lat;
   }
 
   get lonNumber() {
-    return this.args.model?.lon ?? 0;
+    return this.args.model?.lon;
   }
 
-  get coordinate(): Coordinate {
-    return {
-      lat: this.latNumber,
-      lng: this.lonNumber,
-    };
+  get hasValidCoordinateValues() {
+    return this.latValue !== 'N/A' || this.lonValue !== 'N/A';
+  }
+
+  get hasNoCoordinates() {
+    return this.latValue === 'N/A' && this.lonValue === 'N/A';
+  }
+
+  get coordinate(): Coordinate[] {
+    // Only return coordinates if both lat and lon are valid numbers AND address is meaningful
+    if (
+      this.latNumber != null &&
+      this.lonNumber != null &&
+      typeof this.latNumber === 'number' &&
+      typeof this.lonNumber === 'number' &&
+      !isNaN(this.latNumber) &&
+      !isNaN(this.lonNumber) &&
+      this.searchAddressValue &&
+      this.searchAddressValue.trim() !== '' &&
+      this.searchAddressValue !== 'Invalid Address' &&
+      this.searchAddressValue !== 'N/A'
+    ) {
+      const coords = [
+        {
+          lat: this.latNumber,
+          lng: this.lonNumber,
+          address: this.searchAddressValue,
+        },
+      ];
+      return coords;
+    }
+
+    return [];
   }
 
   get hasValidCoordinates() {
-    return this.args.model?.lat && this.args.model?.lon;
+    return (
+      this.args.model?.lat != null &&
+      this.args.model?.lon != null &&
+      typeof this.args.model.lat === 'number' &&
+      typeof this.args.model.lon === 'number' &&
+      !isNaN(this.args.model.lat) &&
+      !isNaN(this.args.model.lon) &&
+      this.searchAddressValue &&
+      this.searchAddressValue.trim() !== '' &&
+      this.searchAddressValue !== 'Invalid Address' &&
+      this.searchAddressValue !== 'N/A'
+    );
   }
 
   <template>
@@ -203,10 +323,7 @@ class EmbeddedTemplate extends Component<typeof GeoSearchPointField> {
           </div>
 
           <div class='map-container'>
-            <MapRender
-              @coordinate={{this.coordinate}}
-              @disableMapClick={{true}}
-            />
+            <MapRender @coordinates={{this.coordinate}} />
           </div>
         </div>
       {{else}}

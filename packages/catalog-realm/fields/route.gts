@@ -6,8 +6,7 @@ import {
   FieldDef,
   field,
 } from 'https://cardstack.com/base/card-api';
-import { gt } from '@cardstack/boxel-ui/helpers';
-import { MapRender, type RoutePoint } from '../components/map-render';
+import { MapRender, type Coordinate } from '../components/map-render';
 import { GeoSearchPointField } from './geo-search-point';
 
 class AtomTemplate extends Component<typeof RouteField> {
@@ -61,8 +60,8 @@ class AtomTemplate extends Component<typeof RouteField> {
 }
 
 class EditTemplate extends Component<typeof RouteField> {
-  get routeCoordinates(): RoutePoint[] {
-    const points: RoutePoint[] = [];
+  get routeCoordinates(): Coordinate[] {
+    const points: Coordinate[] = [];
 
     if (this.args.model?.startPoint?.lat && this.args.model?.startPoint?.lon) {
       points.push({
@@ -161,31 +160,100 @@ class EditTemplate extends Component<typeof RouteField> {
 }
 
 class EmbeddedTemplate extends Component<typeof RouteField> {
-  get routeCoordinates(): RoutePoint[] {
-    const points: RoutePoint[] = [];
+  get startPointSearchAddressValue() {
+    return this.args.model?.startPoint?.searchKey ?? 'Invalid Address';
+  }
 
-    if (this.args.model?.startPoint?.lat && this.args.model?.startPoint?.lon) {
-      points.push({
-        lat: this.args.model.startPoint.lat,
-        lng: this.args.model.startPoint.lon,
-        address: this.args.model.startPoint.searchKey ?? 'Start Point',
-      });
+  get startPointLatValue() {
+    return this.args.model?.startPoint?.lat ?? 'N/A';
+  }
+
+  get startPointLonValue() {
+    return this.args.model?.startPoint?.lon ?? 'N/A';
+  }
+
+  get startPointLatNumber() {
+    return this.args.model?.startPoint?.lat;
+  }
+
+  get startPointLonNumber() {
+    return this.args.model?.startPoint?.lon;
+  }
+
+  get endPointSearchAddressValue() {
+    return this.args.model?.endPoint?.searchKey ?? 'Invalid Address';
+  }
+
+  get endPointLatValue() {
+    return this.args.model?.endPoint?.lat ?? 'N/A';
+  }
+
+  get endPointLonValue() {
+    return this.args.model?.endPoint?.lon ?? 'N/A';
+  }
+
+  get endPointLatNumber() {
+    return this.args.model?.endPoint?.lat;
+  }
+
+  get endPointLonNumber() {
+    return this.args.model?.endPoint?.lon;
+  }
+
+  get routeCoordinates(): Coordinate[] {
+    const coordinates: Coordinate[] = [];
+
+    if (
+      this.startPointLatNumber != null &&
+      this.startPointLonNumber != null &&
+      typeof this.startPointLatNumber === 'number' &&
+      typeof this.startPointLonNumber === 'number' &&
+      !isNaN(this.startPointLatNumber) &&
+      !isNaN(this.startPointLonNumber) &&
+      this.startPointSearchAddressValue &&
+      this.startPointSearchAddressValue.trim() !== '' &&
+      this.startPointSearchAddressValue !== 'Invalid Address' &&
+      this.startPointSearchAddressValue !== 'N/A'
+    ) {
+      const startCoord = {
+        lat: this.startPointLatNumber,
+        lng: this.startPointLonNumber,
+        address: this.startPointSearchAddressValue,
+      };
+      coordinates.push(startCoord);
     }
 
-    if (this.args.model?.endPoint?.lat && this.args.model?.endPoint?.lon) {
-      points.push({
-        lat: this.args.model.endPoint.lat,
-        lng: this.args.model.endPoint.lon,
-        address: this.args.model.endPoint.searchKey ?? 'End Point',
-      });
+    if (
+      this.endPointLatNumber != null &&
+      this.endPointLonNumber != null &&
+      typeof this.endPointLatNumber === 'number' &&
+      typeof this.endPointLonNumber === 'number' &&
+      !isNaN(this.endPointLatNumber) &&
+      !isNaN(this.endPointLonNumber) &&
+      this.endPointSearchAddressValue &&
+      this.endPointSearchAddressValue.trim() !== '' &&
+      this.endPointSearchAddressValue !== 'Invalid Address' &&
+      this.endPointSearchAddressValue !== 'N/A'
+    ) {
+      const endCoord = {
+        lat: this.endPointLatNumber,
+        lng: this.endPointLonNumber,
+        address: this.endPointSearchAddressValue,
+      };
+      coordinates.push(endCoord);
     }
 
-    return points;
+    return [...coordinates];
+  }
+
+  get hasValidCoordinates() {
+    const hasValid = this.routeCoordinates.length > 0;
+    return hasValid;
   }
 
   <template>
     <div class='embedded-template'>
-      {{#if (gt this.routeCoordinates.length 1)}}
+      {{#if this.hasValidCoordinates}}
         <div class='route-preview'>
           <div class='route-header'>
             <MapIcon class='map-icon' />
@@ -193,10 +261,7 @@ class EmbeddedTemplate extends Component<typeof RouteField> {
           </div>
 
           <div class='map-container'>
-            <MapRender
-              @route={{this.routeCoordinates}}
-              @disableMapClick={{true}}
-            />
+            <MapRender @coordinates={{this.routeCoordinates}} />
           </div>
         </div>
       {{else}}
@@ -205,8 +270,7 @@ class EmbeddedTemplate extends Component<typeof RouteField> {
             <div class='placeholder-icon'>📍</div>
             <div class='placeholder-title'>Add Waypoints</div>
             <div class='placeholder-description'>
-              Add at least 2 waypoints with coordinates to see the route on the
-              map
+              Add waypoints with coordinates to see the route on the map
             </div>
           </div>
         </div>

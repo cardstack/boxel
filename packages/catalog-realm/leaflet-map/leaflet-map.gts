@@ -29,13 +29,12 @@ export class LeafletMap extends CardDef {
     get coordinate() {
       const lat = this.args.model.geoPoint?.lat ?? 0;
       const lon = this.args.model.geoPoint?.lon ?? 0;
-      return { lat, lng: lon };
+      return [{ lat, lng: lon }];
     }
 
     <template>
       <MapRender
-        @coordinate={{this.coordinate}}
-        @tileserverUrl={{@model.tileserverUrl}}
+        @coordinates={{this.coordinate}}
         @onMapClickUpdate={{this.updatecoordinate}}
       />
     </template>
