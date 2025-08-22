@@ -428,6 +428,7 @@ export default class SubmodeLayout extends Component<Signature> {
               openSearchToPrompt=this.openSearchSheetToPrompt
               openSearchToResults=this.openSearchAndShowResults
               updateSubmode=this.updateSubmode
+              toggleSubscriptionPlans=this.toggleSubscriptionPlans
             )
           }}
           <button

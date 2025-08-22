@@ -1,5 +1,6 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
@@ -11,6 +12,7 @@ import { meta } from '@cardstack/runtime-common/constants';
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
+import BillingService from '@cardstack/host/services/billing-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type StoreService from '@cardstack/host/services/store';
@@ -27,6 +29,12 @@ interface HostSubmodeSignature {
 export default class HostSubmode extends Component<HostSubmodeSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare store: StoreService;
+  @service private declare billingService: BillingService;
+
+  constructor(owner: Owner, args: HostSubmodeSignature['Args']) {
+    super(owner, args);
+    this.billingService.initializeSubscriptionData();
+  }
 
   get currentCardId() {
     return this.operatorModeStateService.currentTrailItem?.replace('.json', '');
@@ -81,6 +89,24 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     return 'container';
   }
 
+  get shouldShowHostMode() {
+    return (
+      this.operatorModeStateService.currentRealmInfo.publishable &&
+      this.billingService.hasPaidMonthlyPlan
+    );
+  }
+
+  get shouldRedirectToSubscription() {
+    return (
+      this.operatorModeStateService.currentRealmInfo.publishable &&
+      !this.billingService.hasPaidMonthlyPlan
+    );
+  }
+
+  get isSubscriptionDataLoaded() {
+    return this.billingService.subscriptionData !== null;
+  }
+
   <template>
     <SubmodeLayout
       class='host-submode-layout'
@@ -95,32 +121,50 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
             @displayBoundaries={{true}}
             class={{this.containerClass}}
           >
-            {{#if this.operatorModeStateService.currentRealmInfo.publishable}}
-              {{#if this.currentCard}}
-                <CardContainer class='card'>
-                  <CardRenderer
-                    class='card-preview'
-                    @card={{this.currentCard}}
-                    @format='isolated'
-                    data-test-host-submode-card={{this.currentCard.id}}
-                  />
-                </CardContainer>
-              {{else if this.isError}}
-                <div data-test-host-submode-error class='error-message'>
-                  <p>Card not found: {{this.currentCardId}}</p>
+            {{#if this.isSubscriptionDataLoaded}}
+              {{#if this.shouldShowHostMode}}
+                {{#if this.currentCard}}
+                  <CardContainer class='card'>
+                    <CardRenderer
+                      class='card-preview'
+                      @card={{this.currentCard}}
+                      @format='isolated'
+                      data-test-host-submode-card={{this.currentCard.id}}
+                    />
+                  </CardContainer>
+                {{else if this.isError}}
+                  <div data-test-host-submode-error class='error-message'>
+                    <p>Card not found: {{this.currentCardId}}</p>
+                  </div>
+                {{else if this.isLoading}}
+                  <div class='loading-message'>
+                    <p>Loading card...</p>
+                  </div>
+                {{/if}}
+              {{else if this.shouldRedirectToSubscription}}
+                <div class='subscription-required-message'>
+                  <p>Host mode requires a paid monthly subscription plan.</p>
+                  <BoxelButton
+                    {{on 'click' (fn layout.updateSubmode 'interact')}}
+                    data-test-switch-to-interact
+                  >View in Interact mode</BoxelButton>
+                  <BoxelButton
+                    {{on 'click' layout.toggleSubscriptionPlans}}
+                    data-test-upgrade-subscription
+                  >Upgrade Plan</BoxelButton>
                 </div>
-              {{else if this.isLoading}}
-                <div class='loading-message'>
-                  <p>Loading card...</p>
+              {{else}}
+                <div class='non-publishable-message'>
+                  <p>This file is not in a publishable realm.</p>
+                  <BoxelButton
+                    {{on 'click' (fn layout.updateSubmode 'interact')}}
+                    data-test-switch-to-interact
+                  >View in Interact mode</BoxelButton>
                 </div>
               {{/if}}
             {{else}}
-              <div class='non-publishable-message'>
-                <p>This file is not in a publishable realm.</p>
-                <BoxelButton
-                  {{on 'click' (fn layout.updateSubmode 'interact')}}
-                  data-test-switch-to-interact
-                >View in Interact mode</BoxelButton>
+              <div class='loading-message'>
+                <p>Loading subscription data...</p>
               </div>
             {{/if}}
           </CardContainer>
@@ -202,7 +246,8 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       .error-message,
       .loading-message,
       .non-publishable-message,
-      .no-card-message {
+      .no-card-message,
+      .subscription-required-message {
         display: flex;
         flex-direction: column;
         align-items: center;
