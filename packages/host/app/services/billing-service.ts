@@ -168,6 +168,11 @@ export default class BillingService extends Service {
     return allAvailableCredits;
   }
 
+  get hasPaidMonthlyPlan(): boolean {
+    const plan = this.subscriptionData?.plan;
+    return plan === 'Creator' || plan === 'Power User';
+  }
+
   private async getToken() {
     if (!this.realmServer.token) {
       await this.realmServer.login();

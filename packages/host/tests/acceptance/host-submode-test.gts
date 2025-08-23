@@ -1,5 +1,6 @@
 import { click } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -51,6 +52,7 @@ module('Acceptance | host submode', function (hooks) {
   setupBaseRealm(hooks);
 
   let realmContents: any;
+  let originalFetchSubscriptionData: any;
 
   hooks.beforeEach(function () {
     realmContents = {
@@ -79,6 +81,40 @@ module('Acceptance | host submode', function (hooks) {
         },
       },
     };
+
+    // Store the original billing service method
+    let billingService = getService('billing-service');
+    originalFetchSubscriptionData = billingService.fetchSubscriptionData;
+    // Mock the fetch here
+    billingService.fetchSubscriptionData = async () => {
+      return new Response(
+        JSON.stringify({
+          data: {
+            attributes: {
+              creditsAvailableInPlanAllowance: 5000,
+              creditsIncludedInPlanAllowance: 5000,
+              extraCreditsAvailableInBalance: 0,
+            },
+          },
+          included: [
+            {
+              type: 'plan',
+              attributes: {
+                name: 'Creator',
+                monthlyPrice: 12,
+                creditsIncluded: 5000,
+              },
+            },
+          ],
+        }),
+      );
+    };
+  });
+
+  hooks.afterEach(function () {
+    // Restore the original billing service method
+    let billingService = getService('billing-service');
+    billingService.fetchSubscriptionData = originalFetchSubscriptionData;
   });
 
   module('with a realm that is not publishable', function (hooks) {
@@ -216,6 +252,124 @@ module('Acceptance | host submode', function (hooks) {
       assert
         .dom('[data-test-host-submode-error]')
         .hasText(`Card not found: ${testRealmURL}nonexistent`);
+    });
+  });
+
+  module('with subscription-based access control', function (hooks) {
+    hooks.beforeEach(async function () {
+      let publishableRealmContents = { ...realmContents };
+      publishableRealmContents['.realm.json'].publishable = true;
+
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: publishableRealmContents,
+      });
+    });
+
+    test('host submode is visible for free plan users but shows upgrade prompt when accessed', async function (assert) {
+      let billingService = getService('billing-service');
+
+      // Override with free plan subscription data for this test
+      billingService.fetchSubscriptionData = async () => {
+        return new Response(
+          JSON.stringify({
+            data: {
+              attributes: {
+                creditsAvailableInPlanAllowance: 1000,
+                creditsIncludedInPlanAllowance: 1000,
+                extraCreditsAvailableInBalance: 0,
+              },
+            },
+            included: [
+              {
+                type: 'plan',
+                attributes: {
+                  name: 'Free',
+                  monthlyPrice: 0,
+                  creditsIncluded: 1000,
+                },
+              },
+            ],
+          }),
+        );
+      };
+
+      await billingService.loadSubscriptionData();
+
+      await visitOperatorMode({
+        submode: 'code',
+        stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+      });
+
+      // Host option should be visible in the dropdown
+      await click('[data-test-submode-switcher] button');
+      assert.dom('[data-test-boxel-menu-item-text="Host"]').exists();
+
+      // But when clicked, it should show the upgrade prompt
+      await click('[data-test-boxel-menu-item-text="Host"]');
+      assert.dom('[data-test-upgrade-subscription]').exists();
+      assert
+        .dom('.subscription-required-message')
+        .containsText('Host mode requires a paid monthly subscription plan');
+
+      // Clicking upgrade button should open subscription modal
+      await click('[data-test-upgrade-subscription]');
+      assert.dom('[data-test-choose-subscription-plan-modal]').exists();
+    });
+
+    test('free plan users see subscription upgrade prompt when accessing host submode directly', async function (assert) {
+      let billingService = getService('billing-service');
+
+      // Override with free plan subscription data for this test
+      billingService.fetchSubscriptionData = async () => {
+        return new Response(
+          JSON.stringify({
+            data: {
+              attributes: {
+                creditsAvailableInPlanAllowance: 1000,
+                creditsIncludedInPlanAllowance: 1000,
+                extraCreditsAvailableInBalance: 0,
+              },
+            },
+            included: [
+              {
+                type: 'plan',
+                attributes: {
+                  name: 'Free',
+                  monthlyPrice: 0,
+                  creditsIncluded: 1000,
+                },
+              },
+            ],
+          }),
+        );
+      };
+
+      await billingService.loadSubscriptionData();
+
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}Person/1.json`],
+      });
+
+      assert.dom('[data-test-upgrade-subscription]').exists();
+      assert
+        .dom('.subscription-required-message')
+        .containsText('Host mode requires a paid monthly subscription plan');
+
+      // Clicking upgrade button should open subscription modal
+      await click('[data-test-upgrade-subscription]');
+      assert.dom('[data-test-choose-subscription-plan-modal]').exists();
+    });
+
+    test('paid plan users can access host submode normally', async function (assert) {
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}Person/1.json`],
+      });
+
+      assert.dom('[data-test-host-submode-card]').exists();
+      assert.dom('[data-test-upgrade-subscription]').doesNotExist();
     });
   });
 });
