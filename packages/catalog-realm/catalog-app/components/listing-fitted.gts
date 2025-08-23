@@ -137,6 +137,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
                 @writableRealms={{this.writableRealms}}
                 @onAction={{this.stubActions.build}}
                 @context={{@context}}
+                @size='extra-small'
               />
             {{else if this.skillActions}}
               {{#if this.skillActions.remix}}
@@ -145,6 +146,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
                   @writableRealms={{this.writableRealms}}
                   @onAction={{this.skillActions.remix}}
                   @context={{@context}}
+                  @size='extra-small'
                 />
               {{/if}}
             {{else if this.regularActions}}
@@ -154,6 +156,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
                   @writableRealms={{this.writableRealms}}
                   @onAction={{this.regularActions.remix}}
                   @context={{@context}}
+                  @size='extra-small'
                 />
               {{/if}}
             {{/if}}
