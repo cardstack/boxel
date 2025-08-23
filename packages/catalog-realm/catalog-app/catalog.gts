@@ -559,25 +559,6 @@ class Isolated extends Component<typeof Catalog> {
       .operator-mode .buried .add-button {
         display: none;
       }
-      .instance-error {
-        position: relative;
-      }
-      .instance-error::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(255, 0, 0, 0.1);
-      }
-      .instance-error .boundaries {
-        box-shadow: 0 0 0 1px var(--boxel-error-300);
-      }
-      .instance-error:hover .boundaries {
-        box-shadow: 0 0 0 1px var(--boxel-dark);
-      }
-
       .go-to-grid {
         font-weight: 600;
         width: 100%;

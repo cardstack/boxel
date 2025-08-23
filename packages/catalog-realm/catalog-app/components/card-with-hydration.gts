@@ -32,7 +32,11 @@ export class CardWithHydration extends GlimmerComponent<CardWithHydrationSignatu
     this.hydratedCardId = cardId;
   }
   get isHydrated() {
-    return new Boolean(this.hydratedCardId) && this.cardResource?.isLoaded;
+    return (
+      new Boolean(this.hydratedCardId) &&
+      this.cardResource?.isLoaded &&
+      !this.cardResource?.cardError //defensive guard
+    );
   }
   cardResource = this.args.context?.getCard(this, () => this.hydratedCardId);
   <template>
@@ -81,7 +85,28 @@ export class CardWithHydration extends GlimmerComponent<CardWithHydrationSignatu
 
       .card:hover {
         cursor: pointer;
-        border: 1px solid var(--boxel-purple);
+        outline: 1px solid var(--boxel-purple);
+      }
+
+      .instance-error {
+        --instance-error-z-index: 1;
+        position: relative;
+      }
+      .instance-error::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: var(--instance-error-z-index);
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 0, 0, 0.1);
+      }
+      .instance-error.boundaries {
+        box-shadow: 0 0 0 1px var(--boxel-error-300);
+      }
+      .instance-error.boundaries:hover {
+        box-shadow: 0 0 0 1px var(--boxel-dark);
       }
     </style>
   </template>
