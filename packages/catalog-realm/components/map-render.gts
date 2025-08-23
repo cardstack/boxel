@@ -235,6 +235,14 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
   ) {
     this.element = element;
 
+    // Always clear existing map and reinitialize for a fresh render
+    if (this.map) {
+      this.map.remove();
+      this.map = null;
+      this.marker = null;
+    }
+
+    // Initialize fresh map
     this.initializeMap(
       namedArgs.tileserverUrl,
       namedArgs.coordinate,
@@ -280,12 +288,18 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
           drawRoute(map, route, onRouteUpdate);
         }
 
-        // Create default marker display on map
-        this.marker = createMarker(defaultCoords, '#ef4444', 'marker').addTo(
-          map,
-        );
-        if (this.marker) {
-          setupMarkerPopup(this.marker, defaultCoords, map, 'Location');
+        // Only create default marker if no route is provided and coordinates are valid
+        const shouldCreateDefaultMarker =
+          (!route || route.length === 0) &&
+          (defaultCoords.lat !== 0 || defaultCoords.lng !== 0);
+
+        if (shouldCreateDefaultMarker) {
+          this.marker = createMarker(defaultCoords, '#ef4444', 'marker').addTo(
+            map,
+          );
+          if (this.marker) {
+            setupMarkerPopup(this.marker, defaultCoords, map, 'Location');
+          }
         }
 
         // Handle map click events
@@ -345,7 +359,7 @@ function darkenColor(color: string, factor: number): string {
 }
 
 function createMarker(
-  coordinate: Coordinate,
+  coordinate: Coordinate | RoutePoint,
   color: string = '#ef4444',
   className: string = 'marker',
 ) {
@@ -382,24 +396,17 @@ function drawRoute(
   }).addTo(map);
 
   route.forEach((point, index) => {
-    const marker = createMarker(point, '#ef4444', 'route-marker').addTo(map);
+    // Different styling for start vs other points
+    const isStartPoint = index === 0;
+    const markerColor = isStartPoint ? '#10b981' : '#ef4444'; // Green for start, red for others
+    const markerClass = isStartPoint
+      ? 'route-marker start-point'
+      : 'route-marker';
+
+    const marker = createMarker(point, markerColor, markerClass).addTo(map);
 
     if (point.address) {
-      const popupContent = `
-        <div style="min-width: 200px;">
-          ${
-            point.address
-              ? `<div style="color: #666; margin-bottom: 6px;">${point.address}</div>`
-              : ''
-          }
-          <div style="color: #666; font-size: 12px;">
-            <strong>Point ${index + 1}:</strong> ${point.lat.toFixed(
-              6,
-            )}, ${point.lng.toFixed(6)}
-          </div>
-        </div>
-      `;
-      marker.bindPopup(popupContent);
+      setupMarkerPopup(marker, point, map, point.address);
     }
   });
 
@@ -455,7 +462,7 @@ function isMarkerClick(event: LeafletMouseEvent): boolean {
 
 function getCoordinateOrRoute(
   args: MapRenderSignature['Args'],
-): Coordinate | Coordinate[] | null {
+): Coordinate | RoutePoint[] | null {
   if (args.coordinate) {
     return args.coordinate;
   }
