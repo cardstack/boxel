@@ -256,6 +256,7 @@ export class RealmServer {
         config = merge({}, config, {
           hostsOwnAssets: false,
           assetsURL: this.assetsURL.href,
+          matrixURL: this.matrixClient.matrixURL,
           realmServerDomain: this.serverURL.hostname,
         });
         return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;

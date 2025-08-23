@@ -26,9 +26,7 @@ test.describe('Profile', () => {
   let realmServer: IsolatedRealmServer;
   test.beforeEach(async () => {
     test.setTimeout(120_000);
-    synapse = await synapseStart({
-      template: 'test',
-    });
+    synapse = await synapseStart();
     await smtpStart();
 
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
@@ -36,10 +34,10 @@ test.describe('Profile', () => {
     await registerUser(synapse, 'user1', 'pass');
     await registerUser(synapse, 'user0', 'pass');
     realmServer = await startRealmServer();
-    await updateUser(admin.accessToken, '@user1:localhost', {
+    await updateUser(synapse, admin.accessToken, '@user1:localhost', {
       emailAddresses: ['user1@localhost'],
     });
-    await updateUser(admin.accessToken, '@user0:localhost', {
+    await updateUser(synapse, admin.accessToken, '@user0:localhost', {
       emailAddresses: ['user0@localhost'],
     });
     await setupUserSubscribed('@user1:localhost', realmServer);
