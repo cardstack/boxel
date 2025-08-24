@@ -8,8 +8,10 @@ import {
   linksTo,
   linksToMany,
 } from './card-api';
-import CodeRefField from './code-ref';
+import CodeRefField, { AbsoluteCodeRefField } from './code-ref';
+import { Spec } from './spec';
 import BooleanField from './boolean';
+import MarkdownField from './markdown';
 import NumberField from './number';
 import ResponseField from './response-field';
 import { Skill } from './skill';
@@ -302,6 +304,20 @@ export class SummarizeSessionInput extends CardDef {
 
 export class SummarizeSessionResult extends CardDef {
   @field summary = contains(StringField);
+}
+
+export class GenerateReadmeInput extends CardDef {
+  @field codeRef = contains(AbsoluteCodeRefField);
+  @field userPrompt = contains(StringField);
+  @field systemPrompt = contains(StringField);
+}
+
+export class GenerateReadmeResult extends CardDef {
+  @field readme = contains(MarkdownField);
+}
+
+export class GenerateReadmeSpecInput extends CardDef {
+  @field spec = linksTo(Spec);
 }
 
 export {
