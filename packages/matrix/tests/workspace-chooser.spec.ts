@@ -19,7 +19,7 @@ test.describe('Workspace Chooser', () => {
     let realm1URL = new URL(`user1/${realm1Name}/`, serverIndexUrl).href;
 
     await clearLocalStorage(page, serverIndexUrl);
-    await setupUserSubscribed('@user1:localhost', testEnv.realmServer);
+    await setupUserSubscribed('@user1:localhost', testEnv.realmServer!);
     await login(page, 'user1', 'pass', {
       url: serverIndexUrl,
     });
