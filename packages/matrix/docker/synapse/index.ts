@@ -19,6 +19,7 @@ export const DEVELOPMENT_SYNAPSE_PORT = 8008;
 export const TEST_SYNAPSE_IP_ADDRESS = '172.20.0.6';
 export const TEST_SYNAPSE_PORT = 8009;
 
+// FIXME these are being left behind
 export function getRegistrationSecretFilename(uniquePort?: number) {
   return uniquePort
     ? `registration_secret_${uniquePort}.txt`
