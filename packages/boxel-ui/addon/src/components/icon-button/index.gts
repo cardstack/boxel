@@ -11,9 +11,9 @@ export interface Signature {
     class?: string;
     height?: string;
     icon?: Icon;
+    loading?: boolean;
     variant?: string;
     width?: string;
-    loading?: boolean;
   };
   Blocks: {
     default: [];

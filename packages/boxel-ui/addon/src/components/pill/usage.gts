@@ -1,3 +1,4 @@
+import CardIcon from '@cardstack/boxel-icons/captions';
 import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -49,17 +50,23 @@ export default class PillUsage extends Component {
   declare boxelPillBorderColor: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare boxelPillFont: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'header-freestyle-container' })
+  declare boxelPillBorderRadius: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'header-freestyle-container' })
+  declare boxelPillBorder: CSSVariableInfo;
 
   <template>
     <div
       class='header-freestyle-container'
       style={{cssVar
-        pill-padding=this.pillPadding.value
-        pill-gap=this.pillGap.value
-        pill-icon-size=this.pillIconSize.value
+        boxel-pill-padding=this.pillPadding.value
+        boxel-pill-gap=this.pillGap.value
+        boxel-pill-icon-size=this.pillIconSize.value
         boxel-pill-background-color=this.boxelPillBackgroundColor.value
         boxel-pill-font-color=this.boxelPillFontColor.value
+        boxel-pill-border=this.boxelPillBorder.value
         boxel-pill-border-color=this.boxelPillBorderColor.value
+        boxel-pill-border-radius=this.boxelPillBorderRadius.value
         boxel-pill-font=this.boxelPillFont.value
       }}
     >
@@ -129,23 +136,23 @@ export default class PillUsage extends Component {
         </:api>
         <:cssVars as |Css|>
           <Css.Basic
-            @name='pill-padding'
-            @type='dimension'
+            @name='boxel-pill-padding'
+            @type='padding'
             @description='Padding of the pill'
             @value={{this.pillPadding.value}}
             @onInput={{this.pillPadding.update}}
           />
           <Css.Basic
-            @name='pill-gap'
-            @type='dimension'
+            @name='boxel-pill-gap'
+            @type='gap'
             @description='Gap between the pill and the icon'
             @value={{this.pillGap.value}}
             @onInput={{this.pillGap.update}}
           />
           <Css.Basic
-            @name='pill-icon-size'
-            @type='dimension'
-            @description='Size of the icon'
+            @name='boxel-pill-icon-size'
+            @type='min-width'
+            @description='Min-width for the icon container'
             @value={{this.pillIconSize.value}}
             @onInput={{this.pillIconSize.update}}
           />
@@ -164,11 +171,24 @@ export default class PillUsage extends Component {
             @onInput={{this.boxelPillFontColor.update}}
           />
           <Css.Basic
+            @name='boxel-pill-border'
+            @type='border'
+            @description='Global override for pill border (highest priority)'
+            @value={{this.boxelPillBorder.value}}
+            @onInput={{this.boxelPillBorder.update}}
+          />
+          <Css.Basic
             @name='boxel-pill-border-color'
-            @type='color'
-            @description='Global override for pill border color (highest priority)'
+            @type='border-color'
             @value={{this.boxelPillBorderColor.value}}
             @onInput={{this.boxelPillBorderColor.update}}
+          />
+          <Css.Basic
+            @name='boxel-pill-border-radius'
+            @type='border-radius'
+            @description='Global override for pill border-radius (highest priority)'
+            @value={{this.boxelPillBorderRadius.value}}
+            @onInput={{this.boxelPillBorderRadius.update}}
           />
           <Css.Basic
             @name='boxel-pill-font'
@@ -177,8 +197,34 @@ export default class PillUsage extends Component {
             @value={{this.boxelPillFont.value}}
             @onInput={{this.boxelPillFont.update}}
           />
+          <Css.Basic
+            @name='boxel-pill-transition'
+            @type='transition'
+            @description='Css "transition" shorthand property'
+          />
         </:cssVars>
       </FreestyleUsage>
+      <FreestyleUsage @name='SpecTag Usage'>
+        <:example>
+          <Pill class='spec-tag-pill'>
+            <:iconLeft>
+              <CardIcon />
+            </:iconLeft>
+            <:default>
+              Card
+            </:default>
+          </Pill>
+        </:example>
+      </FreestyleUsage>
     </div>
+    <style scoped>
+      .spec-tag-pill {
+        --boxel-pill-font: 500 var(--boxel-font-xs);
+        --boxel-pill-background-color: var(--boxel-200);
+        --boxel-pill-icon-size: 18px;
+        word-break: initial;
+        text-transform: uppercase;
+      }
+    </style>
   </template>
 }
