@@ -1,47 +1,47 @@
 import { expect, test } from '@playwright/test';
 import { registerUser } from '../docker/synapse';
 import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-} from '../docker/synapse';
-import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
-import {
   clearLocalStorage,
   assertLoggedIn,
   assertLoggedOut,
   login,
   logout,
   openRoot,
-  registerRealmUsers,
   setupUserSubscribed,
+  startUniqueTestEnvironment,
+  stopTestEnvironment,
+  type TestEnvironment,
 } from '../helpers';
 import jwt from 'jsonwebtoken';
 
 const REALM_SECRET_SEED = "shhh! it's a secret";
 
 test.describe('Login', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
+  let testEnv: TestEnvironment;
+  let appURL: string;
 
   test.beforeEach(async ({ page }) => {
     // These tests specifically are pretty slow as there's lots of reloading
     // Add 120s to the overall test timeout
     test.setTimeout(120_000);
-    synapse = await synapseStart();
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
-    await registerUser(synapse, 'user1', 'pass');
-    await clearLocalStorage(page, appURL);
-    await setupUserSubscribed('@user1:localhost', realmServer);
+    testEnv = await startUniqueTestEnvironment();
+
+    appURL = testEnv.config.testHost;
+
+    await registerUser(
+      testEnv.synapse!,
+      'user1',
+      'pass',
+      false,
+      undefined,
+      testEnv.config.testHost,
+    );
+
+    await clearLocalStorage(page, testEnv.config.testHost);
+    await setupUserSubscribed('@user1:localhost', testEnv.realmServer);
   });
   test.afterEach(async () => {
-    await realmServer.stop();
-    await synapseStop(synapse.synapseId);
+    await stopTestEnvironment(testEnv);
   });
 
   test('it can login on the realm server home page and see the workspace chooser', async ({
