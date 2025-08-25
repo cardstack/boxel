@@ -1,5 +1,8 @@
+import Check from '@cardstack/boxel-icons/check';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { concat } from '@ember/helper';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import PowerSelect, {
@@ -66,6 +69,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
       '--boxel-dropdown-highlight-color',
       '--boxel-dropdown-highlight-hover-color',
       '--boxel-dropdown-hover-color',
+      '--boxel-form-control-border-radius',
     ];
 
     themeVars.forEach((varName) => {
@@ -84,9 +88,13 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
     if (!this.selectEl) return;
 
     this.syncCustomProps();
+    this.detectAndSetThemeColors();
 
     this.themeObserver?.disconnect();
-    this.themeObserver = new MutationObserver(() => this.syncCustomProps());
+    this.themeObserver = new MutationObserver(() => {
+      this.syncCustomProps();
+      this.detectAndSetThemeColors();
+    });
     this.themeObserver.observe(this.selectEl, {
       attributes: true,
       attributeFilter: ['style', 'class'],
@@ -97,6 +105,63 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
   @action
   onOpen() {
     this.startObservingTheme();
+  }
+
+  private detectAndSetThemeColors() {
+    if (!this.selectEl) return;
+
+    // Check if theme variables are available
+    const cs = getComputedStyle(this.selectEl);
+    const hasBackground = cs.getPropertyValue('--background').trim() !== '';
+    const hasForeground = cs.getPropertyValue('--foreground').trim() !== '';
+    const parentHasTheme =
+      this.selectEl.closest(
+        '[style*="--background"], [style*="--foreground"]',
+      ) !== null;
+
+    const hasThemeVariables = hasBackground || hasForeground || parentHasTheme;
+
+    const variant = this.args.variant || 'default';
+    const variantColors = {
+      default: {
+        bg: 'var(--background, var(--boxel-light))',
+        fg: 'var(--foreground, var(--boxel-dark))',
+      },
+      primary: {
+        bg: 'var(--primary, var(--boxel-600))',
+        fg: 'var(--primary-foreground, var(--boxel-dark))',
+      },
+      secondary: {
+        bg: 'var(--secondary, var(--boxel-400))',
+        fg: 'var(--secondary-foreground, var(--boxel-dark))',
+      },
+      muted: {
+        bg: 'var(--muted, var(--boxel-200))',
+        fg: 'var(--muted-foreground, var(--boxel-dark))',
+      },
+      destructive: {
+        bg: 'var(--destructive, var(--boxel-danger))',
+        fg: 'var(--destructive-foreground, var(--boxel-light))',
+      },
+    };
+
+    if (hasThemeVariables) {
+      const { bg, fg } = variantColors[variant];
+      const themeVars = {
+        '--theme-highlight': `color-mix(in oklch, ${bg} 92%, ${fg})`,
+        '--theme-highlight-hover': `color-mix(in oklch, ${bg} 88%, ${fg})`,
+        '--theme-hover': `color-mix(in oklch, ${bg} 94%, ${fg})`,
+      };
+      Object.entries(themeVars).forEach(([key, value]) => {
+        this.dropdownContainer.style.setProperty(key, value);
+      });
+    } else {
+      ['--theme-highlight', '--theme-highlight-hover', '--theme-hover'].forEach(
+        (key) => {
+          this.dropdownContainer.style.removeProperty(key);
+        },
+      );
+    }
   }
 
   <template>
@@ -144,6 +209,11 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         (component BeforeOptions autofocus=false)
       }}
       @afterOptionsComponent={{@afterOptionsComponent}}
+      @optionsComponent={{if
+        @optionsComponent
+        @optionsComponent
+        (component BoxelSelectOptions)
+      }}
       data-select-trigger='true'
       ...attributes
       as |item|
@@ -167,7 +237,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         );
         --select-focus-border-color: var(
           --boxel-select-focus-border-color,
-          var(--primary, var(--boxel-outline-color))
+          var(--primary, var(--boxel-dark))
         );
 
         position: relative;
@@ -175,7 +245,13 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         align-items: stretch;
         overflow: hidden;
         border: 1px solid var(--select-border-color);
-        border-radius: var(--boxel-border-radius-sm);
+        border-radius: var(--boxel-form-control-border-radius);
+        border-bottom-left-radius: var(
+          --boxel-form-control-border-radius
+        ) !important;
+        border-bottom-right-radius: var(
+          --boxel-form-control-border-radius
+        ) !important;
         max-width: 100%;
         width: 100%;
         background-color: var(--select-background-color);
@@ -185,15 +261,19 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
 
       .boxel-select:hover {
         cursor: pointer;
+        border-color: var(--select-focus-border-color);
       }
 
       .boxel-select:focus-within {
         border-color: var(--select-focus-border-color);
-        box-shadow: 0 0 0 1px var(--select-focus-border-color);
+      }
+
+      .boxel-select :deep(.boxel-trigger) {
+        padding: var(--boxel-sp-xs)
+          calc(var(--boxel-sp-xxxs) + var(--boxel-sp-xxs));
       }
 
       .boxel-select :deep(.boxel-trigger-placeholder) {
-        font-family: inherit;
         color: var(--select-text-color);
       }
 
@@ -212,7 +292,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         );
         --select-focus-border-color: var(
           --boxel-select-focus-border-color,
-          var(--primary, var(--boxel-outline-color))
+          var(--primary, var(--boxel-dark))
         );
       }
 
@@ -288,7 +368,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         );
         --select-focus-border-color: var(
           --boxel-select-focus-border-color,
-          var(--destructive, var(--boxel-600))
+          var(--destructive, var(--boxel-danger))
         );
       }
 
@@ -313,41 +393,15 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         );
         --dropdown-highlight-color: var(
           --boxel-dropdown-highlight-color,
-          color-mix(
-            in oklch,
-            var(
-                --dropdown-background-color,
-                var(--background, var(--boxel-light))
-              )
-              92%,
-            var(--foreground, var(--boxel-dark))
-          )
+          var(--theme-highlight, var(--boxel-highlight))
         );
-
         --dropdown-highlight-hover-color: var(
-          --boxel-dropdown-highlight-hover-color,
-          color-mix(
-            in oklch,
-            var(
-                --dropdown-background-color,
-                var(--background, var(--boxel-light))
-              )
-              88%,
-            var(--foreground, var(--boxel-dark))
-          )
+          --boxel-dropdown-hover-color,
+          var(--theme-highlight-hover, var(--boxel-highlight))
         );
-
         --dropdown-hover-color: var(
           --boxel-dropdown-hover-color,
-          color-mix(
-            in oklch,
-            var(
-                --dropdown-background-color,
-                var(--background, var(--boxel-100))
-              )
-              94%,
-            var(--foreground, var(--boxel-dark))
-          )
+          var(--theme-hover, var(--boxel-light-100))
         );
         --dropdown-focus-border-color: var(
           --boxel-dropdown-focus-border-color,
@@ -361,31 +415,41 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         box-shadow: var(--boxel-box-shadow);
         border-radius: var(--boxel-form-control-border-radius);
         background-color: var(--dropdown-background-color);
-        border: 1px solid var(--dropdown-border-color);
+        border: 1px solid var(--dropdown-border-color) !important;
         z-index: var(--boxel-layer-modal-urgent);
         max-height: 200px;
+        margin-top: 4px;
+        border-top-left-radius: var(
+          --boxel-form-control-border-radius
+        ) !important;
+        border-top-right-radius: var(
+          --boxel-form-control-border-radius
+        ) !important;
         overflow: hidden;
       }
 
       .boxel-select__dropdown ul {
         list-style: none;
-        padding: 0;
+        padding: var(--boxel-sp-xxxs);
         margin: 0;
         overflow: auto;
         max-height: inherit;
       }
 
       .boxel-select__dropdown .ember-power-select-option {
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        padding: var(--boxel-sp-xxs) !important;
         background-color: var(--dropdown-background-color);
         color: var(--dropdown-text-color);
         transition: background-color var(--boxel-transition);
+        border-radius: var(--boxel-border-radius-sm);
         cursor: pointer;
         border: none;
         width: 100%;
         text-align: left;
         font-family: inherit;
-        font-size: var(--boxel-font-sm);
+        font-size: var(--boxel-font-size-sm);
+        letter-spacing: var(--boxel-lsp-sm);
+        margin-bottom: 2px;
       }
 
       .boxel-select__dropdown .ember-power-select-option[aria-selected='true'] {
@@ -422,7 +486,8 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         border-radius: var(--boxel-border-radius-xs);
         padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
         font-family: inherit;
-        font-size: var(--boxel-font-sm);
+        font-size: var(--boxel-font-size-sm);
+        letter-spacing: var(--boxel-lsp-sm);
         width: 100%;
         box-sizing: border-box;
       }
@@ -446,43 +511,38 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         text-align: center;
       }
 
-      /* Variant-specific dropdown styling */
-      .boxel-select__dropdown.variant-primary {
-        --dropdown-background-color: var(
-          --boxel-dropdown-background-color,
-          color-mix(
-            in oklch,
-            var(--primary, var(--boxel-600)) 15%,
-            var(--background, var(--boxel-light)) 85%
-          )
-        );
+      /* All variants use the same reusable theme variables */
+      .boxel-select__dropdown[class*='variant-'] {
         --dropdown-highlight-color: var(
           --boxel-dropdown-highlight-color,
-          color-mix(
-            in oklch,
-            var(--primary, var(--boxel-600)) 88%,
-            var(--foreground, var(--boxel-dark))
-          )
+          var(--theme-highlight, var(--boxel-highlight))
         );
         --dropdown-highlight-hover-color: var(
-          --boxel-dropdown-highlight-hover-color,
-          color-mix(
-            in oklch,
-            var(--primary, var(--boxel-600)) 82%,
-            var(--foreground, var(--boxel-dark))
-          )
+          --boxel-dropdown-hover-color,
+          var(--theme-highlight-hover, var(--boxel-highlight))
         );
         --dropdown-hover-color: var(
           --boxel-dropdown-hover-color,
-          color-mix(
-            in oklch,
-            var(--primary, var(--boxel-600)) 90%,
-            var(--foreground, var(--boxel-dark))
-          )
+          var(--theme-hover, var(--boxel-light-100))
+        );
+      }
+
+      .boxel-select__dropdown.variant-primary {
+        --dropdown-highlight-color: var(
+          --boxel-dropdown-highlight-color,
+          var(--primary, var(--boxel-600))
+        );
+        --dropdown-highlight-hover-color: var(
+          --boxel-dropdown-hover-color,
+          var(--primary, var(--boxel-600))
+        );
+        --dropdown-hover-color: var(
+          --boxel-dropdown-hover-color,
+          var(--theme-hover, var(--boxel-500))
         );
         --dropdown-selected-text-color: var(
           --primary-foreground,
-          var(--foreground, var(--boxel-dark))
+          var(--foreground, var(--boxel-light))
         );
         --dropdown-focus-border-color: var(
           --primary,
@@ -491,37 +551,17 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
       }
 
       .boxel-select__dropdown.variant-secondary {
-        --dropdown-background-color: var(
-          --boxel-dropdown-background-color,
-          color-mix(
-            in oklch,
-            var(--secondary, var(--boxel-400)) 15%,
-            var(--background, var(--boxel-light)) 85%
-          )
-        );
         --dropdown-highlight-color: var(
           --boxel-dropdown-highlight-color,
-          color-mix(
-            in oklch,
-            var(--secondary, var(--boxel-400)) 88%,
-            var(--foreground, var(--boxel-dark))
-          )
+          var(--secondary, var(--boxel-400))
         );
         --dropdown-highlight-hover-color: var(
-          --boxel-dropdown-highlight-hover-color,
-          color-mix(
-            in oklch,
-            var(--secondary, var(--boxel-400)) 82%,
-            var(--foreground, var(--boxel-dark))
-          )
+          --boxel-dropdown-hover-color,
+          var(--secondary, var(--boxel-400))
         );
         --dropdown-hover-color: var(
           --boxel-dropdown-hover-color,
-          color-mix(
-            in oklch,
-            var(--secondary, var(--boxel-400)) 90%,
-            var(--foreground, var(--boxel-dark))
-          )
+          var(--theme-hover, var(--boxel-light-100))
         );
         --dropdown-selected-text-color: var(
           --secondary-foreground,
@@ -534,37 +574,17 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
       }
 
       .boxel-select__dropdown.variant-muted {
-        --dropdown-background-color: var(
-          --boxel-dropdown-background-color,
-          color-mix(
-            in oklch,
-            var(--muted, var(--boxel-200)) 15%,
-            var(--background, var(--boxel-light)) 85%
-          )
-        );
         --dropdown-highlight-color: var(
           --boxel-dropdown-highlight-color,
-          color-mix(
-            in oklch,
-            var(--muted, var(--boxel-200)) 88%,
-            var(--foreground, var(--boxel-dark))
-          )
+          var(--muted, var(--boxel-200))
         );
         --dropdown-highlight-hover-color: var(
-          --boxel-dropdown-highlight-hover-color,
-          color-mix(
-            in oklch,
-            var(--muted, var(--boxel-200)) 82%,
-            var(--foreground, var(--boxel-dark))
-          )
+          --boxel-dropdown-hover-color,
+          var(--muted, var(--boxel-200))
         );
         --dropdown-hover-color: var(
           --boxel-dropdown-hover-color,
-          color-mix(
-            in oklch,
-            var(--muted, var(--boxel-200)) 90%,
-            var(--foreground, var(--boxel-dark))
-          )
+          var(--theme-hover, var(--boxel-light-100))
         );
         --dropdown-selected-text-color: var(
           --muted-foreground,
@@ -574,37 +594,17 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
       }
 
       .boxel-select__dropdown.variant-destructive {
-        --dropdown-background-color: var(
-          --boxel-dropdown-background-color,
-          color-mix(
-            in oklch,
-            var(--destructive, var(--boxel-600)) 15%,
-            var(--background, var(--boxel-light)) 85%
-          )
-        );
         --dropdown-highlight-color: var(
           --boxel-dropdown-highlight-color,
-          color-mix(
-            in oklch,
-            var(--destructive, var(--boxel-600)) 88%,
-            var(--foreground, var(--boxel-dark))
-          )
+          var(--destructive, var(--boxel-danger))
         );
         --dropdown-highlight-hover-color: var(
-          --boxel-dropdown-highlight-hover-color,
-          color-mix(
-            in oklch,
-            var(--destructive, var(--boxel-600)) 82%,
-            var(--foreground, var(--boxel-dark))
-          )
+          --boxel-dropdown-hover-color,
+          var(--destructive, var(--boxel-danger))
         );
         --dropdown-hover-color: var(
           --boxel-dropdown-hover-color,
-          color-mix(
-            in oklch,
-            var(--destructive, var(--boxel-600)) 90%,
-            var(--foreground, var(--boxel-dark))
-          )
+          var(--theme-hover, var(--boxel-light-100))
         );
         --dropdown-selected-text-color: var(
           --destructive-foreground,
@@ -624,6 +624,140 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         width: 100%;
         height: 100%;
         pointer-events: none;
+      }
+    </style>
+  </template>
+}
+
+export interface OptionsSignature<ItemT = any> {
+  Args: {
+    highlighted: ItemT;
+    options: ItemT[];
+    searchText: string;
+    select: {
+      actions: {
+        close: () => void;
+        highlight: (option: ItemT) => void;
+        select: (option: ItemT) => void;
+      };
+      selected: ItemT;
+    };
+  };
+  Blocks: {
+    default: [ItemT, any, boolean];
+  };
+  Element: HTMLDivElement;
+}
+
+export class BoxelSelectOptions<ItemT = any> extends Component<
+  OptionsSignature<ItemT>
+> {
+  @action
+  handleSelect(
+    option: ItemT,
+    select: OptionsSignature<ItemT>['Args']['select'],
+  ) {
+    select.actions.select(option);
+    select.actions.close();
+    // Blur the target element after selection
+    const activeElement = document.activeElement as HTMLElement;
+    if (activeElement) {
+      activeElement.blur();
+    }
+  }
+
+  <template>
+    <ul class='boxel-select-options-list'>
+      {{#each @options as |option|}}
+        <li class='boxel-select-option-item'>
+          <button
+            type='button'
+            class={{cn
+              'boxel-select-option-button'
+              (if (eq option @select.selected) 'is-selected')
+              (if (eq option @highlighted) 'is-highlighted')
+            }}
+            {{on 'click' (fn this.handleSelect option @select)}}
+            {{on 'mouseenter' (fn @select.actions.highlight option)}}
+          >
+            <span class='boxel-select-option-text'>
+              {{yield option @select (eq option @select.selected)}}
+            </span>
+            {{#if (eq option @select.selected)}}
+              <Check class='boxel-select-option-checkmark' />
+            {{/if}}
+          </button>
+        </li>
+      {{/each}}
+    </ul>
+
+    <style scoped>
+      .boxel-select-options-list {
+        list-style: none;
+        padding: var(--boxel-sp-xxxs);
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+
+      .boxel-select-option-item {
+        margin: 0;
+      }
+
+      .boxel-select-option-button {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: var(--boxel-sp-xxs) !important;
+        margin-bottom: 2px;
+        font-family: inherit;
+        font-size: var(--boxel-font-size-sm);
+        letter-spacing: var(--boxel-lsp-sm);
+        text-align: left;
+        background-color: var(--dropdown-background-color);
+        color: var(--dropdown-text-color);
+        border: none;
+        border-radius: var(--boxel-border-radius-sm);
+        cursor: pointer;
+        transition: background-color var(--boxel-transition);
+      }
+
+      .boxel-select-option-button:hover {
+        background-color: var(--dropdown-hover-color);
+        color: var(--dropdown-selected-text-color);
+      }
+
+      .boxel-select-option-button.is-selected {
+        background-color: var(--dropdown-highlight-color);
+        color: var(--dropdown-selected-text-color);
+      }
+
+      .boxel-select-option-button.is-highlighted {
+        background-color: var(--dropdown-highlight-hover-color);
+        color: var(--dropdown-selected-text-color);
+      }
+
+      .boxel-select-option-icon {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+        margin-right: var(--boxel-sp-xxs);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .boxel-select-option-text {
+        flex: 1;
+      }
+
+      .boxel-select-option-checkmark {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+        --icon-color: currentColor;
       }
     </style>
   </template>
