@@ -41,10 +41,10 @@ test.describe('Host mode', () => {
   test('card in a published realm renders in host mode with a connect button', async ({
     page,
   }) => {
-    await page.goto('http://published.realm/mango.json');
+    await page.goto('http://published.localhost:4205/mango.json');
 
     await expect(
-      page.locator('[data-test-card="http://published.realm/mango"]'),
+      page.locator('[data-test-card="http://published.localhost:4205/mango"]'),
     ).toBeVisible();
     await expect(page.locator('h1:first-of-type')).toHaveText('Mango');
 
@@ -60,7 +60,7 @@ test.describe('Host mode', () => {
 
     await assertLoggedIn(page);
 
-    await page.goto('http://published.realm/mango.json');
+    await page.goto('http://published.localhost:4205/mango.json');
 
     await waitUntil(() => page.locator('iframe').isVisible());
 

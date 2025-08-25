@@ -48,7 +48,7 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
 
   get connectUrl() {
     // FIXME this is a hack for testing at the moment
-    if (window.location.hostname === 'published.realm') {
+    if (window.location.host === 'published.localhost:4205') {
       return 'http://localhost:4205/connect/FIXME';
     } else {
       return 'http://localhost:4200/connect/FIXME';
