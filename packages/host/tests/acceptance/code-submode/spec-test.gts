@@ -844,6 +844,7 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-module-inspector-view="spec"]').exists();
 
     await click('[data-test-module-inspector-view="spec"]');
+
     await click('[data-test-spec-selector] > div');
     assert
       .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
