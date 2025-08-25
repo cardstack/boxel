@@ -108,6 +108,10 @@ export async function startServer(
           let response = await fetch(`http://localhost:${workerManagerPort}/`);
           if (response.ok) {
             let json = await response.json();
+            console.log(
+              `response? wm${workerManagerPort}`,
+              JSON.stringify(json, null, 2),
+            );
             if (json.ready) {
               resolve();
               return;
