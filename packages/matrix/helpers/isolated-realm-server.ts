@@ -92,12 +92,12 @@ export async function startServer(
   });
   if (workerManager.stdout) {
     workerManager.stdout.on('data', (data: Buffer) =>
-      console.log(`worker: ${data.toString()}`),
+      console.log(`worker[${workerManagerPort}]: ${data.toString()}`),
     );
   }
   if (workerManager.stderr) {
     workerManager.stderr.on('data', (data: Buffer) =>
-      console.error(`worker: ${data.toString()}`),
+      console.error(`worker[${workerManagerPort}]: ${data.toString()}`),
     );
   }
 
@@ -173,12 +173,12 @@ export async function startServer(
   });
   if (workerManager.stdout) {
     workerManager.stdout.on('data', (data: Buffer) =>
-      console.log(`worker: ${data.toString()}`),
+      console.log(`worker[${workerManagerPort}]: ${data.toString()}`),
     );
   }
   if (workerManager.stderr) {
     workerManager.stderr.on('data', (data: Buffer) =>
-      console.error(`worker: ${data.toString()}`),
+      console.error(`worker[${workerManagerPort}]: ${data.toString()}`),
     );
   }
 
@@ -307,12 +307,12 @@ export async function startServer(
   realmServer.unref();
   if (realmServer.stdout) {
     realmServer.stdout.on('data', (data: Buffer) =>
-      console.log(`realm server: ${data.toString()}`),
+      console.log(`realm server[${realmServerPort}]: ${data.toString()}`),
     );
   }
   if (realmServer.stderr) {
     realmServer.stderr.on('data', (data: Buffer) =>
-      console.error(`realm server: ${data.toString()}`),
+      console.error(`realm server[${realmServerPort}]: ${data.toString()}`),
     );
   }
   realmServer.on('message', (message) => {
