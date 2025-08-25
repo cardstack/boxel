@@ -67,11 +67,15 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
   }
 
   @action
-  updatecoordinate(coordinate: { lat: number; lng: number }) {
+  updateCoordinate(coordinate: { lat: number; lng: number }) {
     if (this.args.model) {
       this.args.model.lat = coordinate.lat;
       this.args.model.lon = coordinate.lng;
     }
+  }
+
+  get hasNoCoordinates() {
+    return !this.args.model?.lon && !this.args.model?.lat;
   }
 
   <template>
@@ -90,7 +94,7 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
           <div class='map-container'>
             <MapRender
               @coordinates={{this.coordinate}}
-              @onMapClickUpdate={{this.updatecoordinate}}
+              @onMapClick={{this.updateCoordinate}}
             />
           </div>
         </div>

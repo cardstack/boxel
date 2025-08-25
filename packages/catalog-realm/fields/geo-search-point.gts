@@ -155,6 +155,10 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
     this.debouncedGeocodeAddress();
   }
 
+  get hasNoCoordinates() {
+    return !this.args.model?.lon && !this.args.model?.lat;
+  }
+
   <template>
     <div class='edit-template'>
       <BoxelInput
@@ -267,7 +271,7 @@ class EmbeddedTemplate extends Component<typeof GeoSearchPointField> {
     return this.latValue === 'N/A' && this.lonValue === 'N/A';
   }
 
-  get coordinate(): Coordinate[] {
+  get coordinates(): Coordinate[] {
     // Only return coordinates if both lat and lon are valid numbers AND address is meaningful
     if (
       this.latNumber != null &&
@@ -323,7 +327,7 @@ class EmbeddedTemplate extends Component<typeof GeoSearchPointField> {
           </div>
 
           <div class='map-container'>
-            <MapRender @coordinates={{this.coordinate}} />
+            <MapRender @coordinates={{this.coordinates}} />
           </div>
         </div>
       {{else}}

@@ -9,6 +9,15 @@ import {
 import { MapRender, type Coordinate } from '../components/map-render';
 import { GeoSearchPointField } from './geo-search-point';
 
+// style: function (feature: any) {
+//   return {
+//     color: feature.properties.color,
+//     weight: feature.properties.weight,
+//     opacity: feature.properties.opacity,
+//     smoothFactor: 1,
+//   };
+// },
+
 class AtomTemplate extends Component<typeof RouteField> {
   get hasRoute() {
     return !!(
@@ -246,6 +255,15 @@ class EmbeddedTemplate extends Component<typeof RouteField> {
     return [...coordinates];
   }
 
+  get routes() {
+    return [
+      {
+        name: 'route to heaven',
+        coordinates: this.routeCoordinates,
+      },
+    ];
+  }
+
   get hasValidCoordinates() {
     const hasValid = this.routeCoordinates.length > 0;
     return hasValid;
@@ -261,7 +279,7 @@ class EmbeddedTemplate extends Component<typeof RouteField> {
           </div>
 
           <div class='map-container'>
-            <MapRender @coordinates={{this.routeCoordinates}} />
+            <MapRender @routes={{this.routes}} />
           </div>
         </div>
       {{else}}

@@ -19,7 +19,7 @@ export class LeafletMap extends CardDef {
   @field tileserverUrl = contains(StringField);
 
   static isolated = class IsolatedTemplate extends Component<typeof this> {
-    updatecoordinate = (coordinate: { lat: number; lng: number }) => {
+    updateCoordinate = (coordinate: { lat: number; lng: number }) => {
       if (this.args.model?.geoPoint) {
         this.args.model.geoPoint.lat = coordinate.lat;
         this.args.model.geoPoint.lon = coordinate.lng;
@@ -35,7 +35,7 @@ export class LeafletMap extends CardDef {
     <template>
       <MapRender
         @coordinates={{this.coordinate}}
-        @onMapClickUpdate={{this.updatecoordinate}}
+        @onMapClick={{this.updateCoordinate}}
       />
     </template>
   };
