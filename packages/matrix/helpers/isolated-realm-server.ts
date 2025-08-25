@@ -116,6 +116,12 @@ export async function startServer(
               resolve();
               return;
             }
+          } else {
+            console.log(
+              'response not ok',
+              response.status,
+              response.statusText,
+            );
           }
         } catch (e) {}
 
