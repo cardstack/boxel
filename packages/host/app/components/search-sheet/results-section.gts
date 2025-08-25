@@ -18,7 +18,7 @@ import CardRenderer from '../card-renderer';
 import { removeFileExtension } from './utils';
 
 interface SearchResultSignature {
-  Element: HTMLElement;
+  Element: Element;
   Args: {
     component?: ComponentLike<{ Element: Element }>;
     card?: CardDef;

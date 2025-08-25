@@ -68,7 +68,7 @@ const ItemButton: TemplateOnlyComponent<ButtonSignature> = <template>
         key=@card.url
       }}
     >
-      <@card.component @displayBoundaries={{false}} />
+      <@card.component class='hide-boundaries' />
     </Button>
   {{else if @newCard}}
     <Button

@@ -65,6 +65,7 @@ export {
   formatPeriod,
   formatRelativeTime,
   getContrastColor,
+  getStyleConversions,
   gt,
   gte,
   lt,
@@ -79,7 +80,6 @@ export {
   optional,
   or,
   pick,
-  getStyleConversions,
   substring,
   subtract,
 };

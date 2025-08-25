@@ -768,7 +768,6 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                                 fieldType=undefined
                                 fieldName=undefined
                               }}
-                              @displayBoundaries={{true}}
                               class='customer-card-container'
                             />
                           {{/if}}

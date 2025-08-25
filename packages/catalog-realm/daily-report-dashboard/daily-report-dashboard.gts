@@ -210,8 +210,7 @@ class Isolated extends Component<typeof DailyReportDashboard> {
                           </div>
                         {{else}}
                           <card.component
-                            @displayBoundaries={{false}}
-                            class='report-card-container'
+                            class='report-card-container hide-boundaries'
                           />
                         {{/if}}
                       {{/each}}

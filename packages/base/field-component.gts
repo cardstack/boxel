@@ -40,6 +40,7 @@ import { consume, provide } from 'ember-provide-consume-context';
 import Component from '@glimmer/component';
 import sanitizedHtml from './helpers/sanitized-html';
 import { concat } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
 
 export interface BoxComponentSignature {
   Element: HTMLElement; // This may not be true for some field components, but it's true more often than not
@@ -271,7 +272,7 @@ export function getBoxComponent(
                         fieldType=field.fieldType
                         fieldName=field.name
                       }}
-                      style={{getThemeStyles model.value}}
+                      style={{htmlSafe (getThemeStyles model.value)}}
                       data-test-card={{card.id}}
                       data-test-card-format={{effectiveFormats.cardDef}}
                       data-test-field-component-card
