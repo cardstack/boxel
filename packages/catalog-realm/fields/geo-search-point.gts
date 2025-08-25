@@ -13,24 +13,26 @@ import { GeoPointField } from './geo-point';
 import { MapRender, type Coordinate } from '../components/map-render';
 
 class AtomTemplate extends Component<typeof GeoSearchPointField> {
-  get searchAddressValue() {
-    return this.args.model?.searchKey ?? 'Invalid Address';
-  }
+  get displayValue() {
+    const address = this.args.model?.searchKey;
+    const lat = this.args.model?.lat;
+    const lon = this.args.model?.lon;
 
-  get latValue() {
-    return this.args.model?.lat ?? 'N/A';
-  }
+    if (address && address.trim() !== '') {
+      return address;
+    }
 
-  get lonValue() {
-    return this.args.model?.lon ?? 'N/A';
+    if (lat != null && lon != null) {
+      return `${lat}, ${lon}`;
+    }
+
+    return 'No location';
   }
 
   <template>
     <div class='coordinate-section'>
       <MapIcon class='map-icon' />
-      <span
-        class='coordinate-section-info-title'
-      >{{this.searchAddressValue}}</span>
+      <span class='coordinate-section-info-title'>{{this.displayValue}}</span>
     </div>
 
     <style scoped>
@@ -60,12 +62,14 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
     return this.args.model.searchKey;
   }
 
-  get latValue() {
-    return this.args.model?.lat ?? 'N/A';
-  }
+  get coordinateDisplay() {
+    const lat = this.args.model?.lat;
+    const lon = this.args.model?.lon;
 
-  get lonValue() {
-    return this.args.model?.lon ?? 'N/A';
+    if (lat != null && lon != null) {
+      return `📍 Lat: ${lat}, Lon: ${lon}`;
+    }
+    return 'No coordinates available';
   }
 
   private fetchCoordinate = task(async (address: string | undefined) => {
@@ -155,10 +159,6 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
     this.debouncedGeocodeAddress();
   }
 
-  get hasNoCoordinates() {
-    return !this.args.model?.lon && !this.args.model?.lat;
-  }
-
   <template>
     <div class='edit-template'>
       <BoxelInput
@@ -174,15 +174,9 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
           <div class='loading-state'>
             🔍 Searching for coordinates...
           </div>
-        {{else if this.hasNoCoordinates}}
-          <div class='no-coordinates'>
-            No coordinates available
-          </div>
         {{else}}
           <div class='coordinate-display'>
-            📍 Lat:
-            {{this.latValue}}, Lon:
-            {{this.lonValue}}
+            {{this.coordinateDisplay}}
           </div>
         {{/if}}
       </div>
@@ -219,20 +213,6 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
         padding: 4px 10px;
       }
 
-      .partial-coordinates {
-        background: #fef3c7;
-        border-left: 4px solid #f59e0b;
-        color: #92400e;
-        padding: 4px 10px;
-      }
-
-      .no-coordinates {
-        background: #fef2f2;
-        border-left: 4px solid #ef4444;
-        color: #991b1b;
-        padding: 4px 10px;
-      }
-
       .color-palette-container {
         padding: 1rem;
         border-radius: var(--boxel-border-radius);
@@ -243,73 +223,68 @@ class EditTemplate extends Component<typeof GeoSearchPointField> {
 }
 
 class EmbeddedTemplate extends Component<typeof GeoSearchPointField> {
-  get searchAddressValue() {
-    return this.args.model?.searchKey ?? 'Invalid Address';
+  get displayValue() {
+    const address = this.args.model?.searchKey;
+    const lat = this.args.model?.lat;
+    const lon = this.args.model?.lon;
+
+    if (address && address.trim() !== '') {
+      return address;
+    }
+
+    if (lat != null && lon != null) {
+      return `${lat}, ${lon}`;
+    }
+
+    return 'No location';
   }
 
-  get latValue() {
-    return this.args.model?.lat ?? 'N/A';
-  }
+  get coordinateDisplay() {
+    const lat = this.args.model?.lat;
+    const lon = this.args.model?.lon;
 
-  get lonValue() {
-    return this.args.model?.lon ?? 'N/A';
-  }
-
-  get latNumber() {
-    return this.args.model?.lat;
-  }
-
-  get lonNumber() {
-    return this.args.model?.lon;
-  }
-
-  get hasValidCoordinateValues() {
-    return this.latValue !== 'N/A' || this.lonValue !== 'N/A';
-  }
-
-  get hasNoCoordinates() {
-    return this.latValue === 'N/A' && this.lonValue === 'N/A';
+    if (lat != null && lon != null) {
+      return `${lat}, ${lon}`;
+    }
+    return 'No coordinates';
   }
 
   get coordinates(): Coordinate[] {
-    // Only return coordinates if both lat and lon are valid numbers AND address is meaningful
+    const lat = this.args.model?.lat;
+    const lon = this.args.model?.lon;
+    const address = this.args.model?.searchKey;
+
     if (
-      this.latNumber != null &&
-      this.lonNumber != null &&
-      typeof this.latNumber === 'number' &&
-      typeof this.lonNumber === 'number' &&
-      !isNaN(this.latNumber) &&
-      !isNaN(this.lonNumber) &&
-      this.searchAddressValue &&
-      this.searchAddressValue.trim() !== '' &&
-      this.searchAddressValue !== 'Invalid Address' &&
-      this.searchAddressValue !== 'N/A'
+      lat != null &&
+      lon != null &&
+      typeof lat === 'number' &&
+      typeof lon === 'number' &&
+      !isNaN(lat) &&
+      !isNaN(lon)
     ) {
-      const coords = [
+      return [
         {
-          lat: this.latNumber,
-          lng: this.lonNumber,
-          address: this.searchAddressValue,
+          lat,
+          lng: lon,
+          address: address || 'Waypoint',
         },
       ];
-      return coords;
     }
 
     return [];
   }
 
   get hasValidCoordinates() {
+    const lat = this.args.model?.lat;
+    const lon = this.args.model?.lon;
+
     return (
-      this.args.model?.lat != null &&
-      this.args.model?.lon != null &&
-      typeof this.args.model.lat === 'number' &&
-      typeof this.args.model.lon === 'number' &&
-      !isNaN(this.args.model.lat) &&
-      !isNaN(this.args.model.lon) &&
-      this.searchAddressValue &&
-      this.searchAddressValue.trim() !== '' &&
-      this.searchAddressValue !== 'Invalid Address' &&
-      this.searchAddressValue !== 'N/A'
+      lat != null &&
+      lon != null &&
+      typeof lat === 'number' &&
+      typeof lon === 'number' &&
+      !isNaN(lat) &&
+      !isNaN(lon)
     );
   }
 
@@ -320,9 +295,8 @@ class EmbeddedTemplate extends Component<typeof GeoSearchPointField> {
           <div class='geo-header'>
             <MapIcon class='map-icon' />
             <div class='geo-info'>
-              <h3 class='geo-title'>{{this.searchAddressValue}}</h3>
-              <span class='coordinate'>{{this.latValue}},
-                {{this.lonValue}}</span>
+              <h3 class='geo-title'>{{this.displayValue}}</h3>
+              <span class='coordinate'>{{this.coordinateDisplay}}</span>
             </div>
           </div>
 

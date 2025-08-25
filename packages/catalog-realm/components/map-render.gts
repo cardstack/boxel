@@ -35,24 +35,7 @@ declare global {
 }
 
 export class MapRender extends GlimmerComponent<MapRenderSignature> {
-  get shouldShowMap() {
-    const coords = this.args.coordinates?.filter(
-      (coord) =>
-        coord &&
-        typeof coord.lat === 'number' &&
-        typeof coord.lng === 'number' &&
-        !isNaN(coord.lat) &&
-        !isNaN(coord.lng) &&
-        coord.lat >= -90 &&
-        coord.lat <= 90 &&
-        coord.lng >= -180 &&
-        coord.lng <= 180,
-    );
-    return coords && coords.length > 0;
-  }
-
   <template>
-    {{!-- {{#if this.shouldShowMap}} --}}
     <figure
       {{LeafletModifier
         coordinates=@coordinates
@@ -62,24 +45,6 @@ export class MapRender extends GlimmerComponent<MapRenderSignature> {
       }}
       class='map'
     />
-    {{!-- {{else}}
-      <div class='map-placeholder'>
-        <div class='placeholder-text'>
-          <div class='simple-placeholder'>
-            <div class='placeholder-icon'>📍</div>
-            <div class='placeholder-title'>Enter Location Coordinate</div>
-            <div class='placeholder-description'>
-              Add correctly formatted coordinate to see the location on the map
-            </div>
-            <div class='placeholder-example'>
-              <strong>Example:</strong><br />
-              Lat: 40.7128<br />
-              Lon: -74.0060
-            </div>
-          </div>
-        </div>
-      </div>
-    {{/if}} --}}
 
     <style scoped>
       figure.map {
@@ -95,65 +60,14 @@ export class MapRender extends GlimmerComponent<MapRenderSignature> {
         color: #666;
         font-size: 14px;
         text-align: center;
+        flex: 1;
+        overflow: hidden; /* Prevent scrollbars from affecting tile calculations */
       }
 
-      .map-placeholder {
-        width: 100%;
-        height: 100%;
-        padding: 1rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #f8fafc;
-        border: 2px dashed #cbd5e1;
-        border-radius: 8px;
-      }
-
-      .placeholder-text {
-        color: #64748b;
-        font-size: 14px;
-        font-weight: 500;
-        text-align: center;
-        width: 100%;
-      }
-
-      .simple-placeholder {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 12px;
-        padding: 20px;
-      }
-
-      .placeholder-icon {
-        font-size: 48px;
-        margin-bottom: 8px;
-      }
-
-      .placeholder-title {
-        font-size: 18px;
-        font-weight: 600;
-        color: #1e293b;
-        margin-bottom: 4px;
-      }
-
-      .placeholder-description {
-        font-size: 14px;
-        color: #64748b;
-        text-align: center;
-        line-height: 1.5;
-        margin-bottom: 16px;
-      }
-
-      .placeholder-example {
-        background: #f1f5f9;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 12px;
-        font-size: 13px;
-        color: #475569;
-        line-height: 1.6;
-        min-width: 280px;
+      figure.map :deep(.leaflet-container) {
+        width: 100% !important;
+        height: 100% !important;
+        min-height: 300px;
       }
     </style>
     <link
@@ -212,11 +126,6 @@ class LeafletLayerState implements LeafletLayerStateInterface {
         this.createMarkers(route.coordinates).forEach((marker) =>
           layersToAdd.push(marker),
         );
-
-        // layersToAdd = [
-        //   ...layersToAdd,
-        //   ...this.createMarkers(route.coordinates),
-        // ];
       }
       let line = this.addPolyline(route.coordinates);
       if (line) layersToAdd.push(line);
@@ -270,7 +179,13 @@ class LeafletLayerState implements LeafletLayerStateInterface {
         duration: 1.5,
       });
     }
-    this.map.invalidateSize();
+
+    // Single invalidate size after view change to ensure proper tile coverage
+    setTimeout(() => {
+      if (this.map) {
+        this.map.invalidateSize();
+      }
+    }, 200);
   }
 
   teardown() {
@@ -291,16 +206,6 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
   ) {
     let { coordinates, routes, onMapClick, mapConfig } = named;
     this.element = element;
-
-    // Use the coordinates passed in through named arguments directly.
-    // This ensures we always get the latest array reference from Ember's reactivity system,
-    // instead of reusing a stale reference or mutating the original array in place.
-    // By reassigning here, the map layer will correctly re-render with updated points.
-    // let coordinates = named.coordinates;
-    // let routes = named.routes;
-
-    // let mapConfig = named.mapConfig;
-    // let onMapClick = named.onMapClick;
 
     (async () => {
       if (!this.moduleSet) {

@@ -2,24 +2,24 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "RoutePreview",
-        "module": "../fields-preview/route"
+        "name": "Route",
+        "module": "../route"
       }
     },
     "type": "card",
     "attributes": {
-      "route": {
-        "endPoint": {
-          "lat": 34.6937569,
-          "lon": 135.5014539,
-          "searchKey": "osaka"
+      "routes": [
+        {
+          "searchKey": "sibu",
+          "lat": 2.2996601,
+          "lon": 111.8710012
         },
-        "startPoint": {
-          "lat": 35.6768601,
-          "lon": 139.7638947,
-          "searchKey": "tokyo"
+        {
+          "searchKey": "sabah",
+          "lat": 5.4257359,
+          "lon": 117.0326392
         }
-      },
+      ],
       "cardInfo": {
         "notes": null,
         "title": null,

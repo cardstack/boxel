@@ -12,18 +12,20 @@ import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { MapRender } from '../components/map-render';
 
 class AtomTemplate extends Component<typeof GeoPointField> {
-  get latValue() {
-    return this.args.model?.lat ?? 'N/A';
-  }
+  get displayValue() {
+    const lat = this.args.model?.lat;
+    const lon = this.args.model?.lon;
 
-  get lonValue() {
-    return this.args.model?.lon ?? 'N/A';
+    if (lat != null && lon != null) {
+      return `${lat}, ${lon}`;
+    }
+    return 'No coordinates';
   }
 
   <template>
     <div class='geo-point-display'>
       <MapIcon class='map-icon' />
-      <span class='coordinate'>{{this.latValue}}, {{this.lonValue}}</span>
+      <span class='coordinate'>{{this.displayValue}}</span>
     </div>
 
     <style scoped>
@@ -44,26 +46,28 @@ class AtomTemplate extends Component<typeof GeoPointField> {
 }
 
 class EmbeddedTemplate extends Component<typeof GeoPointField> {
-  get latValue() {
-    return this.args.model?.lat ?? 'N/A';
+  get displayValue() {
+    const lat = this.args.model?.lat;
+    const lon = this.args.model?.lon;
+
+    if (lat != null && lon != null) {
+      return `${lat}, ${lon}`;
+    }
+    return 'No coordinates';
   }
 
-  get lonValue() {
-    return this.args.model?.lon ?? 'N/A';
-  }
+  get coordinates() {
+    const lat = this.args.model?.lat;
+    const lon = this.args.model?.lon;
 
-  get coordinate() {
-    const lat = this.args.model?.lat ?? 0;
-    const lon = this.args.model?.lon ?? 0;
-    return [{ lat, lng: lon }];
-  }
-
-  get lonNumber() {
-    return this.args.model?.lon ?? 0;
+    if (lat != null && lon != null) {
+      return [{ lat, lng: lon }];
+    }
+    return [];
   }
 
   get hasValidCoordinates() {
-    return this.args.model?.lat && this.args.model?.lon;
+    return this.args.model?.lat != null && this.args.model?.lon != null;
   }
 
   @action
@@ -74,10 +78,6 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
     }
   }
 
-  get hasNoCoordinates() {
-    return !this.args.model?.lon && !this.args.model?.lat;
-  }
-
   <template>
     <div class='embedded-template'>
       {{#if this.hasValidCoordinates}}
@@ -86,14 +86,13 @@ class EmbeddedTemplate extends Component<typeof GeoPointField> {
             <MapIcon class='map-icon' />
             <div class='geo-info'>
               <h3 class='geo-title'>Location</h3>
-              <span class='coordinate'>{{this.latValue}},
-                {{this.lonValue}}</span>
+              <span class='coordinate'>{{this.displayValue}}</span>
             </div>
           </div>
 
           <div class='map-container'>
             <MapRender
-              @coordinates={{this.coordinate}}
+              @coordinates={{this.coordinates}}
               @onMapClick={{this.updateCoordinate}}
             />
           </div>
