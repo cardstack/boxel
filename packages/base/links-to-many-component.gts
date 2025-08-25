@@ -17,7 +17,7 @@ import {
   PermissionsConsumer,
   getBoxComponent,
 } from './field-component';
-import { AddButton, IconButton, Pill } from '@cardstack/boxel-ui/components';
+import { IconButton, Pill } from '@cardstack/boxel-ui/components';
 import {
   restartableTask,
   type EncapsulatedTaskDescriptor as Descriptor,
@@ -45,6 +45,7 @@ import {
 } from '@cardstack/boxel-ui/modifiers';
 
 import { action } from '@ember/object';
+import AddButton from './components/add-button';
 import { initSharedState } from './shared-state';
 
 interface Signature {
@@ -227,9 +228,6 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       {{#if permissions.canWrite}}
         <AddButton
           class='add-new'
-          @variant='full-width'
-          @iconWidth='12px'
-          @iconHeight='12px'
           {{on 'click' @add}}
           data-test-add-new={{@field.name}}
         >
@@ -343,8 +341,6 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
       <AddButton
         class='add-new'
         @variant='pill'
-        @iconWidth='12px'
-        @iconHeight='12px'
         {{on 'click' @add}}
         data-test-add-new={{@field.name}}
       >
@@ -354,7 +350,6 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
     </div>
     <style scoped>
       .boxel-pills {
-        --boxel-add-button-pill-font: var(--boxel-font-sm);
         --pill-border-radius: var(--boxel-border-radius-sm);
         display: flex;
         flex-wrap: wrap;
@@ -380,9 +375,6 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
       .item-pill:has(button:hover) {
         color: var(--boxel-600);
         border-color: var(--boxel-600);
-      }
-      .add-new {
-        border-radius: var(--pill-border-radius);
       }
     </style>
   </template>
