@@ -102,9 +102,21 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
     });
   }
 
+  private focusSelectedOption() {
+    if (!this.args.selected) return;
+    const selectedOption = document.querySelector(
+      '.boxel-select-option-item.ember-power-select-option--selected',
+    ) as HTMLElement;
+    if (selectedOption) {
+      selectedOption.focus();
+      selectedOption.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+
   @action
   onOpen() {
     this.startObservingTheme();
+    setTimeout(() => this.focusSelectedOption(), 100);
   }
 
   private detectAndSetThemeColors() {
