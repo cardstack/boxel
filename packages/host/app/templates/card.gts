@@ -2,7 +2,9 @@ import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
+import { modifier } from 'ember-modifier';
 import { pageTitle } from 'ember-page-title';
+import window from 'ember-window-mock';
 
 import { consume, provide } from 'ember-provide-consume-context';
 import RouteTemplate from 'ember-route-template';
@@ -44,6 +46,15 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
 
   @service private declare store: StoreService;
 
+  get connectUrl() {
+    // FIXME this is a hack for testing at the moment
+    if (window.location.hostname === 'published.realm') {
+      return 'http://localhost:4205/connect/FIXME';
+    } else {
+      return 'http://localhost:4200/connect/FIXME';
+    }
+  }
+
   get isError() {
     return isCardErrorJSONAPI(this.args.model);
   }
@@ -80,6 +91,21 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
     };
   }
 
+  addMessageListener = modifier((element: HTMLElement) => {
+    let messageHandler = (event: MessageEvent) => {
+      // FIXME check origin
+      if (event.data === 'ready') {
+        element.classList.remove('not-loaded');
+      }
+    };
+
+    window.addEventListener('message', messageHandler);
+
+    return () => {
+      window.removeEventListener('message', messageHandler);
+    };
+  });
+
   <template>
     {{pageTitle this.title}}
     {{#if this.isError}}
@@ -88,6 +114,12 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
         {{@model.id}}
       </div>
     {{else}}
+      <iframe
+        class='connect not-loaded'
+        title='connect'
+        src={{this.connectUrl}}
+        {{this.addMessageListener}}
+      />
       <section
         class='host-mode-container'
         style={{this.backgroundImageStyle}}
@@ -117,6 +149,23 @@ class HostModeComponent extends Component<HostModeComponentSignature> {
 
       .card {
         width: 50rem;
+      }
+
+      .connect {
+        position: fixed;
+        top: var(--boxel-sp);
+        right: var(--boxel-sp);
+        width: 10rem;
+        height: 3rem;
+        border: none;
+        background: transparent;
+        opacity: 1;
+        transition: opacity 0.2s ease-in-out;
+      }
+
+      .connect.not-loaded {
+        width: 0;
+        opacity: 0;
       }
     </style>
   </template>
