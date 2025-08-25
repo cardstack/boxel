@@ -11,42 +11,37 @@ import {
   sendMessage,
   reloadAndOpenAiAssistant,
   isInRoom,
-  registerRealmUsers,
   selectCardFromCatalog,
   getRoomEvents,
   setupTwoStackItems,
   showAllCards,
   setupUserSubscribed,
   setSkillsRedirect,
+  startUniqueTestEnvironment,
+  stopTestEnvironment,
+  type TestEnvironment,
 } from '../helpers';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-} from '../docker/synapse';
-import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
+
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '../helpers/matrix-constants';
 
 test.describe('Room messages', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
+  let testEnv: TestEnvironment;
+  let appURL: string;
   let userCred: Credentials;
+
   test.beforeEach(async ({ page }) => {
     await setSkillsRedirect(page);
     test.setTimeout(120_000);
-    synapse = await synapseStart();
-    await registerRealmUsers(synapse);
-    userCred = await registerUser(synapse, 'user1', 'pass');
-    realmServer = await startRealmServer();
-    await setupUserSubscribed('@user1:localhost', realmServer);
+    testEnv = await startUniqueTestEnvironment();
+
+    appURL = testEnv.config.testHost;
+
+    userCred = await registerUser(testEnv.synapse!, 'user1', 'pass');
+
+    await setupUserSubscribed('@user1:localhost', testEnv.realmServer!);
   });
   test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-    await realmServer.stop();
+    await stopTestEnvironment(testEnv);
   });
 
   test(`it can send a message in a room`, async ({ page }) => {
@@ -261,7 +256,7 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    let messages = await getRoomEvents(synapse);
+    let messages = await getRoomEvents(testEnv.synapse!);
     let message = messages[messages.length - 1];
     let messageData = JSON.parse(message.content.data);
     let cardText = await (
@@ -327,7 +322,7 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    let messages = await getRoomEvents(synapse);
+    let messages = await getRoomEvents(testEnv.synapse!);
     let lastMessage = messages[messages.length - 1];
     let attachedFiles = JSON.parse(lastMessage.content.data).attachedFiles;
     expect(attachedFiles.length).toStrictEqual(1);
@@ -396,7 +391,7 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    let messages = await getRoomEvents(synapse);
+    let messages = await getRoomEvents(testEnv.synapse!);
     let lastMessage = messages[messages.length - 1];
 
     let attachedCards = JSON.parse(lastMessage.content.data).attachedCards;
@@ -922,7 +917,7 @@ test.describe('Room messages', () => {
 
     // There should only be one card fragments event for multiple message events
     // if the card remains unchanged and is attached multiple times.
-    let events = await getRoomEvents(synapse);
+    let events = await getRoomEvents(testEnv.synapse!);
     let messageEvents = events.filter(
       (e) =>
         e.type === 'm.room.message' &&
@@ -974,7 +969,7 @@ test.describe('Room messages', () => {
     let room1 = await getRoomId(page);
 
     let event1 = await putEvent(
-      synapse,
+      testEnv.synapse!,
       userCred.accessToken,
       room1,
       'm.room.message',
@@ -995,7 +990,7 @@ test.describe('Room messages', () => {
     ]);
 
     let replaceEvent1 = await putEvent(
-      synapse,
+      testEnv.synapse!,
       userCred.accessToken,
       room1,
       'm.room.message',
@@ -1021,7 +1016,7 @@ test.describe('Room messages', () => {
     ]);
 
     let replaceEvent2 = await putEvent(
-      synapse,
+      testEnv.synapse!,
       userCred.accessToken,
       room1,
       'm.room.message',

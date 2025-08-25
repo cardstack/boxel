@@ -34,11 +34,11 @@ test.describe('Login', () => {
       'pass',
       false,
       undefined,
-      testEnv.config.testHost,
+      appURL,
     );
 
-    await clearLocalStorage(page, testEnv.config.testHost);
-    await setupUserSubscribed('@user1:localhost', testEnv.realmServer);
+    await clearLocalStorage(page, appURL);
+    await setupUserSubscribed('@user1:localhost', testEnv.realmServer!);
   });
   test.afterEach(async () => {
     await stopTestEnvironment(testEnv);
@@ -310,7 +310,7 @@ test.describe('Login', () => {
   });
 
   test('it can logout at payment setup flow', async ({ page }) => {
-    await registerUser(synapse, 'user2', 'pass');
+    await registerUser(testEnv.synapse!, 'user2', 'pass');
     await login(page, 'user2', 'pass', {
       url: appURL,
     });

@@ -1,59 +1,59 @@
 import { expect, test } from '@playwright/test';
 import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
   registerUser,
   getJoinedRooms,
   getRoomMembers,
   getRoomRetentionPolicy,
 } from '../docker/synapse';
-import { smtpStart, smtpStop } from '../docker/smtp4dev';
-import { login, registerRealmUsers, setupUserSubscribed } from '../helpers';
-
 import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
+  login,
+  setupUserSubscribed,
+  startUniqueTestEnvironment,
+  stopTestEnvironment,
+  type TestEnvironment,
+} from '../helpers';
 
 test.describe('Auth rooms', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
+  let testEnv: TestEnvironment;
   let user: { accessToken: string };
 
   test.beforeEach(async () => {
     // synapse defaults to 30s for beforeEach to finish, we need a bit more time
     // to safely start the realm
     test.setTimeout(120_000);
-    synapse = await synapseStart();
-    await smtpStart();
+    testEnv = await startUniqueTestEnvironment();
 
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
-
-    user = await registerUser(synapse, 'user1', 'pass');
-    await setupUserSubscribed('@user1:localhost', realmServer);
+    user = await registerUser(
+      testEnv.synapse!,
+      'user1',
+      'pass',
+      false,
+      undefined,
+      testEnv.config.testHost,
+    );
+    await setupUserSubscribed('@user1:localhost', testEnv.realmServer!);
   });
 
   test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-    await smtpStop();
-    await realmServer.stop();
+    await stopTestEnvironment(testEnv);
   });
 
   // CS-8988 - this test is flaky and needs to be fixed
   // By delaying await getJoinedRooms(user.accessToken); the test is passing more
   // reliably but that makes the test take too long to run (several seconds)
   test.skip('auth rooms have a retention policy', async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
 
-    let roomIds = await getJoinedRooms(synapse, user.accessToken);
+    let roomIds = await getJoinedRooms(testEnv.synapse!, user.accessToken);
 
     let roomIdToMembers = new Map<string, any>();
 
     for (let room of roomIds) {
-      let members = await getRoomMembers(synapse, room, user.accessToken);
+      let members = await getRoomMembers(
+        testEnv.synapse!,
+        room,
+        user.accessToken,
+      );
       roomIdToMembers.set(room, members);
     }
 
@@ -67,7 +67,7 @@ test.describe('Auth rooms', () => {
 
     for (let room of realmRoomIds) {
       let retentionPolicy = await getRoomRetentionPolicy(
-        synapse,
+        testEnv.synapse!,
         user.accessToken,
         room,
       );

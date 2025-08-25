@@ -1,47 +1,42 @@
 import { test, expect } from '@playwright/test';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-  registerUser,
-} from '../docker/synapse';
-import {
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-  appURL,
-} from '../helpers/isolated-realm-server';
+import { registerUser } from '../docker/synapse';
 import {
   clearLocalStorage,
   createRealm,
   login,
-  registerRealmUsers,
   setupUserSubscribed,
+  startUniqueTestEnvironment,
+  stopTestEnvironment,
+  type TestEnvironment,
 } from '../helpers';
 
 test.describe('Create Realm via Dashboard', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
+  let testEnv: TestEnvironment;
 
   test.beforeEach(async () => {
     // synapse defaults to 30s for beforeEach to finish, we need a bit more time
     // to safely start the realm
     test.setTimeout(120_000);
-    synapse = await synapseStart();
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
-    await registerUser(synapse, 'user1', 'pass');
+    testEnv = await startUniqueTestEnvironment();
+    await registerUser(
+      testEnv.synapse!,
+      'user1',
+      'pass',
+      false,
+      undefined,
+      testEnv.config.testHost,
+    );
   });
 
   test.afterEach(async () => {
-    await realmServer?.stop();
-    await synapseStop(synapse.synapseId);
+    await stopTestEnvironment(testEnv);
   });
 
   test('it can create a new realm', async ({ page }) => {
-    let serverIndexUrl = new URL(appURL).origin;
+    let serverIndexUrl = new URL(testEnv.config.testHost).origin;
     await clearLocalStorage(page, serverIndexUrl);
 
-    await setupUserSubscribed('@user1:localhost', realmServer);
+    await setupUserSubscribed('@user1:localhost', testEnv.realmServer!);
 
     await login(page, 'user1', 'pass', {
       url: serverIndexUrl,

@@ -10,40 +10,46 @@ import {
   sendMessage,
   reloadAndOpenAiAssistant,
   isInRoom,
-  registerRealmUsers,
   setupUserSubscribed,
   clearLocalStorage,
   setSkillsRedirect,
+  startUniqueTestEnvironment,
+  stopTestEnvironment,
+  type TestEnvironment,
 } from '../helpers';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-} from '../docker/synapse';
-import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
 
 test.describe('Skills', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
+  let testEnv: TestEnvironment;
+
+  let environmentSkillCardId: string,
+    defaultSkillCardsForCodeMode: string[],
+    skillCard1: string,
+    skillCard2: string,
+    skillCard3: string;
+
   test.beforeEach(async ({ page }) => {
     test.setTimeout(120_000);
     await setSkillsRedirect(page);
-    synapse = await synapseStart();
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
-    await registerUser(synapse, 'user1', 'pass');
-    await registerUser(synapse, 'user2', 'pass');
-    await clearLocalStorage(page, appURL);
-    await setupUserSubscribed('@user1:localhost', realmServer);
-    await setupUserSubscribed('@user2:localhost', realmServer);
+    testEnv = await startUniqueTestEnvironment();
+
+    await registerUser(testEnv.synapse!, 'user1', 'pass');
+    await registerUser(testEnv.synapse!, 'user2', 'pass');
+    await clearLocalStorage(page, testEnv.config.testHost);
+    await setupUserSubscribed('@user1:localhost', testEnv.realmServer!);
+    await setupUserSubscribed('@user2:localhost', testEnv.realmServer!);
+
+    environmentSkillCardId = `${testEnv.config.testHost}/skills/Skill/boxel-environment`;
+    defaultSkillCardsForCodeMode = [
+      `${testEnv.config.testHost}/skills/Skill/source-code-editing`,
+      `${testEnv.config.testHost}/skills/Skill/boxel-development`,
+      `${testEnv.config.testHost}/skills/Skill/boxel-environment`,
+    ];
+    skillCard1 = `${testEnv.config.testHost}/skill-pirate-speak`;
+    skillCard2 = `${testEnv.config.testHost}/skill-seo`;
+    skillCard3 = `${testEnv.config.testHost}/skill-card-title-editing`;
   });
   test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-    await realmServer.stop();
+    await stopTestEnvironment(testEnv);
   });
 
   async function attachSkill(
@@ -69,18 +75,8 @@ test.describe('Skills', () => {
     ).toContainClass('checked');
   }
 
-  const environmentSkillCardId = `http://localhost:4205/skills/Skill/boxel-environment`;
-  const defaultSkillCardsForCodeMode = [
-    `http://localhost:4205/skills/Skill/source-code-editing`,
-    `http://localhost:4205/skills/Skill/boxel-development`,
-    `http://localhost:4205/skills/Skill/boxel-environment`,
-  ];
-  const skillCard1 = `${appURL}/skill-pirate-speak`;
-  const skillCard2 = `${appURL}/skill-seo`;
-  const skillCard3 = `${appURL}/skill-card-title-editing`;
-
   test(`it can attach skill cards and toggle activation`, async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
     await getRoomId(page);
     await expect(page.locator('[data-test-new-session]')).toHaveCount(1);
     await expect(page.locator('[data-test-skill-menu]')).toHaveCount(1);
@@ -159,7 +155,7 @@ test.describe('Skills', () => {
   test('it will attach code editing skills in code mode by default', async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
     await page.locator(`[data-test-room-settled]`).waitFor();
 
     await page.locator('[data-test-submode-switcher] button').click();
@@ -186,7 +182,7 @@ test.describe('Skills', () => {
   test(`room skills state does not leak when switching rooms`, async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
     let room1 = await getRoomId(page);
 
     await attachSkill(page, skillCard1, true);
@@ -239,7 +235,7 @@ test.describe('Skills', () => {
   });
 
   test(`can attach more skills during chat`, async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard2, true);
     await sendMessage(page, room1, 'Message 1');
@@ -254,7 +250,7 @@ test.describe('Skills', () => {
   });
 
   test(`can disable all skills`, async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard1, true);
     await attachSkill(page, skillCard2);
@@ -295,7 +291,7 @@ test.describe('Skills', () => {
   });
 
   test(`previously disabled skills can be enabled`, async ({ page }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard1, true);
     await attachSkill(page, skillCard2);
@@ -325,7 +321,7 @@ test.describe('Skills', () => {
   test(`skills are persisted per room and do not leak between different users`, async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
     let room1 = await getRoomId(page);
     await attachSkill(page, skillCard1, true);
     await attachSkill(page, skillCard2);
@@ -341,7 +337,7 @@ test.describe('Skills', () => {
     );
 
     await logout(page);
-    await login(page, 'user2', 'pass', { url: appURL });
+    await login(page, 'user2', 'pass', { url: testEnv.config.testHost });
     await getRoomId(page);
     await expect(page.locator('[data-test-active-skills-count]')).toContainText(
       '1 Skill',
@@ -352,7 +348,7 @@ test.describe('Skills', () => {
     );
 
     await logout(page);
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
     await openRoom(page, room1);
     await expect(page.locator('[data-test-active-skills-count]')).toContainText(
       '2 Skills',
@@ -362,7 +358,7 @@ test.describe('Skills', () => {
   test('ensure that the skill card from boxel index is not overwritten by the skill card from matrix store', async ({
     page,
   }) => {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
 
     // create a skill card
     await page.locator('[data-test-create-new-card-button]').click();

@@ -1,44 +1,29 @@
 import { test, expect } from '@playwright/test';
 import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-} from '../docker/synapse';
-import { smtpStart, smtpStop } from '../docker/smtp4dev';
-import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
-import {
   clearLocalStorage,
   validateEmail,
   gotoRegistration,
   assertLoggedIn,
   setupPayment,
-  registerRealmUsers,
+  startUniqueTestEnvironment,
+  stopTestEnvironment,
+  type TestEnvironment,
 } from '../helpers';
 
 test.describe('User Registration w/o Token', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
+  let testEnv: TestEnvironment;
+  let appURL: string;
 
   test.beforeEach(async () => {
     // synapse defaults to 30s for beforeEach to finish, we need a bit more time
     // to safely start the realm
     test.setTimeout(60_000);
-    synapse = await synapseStart({
-      template: 'test-without-registration-token',
-    });
-    await smtpStart();
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
+    testEnv = await startUniqueTestEnvironment();
+    appURL = testEnv.config.testHost;
   });
 
   test.afterEach(async () => {
-    await realmServer.stop();
-    await synapseStop(synapse.synapseId);
-    await smtpStop();
+    await stopTestEnvironment(testEnv);
   });
 
   // CS-8381
@@ -68,7 +53,7 @@ test.describe('User Registration w/o Token', () => {
       'Success! Your email has been validated',
     );
 
-    await setupPayment('@user1:localhost', realmServer, page);
+    await setupPayment('@user1:localhost', testEnv.realmServer!, page);
     await assertLoggedIn(page);
   });
 });
