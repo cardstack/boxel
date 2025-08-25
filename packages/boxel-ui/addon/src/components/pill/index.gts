@@ -118,9 +118,9 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
       }
 
       .variant-muted {
-        --pill-background-color: var(--muted, var(--boxel-100));
+        --pill-background-color: var(--muted, var(--boxel-200));
         --pill-font-color: var(--muted-foreground, var(--boxel-dark));
-        --pill-border-color: var(--muted, var(--boxel-100));
+        --pill-border-color: var(--muted, var(--boxel-400));
       }
 
       .variant-destructive {

@@ -206,9 +206,9 @@ export default class PillUsage extends Component {
       </FreestyleUsage>
       <FreestyleUsage @name='SpecTag Usage'>
         <:example>
-          <Pill class='spec-tag-pill'>
+          <Pill @variant='muted' class='spec-tag-pill'>
             <:iconLeft>
-              <CardIcon />
+              <CardIcon width='18px' height='18px' />
             </:iconLeft>
             <:default>
               Card
@@ -220,8 +220,6 @@ export default class PillUsage extends Component {
     <style scoped>
       .spec-tag-pill {
         --boxel-pill-font: 500 var(--boxel-font-xs);
-        --boxel-pill-background-color: var(--boxel-200);
-        --boxel-pill-icon-size: 18px;
         word-break: initial;
         text-transform: uppercase;
       }

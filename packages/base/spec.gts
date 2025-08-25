@@ -995,7 +995,7 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
   }
   <template>
     {{#if this.icon}}
-      <Pill class='spec-tag-pill' ...attributes>
+      <Pill @variant='muted' class='spec-tag-pill' ...attributes>
         <:iconLeft>
           <this.icon width='18px' height='18px' />
         </:iconLeft>
