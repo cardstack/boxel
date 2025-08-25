@@ -15,7 +15,6 @@ import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 
 export const testHost = 'http://localhost:4205/test';
-export const mailHost = 'http://localhost:5001';
 export const initialRoomName = 'New AI Assistant Chat';
 
 const realmSecretSeed = "shhh! it's a secret";
@@ -37,11 +36,13 @@ export function generateTestConfig() {
   let realmServerPort = basePort + randomOffset;
   let workerManagerPort = realmServerPort + 1;
   let synapsePort = realmServerPort + 2;
+  let smtp4DevPort = realmServerPort + 3;
 
   return {
     realmServerPort,
     workerManagerPort,
     synapsePort,
+    smtp4DevPort,
     testHost: `http://localhost:${realmServerPort}/test`,
   };
 }
@@ -250,6 +251,7 @@ export async function getMonacoContent(page: Page): Promise<string> {
 }
 
 export async function validateEmail(
+  testEnv: TestEnvironment,
   appPage: Page,
   email: string,
   opts?: {
@@ -276,7 +278,7 @@ export async function validateEmail(
 
   let context = appPage.context();
   let emailPage = await context.newPage();
-  await emailPage.goto(mailHost);
+  await emailPage.goto(`http://localhost:${testEnv.config.smtp4DevPort}`);
   await expect(
     emailPage.locator('.messagelist .unread').filter({ hasText: email }),
   ).toHaveCount(sendAttempts);
@@ -313,6 +315,7 @@ export async function validateEmail(
 }
 
 export async function validateEmailForResetPassword(
+  testEnv: TestEnvironment,
   appPage: Page,
   email: string,
   opts?: {
@@ -334,7 +337,7 @@ export async function validateEmailForResetPassword(
 
   let context = appPage.context();
   let emailPage = await context.newPage();
-  await emailPage.goto(mailHost);
+  await emailPage.goto(`http://localhost:${testEnv.config.smtp4DevPort}`);
   await expect(
     emailPage.locator('.messagelist .unread').filter({ hasText: email }),
   ).toHaveCount(sendAttempts);

@@ -45,7 +45,7 @@ test.describe('User Registration w/o Token', () => {
       .locator('[data-test-confirm-password-field]')
       .fill('mypassword1!');
     await page.locator('[data-test-register-btn]').click();
-    await validateEmail(page, 'user1@example.com');
+    await vaildateEmail(testEnv, page, 'user1@example.com');
 
     await page.bringToFront();
 

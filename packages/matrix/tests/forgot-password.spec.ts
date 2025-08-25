@@ -82,6 +82,7 @@ test.describe('Forgot password', () => {
     );
 
     let resetPasswordPage = await validateEmailForResetPassword(
+      testEnv,
       page,
       'user1@example.com',
       {
@@ -186,6 +187,7 @@ test.describe('Forgot password', () => {
     );
 
     let resetPasswordPage = await validateEmailForResetPassword(
+      testEnv,
       page,
       'user1@example.com',
     );
@@ -252,7 +254,7 @@ test.describe('Forgot password', () => {
       1,
     );
 
-    await validateEmailForResetPassword(page, 'user1@example.com', {
+    await validateEmailForResetPassword(testEnv, page, 'user1@example.com', {
       sendAttempts: 2,
     });
   });

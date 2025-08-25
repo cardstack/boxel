@@ -121,7 +121,7 @@ test.describe('Profile', () => {
     ).toHaveCount(1);
 
     // email client
-    await validateEmail(page, 'user2@localhost', {
+    await vaildateEmail(testEnv, page, 'user2@localhost', {
       onAppTrigger: async (page) => {
         await expect(page.locator('[data-test-resend-validation]')).toHaveCount(
           1,
@@ -229,7 +229,7 @@ test.describe('Profile', () => {
     await page.locator('[data-test-confirm-password-button]').click();
 
     // email client
-    await validateEmail(page, 'user2@localhost', {
+    await vaildateEmail(testEnv, page, 'user2@localhost', {
       sendAttempts: 2,
       onAppTrigger: async (page) => {
         await expect(page.locator('[data-test-resend-validation]')).toHaveCount(
