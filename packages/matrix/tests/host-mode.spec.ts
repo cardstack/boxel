@@ -10,7 +10,12 @@ import {
   startServer as startRealmServer,
   type IsolatedRealmServer,
 } from '../helpers/isolated-realm-server';
-import { assertLoggedIn, login, registerRealmUsers } from '../helpers';
+import {
+  assertLoggedIn,
+  login,
+  registerRealmUsers,
+  waitUntil,
+} from '../helpers';
 
 test.describe('Host mode', () => {
   let synapse: SynapseInstance;
@@ -56,6 +61,8 @@ test.describe('Host mode', () => {
     await assertLoggedIn(page);
 
     await page.goto('http://published.realm/mango.json');
+
+    await waitUntil(() => page.locator('iframe').isVisible());
 
     let connectIframe = page.frameLocator('iframe');
 
