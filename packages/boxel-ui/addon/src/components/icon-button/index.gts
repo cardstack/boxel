@@ -1,10 +1,9 @@
-import { on } from '@ember/modifier';
-import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import cn from '../../helpers/cn.ts';
+import LoadingIcon from '../../icons/loading-indicator.gts';
 import type { Icon } from '../../icons/types.ts';
-import LoadingIndicator from '../loading-indicator/index.gts';
+import BoxelButton, { type BoxelButtonKind } from '../button/index.gts';
 
 export interface Signature {
   Args: {
@@ -12,91 +11,74 @@ export interface Signature {
     height?: string;
     icon?: Icon;
     loading?: boolean;
-    variant?: string;
+    round?: boolean;
+    variant?: BoxelButtonKind;
     width?: string;
   };
   Blocks: {
     default: [];
   };
-  Element: HTMLButtonElement;
+  Element: HTMLButtonElement | HTMLAnchorElement;
 }
 
-class IconButton extends Component<Signature> {
-  @tracked isHoverOnButton = false;
+const IconButton: TemplateOnlyComponent<Signature> = <template>
+  <BoxelButton
+    class={{cn 'boxel-icon-button' is-round=@round loading=@loading}}
+    @class={{@class}}
+    @kind={{@variant}}
+    @size='auto'
+    ...attributes
+  >
+    {{#if @loading}}
+      <LoadingIcon
+        class='loading-icon'
+        width={{if @width @width '16px'}}
+        height={{if @height @height '16px'}}
+      />
+    {{else if @icon}}
+      <@icon
+        width={{if @width @width '16px'}}
+        height={{if @height @height '16px'}}
+        class='svg-icon'
+      />
+    {{/if}}
+  </BoxelButton>
+  <style scoped>
+    .boxel-icon-button {
+      --icon-color: var(--boxel-icon-button-icon-color, currentColor);
+      width: var(--boxel-icon-button-width, var(--boxel-icon-lg));
+      height: var(--boxel-icon-button-height, var(--boxel-icon-lg));
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(
+        --boxel-icon-button-background,
+        var(--boxel-button-color)
+      );
+      color: var(--boxel-icon-button-color, var(--boxel-button-text-color));
+      z-index: 0;
+      overflow: hidden;
+      transition: var(
+        --boxel-icon-button-transition,
+        var(--boxel-transition-properties)
+      );
+    }
+    .is-round {
+      border-radius: 50%;
+    }
 
-  onMouseEnterButton = (_e: MouseEvent) => {
-    this.isHoverOnButton = true;
-  };
+    @media (prefers-reduced-motion: no-preference) {
+      .loading-icon {
+        animation: spin 6000ms linear infinite;
+      }
+    }
 
-  onMouseLeaveButton = (_e: MouseEvent) => {
-    this.isHoverOnButton = false;
-  };
-
-  <template>
-    <button
-      class={{cn (if @variant @variant) @class loading=@loading}}
-      {{on 'mouseenter' this.onMouseEnterButton}}
-      {{on 'mouseleave' this.onMouseLeaveButton}}
-      ...attributes
-    >
-      {{#if @loading}}
-        <LoadingIndicator
-          width={{if @width @width '16px'}}
-          height={{if @height @height '16px'}}
-        />
-      {{else if @icon}}
-        <@icon
-          width={{if @width @width '16px'}}
-          height={{if @height @height '16px'}}
-          class='svg-icon'
-        />
-      {{/if}}
-    </button>
-    <style scoped>
-      button {
-        --inner-boxel-icon-button-width: var(--boxel-icon-button-width, 40px);
-        --inner-boxel-icon-button-height: var(--boxel-icon-button-height, 40px);
-        width: var(--inner-boxel-icon-button-width);
-        height: var(--inner-boxel-icon-button-height);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0;
-        background: var(--boxel-icon-button-background, none);
-        border: 1px solid transparent;
-        color: var(--boxel-icon-button-color, currentColor);
-        z-index: 0;
-        overflow: hidden;
-        transition: var(
-          --boxel-icon-button-transition,
-          var(--boxel-transition-properties)
-        );
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
       }
-      .loading,
-      :disabled {
-        pointer-events: none;
-      }
-      button:not(:disabled):hover {
-        cursor: pointer;
-      }
-
-      .primary {
-        --icon-bg: var(--boxel-highlight);
-        --icon-border: var(--boxel-highlight);
-      }
-
-      .secondary {
-        --icon-color: var(--boxel-highlight);
-        border: 1px solid rgb(255 255 255 / 35%);
-        border-radius: 100px;
-        background-color: var(--boxel-icon-button-background, #41404d);
-      }
-
-      .secondary:hover {
-        background-color: var(--boxel-purple-800);
-      }
-    </style>
-  </template>
-}
+    }
+  </style>
+</template>;
 
 export default IconButton;

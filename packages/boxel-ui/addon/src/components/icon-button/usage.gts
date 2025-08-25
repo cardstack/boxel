@@ -1,4 +1,4 @@
-import { array, fn } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
@@ -9,20 +9,24 @@ import {
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
-import cssVar from '../../helpers/css-var.ts';
+import { cn, cssVar, eq } from '../../helpers.ts';
 import { ALL_ICON_COMPONENTS } from '../../icons.gts';
-import IconPlusCircle from '../../icons/icon-plus-circle.gts';
+import IconPlus from '../../icons/icon-plus.gts';
 import type { Icon } from '../../icons/types.ts';
+import { type BoxelButtonKind, buttonKindOptions } from '../button/index.gts';
 import BoxelIconButton from './index.gts';
 
 export default class IconButtonUsage extends Component {
-  @tracked icon: Icon = IconPlusCircle;
-  @tracked variant?: string;
-  @tracked width = '16px';
-  @tracked height = '16px';
+  variants = buttonKindOptions;
+  @tracked private icon: Icon = IconPlus;
+  @tracked private variant?: BoxelButtonKind;
+  @tracked private width?: string;
+  @tracked private height?: string;
+  @tracked private isLoading = false;
+  @tracked private isRound = false;
 
-  @tracked showIconBorders = false;
-  @tracked hideIconOverflow = false;
+  @tracked private showIconBorders = false;
+  @tracked private hideIconOverflow = false;
 
   cssClassName = 'boxel-icon-button';
   @cssVariable declare boxelIconButtonWidth: CSSVariableInfo;
@@ -44,19 +48,28 @@ export default class IconButtonUsage extends Component {
   <template>
     <FreestyleUsage @name='IconButton'>
       <:example>
-        <BoxelIconButton
-          @icon={{this.icon}}
-          @variant={{this.variant}}
-          @width={{this.width}}
-          @height={{this.height}}
-          aria-label='Special Button'
-          {{on 'click' (fn this.log 'Button clicked')}}
-          style={{cssVar
-            boxel-icon-button-width=this.boxelIconButtonWidth.value
-            boxel-icon-button-height=this.boxelIconButtonHeight.value
-            boxel-icon-button-background=this.boxelIconButtonBackground.value
+        <div
+          class={{cn
+            'usage-icon-button-background'
+            usage-button-dark-mode-background=(eq this.variant 'secondary-dark')
           }}
-        />
+        >
+          <BoxelIconButton
+            @icon={{this.icon}}
+            @loading={{this.isLoading}}
+            @variant={{this.variant}}
+            @width={{this.width}}
+            @height={{this.height}}
+            @round={{this.isRound}}
+            aria-label='Special Button'
+            {{on 'click' (fn this.log 'Button clicked')}}
+            style={{cssVar
+              boxel-icon-button-width=this.boxelIconButtonWidth.value
+              boxel-icon-button-height=this.boxelIconButtonHeight.value
+              boxel-icon-button-background=this.boxelIconButtonBackground.value
+            }}
+          />
+        </div>
       </:example>
 
       <:api as |Args|>
@@ -70,22 +83,36 @@ export default class IconButtonUsage extends Component {
         <Args.String
           @name='variant'
           @optional={{true}}
-          @description="the variant to render as (applies CSS class) - 'null' or 'primary' or 'secondary'"
           @value={{this.variant}}
-          @options={{array 'primary' 'secondary' '<undefined>'}}
+          @options={{this.variants}}
           @onInput={{fn (mut this.variant)}}
-          @defaultValue='<undefined>'
+          @defaultValue='default'
+        />
+        <Args.Bool
+          @name='loading'
+          @optional={{true}}
+          @value={{this.isLoading}}
+          @onInput={{fn (mut this.isLoading)}}
+          @defaultValue='false'
+        />
+        <Args.Bool
+          @name='round'
+          @optional={{true}}
+          @value={{this.isRound}}
+          @onInput={{fn (mut this.isRound)}}
+          @defaultValue='false'
         />
         <Args.String
           @name='width'
-          @description='used to size the SVG rendering (only accepts px values)'
+          @optional={{true}}
+          @description='svg icon width'
           @defaultValue='16px'
           @value={{this.width}}
           @onInput={{fn (mut this.width)}}
         />
         <Args.String
           @name='height'
-          @description='used to size the SVG rendering (only accepts px values)'
+          @description='svg icon height'
           @defaultValue='16px'
           @value={{this.height}}
           @onInput={{fn (mut this.height)}}
@@ -93,28 +120,38 @@ export default class IconButtonUsage extends Component {
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
-          @name='boxel-icon-button-width'
-          @type='dimension'
-          @description='Used to size the boundaries of the button'
-          @defaultValue={{this.boxelIconButtonWidth.defaults}}
-          @value={{this.boxelIconButtonWidth.value}}
-          @onInput={{this.boxelIconButtonWidth.update}}
+          @name='--boxel-icon-button-width'
+          @type='width'
+          @description='width of the button'
+          @defaultValue='40px'
         />
         <Css.Basic
-          @name='boxel-icon-button-height'
-          @type='dimension'
-          @description='Used to size the boundaries of the button'
-          @defaultValue={{this.boxelIconButtonHeight.defaults}}
-          @value={{this.boxelIconButtonHeight.value}}
-          @onInput={{this.boxelIconButtonHeight.update}}
+          @name='--boxel-icon-button-height'
+          @type='height'
+          @description='height of the button'
+          @defaultValue='40px'
         />
         <Css.Basic
-          @name='boxel-icon-button-background'
+          @name='--boxel-icon-button-background'
+          @type='background-color'
+          @defaultValue='#fff'
+        />
+        <Css.Basic
+          @name='--boxel-icon-button-color'
           @type='color'
-          @description='Background color of the icon button'
-          @defaultValue={{this.boxelIconButtonBackground.defaults}}
-          @value={{this.boxelIconButtonBackground.value}}
-          @onInput={{this.boxelIconButtonBackground.update}}
+          @description='font color'
+          @defaultValue='#000'
+        />
+        <Css.Basic
+          @name='--boxel-icon-button-icon-color'
+          @type='color'
+          @description='icon color'
+          @defaultValue='currentColor'
+        />
+        <Css.Basic
+          @name='--boxel-icon-button-transition'
+          @type='transition'
+          @description='css shorthand "transition" property'
         />
       </:cssVars>
     </FreestyleUsage>
@@ -149,6 +186,7 @@ export default class IconButtonUsage extends Component {
                 @variant={{this.variant}}
                 @width={{this.width}}
                 @height={{this.height}}
+                @round={{this.isRound}}
                 aria-label='Special Button'
                 {{on 'click' (fn this.log 'Button clicked')}}
                 class='icon'
@@ -192,6 +230,18 @@ export default class IconButtonUsage extends Component {
         border: 1px solid var(--boxel-500);
         width: calc(var(--boxel-icon-button-width) + 2px);
         height: calc(var(--boxel-icon-button-height) + 2px);
+      }
+
+      .usage-icon-button-background {
+        padding: var(--boxel-sp-xs);
+      }
+      .usage-button-dark-mode-background {
+        background-color: var(--foreground, var(--boxel-700));
+        color: var(--background, var(--boxel-light));
+      }
+
+      :deep(.FreestyleUsageCssVar input) {
+        display: none;
       }
     </style>
   </template>
