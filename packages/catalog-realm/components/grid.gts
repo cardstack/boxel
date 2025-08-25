@@ -4,8 +4,6 @@ import { type CardContext } from 'https://cardstack.com/base/card-api';
 
 import { type Query } from '@cardstack/runtime-common';
 
-import { CardContainer } from '@cardstack/boxel-ui/components';
-
 interface CardsGridSignature {
   Args: {
     query: Query;
@@ -37,19 +35,16 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
           </:loading>
           <:response as |cards|>
             {{#each cards key='url' as |card|}}
-              <li class='{{@selectedView}}-view-container'>
-                <CardContainer
-                  {{@context.cardComponentModifier
-                    cardId=card.url
-                    format='data'
-                    fieldType=undefined
-                    fieldName=undefined
-                  }}
-                  class='card'
-                  @displayBoundaries={{true}}
-                >
-                  <card.component />
-                </CardContainer>
+              <li
+                class='{{@selectedView}}-view-container'
+                {{@context.cardComponentModifier
+                  cardId=card.url
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
+              >
+                <card.component />
               </li>
             {{/each}}
           </:response>

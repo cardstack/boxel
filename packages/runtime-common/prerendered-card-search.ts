@@ -13,7 +13,7 @@ export interface PrerenderedCardLike {
   url: string;
   isError: boolean;
   realmUrl: string;
-  component: ComponentLike<{ Args: {} }>;
+  component: ComponentLike<{ Args: {}; Element: Element }>;
 }
 
 export interface PrerenderedCardComponentSignature {

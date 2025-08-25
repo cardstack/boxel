@@ -124,7 +124,10 @@ export default class RenderService extends Service {
       realmPath,
       componentCodeRef,
     } = params;
-    let component = card.constructor.getComponent(card, undefined, {
+    const cardApi = await this.loaderService.loader.import<typeof CardAPI>(
+      `${baseRealm.url}card-api`,
+    );
+    let component = cardApi.getComponent(card, undefined, {
       componentCodeRef,
     });
 

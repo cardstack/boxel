@@ -11,8 +11,6 @@ import {
 
 import { type PrerenderedCardLike } from '@cardstack/runtime-common';
 
-import { CardContainer } from '@cardstack/boxel-ui/components';
-
 interface CardWithHydrationSignature {
   Args: {
     card: PrerenderedCardLike;
@@ -43,37 +41,28 @@ export class CardWithHydration extends GlimmerComponent<CardWithHydrationSignatu
     {{#if this.isHydrated}}
       {{#if this.cardResource.card}}
         {{#let (getComponent this.cardResource.card) as |Component|}}
-          <CardContainer
+          <Component
             class='card'
-            @displayBoundaries={{true}}
             data-test-cards-grid-item={{removeFileExtension @card.url}}
             data-cards-grid-item={{removeFileExtension @card.url}}
             data-test-hydrated-card
-          >
-            <Component />
-          </CardContainer>
+          />
         {{/let}}
       {{/if}}
     {{else if @card.isError}}
-      <CardContainer
+      <@card.component
         class='card instance-error'
-        @displayBoundaries={{true}}
         data-test-instance-error={{@card.isError}}
         data-test-cards-grid-item={{removeFileExtension @card.url}}
         data-cards-grid-item={{removeFileExtension @card.url}}
-      >
-        <@card.component />
-      </CardContainer>
+      />
     {{else}}
-      <CardContainer
+      <@card.component
         class='card'
-        @displayBoundaries={{true}}
         data-test-cards-grid-item={{removeFileExtension @card.url}}
         data-cards-grid-item={{removeFileExtension @card.url}}
         {{on 'mouseenter' (fn this.hydrateCard @card)}}
-      >
-        <@card.component />
-      </CardContainer>
+      />
     {{/if}}
 
     <style scoped>

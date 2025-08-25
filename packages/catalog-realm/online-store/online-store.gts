@@ -12,7 +12,7 @@ import TextAreaField from 'https://cardstack.com/base/text-area';
 import ColorField from 'https://cardstack.com/base/color';
 import EmailField from 'https://cardstack.com/base/email';
 
-import { Button, CardContainer } from '@cardstack/boxel-ui/components';
+import { Button } from '@cardstack/boxel-ui/components';
 import { eq, gt, formatNumber } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -591,18 +591,15 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                               <p>Failed to load: {{card.url}}</p>
                             </div>
                           {{else}}
-                            <CardContainer
+                            <card.component
+                              class='product-card-container'
                               {{@context.cardComponentModifier
                                 cardId=card.url
                                 format='data'
                                 fieldType=undefined
                                 fieldName=undefined
                               }}
-                              @displayBoundaries={{true}}
-                              class='product-card-container'
-                            >
-                              <card.component />
-                            </CardContainer>
+                            />
                           {{/if}}
                         {{/each}}
                       </div>
@@ -678,18 +675,15 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                               <p>Failed to load: {{card.url}}</p>
                             </div>
                           {{else}}
-                            <CardContainer
+                            <card.component
                               {{@context.cardComponentModifier
                                 cardId=card.url
                                 format='data'
                                 fieldType=undefined
                                 fieldName=undefined
                               }}
-                              @displayBoundaries={{true}}
                               class='order-card-container'
-                            >
-                              <card.component />
-                            </CardContainer>
+                            />
                           {{/if}}
                         {{/each}}
                       </div>
@@ -767,7 +761,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                               <p>Failed to load: {{card.url}}</p>
                             </div>
                           {{else}}
-                            <CardContainer
+                            <card.component
                               {{@context.cardComponentModifier
                                 cardId=card.url
                                 format='data'
@@ -776,9 +770,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
                               }}
                               @displayBoundaries={{true}}
                               class='customer-card-container'
-                            >
-                              <card.component />
-                            </CardContainer>
+                            />
                           {{/if}}
                         {{/each}}
                       </div>

@@ -11,6 +11,8 @@ import { trackedFunction } from 'reactiveweb/function';
 
 import { TrackedSet } from 'tracked-built-ins';
 
+import { CardContainer } from '@cardstack/boxel-ui/components';
+
 import {
   type Query,
   RealmPaths,
@@ -57,14 +59,22 @@ export class PrerenderedCard implements PrerenderedCardLike {
 function getErrorComponent(realmURL: string, url: string) {
   let name = new RealmPaths(new URL(realmURL)).local(new URL(url));
   const DefaultErrorResultComponent: TemplateOnlyComponent<{
-    Element: Element;
+    Element: HTMLDivElement;
   }> = <template>
-    <div class='error' ...attributes>
-      <div class='thumbnail'>
-        <TriangleAlert />
+    <CardContainer
+      class='card instance-error'
+      @displayBoundaries={{true}}
+      data-test-instance-error={{true}}
+      data-test-card={{url}}
+      ...attributes
+    >
+      <div class='error'>
+        <div class='thumbnail'>
+          <TriangleAlert />
+        </div>
+        <div class='name' data-test-instance-error-name>{{name}}</div>
       </div>
-      <div class='name' data-test-instance-error-name>{{name}}</div>
-    </div>
+    </CardContainer>
     <style scoped>
       .error {
         display: flex;
@@ -96,7 +106,7 @@ function getErrorComponent(realmURL: string, url: string) {
       }
     </style>
   </template>;
-  return DefaultErrorResultComponent;
+  return DefaultErrorResultComponent as unknown as HTMLComponent;
 }
 
 export default class PrerenderedCardSearch extends Component<PrerenderedCardComponentSignature> {
