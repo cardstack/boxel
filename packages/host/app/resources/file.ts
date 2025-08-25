@@ -278,6 +278,7 @@ class _FileResource extends Resource<Args> {
         new URL(this._url),
         content,
         opts?.saveType ?? 'editor',
+        { resetLoader: opts?.flushLoader },
       );
       if (this.innerState.state === 'not-found') {
         // TODO think about the "unauthorized" scenario
@@ -297,10 +298,6 @@ class _FileResource extends Resource<Args> {
         write: state.write,
         realmURL: state.realmURL,
       });
-
-      if (opts?.flushLoader) {
-        this.loaderService.resetLoader();
-      }
     },
   );
 

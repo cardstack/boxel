@@ -1,5 +1,7 @@
 import { inject as service } from '@ember/service';
 
+import { hasExecutableExtension } from '@cardstack/runtime-common';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -62,6 +64,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
         new URL(finalFileUrl),
         patchedCode,
         'bot-patch',
+        { resetLoader: hasExecutableExtension(finalFileUrl) },
       );
     }
 
