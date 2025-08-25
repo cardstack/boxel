@@ -191,7 +191,6 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
               {{#if permissions.canWrite}}
                 <IconButton
                   {{sortableHandle}}
-                  @variant='primary'
                   @icon={{FourLines}}
                   @width='18px'
                   @height='18px'
@@ -201,7 +200,6 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
                   data-test-sort={{i}}
                 />
                 <IconButton
-                  @variant='primary'
                   @icon={{IconMinusCircle}}
                   @width='20px'
                   @height='20px'
@@ -325,7 +323,6 @@ class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditor
           <Pill class='item-pill' data-test-pill-item={{i}}>
             <Item @format='atom' @displayContainer={{false}} />
             <IconButton
-              @variant='primary'
               @icon={{IconX}}
               @width='10px'
               @height='10px'

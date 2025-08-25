@@ -86,7 +86,6 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
                 {{#if permissions.canWrite}}
                   <IconButton
                     {{sortableHandle}}
-                    @variant='primary'
                     @icon={{FourLines}}
                     @width='18px'
                     @height='18px'

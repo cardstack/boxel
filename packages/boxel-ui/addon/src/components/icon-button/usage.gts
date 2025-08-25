@@ -4,12 +4,8 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import {
-  type CSSVariableInfo,
-  cssVariable,
-} from 'ember-freestyle/decorators/css-variable';
 
-import { cn, cssVar, eq } from '../../helpers.ts';
+import { cn, eq } from '../../helpers.ts';
 import { ALL_ICON_COMPONENTS } from '../../icons.gts';
 import IconPlus from '../../icons/icon-plus.gts';
 import type { Icon } from '../../icons/types.ts';
@@ -23,15 +19,11 @@ export default class IconButtonUsage extends Component {
   @tracked private width?: string;
   @tracked private height?: string;
   @tracked private isLoading = false;
+  @tracked private isDisabled = false;
   @tracked private isRound = false;
 
   @tracked private showIconBorders = false;
   @tracked private hideIconOverflow = false;
-
-  cssClassName = 'boxel-icon-button';
-  @cssVariable declare boxelIconButtonWidth: CSSVariableInfo;
-  @cssVariable declare boxelIconButtonHeight: CSSVariableInfo;
-  @cssVariable declare boxelIconButtonBackground: CSSVariableInfo;
 
   @action log(message: string): void {
     console.log(message);
@@ -61,13 +53,9 @@ export default class IconButtonUsage extends Component {
             @width={{this.width}}
             @height={{this.height}}
             @round={{this.isRound}}
+            @disabled={{this.isDisabled}}
             aria-label='Special Button'
             {{on 'click' (fn this.log 'Button clicked')}}
-            style={{cssVar
-              boxel-icon-button-width=this.boxelIconButtonWidth.value
-              boxel-icon-button-height=this.boxelIconButtonHeight.value
-              boxel-icon-button-background=this.boxelIconButtonBackground.value
-            }}
           />
         </div>
       </:example>
@@ -102,6 +90,13 @@ export default class IconButtonUsage extends Component {
           @onInput={{fn (mut this.isRound)}}
           @defaultValue='false'
         />
+        <Args.Bool
+          @name='disabled'
+          @optional={{true}}
+          @value={{this.isDisabled}}
+          @onInput={{fn (mut this.isDisabled)}}
+          @defaultValue='false'
+        />
         <Args.String
           @name='width'
           @optional={{true}}
@@ -130,6 +125,11 @@ export default class IconButtonUsage extends Component {
           @type='height'
           @description='height of the button'
           @defaultValue='40px'
+        />
+        <Css.Basic
+          @name='--boxel-icon-button-padding'
+          @type='padding'
+          @defaultValue='0'
         />
         <Css.Basic
           @name='--boxel-icon-button-background'
@@ -187,13 +187,10 @@ export default class IconButtonUsage extends Component {
                 @width={{this.width}}
                 @height={{this.height}}
                 @round={{this.isRound}}
+                @disabled={{this.isDisabled}}
                 aria-label='Special Button'
                 {{on 'click' (fn this.log 'Button clicked')}}
                 class='icon'
-                style={{cssVar
-                  boxel-icon-button-width=this.boxelIconButtonWidth.value
-                  boxel-icon-button-height=this.boxelIconButtonHeight.value
-                }}
               />
               <span class='label'>{{icon.name}}</span>
             </div>

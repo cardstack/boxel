@@ -76,7 +76,6 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
           </DefaultFormatsProvider>
           {{#if permissions.canWrite}}
             <IconButton
-              @variant='primary'
               @icon={{IconMinusCircle}}
               @width='20px'
               @height='20px'
