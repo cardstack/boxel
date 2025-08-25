@@ -48,6 +48,10 @@ export type SaveType =
   | 'copy'
   | 'instance';
 
+export interface SaveSourceOptions {
+  resetLoader?: boolean;
+}
+
 export default class CardService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
@@ -177,7 +181,12 @@ export default class CardService extends Service {
     };
   }
 
-  async saveSource(url: URL, content: string, type: SaveType) {
+  async saveSource(
+    url: URL,
+    content: string,
+    type: SaveType,
+    options?: SaveSourceOptions,
+  ) {
     try {
       let clientRequestId = `${type}:${uuidv4()}`;
       this.clientRequestIds.add(clientRequestId);
@@ -199,6 +208,11 @@ export default class CardService extends Service {
         throw new Error(errorMessage);
       }
       this.subscriber?.(url, content);
+
+      if (options?.resetLoader) {
+        this.loaderService.resetLoader();
+      }
+
       return response;
     } catch (e: any) {
       let error = formattedError(undefined, e)?.errors?.[0];
