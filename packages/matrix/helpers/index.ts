@@ -12,6 +12,7 @@ import { realmPassword } from './realm-credentials';
 import { registerUser } from '../docker/synapse';
 import { IsolatedRealmServer, startServer } from './isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
+import { smtpStart, smtpStop } from '../docker/smtp4dev';
 
 export const testHost = 'http://localhost:4205/test';
 export const mailHost = 'http://localhost:5001';
@@ -19,7 +20,12 @@ export const initialRoomName = 'New AI Assistant Chat';
 
 const realmSecretSeed = "shhh! it's a secret";
 
+interface TestEnvironmentOptions {
+  withSmtp?: boolean;
+}
+
 export interface TestEnvironment {
+  options: TestEnvironmentOptions;
   config: ReturnType<typeof generateTestConfig>;
   synapse?: SynapseInstance;
   realmServer?: IsolatedRealmServer;
@@ -40,7 +46,9 @@ export function generateTestConfig() {
   };
 }
 
-export async function startUniqueTestEnvironment(): Promise<TestEnvironment> {
+export async function startUniqueTestEnvironment(
+  options: TestEnvironmentOptions = {},
+): Promise<TestEnvironment> {
   console.log('[startUniqueTestEnvironment] Starting unique test environment…');
 
   try {
@@ -68,7 +76,12 @@ export async function startUniqueTestEnvironment(): Promise<TestEnvironment> {
       throw error;
     }
 
+    if (options.withSmtp) {
+      await smtpStart();
+    }
+
     return {
+      options,
       config,
       synapse,
       realmServer,
@@ -124,6 +137,10 @@ export async function stopTestEnvironment(env: TestEnvironment) {
   }
   if (env.synapse) {
     await synapseStop(env.synapse.synapseId);
+  }
+
+  if (env.options.withSmtp) {
+    await smtpStop();
   }
 }
 

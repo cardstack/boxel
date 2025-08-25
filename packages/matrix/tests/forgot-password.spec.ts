@@ -1,16 +1,9 @@
 import { expect, test } from '@playwright/test';
 import {
-  synapseStart,
-  synapseStop,
   updateUser,
-  type SynapseInstance,
+  registerUser,
+  createRegistrationToken,
 } from '../docker/synapse';
-import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
-import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import {
   clearLocalStorage,
   assertLoggedIn,
@@ -18,10 +11,11 @@ import {
   gotoForgotPassword,
   validateEmailForResetPassword,
   login,
-  registerRealmUsers,
   setupUserSubscribed,
+  startUniqueTestEnvironment,
+  stopTestEnvironment,
+  type TestEnvironment,
 } from '../helpers';
-import { registerUser, createRegistrationToken } from '../docker/synapse';
 
 const REGISTRATION_TOKEN = 'abc123';
 const name = 'user1';
@@ -30,43 +24,50 @@ const username = 'user1';
 const password = 'mypassword1!';
 
 test.describe('Forgot password', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
+  let testEnv: TestEnvironment;
   test.beforeEach(async ({ page }) => {
     // These tests specifically are pretty slow as there's lots of reloading
     // Add 30s to the overall test timeout
     test.setTimeout(120_000);
-    synapse = await synapseStart();
+    testEnv = await startUniqueTestEnvironment({ withSmtp: true });
 
-    await smtpStart();
-
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
+    let admin = await registerUser(
+      testEnv.synapse!,
+      'admin',
+      'adminpass',
+      true,
+      undefined,
+      testEnv.config.testHost,
+    );
     await createRegistrationToken(
-      synapse,
+      testEnv.synapse!,
       admin.accessToken,
       REGISTRATION_TOKEN,
       1000,
     );
-    await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
-    await clearLocalStorage(page, appURL);
-    await gotoRegistration(page, appURL);
-    await registerUser(synapse, username, password);
-    await updateUser(synapse, admin.accessToken, '@user1:localhost', {
+    await clearLocalStorage(page, testEnv.config.testHost);
+    await gotoRegistration(page, testEnv.config.testHost);
+    await registerUser(
+      testEnv.synapse!,
+      username,
+      password,
+      false,
+      undefined,
+      testEnv.config.testHost,
+    );
+    await updateUser(testEnv.synapse!, admin.accessToken, '@user1:localhost', {
       emailAddresses: [email],
       displayname: name,
     });
-    await setupUserSubscribed('@user1:localhost', realmServer);
+    await setupUserSubscribed('@user1:localhost', testEnv.realmServer!);
   });
 
   test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-    await smtpStop();
-    await realmServer.stop();
+    await stopTestEnvironment(testEnv);
   });
 
   test('It can reset password', async ({ page }) => {
-    await gotoForgotPassword(page, appURL);
+    await gotoForgotPassword(page, testEnv.config.testHost);
 
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),
@@ -121,7 +122,7 @@ test.describe('Forgot password', () => {
     await resetPasswordPage.locator('[data-test-back-to-login-btn]').click();
 
     await login(resetPasswordPage, 'user1', 'mypassword2!', {
-      url: appURL,
+      url: testEnv.config.testHost,
     });
 
     await assertLoggedIn(resetPasswordPage);
@@ -130,7 +131,7 @@ test.describe('Forgot password', () => {
   test('It shows an error when email does not belong to any account', async ({
     page,
   }) => {
-    await gotoForgotPassword(page, appURL);
+    await gotoForgotPassword(page, testEnv.config.testHost);
 
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),
@@ -169,7 +170,7 @@ test.describe('Forgot password', () => {
   test('It shows an error when password does not meet the requirement', async ({
     page,
   }) => {
-    await gotoForgotPassword(page, appURL);
+    await gotoForgotPassword(page, testEnv.config.testHost);
 
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),
@@ -237,7 +238,7 @@ test.describe('Forgot password', () => {
   });
 
   test('it can resend email validation message', async ({ page }) => {
-    await gotoForgotPassword(page, appURL);
+    await gotoForgotPassword(page, testEnv.config.testHost);
 
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),

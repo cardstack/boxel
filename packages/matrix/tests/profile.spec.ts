@@ -1,56 +1,48 @@
 import { expect, type Page, test } from '@playwright/test';
-import {
-  synapseStart,
-  synapseStop,
-  type SynapseInstance,
-  registerUser,
-  updateUser,
-} from '../docker/synapse';
-import { smtpStart, smtpStop } from '../docker/smtp4dev';
+import { registerUser, updateUser } from '../docker/synapse';
 import {
   login,
   validateEmail,
   assertLoggedOut,
   assertLoggedIn,
-  registerRealmUsers,
   setupUserSubscribed,
+  startUniqueTestEnvironment,
+  stopTestEnvironment,
+  type TestEnvironment,
 } from '../helpers';
-import {
-  appURL,
-  startServer as startRealmServer,
-  type IsolatedRealmServer,
-} from '../helpers/isolated-realm-server';
 
 test.describe('Profile', () => {
-  let synapse: SynapseInstance;
-  let realmServer: IsolatedRealmServer;
+  let testEnv: TestEnvironment;
+
   test.beforeEach(async () => {
     test.setTimeout(120_000);
-    synapse = await synapseStart();
-    await smtpStart();
+    testEnv = await startUniqueTestEnvironment({ withSmtp: true });
 
-    let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await registerRealmUsers(synapse);
-    await registerUser(synapse, 'user1', 'pass');
-    await registerUser(synapse, 'user0', 'pass');
-    realmServer = await startRealmServer();
-    await updateUser(synapse, admin.accessToken, '@user1:localhost', {
+    let admin = await registerUser(
+      testEnv.synapse!,
+      'admin',
+      'adminpass',
+      true,
+    );
+
+    await registerUser(testEnv.synapse!, 'user1', 'pass');
+    await registerUser(testEnv.synapse!, 'user0', 'pass');
+
+    await updateUser(testEnv.synapse!, admin.accessToken, '@user1:localhost', {
       emailAddresses: ['user1@localhost'],
     });
-    await updateUser(synapse, admin.accessToken, '@user0:localhost', {
+    await updateUser(testEnv.synapse!, admin.accessToken, '@user0:localhost', {
       emailAddresses: ['user0@localhost'],
     });
-    await setupUserSubscribed('@user1:localhost', realmServer);
+    await setupUserSubscribed('@user1:localhost', testEnv.realmServer!);
   });
 
   test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-    await smtpStop();
-    await realmServer.stop();
+    await stopTestEnvironment(testEnv);
   });
 
   async function gotoProfileSettings(page: Page) {
-    await login(page, 'user1', 'pass', { url: appURL });
+    await login(page, 'user1', 'pass', { url: testEnv.config.testHost });
     await page.locator('[data-test-profile-icon-button]').click();
     await page.locator('[data-test-settings-button]').click();
   }
