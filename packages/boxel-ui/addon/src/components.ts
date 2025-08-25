@@ -55,6 +55,7 @@ import ResizablePanelGroup, {
   ResizeHandle,
 } from './components/resizable-panel-group/index.gts';
 import BoxelSelect from './components/select/index.gts';
+import SelectionSummary from './components/selection-summary/index.gts';
 import SkeletonPlaceholder from './components/skeleton-placeholder/index.gts';
 import SortDropdown, {
   type SortOption,
@@ -125,6 +126,7 @@ export {
   ResizablePanel,
   ResizablePanelGroup,
   ResizeHandle,
+  SelectionSummary,
   SkeletonPlaceholder,
   SortDropdown,
   Switch,
