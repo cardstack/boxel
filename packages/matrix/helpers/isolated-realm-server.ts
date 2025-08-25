@@ -97,7 +97,7 @@ export async function startServer(
   }
   if (workerManager.stderr) {
     workerManager.stderr.on('data', (data: Buffer) =>
-      console.error(`worker[${workerManagerPort}]: ${data.toString()}`),
+      console.error(`worker[${workerManagerPort}] sterr: ${data.toString()}`),
     );
   }
 
