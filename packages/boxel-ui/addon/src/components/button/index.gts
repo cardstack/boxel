@@ -7,24 +7,27 @@ import { eq, not, or } from '../../helpers/truth-helpers.ts';
 import LoadingIndicator from '../loading-indicator/index.gts';
 
 export type BoxelButtonKind =
+  | 'default'
   | 'primary'
   | 'secondary'
-  | 'outline'
-  | 'secondary-dark'
-  | 'secondary-light'
-  | 'danger'
+  | 'muted'
+  | 'destructive'
+  | 'danger' // deprecated, same as 'destructive'
+  | 'text-only'
   | 'primary-dark'
-  | 'text-only';
+  | 'secondary-light'
+  | 'secondary-dark';
 
 export const buttonKindOptions: BoxelButtonKind[] = [
+  'default',
   'primary',
   'secondary',
-  'outline',
-  'secondary-dark',
-  'secondary-light',
-  'danger',
-  'primary-dark',
+  'muted',
+  'destructive',
   'text-only',
+  'primary-dark',
+  'secondary-light',
+  'secondary-dark',
 ];
 
 export type BoxelButtonSize =
@@ -36,10 +39,10 @@ export type BoxelButtonSize =
   | 'touch';
 
 export const buttonSizeOptions = [
+  'base',
   'auto',
   'extra-small',
   'small',
-  'base',
   'tall',
   'touch',
 ];
@@ -68,7 +71,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       'boxel-button'
       @class
       (concat 'size-' (if @size @size 'base'))
-      (concat 'kind-' (if @kind @kind 'secondary'))
+      (concat 'kind-' (if @kind @kind 'default'))
       loading=@loading
     )
     as |classes|
@@ -215,6 +218,18 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       * --boxel-button-text-color (css "color" property)
       *
       */
+      .kind-default {
+        --boxel-button-color: var(--background, transparent);
+        --boxel-button-text-color: var(--foreground, var(--boxel-dark));
+        --boxel-button-border: 1px solid var(--border, var(--boxel-400));
+      }
+      .kind-default:not(:disabled):hover,
+      .kind-default:not(:disabled):active {
+        --boxel-button-color: var(--accent);
+        --boxel-button-text-color: var(--accent-foreground);
+        --boxel-button-border: 1px solid var(--border, var(--boxel-dark));
+      }
+
       .kind-primary {
         --boxel-button-color: var(--primary, var(--boxel-highlight));
         --boxel-button-text-color: var(--primary-foreground, var(--boxel-dark));
@@ -240,16 +255,52 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         --boxel-button-border: 1px solid var(--secondary, var(--boxel-dark));
       }
 
-      .kind-outline {
-        --boxel-button-color: var(--background, var(--boxel-light));
-        --boxel-button-text-color: var(--foreground, var(--boxel-dark));
-        --boxel-button-border: 1px solid
-          var(--border, var(--boxel-button-border-color));
+      .kind-muted {
+        --boxel-button-color: var(--muted, var(--boxel-100));
+        --boxel-button-text-color: var(--muted-foreground, var(--boxel-dark));
+        --boxel-button-border: 1px solid var(--boxel-button-color);
       }
-      .kind-outline:not(:disabled):hover,
-      .kind-outline:not(:disabled):active {
+
+      .kind-destructive,
+      .kind-danger {
+        --boxel-button-color: var(--destructive, var(--boxel-danger));
+        --boxel-button-text-color: var(
+          --destructive-foreground,
+          var(--boxel-light-100)
+        );
+        --boxel-button-box-shadow: var(--shadow);
+      }
+      .kind-destructive:not(:disabled):hover,
+      .kind-destructive:not(:disabled):active,
+      .kind-danger:not(:disabled):hover,
+      .kind-danger:not(:disabled):active {
+        --boxel-button-color: var(--destructive, var(--boxel-danger-hover));
+      }
+
+      .kind-text-only {
+        /* transparent background and border */
+        --boxel-button-color: transparent;
+        --boxel-button-text-color: inherit;
+      }
+      .kind-text-only:not(:disabled):hover,
+      .kind-text-only:not(:disabled):active {
         --boxel-button-color: var(--accent, var(--boxel-200));
         --boxel-button-text-color: var(--accent-foreground, var(--boxel-dark));
+      }
+
+      .kind-primary-dark {
+        /* inverted background and foreground */
+        --boxel-button-color: var(--foreground, var(--boxel-dark));
+        --boxel-button-text-color: var(--background, var(--boxel-light));
+        --boxel-button-box-shadow: var(--shadow);
+      }
+      .kind-primary-dark:not(:disabled):hover,
+      .kind-primary-dark:not(:disabled):active {
+        --boxel-button-color: color-mix(
+          in oklab,
+          var(--foreground, var(--boxel-dark)) 85%,
+          transparent
+        );
       }
 
       .kind-secondary-light {
@@ -273,43 +324,6 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
       .kind-secondary-dark:not(:disabled):hover,
       .kind-secondary-dark:not(:disabled):active {
         --boxel-button-border: 1px solid var(--boxel-button-text-color);
-      }
-
-      .kind-danger {
-        --boxel-button-color: var(--destructive, var(--boxel-danger));
-        --boxel-button-text-color: var(
-          --destructive-foreground,
-          var(--boxel-light-100)
-        );
-        --boxel-button-box-shadow: var(--shadow);
-      }
-      .kind-danger:not(:disabled):hover,
-      .kind-danger:not(:disabled):active {
-        --boxel-button-color: var(--destructive, var(--boxel-danger-hover));
-      }
-
-      .kind-primary-dark {
-        --boxel-button-color: var(--secondary-foreground, var(--boxel-dark));
-        --boxel-button-text-color: var(--secondary, var(--boxel-light));
-        --boxel-button-box-shadow: var(--shadow);
-      }
-      .kind-primary-dark:not(:disabled):hover,
-      .kind-primary-dark:not(:disabled):active {
-        --boxel-button-color: color-mix(
-          in oklab,
-          var(--secondary-foreground, var(--boxel-dark)) 85%,
-          transparent
-        );
-      }
-
-      .kind-text-only {
-        --boxel-button-color: transparent;
-        --boxel-button-text-color: inherit;
-      }
-      .kind-text-only:not(:disabled):hover,
-      .kind-text-only:not(:disabled):active {
-        --boxel-button-color: var(--accent, var(--boxel-200));
-        --boxel-button-text-color: var(--accent-foreground, var(--boxel-dark));
       }
 
       /**

@@ -18,6 +18,7 @@ interface ChooseRealmActionSignature {
     writableRealms: { name: string; url: string; iconURL?: string }[];
     onAction: (realmUrl: string) => Promise<void>;
     context?: CardContext;
+    size?: 'extra-small';
   };
 }
 
@@ -53,7 +54,7 @@ export default class ChooseRealmAction extends GlimmerComponent<ChooseRealmActio
           data-test-catalog-listing-action={{@name}}
           class='card-action-button'
           @kind='primary'
-          @size='extra-small'
+          @size={{@size}}
           @loading={{this.runAction.isRunning}}
           {{on 'click' this.handleStopPropagation}}
           {{bindings}}

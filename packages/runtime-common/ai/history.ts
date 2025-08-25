@@ -7,9 +7,9 @@ import type {
   MessageEvent,
   RealmServerEvent,
 } from 'https://cardstack.com/base/matrix-event';
-import { type IRoomEvent } from 'matrix-js-sdk';
-import * as Sentry from '@sentry/node';
-import { logger } from '@cardstack/runtime-common';
+import { MatrixClient, type IRoomEvent } from 'matrix-js-sdk';
+
+import { logger } from '../log';
 import {
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
@@ -19,19 +19,16 @@ import {
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
-} from '@cardstack/runtime-common/matrix-constants';
+} from '../matrix-constants';
 
-import { downloadFile, MatrixClient } from './matrix/util';
+import { downloadFile } from './matrix-utils';
 import { SerializedFileDef } from 'https://cardstack.com/base/file-api';
+import { HistoryConstructionError } from './types';
 
-let log = logger('ai-bot:history');
-
-export class HistoryConstructionError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'HistoryConstructionError';
-  }
+function getLog() {
+  return logger('ai-bot:history');
 }
+
 export async function constructHistory(
   eventlist: IRoomEvent[],
   client: MatrixClient,
@@ -165,15 +162,7 @@ function parseContentData(event: IRoomEvent) {
     try {
       event.content.data = JSON.parse(event.content.data);
     } catch (e) {
-      Sentry.captureException(e, {
-        attachments: [
-          {
-            data: event.content.data,
-            filename: 'rawEventContentData.txt',
-          },
-        ],
-      });
-      log.error('Error parsing JSON', e);
+      getLog().error('Error parsing JSON', e);
       throw new HistoryConstructionError((e as Error).message);
     }
   }

@@ -61,6 +61,7 @@ test.describe('Login', () => {
     ).toHaveCount(1);
 
     await logout(page);
+    await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
     await assertLoggedOut(page);
     await page.reload();
     await assertLoggedOut(page);

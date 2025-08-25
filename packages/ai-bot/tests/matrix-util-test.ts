@@ -1,12 +1,12 @@
 import { test } from 'qunit';
 import { FakeMatrixClient } from './helpers/fake-matrix-client';
-import { getRoomEvents } from '../lib/matrix/util';
 import { Method } from 'matrix-js-sdk';
 import type {
   CardMessageEvent,
   MatrixEvent as DiscreteMatrixEvent,
 } from 'https://cardstack.com/base/matrix-event';
-import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common';
+import { getRoomEvents } from '@cardstack/runtime-common/ai';
 
 /**
  * Creates a mock Matrix event with all required properties
