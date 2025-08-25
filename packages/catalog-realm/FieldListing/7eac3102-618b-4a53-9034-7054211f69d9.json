@@ -8,16 +8,16 @@
     },
     "type": "card",
     "attributes": {
-      "name": "Geo Search Point Field",
+      "name": "Route Field",
       "images": [
-        "https://boxel-images.boxel.ai/app-assets/catalog/geo-search-point-listing/screenshot_01.png"
+        "https://boxel-images.boxel.ai/app-assets/catalog/route-listing/screenshot_01.png"
       ],
-      "summary": "The GeoSearchPointField is an enhanced geographic field type that extends the base GeoPointField to provide address search functionality with automatic geocoding. It allows users to search for locations by address and automatically converts them to geographic coordinate.",
+      "summary": "Smart route visualization component that transforms complex navigation data into intuitive, interactive previews. Perfect for travel apps, delivery services, and mapping applications requiring clear route presentation",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/geo-search-point-listing/thumbnail.png"
+        "title": "Route Preview Component",
+        "description": "Interactive component that displays route information and navigation previews for web applications. Provides visual feedback for routing states and navigation flows.",
+        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/route-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -38,27 +38,32 @@
       },
       "specs.0": {
         "links": {
-          "self": "../Spec/100481ef-b683-4748-b217-9076b5c04154"
+          "self": "../Spec/dc835c92-0770-4eac-b102-618b3a539034"
         }
       },
       "specs.1": {
         "links": {
-          "self": "../Spec/b6839748-3217-4076-b5c0-415482adeb07"
+          "self": "../Spec/707eac31-0261-4b3a-9390-347054211f69"
         }
       },
       "specs.2": {
         "links": {
-          "self": "../Spec/efb68397-4832-4790-b6b5-c0415482adeb"
+          "self": "../Spec/07707eac-3102-418b-ba53-90347054211f"
         }
       },
       "specs.3": {
         "links": {
-          "self": "../Spec/0481efb6-8397-4832-9790-76b5c0415482"
+          "self": "../Spec/5c920770-7eac-4102-a18b-3a5390347054"
         }
       },
       "specs.4": {
         "links": {
-          "self": "../Spec/81efb683-9748-4217-9076-b5c0415482ad"
+          "self": "../Spec/9207707e-ac31-4261-8b3a-539034705421"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/835c9207-707e-4c31-8261-8b3a53903470"
         }
       },
       "publisher": {
@@ -68,20 +73,15 @@
       },
       "examples.0": {
         "links": {
-          "self": "../fields-preview/GeoSearchPointPreview/2b042a26-1932-47bd-b7c8-92d37e9a7e59"
+          "self": "../RoutePreview/10535788-cf82-4c9e-a97e-5466c12058b7"
         }
       },
       "categories.0": {
         "links": {
-          "self": "../Category/developer-tools-code"
-        }
-      },
-      "categories.1": {
-        "links": {
           "self": "../Category/38b5d1dc-00d3-4a19-8998-29f0c19081de"
         }
       },
-      "categories.2": {
+      "categories.1": {
         "links": {
           "self": "../Category/travel-experiences"
         }

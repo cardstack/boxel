@@ -1,61 +1,33 @@
 import GlimmerComponent from '@glimmer/component';
 import Modifier, { NamedArgs } from 'ember-modifier';
-import { action } from '@ember/object';
 
 export interface Coordinate {
+  address?: string;
   lat: number;
   lng: number;
 }
 
-export interface RoutePoint extends Coordinate {
-  address?: string;
+export interface Route {
+  name?: string;
+  coordinates: Coordinate[];
+}
+
+interface LeafletMapConfig {
+  tileserverUrl?: string;
+  disableMapClick?: boolean;
+  singleZoom?: number;
+  fitBoundsPadding?: number;
+  showLayerControl?: boolean;
 }
 
 interface MapRenderSignature {
-  Args:
-    | {
-        coordinate: Coordinate;
-        route?: never;
-        tileserverUrl?: string;
-        disableMapClick?: boolean;
-        onMapClickUpdate?: (coordinate: Coordinate) => void;
-        onRouteUpdate?: never;
-      }
-    | {
-        route: RoutePoint[];
-        coordinate?: never;
-        tileserverUrl?: string;
-        disableMapClick?: boolean;
-        onMapClickUpdate?: (coordinate: Coordinate) => void;
-        onRouteUpdate?: (route: RoutePoint[]) => void;
-      };
+  Args: {
+    coordinates?: Coordinate[]; //use this arg if you want markers only
+    routes?: Route[]; //use this arg if you want to render routes (polylines)
+    mapConfig?: LeafletMapConfig;
+    onMapClick?: (coordinate: Coordinate) => void;
+  };
   Element: HTMLElement;
-}
-
-interface LeafletMouseEvent {
-  originalEvent: MouseEvent;
-  latlng: Coordinate;
-  target: HTMLElement;
-  type: string;
-}
-
-interface LeafletMap {
-  setView: (coords: [number, number], zoom: number) => LeafletMap;
-  addTo: (container: HTMLElement) => LeafletMap;
-  on: (
-    event: string,
-    handler: (event: LeafletMouseEvent) => void,
-  ) => LeafletMap;
-  removeLayer: (layer: any) => LeafletMap;
-  fitBounds: (bounds: any) => LeafletMap;
-  remove: () => void;
-}
-
-interface LeafletMarker {
-  addTo: (map: LeafletMap) => LeafletMarker;
-  bindPopup: (content: string) => LeafletMarker;
-  on: (event: string, handler: () => void) => LeafletMarker;
-  remove: () => void;
 }
 
 declare global {
@@ -63,51 +35,34 @@ declare global {
 }
 
 export class MapRender extends GlimmerComponent<MapRenderSignature> {
-  map: any;
-
   get shouldShowMap() {
-    const coords = getCoordinateOrRoute(this.args);
-    return !!coords;
-  }
-
-  get coordinate() {
-    return getCoordinateOrRoute(this.args);
-  }
-
-  @action
-  setMap(map: any) {
-    this.map = map;
-  }
-
-  @action
-  handleMapClick(coordinate: Coordinate) {
-    if (this.args.onMapClickUpdate) {
-      this.args.onMapClickUpdate(coordinate);
-    }
-  }
-
-  @action
-  handleRouteUpdate(route: RoutePoint[]) {
-    if (this.args.onRouteUpdate) {
-      this.args.onRouteUpdate(route);
-    }
+    const coords = this.args.coordinates?.filter(
+      (coord) =>
+        coord &&
+        typeof coord.lat === 'number' &&
+        typeof coord.lng === 'number' &&
+        !isNaN(coord.lat) &&
+        !isNaN(coord.lng) &&
+        coord.lat >= -90 &&
+        coord.lat <= 90 &&
+        coord.lng >= -180 &&
+        coord.lng <= 180,
+    );
+    return coords && coords.length > 0;
   }
 
   <template>
-    {{#if this.shouldShowMap}}
-      <figure
-        {{LeafletModifier
-          coordinate=@coordinate
-          route=@route
-          tileserverUrl=@tileserverUrl
-          disableMapClick=@disableMapClick
-          setMap=this.setMap
-          onMapClick=this.handleMapClick
-          onRouteUpdate=this.handleRouteUpdate
-        }}
-        class='map'
-      />
-    {{else}}
+    {{!-- {{#if this.shouldShowMap}} --}}
+    <figure
+      {{LeafletModifier
+        coordinates=@coordinates
+        routes=@routes
+        mapConfig=@mapConfig
+        onMapClick=@onMapClick
+      }}
+      class='map'
+    />
+    {{!-- {{else}}
       <div class='map-placeholder'>
         <div class='placeholder-text'>
           <div class='simple-placeholder'>
@@ -124,7 +79,7 @@ export class MapRender extends GlimmerComponent<MapRenderSignature> {
           </div>
         </div>
       </div>
-    {{/if}}
+    {{/if}} --}}
 
     <style scoped>
       figure.map {
@@ -212,116 +167,204 @@ interface LeafletModifierSignature {
   Args: {
     Positional: [];
     Named: {
-      coordinate?: Coordinate;
-      route?: RoutePoint[];
-      tileserverUrl?: string;
-      disableMapClick?: boolean;
-      setMap?: (map: LeafletMap) => void;
+      coordinates?: Coordinate[];
+      routes?: Route[];
+      mapConfig?: {
+        tileserverUrl?: string;
+        disableMapClick?: boolean;
+        singleZoom?: number;
+        fitBoundsPadding?: number;
+        showLayerControl?: boolean;
+      };
       onMapClick?: (coordinate: Coordinate) => void;
-      onRouteUpdate?: (route: RoutePoint[]) => void;
     };
   };
 }
 
-export class LeafletModifier extends Modifier<LeafletModifierSignature> {
-  element: HTMLElement | null = null;
-  map: LeafletMap | null = null;
-  marker: LeafletMarker | null = null;
+interface LeafletLayerStateInterface {
+  onCoordinatesChange: (coordinates: Coordinate[]) => void;
+  onRoutesChange: (routes: Route[]) => void;
+}
 
-  modify(
-    element: HTMLElement,
-    [],
-    namedArgs: NamedArgs<LeafletModifierSignature>,
-  ) {
-    this.element = element;
+class LeafletLayerState implements LeafletLayerStateInterface {
+  group: any | null = null;
+  constructor(private map: any) {
+    this.group = L.layerGroup();
+    this.group.addTo(this.map);
+  }
 
-    this.initializeMap(
-      namedArgs.tileserverUrl,
-      namedArgs.coordinate,
-      namedArgs.route,
-      namedArgs.setMap,
-      namedArgs.onMapClick,
-      namedArgs.onRouteUpdate,
-      namedArgs.disableMapClick,
+  addLayers(layers: any[]) {
+    layers.forEach((layer) => this.group?.addLayer(layer));
+    this.readjustMapView();
+  }
+
+  onCoordinatesChange(coordinates: Coordinate[]) {
+    this.teardown();
+    let markers = this.createMarkers(coordinates);
+    this.addLayers(markers);
+  }
+
+  onRoutesChange(routes: Route[]) {
+    this.teardown();
+    let layersToAdd: any[] = [];
+    routes.forEach((route) => {
+      if (route.coordinates.length > 0) {
+        this.createMarkers(route.coordinates).forEach((marker) =>
+          layersToAdd.push(marker),
+        );
+
+        // layersToAdd = [
+        //   ...layersToAdd,
+        //   ...this.createMarkers(route.coordinates),
+        // ];
+      }
+      let line = this.addPolyline(route.coordinates);
+      if (line) layersToAdd.push(line);
+    });
+    this.addLayers(layersToAdd);
+  }
+
+  private createMarkers(coords: Coordinate[]) {
+    return coords.map((c, i) => {
+      const color =
+        i === 0 ? '#22c55e' : i === coords.length - 1 ? '#ef4444' : '#3b82f6';
+      const marker = createMarker(c, color);
+      if (c.address) marker.bindPopup(c.address);
+      return marker;
+    });
+  }
+
+  private addPolyline(coordinates: Coordinate[]) {
+    const latLngs = coordinates.map((c) => L.latLng(c.lat, c.lng));
+    return new L.Polyline(latLngs);
+  }
+
+  private readjustMapView() {
+    let markerLayers = this.group
+      .getLayers()
+      .filter((layer: any) => layer instanceof L.Marker);
+    let coords = markerLayers.map((markerLayer: any) => {
+      return markerLayer.getLatLng();
+    });
+    this.fitMapToCoordinates(
+      coords.map((ll: any) => ({ lat: ll.lat, lng: ll.lng })),
     );
   }
 
-  private initializeMap(
-    tileserverUrl?: string,
-    coordinate?: Coordinate,
-    route?: RoutePoint[],
-    setMap?: (map: LeafletMap) => void,
-    onMapClick?: (coordinate: Coordinate) => void,
-    onRouteUpdate?: (route: RoutePoint[]) => void,
-    disableMapClick?: boolean,
-  ) {
-    // Load Leaflet library dynamically
-    fetch('https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js')
-      .then((r) => r.text())
-      .then((t) => {
-        eval(t);
+  private fitMapToCoordinates(coords: Coordinate[]) {
+    if (!this.map || coords.length === 0) {
+      throw new Error('Map is not initialized or no coordinates provided');
+    }
 
-        // Initialize map with coordinate or defaults
-        const defaultCoords: Coordinate = coordinate || { lat: 0, lng: 0 };
-        const zoom = 13;
-        let map = L.map(this.element!).setView(
-          [defaultCoords.lat, defaultCoords.lng],
-          zoom,
-        );
-        this.map = map;
-
-        // Add tile layer (map background)
-        L.tileLayer(
-          tileserverUrl || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-        ).addTo(map);
-
-        // Draw route if provided
-        if (route && route.length > 0) {
-          drawRoute(map, route, onRouteUpdate);
-        }
-
-        // Create default marker display on map
-        this.marker = createMarker(defaultCoords, '#ef4444', 'marker').addTo(
-          map,
-        );
-        if (this.marker) {
-          setupMarkerPopup(this.marker, defaultCoords, map, 'Location');
-        }
-
-        // Handle map click events
-        if (!disableMapClick) {
-          map.on('click', (event: LeafletMouseEvent) => {
-            if (isMarkerClick(event)) {
-              return;
-            }
-
-            const clickCoords: Coordinate = event.latlng;
-
-            // Remove existing marker
-            if (this.marker) {
-              map.removeLayer(this.marker);
-            }
-
-            // Create new marker at clicked location
-            this.marker = createMarker(clickCoords, '#ef4444', 'marker').addTo(
-              map,
-            );
-
-            if (this.marker) {
-              setupMarkerPopup(this.marker, clickCoords, map, 'Location');
-            }
-            onMapClick?.(clickCoords);
-          });
-        }
-
-        setMap?.(map);
+    if (coords.length === 1) {
+      // single point → just flyTo
+      this.map.flyTo([coords[0].lat, coords[0].lng], 15, {
+        animate: true,
+        duration: 1.2,
       });
+    } else {
+      const latLngs = coords.map((c) => L.latLng([c.lat, c.lng]));
+      this.map.flyToBounds(latLngs, {
+        padding: [32, 32],
+        animate: true,
+        duration: 1.5,
+      });
+    }
+    this.map.invalidateSize();
+  }
+
+  teardown() {
+    this.group?.clearLayers();
+  }
+}
+
+export default class LeafletModifier extends Modifier<LeafletModifierSignature> {
+  element: HTMLElement | null = null;
+  moduleSet: boolean = false;
+  map: any;
+  state: LeafletLayerState | undefined;
+
+  modify(
+    element: HTMLElement,
+    _positional: [],
+    named: NamedArgs<LeafletModifierSignature>,
+  ) {
+    let { coordinates, routes, onMapClick, mapConfig } = named;
+    this.element = element;
+
+    // Use the coordinates passed in through named arguments directly.
+    // This ensures we always get the latest array reference from Ember's reactivity system,
+    // instead of reusing a stale reference or mutating the original array in place.
+    // By reassigning here, the map layer will correctly re-render with updated points.
+    // let coordinates = named.coordinates;
+    // let routes = named.routes;
+
+    // let mapConfig = named.mapConfig;
+    // let onMapClick = named.onMapClick;
+
+    (async () => {
+      if (!this.moduleSet) {
+        let module = await fetch(
+          'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+        );
+        let script = await module.text();
+        eval(script);
+        // the reason we do this is bcos there exist an error when adding a polyline layer
+        // complaining that x() coordinate doesn't exist when calling intersects() method
+        // this I suspect is due to a bug in the conversion of LatLng object into L.Bounds
+        // which is a recurring issue in Leaflet github repo
+        L.Bounds.prototype.intersects = function () {
+          // Always return true (ignore bounds checks)
+          return true;
+        };
+        this.initMap(mapConfig, onMapClick);
+        this.moduleSet = true;
+      }
+      if (!this.map) {
+        return;
+      }
+      if (!this.state) {
+        this.state = new LeafletLayerState(this.map);
+      }
+      if (coordinates) {
+        this.state.onCoordinatesChange(coordinates);
+      }
+      if (routes) {
+        this.state.onRoutesChange(routes);
+      }
+    })();
   }
 
   willRemove() {
-    if (this.marker) {
-      this.marker = null;
+    this.teardown();
+  }
+
+  private initMap(
+    mapConfig?: LeafletMapConfig,
+    onMapClick?: (c: Coordinate) => void,
+  ) {
+    const zoom = mapConfig?.singleZoom ?? 13;
+    this.map = L.map(this.element!).setView([0, 0], zoom);
+
+    L.tileLayer(
+      mapConfig?.tileserverUrl ||
+        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      {
+        maxZoom: 18,
+        attribution: '© OpenStreetMap contributors',
+      },
+    ).addTo(this.map);
+
+    if (!mapConfig?.disableMapClick && onMapClick) {
+      this.map.on('click', (event: any) => {
+        const { lat, lng } = event.latlng;
+        onMapClick({ lat, lng });
+      });
     }
+  }
+
+  private teardown() {
+    this.state?.teardown();
     if (this.map) {
       this.map.remove();
       this.map = null;
@@ -329,140 +372,33 @@ export class LeafletModifier extends Modifier<LeafletModifierSignature> {
   }
 }
 
-function darkenColor(color: string, factor: number): string {
-  const hex = color.replace('#', '');
-  const r = parseInt(hex.substr(0, 2), 16);
-  const g = parseInt(hex.substr(2, 2), 16);
-  const b = parseInt(hex.substr(4, 2), 16);
+//utilities
+function createMarker(coord: Coordinate, color: string) {
+  const strokeColor = darken(color, 0.3);
+  const html = `<svg width="24" height="32" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 0C5.3 0 0 5.3 0 12c0 8.5 12 20 12 20s12-11.5 12-20C24 5.3 18.7 0 12 0z"
+            fill="${color}" stroke="${strokeColor}" stroke-width="2"/>
+      <circle cx="12" cy="12" r="4" fill="white" stroke="${strokeColor}" stroke-width="1"/>
+    </svg>`;
 
-  const newR = Math.max(0, Math.floor(r * (1 - factor)));
-  const newG = Math.max(0, Math.floor(g * (1 - factor)));
-  const newB = Math.max(0, Math.floor(b * (1 - factor)));
-
-  return `#${newR.toString(16).padStart(2, '0')}${newG
-    .toString(16)
-    .padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`;
-}
-
-function createMarker(
-  coordinate: Coordinate,
-  color: string = '#ef4444',
-  className: string = 'marker',
-) {
-  const strokeColor = darkenColor(color, 0.3);
-
-  return L.marker([coordinate.lat, coordinate.lng], {
+  return L.marker([coord.lat, coord.lng], {
     icon: L.divIcon({
-      className,
-      html: `<svg width="24" height="32" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 0C5.373 0 0 5.373 0 12c0 8.5 12 20 12 20s12-11.5 12-20c0-6.627-5.373-12-12-12z" fill="${color}" stroke="${strokeColor}" stroke-width="1"/>
-        <circle cx="12" cy="12" r="4" fill="white" stroke="${strokeColor}" stroke-width="1"/>
-      </svg>`,
+      className: 'marker',
+      html,
       iconSize: [24, 32],
       iconAnchor: [12, 32],
+      popupAnchor: [0, -32],
     }),
   });
 }
 
-function drawRoute(
-  map: LeafletMap,
-  route: RoutePoint[],
-  onRouteUpdate?: (route: RoutePoint[]) => void,
-) {
-  if (!map || route.length < 2) return;
-
-  const routeCoords = route.map(
-    (point) => [point.lat, point.lng] as [number, number],
-  );
-
-  const polyline = L.polyline(routeCoords, {
-    color: '#3b82f6',
-    weight: 3,
-    opacity: 0.8,
-  }).addTo(map);
-
-  route.forEach((point, index) => {
-    const marker = createMarker(point, '#ef4444', 'route-marker').addTo(map);
-
-    if (point.address) {
-      const popupContent = `
-        <div style="min-width: 200px;">
-          ${
-            point.address
-              ? `<div style="color: #666; margin-bottom: 6px;">${point.address}</div>`
-              : ''
-          }
-          <div style="color: #666; font-size: 12px;">
-            <strong>Point ${index + 1}:</strong> ${point.lat.toFixed(
-              6,
-            )}, ${point.lng.toFixed(6)}
-          </div>
-        </div>
-      `;
-      marker.bindPopup(popupContent);
-    }
-  });
-
-  map.fitBounds(polyline.getBounds());
-  onRouteUpdate?.(route);
-}
-
-function createPopupContent(coordinate: Coordinate, title: string): string {
-  return `
-    <div style="text-align: center; min-width: 250px;">
-      <div style="font-weight: bold; margin-bottom: 8px;">📍 ${title}</div>
-      <div style="margin-bottom: 6px; color: #666;">
-        <strong>Coordinate:</strong><br>
-        ${coordinate.lat.toFixed(6)}, ${coordinate.lng.toFixed(6)}
-      </div>
-    </div>
-  `;
-}
-
-function createPopup() {
-  return L.popup({
-    offset: [0, -20],
-    closeButton: false,
-    autoClose: false,
-  });
-}
-
-function setupMarkerPopup(
-  marker: LeafletMarker,
-  coordinate: Coordinate,
-  map: LeafletMap,
-  title: string,
-): void {
-  const popup = createPopup().setContent(createPopupContent(coordinate, title));
-
-  marker.on('mouseover', () => {
-    popup.setLatLng([coordinate.lat, coordinate.lng]).openOn(map);
-  });
-
-  marker.on('mouseout', () => {
-    popup.remove();
-  });
-}
-
-function isMarkerClick(event: LeafletMouseEvent): boolean {
-  if (!event.originalEvent?.target) return false;
-
-  const target = event.originalEvent.target as HTMLElement;
-  return !!(
-    target.closest('.leaflet-marker-icon') || target.closest('.leaflet-marker')
-  );
-}
-
-function getCoordinateOrRoute(
-  args: MapRenderSignature['Args'],
-): Coordinate | Coordinate[] | null {
-  if (args.coordinate) {
-    return args.coordinate;
-  }
-
-  if (args.route) {
-    return args.route;
-  }
-
-  return null;
+function darken(hex: string, factor: number) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  const d = (c: number) => Math.max(0, Math.floor(c * (1 - factor)));
+  return `#${d(r).toString(16).padStart(2, '0')}${d(g)
+    .toString(16)
+    .padStart(2, '0')}${d(b).toString(16).padStart(2, '0')}`;
 }
