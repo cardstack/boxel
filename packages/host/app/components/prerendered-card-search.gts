@@ -43,7 +43,11 @@ export class PrerenderedCard implements PrerenderedCardLike {
     if (data.isError && !data.html) {
       this.component = getErrorComponent(data.realmUrl, data.url);
     } else {
-      this.component = htmlComponent(data.html);
+      let extraAttributes: Record<string, string> = {};
+      if (data.isError) {
+        extraAttributes['data-is-error'] = 'true';
+      }
+      this.component = htmlComponent(data.html, extraAttributes);
     }
   }
   get url() {

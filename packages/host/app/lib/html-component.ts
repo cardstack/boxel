@@ -32,7 +32,10 @@ type TopElement = ComponentLike<{
   Element: Element;
 }>;
 
-export function htmlComponent(html: string): HTMLComponent {
+export function htmlComponent(
+  html: string,
+  extraAttributes: Record<string, string> = {},
+): HTMLComponent {
   let testContainer = document.createElement('div');
   testContainer.innerHTML = html;
   if (
@@ -48,6 +51,11 @@ export function htmlComponent(html: string): HTMLComponent {
     sourceParts.push(`<${tagName} `);
 
     for (let { name, value } of cardElement.attributes) {
+      attrs[name] = value;
+      sourceParts.push(`${name}={{@attrs.${name}}} `);
+    }
+
+    for (let [name, value] of Object.entries(extraAttributes)) {
       attrs[name] = value;
       sourceParts.push(`${name}={{@attrs.${name}}} `);
     }

@@ -7,8 +7,6 @@ import {
   type PrerenderedCardLike,
 } from '@cardstack/runtime-common';
 
-import { CardContainer } from '@cardstack/boxel-ui/components';
-
 interface CardListSignature {
   Args: {
     query: Query;

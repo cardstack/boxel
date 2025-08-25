@@ -20,7 +20,7 @@ import { removeFileExtension } from './utils';
 interface SearchResultSignature {
   Element: HTMLElement;
   Args: {
-    component?: ComponentLike<{}>;
+    component?: ComponentLike<{ Element: Element }>;
     card?: CardDef;
     cardId: string | undefined;
     isCompact: boolean;
