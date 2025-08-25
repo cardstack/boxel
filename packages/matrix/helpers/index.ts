@@ -49,10 +49,12 @@ export function generateTestConfig() {
 export async function startUniqueTestEnvironment(
   options: TestEnvironmentOptions = {},
 ): Promise<TestEnvironment> {
-  console.log('[startUniqueTestEnvironment] Starting unique test environment…');
+  let config = generateTestConfig();
+  console.log(
+    `[startUniqueTestEnvironment wm:${config.workerManagerPort} rs:${config.realmServerPort}] Starting unique test environment…`,
+  );
 
   try {
-    let config = generateTestConfig();
     let synapse = await synapseStart({ uniquePort: config.synapsePort });
     await registerRealmUsers(synapse, config.testHost);
 
@@ -88,7 +90,7 @@ export async function startUniqueTestEnvironment(
     };
   } catch (error) {
     console.error(
-      '[startUniqueTestEnvironment] Failed to start test environment:',
+      `[startUniqueTestEnvironment wm:${config.workerManagerPort} rs:${config.realmServerPort}] Failed to start test environment:`,
       error,
     );
     throw error;
