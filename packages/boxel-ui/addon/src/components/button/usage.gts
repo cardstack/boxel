@@ -20,8 +20,8 @@ export default class ButtonUsage extends Component {
 
   // base button arguments
   @tracked as = 'button';
-  @tracked size: BoxelButtonSize = 'base';
-  @tracked kind: BoxelButtonKind = 'secondary';
+  @tracked size?: BoxelButtonSize;
+  @tracked kind?: BoxelButtonKind;
   @tracked disabled = false;
   @tracked loading = false;
 

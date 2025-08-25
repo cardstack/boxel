@@ -320,6 +320,7 @@ export default class Room extends Component<Signature> {
         --chat-input-area-bottom-padding: var(--boxel-sp-sm);
 
         background-color: var(--boxel-light);
+        color: var(--boxel-dark);
         border-radius: var(--chat-input-area-border-radius);
 
         position: relative;
