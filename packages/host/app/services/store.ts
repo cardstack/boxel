@@ -105,7 +105,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   constructor(owner: Owner) {
     super(owner);
-    this.store = new CardStore(this.referenceCount, this.network.fetch);
+    this.store = new CardStore(this.referenceCount, this.network.authedFetch);
     this.reset.register(this);
     this.ready = this.setup();
     registerDestructor(this, () => {
@@ -136,7 +136,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightCardMutations = new Map();
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
-    this.store = new CardStore(this.referenceCount, this.network.fetch);
+    this.store = new CardStore(this.referenceCount, this.network.authedFetch);
     this.ready = this.setup();
   }
 
