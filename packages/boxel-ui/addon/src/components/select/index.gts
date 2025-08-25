@@ -235,6 +235,10 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
           --boxel-select-text-color,
           var(--foreground, var(--boxel-dark))
         );
+        --select-placeholder-color: var(
+          --boxel-select-placeholder-color,
+          var(--foreground, var(--boxel-450))
+        );
         --select-focus-border-color: var(
           --boxel-select-focus-border-color,
           var(--primary, var(--boxel-dark))
@@ -271,10 +275,6 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
       .boxel-select :deep(.boxel-trigger) {
         padding: var(--boxel-sp-xs)
           calc(var(--boxel-sp-xxxs) + var(--boxel-sp-xxs));
-      }
-
-      .boxel-select :deep(.boxel-trigger-placeholder) {
-        color: var(--select-text-color);
       }
 
       .variant-default {
@@ -374,6 +374,16 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
 
       .ember-power-select-trigger {
         padding: 0;
+      }
+
+      .ember-power-select-trigger[aria-disabled='true'] {
+        background-color: #eeeeee;
+        color: var(--select-placeholder-color);
+        cursor: not-allowed;
+      }
+
+      .ember-power-select-trigger[aria-disabled='true']:hover {
+        border-color: none;
       }
     </style>
     {{! template-lint-disable require-scoped-style }}
@@ -667,26 +677,42 @@ export class BoxelSelectOptions<ItemT = any> extends Component<
   }
 
   <template>
-    <ul class='boxel-select-options-list'>
-      {{#each @options as |option|}}
-        <li class='boxel-select-option-item'>
-          <button
-            type='button'
-            class={{cn
-              'boxel-select-option-button'
-              (if (eq option @select.selected) 'is-selected')
-              (if (eq option @highlighted) 'is-highlighted')
-            }}
-            {{on 'click' (fn this.handleSelect option @select)}}
-            {{on 'mouseenter' (fn @select.actions.highlight option)}}
-          >
-            <span class='boxel-select-option-text'>
-              {{yield option @select (eq option @select.selected)}}
-            </span>
-            {{#if (eq option @select.selected)}}
-              <Check class='boxel-select-option-checkmark' />
-            {{/if}}
-          </button>
+    <ul
+      class='boxel-select-options-list ember-power-select-options'
+      role='listbox'
+      aria-label='Select options'
+    >
+      {{#each @options as |option index|}}
+        <li
+          class={{cn
+            'boxel-select-option-item'
+            'ember-power-select-option'
+            (if
+              (eq option @select.selected) 'ember-power-select-option--selected'
+            )
+            (if
+              (eq option @highlighted) 'ember-power-select-option--highlighted'
+            )
+          }}
+          data-option-index={{index}}
+          data-test-option={{index}}
+          role='option'
+          aria-selected={{eq option @select.selected}}
+          aria-current={{eq option @highlighted}}
+          {{on 'click' (fn this.handleSelect option @select)}}
+          {{on 'mouseenter' (fn @select.actions.highlight option)}}
+          tabindex='0'
+        >
+          <span class='boxel-select-option-text'>
+            {{yield option @select (eq option @select.selected)}}
+          </span>
+          {{#if (eq option @select.selected)}}
+            <Check
+              class='boxel-select-option-checkmark'
+              role='presentation'
+              aria-hidden='true'
+            />
+          {{/if}}
         </li>
       {{/each}}
     </ul>
@@ -703,9 +729,6 @@ export class BoxelSelectOptions<ItemT = any> extends Component<
 
       .boxel-select-option-item {
         margin: 0;
-      }
-
-      .boxel-select-option-button {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -722,19 +745,20 @@ export class BoxelSelectOptions<ItemT = any> extends Component<
         border-radius: var(--boxel-border-radius-sm);
         cursor: pointer;
         transition: background-color var(--boxel-transition);
+        outline: none;
       }
 
-      .boxel-select-option-button:hover {
+      .boxel-select-option-item:hover {
         background-color: var(--dropdown-hover-color);
         color: var(--dropdown-selected-text-color);
       }
 
-      .boxel-select-option-button.is-selected {
+      .boxel-select-option-item.ember-power-select-option--selected {
         background-color: var(--dropdown-highlight-color);
         color: var(--dropdown-selected-text-color);
       }
 
-      .boxel-select-option-button.is-highlighted {
+      .boxel-select-option-item.ember-power-select-option--highlighted {
         background-color: var(--dropdown-highlight-hover-color);
         color: var(--dropdown-selected-text-color);
       }

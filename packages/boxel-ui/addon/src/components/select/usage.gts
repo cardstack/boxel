@@ -36,6 +36,10 @@ export default class BoxelSelectUsage extends Component {
     { name: 'United Kingdom' },
   ] as Array<Country>;
 
+  get displayItems() {
+    return this.items.map((item) => item.name);
+  }
+
   @tracked selectedItem: Country | null = null;
   @tracked placeholder = 'Select Item';
   @tracked verticalPosition = 'auto' as const;
@@ -59,6 +63,8 @@ export default class BoxelSelectUsage extends Component {
   declare boxelSelectBorderColor: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare boxelSelectTextColor: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'header-freestyle-container' })
+  declare boxelSelectPlaceholderColor: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare boxelSelectFocusBorderColor: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
@@ -87,6 +93,7 @@ export default class BoxelSelectUsage extends Component {
         boxel-select-background-color=this.boxelSelectBackgroundColor.value
         boxel-select-border-color=this.boxelSelectBorderColor.value
         boxel-select-text-color=this.boxelSelectTextColor.value
+        boxel-select-placeholder-color=this.boxelSelectPlaceholderColor.value
         boxel-select-focus-border-color=this.boxelSelectFocusBorderColor.value
         boxel-dropdown-background-color=this.boxelDropdownBackgroundColor.value
         boxel-dropdown-border-color=this.boxelDropdownBorderColor.value
@@ -129,8 +136,7 @@ export default class BoxelSelectUsage extends Component {
             @name='options'
             @description='An array of items, to be listed on dropdown'
             @required={{true}}
-            @items={{this.items}}
-            @onChange={{this.onSelectItem}}
+            @items={{this.displayItems}}
           />
           <Args.Action
             @name='onChange'
