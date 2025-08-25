@@ -52,6 +52,8 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     await clearLocalStorage(page, serverIndexUrl);
     await gotoRegistration(page, serverIndexUrl);
 
+    await expect(page.locator('[data-test-register-btn]')).toHaveCount(1);
+
     await expect(
       page.locator('[data-test-token-field]'),
       'token field is not displayed',
@@ -143,7 +145,19 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
     ).toHaveCount(1);
 
     let newRealmURL = new URL('user1/personal/', serverIndexUrl).href;
+
+    await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
+    await expect(
+      page.locator(`[data-test-workspace="Test User's Workspace"]`),
+    ).toHaveCount(1);
+
     await enterWorkspace(page, "Test User's Workspace");
+
+    await expect(
+      page.locator(
+        `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
+      ),
+    ).toContainText("Test User's Workspace");
 
     // assert workspace chooser toggle states
     await expect(

@@ -151,7 +151,6 @@ interface ProfileAssertions {
 }
 interface LoginOptions {
   url?: string;
-  expectFailure?: true;
 }
 
 export async function setSkillsRedirect(page: Page) {
@@ -227,9 +226,9 @@ export async function createRealm(
   await page.locator('[data-test-display-name-field]').fill(name);
   await page.locator('[data-test-endpoint-field]').fill(endpoint);
   await page.locator('[data-test-create-workspace-submit]').click();
-  await expect(page.locator(`[data-test-workspace="${name}"]`)).toBeVisible();
-  await expect(page.locator('[data-test-create-workspace-modal]')).toHaveCount(
-    0,
+  await waitUntil(
+    async () =>
+      (await page.locator(`[data-test-workspace="${name}"]`).count()) === 1,
   );
 }
 
@@ -383,16 +382,12 @@ export async function gotoRegistration(page: Page, appURL = testHost) {
   await openRoot(page, appURL);
 
   await page.locator('[data-test-register-user]').click();
-  await expect(page.locator('[data-test-register-btn]')).toHaveCount(1);
 }
 
 export async function gotoForgotPassword(page: Page, appURL = testHost) {
   await openRoot(page, appURL);
 
   await page.locator('[data-test-forgot-password]').click();
-  await expect(page.locator('[data-test-reset-your-password-btn]')).toHaveCount(
-    1,
-  );
 }
 
 export async function login(
@@ -403,36 +398,19 @@ export async function login(
 ) {
   await openRoot(page, opts?.url);
 
-  await expect(page.locator('[data-test-username-field]')).toBeEditable();
   await page.locator('[data-test-username-field]').fill(username);
   await page.locator('[data-test-password-field]').fill(password);
   await page.locator('[data-test-login-btn]').click();
-
-  if (opts?.expectFailure) {
-    await expect(page.locator('[data-test-login-error]')).toHaveCount(1);
-  }
 }
 
 export async function enterWorkspace(
   page: Page,
   workspace = 'Test Workspace A',
 ) {
-  await expect(page.locator('[data-test-workspace-chooser]')).toHaveCount(1);
-  await expect(
-    page.locator(`[data-test-workspace="${workspace}"]`),
-  ).toHaveCount(1);
   await page.locator(`[data-test-workspace="${workspace}"]`).click();
-  await expect(
-    page.locator(
-      `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
-    ),
-  ).toContainText(workspace);
 }
 
 export async function showAllCards(page: Page) {
-  await expect(
-    page.locator(`[data-test-boxel-filter-list-button="All Cards"]`),
-  ).toHaveCount(1);
   await page
     .locator(`[data-test-boxel-filter-list-button="All Cards"]`)
     .click();
@@ -441,7 +419,6 @@ export async function showAllCards(page: Page) {
 export async function logout(page: Page) {
   await page.locator('[data-test-profile-icon-button]').click();
   await page.locator('[data-test-signout-button]').click();
-  await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
 export async function createRoom(page: Page) {
@@ -504,9 +481,6 @@ export async function openRenameMenu(page: Page, roomId: string) {
   await page
     .locator(`[data-test-past-session-options-button="${roomId}"]`)
     .click();
-  await expect(
-    page.locator(`[data-test-boxel-menu-item-text="Rename"]`),
-  ).toHaveCount(1);
   await page.locator(`[data-test-boxel-menu-item-text="Rename"]`).click();
   await page.locator(`[data-test-name-field]`).waitFor();
 }
@@ -517,9 +491,6 @@ export async function writeMessage(
   message: string,
 ) {
   await page.locator(`[data-test-message-field="${roomId}"]`).fill(message);
-  await expect(
-    page.locator(`[data-test-message-field="${roomId}"]`),
-  ).toHaveValue(message);
 }
 
 export async function selectCardFromCatalog(

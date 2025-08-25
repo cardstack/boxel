@@ -449,6 +449,28 @@ ${REPLACE_MARKER}
     );
   });
 
+  test('it will text code clocks as they are sent, without hiding the first line url as it streams', async function (assert) {
+    await renderFormattedAiBotMessage({
+      htmlParts: parseHtmlContent(
+        `<pre data-code-language="text">https://example.com/some-url</pre>`,
+        roomId,
+        eventId,
+      ),
+      isStreaming: false,
+      isLastAssistantMessage: true,
+    });
+
+    assert.dom('.code-block').exists();
+    assert.dom('.code-block-diff').doesNotExist();
+    await waitUntil(() => document.querySelectorAll('.view-line').length == 1);
+
+    assert.equal(
+      (document.getElementsByClassName('view-lines')[0] as HTMLElement)
+        .innerText,
+      'https://example.com/some-url',
+    );
+  });
+
   test('it will render an error message when file url is missing', async function (assert) {
     await renderFormattedAiBotMessage({
       htmlParts: parseHtmlContent(

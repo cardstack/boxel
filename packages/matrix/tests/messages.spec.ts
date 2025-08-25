@@ -64,6 +64,9 @@ test.describe('Room messages', () => {
     await assertMessages(page, []);
 
     await writeMessage(page, room1, 'Message 1');
+    await expect(
+      page.locator(`[data-test-message-field="${room1}"]`),
+    ).toHaveValue('Message 1');
     await page.locator('[data-test-send-message-btn]').click();
 
     await expect(page.locator('[data-test-message-field]')).toHaveValue('');

@@ -43,6 +43,14 @@ test.describe('Create Realm via Dashboard', () => {
     });
 
     await createRealm(page, 'new-workspace', '1New Workspace');
+
+    await expect(
+      page.locator(`[data-test-workspace="1New Workspace"]`),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-test-create-workspace-modal]'),
+    ).toHaveCount(0);
+
     await page.locator('[data-test-workspace="1New Workspace"]').click();
     let newRealmURL = new URL('user1/new-workspace/', serverIndexUrl).href;
     await expect(

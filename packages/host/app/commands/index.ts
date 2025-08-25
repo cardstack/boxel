@@ -31,6 +31,7 @@ import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SendRequestViaProxyCommandModule from './send-request-via-proxy';
 import * as SetActiveLlmModule from './set-active-llm';
 import * as ShowCardCommandModule from './show-card';
+import * as SummarizeSessionCommandModule from './summarize-session';
 import * as SwitchSubmodeCommandModule from './switch-submode';
 import * as TransformCardsCommandModule from './transform-cards';
 import * as UpdateCodePathWithSelectionCommandModule from './update-code-path-with-selection';
@@ -165,6 +166,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     SendRequestViaProxyCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/summarize-session',
+    SummarizeSessionCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/ai-assistant',
     UseAiAssistantCommandModule,
   );
@@ -213,4 +218,5 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   UpdateSkillActivationCommandModule.default,
   UseAiAssistantCommandModule.default,
   WriteTextFileCommandModule.default,
+  SummarizeSessionCommandModule.default,
 ];
