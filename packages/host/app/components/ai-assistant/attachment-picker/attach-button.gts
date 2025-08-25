@@ -3,8 +3,8 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
-import PlusIcon from '@cardstack/boxel-icons/plus';
 import FileCode from '@cardstack/boxel-icons/file-code';
+import PlusIcon from '@cardstack/boxel-icons/plus';
 import { restartableTask } from 'ember-concurrency';
 
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
