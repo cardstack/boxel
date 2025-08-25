@@ -4,6 +4,7 @@ import { resolve, join } from 'path';
 import { dirSync, setGracefulCleanup } from 'tmp';
 import { ensureDirSync, copySync, readFileSync } from 'fs-extra';
 import { v4 as uuidv4 } from 'uuid';
+import { getRegistrationSecretFilename } from '../docker/synapse';
 
 setGracefulCleanup();
 
@@ -17,11 +18,32 @@ const skillsRealmDir = resolve(
 const matrixDir = resolve(join(__dirname, '..'));
 export const appURL = 'http://localhost:4205/test';
 
-export async function startServer(includePublishedRealm = false) {
+export function getAppURL(port = 4205) {
+  return `http://localhost:${port}/test`;
+}
+
+function generateUniquePorts() {
+  const basePort = 5000;
+  const randomOffset = Math.floor(Math.random() * 10000);
+  return {
+    realmServerPort: basePort + randomOffset,
+    workerManagerPort: basePort + randomOffset + 1,
+  };
+}
+
+export async function startServer(
+  includePublishedRealm = false,
+  ports?: { realmServerPort: number; workerManagerPort: number },
+  matrixURL = 'http://localhost:8009',
+  synapsePort?: number,
+) {
   let dir = dirSync();
   let testRealmDir = join(dir.name, 'test');
   ensureDirSync(testRealmDir);
   copySync(testRealmCards, testRealmDir);
+
+  let uniquePorts = ports || generateUniquePorts();
+  let { realmServerPort, workerManagerPort } = uniquePorts;
 
   let publishedRealmId = uuidv4();
 
@@ -37,20 +59,20 @@ export async function startServer(includePublishedRealm = false) {
   process.env.REALM_SERVER_SECRET_SEED = "mum's the word";
   process.env.REALM_SECRET_SEED = "shhh! it's a secret";
   process.env.GRAFANA_SECRET = "shhh! it's a secret";
-  process.env.MATRIX_URL = 'http://localhost:8009';
+  process.env.MATRIX_URL = matrixURL;
   process.env.REALM_SERVER_MATRIX_USERNAME = 'realm_server';
   process.env.NODE_ENV = 'test';
 
   let workerArgs = [
     `--transpileOnly`,
     'worker-manager',
-    `--port=4212`,
-    `--matrixURL='http://localhost:8009'`,
+    `--port=${workerManagerPort}`,
+    `--matrixURL='${matrixURL}'`,
     `--distURL="${process.env.HOST_URL ?? 'http://localhost:4200'}"`,
     `--migrateDB`,
 
-    `--fromUrl='http://localhost:4205/test/'`,
-    `--toUrl='http://localhost:4205/test/'`,
+    `--fromUrl='http://localhost:${realmServerPort}/test/'`,
+    `--toUrl='http://localhost:${realmServerPort}/test/'`,
   ];
   workerArgs = workerArgs.concat([
     `--fromUrl='https://cardstack.com/base/'`,
@@ -60,7 +82,7 @@ export async function startServer(includePublishedRealm = false) {
   if (includePublishedRealm) {
     workerArgs = workerArgs.concat([
       `--fromUrl='http://published.realm/'`,
-      `--toUrl='http://localhost:4205/published/'`,
+      `--toUrl='http://localhost:${realmServerPort}/published/'`,
     ]);
   }
 
@@ -77,6 +99,113 @@ export async function startServer(includePublishedRealm = false) {
     workerManager.stderr.on('data', (data: Buffer) =>
       console.error(`worker: ${data.toString()}`),
     );
+  }
+
+  let workerManagerStartupTimedOut = await Promise.race([
+    new Promise<void>((resolve) => {
+      let checkReady = async () => {
+        try {
+          let response = await fetch(`http://localhost:${workerManagerPort}/`);
+          if (response.ok) {
+            let json = await response.json();
+            if (json.ready) {
+              resolve();
+              return;
+            }
+          }
+        } catch (e) {}
+
+        setTimeout(checkReady, 100);
+      };
+
+      checkReady();
+    }),
+    new Promise<true>((resolve) => setTimeout(() => resolve(true), 10_000)),
+  ]);
+
+  if (workerManagerStartupTimedOut) {
+    throw new Error(`timed out waiting for worker manager to start`);
+  }
+
+  let sqlExecutor = new WorkerManagerSQLExecutor(workerManager);
+
+  // FIXME Rewrite 4205 ports in database to dynamic ports, is there a better way?
+  await sqlExecutor.executeSQL(`
+    UPDATE realm_user_permissions
+    SET realm_url = REPLACE(realm_url, 'localhost:4205', 'localhost:${realmServerPort}')
+    WHERE realm_url LIKE '%localhost:4205%'
+  `);
+
+  let realmsToSetup = [
+    'test',
+    'skills',
+    'base',
+    'catalog',
+    'experiments',
+    'seed',
+  ];
+  for (let realmPath of realmsToSetup) {
+    await sqlExecutor.executeSQL(`
+      INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+      VALUES ('http://localhost:${realmServerPort}/${realmPath}/', '@realm_server:localhost', true, true, true)
+      ON CONFLICT (realm_url, username)
+      DO UPDATE SET read = true, write = true, realm_owner = true
+    `);
+  }
+
+  let workerManagerStop = new Promise<void>((resolve) => {
+    let stopHandler = (message: any) => {
+      if (message === 'stopped') {
+        workerManager.off('message', stopHandler);
+        resolve();
+      }
+    };
+    workerManager.on('message', stopHandler);
+  });
+
+  workerManager.send('stop');
+  await workerManagerStop;
+
+  // FIXME this is hideous
+  workerManager = spawn('ts-node', workerArgs, {
+    cwd: realmServerDir,
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+  });
+  if (workerManager.stdout) {
+    workerManager.stdout.on('data', (data: Buffer) =>
+      console.log(`worker: ${data.toString()}`),
+    );
+  }
+  if (workerManager.stderr) {
+    workerManager.stderr.on('data', (data: Buffer) =>
+      console.error(`worker: ${data.toString()}`),
+    );
+  }
+
+  let newWorkerManagerStartupTimedOut = await Promise.race([
+    new Promise<void>((resolve) => {
+      let checkReady = async () => {
+        try {
+          let response = await fetch(`http://localhost:${workerManagerPort}/`);
+          if (response.ok) {
+            let json = await response.json();
+            if (json.ready) {
+              resolve();
+              return;
+            }
+          }
+        } catch (e) {}
+
+        setTimeout(checkReady, 100);
+      };
+
+      checkReady();
+    }),
+    new Promise<true>((resolve) => setTimeout(() => resolve(true), 10_000)),
+  ]);
+
+  if (newWorkerManagerStartupTimedOut) {
+    throw new Error(`timed out waiting for restarted worker manager to start`);
   }
 
   // Add published realm database rows before starting realm server
@@ -141,28 +270,28 @@ export async function startServer(includePublishedRealm = false) {
   let serverArgs = [
     `--transpileOnly`,
     'main',
-    `--port=4205`,
-    `--matrixURL='http://localhost:8009'`,
+    `--port=${realmServerPort}`,
+    `--matrixURL='${matrixURL}'`,
     `--realmsRootPath='${dir.name}'`,
-    `--workerManagerPort=4212`,
+    `--workerManagerPort=${workerManagerPort}`,
     `--useRegistrationSecretFunction`,
 
     `--path='${testRealmDir}'`,
     `--username='test_realm'`,
-    `--fromUrl='http://localhost:4205/test/'`,
-    `--toUrl='http://localhost:4205/test/'`,
+    `--fromUrl='http://localhost:${realmServerPort}/test/'`,
+    `--toUrl='http://localhost:${realmServerPort}/test/'`,
   ];
   serverArgs = serverArgs.concat([
     `--username='skills_realm'`,
     `--path='${skillsRealmDir}'`,
-    `--fromUrl='http://localhost:4205/skills/'`,
-    `--toUrl='http://localhost:4205/skills/'`,
+    `--fromUrl='http://localhost:${realmServerPort}/skills/'`,
+    `--toUrl='http://localhost:${realmServerPort}/skills/'`,
   ]);
 
   if (includePublishedRealm) {
     serverArgs = serverArgs.concat([
       `--fromUrl='http://published.realm/'`,
-      `--toUrl='http://localhost:4205/published/'`,
+      `--toUrl='http://localhost:${realmServerPort}/published/'`,
     ]);
   }
 
@@ -188,11 +317,30 @@ export async function startServer(includePublishedRealm = false) {
   }
   realmServer.on('message', (message) => {
     if (message === 'get-registration-secret' && realmServer.send) {
-      let secret = readFileSync(
-        join(matrixDir, 'registration_secret.txt'),
-        'utf8',
-      );
-      realmServer.send(`registration-secret:${secret}`);
+      let registrationSecretFile = getRegistrationSecretFilename(synapsePort);
+
+      try {
+        let secret = readFileSync(registrationSecretFile, 'utf8');
+        realmServer.send(`registration-secret:${secret}`);
+      } catch (error) {
+        console.error(
+          `Failed to read registration secret from ${registrationSecretFile}:`,
+          error,
+        );
+        // Fallback to default file if unique file doesn't exist
+        try {
+          let secret = readFileSync(
+            join(matrixDir, 'registration_secret.txt'),
+            'utf8',
+          );
+          realmServer.send(`registration-secret:${secret}`);
+        } catch (fallbackError) {
+          console.error(
+            `Failed to read fallback registration secret:`,
+            fallbackError,
+          );
+        }
+      }
     }
   });
 
