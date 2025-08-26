@@ -3,12 +3,15 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import { concat } from '@ember/helper';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { get } from '@ember/object';
 import { action } from '@ember/object';
+import { guidFor } from '@ember/object/internals';
 import Component from '@glimmer/component';
 import PowerSelect, {
   type PowerSelectArgs,
 } from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
+import PowerSelectOptions from 'ember-power-select/components/power-select/options';
 
 import cn from '../../helpers/cn.ts';
 import { BoxelSelectDefaultTrigger } from './trigger.gts';
@@ -28,22 +31,25 @@ interface Signature<ItemT = any> {
 
 export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
   private themeObserver?: MutationObserver | null = null;
-  private selectId = `boxel-select-${Math.random()
-    .toString(36)
-    .substring(2, 11)}`;
+  private selectId = `boxel-select-${guidFor(this)}`;
 
   get selectEl(): HTMLElement | null {
     return document.getElementById(this.selectId);
   }
 
-  get dropdownContainer(): HTMLElement {
+  get dropdownContainer(): HTMLElement | null {
+    // When renderInPlace is true, the dropdown is rendered within the component
+    // so we don't need to sync to the wormhole
+    if (this.args.renderInPlace) {
+      return null;
+    }
     return document.querySelector(
       '#ember-basic-dropdown-wormhole',
     ) as HTMLElement;
   }
 
   private syncCustomProps() {
-    if (!this.selectEl) return;
+    if (!this.selectEl || !this.dropdownContainer) return;
     const cs = getComputedStyle(this.selectEl);
 
     const themeVars = [
@@ -58,6 +64,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
       '--muted-foreground',
       '--destructive',
       '--destructive-foreground',
+      'font-family',
     ];
 
     const dropdownVars = [
@@ -75,17 +82,23 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
     themeVars.forEach((varName) => {
       const value = cs.getPropertyValue(varName);
 
-      this.dropdownContainer.style.setProperty(varName, value);
+      this.dropdownContainer?.style.setProperty(varName, value);
     });
 
     dropdownVars.forEach((varName) => {
       const value = cs.getPropertyValue(varName);
-      this.dropdownContainer.style.setProperty(varName, value);
+      this.dropdownContainer?.style.setProperty(varName, value);
     });
   }
 
   private startObservingTheme() {
     if (!this.selectEl) return;
+
+    // Don't set up theme observation when renderInPlace is true
+    // as the dropdown will inherit styles naturally through CSS
+    if (this.args.renderInPlace) {
+      return;
+    }
 
     this.syncCustomProps();
     this.detectAndSetThemeColors();
@@ -102,25 +115,16 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
     });
   }
 
-  private focusSelectedOption() {
-    if (!this.args.selected) return;
-    const selectedOption = document.querySelector(
-      '.boxel-select-option-item.ember-power-select-option--selected',
-    ) as HTMLElement;
-    if (selectedOption) {
-      selectedOption.focus();
-      selectedOption.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  @action
+  onOpen() {
+    // Only start theme observation if not rendering in place
+    if (!this.args.renderInPlace) {
+      this.startObservingTheme();
     }
   }
 
-  @action
-  onOpen() {
-    this.startObservingTheme();
-    setTimeout(() => this.focusSelectedOption(), 100);
-  }
-
   private detectAndSetThemeColors() {
-    if (!this.selectEl) return;
+    if (!this.selectEl || !this.dropdownContainer) return;
 
     // Check if theme variables are available
     const cs = getComputedStyle(this.selectEl);
@@ -165,12 +169,12 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         '--theme-hover': `color-mix(in oklch, ${bg} 94%, ${fg})`,
       };
       Object.entries(themeVars).forEach(([key, value]) => {
-        this.dropdownContainer.style.setProperty(key, value);
+        this.dropdownContainer?.style.setProperty(key, value);
       });
     } else {
       ['--theme-highlight', '--theme-highlight-hover', '--theme-hover'].forEach(
         (key) => {
-          this.dropdownContainer.style.removeProperty(key);
+          this.dropdownContainer?.style.removeProperty(key);
         },
       );
     }
@@ -200,6 +204,12 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
       }}
       @loadingMessage={{@loadingMessage}}
       @onFocus={{this.onOpen}}
+      @ariaLabel={{@ariaLabel}}
+      @ariaLabelledBy={{@ariaLabelledBy}}
+      @ariaDescribedBy={{@ariaDescribedBy}}
+      @ariaInvalid={{@ariaInvalid}}
+      @required={{@required}}
+      @triggerRole={{@triggerRole}}
       {{! We can avoid providing arguments to the triggerComponent as long as they are specified here https://github.com/cibernox/ember-power-select/blob/913c85ec82d5c6aeb80a7a3b9d9c21ca9613e900/ember-power-select/src/components/power-select.hbs#L79-L106 }}
       {{! Even the custom BoxelTriggerWrapper will receive these arguments }}
       @triggerComponent={{if
@@ -213,7 +223,6 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
       }}
       @disabled={{@disabled}}
       @matchTriggerWidth={{@matchTriggerWidth}}
-      @eventType='click'
       @searchEnabled={{@searchEnabled}}
       @beforeOptionsComponent={{if
         @beforeOptionsComponent
@@ -440,7 +449,6 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         border: 1px solid var(--dropdown-border-color) !important;
         z-index: var(--boxel-layer-modal-urgent);
         max-height: 200px;
-        margin-top: 4px;
         border-top-left-radius: var(
           --boxel-form-control-border-radius
         ) !important;
@@ -448,6 +456,12 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
           --boxel-form-control-border-radius
         ) !important;
         overflow: hidden;
+        font-family: inherit;
+      }
+
+      .boxel-select__dropdown:not(.ember-basic-dropdown-content--above) {
+        margin-top: 4px;
+        margin-bottom: 0;
       }
 
       .boxel-select__dropdown ul {
@@ -456,6 +470,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         margin: 0;
         overflow: auto;
         max-height: inherit;
+        font-family: inherit;
       }
 
       .boxel-select__dropdown .ember-power-select-option {
@@ -541,7 +556,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         );
         --dropdown-highlight-hover-color: var(
           --boxel-dropdown-hover-color,
-          var(--theme-highlight-hover, var(--boxel-highlight))
+          var(--theme-highlight-hover, var(--boxel-light-100))
         );
         --dropdown-hover-color: var(
           --boxel-dropdown-hover-color,
@@ -647,22 +662,39 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         height: 100%;
         pointer-events: none;
       }
+
+      /* Accessibility: Status announcement region */
+      .ember-power-select-visually-hidden {
+        position: absolute !important;
+        width: 1px !important;
+        height: 1px !important;
+        padding: 0 !important;
+        margin: -1px !important;
+        overflow: hidden !important;
+        clip: rect(0, 0, 0, 0) !important;
+        white-space: nowrap !important;
+        border: 0 !important;
+      }
     </style>
   </template>
 }
 
 export interface OptionsSignature<ItemT = any> {
   Args: {
+    extra?: any;
+    groupIndex?: string;
     highlighted: ItemT;
     options: ItemT[];
     searchText: string;
     select: {
       actions: {
+        choose: (option: ItemT, event?: Event) => void;
         close: () => void;
         highlight: (option: ItemT) => void;
         select: (option: ItemT) => void;
       };
       selected: ItemT;
+      uniqueId: string;
     };
   };
   Blocks: {
@@ -671,14 +703,9 @@ export interface OptionsSignature<ItemT = any> {
   Element: HTMLDivElement;
 }
 
-export class BoxelSelectOptions<ItemT = any> extends Component<
-  OptionsSignature<ItemT>
-> {
+export class BoxelSelectOptions extends PowerSelectOptions {
   @action
-  handleSelect(
-    option: ItemT,
-    select: OptionsSignature<ItemT>['Args']['select'],
-  ) {
+  handleSelect(option: any, select: any) {
     select.actions.select(option);
     select.actions.close();
     // Blur the target element after selection
@@ -693,6 +720,7 @@ export class BoxelSelectOptions<ItemT = any> extends Component<
       class='boxel-select-options-list ember-power-select-options'
       role='listbox'
       aria-label='Select options'
+      id='ember-power-select-options-{{@select.uniqueId}}'
     >
       {{#each @options as |option index|}}
         <li
@@ -703,20 +731,22 @@ export class BoxelSelectOptions<ItemT = any> extends Component<
               (eq option @select.selected) 'ember-power-select-option--selected'
             )
             (if
-              (eq option @highlighted) 'ember-power-select-option--highlighted'
+              (eq option @select.highlighted)
+              'ember-power-select-option--highlighted'
             )
           }}
-          data-option-index={{index}}
+          id='{{@select.uniqueId}}-{{@groupIndex}}{{index}}'
+          data-option-index='{{@groupIndex}}{{index}}'
           data-test-option={{index}}
           role='option'
           aria-selected={{eq option @select.selected}}
-          aria-current={{eq option @highlighted}}
+          aria-disabled={{if (get option 'disabled') 'true'}}
+          aria-current={{eq option @select.highlighted}}
           {{on 'click' (fn this.handleSelect option @select)}}
           {{on 'mouseenter' (fn @select.actions.highlight option)}}
-          tabindex='0'
         >
           <span class='boxel-select-option-text'>
-            {{yield option @select (eq option @select.selected)}}
+            {{yield option @select}}
           </span>
           {{#if (eq option @select.selected)}}
             <Check
@@ -737,6 +767,10 @@ export class BoxelSelectOptions<ItemT = any> extends Component<
         display: flex;
         flex-direction: column;
         gap: 1px;
+        overflow: auto;
+        max-height: inherit;
+        position: relative;
+        box-sizing: border-box;
       }
 
       .boxel-select-option-item {
@@ -746,7 +780,7 @@ export class BoxelSelectOptions<ItemT = any> extends Component<
         justify-content: space-between;
         width: 100%;
         padding: var(--boxel-sp-xxs) !important;
-        margin-bottom: 2px;
+        margin-bottom: 1px;
         font-family: inherit;
         font-size: var(--boxel-font-size-sm);
         letter-spacing: var(--boxel-lsp-sm);
@@ -758,6 +792,7 @@ export class BoxelSelectOptions<ItemT = any> extends Component<
         cursor: pointer;
         transition: background-color var(--boxel-transition);
         outline: none;
+        box-sizing: border-box;
       }
 
       .boxel-select-option-item:hover {
@@ -773,6 +808,19 @@ export class BoxelSelectOptions<ItemT = any> extends Component<
       .boxel-select-option-item.ember-power-select-option--highlighted {
         background-color: var(--dropdown-highlight-hover-color);
         color: var(--dropdown-selected-text-color);
+      }
+
+      .boxel-select-option-item:focus {
+        background-color: var(--dropdown-highlight-color);
+        color: var(--dropdown-selected-text-color);
+        outline: 2px solid var(--dropdown-focus-border-color);
+        outline-offset: -2px;
+      }
+
+      .boxel-select-option-item[aria-disabled='true'] {
+        opacity: 0.5;
+        cursor: not-allowed;
+        pointer-events: none;
       }
 
       .boxel-select-option-icon {

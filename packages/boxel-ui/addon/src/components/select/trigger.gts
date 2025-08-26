@@ -58,7 +58,10 @@ export class BoxelTriggerWrapper extends Component<TriggerSignature> {
         gap: var(--boxel-sp-xxxs);
         padding: var(--boxel-sp-xs);
         font: var(--boxel-font-sm);
+        font-family: inherit;
         letter-spacing: var(--boxel-lsp-sm);
+        outline: none;
+        cursor: pointer;
       }
       .boxel-trigger-content {
         display: flex;
@@ -68,6 +71,7 @@ export class BoxelTriggerWrapper extends Component<TriggerSignature> {
       .boxel-trigger-placeholder {
         color: var(--boxel-450);
         font: var(--boxel-font-sm);
+        font-family: inherit;
         letter-spacing: var(--boxel-lsp-sm);
       }
     </style>
