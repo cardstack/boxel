@@ -170,7 +170,6 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     await this.operatorModeStateService.updateCodePath(selectedUrl);
   }
 
-
   <template>
     <div
       class={{cn

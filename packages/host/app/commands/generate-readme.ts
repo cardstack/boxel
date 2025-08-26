@@ -1,6 +1,10 @@
 import { service } from '@ember/service';
 
+import { isCardInstance } from '@cardstack/runtime-common';
+import { skillCardsToMessage } from '@cardstack/runtime-common/ai/prompt';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import { Skill } from 'https://cardstack.com/base/skill';
 
 import HostBaseCommand from '../lib/host-base-command';
 
@@ -10,6 +14,7 @@ import SendRequestViaProxyCommand from './send-request-via-proxy';
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 import type RealmServerService from '../services/realm-server';
+import type StoreService from '../services/store';
 
 export default class GenerateReadmeCommand extends HostBaseCommand<
   typeof BaseCommandModule.GenerateReadmeInput,
@@ -18,6 +23,7 @@ export default class GenerateReadmeCommand extends HostBaseCommand<
   @service declare private matrixService: MatrixService;
   @service declare private commandService: CommandService;
   @service declare private realmServer: RealmServerService;
+  @service declare private store: StoreService;
 
   static actionVerb = 'Generate README';
   description = 'Generate a README based on the current context';
@@ -58,10 +64,37 @@ export default class GenerateReadmeCommand extends HostBaseCommand<
         throw new Error('No file content available to generate README');
       }
 
+      // Load skill cards from IDs if provided
+      let loadedSkillCards: Skill[] = [];
+      if (input.skillCardIds && input.skillCardIds.length > 0) {
+        const skillCardPromises = input.skillCardIds.map(
+          async (skillCardId) => {
+            try {
+              return await this.store.get<Skill>(skillCardId);
+            } catch (e) {
+              console.warn(`Failed to load skill card ${skillCardId}:`, e);
+              return null;
+            }
+          },
+        );
+
+        const skillCardResults = await Promise.all(skillCardPromises);
+        loadedSkillCards = skillCardResults.filter(
+          (card): card is Skill => card !== null && isCardInstance(card),
+        );
+      }
+
+      // Build system prompt with skill cards if provided
+      let systemPrompt = input.systemPrompt;
+      if (loadedSkillCards.length > 0) {
+        systemPrompt += '\n\nAvailable Skills:\n';
+        systemPrompt += skillCardsToMessage(loadedSkillCards);
+      }
+
       const generationMessages = [
         {
           role: 'system' as const,
-          content: input.systemPrompt,
+          content: systemPrompt,
         },
         {
           role: 'user' as const,
@@ -80,7 +113,7 @@ ${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : 'No file content available.'}
         url: 'https://openrouter.ai/api/v1/chat/completions',
         method: 'POST',
         requestBody: JSON.stringify({
-          model: 'anthropic/claude-3.5-sonnet',
+          model: input.llmModel || 'anthropic/claude-3.5-sonnet',
           messages: generationMessages,
           stream: false,
         }),

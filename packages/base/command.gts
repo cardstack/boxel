@@ -312,7 +312,8 @@ export class SummarizeSessionResult extends CardDef {
 export class AskAiInput extends CardDef {
   @field prompt = contains(StringField);
   @field llmMode = contains(StringField); // 'ask' or 'act'
-}
+  }
+  
 
 export class AskAiOutput extends CardDef {
   @field response = contains(StringField);
@@ -379,6 +380,8 @@ export class GenerateReadmeInput extends CardDef {
   @field codeRef = contains(AbsoluteCodeRefField);
   @field userPrompt = contains(StringField);
   @field systemPrompt = contains(StringField);
+  @field llmModel = contains(StringField);
+  @field skillCardIds = containsMany(StringField);
 }
 
 export class GenerateReadmeResult extends CardDef {
