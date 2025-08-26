@@ -188,7 +188,7 @@ module('Integration | card-prerender', function (hooks) {
         assert.strictEqual(
           cleanWhiteSpace(stripScopedCSSAttributes(entry!.isolatedHtml!)),
           cleanWhiteSpace(`<div
-            class="ember-view boxel-card-container boundaries field-component-card isolated-format display-container-true"
+            class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card isolated-format display-container-true"
             data-test-boxel-card-container
             style="--boxel-example: 1px;"
             data-test-card="http://test-realm/test/Pet/mango"
@@ -210,7 +210,7 @@ module('Integration | card-prerender', function (hooks) {
         assert.strictEqual(
           cleanWhiteSpace(stripScopedCSSAttributes(entry!.isolatedHtml!)),
           cleanWhiteSpace(`<div
-            class="ember-view boxel-card-container boundaries field-component-card isolated-format display-container-true"
+            class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card isolated-format display-container-true"
             data-test-boxel-card-container
             style="--boxel-example: 1px;"
             data-test-card="http://test-realm/test/Pet/vangogh"

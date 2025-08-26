@@ -1465,7 +1465,7 @@ module(`Integration | realm indexing`, function (hooks) {
       ),
       cleanWhiteSpace(
         `<div
-          class="ember-view boxel-card-container boundaries field-component-card embedded-format display-container-true"
+          class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
           data-test-boxel-card-container
           style="--boxel-example: 1px;"
           data-test-card="http://test-realm/test/germaine"
@@ -1491,7 +1491,7 @@ module(`Integration | realm indexing`, function (hooks) {
         stripScopedCSSAttributes(embeddedHtml![`${testRealmURL}person/Person`]),
       ),
       cleanWhiteSpace(`<div
-        class="ember-view boxel-card-container boundaries field-component-card embedded-format display-container-true"
+        class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
         data-test-boxel-card-container
         style="--boxel-example: 1px;"
         data-test-card="http://test-realm/test/germaine"
@@ -1508,7 +1508,7 @@ module(`Integration | realm indexing`, function (hooks) {
     assert.strictEqual(
       cleanWhiteSpace(stripScopedCSSAttributes(embeddedHtml![cardDefRefURL])),
       cleanWhiteSpace(`<div
-        class="ember-view boxel-card-container boundaries field-component-card embedded-format display-container-true"
+        class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
         data-test-boxel-card-container
         style="--boxel-example: 1px;"
         data-test-card="http://test-realm/test/germaine"
@@ -1604,7 +1604,7 @@ module(`Integration | realm indexing`, function (hooks) {
       ),
       cleanWhiteSpace(
         `<div
-          class="ember-view boxel-card-container boundaries field-component-card fitted-format display-container-true"
+          class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
           data-test-boxel-card-container
           style="--boxel-example: 1px;"
           data-test-card="http://test-realm/test/germaine"
@@ -1630,7 +1630,7 @@ module(`Integration | realm indexing`, function (hooks) {
         stripScopedCSSAttributes(fittedHtml![`${testRealmURL}person/Person`]),
       ),
       cleanWhiteSpace(`<div
-      class="ember-view boxel-card-container boundaries field-component-card fitted-format display-container-true"
+      class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
       data-test-boxel-card-container
       style="--boxel-example: 1px;"
       data-test-card="http://test-realm/test/germaine"
@@ -1647,7 +1647,7 @@ module(`Integration | realm indexing`, function (hooks) {
     assert.strictEqual(
       cleanWhiteSpace(stripScopedCSSAttributes(embeddedHtml![cardDefRefURL])),
       cleanWhiteSpace(`<div
-      class="ember-view boxel-card-container boundaries field-component-card embedded-format display-container-true"
+      class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
       data-test-boxel-card-container
       style="--boxel-example: 1px;"
       data-test-card="http://test-realm/test/germaine"
