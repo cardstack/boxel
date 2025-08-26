@@ -1,6 +1,45 @@
 import GlimmerComponent from '@glimmer/component';
 import Modifier, { NamedArgs } from 'ember-modifier';
 
+// Leaflet type definitions
+interface LeafletMap {
+  setView: (center: [number, number], zoom: number) => LeafletMap;
+  addTo: (layer: any) => LeafletMap;
+  on: (event: string, handler: (event: any) => void) => LeafletMap;
+  remove: () => void;
+  flyTo: (center: [number, number], zoom: number, options: any) => LeafletMap;
+  flyToBounds: (bounds: any, options: any) => LeafletMap;
+  invalidateSize: () => void;
+}
+
+interface LeafletTileLayer {
+  addTo: (map: LeafletMap) => LeafletTileLayer;
+  remove: () => void;
+}
+
+interface LeafletMarker {
+  bindPopup: (content: string) => LeafletMarker;
+  getLatLng: () => LeafletLatLng;
+}
+
+interface LeafletPolyline {
+  // Leaflet polyline methods, we add this when we need more control over the polyline
+}
+
+type LeafletLayers = LeafletMarker | LeafletPolyline;
+
+interface LeafletLatLng {
+  lat: number;
+  lng: number;
+}
+
+interface LeafletLayerGroup {
+  addLayer: (layer: any) => LeafletLayerGroup;
+  clearLayers: () => void;
+  getLayers: () => any[];
+  addTo: (map: LeafletMap) => LeafletLayerGroup;
+}
+
 export interface Coordinate {
   address?: string;
   lat: number;
@@ -79,8 +118,9 @@ interface LeafletTileInterface {
 }
 
 class LeafletTile implements LeafletTileInterface {
-  tile: any;
-  constructor(private map: any) {
+  private tile: LeafletTileLayer | null = null;
+
+  constructor(private map: LeafletMap) {
     this.map = map;
   }
 
@@ -119,13 +159,14 @@ interface LeafletLayerStateInterface {
 }
 
 class LeafletLayerState implements LeafletLayerStateInterface {
-  group: any | null = null;
-  constructor(private map: any) {
+  private group: LeafletLayerGroup | null = null;
+
+  constructor(private map: LeafletMap) {
     this.group = L.layerGroup();
-    this.group.addTo(this.map);
+    this.group?.addTo(this.map);
   }
 
-  addLayers(layers: any[]) {
+  addLayers(layers: LeafletLayers[]) {
     layers.forEach((layer) => this.group?.addLayer(layer));
     this.readjustMapView();
   }
@@ -138,7 +179,7 @@ class LeafletLayerState implements LeafletLayerStateInterface {
 
   onRoutesChange(routes: Route[]) {
     this.teardown();
-    let layersToAdd: any[] = [];
+    let layersToAdd: LeafletLayers[] = [];
     routes.forEach((route) => {
       if (route.coordinates.length > 0) {
         this.createMarkers(route.coordinates).forEach((marker) =>
@@ -151,7 +192,7 @@ class LeafletLayerState implements LeafletLayerStateInterface {
     this.addLayers(layersToAdd);
   }
 
-  private createMarkers(coords: Coordinate[]) {
+  private createMarkers(coords: Coordinate[]): LeafletMarker[] {
     return coords.map((c, i) => {
       const color =
         i === 0 ? '#22c55e' : i === coords.length - 1 ? '#ef4444' : '#3b82f6';
@@ -161,20 +202,23 @@ class LeafletLayerState implements LeafletLayerStateInterface {
     });
   }
 
-  private addPolyline(coordinates: Coordinate[]) {
+  private addPolyline(coordinates: Coordinate[]): LeafletPolyline | null {
+    if (coordinates.length < 2) return null;
     const latLngs = coordinates.map((c) => L.latLng(c.lat, c.lng));
     return new L.Polyline(latLngs);
   }
 
   private readjustMapView() {
+    if (!this.group) return;
+
     let markerLayers = this.group
       .getLayers()
       .filter((layer: any) => layer instanceof L.Marker);
-    let coords = markerLayers.map((markerLayer: any) => {
+    let coords = markerLayers.map((markerLayer: LeafletMarker) => {
       return markerLayer.getLatLng();
     });
     this.fitMapToCoordinates(
-      coords.map((ll: any) => ({ lat: ll.lat, lng: ll.lng })),
+      coords.map((ll: LeafletLatLng) => ({ lat: ll.lat, lng: ll.lng })),
     );
   }
 
@@ -190,7 +234,7 @@ class LeafletLayerState implements LeafletLayerStateInterface {
         duration: 1.2,
       });
     } else {
-      const latLngs = coords.map((c) => L.latLng([c.lat, c.lng]));
+      const latLngs = coords.map((c) => L.latLng(c.lat, c.lng));
       this.map.flyToBounds(latLngs, {
         padding: [32, 32],
         animate: true,
@@ -212,11 +256,11 @@ class LeafletLayerState implements LeafletLayerStateInterface {
 }
 
 export default class LeafletModifier extends Modifier<LeafletModifierSignature> {
-  element: HTMLElement | null = null;
-  moduleSet: boolean = false;
-  map: any;
-  tile: any; //
-  state: LeafletLayerState | undefined;
+  private element: HTMLElement | null = null;
+  private moduleSet: boolean = false;
+  private map: LeafletMap | null = null;
+  private tile: LeafletTile | null = null;
+  private state: LeafletLayerState | undefined;
 
   modify(
     element: HTMLElement,
@@ -251,7 +295,7 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
       if (!this.tile) {
         this.tile = new LeafletTile(this.map);
       }
-      this.tile.onTileChange(tileserverUrl);
+      this.tile.onTileChange(tileserverUrl || null);
 
       if (!this.state) {
         this.state = new LeafletLayerState(this.map);
@@ -273,7 +317,9 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
     mapConfig?: LeafletMapConfig,
     onMapClick?: (c: Coordinate) => void,
   ) {
-    this.map = L.map(this.element!).setView([0, 0], 13);
+    if (!this.element) return;
+
+    this.map = L.map(this.element).setView([0, 0], 13);
 
     L.tileLayer(
       mapConfig?.tileserverUrl ||
@@ -285,10 +331,13 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
     ).addTo(this.map);
 
     if (!mapConfig?.disableMapClick && onMapClick) {
-      this.map.on('click', (event: any) => {
-        const { lat, lng } = event.latlng;
-        onMapClick({ lat, lng });
-      });
+      this.map?.on(
+        'click',
+        (event: { latlng: { lat: number; lng: number } }) => {
+          const { lat, lng } = event.latlng;
+          onMapClick({ lat, lng });
+        },
+      );
     }
   }
 
@@ -302,7 +351,7 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
 }
 
 //utilities
-function createMarker(coord: Coordinate, color: string) {
+function createMarker(coord: Coordinate, color: string): LeafletMarker {
   const strokeColor = darken(color, 0.3);
   const html = `<svg width="24" height="32" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg">
       <path d="M12 0C5.3 0 0 5.3 0 12c0 8.5 12 20 12 20s12-11.5 12-20C24 5.3 18.7 0 12 0z"
@@ -321,7 +370,7 @@ function createMarker(coord: Coordinate, color: string) {
   });
 }
 
-function darken(hex: string, factor: number) {
+function darken(hex: string, factor: number): string {
   const h = hex.replace('#', '');
   const r = parseInt(h.substring(0, 2), 16);
   const g = parseInt(h.substring(2, 4), 16);
