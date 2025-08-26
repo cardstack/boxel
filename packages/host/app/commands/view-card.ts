@@ -73,9 +73,7 @@ export default class ViewCardCommand extends HostBaseCommand<
   private async handleCodeMode(input: BaseCommandModule.ViewCardInput) {
     await this.operatorModeStateService.updateCodePath(new URL(input.cardId));
 
-    await new UpdatePlaygroundSelectionCommand(
-      this.commandContext,
-    ).execute({
+    await new UpdatePlaygroundSelectionCommand(this.commandContext).execute({
       moduleId: undefined,
       cardId: input.cardId,
       format: (input.format as Format) || 'isolated',
