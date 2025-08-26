@@ -1,7 +1,6 @@
 import { service } from '@ember/service';
 
 import { isCardInstance } from '@cardstack/runtime-common';
-import { skillCardsToMessage } from '@cardstack/runtime-common/ai/prompt';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import { Skill } from 'https://cardstack.com/base/skill';
@@ -138,3 +137,12 @@ ${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : 'No file content available.'}
     }
   }
 }
+
+export const skillCardsToMessage = (cards: Skill[]) => {
+  return cards
+    .map((card) => {
+      return `Skill (id: ${card.id}):
+${card.instructions}`;
+    })
+    .join('\n\n');
+};

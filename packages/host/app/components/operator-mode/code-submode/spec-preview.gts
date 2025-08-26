@@ -5,7 +5,6 @@ import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
 
-import { task } from 'ember-concurrency';
 import { consume, provide } from 'ember-provide-consume-context';
 
 import {
