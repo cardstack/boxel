@@ -93,7 +93,7 @@ export class AllowedProxyDestinations {
     return config?.supportsStreaming ?? false;
   }
 
-  static async getInstance(dbAdapter: DBAdapter) {
+  static getInstance(dbAdapter: DBAdapter) {
     if (!AllowedProxyDestinations.instance) {
       AllowedProxyDestinations.instance = new AllowedProxyDestinations(
         dbAdapter,

@@ -212,7 +212,7 @@ export default function handleRequestForward({
 
       // 3. Validate proxy destination is allowed and get config
       const destinationsConfig =
-        await AllowedProxyDestinations.getInstance(dbAdapter);
+        AllowedProxyDestinations.getInstance(dbAdapter);
       const destinationConfig = await destinationsConfig.getDestinationConfig(
         json.url,
       );
