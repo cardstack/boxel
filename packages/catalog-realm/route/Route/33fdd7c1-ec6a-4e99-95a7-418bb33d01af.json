@@ -1,0 +1,43 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Route",
+        "module": "../route"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      },
+      "mapConfig": {
+        "tileserverUrl": "",
+        "disableMapClick": true
+      },
+      "routeName": "China–Tokyo",
+      "coordinates": [
+        {
+          "searchKey": "china",
+          "lat": 35.000074,
+          "lon": 104.999927
+        },
+        {
+          "searchKey": "sibu",
+          "lat": 2.2996601,
+          "lon": 111.8710012
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

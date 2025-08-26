@@ -1,0 +1,36 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Routes",
+        "module": "../routes"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "title": null,
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "relationships": {
+      "routes.0": {
+        "links": {
+          "self": "../../route/Route/770f6435-3129-4cde-817a-52e6e4ce443f"
+        }
+      },
+      "routes.1": {
+        "links": {
+          "self": "../../route/Route/33fdd7c1-ec6a-4e99-95a7-418bb33d01af"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

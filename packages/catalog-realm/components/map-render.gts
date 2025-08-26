@@ -15,8 +15,6 @@ export interface Route {
 interface LeafletMapConfig {
   tileserverUrl?: string;
   disableMapClick?: boolean;
-  singleZoom?: number;
-  fitBoundsPadding?: number;
 }
 
 interface MapRenderSignature {
@@ -74,6 +72,33 @@ export class MapRender extends GlimmerComponent<MapRenderSignature> {
       rel='stylesheet'
     />
   </template>
+}
+
+interface LeafletTileInterface {
+  onTileChange: (tile: string | null) => void;
+}
+
+class LeafletTile implements LeafletTileInterface {
+  tile: any;
+  constructor(private map: any) {
+    this.map = map;
+  }
+
+  onTileChange(tile: string | null) {
+    this.teardown();
+    const defaultTile = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+    this.tile = L.tileLayer(tile || defaultTile, {
+      maxZoom: 18,
+      attribution: '© OpenStreetMap contributors',
+    }).addTo(this.map);
+  }
+
+  teardown() {
+    if (this.tile) {
+      this.tile.remove();
+      this.tile = null;
+    }
+  }
 }
 
 interface LeafletModifierSignature {
@@ -190,6 +215,7 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
   element: HTMLElement | null = null;
   moduleSet: boolean = false;
   map: any;
+  tile: any; //
   state: LeafletLayerState | undefined;
 
   modify(
@@ -198,6 +224,7 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
     named: NamedArgs<LeafletModifierSignature>,
   ) {
     let { coordinates, routes, onMapClick, mapConfig } = named;
+    let { tileserverUrl } = mapConfig || {};
     this.element = element;
 
     (async () => {
@@ -221,6 +248,11 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
       if (!this.map) {
         return;
       }
+      if (!this.tile) {
+        this.tile = new LeafletTile(this.map);
+      }
+      this.tile.onTileChange(tileserverUrl);
+
       if (!this.state) {
         this.state = new LeafletLayerState(this.map);
       }
@@ -241,8 +273,7 @@ export default class LeafletModifier extends Modifier<LeafletModifierSignature> 
     mapConfig?: LeafletMapConfig,
     onMapClick?: (c: Coordinate) => void,
   ) {
-    const zoom = mapConfig?.singleZoom ?? 13;
-    this.map = L.map(this.element!).setView([0, 0], zoom);
+    this.map = L.map(this.element!).setView([0, 0], 13);
 
     L.tileLayer(
       mapConfig?.tileserverUrl ||

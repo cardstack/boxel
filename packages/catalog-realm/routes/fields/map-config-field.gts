@@ -3,16 +3,22 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import StringField from 'https://cardstack.com/base/string';
+import NumberField from 'https://cardstack.com/base/number';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import { contains, field } from 'https://cardstack.com/base/card-api';
 
 class AtomTemplate extends Component<typeof MapConfigField> {
   get displayValue() {
     const tileserverUrl = this.args.model?.tileserverUrl;
+    const singleZoom = this.args.model?.singleZoom;
     const disableMapClick = this.args.model?.disableMapClick;
 
     if (tileserverUrl) {
       return `Custom tileserver: ${tileserverUrl}`;
+    }
+
+    if (singleZoom) {
+      return `Zoom: ${singleZoom}`;
     }
 
     if (disableMapClick) {
@@ -49,6 +55,14 @@ class EditTemplate extends Component<typeof MapConfigField> {
     return this.args.model?.tileserverUrl || '';
   }
 
+  get singleZoomValue() {
+    return this.args.model?.singleZoom || 13;
+  }
+
+  get fitBoundsPaddingValue() {
+    return this.args.model?.fitBoundsPadding || 32;
+  }
+
   get disableMapClickValue() {
     return this.args.model?.disableMapClick || false;
   }
@@ -57,6 +71,22 @@ class EditTemplate extends Component<typeof MapConfigField> {
   updateTileserverUrl(value: string) {
     if (this.args.model) {
       this.args.model.tileserverUrl = value || undefined;
+    }
+  }
+
+  @action
+  updateSingleZoom(value: string) {
+    if (this.args.model) {
+      const numValue = parseInt(value, 10);
+      this.args.model.singleZoom = isNaN(numValue) ? 13 : numValue;
+    }
+  }
+
+  @action
+  updateFitBoundsPadding(value: string) {
+    if (this.args.model) {
+      const numValue = parseInt(value, 10);
+      this.args.model.fitBoundsPadding = isNaN(numValue) ? 32 : numValue;
     }
   }
 
@@ -87,6 +117,34 @@ class EditTemplate extends Component<typeof MapConfigField> {
         />
         <div class='field-help'>
           Leave empty to use default OpenStreetMap tiles
+        </div>
+      </div>
+
+      <div class='field-group'>
+        <label class='field-label'>Default Zoom Level</label>
+        <BoxelInput
+          type='number'
+          min='1'
+          max='18'
+          @value={{this.singleZoomValue}}
+          @onInput={{this.updateSingleZoom}}
+        />
+        <div class='field-help'>
+          Zoom level when displaying a single point (1-18)
+        </div>
+      </div>
+
+      <div class='field-group'>
+        <label class='field-label'>Fit Bounds Padding</label>
+        <BoxelInput
+          type='number'
+          min='0'
+          max='100'
+          @value={{this.fitBoundsPaddingValue}}
+          @onInput={{this.updateFitBoundsPadding}}
+        />
+        <div class='field-help'>
+          Padding around map bounds in pixels
         </div>
       </div>
 
@@ -182,6 +240,8 @@ export class MapConfigField extends FieldDef {
   static displayName = 'Map Configuration';
 
   @field tileserverUrl = contains(StringField);
+  @field singleZoom = contains(NumberField);
+  @field fitBoundsPadding = contains(NumberField);
   @field disableMapClick = contains(BooleanField);
 
   static atom = AtomTemplate;

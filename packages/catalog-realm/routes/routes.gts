@@ -3,40 +3,45 @@ import StringField from 'https://cardstack.com/base/string';
 import {
   Component,
   contains,
-  containsMany,
   CardDef,
   field,
+  linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import { MapRender, type Coordinate } from '../components/map-render';
-import { CoordinateField } from './fields/coordinate-field';
-import { MapConfigField } from './fields/map-config-field';
+import { Route } from '../route/route';
 
-class AtomTemplate extends Component<typeof Route> {
+class AtomTemplate extends Component<typeof Routes> {
   <template>
-    <div class='route-display'>
+    <div class='routes-display'>
       <MapIcon class='map-icon' />
-      <div class='route-info'>
-        <span class='route-title'>{{@model.title}}</span>
+      <div class='routes-info'>
+        <span class='routes-title'>{{@model.title}}</span>
+        <span class='routes-count'>{{@model.routes.length}} routes</span>
       </div>
     </div>
 
     <style scoped>
-      .route-display {
+      .routes-display {
         display: inline-flex;
         align-items: center;
         gap: var(--boxel-sp-xxs);
         flex-shrink: 0;
       }
 
-      .route-info {
+      .routes-info {
         display: flex;
         flex-direction: column;
         gap: 2px;
       }
 
-      .route-title {
+      .routes-title {
         font-weight: 500;
         line-height: normal;
+      }
+
+      .routes-count {
+        font-size: 12px;
+        color: var(--boxel-text-muted);
       }
 
       .map-icon {
@@ -49,76 +54,97 @@ class AtomTemplate extends Component<typeof Route> {
   </template>
 }
 
-class IsolatedTemplate extends Component<typeof Route> {
-  get routeCoordinates(): Coordinate[] {
-    const coordinates: Coordinate[] = [];
+class IsolatedTemplate extends Component<typeof Routes> {
+  get allRouteCoordinates(): Coordinate[] {
+    const allCoordinates: Coordinate[] = [];
 
-    // Get coordinates from the route field
-    if (this.args.model?.coordinates) {
-      this.args.model.coordinates.forEach((c: any) => {
-        if (c?.lat && c?.lon) {
-          const address = c.searchKey;
-          coordinates.push({
-            lat: c.lat,
-            lng: c.lon,
-            address: address && address.trim() !== '' ? address : 'Waypoint',
+    if (this.args.model?.routes) {
+      this.args.model.routes.forEach((route: any) => {
+        if (route?.coordinates) {
+          route.coordinates.forEach((c: any) => {
+            if (c?.lat && c?.lon) {
+              const address = c.searchKey;
+              allCoordinates.push({
+                lat: c.lat,
+                lng: c.lon,
+                address:
+                  address && address.trim() !== '' ? address : 'Waypoint',
+              });
+            }
           });
         }
       });
     }
 
-    return coordinates;
+    return allCoordinates;
   }
 
-  get routes() {
-    return [
-      {
-        name: this.args.model?.title || 'Route',
-        coordinates: this.routeCoordinates,
-      },
-    ];
+  get routesForMap() {
+    const routes: any[] = [];
+
+    if (this.args.model?.routes) {
+      this.args.model.routes.forEach((route: any) => {
+        if (route?.coordinates && route.coordinates.length > 0) {
+          const coordinates: Coordinate[] = [];
+          route.coordinates.forEach((c: any) => {
+            if (c?.lat && c?.lon) {
+              const address = c.searchKey;
+              coordinates.push({
+                lat: c.lat,
+                lng: c.lon,
+                address:
+                  address && address.trim() !== '' ? address : 'Waypoint',
+              });
+            }
+          });
+
+          if (coordinates.length > 0) {
+            routes.push({
+              name: route.title || 'Untitled Route',
+              coordinates: coordinates,
+            });
+          }
+        }
+      });
+    }
+
+    return routes;
   }
 
-  get hasValidCoordinates() {
-    return this.routeCoordinates.length > 0;
+  get hasValidRoutes() {
+    return this.args.model?.routes && this.args.model.routes.length > 0;
   }
 
   <template>
     <div class='isolated-template'>
-
       <div class='template-content'>
         <div class='fields-panel'>
           <div class='fields-header'>
-            <h3>Route Configuration</h3>
+            <h3>Routes Collection</h3>
             <p class='fields-description'>
-              Add waypoints to create your route. Each waypoint will be
-              connected to form a complete journey.
+              Manage your collection of routes. Each route contains waypoints
+              that form a complete journey.
             </p>
           </div>
           <div class='fields-container'>
-            <@fields.coordinates @format='edit' />
-            <@fields.mapConfig @format='edit' />
+            <@fields.routes @format='edit' />
           </div>
         </div>
 
         <div class='map-panel'>
-          {{#if this.hasValidCoordinates}}
-            <MapRender
-              @routes={{this.routes}}
-              @mapConfig={{@model.mapConfig}}
-            />
+          {{#if this.hasValidRoutes}}
+            <MapRender @routes={{this.routesForMap}} />
           {{else}}
             <div class='map-placeholder'>
               <div class='placeholder-content'>
                 <div class='placeholder-icon'>🗺️</div>
-                <div class='placeholder-title'>Create Your Route</div>
+                <div class='placeholder-title'>Create Your Routes Collection</div>
                 <div class='placeholder-description'>
-                  Add waypoints using the configuration panel to visualize your
-                  route on the map
+                  Add routes to this collection to visualize them on the map
                 </div>
                 <div class='placeholder-hint'>
                   <span class='hint-icon'>💡</span>
-                  <span>Start by adding your first waypoint</span>
+                  <span>Start by adding your first route</span>
                 </div>
               </div>
             </div>
@@ -185,8 +211,22 @@ class IsolatedTemplate extends Component<typeof Route> {
         background: var(--boxel-light);
       }
 
-      .fields-container > * + * {
-        margin-top: var(--boxel-sp);
+      .routes-section {
+        margin-bottom: var(--boxel-sp-xl);
+      }
+
+      .routes-section h4 {
+        margin: 0 0 var(--boxel-sp-xs) 0;
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--boxel-text-color);
+      }
+
+      .section-description {
+        margin: 0 0 var(--boxel-sp-md) 0;
+        font-size: 14px;
+        color: var(--boxel-text-muted);
+        line-height: 1.4;
       }
 
       .map-panel {
@@ -262,62 +302,97 @@ class IsolatedTemplate extends Component<typeof Route> {
   </template>
 }
 
-class EmbeddedTemplate extends Component<typeof Route> {
-  get routeCoordinates(): Coordinate[] {
-    const coordinates: Coordinate[] = [];
+class EmbeddedTemplate extends Component<typeof Routes> {
+  get allRouteCoordinates(): Coordinate[] {
+    const allCoordinates: Coordinate[] = [];
 
-    // Get coordinates from the routes field
-    if (this.args.model?.coordinates) {
-      this.args.model.coordinates.forEach((routePoint: any) => {
-        if (routePoint?.lat && routePoint?.lon) {
-          const address = routePoint.searchKey;
-          coordinates.push({
-            lat: routePoint.lat,
-            lng: routePoint.lon,
-            address: address && address.trim() !== '' ? address : 'Waypoint',
+    // Collect coordinates from all linked routes
+    if (this.args.model?.routes) {
+      this.args.model.routes.forEach((route: any) => {
+        if (route?.coordinates) {
+          route.coordinates.forEach((c: any) => {
+            if (c?.lat && c?.lon) {
+              const address = c.searchKey;
+              allCoordinates.push({
+                lat: c.lat,
+                lng: c.lon,
+                address:
+                  address && address.trim() !== '' ? address : 'Waypoint',
+              });
+            }
           });
         }
       });
     }
 
-    return coordinates;
+    return allCoordinates;
   }
 
-  get routes() {
-    return [
-      {
-        name: this.args.model?.title || 'Route',
-        coordinates: this.routeCoordinates,
-      },
-    ];
+  get routesForMap() {
+    const routes: any[] = [];
+
+    if (this.args.model?.routes) {
+      this.args.model.routes.forEach((route: any) => {
+        if (route?.coordinates && route.coordinates.length > 0) {
+          const coordinates: Coordinate[] = [];
+          route.coordinates.forEach((c: any) => {
+            if (c?.lat && c?.lon) {
+              const address = c.searchKey;
+              coordinates.push({
+                lat: c.lat,
+                lng: c.lon,
+                address:
+                  address && address.trim() !== '' ? address : 'Waypoint',
+              });
+            }
+          });
+
+          if (coordinates.length > 0) {
+            routes.push({
+              name: route.title || 'Untitled Route',
+              coordinates: coordinates,
+            });
+          }
+        }
+      });
+    }
+
+    return routes;
   }
 
-  get hasValidCoordinates() {
-    return this.routeCoordinates.length > 0;
+  get routesTitle() {
+    return this.args.model?.title || 'Routes Collection';
   }
 
-  get routeTitle() {
-    return this.args.model?.title || 'Untitled Route';
+  get routesCount() {
+    return this.args.model?.routes?.length || 0;
+  }
+
+  get hasValidRoutes() {
+    return this.routesForMap.length > 0;
   }
 
   <template>
     <div class='embedded-template'>
-      {{#if this.hasValidCoordinates}}
-        <div class='route-preview'>
-          <div class='route-header'>
+      {{#if this.hasValidRoutes}}
+        <div class='routes-preview'>
+          <div class='routes-header'>
             <MapIcon class='map-icon' />
-            <span class='route-title'>{{this.routeTitle}}</span>
+            <div class='routes-info'>
+              <span class='routes-title'>{{this.routesTitle}}</span>
+              <span class='routes-count'>{{this.routesCount}} routes</span>
+            </div>
           </div>
 
-          <MapRender @routes={{this.routes}} @mapConfig={{@model.mapConfig}} />
+          <MapRender @routes={{this.routesForMap}} />
         </div>
       {{else}}
-        <div class='route-placeholder'>
+        <div class='routes-placeholder'>
           <div class='placeholder-text'>
-            <div class='placeholder-icon'>📍</div>
-            <div class='placeholder-title'>Add Waypoints</div>
+            <div class='placeholder-icon'>🗺️</div>
+            <div class='placeholder-title'>Add Routes</div>
             <div class='placeholder-description'>
-              Add waypoints with coordinates to see the route on the map
+              Add routes to this collection to see them on the map
             </div>
           </div>
         </div>
@@ -331,14 +406,14 @@ class EmbeddedTemplate extends Component<typeof Route> {
         gap: var(--boxel-sp-md);
       }
 
-      .route-preview {
+      .routes-preview {
         overflow: hidden;
         background: var(--boxel-surface-secondary);
         border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius);
       }
 
-      .route-header {
+      .routes-header {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
@@ -347,11 +422,22 @@ class EmbeddedTemplate extends Component<typeof Route> {
         border-bottom: 1px solid var(--boxel-border-color);
       }
 
-      .route-title {
+      .routes-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .routes-title {
         font-size: 16px;
         font-weight: 600;
         color: var(--boxel-text-color);
         margin: 0;
+      }
+
+      .routes-count {
+        font-size: 12px;
+        color: var(--boxel-text-muted);
       }
 
       .map-icon {
@@ -361,7 +447,7 @@ class EmbeddedTemplate extends Component<typeof Route> {
         height: 20px;
       }
 
-      .route-placeholder {
+      .routes-placeholder {
         height: 250px;
         display: flex;
         align-items: center;
@@ -396,30 +482,38 @@ class EmbeddedTemplate extends Component<typeof Route> {
   </template>
 }
 
-export class Route extends CardDef {
-  static displayName = 'Route';
+export class Routes extends CardDef {
+  static displayName = 'Routes';
   static prefersWideFormat = true;
 
-  @field routeName = contains(StringField);
-  @field coordinates = containsMany(CoordinateField);
-  @field mapConfig = contains(MapConfigField);
+  @field routes = linksToMany(Route);
 
   @field title = contains(StringField, {
-    computeVia: function (this: Route) {
-      if (this.routeName && this.routeName.trim() !== '') {
-        return this.routeName;
+    computeVia: function (this: Routes) {
+      const routes = this.routes || [];
+      if (routes.length === 0) {
+        return 'Empty Routes Collection';
       }
-      let firstWaypoint = this.coordinates[0]?.searchKey;
-      let lastWaypoint =
-        this.coordinates[this.coordinates.length - 1]?.searchKey;
+      // For each route, get its title (which is usually "waypoint – waypoint")
+      let titles = routes.map((route: any, idx: number) => {
+        let routeTitle = route?.title;
+        if (!routeTitle) {
+          // Try to construct from waypoints if possible
+          let firstWaypoint = route?.coordinates?.[0]?.searchKey;
+          let lastWaypoint =
+            route?.coordinates?.[route?.coordinates?.length - 1]?.searchKey;
 
-      if (firstWaypoint && lastWaypoint && firstWaypoint !== lastWaypoint) {
-        return `${firstWaypoint} – ${lastWaypoint}`;
-      } else if (firstWaypoint) {
-        return firstWaypoint;
-      } else {
-        return 'Untitled Route';
-      }
+          if (firstWaypoint && lastWaypoint && firstWaypoint !== lastWaypoint) {
+            routeTitle = `${firstWaypoint} – ${lastWaypoint}`;
+          } else if (firstWaypoint) {
+            routeTitle = firstWaypoint;
+          } else {
+            routeTitle = `Route ${String.fromCharCode(65 + idx)}`; // Route A, B, etc.
+          }
+        }
+        return `Route ${String.fromCharCode(65 + idx)}: ${routeTitle}`;
+      });
+      return titles.join(' | ');
     },
   });
 
