@@ -12,8 +12,7 @@ const config = {
   launch_in_dev: ['Chrome'],
 
   // Give Chrome time to boot/connect (values are generous by design)
-  browser_start_timeout: 120000, // 120s
-  browser_disconnect_timeout: 120000, // 120s
+  browser_start_timeout: 120,
 
   browser_args: {
     Chrome: {
