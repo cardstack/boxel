@@ -103,8 +103,6 @@ ${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : 'No file content available.'}
         },
       ];
 
-      console.log(generationMessages);
-
       const sendRequestViaProxyCommand = new SendRequestViaProxyCommand(
         this.commandService.commandContext,
       );
@@ -112,7 +110,7 @@ ${fileContent ? `\`\`\`\n${fileContent}\n\`\`\`` : 'No file content available.'}
         url: 'https://openrouter.ai/api/v1/chat/completions',
         method: 'POST',
         requestBody: JSON.stringify({
-          model: input.llmModel || 'anthropic/claude-3.5-sonnet',
+          model: input.llmModel || 'anthropic/claude-3-haiku',
           messages: generationMessages,
           stream: false,
         }),
