@@ -14,7 +14,6 @@ const config = {
   // Give Chrome time to boot/connect (values are generous by design)
   browser_start_timeout: 120000, // 120s
   browser_disconnect_timeout: 120000, // 120s
-  timeout: 120, // Testem test timeout (seconds)
 
   browser_args: {
     Chrome: {
