@@ -8,13 +8,10 @@ import {
   field,
 } from 'https://cardstack.com/base/card-api';
 import { MapRender, type Coordinate } from '../components/map-render';
-import { WaypointInputField } from './fields/waypoint-input-field';
+import { CoordinateField } from './fields/coordinate-field';
+import { MapConfigField } from './fields/map-config-field';
 
 class AtomTemplate extends Component<typeof Route> {
-  get hasRoute() {
-    return this.args.model?.routes && this.args.model.routes.length > 0;
-  }
-
   <template>
     <div class='route-display'>
       <MapIcon class='map-icon' />
@@ -56,14 +53,14 @@ class IsolatedTemplate extends Component<typeof Route> {
   get routeCoordinates(): Coordinate[] {
     const coordinates: Coordinate[] = [];
 
-    // Get coordinates from the routes field
-    if (this.args.model?.routes) {
-      this.args.model.routes.forEach((routePoint: any) => {
-        if (routePoint?.lat && routePoint?.lon) {
-          const address = routePoint.searchKey;
+    // Get coordinates from the route field
+    if (this.args.model?.coordinates) {
+      this.args.model.coordinates.forEach((c: any) => {
+        if (c?.lat && c?.lon) {
+          const address = c.searchKey;
           coordinates.push({
-            lat: routePoint.lat,
-            lng: routePoint.lon,
+            lat: c.lat,
+            lng: c.lon,
             address: address && address.trim() !== '' ? address : 'Waypoint',
           });
         }
@@ -99,13 +96,17 @@ class IsolatedTemplate extends Component<typeof Route> {
             </p>
           </div>
           <div class='fields-container'>
-            <@fields.routes @format='edit' />
+            <@fields.coordinates @format='edit' />
+            <@fields.mapConfig @format='edit' />
           </div>
         </div>
 
         <div class='map-panel'>
           {{#if this.hasValidCoordinates}}
-            <MapRender @routes={{this.routes}} />
+            <MapRender
+              @routes={{this.routes}}
+              @mapConfig={{@model.mapConfig}}
+            />
           {{else}}
             <div class='map-placeholder'>
               <div class='placeholder-content'>
@@ -182,6 +183,10 @@ class IsolatedTemplate extends Component<typeof Route> {
         padding: var(--boxel-sp-xl);
         overflow-y: auto;
         background: var(--boxel-light);
+      }
+
+      .fields-container > * + * {
+        margin-top: var(--boxel-sp);
       }
 
       .map-panel {
@@ -262,8 +267,8 @@ class EmbeddedTemplate extends Component<typeof Route> {
     const coordinates: Coordinate[] = [];
 
     // Get coordinates from the routes field
-    if (this.args.model?.routes) {
-      this.args.model.routes.forEach((routePoint: any) => {
+    if (this.args.model?.coordinates) {
+      this.args.model.coordinates.forEach((routePoint: any) => {
         if (routePoint?.lat && routePoint?.lon) {
           const address = routePoint.searchKey;
           coordinates.push({
@@ -304,7 +309,7 @@ class EmbeddedTemplate extends Component<typeof Route> {
             <span class='route-title'>{{this.routeTitle}}</span>
           </div>
 
-          <MapRender @routes={{this.routes}} />
+          <MapRender @routes={{this.routes}} @mapConfig={{@model.mapConfig}} />
         </div>
       {{else}}
         <div class='route-placeholder'>
@@ -395,12 +400,14 @@ export class Route extends CardDef {
   static displayName = 'Route';
   static prefersWideFormat = true;
 
-  @field routes = containsMany(WaypointInputField);
+  @field coordinates = containsMany(CoordinateField);
+  @field mapConfig = contains(MapConfigField);
 
   @field title = contains(StringField, {
     computeVia: function (this: Route) {
-      let firstWaypoint = this.routes[0]?.searchKey;
-      let lastWaypoint = this.routes[this.routes.length - 1]?.searchKey;
+      let firstWaypoint = this.coordinates[0]?.searchKey;
+      let lastWaypoint =
+        this.coordinates[this.coordinates.length - 1]?.searchKey;
 
       if (firstWaypoint && lastWaypoint && firstWaypoint !== lastWaypoint) {
         return `${firstWaypoint} – ${lastWaypoint}`;

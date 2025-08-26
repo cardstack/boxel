@@ -17,7 +17,6 @@ interface LeafletMapConfig {
   disableMapClick?: boolean;
   singleZoom?: number;
   fitBoundsPadding?: number;
-  showLayerControl?: boolean;
 }
 
 interface MapRenderSignature {
@@ -83,13 +82,7 @@ interface LeafletModifierSignature {
     Named: {
       coordinates?: Coordinate[];
       routes?: Route[];
-      mapConfig?: {
-        tileserverUrl?: string;
-        disableMapClick?: boolean;
-        singleZoom?: number;
-        fitBoundsPadding?: number;
-        showLayerControl?: boolean;
-      };
+      mapConfig?: LeafletMapConfig;
       onMapClick?: (coordinate: Coordinate) => void;
     };
   };

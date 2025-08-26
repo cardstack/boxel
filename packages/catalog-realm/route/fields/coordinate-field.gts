@@ -5,7 +5,7 @@ import { task } from 'ember-concurrency';
 import { debounce } from 'lodash';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 
-class EditTemplate extends Component<typeof WaypointInputField> {
+class EditTemplate extends Component<typeof CoordinateField> {
   get searchAddressValue() {
     return this.args.model.searchKey;
   }
@@ -171,8 +171,8 @@ class EditTemplate extends Component<typeof WaypointInputField> {
 }
 
 // @ts-ignore
-export class WaypointInputField extends GeoSearchPointField {
-  static displayName = 'Waypoints';
+export class CoordinateField extends GeoSearchPointField {
+  static displayName = 'Coordinate';
 
   static embedded = EditTemplate;
 }
