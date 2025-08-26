@@ -4,6 +4,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
+import { skillCardURL } from '../lib/utils';
 
 import GenerateReadmeCommand from './generate-readme';
 import PatchCardInstanceCommand from './patch-card-instance';
@@ -15,6 +16,26 @@ export default class GenerateReadmeSpecCommand extends HostBaseCommand<
   typeof BaseCommandModule.GenerateReadmeResult
 > {
   @service declare private commandService: CommandService;
+
+  private static readonly GENERATE_README_USER_PROMPT = `Create README documentation for this spec with a brief description and usage examples.`;
+  private static readonly GENERATE_README_SYSTEM_PROMPT = `YOU ARE a proficient Boxel developer creating GitHub-style documentation. Use this structure:
+
+• **Import**: Show how to import the component/field/card/command
+• **Link**: Show how to link or define it in a card (e.g., @field myCard = linksTo(CardName) for cards, @field myField = contains(FieldName) for fields)
+• **Template**: Show how to call it in templates using the fields API with format arguments (e.g., <@fields.myField @format='atom'/>)
+• **Command**: Show how to instantiate and execute commands (e.g., new CommandName(context).execute(input))
+• **Component**: Show how to use components in templates (e.g., <MyComponent @arg="value" />)
+
+Code examples:
+- Cards: show linksTo() usage
+- Fields: show contains() and new FieldName() instantiation
+- Commands: show instantiation and execution patterns
+- Components: show template usage with arguments
+- Include template usage with format options (atom, embedded, edit)
+
+Keep examples minimal but complete. Return ONLY markdown content.
+
+If skill cards are provided, use them for context but don't reference them in the output.`;
 
   static actionVerb = 'Generate README for Spec';
   description =
@@ -43,10 +64,13 @@ export default class GenerateReadmeSpecCommand extends HostBaseCommand<
         name: input.spec.ref.name,
         module: input.spec.moduleHref,
       },
-      userPrompt:
-        'Return only the README markdown content showing how to import and use this in a card.',
-      systemPrompt:
-        'Generate a concise library-style README with Import and Usage sections. Focus on practical code examples. Return ONLY the README content as plain markdown, no explanations, no additional text, and no triple-tick markdown code blocks.',
+      userPrompt: GenerateReadmeSpecCommand.GENERATE_README_USER_PROMPT,
+      systemPrompt: GenerateReadmeSpecCommand.GENERATE_README_SYSTEM_PROMPT,
+      llmModel: 'anthropic/claude-3-haiku',
+      skillCardIds: [
+        skillCardURL('boxel-development'),
+        skillCardURL('source-code-editing'),
+      ],
     });
 
     // Patch the spec's readMe field
