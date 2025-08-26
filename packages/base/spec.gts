@@ -20,6 +20,7 @@ import {
   Pill,
   RealmIcon,
   BoxelInput,
+  BoxelButton,
 } from '@cardstack/boxel-ui/components';
 import {
   codeRefWithAbsoluteURL,
@@ -31,6 +32,9 @@ import {
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import GlimmerComponent from '@glimmer/component';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { task } from 'ember-concurrency';
 import BoxModel from '@cardstack/boxel-icons/box-model';
 import BookOpenText from '@cardstack/boxel-icons/book-open-text';
 import LayersSubtract from '@cardstack/boxel-icons/layers-subtract';
@@ -41,6 +45,7 @@ import AppsIcon from '@cardstack/boxel-icons/apps';
 import LayoutList from '@cardstack/boxel-icons/layout-list';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
+import GenerateReadmeSpecCommand from '@cardstack/boxel-host/commands/generate-readme-spec';
 
 export type SpecType = 'card' | 'field' | 'component' | 'app' | 'command';
 
@@ -58,6 +63,36 @@ class Isolated extends Component<typeof Spec> {
     }
     return this.args.model.constructor?.icon;
   }
+
+  @action
+  generateReadme() {
+    this.generateReadmeTask.perform();
+  }
+
+  generateReadmeTask = task(async () => {
+    if (!this.args.model) {
+      return;
+    }
+
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      console.error('Command context not available');
+      return;
+    }
+
+    try {
+      const generateReadmeSpecCommand = new GenerateReadmeSpecCommand(
+        commandContext,
+      );
+      const result = await generateReadmeSpecCommand.execute({
+        spec: this.args.model,
+      });
+
+      console.log('Generated README:', result.readme);
+    } catch (error) {
+      console.error('Error generating README:', error);
+    }
+  });
 
   get icon() {
     return this.cardDef?.icon;
@@ -128,8 +163,19 @@ class Isolated extends Component<typeof Spec> {
       </header>
       <section class='readme section'>
         <header class='row-header' aria-labelledby='readme'>
-          <BookOpenText width='20' height='20' role='presentation' />
-          <h2 id='readme'>Read Me</h2>
+          <div class='row-header-left'>
+            <BookOpenText width='20' height='20' role='presentation' />
+            <h2 id='readme'>Read Me</h2>
+          </div>
+          <BoxelButton
+            @kind='secondary-light'
+            @size='small'
+            @loading={{this.generateReadmeTask.isRunning}}
+            {{on 'click' this.generateReadme}}
+            data-test-generate-readme-2
+          >
+            Generate README
+          </BoxelButton>
         </header>
         <div data-test-readme>
           <@fields.readMe />
@@ -246,8 +292,14 @@ class Isolated extends Component<typeof Spec> {
       .row-header {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: var(--boxel-sp-xs);
         padding-bottom: var(--boxel-sp-lg);
+      }
+      .row-header-left {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
       }
       .row-content {
         margin-top: var(--boxel-sp-sm);
@@ -568,6 +620,36 @@ class Edit extends Component<typeof Spec> {
     return this.args.model.constructor?.icon;
   }
 
+  @action
+  generateReadme() {
+    this.generateReadmeTask.perform();
+  }
+
+  generateReadmeTask = task(async () => {
+    if (!this.args.model) {
+      return;
+    }
+
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      console.error('Command context not available');
+      return;
+    }
+
+    try {
+      const generateReadmeSpecCommand = new GenerateReadmeSpecCommand(
+        commandContext,
+      );
+      const result = await generateReadmeSpecCommand.execute({
+        spec: this.args.model,
+      });
+
+      console.log('Generated README:', result.readme);
+    } catch (error) {
+      console.error('Error generating README:', error);
+    }
+  });
+
   get icon() {
     return this.cardDef?.icon;
   }
@@ -644,8 +726,19 @@ class Edit extends Component<typeof Spec> {
       </header>
       <section class='readme section'>
         <header class='row-header' aria-labelledby='readme'>
-          <BookOpenText width='20' height='20' role='presentation' />
-          <h2 id='readme'>Read Me</h2>
+          <div class='row-header-left'>
+            <BookOpenText width='20' height='20' role='presentation' />
+            <h2 id='readme'>Read Me</h2>
+          </div>
+          <BoxelButton
+            @kind='secondary-light'
+            @size='small'
+            @loading={{this.generateReadmeTask.isRunning}}
+            {{on 'click' this.generateReadme}}
+            data-test-generate-readme
+          >
+            Generate README
+          </BoxelButton>
         </header>
         <div data-test-readme>
           <@fields.readMe />
@@ -653,8 +746,10 @@ class Edit extends Component<typeof Spec> {
       </section>
       <section class='examples section'>
         <header class='row-header' aria-labelledby='examples'>
-          <LayersSubtract width='20' height='20' role='presentation' />
-          <h2 id='examples'>Examples</h2>
+          <div class='row-header-left'>
+            <LayersSubtract width='20' height='20' role='presentation' />
+            <h2 id='examples'>Examples</h2>
+          </div>
         </header>
         {{#if (eq @model.specType 'field')}}
           {{#if this.isPrimitiveField}}
@@ -673,8 +768,10 @@ class Edit extends Component<typeof Spec> {
       </section>
       <section class='module section'>
         <header class='row-header' aria-labelledby='module'>
-          <GitBranch width='20' height='20' role='presentation' />
-          <h2 id='module'>Module</h2>
+          <div class='row-header-left'>
+            <GitBranch width='20' height='20' role='presentation' />
+            <h2 id='module'>Module</h2>
+          </div>
         </header>
         <div class='code-ref-container'>
           <FieldContainer @label='URL' @vertical={{true}}>
@@ -755,8 +852,14 @@ class Edit extends Component<typeof Spec> {
       .row-header {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: var(--boxel-sp-xs);
         padding-bottom: var(--boxel-sp-lg);
+      }
+      .row-header-left {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
       }
       .row-content {
         margin-top: var(--boxel-sp-sm);

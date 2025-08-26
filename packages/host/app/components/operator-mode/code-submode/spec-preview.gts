@@ -30,13 +30,11 @@ import {
   CardContextName,
 } from '@cardstack/runtime-common';
 
-import GenerateReadmeSpecCommand from '@cardstack/host/commands/generate-readme-spec';
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import { type ModuleDeclaration } from '@cardstack/host/resources/module-contents';
 
-import type CommandService from '@cardstack/host/services/command-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { ModuleInspectorView } from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -113,7 +111,6 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare specPanelService: SpecPanelService;
   @service private declare store: StoreService;
-  @service private declare commandService: CommandService;
 
   private cardTracker = new ElementTracker();
 
@@ -173,29 +170,6 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     await this.operatorModeStateService.updateCodePath(selectedUrl);
   }
 
-  @action
-  generateReadme() {
-    this.generateReadmeTask.perform();
-  }
-
-  generateReadmeTask = task(async () => {
-    if (!this.args.activeSpec) {
-      return;
-    }
-
-    try {
-      const generateReadmeSpecCommand = new GenerateReadmeSpecCommand(
-        this.commandService.commandContext,
-      );
-      const result = await generateReadmeSpecCommand.execute({
-        spec: this.args.activeSpec,
-      });
-
-      console.log('Generated README:', result.readme);
-    } catch (error) {
-      console.error('Error generating README:', error);
-    }
-  });
 
   <template>
     <div
@@ -254,15 +228,6 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                 data-test-view-spec-instance
               >
                 <span class='view-instance-btn-text'>View Instance</span>
-              </BoxelButton>
-              <BoxelButton
-                @kind='secondary-light'
-                @size='small'
-                @loading={{this.generateReadmeTask.isRunning}}
-                {{on 'click' this.generateReadme}}
-                data-test-generate-readme
-              >
-                <span class='generate-readme-btn-text'>Generate README</span>
               </BoxelButton>
             </div>
             <Overlays
