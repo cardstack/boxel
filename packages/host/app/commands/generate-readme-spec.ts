@@ -67,10 +67,7 @@ If skill cards are provided, use them for context but don't reference them in th
       userPrompt: GenerateReadmeSpecCommand.GENERATE_README_USER_PROMPT,
       systemPrompt: GenerateReadmeSpecCommand.GENERATE_README_SYSTEM_PROMPT,
       llmModel: 'anthropic/claude-3-haiku',
-      skillCardIds: [
-        skillCardURL('boxel-development'),
-        skillCardURL('source-code-editing'),
-      ],
+      skillCardIds: [skillCardURL('boxel-development')],
     });
 
     // Patch the spec's readMe field
