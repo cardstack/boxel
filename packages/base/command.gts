@@ -64,6 +64,12 @@ export class ShowCardInput extends CardDef {
   @field format = contains(StringField);
 }
 
+export class ViewCardInput extends CardDef {
+  @field cardId = contains(StringField);
+  @field format = contains(StringField);
+  @field stackIndex = contains(NumberField);
+}
+
 export class FileUrlCard extends CardDef {
   @field fileUrl = contains(StringField);
 }

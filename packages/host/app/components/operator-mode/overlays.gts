@@ -12,7 +12,10 @@ import { type TrackedArray } from 'tracked-built-ins';
 
 import { type Actions } from '@cardstack/runtime-common';
 
+import ViewCardCommand from '@cardstack/host/commands/view-card';
+
 import type CardService from '@cardstack/host/services/card-service';
+import type CommandService from '@cardstack/host/services/command-service';
 import RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
@@ -86,6 +89,7 @@ export default class Overlays extends Component<OverlaySignature> {
 
   @service protected declare cardService: CardService;
   @service protected declare realm: RealmService;
+  @service protected declare commandService: CommandService;
 
   @tracked
   protected currentlyHoveredCard: RenderedCardForOverlayActions | null = null;
@@ -140,8 +144,6 @@ export default class Overlays extends Component<OverlaySignature> {
         this.openOrSelectCard(
           renderedCard.cardDefOrId,
           this.getFormatForCard(renderedCard),
-          renderedCard.fieldType,
-          renderedCard.fieldName,
         );
       });
       renderedCard.element.style.cursor = 'pointer';
@@ -175,15 +177,13 @@ export default class Overlays extends Component<OverlaySignature> {
   @action protected openOrSelectCard(
     cardDefOrId: CardDefOrId,
     format: Format = 'isolated',
-    fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
-    fieldName?: string,
   ) {
     if (this.args.toggleSelect && this.args.selectedCards?.length) {
       this.args.toggleSelect(cardDefOrId);
     } else if (this.args.onSelectCard) {
       this.args.onSelectCard(cardDefOrId);
     } else {
-      this.viewCard.perform(cardDefOrId, format, fieldType, fieldName);
+      this.viewCard.perform(cardDefOrId, format);
     }
   }
 
@@ -211,22 +211,15 @@ export default class Overlays extends Component<OverlaySignature> {
   }
 
   protected viewCard = dropTask(
-    async (
-      cardDefOrId: CardDefOrId,
-      format: Format = 'isolated',
-      fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
-      fieldName?: string,
-    ) => {
+    async (cardDefOrId: CardDefOrId, format: Format = 'isolated') => {
       let cardId =
         typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
       let canWrite = this.realm.canWrite(cardId);
       format = canWrite ? format : 'isolated';
-      if (this.args.publicAPI) {
-        await this.args.publicAPI.viewCard(new URL(cardId), format, {
-          fieldType,
-          fieldName,
-        });
-      }
+      await new ViewCardCommand(this.commandService.commandContext).execute({
+        cardId: cardId,
+        format: format,
+      });
     },
   );
 

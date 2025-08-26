@@ -55,6 +55,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
+import ViewCardCommand from '@cardstack/host/commands/view-card';
 
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
@@ -197,22 +198,6 @@ export default class InteractSubmode extends Component {
         });
         here.addToStack(newItem);
         return localId;
-      },
-      viewCard: (
-        cardOrURL: CardDef | URL,
-        format: Format = 'isolated',
-        opts?: { openCardInRightMostStack?: boolean },
-      ): void => {
-        if (opts?.openCardInRightMostStack) {
-          stackIndex = here.stacks.length;
-        }
-        let newItem = new StackItem({
-          id: cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id,
-          format,
-          stackIndex,
-        });
-        here.addToStack(newItem);
-        here.operatorModeStateService.closeWorkspaceChooser();
       },
       editCard(card: CardDef): void {
         let item = here.findCardInStack(card, stackIndex);
@@ -524,9 +509,12 @@ export default class InteractSubmode extends Component {
           searchSheetTrigger ===
           SearchSheetTriggers.DropCardToRightNeighborStackButton
         ) {
-          await this.publicAPI(this, this.stacks.length).viewCard(
-            url,
-            'isolated',
+          await new ViewCardCommand(this.commandService.commandContext).execute(
+            {
+              cardId: url.href,
+              format: 'isolated',
+              stackIndex: 1,
+            },
           );
         } else {
           // In case, that the search was accessed directly without clicking right and left buttons,
@@ -539,7 +527,12 @@ export default class InteractSubmode extends Component {
             numberOfStacks === 0 ||
             this.operatorModeStateService.stackIsEmpty(stackIndex)
           ) {
-            await this.publicAPI(this, 0).viewCard(url, 'isolated');
+            await new ViewCardCommand(
+              this.commandService.commandContext,
+            ).execute({
+              cardId: url.href,
+              format: 'isolated',
+            });
           } else {
             stack = this.operatorModeStateService.rightMostStack();
             if (stack) {

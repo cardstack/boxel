@@ -438,15 +438,6 @@ export interface CardActions {
       cardModeAfterCreation?: Format; // by default, the new card opens in the stack in edit mode
     },
   ) => Promise<string | undefined>;
-  viewCard: (
-    cardOrURL: CardDef | URL,
-    format?: Format,
-    opts?: {
-      openCardInRightMostStack?: boolean;
-      fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
-      fieldName?: string;
-    },
-  ) => void;
   editCard: (card: CardDef) => void;
   saveCard: (id: string) => void;
   changeSubmode: (

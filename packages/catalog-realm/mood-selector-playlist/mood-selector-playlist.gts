@@ -18,6 +18,8 @@ import MusicIcon from '@cardstack/boxel-icons/music';
 import { PlaylistCard } from '../playlist/playlist';
 import { htmlSafe } from '@ember/template';
 
+import ViewCardCommand from '@cardstack/boxel-host/commands/view-card';
+
 export class MoodField extends FieldDef {
   static displayName = 'Mood';
   static icon = MusicIcon;
@@ -94,8 +96,15 @@ class MoodSelectorPlaylistEmbedded extends Component<
       console.log(`Opening playlist: ${mood.name}`);
       this.isAnimating = false;
 
-      if (mood.playlist && this.args.context?.actions?.viewCard) {
-        this.args.context.actions.viewCard(mood.playlist, 'isolated');
+      if (mood.playlist) {
+        let commandContext = this.args.context?.commandContext;
+        if (!commandContext) {
+          throw new Error('Command context not available. Please try again.');
+        }
+        new ViewCardCommand(commandContext).execute({
+          cardId: mood.playlist.id,
+          format: 'isolated',
+        });
       }
     }, 1500);
   }
@@ -111,11 +120,15 @@ class MoodSelectorPlaylistEmbedded extends Component<
     event.stopPropagation();
     event.preventDefault();
 
-    if (this.selectedMood?.playlist && this.args.context?.actions?.viewCard) {
-      this.args.context.actions.viewCard(
-        this.selectedMood.playlist,
-        'isolated',
-      );
+    if (this.selectedMood?.playlist) {
+      let commandContext = this.args.context?.commandContext;
+      if (!commandContext) {
+        throw new Error('Command context not available. Please try again.');
+      }
+      new ViewCardCommand(commandContext).execute({
+        cardId: this.selectedMood.playlist.id,
+        format: 'isolated',
+      });
     }
   }
 
@@ -436,8 +449,15 @@ class MoodSelectorPlaylistIsolated extends Component<
       console.log(`Opening playlist: ${mood.name}`);
       this.isAnimating = false;
 
-      if (mood.playlist && this.args.context?.actions?.viewCard) {
-        this.args.context.actions.viewCard(mood.playlist, 'isolated');
+      if (mood.playlist) {
+        let commandContext = this.args.context?.commandContext;
+        if (!commandContext) {
+          throw new Error('Command context not available. Please try again.');
+        }
+        new ViewCardCommand(commandContext).execute({
+          cardId: mood.playlist.id,
+          format: 'isolated',
+        });
       }
     }, 1500);
   }
@@ -453,11 +473,15 @@ class MoodSelectorPlaylistIsolated extends Component<
     event.stopPropagation();
     event.preventDefault();
 
-    if (this.selectedMood?.playlist && this.args.context?.actions?.viewCard) {
-      this.args.context.actions.viewCard(
-        this.selectedMood.playlist,
-        'isolated',
-      );
+    if (this.selectedMood?.playlist) {
+      let commandContext = this.args.context?.commandContext;
+      if (!commandContext) {
+        throw new Error('Command context not available. Please try again.');
+      }
+      new ViewCardCommand(commandContext).execute({
+        cardId: this.selectedMood.playlist.id,
+        format: 'isolated',
+      });
     }
   }
 
