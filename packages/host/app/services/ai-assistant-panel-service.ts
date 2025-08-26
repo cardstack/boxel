@@ -116,6 +116,16 @@ export default class AiAssistantPanelService extends Service {
     if (!selection) {
       return undefined;
     }
+
+    // Check if there's an actual selection (not just cursor position)
+    const hasSelection =
+      selection.startLineNumber !== selection.endLineNumber ||
+      selection.startColumn !== selection.endColumn;
+
+    if (!hasSelection) {
+      return undefined;
+    }
+
     if (selection.startLineNumber === selection.endLineNumber) {
       return `Line ${selection.startLineNumber}`;
     }
