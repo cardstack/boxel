@@ -38,14 +38,9 @@ export default class IconButtonUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name='IconButton'>
-      <:example>
-        <div
-          class={{cn
-            'usage-icon-button-background'
-            usage-button-dark-mode-background=(eq this.variant 'secondary-dark')
-          }}
-        >
+    <div class={{cn dark-background=(eq this.variant 'secondary-dark')}}>
+      <FreestyleUsage @name='IconButton'>
+        <:example>
           <BoxelIconButton
             @icon={{this.icon}}
             @loading={{this.isLoading}}
@@ -57,147 +52,149 @@ export default class IconButtonUsage extends Component {
             aria-label='Special Button'
             {{on 'click' (fn this.log 'Button clicked')}}
           />
-        </div>
-      </:example>
+        </:example>
 
-      <:api as |Args|>
-        <Args.Component
-          @name='icon'
-          @description='Icon component reference'
-          @value={{this.icon}}
-          @options={{ALL_ICON_COMPONENTS}}
-          @onChange={{fn (mut this.icon)}}
-        />
-        <Args.String
-          @name='variant'
-          @optional={{true}}
-          @value={{this.variant}}
-          @options={{this.variants}}
-          @onInput={{fn (mut this.variant)}}
-          @defaultValue='default'
-        />
-        <Args.Bool
-          @name='loading'
-          @optional={{true}}
-          @value={{this.isLoading}}
-          @onInput={{fn (mut this.isLoading)}}
-          @defaultValue='false'
-        />
-        <Args.Bool
-          @name='round'
-          @optional={{true}}
-          @value={{this.isRound}}
-          @onInput={{fn (mut this.isRound)}}
-          @defaultValue='false'
-        />
-        <Args.Bool
-          @name='disabled'
-          @optional={{true}}
-          @value={{this.isDisabled}}
-          @onInput={{fn (mut this.isDisabled)}}
-          @defaultValue='false'
-        />
-        <Args.String
-          @name='width'
-          @optional={{true}}
-          @description='svg icon width'
-          @defaultValue='16px'
-          @value={{this.width}}
-          @onInput={{fn (mut this.width)}}
-        />
-        <Args.String
-          @name='height'
-          @description='svg icon height'
-          @defaultValue='16px'
-          @value={{this.height}}
-          @onInput={{fn (mut this.height)}}
-        />
-      </:api>
-      <:cssVars as |Css|>
-        <Css.Basic
-          @name='--boxel-icon-button-width'
-          @type='width'
-          @description='width of the button'
-          @defaultValue='40px'
-        />
-        <Css.Basic
-          @name='--boxel-icon-button-height'
-          @type='height'
-          @description='height of the button'
-          @defaultValue='40px'
-        />
-        <Css.Basic
-          @name='--boxel-icon-button-padding'
-          @type='padding'
-          @defaultValue='0'
-        />
-        <Css.Basic
-          @name='--boxel-icon-button-background'
-          @type='background-color'
-          @defaultValue='#fff'
-        />
-        <Css.Basic
-          @name='--boxel-icon-button-color'
-          @type='color'
-          @description='font color'
-          @defaultValue='#000'
-        />
-        <Css.Basic
-          @name='--boxel-icon-button-icon-color'
-          @type='color'
-          @description='icon color'
-          @defaultValue='currentColor'
-        />
-        <Css.Basic
-          @name='--boxel-icon-button-transition'
-          @type='transition'
-          @description='css shorthand "transition" property'
-        />
-      </:cssVars>
-    </FreestyleUsage>
+        <:api as |Args|>
+          <Args.Component
+            @name='icon'
+            @description='Icon component reference'
+            @value={{this.icon}}
+            @options={{ALL_ICON_COMPONENTS}}
+            @onChange={{fn (mut this.icon)}}
+          />
+          <Args.String
+            @name='variant'
+            @optional={{true}}
+            @value={{this.variant}}
+            @options={{this.variants}}
+            @onInput={{fn (mut this.variant)}}
+            @defaultValue='default'
+          />
+          <Args.Bool
+            @name='loading'
+            @optional={{true}}
+            @value={{this.isLoading}}
+            @onInput={{fn (mut this.isLoading)}}
+            @defaultValue='false'
+          />
+          <Args.Bool
+            @name='round'
+            @optional={{true}}
+            @value={{this.isRound}}
+            @onInput={{fn (mut this.isRound)}}
+            @defaultValue='false'
+          />
+          <Args.Bool
+            @name='disabled'
+            @optional={{true}}
+            @value={{this.isDisabled}}
+            @onInput={{fn (mut this.isDisabled)}}
+            @defaultValue='false'
+          />
+          <Args.String
+            @name='width'
+            @optional={{true}}
+            @description='icon size'
+            @defaultValue='16px'
+            @value={{this.width}}
+            @onInput={{fn (mut this.width)}}
+          />
+          <Args.String
+            @name='height'
+            @description='icon size'
+            @defaultValue='16px'
+            @value={{this.height}}
+            @onInput={{fn (mut this.height)}}
+          />
+          <Args.Yield @description='Yield for button content' />
+        </:api>
+        <:cssVars as |Css|>
+          <Css.Basic
+            @name='--boxel-icon-button-width'
+            @type='width'
+            @description='width of the button'
+            @defaultValue='40px'
+          />
+          <Css.Basic
+            @name='--boxel-icon-button-height'
+            @type='height'
+            @description='height of the button'
+            @defaultValue='40px'
+          />
+          <Css.Basic
+            @name='--boxel-icon-button-padding'
+            @type='padding'
+            @defaultValue='0'
+          />
+          <Css.Basic
+            @name='--boxel-icon-button-background'
+            @type='background'
+            @description='css shorthand "background" property'
+            @defaultValue='#fff'
+          />
+          <Css.Basic
+            @name='--boxel-icon-button-color'
+            @type='color'
+            @description='font color'
+            @defaultValue='#000'
+          />
+          <Css.Basic
+            @name='--boxel-icon-button-icon-color'
+            @type='color'
+            @description='icon color'
+            @defaultValue='currentColor'
+          />
+          <Css.Basic
+            @name='--boxel-icon-button-transition'
+            @type='transition'
+            @description='css shorthand "transition" property'
+          />
+        </:cssVars>
+      </FreestyleUsage>
 
-    <FreestyleUsage @name='All Icons'>
-      <:example>
-        <label class='checkbox-label'>
-          <input
-            type='checkbox'
-            checked={{this.showIconBorders}}
-            {{on 'change' this.toggleShowIconBorders}}
-          />
-          Show icon bounds
-        </label>
-        <label class='checkbox-label'>
-          <input
-            type='checkbox'
-            checked={{this.hideIconOverflow}}
-            {{on 'change' this.toggleHideIconOverflow}}
-          />
-          Hide icon overflow
-        </label>
-        <section class='all-icons'>
-          {{#each ALL_ICON_COMPONENTS as |icon|}}
-            <div
-              class='icon-and-label
-                {{if this.showIconBorders "show-borders"}}
-                {{if this.hideIconOverflow "hide-icon-overflow"}}'
-            >
-              <BoxelIconButton
-                @icon={{icon}}
-                @variant={{this.variant}}
-                @width={{this.width}}
-                @height={{this.height}}
-                @round={{this.isRound}}
-                @disabled={{this.isDisabled}}
-                aria-label='Special Button'
-                {{on 'click' (fn this.log 'Button clicked')}}
-                class='icon'
-              />
-              <span class='label'>{{icon.name}}</span>
-            </div>
-          {{/each}}
-        </section>
-      </:example>
-    </FreestyleUsage>
+      <FreestyleUsage @name='All Icons'>
+        <:example>
+          <label class='checkbox-label'>
+            <input
+              type='checkbox'
+              checked={{this.showIconBorders}}
+              {{on 'change' this.toggleShowIconBorders}}
+            />
+            Show icon bounds
+          </label>
+          <label class='checkbox-label'>
+            <input
+              type='checkbox'
+              checked={{this.hideIconOverflow}}
+              {{on 'change' this.toggleHideIconOverflow}}
+            />
+            Hide icon overflow
+          </label>
+          <section class='all-icons'>
+            {{#each ALL_ICON_COMPONENTS as |icon|}}
+              <div
+                class='icon-and-label
+                  {{if this.showIconBorders "show-borders"}}
+                  {{if this.hideIconOverflow "hide-icon-overflow"}}'
+              >
+                <BoxelIconButton
+                  @icon={{icon}}
+                  @variant={{this.variant}}
+                  @width={{this.width}}
+                  @height={{this.height}}
+                  @round={{this.isRound}}
+                  @disabled={{this.isDisabled}}
+                  aria-label='Special Button'
+                  {{on 'click' (fn this.log 'Button clicked')}}
+                  class='icon'
+                />
+                <span class='label'>{{icon.name}}</span>
+              </div>
+            {{/each}}
+          </section>
+        </:example>
+      </FreestyleUsage>
+    </div>
     <style scoped>
       .checkbox-label {
         display: flex;
@@ -229,10 +226,7 @@ export default class IconButtonUsage extends Component {
         height: calc(var(--boxel-icon-button-height) + 2px);
       }
 
-      .usage-icon-button-background {
-        padding: var(--boxel-sp-xs);
-      }
-      .usage-button-dark-mode-background {
+      .dark-background :deep(.FreestyleUsage-preview) {
         background-color: var(--foreground, var(--boxel-700));
         color: var(--background, var(--boxel-light));
       }

@@ -44,6 +44,7 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
         class='svg-icon'
       />
     {{/if}}
+    {{yield}}
   </BoxelButton>
   <style scoped>
     @layer {
