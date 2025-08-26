@@ -471,7 +471,7 @@ export class RealmServer {
         ])
       ).map((row) => ({
         id: row.id as string,
-        owner_username: row.owner_id as string,
+        owner_username: row.owner_username as string,
         source_realm_url: row.source_realm_url as string,
         published_realm_url: row.published_realm_url as string,
       }));
