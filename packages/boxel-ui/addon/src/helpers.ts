@@ -7,7 +7,7 @@ import { dayjsFormat } from './helpers/dayjs-format.ts';
 import element from './helpers/element.ts';
 import {
   extractCssVariables,
-  styleConversions,
+  getStyleConversions,
 } from './helpers/extract-css-variables.ts';
 import formatAge from './helpers/format-age.ts';
 import formatCountdown from './helpers/format-countdown.ts';
@@ -65,6 +65,7 @@ export {
   formatPeriod,
   formatRelativeTime,
   getContrastColor,
+  getStyleConversions,
   gt,
   gte,
   lt,
@@ -79,7 +80,6 @@ export {
   optional,
   or,
   pick,
-  styleConversions,
   substring,
   subtract,
 };

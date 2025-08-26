@@ -30,15 +30,17 @@ import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import {
   extractCssVariables,
-  styleConversions,
+  getStyleConversions,
 } from '@cardstack/boxel-ui/helpers';
 import Modifier from 'ember-modifier';
 import { isEqual, flatMap } from 'lodash';
 import { initSharedState } from './shared-state';
-import { and, eq, not } from '@cardstack/boxel-ui/helpers';
+import { and, cn, eq, not } from '@cardstack/boxel-ui/helpers';
 import { consume, provide } from 'ember-provide-consume-context';
 import Component from '@glimmer/component';
 import sanitizedHtml from './helpers/sanitized-html';
+import { concat } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
 
 export interface BoxComponentSignature {
   Element: HTMLElement; // This may not be true for some field components, but it's true more often than not
@@ -213,13 +215,17 @@ export function getBoxComponent(
 
   function getThemeStyles(cardDef?: CardDef) {
     if (!extractCssVariables) {
-      return;
+      return htmlSafe('');
     }
     let css =
       cardDef && 'cssVariables' in cardDef
         ? (cardDef as Theme).cssVariables
         : cardDef?.cardInfo?.theme?.cssVariables;
-    return sanitizedHtml(styleConversions + extractCssVariables(css));
+    return sanitizedHtml(
+      [getStyleConversions(), extractCssVariables(css)]
+        .filter(Boolean)
+        .join(''),
+    );
   }
 
   let component: TemplateOnlyComponent<{
@@ -255,8 +261,11 @@ export function getBoxComponent(
                   >
                     <CardContainer
                       @displayBoundaries={{displayContainer}}
-                      class='field-component-card
-                        {{effectiveFormats.cardDef}}-format display-container-{{displayContainer}}'
+                      class={{cn
+                        'field-component-card'
+                        (concat effectiveFormats.cardDef '-format')
+                        (concat 'display-container-' displayContainer)
+                      }}
                       {{context.cardComponentModifier
                         card=card
                         format=effectiveFormats.cardDef

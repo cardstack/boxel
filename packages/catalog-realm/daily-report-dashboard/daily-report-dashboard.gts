@@ -2,11 +2,7 @@ import { array } from '@ember/helper';
 import { gt } from '@cardstack/boxel-ui/helpers';
 import { CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
 import { Component, realmURL } from 'https://cardstack.com/base/card-api';
-import {
-  Button,
-  CardContainer,
-  BoxelInput,
-} from '@cardstack/boxel-ui/components';
+import { Button, BoxelInput } from '@cardstack/boxel-ui/components';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
@@ -213,18 +209,9 @@ class Isolated extends Component<typeof DailyReportDashboard> {
                             <div class='error-text'>Failed to load report</div>
                           </div>
                         {{else}}
-                          <CardContainer
-                            {{@context.cardComponentModifier
-                              cardId=card.url
-                              format='data'
-                              fieldType=undefined
-                              fieldName=undefined
-                            }}
-                            @displayBoundaries={{false}}
-                            class='report-card-container'
-                          >
-                            <card.component />
-                          </CardContainer>
+                          <card.component
+                            class='report-card-container hide-boundaries'
+                          />
                         {{/if}}
                       {{/each}}
                     </div>

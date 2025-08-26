@@ -330,25 +330,27 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         </:loading>
         <:response as |cards|>
           {{#each cards as |card|}}
-            <div class='card-container'>
-              <card.component />
-            </div>
+            <card.component />
           {{/each}}
         </:response>
       </PrerenderedCardSearch>
     </template>);
-    await waitFor('.card-container');
-    assert.dom('.card-container').exists({ count: 2 });
+    await waitFor('#ember-testing > [data-test-boxel-card-container]');
     assert
-      .dom('.card-container:nth-child(1)')
+      .dom('#ember-testing > [data-test-boxel-card-container]')
+      .exists({ count: 2 });
+    assert
+      .dom('#ember-testing > [data-test-boxel-card-container]:nth-child(1)')
       .containsText('Card 2 by Cardy Jones');
     assert
-      .dom('.card-container:nth-child(2)')
+      .dom('#ember-testing > [data-test-boxel-card-container]:nth-child(2)')
       .containsText('Cardy Stackington Jr. III');
     assert
-      .dom('.card-container .book')
+      .dom('#ember-testing > [data-test-boxel-card-container] .book')
       .hasStyle({ backgroundColor: 'rgb(255, 255, 0)' });
-    assert.dom('.card-container .author').hasStyle({ color: 'rgb(0, 0, 255)' });
+    assert
+      .dom('#ember-testing > [data-test-boxel-card-container] .author')
+      .hasStyle({ color: 'rgb(0, 0, 255)' });
   });
 
   test(`can include last known good state for instances in error state`, async function (assert) {
@@ -413,31 +415,37 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         </:loading>
         <:response as |cards|>
           {{#each cards as |card|}}
-            <div class='card-container' data-test-is-error={{card.isError}}>
-              <card.component />
-            </div>
+            <card.component />
           {{/each}}
         </:response>
       </PrerenderedCardSearch>
     </template>);
-    await waitFor('.card-container');
-    assert.dom('.card-container').exists({ count: 2 });
+    await waitFor('#ember-testing > [data-test-boxel-card-container]');
     assert
-      .dom('.card-container:nth-child(1)')
+      .dom('#ember-testing > [data-test-boxel-card-container]')
+      .exists({ count: 2 });
+    assert
+      .dom('#ember-testing > [data-test-boxel-card-container]:nth-child(1)')
       .containsText('Card 2 by Cardy Jones');
     assert
-      .dom('.card-container:nth-child(1)[data-test-is-error]')
+      .dom(
+        '#ember-testing > [data-test-boxel-card-container]:nth-child(1)[data-test-is-error]',
+      )
       .doesNotExist('the result is not an instance in an error state');
     assert
-      .dom('.card-container:nth-child(2)')
+      .dom('#ember-testing > [data-test-boxel-card-container]:nth-child(2)')
       .containsText('Cardy Stackington Jr. III');
     assert
-      .dom('.card-container:nth-child(2)[data-test-is-error]')
+      .dom(
+        '#ember-testing > [data-test-boxel-card-container]:nth-child(2)[data-is-error]',
+      )
       .exists('the result is an instance in an error state');
     assert
-      .dom('.card-container .book')
+      .dom('#ember-testing > [data-test-boxel-card-container] .book')
       .hasStyle({ backgroundColor: 'rgb(255, 255, 0)' });
-    assert.dom('.card-container .author').hasStyle({ color: 'rgb(0, 0, 255)' });
+    assert
+      .dom('#ember-testing > [data-test-boxel-card-container] .author')
+      .hasStyle({ color: 'rgb(0, 0, 255)' });
   });
 
   test(`refreshes when a queried realm changes when configured to perform live search`, async function (assert) {
@@ -471,9 +479,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         </:loading>
         <:response as |cards|>
           {{#each cards as |card|}}
-            <div class='card-container'>
-              <card.component />
-            </div>
+            <card.component />
           {{/each}}
         </:response>
       </PrerenderedCardSearch>
@@ -481,18 +487,26 @@ module(`Integration | prerendered-card-search`, function (hooks) {
       {{! to support incremental indexing }}
       <CardPrerender />
     </template>);
-    await waitFor('.card-container');
-    assert.dom('.card-container').exists({ count: 2 });
+    await waitFor('#ember-testing > [data-test-boxel-card-container]');
+    assert
+      .dom('#ember-testing > [data-test-boxel-card-container]')
+      .exists({ count: 2 });
 
     let cardService = getService('card-service');
     await cardService.deleteSource(new URL(`${testRealmURL}card-2.json`));
 
     await waitUntil(() => {
-      return document.querySelectorAll('.card-container').length === 1;
+      return (
+        document.querySelectorAll(
+          '#ember-testing > [data-test-boxel-card-container]',
+        ).length === 1
+      );
     });
-    assert.dom('.card-container').exists({ count: 1 });
     assert
-      .dom('.card-container:nth-child(1)')
+      .dom('#ember-testing > [data-test-boxel-card-container]')
+      .exists({ count: 1 });
+    assert
+      .dom('#ember-testing > [data-test-boxel-card-container]:nth-child(1)')
       .containsText('Cardy Stackington Jr. III');
   });
 });
