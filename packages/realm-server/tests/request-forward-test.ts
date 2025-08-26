@@ -137,7 +137,6 @@ module(basename(__filename), function () {
       },
       afterEach: async () => {
         await closeServer(testRealmHttpServer);
-        AllowedProxyDestinations.reset();
       },
     });
 
